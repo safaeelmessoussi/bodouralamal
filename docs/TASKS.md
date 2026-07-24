@@ -17,7 +17,7 @@
 - [x] `RateLimitCounter` entity + unique `(user_id, bucket, window_start)` (§7/TD-6, Revision 14) — added by a forward-only follow-up migration (TD-6b)
 - [x] Hand-written SQL migrations via `migrate dev --create-only`: explicit `CREATE COLLATION "ar-x-icu"` registration, column collations, CHECKs (incl. bp score checks), partial unique indexes, cross-table ayah trigger (TD-6, TD-6a)
 - [x] Production seed, idempotent (§15.1): roles, categories/levels, subjects, academic year, 114 Surahs, SystemSetting defaults, Super Admin allow-list (via `pre_provisioned_email`, Revision 15 — no placeholder identity)
-- [ ] Dev fixtures with `NODE_ENV` guard (§15.2)
+- [x] Dev fixtures with `NODE_ENV` guard (§15.2)
 - [ ] Google OAuth: state+PKCE, callback branches 4a/4b/4c, onboarding token (10 min, `jti` + ConsumedToken replay guard) (§4.1b, TD-12)
 - [ ] Email lowercasing on all identity lookups/writes (TD-12) + DB `CHECK (email = lower(email))` (TD-6)
 - [ ] Registration identity extracted solely from onboarding-token payload; body fields excluded from schema (§4.1b, TD-12)
