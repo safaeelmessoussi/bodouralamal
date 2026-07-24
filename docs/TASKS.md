@@ -2,7 +2,7 @@
 **Granular implementation checklist. Mutable — agents tick items (`[x]`) as work completes and may split items into sub-items, but never add tasks for post-MVP features (SRS §10.1) and never contradict the SRS. Milestone order: `docs/IMPLEMENTATION_PLAN.md`. Completion log: `docs/CHANGES.log`. SRS references in parentheses are the authority for each item.**
 
 ## M0 — Bootstrap
-- [ ] Monorepo folders per §16.1 (backend/frontend/nginx/docs)
+- [x] Monorepo folders per §16.1 (backend/frontend/nginx/docs)
 - [ ] `/CLAUDE.md`, `/AGENTS.md`, `docs/CHANGES.log` committed (§16.3)
 - [ ] `.env.example` generated from TD-13 inventory; boot-time fail-fast validation for Required vars
 - [ ] Version pins per §3.1a (Node 22 LTS image, PG 17, Prisma 6, React 19, Vite 6, Express 5, pg-boss 10)

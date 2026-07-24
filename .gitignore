@@ -1,0 +1,12 @@
+node_modules/
+dist/
+coverage/
+
+# Never commit real environment files (SRS §20 rule 18); .env.example is generated and tracked
+.env
+.env.*
+!.env.example
+
+*.tsbuildinfo
+*.log
+.DS_Store
