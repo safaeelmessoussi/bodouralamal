@@ -13,9 +13,12 @@
     "start": "node dist/index.js",
     "lint": "eslint src",
     "typecheck": "tsc -p tsconfig.json --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "3.1095.0",
+    "@aws-sdk/s3-request-presigner": "3.1095.0",
     "@prisma/client": "7.9.0",
     "express": "5.2.1",
     "pg-boss": "12.26.2",
