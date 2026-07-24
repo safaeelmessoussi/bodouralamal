@@ -219,9 +219,22 @@ model User {
   consentsRevoked   ConsentRecord[]         @relation("ConsentRevokedBy")
   auditEntries      AuditLog[]
   trashEntries      Trash[]
+  rateLimitCounters RateLimitCounter[]
 
   @@index([accountStatus])
   @@index([deletedAt])
+  // TD-10 shadow-column indexes. These MUST be declared here even though the
+  // hand-written init migration already created them: Prisma diffs the live
+  // database against this file, so an index it cannot see is drift it will
+  // silently DROP in the next generated migration. (Caught exactly that way —
+  // the TD-6b DROP lint blocked it.) Plain btree indexes are expressible in
+  // Prisma, unlike the collations, CHECKs, partial indexes, and triggers that
+  // §20 rule 5 keeps in SQL; the names match the migration's names so no
+  // drop-and-recreate is generated.
+  @@index([nameArabicNormalized])
+  @@index([nameFrenchNormalized])
+  @@index([nicknameNormalized])
+  @@index([phoneNormalized])
   @@map("user")
 }
 
@@ -599,6 +612,37 @@ model ConsumedToken {
 
   @@index([expiresAt])
   @@map("consumed_token")
+}
+
+/// Authoritative store for per-user quotas that Nginx cannot enforce (§3.1,
+/// §7, Revision 14). `limit_req` keys on connection variables and cannot read
+/// a JWT subject, and its grammar admits only r/s and r/m, so an hourly
+/// per-user quota has no representation at the edge.
+///
+/// The counter is locked and incremented INSIDE the transaction of the action
+/// it gates (TD-4.12, TD-15.2) — evaluating the count outside would let two
+/// concurrent initiations both pass at the limit boundary. Never held in
+/// process memory (dies with the container, wrong across replicas) and never
+/// routed through pg-boss (a job queue is asynchronous; this decision must be
+/// synchronous). Elapsed windows are removed by `ratelimit.purge` (TD-7).
+model RateLimitCounter {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Names the quota. MVP: `upload.initiate` (30/hour, TD-13).
+  bucket String @db.VarChar(60)
+
+  /// Truncated start of the fixed window.
+  windowStart DateTime @map("window_start") @db.Timestamptz(6)
+  count       Int      @default(0)
+
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  /// The unique key is what makes the increment safe under concurrency (TD-6).
+  @@unique([userId, bucket, windowStart])
+  @@index([windowStart])
+  @@map("rate_limit_counter")
 }
 
 /// Restricted case-file data (BR-16, §4.10). Field-level access: Admins and

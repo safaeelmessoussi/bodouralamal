@@ -14,7 +14,7 @@
 - [x] Signed PUT + signed GET round-trip through the /storage proxy passes (§3.1, §18)
 - [x] MinIO dual buckets (public/private) + policies (§3.1)
 - [x] `schema.prisma` full §7 model incl. `version` columns on TD-15 entities; plain constraints in Prisma
-- [ ] `RateLimitCounter` entity + unique `(user_id, bucket, window_start)` (§7/TD-6, Revision 14) — added by a forward-only follow-up migration (TD-6b)
+- [x] `RateLimitCounter` entity + unique `(user_id, bucket, window_start)` (§7/TD-6, Revision 14) — added by a forward-only follow-up migration (TD-6b)
 - [x] Hand-written SQL migrations via `migrate dev --create-only`: explicit `CREATE COLLATION "ar-x-icu"` registration, column collations, CHECKs (incl. bp score checks), partial unique indexes, cross-table ayah trigger (TD-6, TD-6a)
 - [ ] Production seed, idempotent (§15.1): roles, categories/levels, subjects, academic year, 114 Surahs, SystemSetting defaults, Super Admin allow-list
 - [ ] Dev fixtures with `NODE_ENV` guard (§15.2)
