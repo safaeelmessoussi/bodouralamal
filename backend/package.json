@@ -9,16 +9,18 @@
   },
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc -p tsconfig.json",
-    "start": "node dist/index.js",
-    "lint": "eslint src",
-    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "build": "tsc -p tsconfig.json && cp prisma/seed/*.json dist/prisma/seed/",
+    "start": "node dist/src/index.js",
+    "lint": "eslint src prisma/seed",
+    "typecheck": "tsc -p tsconfig.typecheck.json",
     "test": "vitest run",
-    "test:integration": "vitest run --config vitest.integration.config.ts"
+    "test:integration": "vitest run --config vitest.integration.config.ts",
+    "seed:production": "node dist/prisma/seed/production.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "3.1095.0",
     "@aws-sdk/s3-request-presigner": "3.1095.0",
+    "@prisma/adapter-pg": "7.9.0",
     "@prisma/client": "7.9.0",
     "dotenv": "17.4.2",
     "express": "5.2.1",

@@ -5,14 +5,19 @@
     "moduleResolution": "NodeNext",
     "lib": ["ES2023"],
     "outDir": "dist",
-    "rootDir": "src",
+    // rootDir is the package root, not src/, because the §15.1 seeds live in
+    // prisma/seed per the §16.1 repo layout and must compile into the same
+    // output tree as the application — they import from src/lib. Emitted
+    // layout is therefore dist/src/** and dist/prisma/seed/**.
+    "rootDir": ".",
     "strict": true,
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
     "forceConsistentCasingInFileNames": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
+    "resolveJsonModule": true,
     "types": ["node"]
   },
-  "include": ["src"]
+  "include": ["src", "prisma/seed"]
 }

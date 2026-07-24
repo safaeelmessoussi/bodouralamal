@@ -1,0 +1,8 @@
+{
+  // Same surface as the build, without emitting — used by `npm run typecheck`
+  // and by CI (§19.2).
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true
+  }
+}
