@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>الخدمة غير متاحة مؤقتاً</title>
+    <style>
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-family: system-ui, -apple-system, "Segoe UI", Tahoma, sans-serif;
+        background: #f7f7f5;
+        color: #1a1a1a;
+      }
+      main { max-width: 32rem; padding: 2rem; text-align: center; }
+      h1 { font-size: 1.5rem; margin-bottom: 0.75rem; }
+      p { line-height: 1.7; color: #444; }
+    </style>
+  </head>
+  <body>
+    <!--
+      TD-16: served when the API is unreachable, so a user never meets a raw
+      502/504. Static and dependency-free by design — it must render when the
+      rest of the platform cannot. Text is Arabic-only, matching the launch
+      locale (§6); it is intentionally outside the i18n catalog because no
+      application JavaScript is running at this point.
+    -->
+    <main>
+      <h1>الخدمة غير متاحة مؤقتاً</h1>
+      <p>
+        نقوم حالياً بأعمال صيانة أو نواجه عطلاً تقنياً مؤقتاً.
+        يرجى المحاولة مرة أخرى بعد قليل.
+      </p>
+    </main>
+  </body>
+</html>

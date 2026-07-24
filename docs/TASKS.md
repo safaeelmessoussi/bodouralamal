@@ -10,7 +10,7 @@
 
 ## M1 — Infrastructure & Platform Core
 - [x] `docker-compose.yml`: api, db, minio, nginx (+certbot); TZ=Africa/Casablanca; tzdata pinned (TD-11)
-- [ ] Nginx same-origin path routing `/` `/api/v1/` `/storage/` + SSL + rate limits + storage error-page mapping + prefix-strip/Host rewrite + CSP/nosniff + `/storage/` client_max_body_size 110m + proxy_request_buffering off (API 2m) + gzip static (§3.1, TD-13)
+- [x] Nginx same-origin path routing `/` `/api/v1/` `/storage/` + SSL + rate limits + storage error-page mapping + prefix-strip/Host rewrite + CSP/nosniff + `/storage/` client_max_body_size 110m + proxy_request_buffering off (API 2m) + gzip static (§3.1, TD-13)
 - [ ] Signed PUT + signed GET round-trip through the /storage proxy passes (§3.1, §18)
 - [x] MinIO dual buckets (public/private) + policies (§3.1)
 - [ ] `schema.prisma` full §7 model incl. `version` columns on TD-15 entities; plain constraints in Prisma

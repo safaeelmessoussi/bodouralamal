@@ -1,0 +1,48 @@
+# Production TLS server (SRS §3.1, R-8) — ACTIVATION TEMPLATE.
+#
+# Not loaded as-is: Nginx only includes conf.d/*.conf, so this file stays
+# inert until the §19.1 deployment activates it. Activation, on the VPS, after
+# certbot has issued the certificate:
+#
+#   1. certbot certonly --webroot -w /var/www/certbot -d <domain>
+#   2. sed 's/__DOMAIN__/<domain>/g' nginx/conf.d/tls.conf.example \
+#        > nginx/conf.d/tls.conf
+#   3. replace the body of nginx/conf.d/default.conf's catch-all with the
+#      redirect shown at the bottom of this file, keeping the ACME location
+#   4. docker compose exec nginx nginx -t && docker compose restart nginx
+#
+# One Let's Encrypt envelope wraps client, API, and storage because all three
+# share this single origin (§3.1) — there is no second certificate to manage.
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+    server_name __DOMAIN__;
+
+    ssl_certificate     /etc/letsencrypt/live/__DOMAIN__/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/__DOMAIN__/privkey.pem;
+
+    ssl_protocols             TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers off;
+    ssl_session_cache         shared:SSL:10m;
+    ssl_session_timeout       1d;
+    ssl_stapling              on;
+    ssl_stapling_verify       on;
+
+    # HSTS is safe here and only here: this block exists only when a real
+    # certificate is installed. It is deliberately absent from the HTTP server
+    # so local development is unaffected.
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+
+    # Identical routing to the HTTP server — one shared snippet, so the two
+    # can never drift (§19.0: no environment-conditional security divergence).
+    include /etc/nginx/snippets/app-routing.conf;
+}
+
+# Replacement body for the port-80 server once TLS is live (keep the ACME
+# location above it):
+#
+#   location / {
+#       return 301 https://$host$request_uri;
+#   }
