@@ -11,3 +11,6 @@ infra.env
 *.tsbuildinfo
 *.log
 .DS_Store
+
+# Prisma client is generated from schema.prisma at build time (never committed)
+backend/src/generated/

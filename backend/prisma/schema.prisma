@@ -1,0 +1,1030 @@
+// بذور الأمل — data model (SRS §7).
+//
+// BINDING (TD-6a, §20 rule 5): this file declares ONLY what Prisma can express
+// — tables, columns, enums, FKs, and PLAIN unique indexes. The following are
+// deliberately absent and live in hand-written SQL migrations instead, because
+// Prisma either cannot express them or would silently drop them:
+//   * the native `ar-x-icu` collation on structural `name` columns and on
+//     sortable person-name columns
+//   * every CHECK constraint (ayah bounds, 0–10,000 bp scores, display_order,
+//     group time/capacity, academic-year label, Hijri offset, lowercase email)
+//   * every PARTIAL unique index (`WHERE deleted_at IS NULL`, `is_current`)
+//   * the cross-table ayah-bounds trigger
+// Adding any of those here would fail to compile or, worse, drop the guarantee.
+//
+// Conventions (§16.2): UUID primary keys everywhere except the natural-key
+// static lookup `QuranSurah`; snake_case columns and tables; camelCase fields.
+//
+// NOT PRESENT BY DESIGN (§10.1, §20 rule 16 — do not pre-create):
+//   GradingTemplate / GradingTemplateItem (post-MVP weight-template engine)
+//   Committee / TeacherCommittee / LevelCommittee
+//   Notification / NotificationPreference
+// There is no tenant dimension anywhere (Revision 11, §3.2) — never reintroduce
+// tenant columns, claims, or scoping.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+/// TD-1 User lifecycle. The `Deleted` state of TD-1 is represented by
+/// `deleted_at IS NOT NULL` rather than a fifth enum value, so a soft-deleted
+/// user has exactly one source of truth instead of two that can disagree.
+enum AccountStatus {
+  pending
+  active
+  rejected
+  suspended
+
+  @@map("account_status")
+}
+
+/// Branch-level membership status, distinct from `account_status` (§7).
+enum UserBranchStatus {
+  active
+  left
+  paused
+
+  @@map("user_branch_status")
+}
+
+enum AuthProvider {
+  google
+
+  @@map("auth_provider")
+}
+
+enum GenderRestriction {
+  any
+  girls_only
+  boys_only
+
+  @@map("gender_restriction")
+}
+
+enum DayOfWeek {
+  monday
+  tuesday
+  wednesday
+  thursday
+  friday
+  saturday
+  sunday
+
+  @@map("day_of_week")
+}
+
+/// TD-1 FamilyLink lifecycle; Approved/Rejected are terminal.
+enum FamilyLinkStatus {
+  pending
+  approved
+  rejected
+
+  @@map("family_link_status")
+}
+
+enum ConsentType {
+  media_release
+  data_processing
+
+  @@map("consent_type")
+}
+
+enum ConsentMethod {
+  online_form
+  staff_recorded
+
+  @@map("consent_method")
+}
+
+/// BR-14 three-tier visibility. Never a boolean (§4.4, §4.9).
+enum Visibility {
+  public
+  private
+  hidden
+
+  @@map("visibility")
+}
+
+/// §4.4 — the biweekly-alternating pattern must be modeled explicitly.
+enum RecurrenceType {
+  none
+  daily
+  weekly
+  biweekly_alternating
+  yearly
+
+  @@map("recurrence_type")
+}
+
+enum QuranLogCategory {
+  new_memorization
+  revision
+
+  @@map("quran_log_category")
+}
+
+enum ExamAccessPolicy {
+  single_submission
+  save_and_resume
+
+  @@map("exam_access_policy")
+}
+
+/// TD-1 submission lifecycle.
+enum SubmissionState {
+  in_progress
+  submitted
+  auto_graded
+  fully_graded
+
+  @@map("submission_state")
+}
+
+/// TD-1 Grade lifecycle. Draft → Published only; the Published→Draft revert
+/// belongs to the post-MVP recalculation engine (§10.1).
+enum GradeStatus {
+  draft
+  published
+
+  @@map("grade_status")
+}
+
+enum ConsumedTokenPurpose {
+  onboarding
+
+  @@map("consumed_token_purpose")
+}
+
+// ---------------------------------------------------------------------------
+// Identity & access
+// ---------------------------------------------------------------------------
+
+/// Core identity. Minor students are User rows with NO UserIdentity records —
+/// they are login-less and reached only through an approved FamilyLink
+/// (§4.3, BR-5).
+model User {
+  id            String        @id @default(uuid()) @db.Uuid
+  accountStatus AccountStatus @default(pending) @map("account_status")
+
+  // Person names. `nameArabic` is collated ar-x-icu by hand-written SQL
+  // (TD-6a) so ordering is correct without per-query COLLATE (BR-19).
+  nameArabic String  @map("name_arabic") @db.VarChar(120)
+  nameFrench String? @map("name_french") @db.VarChar(120)
+  nickname   String? @db.VarChar(60)
+  phone      String? @db.VarChar(20)
+  notes      String? @db.VarChar(2000)
+
+  // TD-10 normalized shadow columns, populated by the migration's
+  // normalization function and indexed for substring search. Never normalized
+  // per-row at query time.
+  nameArabicNormalized String? @map("name_arabic_normalized")
+  nameFrenchNormalized String? @map("name_french_normalized")
+  nicknameNormalized   String? @map("nickname_normalized")
+  phoneNormalized      String? @map("phone_normalized")
+
+  /// TD-15 optimistic locking — staff-edited profile/role/scope changes.
+  version Int @default(0)
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  deletedById  String? @map("deleted_by") @db.Uuid
+  deletedBy    User?   @relation("UserDeletedBy", fields: [deletedById], references: [id], onDelete: Restrict)
+  deletedUsers User[]  @relation("UserDeletedBy")
+
+  identities        UserIdentity[]
+  branchRoles       UserBranchRole[]
+  socialProfile     StudentSocialProfile?
+  enrollments       StudentGroup[]
+  taughtGroups      GroupTeacher[]
+  parentLinks       FamilyLink[]            @relation("FamilyLinkParent")
+  childLinks        FamilyLink[]            @relation("FamilyLinkChild")
+  quranLogs         QuranProgressLog[]      @relation("QuranLogStudent")
+  quranLogsAuthored QuranProgressLog[]      @relation("QuranLogLoggedBy")
+  surahProgress     StudentSurahProgress[]
+  submissions       StudentExamSubmission[]
+  grades            Grade[]
+  consentsAsSubject ConsentRecord[]         @relation("ConsentStudent")
+  consentsGranted   ConsentRecord[]         @relation("ConsentGrantedBy")
+  consentsRevoked   ConsentRecord[]         @relation("ConsentRevokedBy")
+  auditEntries      AuditLog[]
+  trashEntries      Trash[]
+
+  @@index([accountStatus])
+  @@index([deletedAt])
+  @@map("user")
+}
+
+/// Provider-abstracted auth linkage (§7). MVP: google only. Local credentials
+/// join post-MVP as another provider WITHOUT restructuring User (§10.1).
+/// No password column exists anywhere, ever (§20 rule 10).
+model UserIdentity {
+  id                String       @id @default(uuid()) @db.Uuid
+  userId            String       @map("user_id") @db.Uuid
+  user              User         @relation(fields: [userId], references: [id], onDelete: Restrict)
+  provider          AuthProvider
+  providerSubjectId String       @map("provider_subject_id")
+
+  /// Always lowercased before every lookup and write (TD-12); the database
+  /// independently enforces `CHECK (email = lower(email))` via TD-6a SQL.
+  email String
+
+  /// TD-5: user soft-delete deactivates identities rather than dropping them.
+  isActive Boolean @default(true) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  // Plain unique — expressible in Prisma. The `(provider, email)` uniqueness
+  // is scoped to ACTIVE identities and is therefore a partial index in SQL.
+  @@unique([provider, providerSubjectId])
+  @@index([email])
+  @@map("user_identity")
+}
+
+model Role {
+  id   String @id @default(uuid()) @db.Uuid
+  /// Seeded set (§15.1): super_admin, admin, teacher, student, parent.
+  name String @unique
+
+  branchRoles UserBranchRole[]
+
+  @@map("role")
+}
+
+/// Role assignment scoped to a branch. Branch scoping is the sole
+/// access-control axis in MVP (§4.2).
+model UserBranchRole {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Restrict)
+  roleId String @map("role_id") @db.Uuid
+  role   Role   @relation(fields: [roleId], references: [id], onDelete: Restrict)
+
+  /// Null = unscoped (Super Admin, §2.1).
+  branchId String? @map("branch_id") @db.Uuid
+  branch   Branch? @relation(fields: [branchId], references: [id], onDelete: Restrict)
+
+  /// The branch-level `user_status` of §7, kept separate from
+  /// `User.account_status`.
+  userStatus UserBranchStatus @default(active) @map("user_status")
+
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  deletedById String?   @map("deleted_by") @db.Uuid
+
+  @@unique([userId, roleId, branchId])
+  @@index([userId])
+  @@index([branchId])
+  @@map("user_branch_role")
+}
+
+// ---------------------------------------------------------------------------
+// Structural entities — single Arabic `name`, collated ar-x-icu (§2.2, TD-6a)
+// ---------------------------------------------------------------------------
+
+model Branch {
+  id                   String    @id @default(uuid()) @db.Uuid
+  name                 String    @db.VarChar(120)
+  operationalStartDate DateTime? @map("operational_start_date") @db.Date
+  /// Super-Admin-managed ordering (§2.2); CHECK (>= 0) in SQL.
+  displayOrder         Int?      @map("display_order")
+
+  version Int @default(0)
+
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  deletedById String?   @map("deleted_by") @db.Uuid
+
+  rooms       Room[]
+  groups      Group[]
+  branchRoles UserBranchRole[]
+  content     EducationalContent[]
+  eventScopes EventBranch[]
+
+  @@index([displayOrder])
+  @@map("branch")
+}
+
+model Room {
+  id       String @id @default(uuid()) @db.Uuid
+  name     String @db.VarChar(120)
+  branchId String @map("branch_id") @db.Uuid
+  branch   Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
+
+  version Int @default(0)
+
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  deletedById String?   @map("deleted_by") @db.Uuid
+
+  groups Group[]
+
+  @@index([branchId])
+  @@map("room")
+}
+
+/// The three tracks (§4.4b): المرأة / اليافعات / الطفل.
+model Category {
+  id           String @id @default(uuid()) @db.Uuid
+  name         String @db.VarChar(120)
+  displayOrder Int?   @map("display_order")
+
+  /// Per-category default content visibility (§4.9, §15.1).
+  defaultContentVisibility Visibility @default(private) @map("default_content_visibility")
+
+  version Int @default(0)
+
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  deletedById String?   @map("deleted_by") @db.Uuid
+
+  levels      Level[]
+  eventScopes EventCategory[]
+
+  @@index([displayOrder])
+  @@map("category")
+}
+
+/// Level numbering is NOT uniform across categories — Women 0–7, Teens 1–6,
+/// Children 0–6. No logic may assume every category has a level 0 (§4.4b).
+model Level {
+  id         String   @id @default(uuid()) @db.Uuid
+  name       String   @db.VarChar(120)
+  categoryId String   @map("category_id") @db.Uuid
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  /// Checked generically by progression logic — never hardcoded against a
+  /// level name (§4.4b).
+  genderRestriction GenderRestriction @default(any) @map("gender_restriction")
+
+  /// Ordering is scoped within the parent Category (§2.2).
+  displayOrder Int? @map("display_order")
+
+  /// Association default is 10 (§4.6, §15.1); stored as basis points of the
+  /// exam total so comparisons stay integer-only (§4.6, §20 rule 3).
+  passingGradeBp Int @default(5000) @map("passing_grade_bp")
+
+  version Int @default(0)
+
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  deletedById String?   @map("deleted_by") @db.Uuid
+
+  groups      Group[]
+  subjects    LevelSubject[]
+  surahs      LevelSurah[]
+  exams       Exam[]
+  content     EducationalContent[]
+  eventScopes EventLevel[]
+
+  @@index([categoryId, displayOrder])
+  @@map("level")
+}
+
+/// Non-Quran curriculum items only — the Quran is never a Subject (§4.4b).
+model Subject {
+  id           String @id @default(uuid()) @db.Uuid
+  name         String @db.VarChar(120)
+  displayOrder Int?   @map("display_order")
+
+  version Int @default(0)
+
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  deletedById String?   @map("deleted_by") @db.Uuid
+
+  levels  LevelSubject[]
+  exams   Exam[]
+  content EducationalContent[]
+
+  @@index([displayOrder])
+  @@map("subject")
+}
+
+/// Creating a row auto-creates draft grading components (BR-9).
+model LevelSubject {
+  id        String  @id @default(uuid()) @db.Uuid
+  levelId   String  @map("level_id") @db.Uuid
+  level     Level   @relation(fields: [levelId], references: [id], onDelete: Restrict)
+  subjectId String  @map("subject_id") @db.Uuid
+  subject   Subject @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  deletedById String?   @map("deleted_by") @db.Uuid
+
+  @@unique([levelId, subjectId])
+  @@map("level_subject")
+}
+
+/// Creating a row for a Women's level auto-generates the two draft components
+/// `[Surah] Memorization` and `[Surah] Tafsir` (§4.6, BR-9).
+model LevelSurah {
+  id      String     @id @default(uuid()) @db.Uuid
+  levelId String     @map("level_id") @db.Uuid
+  level   Level      @relation(fields: [levelId], references: [id], onDelete: Restrict)
+  surahId Int        @map("surah_id")
+  surah   QuranSurah @relation(fields: [surahId], references: [surahId], onDelete: Restrict)
+
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  deletedById String?   @map("deleted_by") @db.Uuid
+
+  @@unique([levelId, surahId])
+  @@map("level_surah")
+}
+
+// ---------------------------------------------------------------------------
+// Scheduling
+// ---------------------------------------------------------------------------
+
+/// The actual scheduling unit (§4.4, BR-17). Times are LOCAL WALL-CLOCK values,
+/// never UTC instants — Morocco suspends DST during Ramadan, which would shift
+/// every weekly class twice a year (TD-11, §20 rule 14).
+model Group {
+  id       String  @id @default(uuid()) @db.Uuid
+  name     String  @db.VarChar(120)
+  levelId  String  @map("level_id") @db.Uuid
+  level    Level   @relation(fields: [levelId], references: [id], onDelete: Restrict)
+  branchId String  @map("branch_id") @db.Uuid
+  branch   Branch  @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  roomId   String? @map("room_id") @db.Uuid
+  room     Room?   @relation(fields: [roomId], references: [id], onDelete: Restrict)
+
+  dayOfWeek DayOfWeek @map("day_of_week")
+  startTime DateTime  @map("start_time") @db.Time(0)
+  endTime   DateTime  @map("end_time") @db.Time(0)
+
+  /// CHECK (> 0) in SQL; capacity is enforced under `SELECT … FOR UPDATE`
+  /// (TD-15.2) so concurrent roster adds cannot oversubscribe.
+  maxStudents Int @map("max_students")
+
+  version Int @default(0)
+
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  deletedById String?   @map("deleted_by") @db.Uuid
+
+  teachers    GroupTeacher[]
+  enrollments StudentGroup[]
+  grades      Grade[]
+  eventScopes EventGroup[]
+
+  @@index([branchId, dayOfWeek])
+  @@index([levelId])
+  @@index([roomId, dayOfWeek])
+  @@map("group")
+}
+
+/// Resolution table for ALL teacher scoping — exam authoring, Quran logging,
+/// sensitive-data access, Hidden-event visibility (§4.2, §4.4, TD-2).
+model GroupTeacher {
+  id        String @id @default(uuid()) @db.Uuid
+  groupId   String @map("group_id") @db.Uuid
+  group     Group  @relation(fields: [groupId], references: [id], onDelete: Restrict)
+  teacherId String @map("teacher_id") @db.Uuid
+  teacher   User   @relation(fields: [teacherId], references: [id], onDelete: Restrict)
+
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  deletedById String?   @map("deleted_by") @db.Uuid
+
+  @@unique([groupId, teacherId])
+  @@index([teacherId])
+  @@map("group_teacher")
+}
+
+/// Enrollment. Every mutation enqueues consent re-evaluation (TD-4.6, §4.1a).
+/// Un-enrollment NEVER deletes grades, submissions, or Quran logs (TD-5).
+model StudentGroup {
+  id        String @id @default(uuid()) @db.Uuid
+  studentId String @map("student_id") @db.Uuid
+  student   User   @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  groupId   String @map("group_id") @db.Uuid
+  group     Group  @relation(fields: [groupId], references: [id], onDelete: Restrict)
+
+  enrolledAt  DateTime  @default(now()) @map("enrolled_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  deletedById String?   @map("deleted_by") @db.Uuid
+
+  // Uniqueness is scoped to non-deleted rows → partial index in SQL (TD-6).
+  @@index([groupId, deletedAt])
+  @@index([studentId])
+  @@map("student_group")
+}
+
+// ---------------------------------------------------------------------------
+// Family & consent (safeguarding)
+// ---------------------------------------------------------------------------
+
+/// THE authorization record checked by the `X-Active-Child-ID` middleware on
+/// every child-scoped request (§4.3). Matching the child alone is never
+/// sufficient — both parent and child must match an Approved row (§20 rule 6).
+model FamilyLink {
+  id        String           @id @default(uuid()) @db.Uuid
+  parentId  String           @map("parent_id") @db.Uuid
+  parent    User             @relation("FamilyLinkParent", fields: [parentId], references: [id], onDelete: Restrict)
+  studentId String           @map("student_id") @db.Uuid
+  student   User             @relation("FamilyLinkChild", fields: [studentId], references: [id], onDelete: Restrict)
+  status    FamilyLinkStatus @default(pending)
+
+  decidedAt      DateTime? @map("decided_at") @db.Timestamptz(6)
+  decidedById    String?   @map("decided_by") @db.Uuid
+  decisionReason String?   @map("decision_reason") @db.VarChar(500)
+
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  deletedById String?   @map("deleted_by") @db.Uuid
+
+  // Uniqueness is scoped to non-deleted rows → partial index in SQL (TD-6).
+  @@index([parentId, status])
+  @@index([studentId, status])
+  @@map("family_link")
+}
+
+/// One row per consent decision. Consent is NEVER a boolean on the user row
+/// (§20 rule 2); absence of a record means NO consent (BR-1). History is
+/// preserved — revocation is a state change with its own actor and timestamp.
+model ConsentRecord {
+  id          String        @id @default(uuid()) @db.Uuid
+  studentId   String        @map("student_id") @db.Uuid
+  student     User          @relation("ConsentStudent", fields: [studentId], references: [id], onDelete: Restrict)
+  consentType ConsentType   @map("consent_type")
+  granted     Boolean
+  method      ConsentMethod
+
+  /// The exact legal text version agreed to (§2.3, §4.1a).
+  consentTextVersion String @map("consent_text_version") @db.VarChar(60)
+
+  grantedAt       DateTime  @default(now()) @map("granted_at") @db.Timestamptz(6)
+  grantedByUserId String    @map("granted_by_user_id") @db.Uuid
+  grantedBy       User      @relation("ConsentGrantedBy", fields: [grantedByUserId], references: [id], onDelete: Restrict)
+  revokedAt       DateTime? @map("revoked_at") @db.Timestamptz(6)
+  revokedByUserId String?   @map("revoked_by_user_id") @db.Uuid
+  revokedBy       User?     @relation("ConsentRevokedBy", fields: [revokedByUserId], references: [id], onDelete: Restrict)
+
+  @@index([studentId, consentType, grantedAt])
+  @@map("consent_record")
+}
+
+/// Replay guard for single-use onboarding tokens. The `jti` insert happens
+/// INSIDE the registration transaction (§4.1b step 5, TD-4.1): a replayed
+/// token hits this unique constraint, the transaction aborts, and the request
+/// fails with 409 STATE_CONFLICT.
+model ConsumedToken {
+  id         String               @id @default(uuid()) @db.Uuid
+  jti        String               @unique
+  purpose    ConsumedTokenPurpose
+  consumedAt DateTime             @default(now()) @map("consumed_at") @db.Timestamptz(6)
+  /// Rows past this horizon are removed by the daily `token.purge` job (TD-7).
+  expiresAt  DateTime             @map("expires_at") @db.Timestamptz(6)
+
+  @@index([expiresAt])
+  @@map("consumed_token")
+}
+
+/// Restricted case-file data (BR-16, §4.10). Field-level access: Admins and
+/// the student's specifically-assigned teachers only — never other students,
+/// unrelated guardians, or teachers at large.
+model StudentSocialProfile {
+  id        String @id @default(uuid()) @db.Uuid
+  studentId String @unique @map("student_id") @db.Uuid
+  student   User   @relation(fields: [studentId], references: [id], onDelete: Restrict)
+
+  healthCondition  String? @map("health_condition") @db.VarChar(2000)
+  familySituation  String? @map("family_situation") @db.VarChar(2000)
+  homeAddress      String? @map("home_address") @db.VarChar(2000)
+  siblingsCount    Int?    @map("siblings_count")
+  fatherName       String? @map("father_name") @db.VarChar(120)
+  fatherProfession String? @map("father_profession") @db.VarChar(120)
+  motherName       String? @map("mother_name") @db.VarChar(120)
+  motherProfession String? @map("mother_profession") @db.VarChar(120)
+
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  deletedById String?   @map("deleted_by") @db.Uuid
+
+  @@map("student_social_profile")
+}
+
+// ---------------------------------------------------------------------------
+// Calendar — the exception layer over Groups' fixed weekly schedules (§4.4)
+// ---------------------------------------------------------------------------
+
+model Event {
+  id          String     @id @default(uuid()) @db.Uuid
+  title       String     @db.VarChar(120)
+  description String?    @db.VarChar(2000)
+  visibility  Visibility @default(private)
+
+  /// Local wall-clock date/time fields (TD-11) — never UTC instants.
+  startDate DateTime  @map("start_date") @db.Date
+  endDate   DateTime? @map("end_date") @db.Date
+  startTime DateTime? @map("start_time") @db.Time(0)
+  endTime   DateTime? @map("end_time") @db.Time(0)
+
+  recurrenceType    RecurrenceType @default(none) @map("recurrence_type")
+  recurrenceEndDate DateTime?      @map("recurrence_end_date") @db.Date
+
+  version Int @default(0)
+
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  deletedById String?   @map("deleted_by") @db.Uuid
+
+  branchScopes   EventBranch[]
+  categoryScopes EventCategory[]
+  levelScopes    EventLevel[]
+  groupScopes    EventGroup[]
+  content        EducationalContent[]
+
+  @@index([startDate, visibility])
+  @@map("event")
+}
+
+// The four scope joins are populated EXPLICITLY at event creation — never
+// evaluated as runtime null/wildcard matches (§4.4).
+
+model EventBranch {
+  eventId  String @map("event_id") @db.Uuid
+  event    Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  branchId String @map("branch_id") @db.Uuid
+  branch   Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
+
+  @@id([eventId, branchId])
+  @@map("event_branch")
+}
+
+model EventCategory {
+  eventId    String   @map("event_id") @db.Uuid
+  event      Event    @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  categoryId String   @map("category_id") @db.Uuid
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  @@id([eventId, categoryId])
+  @@map("event_category")
+}
+
+model EventLevel {
+  eventId String @map("event_id") @db.Uuid
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  levelId String @map("level_id") @db.Uuid
+  level   Level  @relation(fields: [levelId], references: [id], onDelete: Restrict)
+
+  @@id([eventId, levelId])
+  @@map("event_level")
+}
+
+model EventGroup {
+  eventId String @map("event_id") @db.Uuid
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  groupId String @map("group_id") @db.Uuid
+  group   Group  @relation(fields: [groupId], references: [id], onDelete: Restrict)
+
+  @@id([eventId, groupId])
+  @@map("event_group")
+}
+
+// ---------------------------------------------------------------------------
+// Quran memorization (§4.5)
+// ---------------------------------------------------------------------------
+
+/// Static pre-seeded lookup, all 114 rows (§15.1). The ONLY entity with a
+/// natural key rather than a UUID (§16.2). `totalAyahs` is the definitive
+/// denominator for coverage.
+model QuranSurah {
+  surahId            Int    @id @map("surah_id")
+  nameArabic         String @map("name_arabic") @db.VarChar(120)
+  nameTransliterated String @map("name_transliterated") @db.VarChar(120)
+  totalAyahs         Int    @map("total_ayahs")
+
+  logs     QuranProgressLog[]
+  progress StudentSurahProgress[]
+  levels   LevelSurah[]
+  exams    Exam[]
+
+  @@map("quran_surah")
+}
+
+/// Discrete closed ayah ranges. Any create/update/soft-delete triggers
+/// SYNCHRONOUS per-surah recalculation in the same request — never a
+/// background job (§4.5, BR-13, §20 rule 1).
+model QuranProgressLog {
+  id        String     @id @default(uuid()) @db.Uuid
+  studentId String     @map("student_id") @db.Uuid
+  student   User       @relation("QuranLogStudent", fields: [studentId], references: [id], onDelete: Restrict)
+  surahId   Int        @map("surah_id")
+  surah     QuranSurah @relation(fields: [surahId], references: [surahId], onDelete: Restrict)
+
+  /// CHECK (start_ayah >= 1 AND start_ayah <= end_ayah) in SQL; the upper
+  /// bound against `total_ayahs` crosses tables and is enforced by a trigger
+  /// plus the service layer (TD-6).
+  startAyah Int              @map("start_ayah")
+  endAyah   Int              @map("end_ayah")
+  category  QuranLogCategory
+
+  loggedById String   @map("logged_by") @db.Uuid
+  loggedBy   User     @relation("QuranLogLoggedBy", fields: [loggedById], references: [id], onDelete: Restrict)
+  loggedAt   DateTime @default(now()) @map("logged_at") @db.Timestamptz(6)
+
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  deletedById String?   @map("deleted_by") @db.Uuid
+
+  // TD-6 names this composite explicitly as a hot path.
+  @@index([studentId, surahId])
+  @@index([studentId, surahId, deletedAt])
+  @@map("quran_progress_log")
+}
+
+/// Self-healing coverage cache (§4.5). NEVER the source of truth — the logs
+/// are. Every reader compares the stamp against the student+surah's latest log
+/// and repairs the row in place on mismatch, which makes stale reads
+/// structurally impossible (BR-13).
+model StudentSurahProgress {
+  id        String     @id @default(uuid()) @db.Uuid
+  studentId String     @map("student_id") @db.Uuid
+  student   User       @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  surahId   Int        @map("surah_id")
+  surah     QuranSurah @relation(fields: [surahId], references: [surahId], onDelete: Restrict)
+
+  /// Union of merged, non-overlapping intervals. `mergedAyahCount` is the
+  /// exact numerator; `coveragePercent` is Decimal (never float) so a 100.00
+  /// comparison for level completion is exact (BR-11, BR-13).
+  mergedAyahCount Int     @map("merged_ayah_count")
+  coveragePercent Decimal @map("coverage_percent") @db.Decimal(5, 2)
+  mergedIntervals Json    @map("merged_intervals") @db.JsonB
+
+  /// Freshness stamp of the newest governing log (§4.5 read-side guard).
+  lastLogId String?   @map("last_log_id") @db.Uuid
+  lastLogAt DateTime? @map("last_log_at") @db.Timestamptz(6)
+
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([studentId, surahId])
+  @@map("student_surah_progress")
+}
+
+// ---------------------------------------------------------------------------
+// Exams & grading (§4.6)
+// ---------------------------------------------------------------------------
+
+/// Exams are independent of calendar bounds. Every question in `questions`
+/// carries an immutable auto-generated UUID; submissions reference those UUIDs
+/// and never array positions (TD-6).
+model Exam {
+  id        String      @id @default(uuid()) @db.Uuid
+  title     String      @db.VarChar(120)
+  levelId   String      @map("level_id") @db.Uuid
+  level     Level       @relation(fields: [levelId], references: [id], onDelete: Restrict)
+  subjectId String?     @map("subject_id") @db.Uuid
+  subject   Subject?    @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+  surahId   Int?        @map("surah_id")
+  surah     QuranSurah? @relation(fields: [surahId], references: [surahId], onDelete: Restrict)
+
+  /// Local wall-clock date (TD-11).
+  date DateTime @db.Date
+
+  /// Optional, non-restricting logical selector used only for sorting on
+  /// transcripts and dashboards (§4.6). §7 defines no Round entity, so this is
+  /// a plain nullable ordinal — see the CHANGES.log note.
+  round Int?
+
+  accessPolicy ExamAccessPolicy @default(save_and_resume) @map("access_policy")
+
+  /// Structured question array; each element carries its immutable UUID.
+  questions Json @db.JsonB
+
+  isPublished Boolean   @default(false) @map("is_published")
+  publishedAt DateTime? @map("published_at") @db.Timestamptz(6)
+
+  version Int @default(0)
+
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  deletedById String?   @map("deleted_by") @db.Uuid
+
+  submissions StudentExamSubmission[]
+  grades      Grade[]
+
+  @@index([levelId, date])
+  @@map("exam")
+}
+
+model StudentExamSubmission {
+  id        String @id @default(uuid()) @db.Uuid
+  examId    String @map("exam_id") @db.Uuid
+  exam      Exam   @relation(fields: [examId], references: [id], onDelete: Restrict)
+  studentId String @map("student_id") @db.Uuid
+  student   User   @relation(fields: [studentId], references: [id], onDelete: Restrict)
+
+  /// Answers keyed by question UUID — never by array position (TD-6).
+  answers Json @db.JsonB
+
+  state SubmissionState @default(in_progress)
+
+  /// Integer basis points, 0–10,000; CHECK enforced in SQL. No float score
+  /// column exists anywhere (§4.6, §20 rule 3).
+  autoScoreBp Int? @map("auto_score_bp")
+
+  startedAt   DateTime  @default(now()) @map("started_at") @db.Timestamptz(6)
+  submittedAt DateTime? @map("submitted_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([examId, studentId])
+  @@index([studentId])
+  @@map("student_exam_submission")
+}
+
+/// Per student, per exam. MVP grades are per-exam and informational — there
+/// are no averages and no template references (§4.6, Revision 12).
+model Grade {
+  id        String @id @default(uuid()) @db.Uuid
+  examId    String @map("exam_id") @db.Uuid
+  exam      Exam   @relation(fields: [examId], references: [id], onDelete: Restrict)
+  studentId String @map("student_id") @db.Uuid
+  student   User   @relation(fields: [studentId], references: [id], onDelete: Restrict)
+
+  /// Sitting provenance — the Group the student sat the exam in (§7).
+  groupId String? @map("group_id") @db.Uuid
+  group   Group?  @relation(fields: [groupId], references: [id], onDelete: Restrict)
+
+  /// Integer basis points of the exam total, 0–10,000 (CHECK in SQL).
+  valueBp Int         @map("value_bp")
+  status  GradeStatus @default(draft)
+
+  /// BR-7: an enrolled student with no submission gets 0 flagged absent, and
+  /// the row is initialized at the teacher's FIRST draft save so draft
+  /// averages are never inflated by omission (§4.6).
+  absent Boolean @default(false)
+
+  /// BR-12: a manual override always wins over computed results.
+  manualPassFailOverride Boolean?  @map("manual_pass_fail_override")
+  overrideById           String?   @map("override_by") @db.Uuid
+  overrideAt             DateTime? @map("override_at") @db.Timestamptz(6)
+  overrideReason         String?   @map("override_reason") @db.VarChar(500)
+
+  /// TD-15: concurrent co-teacher scoring vs admin override must not clobber.
+  version Int @default(0)
+
+  publishedAt DateTime? @map("published_at") @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([examId, studentId])
+  @@index([studentId, status])
+  @@map("grade")
+}
+
+// ---------------------------------------------------------------------------
+// Content & storage (§4.9)
+// ---------------------------------------------------------------------------
+
+model AcademicYear {
+  id        String  @id @default(uuid()) @db.Uuid
+  /// Validated `YYYY-YYYY`; free-text year strings are prohibited (§4.10).
+  label     String  @unique @db.VarChar(9)
+  /// Exactly one `true` row application-wide — partial unique index in SQL.
+  isCurrent Boolean @default(false) @map("is_current")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  content EducationalContent[]
+
+  @@map("academic_year")
+}
+
+model EducationalContent {
+  id          String  @id @default(uuid()) @db.Uuid
+  title       String  @db.VarChar(120)
+  description String? @db.VarChar(2000)
+
+  visibility Visibility @default(private)
+
+  /// Maintained by the consent re-evaluation engine (§4.1a). Lifting it is
+  /// Admin-only with a mandatory justification — Teachers never can
+  /// (BR-3, §20 rule 7).
+  consentForcedPrivate Boolean @default(false) @map("consent_forced_private")
+
+  levelId String @map("level_id") @db.Uuid
+  level   Level  @relation(fields: [levelId], references: [id], onDelete: Restrict)
+
+  /// NULL = the Global / بدون فرع scope. Assignable only by Admins and Super
+  /// Admins; Teachers are locked to their own branch scope (BR-20, §4.9).
+  branchId String? @map("branch_id") @db.Uuid
+  branch   Branch? @relation(fields: [branchId], references: [id], onDelete: Restrict)
+
+  subjectId String?  @map("subject_id") @db.Uuid
+  subject   Subject? @relation(fields: [subjectId], references: [id], onDelete: SetNull)
+
+  eventId String? @map("event_id") @db.Uuid
+  event   Event?  @relation(fields: [eventId], references: [id], onDelete: SetNull)
+
+  academicYearId String       @map("academic_year_id") @db.Uuid
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Restrict)
+
+  /// Immutable hash-segmented key (TD-9). Replacing a file mints a NEW key and
+  /// quarantines the old object — keys are never reused or overwritten
+  /// (§20 rule 15). Visibility is never encoded in the key; the bucket carries
+  /// it.
+  storageBucket    String @map("storage_bucket") @db.VarChar(20)
+  storageKey       String @unique @map("storage_key")
+  originalFilename String @map("original_filename")
+  mimeType         String @map("mime_type") @db.VarChar(120)
+  sizeBytes        BigInt @map("size_bytes")
+
+  version Int @default(0)
+
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  deletedById String?   @map("deleted_by") @db.Uuid
+
+  @@index([levelId, academicYearId, branchId])
+  @@index([visibility])
+  @@map("educational_content")
+}
+
+// ---------------------------------------------------------------------------
+// Platform: audit, trash, settings
+// ---------------------------------------------------------------------------
+
+/// Append-only accountability record (TD-8). No update or delete path exists
+/// in the application. Distinct from `Trash`, which exists for restoration.
+model AuditLog {
+  id          String  @id @default(uuid()) @db.Uuid
+  actorUserId String? @map("actor_user_id") @db.Uuid
+  actor       User?   @relation(fields: [actorUserId], references: [id], onDelete: Restrict)
+
+  actionType   String  @map("action_type") @db.VarChar(60)
+  targetEntity String? @map("target_entity") @db.VarChar(60)
+  targetId     String? @map("target_id") @db.Uuid
+
+  /// Includes mandatory justifications (consent-gate overrides, pass/fail
+  /// overrides). Never PII beyond what TD-8 requires (TD-14).
+  detail Json @db.JsonB
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([actionType, createdAt])
+  @@index([targetEntity, targetId])
+  @@index([actorUserId, createdAt])
+  @@map("audit_log")
+}
+
+/// JSON snapshot of any soft-deleted record, for restoration (§4.10, BR-15).
+/// MVP restoration runs through the locked CLI script, never ad-hoc psql.
+/// The 90-day window is enforced by `content.quarantine-purge` (TD-7).
+model Trash {
+  id           String @id @default(uuid()) @db.Uuid
+  targetEntity String @map("target_entity") @db.VarChar(60)
+  targetId     String @map("target_id") @db.Uuid
+
+  /// Full row snapshot INCLUDING the cascaded relationship rows (FamilyLink,
+  /// GroupTeacher, UserBranchRole, UserIdentity deactivations) — a User
+  /// restored without them is a half-restored, silently broken account (§4.10).
+  snapshot Json @db.JsonB
+
+  deletedById String?  @map("deleted_by") @db.Uuid
+  deletedBy   User?    @relation(fields: [deletedById], references: [id], onDelete: Restrict)
+  deletedAt   DateTime @default(now()) @map("deleted_at") @db.Timestamptz(6)
+  /// End of the 90-day permanent-delete window (BR-15).
+  purgeAfter  DateTime @map("purge_after") @db.Timestamptz(6)
+
+  @@index([targetEntity, targetId])
+  @@index([purgeAfter])
+  @@map("trash")
+}
+
+/// Application-level runtime config (TD-13): branding, legal/consent text
+/// versions, Hijri day offset (−2…+2, CHECK in SQL), category default
+/// visibilities, per-level passing defaults.
+model SystemSetting {
+  key   String @id @db.VarChar(80)
+  value Json   @db.JsonB
+
+  version Int @default(0)
+
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedById String?  @map("updated_by") @db.Uuid
+
+  @@map("system_setting")
+}
