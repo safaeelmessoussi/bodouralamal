@@ -6,7 +6,7 @@
 - [x] `/CLAUDE.md`, `/AGENTS.md`, `docs/CHANGES.log` committed (§16.3)
 - [x] `.env.example` generated from TD-13 inventory; boot-time fail-fast validation for Required vars
 - [x] Version pins per §3.1a (Node 22 LTS image, PG 17, Prisma 6, React 19, Vite 6, Express 5, pg-boss 10)
-- [ ] CI skeleton: lint, typecheck, test runners, TD-6a migration-presence check, `db push` ban check, `.env` commit check, DROP/RENAME migration lint (TD-6b), OpenAPI↔TD-3 conformance check (§3.1)
+- [x] CI skeleton: lint, typecheck, test runners, TD-6a migration-presence check, `db push` ban check, `.env` commit check, DROP/RENAME migration lint (TD-6b), OpenAPI↔TD-3 conformance check (§3.1)
 
 ## M1 — Infrastructure & Platform Core
 - [ ] `docker-compose.yml`: api, db, minio, nginx (+certbot); TZ=Africa/Casablanca; tzdata pinned (TD-11)

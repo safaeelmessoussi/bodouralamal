@@ -1,0 +1,63 @@
+# TD-3 API route registry seed — derived verbatim from SRS TD-3 (§13) plus the
+# refresh route defined in TD-12 and the health endpoint defined in TD-14.
+# Format: METHOD <path>; paths are relative to the /api/v1 prefix except
+# /healthz (TD-14, served at the origin root per §19.1 step 8).
+#
+# The SRS TD-3 registry is the canonical API contract (§3.1). CI enforces both
+# directions against docs/openapi.json (scripts/ci/check-openapi-td3.sh).
+# Path parameters are compared positionally ({name} matches any {other-name}).
+#
+# EXCLUDED per Revision 12 postponement (§10.1, §20 rule 16) — do not add
+# before the post-MVP weight-template engine ships:
+#   POST /levels/{id}/grading-template/items
+#   DELETE /grading-template-items/{id}
+#   POST /grading-templates/{id}/activate
+#
+# Any other addition to this file requires a Document Owner decision (the
+# error/route catalog is extensible only by SRS revision, TD-3.8).
+
+# 3.1 Auth & identity
+GET /auth/google
+GET /auth/google/callback
+POST /auth/logout
+POST /auth/refresh
+GET /me
+
+# 3.2 Registration & approvals
+POST /registrations
+GET /admin/approvals
+POST /admin/approvals/{id}/approve
+POST /admin/approvals/{id}/reject
+POST /family-links
+
+# 3.4 Calendar
+GET /calendar
+POST /events
+PATCH /events/{id}
+DELETE /events/{id}
+POST /admin/branches/{id}/event-backfill
+
+# 3.5 Storage (single-shot uploads, MVP)
+POST /uploads/initiate
+POST /uploads/{upload_id}/complete
+POST /uploads/{upload_id}/abort
+GET /content/{id}/download-url
+
+# 3.6 Exams & grading
+POST /exams
+POST /exams/{id}/publish
+POST /exams/{id}/submissions
+PATCH /submissions/{id}
+POST /submissions/{id}/submit
+POST /grades/{id}/publish
+POST /grades/{id}/republish
+POST /grades/{id}/pass-fail-override
+POST /students/{id}/quran-logs
+PATCH /quran-logs/{id}
+DELETE /quran-logs/{id}
+
+# 3.7 Background jobs
+GET /jobs/{id}
+
+# TD-14 Observability
+GET /healthz
