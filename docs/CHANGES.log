@@ -2,8 +2,8 @@
 
 ## Active Status
 - CURRENT TASK: M0 Bootstrap (docs/TASKS.md)
-- COMPLETED TASKS: SRS Revisions 11–12 applied; M0.1 monorepo skeleton (§16.1)
-- NEXT TASK: M0.2 agent workspace files (/CLAUDE.md, /AGENTS.md — §16.3).
+- COMPLETED TASKS: SRS Revisions 11–12 applied; M0.1 monorepo skeleton (§16.1); M0.2 agent workspace files (§16.3)
+- NEXT TASK: M0.3 version pins per §3.1a (lockfile creation).
 
 ## Progress History
 | Date | Task Ref | What Was Built | System Impacts | DB Migrations |
@@ -12,3 +12,4 @@
 | 2026-07-22 | SRS-R11 | Removed multi-tenant architecture from docs/SRS.md: deleted Tenant entity, all tenant_id columns/indexes/claims, tenant-scoped repository injection, multi-tenant roadmap item; §1.2/§3.2 reframed as strict dedicated single-tenant; guardrail 8 updated | Schema simplified; second institute = separate deployment (§3.2); all security guards intact | None yet (pre-implementation — schema not created) |
 | 2026-07-22 | SRS-R12 | Resolved implementation blockers (raw-SQL exception for locks/pg-boss inserts; Nginx /storage body-size+buffering; OAuth failure redirects + single-flight refresh; CI-built images; pool/memory pins) and deferred to §10.1: weight-template engine, in-app recorder, FR/EN chrome, Committees, /admin/audit page, print layout. Audio cap 500→100MB; Vercel staging = MSW mocks only | Week 5–7 slack recovered for mid-Sept target; R-4 retired, R-9 downgraded | None yet (pre-implementation) |
 | 2026-07-24 | M0.1 | Monorepo skeleton per §16.1: backend/{prisma/{migrations,seed},src/{controllers,services,repositories,policies,validators,jobs,middleware,lib}}, frontend/src/{components,pages,layouts,hooks,contexts,services,types,i18n}, nginx/, scripts/, .github/workflows/; docs/IMPLEMENTATION_PLAN.md (milestone order derived from §8/§18); .gitignore (blocks .env commits), .nvmrc; git develop branch created | Repository layout fixed for all later milestones | None |
+| 2026-07-24 | M0.2 | /CLAUDE.md and /AGENTS.md created verbatim from SRS §16.3 Files 1–2; docs/CHANGES.log (File 3, pre-existing) committed on develop | Agent workspace files active; precedence rule (SRS wins) in force | None |
