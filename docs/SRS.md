@@ -1,8 +1,8 @@
 # Software Requirements Specification
 ## بذور الأمل — Institute Management Platform
 
-**Status:** Final MVP Blueprint (Revision 12 — implementation-audit resolutions & deadline-protecting scope trim), **immutable source of truth** — changed only by an explicit Document Owner revision, never by an implementing agent
-**Revision date:** 2026-07-22
+**Status:** Final MVP Blueprint (Revision 13 — post-Revision-12 consistency sweep: template-engine leftover annotations & official `test` NODE_ENV tier), **immutable source of truth** — changed only by an explicit Document Owner revision, never by an implementing agent
+**Revision date:** 2026-07-24
 **Canonical location:** `docs/SRS.md` in the project repository
 **Document Owner:** [assign]
 
@@ -23,6 +23,8 @@ This is a standalone, self-contained specification. It does not reference extern
 * **§18 — Module Acceptance Checklists.**
 * **§19 — Environments, Deployment Pipeline & Testing Strategy.**
 * **§20 — AI Implementation Rules:** hard guardrails for any autonomous coding agent. §20 closes the document deliberately: it is the last thing an agent reads before writing code.
+
+**Revision 13 (implementation-phase consistency sweep — Document Owner approved, 2026-07-24):** an M0 implementation review found the Revision-12 postponement sweep left the weight-template engine referenced without postponement annotations in several MVP sections; this created one operational contradiction — TD-3 §3.6 still listed the three grading-template routes, so the §3.1 CI conformance rule would have *required* endpoints §20 rule 16 *forbids* building. Resolutions, all documentation-consistency only (zero scope change): (A) the three grading-template routes are moved out of the active TD-3 registry into a postponement note (matching the §3.5 multipart pattern) — they are excluded from the MVP OpenAPI contract and the §3.1 CI conformance check until the engine ships; (B) remaining leftovers annotated or trimmed: §5.8 exam-lifecycle flow (formula-integration/recalc tail), the TD-2 grading-template permission row (removed; rejoins with the engine like the CSV/Trash rows), §15.2 fixture templates (deferred with the engine — §7 forbids pre-creating its tables), TD-8 `template.activate`/`template.demote` rows (marked post-MVP), §4.6 Interactive Grading Flow wording, the §2.1 Admin role description, and the §2.3 owner task (exam list stays a launch task; calculation templates follow the engine); (C) **TD-13: `NODE_ENV` officially admits `test`** as the §19.2 test-runner value — a non-production tier for every guard (§15.2 fixture firewall, TD-13 production-only rules, error verbosity); boot validation enumerates exactly `production | development | test` so typos fail fast rather than silently passing the non-production guard.
 
 **Revision 12 (implementation-audit resolutions & deadline scope trim — Document Owner approved):** (B1) a sanctioned, narrow raw-SQL exception inside repositories for row locks and same-transaction pg-boss job inserts — the TD-4/TD-15 contradiction with the raw-SQL ban is resolved (§16.2, §20 rule 8); (B2) Nginx `/storage/` location must set `client_max_body_size 110m` and `proxy_request_buffering off` — scoped there only, API stays at 2m (§3.1, TD-13); (B3) OAuth callback failures are redirect flows with defined error keys, never JSON envelopes; `OAUTH_EXCHANGE_FAILED` added; single-flight client refresh mandated (§4.1b, TD-3.8, TD-12); (B4) production images are built in CI and pulled — never built on the 4 GB VPS (§19.1); connection-pool budget pinned (TD-13). **Postponed to §10.1 (deadline protection, fully additive later):** the dynamic basis-point weight-template engine and everything downstream of it (activation lifecycle, freeze/stale machinery, `grade.recalculate`, aggregation, `/admin/grading`) — MVP grades are per-exam and informational, which is a coherent state of the existing model since every exam already defaults to 0 bp; the in-app audio recorder (file upload of phone-made recordings stays fully supported — R-4 retired); FR/EN interface translation (Arabic-only launch; i18n keys remain mandatory); Committees; the `/admin/audit` browsing page (audit *writing* stays mandatory; reads via SQL runbook); the print-ready exam CSS layout. **Performance:** audio cap reduced 500→100 MB; `StudentSurahProgress` self-heal guard executed as one joined query on lists; container memory pins in TD-13; Vercel staging reviews UI against MSW mocks only — zero CORS allow-listing anywhere (§19.0).
 
@@ -83,7 +85,7 @@ This document covers the **MVP** (8-week delivery target, assuming AI-accelerate
 | Role | Description |
 |---|---|
 | Super Admin | Full system access, audit, application-level config, exclusive management of `display_order` values. Seeded at deployment by allow-listing a specific Google account email — no credential is ever hardcoded or documented in plaintext. |
-| Admin | Scoped to one or more branches; manages users, groups, levels, approvals, grading templates, content, consent overrides. May assign content/events to the Global (no-branch) scope. |
+| Admin | Scoped to one or more branches; manages users, groups, levels, approvals, content, consent overrides (grading templates: post-MVP, §10.1, Revision 13). May assign content/events to the Global (no-branch) scope. |
 | Teacher / مؤطرة | Scoped to assigned groups (via `GroupTeacher`); logs Quran progress, grades, educational resources, and schedules/grades exams. Cannot override consent-driven privacy defaults (§4.9) and cannot assign content to the Global scope. |
 | Student | Views own schedule, Quran progress, resources, and published grades. Takes remote online exams. **Adult students (Women's track) hold their own Google-authenticated accounts. Minor students (Teens/Children) do not have separate logins** — their records are accessed through a linked Parent's account context (§4.3). |
 | Parent | Views linked children's data via a Family Dashboard; may hold other roles simultaneously. Acts as the login vehicle for minor students; asserts the active child per request via `X-Active-Child-ID` (§4.3). |
@@ -105,7 +107,7 @@ A single person may hold multiple roles concurrently (e.g., a mother who is both
 ### 2.3 Owner-Assignment Tasks (not engineering blockers, but real and currently unassigned)
 | Task | Why it matters | Effort |
 |---|---|---|
-| Enter starter list of exams and calculation templates per level | Without it, teachers cannot calculate round averages at launch | ~15 min per level |
+| Enter starter list of exams per level (calculation templates follow the post-MVP template engine, §10.1 — Revision 12 made MVP grades per-exam/informational; Revision 13 annotation) | Exam list needed at launch; without templates, round averages cannot be calculated once the engine ships | ~15 min per level |
 | Confirm Moroccan-region hosting account exists and is provisioned (min 4 GB RAM + a second Moroccan location for offsite backups, §6) | Blocks production deployment entirely if missing | Procurement |
 | Legally verify the explicit Parental Consent text (Arabic) for media/recordings, and version it | `ConsentRecord` stores the text version signed | Compliance |
 | Create the Google Cloud project, OAuth consent screen, and production OAuth client credentials | Google-only auth cannot function without it; verification can take days–weeks | Procurement/admin |
@@ -289,7 +291,7 @@ The registration/login entry is **OAuth-first**: the registration form is never 
   * **Format (Revision 12):** digital exams only in MVP; the standardized print-ready CSS layout is postponed to §10.1 — paper sittings are prepared outside the platform until then, and their marks entered as grades normally.
   * **Question Types:** MCQs (auto-graded) and free-text/short-answer (manually graded).
   * **Stable question identity (TD-6):** every question carries an **auto-generated, immutable UUID**; `StudentExamSubmission` answers reference question UUIDs — never array positions.
-  * **Interactive Grading Flow:** on submission, MCQs auto-score into a draft grade; teacher scores subjective parts; Publish feeds the active formula (if selected).
+  * **Interactive Grading Flow:** on submission, MCQs auto-score into a draft grade; teacher scores subjective parts; Publish makes the per-exam grade visible (formula integration is post-MVP — template engine, §10.1, Revision 13).
   * **Access Policy:** `single_submission` vs `save_and_resume`, per exam, changeable on the fly.
   * **No system-enforced time limits** in MVP.
 * **Certificate/Transcript Snapshot Rule (BR-10):** at certificate generation (post-MVP), exact grade values are snapshot into the record; later template edits cannot retroactively invalidate an issued document.
@@ -389,7 +391,7 @@ The registration/login entry is **OAuth-first**: the registration form is never 
 ### 5.8 Key Navigation Flows
 * **Registration → Access:** Landing → Continue with Google (§4.1b) → unified/adult form (read-only email) → Pending status screen → [Admin approval] → Login → role-based dashboard redirect.
 * **Child Linking:** Family Dashboard → Link a Child → submit → Pending → [Admin approval] → child appears in Family Dashboard → switching to the child sets `X-Active-Child-ID` for subsequent requests.
-* **Exam Lifecycle & Grading:** Teacher authors Exam (stable question UUIDs) → Publishes exam → Student takes it online (adults directly; minors via parent context) or on paper → MCQ auto-saves as draft → Teacher grades subjective parts, absent students receive default 0 → Publish → score integrates into the active basis-point formula if selected → (template edit → async recalc → affected grades revert to draft → Re-publish).
+* **Exam Lifecycle & Grading:** Teacher authors Exam (stable question UUIDs) → Publishes exam → Student takes it online (adults directly; minors via parent context) or on paper → MCQ auto-saves as draft → Teacher grades subjective parts, absent students receive default 0 → Publish. (Formula integration and the template-edit → async-recalc → Re-publish loop are post-MVP — template engine, §10.1, Revision 13.)
 * **Consent lifecycle:** consent granted/revoked (online or staff-recorded) → `ConsentRecord` written → pg-boss re-evaluation job → affected group recordings' visibility force-corrected (bucket migration if needed) → stale public links land on `/content-unavailable`.
 
 (Full step-by-step journeys with state annotations: §17.)
@@ -603,7 +605,6 @@ consent_forced_private = true → public   ONLY via Admin override with justific
 | Approve/reject registrations & family links | ✔ | ✔ | ⊘ | ⊘ | ⊘ | ⊘ |
 | Create/edit users; assign roles & branch scopes | ✔ | ✔ | ⊘ | ⊘ | ⊘ | ⊘ |
 | Record staff-declared consent grants/revocations | ✔ | ✔ | ⊘ | ⊘ | ⊘ | ⊘ |
-| Configure/activate grading templates | ✔ | ✔ | ✔ (own levels' groups) | ⊘ | ⊘ | ⊘ |
 | Override consent gate (with justification) | ✔ | ✔ | ⊘ | ⊘ | ⊘ | ⊘ |
 | Override pass/fail | ✔ | ✔ | ✔ (own students) | ⊘ | ⊘ | ⊘ |
 | Schedule/edit Events (all visibility tiers) | ✔ | ✔ | ✔ (own groups; hidden allowed) | ⊘ | ⊘ | ⊘ |
@@ -618,7 +619,7 @@ consent_forced_private = true → public   ONLY via Admin override with justific
 | Browse AuditLog | ✔ | ✔ | ⊘ | ⊘ | ⊘ | ⊘ |
 | Restore soft-deleted records | ✔ (MVP: manual-SQL runbook §4.10) | ⊘ | ⊘ | ⊘ | ⊘ | ⊘ |
 
-Every endpoint enforces this matrix **server-side**; UI hiding is never the enforcement mechanism. (CSV import/export and Trash-UI rows will be added when those features ship post-MVP, §10.1.)
+Every endpoint enforces this matrix **server-side**; UI hiding is never the enforcement mechanism. (CSV import/export, Trash-UI, and grading-template rows will be added when those features ship post-MVP, §10.1 — the template row was `Super Admin ✔ / Admin ✔ / Teacher ✔ own levels' groups`, preserved here for the engine's return; Revision 13.)
 
 ### TD-3 — API Route Registry (contract blueprint)
 
@@ -680,12 +681,10 @@ PATCH /submissions/{id}                   → save-and-resume answer patch (reje
 POST /submissions/{id}/submit             → final; MCQ auto-grade → draft Grade
 POST /grades/{id}/publish  POST /grades/{id}/republish
 POST /grades/{id}/pass-fail-override      → body: { status, reason }
-POST /levels/{id}/grading-template/items  → add { exam_id, weight_bp } (constraint-checked)
-DELETE /grading-template-items/{id}
-POST /grading-templates/{id}/activate     → transactional 10,000 bp validation (TD-4)
 POST /students/{id}/quran-logs            PATCH /quran-logs/{id}   DELETE /quran-logs/{id}
                                           → each returns the synchronously recalculated surah coverage (§4.5)
 ```
+(Grading-template routes — `POST /levels/{id}/grading-template/items` [add `{ exam_id, weight_bp }`, constraint-checked], `DELETE /grading-template-items/{id}`, `POST /grading-templates/{id}/activate` [transactional 10,000 bp validation, TD-4] — arrive with the post-MVP weight-template engine (§10.1, Revision 13); they are excluded from the MVP OpenAPI contract and the §3.1 CI conformance check until then.)
 
 **3.7 Background jobs**
 ```
@@ -844,7 +843,7 @@ Every action below writes an `AuditLog` row (actor, timestamp, action_type, targ
 | `consent_gate.override` | resource, **mandatory justification text** |
 | `grade.publish` / `grade.republish` | exam, students affected count |
 | `grade.passfail_override` | student, old→new, reason |
-| `template.activate` / `template.demote` | sum at time of action |
+| *(post-MVP — template engine, §10.1, Revision 13)* `template.activate` / `template.demote` | sum at time of action; rows join the grid when the engine ships |
 | `quranlog.update` / `quranlog.delete` | log reference, old→new range, recalculated coverage |
 | `group.delete` / `branch.delete_blocked` etc. | entity snapshot reference |
 | `content.visibility_change` | old→new tier, consent-forced flag state |
@@ -937,7 +936,7 @@ All runtime configuration flows through environment variables (docker-compose `.
 | `PUBLIC_BASE_URL` | Yes | — | `https://platform.bodour.ma` | Canonical origin (client `/`, API `/api/v1/`, §3.1) |
 | `STORAGE_BASE_URL` | Yes | — | `https://platform.bodour.ma/storage` | Public storage path prefix (§3.1) |
 | `SUPER_ADMIN_EMAIL` | Yes | — | `admin@bodour.ma` | Super Admin allow-list seed (§15.1) |
-| `NODE_ENV` | Yes | — | `production` \| `development` | Fixture guard (§15.2), error verbosity |
+| `NODE_ENV` | Yes | — | `production` \| `development` \| `test` | Fixture guard (§15.2), error verbosity. `test` is the §19.2 test-runner value — a non-production tier for every guard; boot validation enumerates exactly these three values (Revision 13) |
 | `BACKUP_TARGET_SSH` | Prod only | — | `restic@backup.ma:/srv/bodour` | Offsite Moroccan backup target (§6) |
 | `TZ` | No | `Africa/Casablanca` | `Africa/Casablanca` | Container wall-clock alignment (TD-11) |
 | `PORT` | No | `3000` | `3000` | API listen port (behind Nginx) |
@@ -1114,7 +1113,7 @@ Two seed tiers. **Production seed** runs on every fresh deployment (idempotent �
 * **Branches/Rooms/Groups/Roster:** **not** seeded with placeholders in production — entered **manually through the admin UI** by the owner/coordinator from real data (§2.3, Week 7; CSV import is post-MVP). Seeding fake branches into production is prohibited.
 
 ### 15.2 Development Fixtures (non-production only)
-* 2 sample branches (each with `operational_start_date` in the past + 2 rooms), 3 sample groups per branch, sample teachers/parents/students (minors login-less), approved and pending family links, consent records in both states, sample exams/templates (one active at exactly 10,000 bp, one draft), sample content in all three visibility tiers including one consent-forced-private recording, and sample events covering every recurrence type including biweekly-alternating.
+* 2 sample branches (each with `operational_start_date` in the past + 2 rooms), 3 sample groups per branch, sample teachers/parents/students (minors login-less), approved and pending family links, consent records in both states, sample exams (grading-template fixtures — one active at exactly 10,000 bp, one draft — join with the post-MVP engine, §10.1, Revision 13; its tables must not be pre-created, §7), sample content in all three visibility tiers including one consent-forced-private recording, and sample events covering every recurrence type including biweekly-alternating.
 * Fixture emails use the reserved `example.com` domain; fixtures never run in production (guarded by env check). **Fixtures are the only data permitted in dev/staging environments (R-10).**
 
 ---

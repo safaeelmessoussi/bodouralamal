@@ -7,8 +7,8 @@
 # directions against docs/openapi.json (scripts/ci/check-openapi-td3.sh).
 # Path parameters are compared positionally ({name} matches any {other-name}).
 #
-# EXCLUDED per Revision 12 postponement (§10.1, §20 rule 16) — do not add
-# before the post-MVP weight-template engine ships:
+# EXCLUDED per SRS Revision 13 (TD-3 §3.6 postponement note; §10.1, §20 rule
+# 16) — do not add before the post-MVP weight-template engine ships:
 #   POST /levels/{id}/grading-template/items
 #   DELETE /grading-template-items/{id}
 #   POST /grading-templates/{id}/activate
