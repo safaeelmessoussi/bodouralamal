@@ -1,0 +1,138 @@
+# بذور الأمل platform — full stack (SRS §3.1, §16.1, §19.0/§19.1, TD-13).
+# Dev:        docker compose up -d            (certbot excluded via profile)
+# Production: docker compose --profile production up -d   (§19.1; images CI-built and pulled)
+#
+# App runtime config comes from .env (TD-13 inventory; cp .env.example .env).
+# Container-bootstrap credentials (Postgres superuser password) live in
+# infra.env (cp infra.env.example infra.env) — see the SRS-silence note in
+# docs/CHANGES.log: TD-13 covers app config only; compose-level DB bootstrap
+# is infrastructure, kept out of .env.example to preserve TD-13 lockstep.
+#
+# Image majors locked at M1 per §3.1a (see docs/CHANGES.log M1.1):
+#   postgres 18 (floor 17; Debian variant — ICU required for ar-x-icu, TD-6a)
+#   minio RELEASE.2025-09-07 (latest stable at lock time)
+#   nginx stable branch
+# Only Nginx publishes host ports — db/minio are reachable exclusively on the
+# internal network (§19.1 posture; local tooling uses `docker compose exec`).
+
+name: bodour
+
+services:
+  api:
+    image: bodour-api:dev
+    build: ./backend
+    env_file: .env
+    environment:
+      TZ: ${TZ:-Africa/Casablanca}
+      # TD-13 container memory pin (4 GB VPS budget)
+      NODE_OPTIONS: --max-old-space-size=768
+    depends_on:
+      db:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    restart: unless-stopped
+
+  db:
+    image: postgres:18.4
+    # TD-13 pinned pool/memory budget — never left at defaults.
+    command: >
+      postgres -c max_connections=30
+               -c shared_buffers=256MB
+               -c work_mem=8MB
+               -c statement_timeout=10s
+    env_file: infra.env
+    environment:
+      TZ: ${TZ:-Africa/Casablanca}
+      POSTGRES_USER: app
+      POSTGRES_DB: bodour
+    volumes:
+      # PG 18+ images require the mount at /var/lib/postgresql (NOT .../data):
+      # data lands in a major-version subdirectory, which is what keeps
+      # `pg_upgrade --link` possible without mount-boundary issues. Mounting
+      # at .../data makes the container refuse to start outright.
+      - db-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U app -d bodour"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  minio:
+    image: minio/minio:RELEASE.2025-09-07T16-13-09Z
+    command: server /data
+    environment:
+      # No TZ here by design: the MinIO image ships without tzdata (TZ would be
+      # silently ignored), and S3 presigned-URL expiry is UTC by specification —
+      # object storage needs no local wall clock. TD-11 wall-clock semantics
+      # live in the api and db containers.
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
+      # TD-13 container memory pin
+      GOMEMLIMIT: 512MiB
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9000/minio/health/live"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  # One-shot: creates the §3.1 dual buckets and their policies, idempotently.
+  # public  → anonymous download (stable URLs behind Nginx)
+  # private → no anonymous access; presigned URLs only (TD-12)
+  minio-init:
+    image: minio/mc:RELEASE.2025-08-13T08-35-41Z
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      # MC_HOST_<alias> is mc's documented credential channel — it keeps the
+      # secret out of the container command line, so it never surfaces in
+      # `docker compose config`, `docker inspect`, or a process list (TD-13:
+      # secrets never appear in logs or payloads).
+      MC_HOST_local: http://${MINIO_ACCESS_KEY}:${MINIO_SECRET_KEY}@minio:9000
+    entrypoint: >
+      /bin/sh -c "
+      mc mb --ignore-existing local/public &&
+      mc mb --ignore-existing local/private &&
+      mc anonymous set download local/public &&
+      mc anonymous set none local/private &&
+      echo 'MinIO dual buckets ready (public: anonymous download, private: presigned-only)'
+      "
+
+  nginx:
+    image: nginx:stable-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./frontend/dist:/usr/share/nginx/html:ro
+      - certbot-www:/var/www/certbot:ro
+      - certbot-conf:/etc/letsencrypt:ro
+    depends_on:
+      - api
+      - minio
+    restart: unless-stopped
+
+  # Production only (§19.1): docker compose --profile production up -d
+  certbot:
+    image: certbot/certbot
+    profiles: ["production"]
+    volumes:
+      - certbot-www:/var/www/certbot
+      - certbot-conf:/etc/letsencrypt
+    entrypoint: >
+      /bin/sh -c "trap exit TERM;
+      while :; do certbot renew --webroot -w /var/www/certbot; sleep 12h & wait $${!}; done"
+    restart: unless-stopped
+
+volumes:
+  db-data:
+  minio-data:
+  certbot-www:
+  certbot-conf:

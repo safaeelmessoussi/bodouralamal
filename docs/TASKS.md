@@ -9,10 +9,10 @@
 - [x] CI skeleton: lint, typecheck, test runners, TD-6a migration-presence check, `db push` ban check, `.env` commit check, DROP/RENAME migration lint (TD-6b), OpenAPI↔TD-3 conformance check (§3.1)
 
 ## M1 — Infrastructure & Platform Core
-- [ ] `docker-compose.yml`: api, db, minio, nginx (+certbot); TZ=Africa/Casablanca; tzdata pinned (TD-11)
+- [x] `docker-compose.yml`: api, db, minio, nginx (+certbot); TZ=Africa/Casablanca; tzdata pinned (TD-11)
 - [ ] Nginx same-origin path routing `/` `/api/v1/` `/storage/` + SSL + rate limits + storage error-page mapping + prefix-strip/Host rewrite + CSP/nosniff + `/storage/` client_max_body_size 110m + proxy_request_buffering off (API 2m) + gzip static (§3.1, TD-13)
 - [ ] Signed PUT + signed GET round-trip through the /storage proxy passes (§3.1, §18)
-- [ ] MinIO dual buckets (public/private) + policies (§3.1)
+- [x] MinIO dual buckets (public/private) + policies (§3.1)
 - [ ] `schema.prisma` full §7 model incl. `version` columns on TD-15 entities; plain constraints in Prisma
 - [ ] Hand-written SQL migrations via `migrate dev --create-only`: explicit `CREATE COLLATION "ar-x-icu"` registration, column collations, CHECKs (incl. bp score checks), partial unique indexes, cross-table ayah trigger (TD-6, TD-6a)
 - [ ] Production seed, idempotent (§15.1): roles, categories/levels, subjects, academic year, 114 Surahs, SystemSetting defaults, Super Admin allow-list
