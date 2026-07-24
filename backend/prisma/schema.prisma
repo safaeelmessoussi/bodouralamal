@@ -341,8 +341,10 @@ model Category {
   name         String @db.VarChar(120)
   displayOrder Int?   @map("display_order")
 
-  /// Per-category default content visibility (§4.9, §15.1).
-  defaultContentVisibility Visibility @default(private) @map("default_content_visibility")
+  // NOTE: the per-Category default content visibility (§4.9) is NOT a column
+  // here — §7 defines Category as carrying only `name` and `display_order`,
+  // and TD-13/§15.1 place that default in `SystemSetting`. Same reasoning for
+  // the per-level passing grade on Level.
 
   version Int @default(0)
 
@@ -373,9 +375,9 @@ model Level {
   /// Ordering is scoped within the parent Category (§2.2).
   displayOrder Int? @map("display_order")
 
-  /// Association default is 10 (§4.6, §15.1); stored as basis points of the
-  /// exam total so comparisons stay integer-only (§4.6, §20 rule 3).
-  passingGradeBp Int @default(5000) @map("passing_grade_bp")
+  // NOTE: the per-level passing grade is NOT a column here — §7 defines Level
+  // as carrying only `name`, `gender_restriction`, and `display_order`, and
+  // TD-13/§15.1 place the passing-grade default in `SystemSetting`.
 
   version Int @default(0)
 

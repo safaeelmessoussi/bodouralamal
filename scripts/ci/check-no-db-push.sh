@@ -10,9 +10,11 @@
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
+# `*.sql` is excluded because a SQL file cannot invoke a CLI command — the only
+# way "db push" appears there is prose in a comment explaining the ban.
 matches=$(git grep --cached -nI -e 'db push' -e 'db-push' -- \
   ':!docs' ':!CLAUDE.md' ':!AGENTS.md' ':!.github/workflows' \
-  ':!scripts/ci/check-no-db-push.sh' || true)
+  ':!*.sql' ':!scripts/ci/check-no-db-push.sh' || true)
 
 if [[ -n "$matches" ]]; then
   echo "FAIL: 'db push' reference(s) found (prohibited, SRS TD-6a):"
