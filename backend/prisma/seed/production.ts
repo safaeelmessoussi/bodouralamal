@@ -202,6 +202,55 @@ async function seedSystemSettings(categoryIds: Map<string, string>): Promise<voi
   console.log(`  system settings: ${settings.length}`);
 }
 
+/**
+ * §15.1 Super Admin. One `active` User whose `pre_provisioned_email` holds the
+ * lowercased SUPER_ADMIN_EMAIL (§7, Revision 15); its `UserIdentity` is created
+ * on FIRST GOOGLE LOGIN (§4.1b step 4b).
+ *
+ * No placeholder identity row is written — §7 prohibits stub identities, and no
+ * password exists anywhere in this system (§20 rule 10).
+ */
+async function seedSuperAdmin(email: string): Promise<void> {
+  // TD-12: lowercase before every lookup and every write, so a capitalised
+  // value in .env can never create an account that its owner cannot claim.
+  const normalized = email.trim().toLowerCase();
+
+  const role = await prisma.role.findUnique({ where: { name: 'super_admin' } });
+  if (!role) throw new Error('super_admin role missing — seedRoles must run first');
+
+  const existing = await prisma.user.findFirst({
+    where: { preProvisionedEmail: normalized, deletedAt: null },
+  });
+
+  const user =
+    existing ??
+    (await prisma.user.create({
+      data: {
+        nameArabic: 'المشرف العام',
+        preProvisionedEmail: normalized,
+        // Pre-approved by definition: the Super Admin must not land in the
+        // approval queue that only a Super Admin could clear.
+        accountStatus: 'active',
+      },
+    }));
+
+  // Unscoped role assignment: Super Admin is not branch-scoped (§2.1).
+  const assignment = await prisma.userBranchRole.findFirst({
+    where: { userId: user.id, roleId: role.id, branchId: null, deletedAt: null },
+  });
+  if (!assignment) {
+    await prisma.userBranchRole.create({
+      data: { userId: user.id, roleId: role.id, branchId: null },
+    });
+  }
+
+  const identityCount = await prisma.userIdentity.count({ where: { userId: user.id } });
+  console.log(
+    `  super admin: ${existing ? 'already present' : 'created'} ` +
+      `(identity ${identityCount === 0 ? 'not yet bound — binds on first Google login' : 'bound'})`,
+  );
+}
+
 async function main(): Promise<void> {
   console.log('Production seed (§15.1) — idempotent\n');
 
@@ -212,24 +261,7 @@ async function main(): Promise<void> {
   await seedQuranSurahs();
   await seedSystemSettings(categoryIds);
 
-  // ---------------------------------------------------------------------
-  // Super Admin (§15.1) — NOT SEEDED YET, pending a Document Owner decision.
-  //
-  // §15.1 requires one `active` User pre-provisioned against SUPER_ADMIN_EMAIL,
-  // whose Google identity binds on first login (§4.1b step 4b). That step says
-  // the `UserIdentity` row is CREATED at binding time, so no identity row
-  // exists beforehand — yet §4.1b step 3 must "fall back to matching a
-  // pre-provisioned account by verified email". §7 defines `User` with no email
-  // column, and email lives only on `UserIdentity`, so there is nowhere to
-  // store the pre-provisioned address.
-  //
-  // Inventing a column would repeat the mistake already corrected once in M1.5
-  // (fields added to Category/Level that §7 does not define). Reported to the
-  // Document Owner; see docs/CHANGES.log.
-  // ---------------------------------------------------------------------
-  console.log('\n  super admin: SKIPPED — blocked on an SRS gap (see docs/CHANGES.log)');
-  console.log('    §7 gives User no email column, but §4.1b step 3 must match a');
-  console.log('    pre-provisioned account by email before any UserIdentity exists.');
+  await seedSuperAdmin(config.SUPER_ADMIN_EMAIL);
 
   console.log('\nSeed complete.');
 }

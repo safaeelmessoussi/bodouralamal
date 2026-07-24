@@ -183,6 +183,20 @@ model User {
   phone      String? @db.VarChar(20)
   notes      String? @db.VarChar(2000)
 
+  /// The email authorized to claim this account BEFORE any external identity
+  /// exists (§7, Revision 15). Staff set it when pre-provisioning; it is the
+  /// only way an unbound account can be found by email, because `UserIdentity`
+  /// rows exist solely for COMPLETED bindings — placeholder identity rows are
+  /// prohibited. Null for self-registered accounts, which get their identity in
+  /// the same transaction that creates them (§4.1b step 5).
+  ///
+  /// Retained, never cleared, after binding: clearing would destroy provenance
+  /// and release the address for a second account to claim. Lowercase is
+  /// enforced by a DB CHECK, and uniqueness among non-null values by a partial
+  /// unique index — both hand-written (TD-6, TD-6a), since Prisma can express
+  /// neither.
+  preProvisionedEmail String? @map("pre_provisioned_email")
+
   // TD-10 normalized shadow columns, populated by the migration's
   // normalization function and indexed for substring search. Never normalized
   // per-row at query time.
