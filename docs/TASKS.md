@@ -14,6 +14,7 @@
 - [x] Signed PUT + signed GET round-trip through the /storage proxy passes (§3.1, §18)
 - [x] MinIO dual buckets (public/private) + policies (§3.1)
 - [x] `schema.prisma` full §7 model incl. `version` columns on TD-15 entities; plain constraints in Prisma
+- [ ] `RateLimitCounter` entity + unique `(user_id, bucket, window_start)` (§7/TD-6, Revision 14) — added by a forward-only follow-up migration (TD-6b)
 - [x] Hand-written SQL migrations via `migrate dev --create-only`: explicit `CREATE COLLATION "ar-x-icu"` registration, column collations, CHECKs (incl. bp score checks), partial unique indexes, cross-table ayah trigger (TD-6, TD-6a)
 - [ ] Production seed, idempotent (§15.1): roles, categories/levels, subjects, academic year, 114 Surahs, SystemSetting defaults, Super Admin allow-list
 - [ ] Dev fixtures with `NODE_ENV` guard (§15.2)
@@ -29,7 +30,7 @@
 - [ ] Outbound timeout discipline (5 s, no hidden retries) + degraded-mode 503 handling per TD-16
 - [ ] request_id propagation, JSON logs, no-PII log policy (TD-14)
 - [ ] `GET /healthz` with component checks (TD-14)
-- [ ] pg-boss bootstrap + job runner; JobsRepository same-transaction job inserts (never boss.send for mutations) (§16.2, TD-4); token.purge cron (TD-7)
+- [ ] pg-boss bootstrap + job runner; JobsRepository same-transaction job inserts (never boss.send for mutations) (§16.2, TD-4); token.purge + ratelimit.purge crons (TD-7)
 - [ ] Pool/memory pins: Prisma limit 10, pg-boss ≤5, PG max_connections 30, statement_timeout 10s; shared_buffers/GOMEMLIMIT/max-old-space (TD-13)
 - [ ] OAuth callback failure redirects (/login?error=…, 4 keys) + OAUTH_EXCHANGE_FAILED + single-flight refresh w/ 10s grace (§4.1b, TD-12)
 - [ ] AuditLog table + write helper (TD-8); auth.login / login_denied / identity_bound rows
@@ -87,6 +88,7 @@
 
 ## M6 — Content, Consent & Storage
 - [ ] Upload initiate/complete/abort: single-shot presigned PUT, branch-scope validation, Teacher Global rejection (§4.9, TD-3.5)
+- [ ] Authoritative per-user upload quota 30/hour in PostgreSQL (`RateLimitCounter`), locked + incremented in the initiate transaction (TD-4.12, TD-15.2); `429 RATE_LIMITED` envelope; never in-process memory, never pg-boss, never njs (§3.1 Revision 14)
 - [ ] Magic-byte validation at /complete via ranged GET (bytes 0–511) to MinIO + HEAD size check; reject-and-delete (§4.9, TD-9)
 - [ ] Hash-segmented immutable keys; replacement mints new key + quarantines old (TD-9)
 - [ ] FileUploader: progress, failure, clean retry (R-9) (§14.3)
