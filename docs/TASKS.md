@@ -29,7 +29,7 @@
 - [x] Rotation / logout / revoke-on-suspension transactions (TD-4.13/14/15); 10 s grace window is idempotent (no chain fork); reuse outside grace revokes the whole session
 - [x] Token-lifecycle acceptance criteria T1–T12 green (§18, Revision 16)
 - [ ] Pending hard-redirect; zero data access except `GET /me` + logout (TD-1); client-side global Pending route guard (§14.4)
-- [ ] Error envelope middleware + canonical code catalog incl. VERSION_CONFLICT/SERVICE_UNAVAILABLE + i18n message keys (TD-3.8)
+- [~] Error envelope + canonical code catalog incl. VERSION_CONFLICT/SERVICE_UNAVAILABLE + i18n message keys (TD-3.8) — catalog, typed domain errors and envelope done + tested; Express middleware lands with the app
 - [ ] Optimistic-locking helper (conditional UPDATE + version bump) shared across TD-15 entities
 - [ ] Outbound timeout discipline (5 s, no hidden retries) + degraded-mode 503 handling per TD-16
 - [ ] request_id propagation, JSON logs, no-PII log policy (TD-14)
