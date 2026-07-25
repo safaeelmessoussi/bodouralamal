@@ -26,6 +26,62 @@ export const AUDIT_ACTIONS = {
   tokenRevoked: 'auth.token_revoked',
 } as const;
 
+/**
+ * TD-8 retention: 12 months for authentication-lifecycle rows.
+ */
+export const AUTH_AUDIT_RETENTION_DAYS = 365;
+
+/**
+ * The `audit.purge` allowlist (TD-7, Revision 19) — the ONLY action types that
+ * may ever be deleted from the audit log.
+ *
+ * Deliberately a standalone **enumerated** list rather than `AUDIT_ACTIONS`
+ * or an `auth.` prefix test:
+ *
+ *   * A prefix/glob would silently sweep in any future action beginning with
+ *     `auth.` — post-MVP local authentication adds several (§10.1) — without
+ *     anyone deciding it was purgeable.
+ *   * Deriving it from `AUDIT_ACTIONS` would couple "an auth action exists" to
+ *     "it is deletable", so adding a *retained* auth event there would quietly
+ *     make it purgeable.
+ *
+ * Everything absent from this list is retained indefinitely, including the
+ * security events `consent_gate.override`, `grade.passfail_override`,
+ * `settings.change` and `trash.manual_restore`. Extending this list requires an
+ * SRS revision, not a code change.
+ */
+export const PURGEABLE_ACTION_TYPES: readonly string[] = [
+  'auth.login',
+  'auth.login_denied',
+  'auth.identity_bound',
+  'auth.refresh',
+  'auth.logout',
+  'auth.token_revoked',
+];
+
+/**
+ * TD-7 `audit.purge`. Selects on **BOTH** the enumerated allowlist AND the age
+ * horizon — never age alone (which would delete the entire log) and never a
+ * prefix match. Returns the number of rows collected.
+ */
+export async function purgeExpiredAuthRows(
+  db: Db,
+  now: Date = new Date(),
+  retentionDays: number = AUTH_AUDIT_RETENTION_DAYS,
+): Promise<number> {
+  const horizon = new Date(now.getTime() - retentionDays * 24 * 60 * 60 * 1000);
+  const result = await db.auditLog.deleteMany({
+    where: {
+      // Both conditions are required. Dropping either one is a data-loss bug:
+      // without the allowlist the job deletes indefinitely-retained security
+      // events; without the horizon it deletes this morning's logins.
+      actionType: { in: [...PURGEABLE_ACTION_TYPES] },
+      createdAt: { lt: horizon },
+    },
+  });
+  return result.count;
+}
+
 export interface AuditEntry {
   /**
    * Null means **system-initiated**, not "attribution lost" (§7, Revision 17):
