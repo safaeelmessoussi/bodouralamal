@@ -18,12 +18,16 @@
 - [x] Hand-written SQL migrations via `migrate dev --create-only`: explicit `CREATE COLLATION "ar-x-icu"` registration, column collations, CHECKs (incl. bp score checks), partial unique indexes, cross-table ayah trigger (TD-6, TD-6a)
 - [x] Production seed, idempotent (§15.1): roles, categories/levels, subjects, academic year, 114 Surahs, SystemSetting defaults, Super Admin allow-list (via `pre_provisioned_email`, Revision 15 — no placeholder identity)
 - [x] Dev fixtures with `NODE_ENV` guard (§15.2)
-- [ ] Google OAuth: state+PKCE, callback branches 4a/4b/4c, onboarding token (10 min, `jti` + ConsumedToken replay guard) (§4.1b, TD-12)
+- [ ] Google OAuth: state+PKCE (flow state in a short-lived signed HttpOnly callback-scoped cookie, TD-12 Revision 16), callback branches 4a/4b/4c, onboarding token (10 min, `jti` + ConsumedToken replay guard) (§4.1b, TD-12)
+- [ ] Step-4a routing complete: Active / Pending / (Rejected|Suspended|deleted_at → deactivated screen), never reactivation (§4.1b, Revision 16)
 - [ ] Email lowercasing on all identity lookups/writes (TD-12) + DB `CHECK (email = lower(email))` (TD-6)
 - [ ] Registration identity extracted solely from onboarding-token payload; body fields excluded from schema (§4.1b, TD-12)
 - [ ] Access token via Authorization header only; refresh = sole cookie route with custom header + Origin check (TD-12)
 - [ ] High-risk endpoint fresh DB status assertions (presigned mint, social profile, approvals, overrides) (TD-12)
-- [ ] Session layer: 1 h access JWT, 30 d rotating refresh cookie (HttpOnly/Secure/SameSite=Lax), revocation list (TD-12)
+- [ ] `RefreshToken` entity + unique `token_hash` + `session_id` chain (§7/TD-6, Revision 16) — forward-only migration
+- [ ] Session layer: 1 h access JWT, 30 d rotating refresh cookie (HttpOnly/Secure/SameSite=Lax), hashed-never-raw storage, revocation list (TD-12)
+- [ ] Rotation / logout / revoke-on-suspension transactions (TD-4.13/14/15); 10 s grace window is idempotent (no chain fork); reuse outside grace revokes the whole session
+- [ ] Token-lifecycle acceptance criteria T1–T12 green (§18, Revision 16)
 - [ ] Pending hard-redirect; zero data access except `GET /me` + logout (TD-1); client-side global Pending route guard (§14.4)
 - [ ] Error envelope middleware + canonical code catalog incl. VERSION_CONFLICT/SERVICE_UNAVAILABLE + i18n message keys (TD-3.8)
 - [ ] Optimistic-locking helper (conditional UPDATE + version bump) shared across TD-15 entities
@@ -33,7 +37,7 @@
 - [ ] pg-boss bootstrap + job runner; JobsRepository same-transaction job inserts (never boss.send for mutations) (§16.2, TD-4); token.purge + ratelimit.purge crons (TD-7)
 - [ ] Pool/memory pins: Prisma limit 10, pg-boss ≤5, PG max_connections 30, statement_timeout 10s; shared_buffers/GOMEMLIMIT/max-old-space (TD-13)
 - [ ] OAuth callback failure redirects (/login?error=…, 4 keys) + OAUTH_EXCHANGE_FAILED + single-flight refresh w/ 10s grace (§4.1b, TD-12)
-- [ ] AuditLog table + write helper (TD-8); auth.login / login_denied / identity_bound rows
+- [ ] AuditLog table + write helper (TD-8); auth.login / login_denied / identity_bound / refresh / logout / token_revoked rows
 - [ ] OpenAPI generation wired; contract = implementation (TD-3)
 - [ ] Branch/Room CRUD + display_order (Super Admin only) (§2.2, §5.6)
 - [ ] §18 Authentication & Onboarding checklist green
@@ -45,6 +49,7 @@
 - [ ] Approval queue: bundles, approve (TD-4.2 atomic) / reject with reason
 - [ ] FamilyLink lifecycle (TD-1); unique partial index enforced
 - [ ] `X-Active-Child-ID` middleware: (parent+child) match, Student-role self-bypass via JWT sub, 400/404 semantics, never from body/query (§4.3)
+- [ ] Revoke an approved family link = soft-delete (§4.3, Revision 16); TD-2 row + `familylink.revoke` audit; middleware already 404s the next request
 - [ ] ChildContextSwitcher component + API-client header injection (§14.3, §16.1)
 - [ ] GroupTeacher join + teacher-scoping resolution helpers (§4.2)
 - [ ] StudentSocialProfile field-level restriction (assigned teachers only) (§4.10, TD-2)

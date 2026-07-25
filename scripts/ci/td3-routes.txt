@@ -1,7 +1,11 @@
-# TD-3 API route registry seed — derived verbatim from SRS TD-3 (§13) plus the
-# refresh route defined in TD-12 and the health endpoint defined in TD-14.
+# TD-3 API route registry seed — derived verbatim from SRS TD-3 (§13), plus the
+# health endpoint defined in TD-14.
 # Format: METHOD <path>; paths are relative to the /api/v1 prefix except
 # /healthz (TD-14, served at the origin root per §19.1 step 8).
+#
+# `POST /auth/refresh` is listed in TD-3.1 as of SRS Revision 16 (finding F1);
+# it is no longer carried here on TD-12's authority alone. TD-3 is the single
+# canonical route surface (§3.1).
 #
 # The SRS TD-3 registry is the canonical API contract (§3.1). CI enforces both
 # directions against docs/openapi.json (scripts/ci/check-openapi-td3.sh).
