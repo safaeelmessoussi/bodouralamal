@@ -15,6 +15,7 @@ import {
   openFlowState,
   sealFlowState,
 } from '../lib/oauth.js';
+import { issueOnboardingToken } from '../lib/onboarding-token.js';
 import { resolveLogin } from '../services/auth.service.js';
 import {
   hashToken,
@@ -138,10 +139,24 @@ export function oauthCallback(prisma: PrismaClient, config: AppConfig) {
     const route = await resolveLogin(prisma, exchange.identity);
 
     if (route.kind === 'onboarding') {
-      // 4c — the onboarding token and the registration transaction are M2 work
-      // (§4.1b steps 4c–5). Until then the visitor is told plainly rather than
-      // being handed a half-built form.
-      res.redirect(302, `${config.PUBLIC_BASE_URL}/register?status=onboarding_pending`);
+      // ── §4.1b step 4c — brand-new person. NO session is created and NO user
+      // row exists: step 6 requires that abandoning the form persists nothing,
+      // so there is deliberately no access token and no refresh cookie here.
+      //
+      // The only credential issued is the short-lived, single-use onboarding
+      // token carrying the VERIFIED email + provider_subject_id, so the client
+      // cannot substitute a different identity at submission (§20 rule 9).
+      // It rides in the URL fragment, which browsers never send to a server —
+      // keeping it out of access logs and the Referer header — and TD-12
+      // requires the client to hold it in memory only, never in storage.
+      const { token: onboardingToken } = issueOnboardingToken(
+        exchange.identity,
+        config.ONBOARDING_TOKEN_KEY,
+      );
+      res.redirect(
+        302,
+        `${config.PUBLIC_BASE_URL}/register#onboarding_token=${onboardingToken}`,
+      );
       return;
     }
     if (route.kind === 'deactivated') {
