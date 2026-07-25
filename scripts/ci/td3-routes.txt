@@ -1,67 +1,87 @@
-# TD-3 API route registry seed — derived verbatim from SRS TD-3 (§13), plus the
-# health endpoint defined in TD-14.
-# Format: METHOD <path>; paths are relative to the /api/v1 prefix except
-# /healthz (TD-14, served at the origin root per §19.1 step 8).
+# Documented API endpoints — the machine-readable projection of what the SRS
+# documents (SRS §3.1 as restated in Revision 21).
 #
-# `POST /auth/refresh` is listed in TD-3.1 as of SRS Revision 16 (finding F1);
-# it is no longer carried here on TD-12's authority alone. TD-3 is the single
-# canonical route surface (§3.1).
+# TD-3 is the NORMATIVE REGISTRY FOR THE DOCUMENTED MILESTONES — the seed, not
+# the exhaustive catalogue. Endpoints for later milestones join through SRS
+# revisions, so the surface still grows spec-first.
 #
-# The SRS TD-3 registry is the canonical API contract (§3.1). CI enforces both
-# directions against docs/openapi.json (scripts/ci/check-openapi-td3.sh).
-# Path parameters are compared positionally ({name} matches any {other-name}).
+# FORMAT:  METHOD <path>  # <SRS clause that documents it>
+# The clause citation is MANDATORY and is what enforces §3.1's rule that no
+# endpoint may be implemented without SRS documentation. An entry with no
+# citation is rejected by the check.
 #
-# EXCLUDED per SRS Revision 13 (TD-3 §3.6 postponement note; §10.1, §20 rule
-# 16) — do not add before the post-MVP weight-template engine ships:
+# Paths are relative to the /api/v1 prefix except /healthz (TD-14, served at
+# the origin root per §19.1 step 8).
+#
+# CI (scripts/ci/check-openapi-td3.sh) fails when:
+#   * an endpoint is in docs/openapi.json but NOT here      → undocumented
+#   * an entry here carries no SRS clause citation           → undocumented
+# and reports, without failing:
+#   * entries here not yet in openapi.json                   → PENDING
+# TD3_REQUIRE_COMPLETE=1 makes PENDING fatal for the §18 M8 release gate.
+#
+# NEVER hand-edit docs/openapi.json to make this pass — it is generated from the
+# implementation, and a mismatch is an implementation bug or an SRS revision.
+#
+# EXCLUDED per SRS Revision 13 (§10.1, §20 rule 16) — the post-MVP
+# weight-template engine; do not add before it ships:
 #   POST /levels/{id}/grading-template/items
 #   DELETE /grading-template-items/{id}
 #   POST /grading-templates/{id}/activate
-#
-# Any other addition to this file requires a Document Owner decision (the
-# error/route catalog is extensible only by SRS revision, TD-3.8).
 
-# 3.1 Auth & identity
-GET /auth/google
-GET /auth/google/callback
-POST /auth/logout
-POST /auth/refresh
-GET /me
+# ── Auth & identity (TD-3.1; refresh added by Revision 16 F1)
+GET /auth/google                              # TD-3.1, §4.1b step 1
+GET /auth/google/callback                     # TD-3.1, §4.1b steps 2-4
+POST /auth/refresh                            # TD-3.1, TD-12
+POST /auth/logout                             # TD-3.1, TD-4.14
+GET /me                                       # TD-3.1, TD-1
 
-# 3.2 Registration & approvals
-POST /registrations
-GET /admin/approvals
-POST /admin/approvals/{id}/approve
-POST /admin/approvals/{id}/reject
-POST /family-links
+# ── Registration & approvals (TD-3.2)
+POST /registrations                           # TD-3.2, §4.1b step 5
+GET /admin/approvals                          # TD-3.2, §5.6
+POST /admin/approvals/{id}/approve            # TD-3.2, TD-4.2
+POST /admin/approvals/{id}/reject             # TD-3.2, §5.6
+POST /family-links                            # TD-3.2, §4.3
 
-# 3.4 Calendar
-GET /calendar
-POST /events
-PATCH /events/{id}
-DELETE /events/{id}
-POST /admin/branches/{id}/event-backfill
+# ── Calendar & events (TD-3.4)
+GET /calendar                                 # TD-3.4, §4.4
+POST /events                                  # TD-3.4, §4.4
+PATCH /events/{id}                            # TD-3.4, §4.4
+DELETE /events/{id}                           # TD-3.4, TD-5
+POST /admin/branches/{id}/event-backfill      # TD-3.4, §4.4
 
-# 3.5 Storage (single-shot uploads, MVP)
-POST /uploads/initiate
-POST /uploads/{upload_id}/complete
-POST /uploads/{upload_id}/abort
-GET /content/{id}/download-url
+# ── Branches & Rooms CRUD (Revision 21: documented by the §5.6 screen and the
+#    §14.2 screen standard; TD-3 seeds only the backfill route above)
+GET /admin/branches                           # §5.6, §14.2 Branches screen
+POST /admin/branches                          # §5.6 "CRUD"
+PATCH /admin/branches/{id}                    # §5.6 "CRUD"; display_order Super Admin only (§2.2)
+DELETE /admin/branches/{id}                   # §5.6 "CRUD"; guarded by TD-5
+GET /admin/branches/{id}/rooms                # §5.6 "Branches & Rooms", §14.2 row action "Rooms"
+POST /admin/branches/{id}/rooms               # §5.6 "Branches & Rooms"
+PATCH /admin/rooms/{id}                       # §5.6 "Branches & Rooms"
+DELETE /admin/rooms/{id}                      # §5.6; guarded by TD-5 (Rooms block on Groups)
 
-# 3.6 Exams & grading
-POST /exams
-POST /exams/{id}/publish
-POST /exams/{id}/submissions
-PATCH /submissions/{id}
-POST /submissions/{id}/submit
-POST /grades/{id}/publish
-POST /grades/{id}/republish
-POST /grades/{id}/pass-fail-override
-POST /students/{id}/quran-logs
-PATCH /quran-logs/{id}
-DELETE /quran-logs/{id}
+# ── Storage (TD-3.5)
+POST /uploads/initiate                        # TD-3.5, §4.9
+POST /uploads/{upload_id}/complete            # TD-3.5, §4.9
+POST /uploads/{upload_id}/abort               # TD-3.5
+GET /content/{id}/download-url                # TD-3.5, TD-12
 
-# 3.7 Background jobs
-GET /jobs/{id}
+# ── Exams, grading & Quran (TD-3.6)
+POST /exams                                   # TD-3.6, §4.6
+POST /exams/{id}/publish                      # TD-3.6, BR-8
+POST /exams/{id}/submissions                  # TD-3.6, TD-1
+PATCH /submissions/{id}                       # TD-3.6, §4.6
+POST /submissions/{id}/submit                 # TD-3.6, TD-1
+POST /grades/{id}/publish                     # TD-3.6, TD-4.5
+POST /grades/{id}/republish                   # TD-3.6, TD-4.5
+POST /grades/{id}/pass-fail-override          # TD-3.6, BR-12
+POST /students/{id}/quran-logs                # TD-3.6, §4.5
+PATCH /quran-logs/{id}                        # TD-3.6, §4.5
+DELETE /quran-logs/{id}                       # TD-3.6, §4.5
 
-# TD-14 Observability
-GET /healthz
+# ── Background jobs (TD-3.7)
+GET /jobs/{id}                                # TD-3.7
+
+# ── Observability (TD-14)
+GET /healthz                                  # TD-14, §19.1 step 8

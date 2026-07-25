@@ -39,7 +39,7 @@
 - [ ] OAuth callback failure redirects (/login?error=…, 4 keys) + OAUTH_EXCHANGE_FAILED + single-flight refresh w/ 10s grace (§4.1b, TD-12)
 - [ ] AuditLog table + write helper (TD-8); auth.login / login_denied / identity_bound / refresh / logout / token_revoked rows
 - [ ] OpenAPI generation wired; contract = implementation (TD-3)
-- [!] Branch/Room CRUD + display_order (Super Admin only) (§2.2, §5.6) — **BLOCKED: TD-3 vs §3.1 contradiction over whether the route registry is exhaustive (see docs/CHANGES.log)**
+- [ ] Branch/Room CRUD + display_order (Super Admin only) (§2.2, §5.6) — unblocked by Revision 21; 8 routes registered with SRS citations
 - [ ] §18 Authentication & Onboarding checklist green
 
 ## M2 — Registration, Approvals, Family

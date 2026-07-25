@@ -41,14 +41,21 @@ def normalize(path: str) -> str:
     # Path parameters compare positionally: {upload_id} matches {id}.
     return re.sub(r"\{[^}]+\}", "{*}", path.rstrip("/") or "/")
 
+# Every entry must cite the SRS clause that documents it — §3.1 (Revision 21)
+# fails an endpoint implemented without SRS documentation, and an uncited entry
+# is exactly that.
 registry = set()
+uncited = []
 with open(registry_path, encoding="utf-8") as fh:
-    for line in fh:
-        line = line.strip()
+    for raw in fh:
+        line = raw.strip()
         if not line or line.startswith("#"):
             continue
-        method, path = line.split(None, 1)
-        registry.add((method.upper(), normalize(path)))
+        route, _, citation = line.partition("#")
+        method, path = route.split(None, 1)
+        if not citation.strip():
+            uncited.append(route.strip())
+        registry.add((method.upper(), normalize(path.strip())))
 
 with open(openapi_path, encoding="utf-8") as fh:
     doc = json.load(fh)
@@ -68,10 +75,17 @@ missing = sorted(registry - implemented)
 require_complete = os.environ.get("TD3_REQUIRE_COMPLETE") == "1"
 
 ok = True
+if uncited:
+    ok = False
+    print("FAIL: registry entr(ies) with no SRS clause citation (§3.1, Revision 21).")
+    print("      An endpoint with no documenting clause is an undocumented endpoint:")
+    for route in uncited:
+        print(f"  {route}")
+
 if extra:
     ok = False
-    print("FAIL: endpoint(s) in the OpenAPI document but absent from the TD-3 registry (§3.1).")
-    print("      These are invented endpoints — §20 rule 16 forbids them outright:")
+    print("FAIL: endpoint(s) in the OpenAPI document but NOT documented in the SRS (§3.1).")
+    print("      Undocumented endpoints are forbidden (§20 rule 16):")
     for method, path in extra:
         print(f"  {method} {path}")
 
@@ -86,7 +100,7 @@ if missing:
 
 print(
     f"{len(implemented)}/{len(registry)} TD-3 endpoints implemented; "
-    f"{len(extra)} invented (must be 0)."
+    f"{len(extra)} undocumented (must be 0)."
 )
 if ok and not missing:
     print("OK: OpenAPI document conforms to the TD-3 registry exactly.")
