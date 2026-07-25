@@ -3,12 +3,13 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { RefreshRevokedReason } from '../generated/prisma/enums.js';
 import { loadConfig } from '../lib/config.js';
 import { createPrismaClient } from '../lib/prisma.js';
+import * as auditRepo from '../repositories/audit.repository.js';
 import {
   hashToken,
   issueNewSession,
+  logout,
   purgeExpired,
-  revokeAllForUser,
-  revokeSession,
+  revokeAllSessions,
   ROTATION_GRACE_MS,
   rotate,
 } from './refresh-token.service.js';
@@ -33,11 +34,15 @@ async function makeUser(): Promise<string> {
 
 beforeEach(async () => {
   await prisma.refreshToken.deleteMany({ where: { user: { nameArabic: { startsWith: TEST_TAG } } } });
+  await prisma.auditLog.deleteMany({ where: { actor: { nameArabic: { startsWith: TEST_TAG } } } });
+  await prisma.auditLog.deleteMany({ where: { targetEntity: 'User', actorUserId: null } });
   await prisma.user.deleteMany({ where: { nameArabic: { startsWith: TEST_TAG } } });
 });
 
 afterAll(async () => {
   await prisma.refreshToken.deleteMany({ where: { user: { nameArabic: { startsWith: TEST_TAG } } } });
+  await prisma.auditLog.deleteMany({ where: { actor: { nameArabic: { startsWith: TEST_TAG } } } });
+  await prisma.auditLog.deleteMany({ where: { targetEntity: 'User', actorUserId: null } });
   await prisma.user.deleteMany({ where: { nameArabic: { startsWith: TEST_TAG } } });
   await prisma.$disconnect();
 });
@@ -147,7 +152,7 @@ describe('§18 token lifecycle acceptance criteria', () => {
     const deviceB = await issueNewSession(prisma, userId);
     expect(deviceA.sessionId).not.toBe(deviceB.sessionId);
 
-    await revokeSession(prisma, deviceA.sessionId);
+    await logout(prisma, { userId, sessionId: deviceA.sessionId, actorUserId: userId });
 
     // A is dead...
     const aDead = await rotate(prisma, deviceA.rawToken);
@@ -159,11 +164,17 @@ describe('§18 token lifecycle acceptance criteria', () => {
 
   it('T7/T8 — revoke-all kills every live session of the user', async () => {
     const userId = await makeUser();
+    const adminId = await makeUser();
     const a = await issueNewSession(prisma, userId);
     const b = await issueNewSession(prisma, userId);
 
-    const revoked = await revokeAllForUser(prisma, userId, RefreshRevokedReason.suspension);
-    expect(revoked).toBe(2);
+    const revoked = await revokeAllSessions(prisma, {
+      userId,
+      reason: RefreshRevokedReason.suspension,
+      actorUserId: adminId,
+    });
+    expect(revoked.tokenCount).toBe(2);
+    expect(revoked.sessionIds).toHaveLength(2);
 
     for (const token of [a, b]) {
       const outcome = await rotate(prisma, token.rawToken);
@@ -173,13 +184,18 @@ describe('§18 token lifecycle acceptance criteria', () => {
 
   it('T8 — suspension revoking tokens in ONE transaction leaves no live token behind', async () => {
     const userId = await makeUser();
+    const adminId = await makeUser();
     await issueNewSession(prisma, userId);
     await issueNewSession(prisma, userId);
 
     // The shape TD-4.15 mandates: status change and revocation are atomic.
     await prisma.$transaction(async (tx) => {
       await tx.user.update({ where: { id: userId }, data: { accountStatus: 'suspended' } });
-      await revokeAllForUser(tx as unknown as typeof prisma, userId, RefreshRevokedReason.suspension);
+      await revokeAllSessions(tx, {
+        userId,
+        reason: RefreshRevokedReason.suspension,
+        actorUserId: adminId,
+      });
     });
 
     const live = await prisma.refreshToken.count({ where: { userId, revokedAt: null } });
@@ -190,11 +206,16 @@ describe('§18 token lifecycle acceptance criteria', () => {
 
   it('T9 — user deletion revokes with reason user_deleted', async () => {
     const userId = await makeUser();
+    const adminId = await makeUser();
     await issueNewSession(prisma, userId);
 
     await prisma.$transaction(async (tx) => {
       await tx.user.update({ where: { id: userId }, data: { deletedAt: new Date() } });
-      await revokeAllForUser(tx as unknown as typeof prisma, userId, RefreshRevokedReason.user_deleted);
+      await revokeAllSessions(tx, {
+        userId,
+        reason: RefreshRevokedReason.user_deleted,
+        actorUserId: adminId,
+      });
     });
 
     const rows = await prisma.refreshToken.findMany({ where: { userId } });
@@ -222,7 +243,7 @@ describe('§18 token lifecycle acceptance criteria', () => {
   it('T11 — a revoked token is never accepted, at any age', async () => {
     const userId = await makeUser();
     const token = await issueNewSession(prisma, userId);
-    await revokeSession(prisma, token.sessionId);
+    await logout(prisma, { userId, sessionId: token.sessionId, actorUserId: userId });
 
     for (let attempt = 0; attempt < 3; attempt++) {
       const outcome = await rotate(prisma, token.rawToken);
@@ -231,6 +252,112 @@ describe('§18 token lifecycle acceptance criteria', () => {
     }
     const live = await prisma.refreshToken.count({ where: { userId, revokedAt: null } });
     expect(live).toBe(0);
+  });
+
+  it('A1 — every revocation path is attributable from the AuditLog ALONE (§7 invariant)', async () => {
+    // The justification for having no `revoked_by` column: who/when/why must be
+    // reconstructable without reading the RefreshToken row, which TD-7 may purge.
+    const userId = await makeUser();
+    const adminId = await makeUser();
+
+    // Path 1 — rotation (self-service).
+    const rotating = await issueNewSession(prisma, userId);
+    await rotate(prisma, rotating.rawToken);
+
+    // Path 2 — logout (self-service).
+    const loggingOut = await issueNewSession(prisma, userId);
+    await logout(prisma, { userId, sessionId: loggingOut.sessionId, actorUserId: userId });
+
+    // Path 3 — suspension (admin-initiated).
+    const suspended = await issueNewSession(prisma, userId);
+    await revokeAllSessions(prisma, {
+      userId,
+      reason: RefreshRevokedReason.suspension,
+      actorUserId: adminId,
+    });
+
+    // Path 4 — replay detection (system-initiated, no human actor).
+    const replayed = await issueNewSession(prisma, userId);
+    await rotate(prisma, replayed.rawToken);
+    await rotate(prisma, replayed.rawToken, new Date(Date.now() + ROTATION_GRACE_MS + 1000));
+
+    // Reconstruct each session's story from the audit trail only.
+    const cases = [
+      { sessionId: rotating.sessionId, action: 'auth.refresh', actor: userId, reason: null },
+      { sessionId: loggingOut.sessionId, action: 'auth.logout', actor: userId, reason: null },
+      {
+        sessionId: suspended.sessionId,
+        action: 'auth.token_revoked',
+        actor: adminId,
+        reason: RefreshRevokedReason.suspension,
+      },
+      {
+        sessionId: replayed.sessionId,
+        action: 'auth.token_revoked',
+        // Null actor = system-initiated, NOT attribution lost (§7 Revision 17).
+        actor: null,
+        reason: RefreshRevokedReason.reuse_detected,
+      },
+    ];
+
+    for (const expected of cases) {
+      const rows = await auditRepo.findBySessionId(prisma, expected.sessionId);
+      const row = rows.find((r) => r.actionType === expected.action);
+
+      // WHO
+      expect(row, `no ${expected.action} row for session ${expected.sessionId}`).toBeDefined();
+      expect(row!.actorUserId).toBe(expected.actor);
+      // WHEN
+      expect(row!.createdAt).toBeInstanceOf(Date);
+      // WHY
+      const detail = row!.detail as Record<string, unknown>;
+      if (expected.reason !== null) expect(detail['reason']).toBe(expected.reason);
+      // WHICH SESSION — the id itself, not merely a count.
+      expect(detail['session_ids']).toContain(expected.sessionId);
+      // AND TO WHOM
+      expect(row!.targetId).toBe(userId);
+    }
+  });
+
+  it('A2 — attribution survives purging the token rows it describes (TD-7)', async () => {
+    const userId = await makeUser();
+    const adminId = await makeUser();
+
+    const past = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000);
+    const stale = await issueNewSession(prisma, userId, past);
+    await revokeAllSessions(prisma, {
+      userId,
+      reason: RefreshRevokedReason.suspension,
+      actorUserId: adminId,
+    });
+
+    // Purge the token rows entirely — the audit trail must stand on its own.
+    await purgeExpired(prisma);
+    expect(
+      await prisma.refreshToken.count({ where: { tokenHash: hashToken(stale.rawToken) } }),
+    ).toBe(0);
+
+    const rows = await auditRepo.findBySessionId(prisma, stale.sessionId);
+    const revocation = rows.find((r) => r.actionType === 'auth.token_revoked');
+    expect(revocation).toBeDefined();
+    expect(revocation!.actorUserId).toBe(adminId);
+    expect((revocation!.detail as Record<string, unknown>)['reason']).toBe(
+      RefreshRevokedReason.suspension,
+    );
+  });
+
+  it('A3 — no raw token or secret ever reaches the audit detail (TD-14)', async () => {
+    const userId = await makeUser();
+    const token = await issueNewSession(prisma, userId);
+    const rotated = await rotate(prisma, token.rawToken);
+    await logout(prisma, { userId, sessionId: token.sessionId, actorUserId: userId });
+
+    const rows = await prisma.auditLog.findMany({ where: { targetId: userId } });
+    const serialized = JSON.stringify(rows);
+    expect(serialized).not.toContain(token.rawToken);
+    if (rotated.kind === 'rotated') expect(serialized).not.toContain(rotated.rawToken);
+    // Hashes are not secrets, but they have no business in the log either.
+    expect(serialized).not.toContain(hashToken(token.rawToken));
   });
 
   it('T12 — concurrent refresh from two tabs rotates exactly once and logs nobody out', async () => {
