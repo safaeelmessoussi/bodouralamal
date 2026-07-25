@@ -18,27 +18,27 @@
 - [x] Hand-written SQL migrations via `migrate dev --create-only`: explicit `CREATE COLLATION "ar-x-icu"` registration, column collations, CHECKs (incl. bp score checks), partial unique indexes, cross-table ayah trigger (TD-6, TD-6a)
 - [x] Production seed, idempotent (§15.1): roles, categories/levels, subjects, academic year, 114 Surahs, SystemSetting defaults, Super Admin allow-list (via `pre_provisioned_email`, Revision 15 — no placeholder identity)
 - [x] Dev fixtures with `NODE_ENV` guard (§15.2)
-- [ ] Google OAuth: state+PKCE (flow state in a short-lived signed HttpOnly callback-scoped cookie, TD-12 Revision 16), callback branches 4a/4b/4c, onboarding token (10 min, `jti` + ConsumedToken replay guard) (§4.1b, TD-12)
-- [ ] Step-4a routing complete: Active / Pending / (Rejected|Suspended|deleted_at → deactivated screen), never reactivation (§4.1b, Revision 16)
-- [ ] Email lowercasing on all identity lookups/writes (TD-12) + DB `CHECK (email = lower(email))` (TD-6)
-- [ ] Registration identity extracted solely from onboarding-token payload; body fields excluded from schema (§4.1b, TD-12)
-- [ ] Access token via Authorization header only; refresh = sole cookie route with custom header + Origin check (TD-12)
+- [x] Google OAuth: state+PKCE (flow state in a short-lived signed HttpOnly callback-scoped cookie, TD-12 Revision 16), callback branches 4a/4b/4c, onboarding token (10 min, `jti` + ConsumedToken replay guard) (§4.1b, TD-12)
+- [x] Step-4a routing complete: Active / Pending / (Rejected|Suspended|deleted_at → deactivated screen), never reactivation (§4.1b, Revision 16)
+- [x] Email lowercasing on all identity lookups/writes (TD-12) + DB `CHECK (email = lower(email))` (TD-6)
+- [~] Registration identity extracted solely from onboarding-token payload — **token side done** (payload is the sole identity source, substitution test green); the `POST /registrations` endpoint that must exclude body fields is M2
+- [x] Access token via Authorization header only; refresh = sole cookie route with custom header + Origin check (TD-12)
 - [ ] High-risk endpoint fresh DB status assertions (presigned mint, social profile, approvals, overrides) (TD-12)
 - [x] `RefreshToken` entity + unique `token_hash` + `session_id` chain (§7/TD-6, Revision 16) — forward-only migration
-- [ ] Session layer: 1 h access JWT, 30 d rotating refresh cookie (HttpOnly/Secure/SameSite=Lax), hashed-never-raw storage, revocation list (TD-12)
+- [x] Session layer: 1 h access JWT, 30 d rotating refresh cookie (HttpOnly/Secure/SameSite=Lax), hashed-never-raw storage, revocation list (TD-12)
 - [x] Rotation / logout / revoke-on-suspension transactions (TD-4.13/14/15); 10 s grace window is idempotent (no chain fork); reuse outside grace revokes the whole session
 - [x] Token-lifecycle acceptance criteria T1–T12 green (§18, Revision 16)
-- [ ] Pending hard-redirect; zero data access except `GET /me` + logout (TD-1); client-side global Pending route guard (§14.4)
+- [~] Pending hard-redirect; zero data access except `GET /me` + logout (TD-1) — **server side done**; the client-side global route guard (§14.4) needs the frontend shell
 - [~] Error envelope + canonical code catalog incl. VERSION_CONFLICT/SERVICE_UNAVAILABLE + i18n message keys (TD-3.8) — catalog, typed domain errors and envelope done + tested; Express middleware lands with the app
 - [ ] Optimistic-locking helper (conditional UPDATE + version bump) shared across TD-15 entities
-- [ ] Outbound timeout discipline (5 s, no hidden retries) + degraded-mode 503 handling per TD-16
-- [ ] request_id propagation, JSON logs, no-PII log policy (TD-14)
-- [ ] `GET /healthz` with component checks (TD-14)
+- [~] Outbound timeout discipline (5 s, no hidden retries) **done** for Google + MinIO; the full TD-16 degraded-mode 503 matrix needs the storage endpoints (M6)
+- [x] request_id propagation, JSON logs, no-PII log policy (TD-14)
+- [x] `GET /healthz` with component checks (TD-14)
 - [~] pg-boss bootstrap + job runner; token.purge + ratelimit.purge + audit.purge crons **done and verified live** (TD-7). `JobsRepository` same-transaction job inserts (§16.2, TD-4) lands with the first job-triggering mutation (M3 roster / M6 consent)
-- [ ] Pool/memory pins: Prisma limit 10, pg-boss ≤5, PG max_connections 30, statement_timeout 10s; shared_buffers/GOMEMLIMIT/max-old-space (TD-13)
-- [ ] OAuth callback failure redirects (/login?error=…, 4 keys) + OAUTH_EXCHANGE_FAILED + single-flight refresh w/ 10s grace (§4.1b, TD-12)
-- [ ] AuditLog table + write helper (TD-8); auth.login / login_denied / identity_bound / refresh / logout / token_revoked rows
-- [ ] OpenAPI generation wired; contract = implementation (TD-3)
+- [x] Pool/memory pins: Prisma limit 10, pg-boss ≤5, PG max_connections 30, statement_timeout 10s; shared_buffers/GOMEMLIMIT/max-old-space (TD-13)
+- [~] OAuth callback failure redirects (4 keys, all verified live) + OAUTH_EXCHANGE_FAILED **done**; the 10 s server grace is **done** (T3); the **client-side single-flight refresh mutex** needs the frontend
+- [x] AuditLog table + write helper (TD-8); auth.login / login_denied / identity_bound / refresh / logout / token_revoked rows
+- [x] OpenAPI generation wired; contract = implementation (TD-3)
 - [ ] Branch/Room CRUD + display_order (Super Admin only) (§2.2, §5.6) — unblocked by Revision 21; 8 routes registered with SRS citations
 - [ ] §18 Authentication & Onboarding checklist green
 

@@ -35,9 +35,10 @@ async function checkStorage(config: AppConfig): Promise<ComponentState> {
 
 /**
  * pg-boss stores its state in PostgreSQL, so "is the queue alive" is a question
- * about its schema. Until the runner is wired (its own M1 task) this reports
- * `not_configured` rather than a false `ok` — a health endpoint that lies about
- * an unbuilt component is worse than one that admits it.
+ * about its schema. The runner is wired (M1.10), so this normally reports `ok`;
+ * `not_configured` remains for an environment where the schema has not been
+ * created yet — reporting that honestly beats a health endpoint that lies about
+ * a component it has not checked.
  */
 async function checkJobQueue(prisma: PrismaClient): Promise<ComponentState> {
   try {
