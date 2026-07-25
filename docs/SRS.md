@@ -1,7 +1,7 @@
 # Software Requirements Specification
 ## بذور الأمل — Institute Management Platform
 
-**Status:** Final MVP Blueprint (Revision 17 — audit attribution invariant: revocation is reconstructable from the AuditLog alone), **immutable source of truth** — changed only by an explicit Document Owner revision, never by an implementing agent
+**Status:** Final MVP Blueprint (Revision 18 — §2.4 sizing revised to the real authentication audit workload; retention classified and enforced), **immutable source of truth** — changed only by an explicit Document Owner revision, never by an implementing agent
 **Revision date:** 2026-07-24
 **Canonical location:** `docs/SRS.md` in the project repository
 **Document Owner:** [assign]
@@ -23,6 +23,8 @@ This is a standalone, self-contained specification. It does not reference extern
 * **§18 — Module Acceptance Checklists.**
 * **§19 — Environments, Deployment Pipeline & Testing Strategy.**
 * **§20 — AI Implementation Rules:** hard guardrails for any autonomous coding agent. §20 closes the document deliberately: it is the last thing an agent reads before writing code.
+
+**Revision 18 (Document Owner decision — sizing follows the audit model, not the reverse, 2026-07-25):** the Revision-16/17 audit model implies roughly **800–900k authentication audit rows a year**, an order of magnitude above §2.4's original ~100k/year estimate. The Document Owner chose to **revise the estimate rather than weaken the audit trail**: per-refresh `auth.refresh` auditing stays **normative**, because the §7 attribution invariant depends on it. Changes: **(1) §2.4** splits `AuditLog` into authentication and other actions, states the real figures at launch and at ceiling, explains that the volume follows directly from the one-hour access-token TTL rather than from careless logging, and adds a **storage projection** (~400–500 bytes/row all-in including its three indexes → ~0.6–0.7 GB at launch, ~3–3.75 GB at ceiling) flagged as **disk, not RAM**, so it lands in the VPS disk budget beside the §2.3 audio estimate instead of competing with the TD-13 memory pins. §2.4's figures are also now explicitly labelled **planning estimates for infrastructure sizing, not hard limits** — nothing in the application enforces them. **(2) TD-8** classifies **all six** authentication-lifecycle actions (`auth.login`, `auth.login_denied`, `auth.identity_bound`, `auth.refresh`, `auth.logout`, `auth.token_revoked`) under the **same 12-month retention** the original login audits carried; the Revision-16/17 events join that class rather than forming a new one, which is what makes authentication rows **bounded rather than cumulative**. **(3)** Because that bound is now load-bearing for §2.4's steady-state projection, retention gains an enforcement mechanism: **`audit.purge` (TD-7)**, the single sanctioned deletion path for audit rows, forbidden from touching the indefinitely-retained action types. TD-8's "append-only" rule is restated around it. A pre-existing inconsistency found during the sweep is also corrected: **§2.3 still cited a 500 MB audio cap**, stale since Revision 12 reduced it to **100 MB**.
 
 **Revision 17 (Document Owner-authorised audit-attribution verification, 2026-07-25):** Revision 16 removed `revoked_by` from `RefreshToken` on the grounds that `AuditLog.actor_user_id` already carries the actor. The Document Owner required that claim to be **verified rather than asserted**, and verification found it true in principle but **not yet guaranteed** in three respects, all corrected here. **(1)** `auth.token_revoked` recorded only a *count* of affected sessions, so a revoke-all touching several sessions could not attribute a **specific** session from the audit trail alone — the detail now carries the **list of affected `session_id`s**. **(2)** `AuditLog.actor_user_id` is now explicitly **nullable**, because two mandated actions have no human actor by nature: replay-detected revocation (triggered by an unauthenticated request presenting a stolen secret) and the consent re-evaluation job's forced visibility changes. A null actor means *system-initiated*, not *attribution lost*; the `action_type` and `detail` carry the "why". **(3)** An **attribution invariant** is stated in §7: for anything revocable, who/when/why must be reconstructable **from the `AuditLog` alone**, without reading the affected row — which may have been purged by TD-7 or overwritten. That is the actual justification for having no `revoked_by` column: a duplicated actor is two records that can disagree. A revocation path that mutates state without its mandated audit row **in the same transaction** is therefore non-compliant, not merely under-logged. TD-4.13's wording is aligned with the Revision-16 implementation note that rotation leaves `revoked_reason` NULL.
 
@@ -121,7 +123,7 @@ A single person may hold multiple roles concurrently (e.g., a mother who is both
 | Create the Google Cloud project, OAuth consent screen, and production OAuth client credentials | Google-only auth cannot function without it; verification can take days–weeks | Procurement/admin |
 | Collect or create Google accounts for all launch staff and first-cohort adult beneficiaries | Google-only MVP auth (Risk R-1) | Field/admin work |
 | Confirm domain + DNS control for Let's Encrypt SSL (app + storage path) | Blocks the secure MinIO pipeline (§3.1) | Procurement |
-| Estimate audio storage budget (recordings/week × avg size) against VPS disk sizing | 500 MB per-file cap (TD-9) can outgrow a small VPS disk within months | Planning |
+| Estimate audio storage budget (recordings/week × avg size) against VPS disk sizing, **alongside the ~0.6–3.75 GB audit-log projection (§2.4)** | The **100 MB** per-file audio cap (TD-9 — corrected in Revision 18 from a stale pre-Revision-12 figure of 500 MB) still accumulates on a small VPS disk over a full year | Planning |
 ### 2.4 Expected Operational Scale (design envelope)
 
 Sizing reality, so implementers neither under-build nor gold-plate:
@@ -134,7 +136,21 @@ Sizing reality, so implementers neither under-build nor gold-plate:
 | QuranProgressLog rows | ~30k/year | 200k total |
 | Grades + submissions | ~15k/year | 100k total |
 | EducationalContent objects | ~1k/year (audio-dominant; storage budget §2.3) | 10k |
-| AuditLog rows | ~100k/year | 1M total |
+| AuditLog rows — **authentication** (`auth.*`) | **~800–900k/year written**; ~900k **steady state** | ~5M/year written; ~5M steady state |
+| AuditLog rows — all other actions | ~100k/year, accumulating | ~500k/year, accumulating |
+
+**Why the authentication figure is an order of magnitude above the rest (Revision 18).** Access tokens live one hour (TD-12), so every active session writes an `auth.refresh` row roughly hourly, and per-refresh auditing is **normative** — the §7 attribution invariant depends on it, and it is deliberately *not* reduced to save rows. The number is therefore a direct consequence of session behaviour at this user count, not a logging accident. Authentication rows are **bounded rather than cumulative**: they fall under the 12-month retention of TD-8 and are collected by `audit.purge` (TD-7), so their steady state is one rolling year's worth. Only the non-authentication rows accumulate indefinitely.
+
+**Storage projection (planning estimate, Revision 18).** An `AuditLog` row costs roughly **400–500 bytes all-in** — row header and payload, plus entries in its three indexes (TD-6). That gives approximately:
+
+| | Launch | Design ceiling |
+|---|---|---|
+| Audit rows in steady state (auth rolling 12 months + 5 years of other actions) | ~1.4M | ~7.5M |
+| **Audit disk footprint** | **~0.6–0.7 GB** | **~3–3.75 GB** |
+
+This is **disk, not RAM** — it does not compete with the TD-13 container memory pins, but it does belong in the VPS disk budget alongside the audio estimate (§2.3), and it is the reason the retention policy is enforced by a job rather than left aspirational. It also enters the **backup sizing** of §6: the audit table is part of every nightly `pg_dump` and of the offsite `restic` push, and the **RTO < 1 h** target is asserted against a database carrying this footprint — which the 12-month authentication retention is what keeps flat instead of growing every year.
+
+**These figures are planning estimates for infrastructure sizing, not hard system limits (Revision 18).** Exceeding a number here is not a fault condition and nothing in the application enforces one; the table exists so the VPS is provisioned honestly and so implementers know which access patterns must stay index-backed. The binding obligations are the ones in the paragraph below.
 
 **Implementation guidance (binding):** the single-VPS topology (§3.1, R-3) is the correct architecture for this entire envelope — do **not** introduce caching layers, read replicas, sharding, search engines, or horizontal scaling machinery for MVP (premature optimization is a defect here). Conversely, do not write code that dies at the ceiling: every list is paginated (TD-10), every hot path is index-backed (composite indexes matched to their query patterns, TD-6), no endpoint performs unbounded full-table scans or N+1 query loops, and the TD-11a latency targets are measured against **ceiling-scale fixture data**, not a ten-row dev database. Growth beyond the ceiling (a second institute) means a separate dedicated deployment or a deliberate re-architecture (§3.2) — not something MVP code should speculatively absorb.
 
@@ -885,6 +901,7 @@ All jobs carry retry: exponential backoff, max 5 attempts, then dead-letter with
 | `upload.gc` | cron (daily) | — | deletes initiated-but-never-completed uploads **strictly older than 48 h** (never younger — an in-progress slow upload must not be reaped) |
 | `token.purge` | cron (daily) | — | deletes `ConsumedToken` rows past their TTL horizon (keeps the replay-guard table small) **and `RefreshToken` rows past `expires_at` (Revision 16), so a table that gains a row per refresh does not grow unbounded**. Purging is fail-closed: a presented token with no row is simply invalid, so collecting expired rows can never widen access |
 | `ratelimit.purge` | cron (daily) | — | deletes `RateLimitCounter` rows for elapsed windows (Revision 14). Housekeeping only — the quota decision itself is synchronous and never depends on this job |
+| `audit.purge` | cron (daily) | — | deletes **authentication-lifecycle** `AuditLog` rows (`auth.*`) older than the 12-month retention horizon (TD-8, Revision 18). **The only sanctioned deletion path for audit rows** — all other action types are retained indefinitely and this job must never touch them. It is what makes §2.4's bounded authentication steady state real rather than aspirational; without it, per-refresh auditing grows without limit |
 
 (`import.csv` / `export.csv` and `grade.recalculate` join this catalog with their post-MVP phases, §10.1.)
 
@@ -916,7 +933,7 @@ Every action below writes an `AuditLog` row (actor, timestamp, action_type, targ
 | `trash.manual_restore` | entity reference, runbook script id (MVP manual-SQL restores, §4.10) |
 | `settings.change` | key, old→new |
 
-(`data.export` / `data.import` and `trash.restore` / `trash.permanent_delete` UI actions join the grid with their post-MVP features.) Login audits retain 12 months; all other audit rows retained indefinitely for MVP. Audit rows are append-only — no update or delete path exists in the application.
+(`data.export` / `data.import` and `trash.restore` / `trash.permanent_delete` UI actions join the grid with their post-MVP features.) **Retention (clarified in Revision 18).** **Every authentication-lifecycle row — `auth.login`, `auth.login_denied`, `auth.identity_bound`, `auth.refresh`, `auth.logout`, `auth.token_revoked` — retains 12 months**, the same policy the original login audits carried; the events added in Revisions 16–17 join that class rather than forming a new one. All other audit rows are retained indefinitely for MVP. Retention is **enforced by the `audit.purge` job (TD-7)**, not left to intent: at ~800–900k authentication rows a year (§2.4) an unenforced policy would simply mean unbounded growth, and §2.4's steady-state projection assumes the collection actually happens. Audit rows are otherwise **append-only** — no update path and no application-level delete path exists; `audit.purge` is the single sanctioned deletion route, exactly as `content.quarantine-purge` is for trashed objects.
 
 ### TD-9 — Data Validation Limits & File/Storage Naming
 
