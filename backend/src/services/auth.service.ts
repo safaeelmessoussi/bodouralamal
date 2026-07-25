@@ -1,0 +1,161 @@
+import type { PrismaClient } from '../generated/prisma/client.js';
+import * as audit from '../repositories/audit.repository.js';
+import * as users from '../repositories/user.repository.js';
+import type { ResolvedAccount } from '../repositories/user.repository.js';
+
+/**
+ * Login resolution and routing (SRS §4.1b steps 3–4, TD-1, TD-4.10).
+ *
+ * The whole security posture of the platform starts here, so the order of
+ * operations is the SRS's, verbatim, and each branch names its clause.
+ */
+
+export type LoginRoute =
+  /** 4a/4b with `Active` — role dashboard. */
+  | { kind: 'active'; account: ResolvedAccount; boundNow: boolean }
+  /** 4a/4b with `Pending` — approval-status screen, ZERO data access (TD-1). */
+  | { kind: 'pending'; account: ResolvedAccount; boundNow: boolean }
+  /**
+   * Rejected, Suspended, or soft-deleted → the "Account deactivated" screen
+   * (§4.1b 4a as completed in Revision 16). Authenticating NEVER reactivates.
+   */
+  | { kind: 'deactivated'; reason: 'rejected' | 'suspended' | 'deleted' }
+  /** 4c — brand-new person: issue an onboarding token and send them to the form. */
+  | { kind: 'onboarding' };
+
+/**
+ * Applies the §4.1b step-4a routing condition **in full**: status alone is not
+ * enough, because a soft-delete sets `deleted_at` without necessarily moving
+ * `account_status` — routing on status alone would hand a deleted user a
+ * dashboard (Revision 16).
+ */
+function routeByStatus(account: ResolvedAccount, boundNow: boolean): LoginRoute {
+  if (account.user.deletedAt !== null) return { kind: 'deactivated', reason: 'deleted' };
+  switch (account.user.accountStatus) {
+    case 'active':
+      return { kind: 'active', account, boundNow };
+    case 'pending':
+      return { kind: 'pending', account, boundNow };
+    case 'rejected':
+      return { kind: 'deactivated', reason: 'rejected' };
+    case 'suspended':
+      return { kind: 'deactivated', reason: 'suspended' };
+  }
+}
+
+/**
+ * §4.1b steps 3–4. Resolution order is fixed: the provider identity first
+ * (every login after the first takes that path), then the pre-provisioned
+ * email fallback among non-deleted users, then onboarding.
+ *
+ * Binding (4b) runs in a transaction with its audit row (TD-4.10). Two
+ * concurrent first logins resolve first-wins on the `(provider,
+ * provider_subject_id)` unique constraint; the loser re-reads and finds the
+ * account already bound (TD-15.3).
+ */
+export async function resolveLogin(
+  prisma: PrismaClient,
+  identity: { email: string; providerSubjectId: string },
+): Promise<LoginRoute> {
+  // TD-12: every lookup runs against the lowercased email.
+  const email = identity.email.toLowerCase();
+
+  // ── Step 3.1 — the provider identity.
+  const bound = await users.findByProviderIdentity(prisma, 'google', identity.providerSubjectId);
+  if (bound) {
+    // A deactivated identity (TD-5 user soft-delete) resolves to the
+    // deactivated screen, NOT to onboarding: §4.1 forbids silently
+    // re-registering a deleted account, and falling through would do exactly
+    // that. The identity is found and refused, rather than not found.
+    const route = bound.identityActive
+      ? routeByStatus(bound, false)
+      : ({ kind: 'deactivated', reason: 'deleted' } as const);
+    await writeLoginAudit(prisma, route, bound.user.id);
+    return route;
+  }
+
+  // ── Step 3.2 — pre-provisioned account awaiting its first binding.
+  const preProvisioned = await users.findByPreProvisionedEmail(prisma, email);
+  if (!preProvisioned) return { kind: 'onboarding' }; // Step 4c.
+
+  // A Suspended/deleted match routes to "Account deactivated" and is NEVER
+  // bound or reactivated by the act of logging in (§4.1, §4.1b 4b).
+  const preRoute = routeByStatus(preProvisioned, false);
+  if (preRoute.kind === 'deactivated') {
+    await writeLoginAudit(prisma, preRoute, preProvisioned.user.id);
+    return preRoute;
+  }
+
+  // ── Step 4b — bind transactionally (TD-4.10).
+  try {
+    await prisma.$transaction(async (tx) => {
+      await users.bindIdentity(tx, {
+        userId: preProvisioned.user.id,
+        provider: 'google',
+        providerSubjectId: identity.providerSubjectId,
+        email,
+      });
+      await audit.write(tx, {
+        actorUserId: preProvisioned.user.id,
+        actionType: audit.AUDIT_ACTIONS.identityBound,
+        targetEntity: 'User',
+        targetId: preProvisioned.user.id,
+        // `pre_provisioned_email` is retained, not cleared (§7), so the
+        // provenance of how this account was created survives the binding.
+        detail: { provider: 'google', matched_by: 'pre_provisioned_email' },
+      });
+    });
+  } catch (error) {
+    // Lost the race to a concurrent first login: re-read and continue as 4a.
+    if ((error as { code?: unknown } | null)?.code === 'P2002') {
+      const nowBound = await users.findByProviderIdentity(
+        prisma,
+        'google',
+        identity.providerSubjectId,
+      );
+      if (nowBound) {
+        const route = routeByStatus(nowBound, false);
+        await writeLoginAudit(prisma, route, nowBound.user.id);
+        return route;
+      }
+    }
+    throw error;
+  }
+
+  const route = routeByStatus(preProvisioned, true);
+  await writeLoginAudit(prisma, route, preProvisioned.user.id);
+  return route;
+}
+
+/** TD-8: `auth.login` on success, `auth.login_denied` with the denial reason. */
+async function writeLoginAudit(
+  prisma: PrismaClient,
+  route: LoginRoute,
+  userId: string,
+): Promise<void> {
+  if (route.kind === 'deactivated') {
+    await audit.write(prisma, {
+      actorUserId: userId,
+      actionType: audit.AUDIT_ACTIONS.loginDenied,
+      targetEntity: 'User',
+      targetId: userId,
+      // TD-8 wants the denial reason; TD-14 forbids the identity email here.
+      detail: { provider: 'google', reason: route.reason },
+    });
+    return;
+  }
+  // `onboarding` never reaches here — it has no account to attribute a login to.
+  if (route.kind === 'onboarding') return;
+
+  await audit.write(prisma, {
+    actorUserId: userId,
+    actionType: audit.AUDIT_ACTIONS.login,
+    targetEntity: 'User',
+    targetId: userId,
+    detail: {
+      provider: 'google',
+      account_status: route.kind,
+      ...(route.boundNow ? { bound_now: true } : {}),
+    },
+  });
+}
