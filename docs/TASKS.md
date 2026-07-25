@@ -34,12 +34,12 @@
 - [ ] Outbound timeout discipline (5 s, no hidden retries) + degraded-mode 503 handling per TD-16
 - [ ] request_id propagation, JSON logs, no-PII log policy (TD-14)
 - [ ] `GET /healthz` with component checks (TD-14)
-- [ ] pg-boss bootstrap + job runner; JobsRepository same-transaction job inserts (never boss.send for mutations) (§16.2, TD-4); token.purge + ratelimit.purge + audit.purge crons (TD-7)
+- [~] pg-boss bootstrap + job runner; token.purge + ratelimit.purge + audit.purge crons **done and verified live** (TD-7). `JobsRepository` same-transaction job inserts (§16.2, TD-4) lands with the first job-triggering mutation (M3 roster / M6 consent)
 - [ ] Pool/memory pins: Prisma limit 10, pg-boss ≤5, PG max_connections 30, statement_timeout 10s; shared_buffers/GOMEMLIMIT/max-old-space (TD-13)
 - [ ] OAuth callback failure redirects (/login?error=…, 4 keys) + OAUTH_EXCHANGE_FAILED + single-flight refresh w/ 10s grace (§4.1b, TD-12)
 - [ ] AuditLog table + write helper (TD-8); auth.login / login_denied / identity_bound / refresh / logout / token_revoked rows
 - [ ] OpenAPI generation wired; contract = implementation (TD-3)
-- [ ] Branch/Room CRUD + display_order (Super Admin only) (§2.2, §5.6)
+- [!] Branch/Room CRUD + display_order (Super Admin only) (§2.2, §5.6) — **BLOCKED: TD-3 vs §3.1 contradiction over whether the route registry is exhaustive (see docs/CHANGES.log)**
 - [ ] §18 Authentication & Onboarding checklist green
 
 ## M2 — Registration, Approvals, Family
