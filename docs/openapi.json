@@ -73,6 +73,131 @@
         }
       }
     },
+    "/admin/branches": {
+      "get": {
+        "summary": "List branches",
+        "description": "Ordered by display_order ASC NULLS LAST then name (ar-x-icu collated, §2.2/TD-10). Admins see their scoped branches; Super Admins see all.",
+        "responses": {
+          "200": {
+            "description": "Branch list."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8)."
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8)."
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a branch",
+        "description": "Admin or Super Admin (TD-2). display_order is Super Admin only (§2.2).",
+        "responses": {
+          "201": {
+            "description": "Created."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8)."
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8)."
+          }
+        }
+      }
+    },
+    "/admin/branches/{id}": {
+      "patch": {
+        "summary": "Update a branch",
+        "description": "Optimistic locking on `version` (TD-15): a stale version returns 409 VERSION_CONFLICT rather than overwriting silently.",
+        "responses": {
+          "200": {
+            "description": "Updated."
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8)."
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). VERSION_CONFLICT."
+          }
+        }
+      },
+      "delete": {
+        "summary": "Soft-delete a branch",
+        "description": "Prohibited while Rooms or Groups reference it (TD-5) — 409 STATE_CONFLICT. Writes a Trash snapshot and an audit row (TD-4.8).",
+        "responses": {
+          "204": {
+            "description": "Deleted."
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8)."
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT when referenced."
+          }
+        }
+      }
+    },
+    "/admin/branches/{id}/rooms": {
+      "get": {
+        "summary": "List a branch's rooms",
+        "description": "Scoped to the branch (§5.6).",
+        "responses": {
+          "200": {
+            "description": "Room list."
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8)."
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a room",
+        "description": "Within the given branch (§5.6).",
+        "responses": {
+          "201": {
+            "description": "Created."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8)."
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8)."
+          }
+        }
+      }
+    },
+    "/admin/rooms/{id}": {
+      "patch": {
+        "summary": "Update a room",
+        "description": "Optimistic locking on `version` (TD-15).",
+        "responses": {
+          "200": {
+            "description": "Updated."
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8)."
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). VERSION_CONFLICT."
+          }
+        }
+      },
+      "delete": {
+        "summary": "Soft-delete a room",
+        "description": "Prohibited while Groups reference it (TD-5).",
+        "responses": {
+          "204": {
+            "description": "Deleted."
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8)."
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT when referenced."
+          }
+        }
+      }
+    },
     "/healthz": {
       "get": {
         "summary": "Health check",

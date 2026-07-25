@@ -1,11 +1,13 @@
 import express, { type Express, type Request, type Response } from 'express';
 
 import * as auth from './controllers/auth.controller.js';
+import * as branch from './controllers/branch.controller.js';
 import { healthController } from './controllers/health.controller.js';
 import type { PrismaClient } from './generated/prisma/client.js';
 import { verifyAccessToken } from './lib/access-token.js';
 import type { AppConfig } from './lib/config.js';
 import { AppError } from './lib/errors.js';
+import { authenticate } from './middleware/authenticate.js';
 import {
   accessLog,
   errorHandler,
@@ -71,6 +73,21 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
   api.post('/auth/refresh', auth.refresh(prisma, config));
   api.post('/auth/logout', auth.logout(prisma));
   api.get('/me', meController(prisma, config));
+
+  // Branches & Rooms (§5.6, §14.2). Everything below requires a live Active
+  // session; role and branch-scope checks live in the service (TD-2).
+  const guarded = express.Router();
+  guarded.use(authenticate(config));
+  guarded.get('/admin/branches', branch.listBranches(prisma));
+  guarded.post('/admin/branches', branch.createBranch(prisma));
+  guarded.patch('/admin/branches/:id', branch.updateBranch(prisma));
+  guarded.delete('/admin/branches/:id', branch.deleteBranch(prisma));
+  guarded.get('/admin/branches/:id/rooms', branch.listRooms(prisma));
+  guarded.post('/admin/branches/:id/rooms', branch.createRoom(prisma));
+  guarded.patch('/admin/rooms/:id', branch.updateRoom(prisma));
+  guarded.delete('/admin/rooms/:id', branch.deleteRoom(prisma));
+  api.use(guarded);
+
   app.use('/api/v1', api);
 
   app.use(notFound);

@@ -86,6 +86,22 @@ const document = {
         { '200': 'Current user.', '401': ENVELOPE },
       ),
     },
+    '/admin/branches': {
+      get: op('List branches', 'Ordered by display_order ASC NULLS LAST then name (ar-x-icu collated, §2.2/TD-10). Admins see their scoped branches; Super Admins see all.', { '200': 'Branch list.', '401': ENVELOPE, '403': ENVELOPE }),
+      post: op('Create a branch', 'Admin or Super Admin (TD-2). display_order is Super Admin only (§2.2).', { '201': 'Created.', '400': ENVELOPE, '403': ENVELOPE }),
+    },
+    '/admin/branches/{id}': {
+      patch: op('Update a branch', 'Optimistic locking on `version` (TD-15): a stale version returns 409 VERSION_CONFLICT rather than overwriting silently.', { '200': 'Updated.', '404': ENVELOPE, '409': `${ENVELOPE} VERSION_CONFLICT.` }),
+      delete: op('Soft-delete a branch', 'Prohibited while Rooms or Groups reference it (TD-5) — 409 STATE_CONFLICT. Writes a Trash snapshot and an audit row (TD-4.8).', { '204': 'Deleted.', '404': ENVELOPE, '409': `${ENVELOPE} STATE_CONFLICT when referenced.` }),
+    },
+    '/admin/branches/{id}/rooms': {
+      get: op('List a branch\'s rooms', 'Scoped to the branch (§5.6).', { '200': 'Room list.', '404': ENVELOPE }),
+      post: op('Create a room', 'Within the given branch (§5.6).', { '201': 'Created.', '400': ENVELOPE, '404': ENVELOPE }),
+    },
+    '/admin/rooms/{id}': {
+      patch: op('Update a room', 'Optimistic locking on `version` (TD-15).', { '200': 'Updated.', '404': ENVELOPE, '409': `${ENVELOPE} VERSION_CONFLICT.` }),
+      delete: op('Soft-delete a room', 'Prohibited while Groups reference it (TD-5).', { '204': 'Deleted.', '404': ENVELOPE, '409': `${ENVELOPE} STATE_CONFLICT when referenced.` }),
+    },
     '/healthz': {
       get: op(
         'Health check',

@@ -49,7 +49,10 @@
   - ✓ Security — server-side denial is the enforcement; the guard is UX only (§14.4)
   - △ Frontend integration — the global router guard needs the React shell
 - [x] Error envelope middleware + canonical code catalog incl. VERSION_CONFLICT/SERVICE_UNAVAILABLE + i18n message keys (TD-3.8)
-- [ ] Optimistic-locking helper (conditional UPDATE + version bump) shared across TD-15 entities
+- [x] Optimistic-locking helper (conditional UPDATE + version bump) shared across TD-15 entities
+  - ✓ Backend — `updateWithVersion` for any TD-15 delegate; distinguishes VERSION_CONFLICT from NOT_FOUND
+  - ✓ Tests — exercised live through Branch/Room PATCH
+  - ✓ Security — stale version returns 409, never a silent overwrite (§20 rule 12)
 - [~] Outbound timeout discipline (5 s, no hidden retries) + degraded-mode 503 handling per TD-16
   - ✓ Backend — 5 s `AbortSignal.timeout` on both outbound calls (Google token exchange, MinIO health); no hidden retries
   - ✓ Tests — exercised through `/healthz` component states
@@ -73,7 +76,11 @@
   - ✓ Reproducible — regeneration is byte-identical to the committed document
   - ✓ CI — a dedicated `contract` job regenerates it and fails on any drift, so the committed file cannot be hand-edited
   - ✓ Gate — the conformance check consumes that regenerated artifact, not a manually-maintained one
-- [ ] Branch/Room CRUD + display_order (Super Admin only) (§2.2, §5.6) — unblocked by Revision 21; 8 routes registered with SRS citations
+- [x] Branch/Room CRUD + display_order (Super Admin only) (§2.2, §5.6)
+  - ✓ Backend — 8 routes; Zod validation at the boundary; TD-5 deletion guards under `FOR UPDATE`; TD-4.8 soft-delete + Trash + audit
+  - ✓ Tests — verified live: 401 unauthenticated, optimistic locking both ways, TD-5 room-blocks-branch, TD-9 length limit
+  - ✓ Security — §2.2 display_order refused for a plain Admin **and** allowed when absent; out-of-scope is 404 not 403 (§20 rule 17)
+  - △ Frontend integration — the `/admin/branches` screen (§14.2) needs the React shell
 - [ ] §18 Authentication & Onboarding checklist green
 
 ## M2 — Registration, Approvals, Family
