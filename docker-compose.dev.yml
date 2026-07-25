@@ -1,0 +1,28 @@
+# Local-development overlay — NEVER used in production (SRS §19.0/§19.1).
+#
+# The base docker-compose.yml deliberately publishes host ports for Nginx only;
+# db and minio stay on the internal network. Host-run integration tests need to
+# reach PostgreSQL directly, so this overlay publishes it — bound to 127.0.0.1,
+# never 0.0.0.0, so nothing is exposed off the machine.
+#
+# It is a SEPARATE file, not docker-compose.override.yml, precisely so compose
+# cannot merge it automatically: §19.1's deployment steps run plain
+# `docker compose up -d` and must never pick this up.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+#
+# Local dev holds fixture data only (§15.2, R-10), so a loopback-bound port
+# carries no beneficiary-data exposure.
+
+services:
+  db:
+    ports:
+      # 5433, not 5432: a host PostgreSQL commonly occupies the default port,
+      # and a silent connection to the WRONG database is far worse than a
+      # port clash. Verified during M1.9 — the clash was real on this machine.
+      - "127.0.0.1:5433:5432"
+
+  minio:
+    ports:
+      # 9001 for the same reason (9000 was already taken on the dev host).
+      - "127.0.0.1:9001:9000"

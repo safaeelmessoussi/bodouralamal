@@ -24,10 +24,10 @@
 - [ ] Registration identity extracted solely from onboarding-token payload; body fields excluded from schema (§4.1b, TD-12)
 - [ ] Access token via Authorization header only; refresh = sole cookie route with custom header + Origin check (TD-12)
 - [ ] High-risk endpoint fresh DB status assertions (presigned mint, social profile, approvals, overrides) (TD-12)
-- [ ] `RefreshToken` entity + unique `token_hash` + `session_id` chain (§7/TD-6, Revision 16) — forward-only migration
+- [x] `RefreshToken` entity + unique `token_hash` + `session_id` chain (§7/TD-6, Revision 16) — forward-only migration
 - [ ] Session layer: 1 h access JWT, 30 d rotating refresh cookie (HttpOnly/Secure/SameSite=Lax), hashed-never-raw storage, revocation list (TD-12)
-- [ ] Rotation / logout / revoke-on-suspension transactions (TD-4.13/14/15); 10 s grace window is idempotent (no chain fork); reuse outside grace revokes the whole session
-- [ ] Token-lifecycle acceptance criteria T1–T12 green (§18, Revision 16)
+- [x] Rotation / logout / revoke-on-suspension transactions (TD-4.13/14/15); 10 s grace window is idempotent (no chain fork); reuse outside grace revokes the whole session
+- [x] Token-lifecycle acceptance criteria T1–T12 green (§18, Revision 16)
 - [ ] Pending hard-redirect; zero data access except `GET /me` + logout (TD-1); client-side global Pending route guard (§14.4)
 - [ ] Error envelope middleware + canonical code catalog incl. VERSION_CONFLICT/SERVICE_UNAVAILABLE + i18n message keys (TD-3.8)
 - [ ] Optimistic-locking helper (conditional UPDATE + version bump) shared across TD-15 entities

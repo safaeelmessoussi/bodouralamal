@@ -234,6 +234,7 @@ model User {
   auditEntries      AuditLog[]
   trashEntries      Trash[]
   rateLimitCounters RateLimitCounter[]
+  refreshTokens     RefreshToken[]
 
   @@index([accountStatus])
   @@index([deletedAt])
@@ -626,6 +627,63 @@ model ConsumedToken {
 
   @@index([expiresAt])
   @@map("consumed_token")
+}
+
+/// Why a session is dead (§7, Revision 16). `reuse_detected` is a security
+/// event — a rotated token was replayed outside the grace window.
+enum RefreshRevokedReason {
+  logout
+  suspension
+  user_deleted
+  reuse_detected
+
+  @@map("refresh_revoked_reason")
+}
+
+/// One row per ISSUED refresh token (§7, Revision 16). This is the server-side
+/// state TD-12 requires: rotation on use, the revocation list, immediate
+/// revocation on suspension, and the 10-second predecessor grace window.
+///
+/// Deliberately absent, each evaluated and rejected in §7: `created_at` (same
+/// instant as `issuedAt`), `revoked_by` (duplicates `AuditLog.actorUserId`),
+/// `created_by_ip` / `user_agent_hash` (personal data, no MVP consumer, no
+/// retention rule), `last_used_at` (derivable from the successor's `issuedAt`
+/// under mandatory rotation). Do not re-add them without an SRS revision.
+model RefreshToken {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// Stable id of one rotation CHAIN, stamped on the first token and copied to
+  /// every successor. Makes "revoke this session" (logout) and "revoke the
+  /// whole chain" (reuse detected) single indexed UPDATEs — walking
+  /// `rotatedFromId` would need a recursive CTE, and §16.2 permits raw SQL
+  /// only for row locks and pg-boss inserts.
+  sessionId String @map("session_id") @db.Uuid
+
+  /// Hashed, NEVER raw (TD-12): a stolen database dump must not yield usable
+  /// 30-day credentials. Unique (TD-6).
+  tokenHash String @unique @map("token_hash")
+
+  issuedAt  DateTime @default(now()) @map("issued_at") @db.Timestamptz(6)
+  /// 30-day TTL (TD-12) and the `token.purge` horizon (TD-7).
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(6)
+
+  /// The immediate predecessor. This one field decides all three refresh
+  /// outcomes: current → rotate; immediate predecessor inside 10 s → accept
+  /// without re-rotating; anything older → reuse detected (TD-12).
+  rotatedFromId String?       @unique @map("rotated_from_id") @db.Uuid
+  rotatedFrom   RefreshToken? @relation("RefreshRotation", fields: [rotatedFromId], references: [id], onDelete: SetNull)
+  rotatedTo     RefreshToken? @relation("RefreshRotation")
+
+  /// The revocation-list check is `revokedAt IS NULL`.
+  revokedAt     DateTime?             @map("revoked_at") @db.Timestamptz(6)
+  revokedReason RefreshRevokedReason? @map("revoked_reason")
+
+  @@index([userId, revokedAt])
+  @@index([sessionId, revokedAt])
+  @@index([expiresAt])
+  @@map("refresh_token")
 }
 
 /// Authoritative store for per-user quotas that Nginx cannot enforce (§3.1,
