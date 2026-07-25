@@ -1,6 +1,17 @@
 # Tasks — بذور الأمل Platform
 **Granular implementation checklist. Mutable — agents tick items (`[x]`) as work completes and may split items into sub-items, but never add tasks for post-MVP features (SRS §10.1) and never contradict the SRS. Milestone order: `docs/IMPLEMENTATION_PLAN.md`. Completion log: `docs/CHANGES.log`. SRS references in parentheses are the authority for each item.**
 
+**Status notation.** `[x]` complete · `[ ]` not started · `[~]` **partial — and a partial item always names WHICH dimension is done**, because "partial" alone hides whether the remaining risk is unwritten code or merely an unbuilt screen. Dimensions used:
+
+| Mark | Dimension | Means |
+|---|---|---|
+| ✓ | Backend implementation | Code exists and runs |
+| ✓ | Tests | Automated coverage exists and passes |
+| ✓ | Security verification | The SRS security property was exercised, not assumed |
+| △ | Frontend integration | Needs the React shell (M2+) |
+| △ | Later milestone | Needs an endpoint or component from a named later milestone |
+
+
 ## M0 — Bootstrap
 - [x] Monorepo folders per §16.1 (backend/frontend/nginx/docs)
 - [x] `/CLAUDE.md`, `/AGENTS.md`, `docs/CHANGES.log` committed (§16.3)
@@ -21,24 +32,47 @@
 - [x] Google OAuth: state+PKCE (flow state in a short-lived signed HttpOnly callback-scoped cookie, TD-12 Revision 16), callback branches 4a/4b/4c, onboarding token (10 min, `jti` + ConsumedToken replay guard) (§4.1b, TD-12)
 - [x] Step-4a routing complete: Active / Pending / (Rejected|Suspended|deleted_at → deactivated screen), never reactivation (§4.1b, Revision 16)
 - [x] Email lowercasing on all identity lookups/writes (TD-12) + DB `CHECK (email = lower(email))` (TD-6)
-- [~] Registration identity extracted solely from onboarding-token payload — **token side done** (payload is the sole identity source, substitution test green); the `POST /registrations` endpoint that must exclude body fields is M2
+- [~] Registration identity extracted solely from onboarding-token payload; body fields excluded from schema (§4.1b, TD-12)
+  - ✓ Backend — onboarding token carries the verified `email` + `provider_subject_id`; payload is the sole identity source
+  - ✓ Tests — 8 unit tests
+  - ✓ Security — a substituted-email token fails signature verification (§20 rule 9)
+  - △ Later milestone (M2) — `POST /registrations` and the Zod schema that must not even accept those fields
 - [x] Access token via Authorization header only; refresh = sole cookie route with custom header + Origin check (TD-12)
 - [ ] High-risk endpoint fresh DB status assertions (presigned mint, social profile, approvals, overrides) (TD-12)
 - [x] `RefreshToken` entity + unique `token_hash` + `session_id` chain (§7/TD-6, Revision 16) — forward-only migration
 - [x] Session layer: 1 h access JWT, 30 d rotating refresh cookie (HttpOnly/Secure/SameSite=Lax), hashed-never-raw storage, revocation list (TD-12)
 - [x] Rotation / logout / revoke-on-suspension transactions (TD-4.13/14/15); 10 s grace window is idempotent (no chain fork); reuse outside grace revokes the whole session
 - [x] Token-lifecycle acceptance criteria T1–T12 green (§18, Revision 16)
-- [~] Pending hard-redirect; zero data access except `GET /me` + logout (TD-1) — **server side done**; the client-side global route guard (§14.4) needs the frontend shell
-- [~] Error envelope + canonical code catalog incl. VERSION_CONFLICT/SERVICE_UNAVAILABLE + i18n message keys (TD-3.8) — catalog, typed domain errors and envelope done + tested; Express middleware lands with the app
+- [~] Pending hard-redirect; zero data access except `GET /me` + logout (TD-1); client-side global Pending route guard (§14.4)
+  - ✓ Backend — only `GET /me` and logout serve a Pending session; the callback routes Pending to the status screen
+  - ✓ Tests — Pending routing covered in the §4.1b suite
+  - ✓ Security — server-side denial is the enforcement; the guard is UX only (§14.4)
+  - △ Frontend integration — the global router guard needs the React shell
+- [x] Error envelope middleware + canonical code catalog incl. VERSION_CONFLICT/SERVICE_UNAVAILABLE + i18n message keys (TD-3.8)
 - [ ] Optimistic-locking helper (conditional UPDATE + version bump) shared across TD-15 entities
-- [~] Outbound timeout discipline (5 s, no hidden retries) **done** for Google + MinIO; the full TD-16 degraded-mode 503 matrix needs the storage endpoints (M6)
+- [~] Outbound timeout discipline (5 s, no hidden retries) + degraded-mode 503 handling per TD-16
+  - ✓ Backend — 5 s `AbortSignal.timeout` on both outbound calls (Google token exchange, MinIO health); no hidden retries
+  - ✓ Tests — exercised through `/healthz` component states
+  - ✓ Security — upstream failures leak no detail; they surface as the canonical envelope
+  - △ Later milestone (M6) — the full TD-16 matrix needs the storage endpoints that must 503 while MinIO is down
 - [x] request_id propagation, JSON logs, no-PII log policy (TD-14)
 - [x] `GET /healthz` with component checks (TD-14)
-- [~] pg-boss bootstrap + job runner; token.purge + ratelimit.purge + audit.purge crons **done and verified live** (TD-7). `JobsRepository` same-transaction job inserts (§16.2, TD-4) lands with the first job-triggering mutation (M3 roster / M6 consent)
+- [~] pg-boss bootstrap + job runner; JobsRepository same-transaction job inserts (§16.2, TD-4); token.purge + ratelimit.purge + audit.purge crons (TD-7)
+  - ✓ Backend — runner in the API container; all three crons scheduled in Postgres with the TD-7 retry policy
+  - ✓ Tests — all three purges run against the live worker and their effects verified
+  - ✓ Security — `audit.purge` allowlist mutation-tested; an equally-ancient security event survived
+  - △ Later milestone (M3/M6) — `JobsRepository` same-transaction enqueue, which needs a job-triggering mutation to exist
 - [x] Pool/memory pins: Prisma limit 10, pg-boss ≤5, PG max_connections 30, statement_timeout 10s; shared_buffers/GOMEMLIMIT/max-old-space (TD-13)
-- [~] OAuth callback failure redirects (4 keys, all verified live) + OAUTH_EXCHANGE_FAILED **done**; the 10 s server grace is **done** (T3); the **client-side single-flight refresh mutex** needs the frontend
+- [~] OAuth callback failure redirects (/login?error=…, 4 keys) + OAUTH_EXCHANGE_FAILED + single-flight refresh w/ 10s grace (§4.1b, TD-12)
+  - ✓ Backend — all four failure keys redirect (never JSON); `OAUTH_EXCHANGE_FAILED` mapped; 10 s server-side grace implemented
+  - ✓ Tests — grace window is §18 T3/T12; the four failure keys verified live through Nginx
+  - ✓ Security — refusals are indistinguishable to the caller; no partial state persisted on any failure path
+  - △ Frontend integration — the client-side single-flight refresh mutex
 - [x] AuditLog table + write helper (TD-8); auth.login / login_denied / identity_bound / refresh / logout / token_revoked rows
 - [x] OpenAPI generation wired; contract = implementation (TD-3)
+  - ✓ Reproducible — regeneration is byte-identical to the committed document
+  - ✓ CI — a dedicated `contract` job regenerates it and fails on any drift, so the committed file cannot be hand-edited
+  - ✓ Gate — the conformance check consumes that regenerated artifact, not a manually-maintained one
 - [ ] Branch/Room CRUD + display_order (Super Admin only) (§2.2, §5.6) — unblocked by Revision 21; 8 routes registered with SRS citations
 - [ ] §18 Authentication & Onboarding checklist green
 

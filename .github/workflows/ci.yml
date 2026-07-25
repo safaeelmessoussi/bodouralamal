@@ -25,7 +25,35 @@ jobs:
         run: bash scripts/ci/check-migrations.sh
       - name: DROP/RENAME migration lint (TD-6b)
         run: bash scripts/ci/check-migration-drop-rename.sh
-      - name: OpenAPI ↔ TD-3 registry conformance (§3.1)
+
+  contract:
+    name: API contract — regenerate and verify no drift
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+        working-directory: backend
+      # Regenerate FROM THE IMPLEMENTATION, then fail if the committed document
+      # differs. Without this the gate below would be validating a file a human
+      # could hand-edit — exactly what §3.1 forbids ("never hand-edited to fix a
+      # mismatch"). Regenerating here is what makes docs/openapi.json a
+      # generated artifact in fact and not merely by intention.
+      - name: Regenerate docs/openapi.json
+        run: npm run openapi:generate
+        working-directory: backend
+      - name: Fail if the committed contract is stale or hand-edited
+        run: |
+          if ! git diff --exit-code docs/openapi.json; then
+            echo "::error::docs/openapi.json is out of date or was hand-edited."
+            echo "Run 'npm --prefix backend run openapi:generate' and commit the result."
+            exit 1
+          fi
+      - name: OpenAPI ↔ documented-endpoint registry conformance (§3.1)
         run: bash scripts/ci/check-openapi-td3.sh
 
   backend:
