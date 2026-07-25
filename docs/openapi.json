@@ -1,0 +1,91 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "بذور الأمل Platform API",
+    "version": "0.1.0",
+    "description": "Generated from the implementation. The SRS TD-3 route registry is the canonical contract (§3.1); this document must conform to it and is never hand-edited."
+  },
+  "servers": [
+    {
+      "url": "/api/v1",
+      "description": "Same-origin API path (§3.1)"
+    }
+  ],
+  "paths": {
+    "/auth/google": {
+      "get": {
+        "summary": "Begin Google OAuth",
+        "description": "Redirects to Google with state + PKCE (§4.1b steps 1–2, TD-12).",
+        "responses": {
+          "302": {
+            "description": "Redirect to Google."
+          }
+        }
+      }
+    },
+    "/auth/google/callback": {
+      "get": {
+        "summary": "Google OAuth callback",
+        "description": "§4.1b routing: existing identity → session by status; pre-provisioned email match → bind identity → session by status; unknown → onboarding. Failures are REDIRECTS to /login?error=<key>, never the TD-3.8 envelope (§4.1b step 7).",
+        "responses": {
+          "302": {
+            "description": "Redirect by routing decision, or to /login?error=<key> on failure."
+          }
+        }
+      }
+    },
+    "/auth/refresh": {
+      "post": {
+        "summary": "Rotate the refresh token",
+        "description": "The ONLY cookie-authenticated route (TD-12). Requires X-Requested-With and an Origin matching PUBLIC_BASE_URL. Rotation, the 10s predecessor grace window, and reuse detection are per TD-4.13 and §18 T1–T12.",
+        "responses": {
+          "200": {
+            "description": "New access token; a rotated refresh cookie unless the grace window applied."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8). All refusal reasons are deliberately indistinguishable."
+          }
+        }
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "summary": "Log out of the current session",
+        "description": "Revokes the current session only; other devices are unaffected (TD-4.14).",
+        "responses": {
+          "204": {
+            "description": "Session revoked. Idempotent."
+          }
+        }
+      }
+    },
+    "/me": {
+      "get": {
+        "summary": "Current identity",
+        "description": "Identity, roles, branch scopes, account_status and approved child links. The only endpoint (with logout) that a Pending session may call (TD-1).",
+        "responses": {
+          "200": {
+            "description": "Current user."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8)."
+          }
+        }
+      }
+    },
+    "/healthz": {
+      "get": {
+        "summary": "Health check",
+        "description": "Public. Checks database, storage and job-queue components (TD-14); §19.1 step 8 asserts a 200 here on deployment.",
+        "responses": {
+          "200": {
+            "description": "All components healthy."
+          },
+          "503": {
+            "description": "At least one component is down."
+          }
+        }
+      }
+    }
+  }
+}

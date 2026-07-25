@@ -54,18 +54,21 @@ export async function findByProviderIdentity(
 }
 
 /**
- * §4.1b step 3.2 — the pre-provisioned fallback, scoped to **non-deleted** users
- * (§7, Revision 15). `UserIdentity` is never consulted here, because an unbound
- * account has no identity row at all.
+ * §4.1b step 3.2 — the pre-provisioned fallback. **Not filtered by
+ * `deleted_at`** (§7, Revision 20): the lookup's job is to FIND the account,
+ * and refusing it is step 4a's job. Filtering here would hide a soft-deleted
+ * person from the whole resolution order and send them to the registration
+ * form, which §4.1 forbids.
  *
- * The caller must pass an already-lowercased email (TD-12).
+ * `UserIdentity` is never consulted here, because an unbound account has no
+ * identity row at all. The caller must pass an already-lowercased email (TD-12).
  */
 export async function findByPreProvisionedEmail(
   db: Db,
   email: string,
 ): Promise<ResolvedAccount | null> {
   const user = await db.user.findFirst({
-    where: { preProvisionedEmail: email, deletedAt: null },
+    where: { preProvisionedEmail: email },
   });
   if (!user) return null;
   return { user, ...(await loadRoles(db, user.id)) };

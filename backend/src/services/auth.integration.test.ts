@@ -161,20 +161,20 @@ describe('§4.1b login resolution and routing', () => {
     if (route.kind === 'deactivated') expect(route.reason).toBe('deleted');
   });
 
-  // BLOCKED on a Document Owner decision — see docs/CHANGES.log. §7 (R15) scopes
-  // the pre-provision fallback to `deleted_at IS NULL`, yet the same sentence
-  // says "a suspended or deleted account yields the Account deactivated
-  // screen" — which that scoping makes unreachable. §4.1 separately forbids
-  // silently re-registering a deleted account. For a NEVER-BOUND deleted
-  // account the two readings disagree, so no behaviour is asserted here.
-  it.skip('a soft-deleted, never-bound account: routing undecided (§7 vs §4.1)', async () => {
+  it('a soft-deleted, NEVER-BOUND account is refused, not sent to registration (R20)', async () => {
+    // Revision 20 option (a): the lookup finds it, step 4a refuses it. Before
+    // that decision this fell through to onboarding — offering a deleted person
+    // the registration form, which §4.1 forbids.
     const email = uniqueEmail();
-    await makeUser({ status: 'active', preProvisionedEmail: email, deleted: true });
+    const userId = await makeUser({ status: 'active', preProvisionedEmail: email, deleted: true });
 
-    // The fallback is scoped to non-deleted users, so a DIFFERENT subject id
-    // must not resurrect the account either.
-    const route = await resolveLogin(prisma, { email, providerSubjectId: 'sub-other' });
+    const route = await resolveLogin(prisma, { email, providerSubjectId: 'sub-never-bound' });
     expect(route.kind).toBe('deactivated');
+    if (route.kind === 'deactivated') expect(route.reason).toBe('deleted');
+
+    // Refused, never bound, never reactivated.
+    expect(await prisma.userIdentity.count({ where: { userId } })).toBe(0);
+    expect((await prisma.user.findUnique({ where: { id: userId } }))?.deletedAt).not.toBeNull();
   });
 
   it('a deactivated identity (user soft-deleted after binding) does not resolve (TD-5)', async () => {
