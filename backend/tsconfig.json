@@ -19,5 +19,10 @@
     "resolveJsonModule": true,
     "types": ["node"]
   },
-  "include": ["src", "prisma/seed"]
+  "include": ["src", "prisma/seed"],
+  // Tests are part of the codebase but not part of the shipped artifact: without
+  // this, `tsc -p tsconfig.json` emitted all ten *.test.js files into dist/ and
+  // the production image carried its own test suite. They are still fully
+  // typechecked — tsconfig.typecheck.json clears this exclude.
+  "exclude": ["**/*.test.ts"]
 }

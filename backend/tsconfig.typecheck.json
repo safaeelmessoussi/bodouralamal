@@ -4,5 +4,8 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "noEmit": true
-  }
+  },
+  // Re-include the test files the build artifact deliberately omits: they must
+  // still be typechecked, they just must not be emitted into dist/.
+  "exclude": []
 }
