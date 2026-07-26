@@ -127,7 +127,12 @@
 - [ ] ChildContextSwitcher component + API-client header injection (§14.3, §16.1)
 - [ ] GroupTeacher join + teacher-scoping resolution helpers (§4.2)
 - [ ] StudentSocialProfile field-level restriction (assigned teachers only) (§4.10, TD-2)
-- [ ] User Management screen per §14.2 incl. normalized-shadow-column substring search, no fuzzy (TD-10)
+- [~] User Management screen per §14.2 incl. normalized-shadow-column substring search, no fuzzy (TD-10)
+  - ✓ Backend — `GET /admin/users`; §14.2 columns exactly; filters read live assignments; TD-10 envelope and ar-x-icu ordering
+  - ✓ Tests — 14 list/search tests + a 38-entry parity corpus proving the TS normalizer matches the SQL function byte for byte; eight mutations caught
+  - ✓ Security — §4.10 fields never leave the list (asserted on the row shape); TD-2 admin-only with TD-12 freshness
+  - ⚠ OPEN AMBIGUITY 4 — implicit admin branch scoping vs §14.2's Branch filter; escalated, not resolved
+  - △ Frontend integration — the §14.2 table, filters and search box
 - [ ] §18 Registration, Approvals & Family checklist green (incl. mid-transaction kill test)
 
 ## M3 — Scheduling & Calendar

@@ -1,5 +1,6 @@
 import type { PrismaClient } from '../generated/prisma/client.js';
 import { AppError, uniqueViolationFields } from '../lib/errors.js';
+import { MIN_QUERY_LENGTH, normalizePhone, normalizeSearchText } from '../lib/search-normalize.js';
 import { assertFreshActive } from '../policies/freshness.policy.js';
 import * as audit from '../repositories/audit.repository.js';
 
@@ -127,4 +128,147 @@ export async function preProvision(
 
     return user;
   });
+}
+
+
+/**
+ * §14.2 Users screen: paginated, filtered, searchable list (TD-10).
+ *
+ * Columns are exactly what §14.2 specifies — Arabic name, Nickname, Role(s),
+ * Branch scope, Status, Phone — and nothing more. Notably absent is anything
+ * from `StudentSocialProfile`: §4.10 restricts those fields to assigned
+ * teachers, so a list screen is the last place they belong.
+ *
+ * **Branch scope, flagged as a specification ambiguity rather than resolved:**
+ * §14.2 lists Branch as a *filter*, while TD-2 states that "Admin actions are
+ * always constrained to assigned branch scope". Those pull in different
+ * directions here, because a `User` is not a branch-scoped entity — a person may
+ * hold roles in several branches or in none at all (parents, students awaiting a
+ * group, and every pre-provisioned account). Constraining implicitly would hide
+ * exactly those people from every Admin and make the screen unusable, while
+ * choosing which unscoped people to reveal would be inventing a rule. Branch is
+ * therefore implemented as the explicit filter §14.2 names, and the question is
+ * recorded for the Document Owner.
+ */
+export interface UserListFilters {
+  q?: string;
+  role?: string;
+  branchId?: string;
+  status?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface UserListItem {
+  id: string;
+  nameArabic: string;
+  nickname: string | null;
+  phone: string | null;
+  accountStatus: string;
+  roles: { role: string; branchId: string | null; branchName: string | null }[];
+}
+
+export interface Page<T> {
+  data: T[];
+  meta: { page: number; page_size: number; total: number };
+}
+
+/** TD-10: default 25, max 100. */
+function pagination(page = 1, pageSize = 25) {
+  const size = Math.min(Math.max(pageSize, 1), 100);
+  const current = Math.max(page, 1);
+  return { skip: (current - 1) * size, take: size, page: current, pageSize: size };
+}
+
+export async function listUsers(
+  prisma: PrismaClient,
+  actorUserId: string,
+  filters: UserListFilters = {},
+): Promise<Page<UserListItem>> {
+  // TD-12: browsing beneficiary records is a user-management surface, so the
+  // caller's status and role are re-read from live rows on every request.
+  await assertFreshActive(prisma, actorUserId, USER_ADMIN_ROLES);
+
+  const { skip, take, page, pageSize } = pagination(filters.page, filters.pageSize);
+
+  const where: Record<string, unknown> = { deletedAt: null };
+  if (filters.status) where['accountStatus'] = filters.status;
+
+  // Role and Branch filters (§14.2) both look at LIVE assignments: a revoked
+  // role must not keep someone in a filtered list.
+  const assignment: Record<string, unknown> = { deletedAt: null };
+  if (filters.role) assignment['role'] = { name: filters.role };
+  if (filters.branchId) assignment['branchId'] = filters.branchId;
+  if (filters.role || filters.branchId) where['branchRoles'] = { some: assignment };
+
+  if (filters.q) {
+    const raw = filters.q.trim();
+    if (raw.length < MIN_QUERY_LENGTH) {
+      // TD-10 sets a two-character floor: a one-character substring matches most
+      // of the table and is a scan, not a search.
+      throw new AppError('VALIDATION_FAILED', `search query must be at least ${MIN_QUERY_LENGTH} characters`);
+    }
+    const text = normalizeSearchText(raw);
+    const phone = normalizePhone(raw);
+    const email = raw.toLowerCase();
+
+    // TD-10's six search fields. Every text comparison runs against the indexed
+    // shadow column, never against a per-row normalization. `contains` emits
+    // LIKE '%…%', which is equivalent to TD-10's ILIKE here because both the
+    // shadow columns and the query are already lowercased by the same rules.
+    where['OR'] = [
+      { nameArabicNormalized: { contains: text } },
+      { nameFrenchNormalized: { contains: text } },
+      { nicknameNormalized: { contains: text } },
+      { phoneNormalized: { contains: phone } },
+      // Email spans BOTH channels (Revision 15): a pre-provisioned account has
+      // no identity row until first login, so searching only `UserIdentity`
+      // would hide precisely the accounts staff most need to find.
+      { preProvisionedEmail: { contains: email } },
+      { identities: { some: { email: { contains: email } } } },
+      // "Linked parent's name" — these are the links where this person is the
+      // child, so the join reaches their parent.
+      { childLinks: { some: { deletedAt: null, parent: { nameArabicNormalized: { contains: text } } } } },
+    ];
+  }
+
+  const [total, users] = await Promise.all([
+    prisma.user.count({ where }),
+    prisma.user.findMany({
+      where,
+      select: {
+        id: true,
+        nameArabic: true,
+        nickname: true,
+        phone: true,
+        accountStatus: true,
+        branchRoles: {
+          where: { deletedAt: null },
+          select: { branchId: true, role: { select: { name: true } }, branch: { select: { name: true } } },
+        },
+      },
+      // TD-10: `name_arabic` is natively collated ar-x-icu (TD-6a), so this is
+      // correct Arabic order with no per-query COLLATE workaround. `id` is the
+      // deterministic tiebreaker that keeps pagination stable.
+      orderBy: [{ nameArabic: 'asc' }, { id: 'asc' }],
+      skip,
+      take,
+    }),
+  ]);
+
+  return {
+    data: users.map((u) => ({
+      id: u.id,
+      nameArabic: u.nameArabic,
+      nickname: u.nickname,
+      phone: u.phone,
+      accountStatus: u.accountStatus,
+      roles: u.branchRoles.map((r) => ({
+        role: r.role.name,
+        branchId: r.branchId,
+        branchName: r.branch?.name ?? null,
+      })),
+    })),
+    meta: { page, page_size: pageSize, total },
+  };
 }

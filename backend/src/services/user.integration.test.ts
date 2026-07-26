@@ -3,7 +3,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { loadConfig } from '../lib/config.js';
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
 import * as userRepo from '../repositories/user.repository.js';
-import { preProvision } from './user.service.js';
+import { listUsers, preProvision } from './user.service.js';
 
 /**
  * Staff pre-provisioning (§3.1, §4.1b step 4b, §5.6, §7 Revision 15).
@@ -48,7 +48,14 @@ async function clear(): Promise<void> {
   });
   await prisma.userIdentity.deleteMany({ where: { userId: { in: ids } } });
   await prisma.userBranchRole.deleteMany({ where: { userId: { in: ids } } });
+  // The search tests link a parent to a child, and FamilyLink references both
+  // under RESTRICT — so the links must go before the people do.
+  await prisma.familyLink.deleteMany({
+    where: { OR: [{ parentId: { in: ids } }, { studentId: { in: ids } }] },
+  });
   await prisma.user.deleteMany({ where: { id: { in: ids } } });
+  // Branches created for the scope filter tests.
+  await prisma.branch.deleteMany({ where: { name: { startsWith: TAG } } });
 }
 
 beforeEach(clear);
@@ -252,5 +259,201 @@ describe('§4.1b step 4b — staff pre-provisioning', () => {
     const detail = row!.detail as Record<string, unknown>;
     expect(detail['pre_provisioned_email']).toBe(email);
     expect(detail['role']).toBe('teacher');
+  });
+});
+
+
+describe('§14.2 / TD-10 — user list, filters and search', () => {
+  /** Seeds a person and returns their id; the trigger fills the shadow columns. */
+  async function person(fields: {
+    nameArabic: string;
+    nameFrench?: string;
+    nickname?: string;
+    phone?: string;
+    status?: string;
+  }): Promise<string> {
+    const user = await prisma.user.create({
+      data: {
+        nameArabic: `${TAG} ${fields.nameArabic}`,
+        ...(fields.nameFrench ? { nameFrench: fields.nameFrench } : {}),
+        ...(fields.nickname ? { nickname: fields.nickname } : {}),
+        ...(fields.phone ? { phone: fields.phone } : {}),
+        accountStatus: (fields.status ?? 'active') as never,
+      },
+    });
+    return user.id;
+  }
+
+  const idsOf = (page: { data: { id: string }[] }) => page.data.map((u) => u.id);
+
+  it('TD-10: substring match, not prefix — سعاد finds أم سعاد', async () => {
+    const admin = await makeStaff('admin');
+    const target = await person({ nameArabic: 'أم سعاد' });
+
+    const page = await listUsers(prisma, admin, { q: 'سعاد' });
+    expect(idsOf(page)).toContain(target);
+  });
+
+  it('TD-10: alef, ta-marbuta and tashkeel variants all unify', async () => {
+    const admin = await makeStaff('admin');
+    const ahmed = await person({ nameArabic: 'أحمد' });
+    const fatima = await person({ nameArabic: 'فاطمة' });
+    const muhammad = await person({ nameArabic: 'مُحَمَّد' });
+
+    // Typed without the hamza, without the ta-marbuta, without diacritics.
+    expect(idsOf(await listUsers(prisma, admin, { q: 'احمد' }))).toContain(ahmed);
+    expect(idsOf(await listUsers(prisma, admin, { q: 'فاطمه' }))).toContain(fatima);
+    expect(idsOf(await listUsers(prisma, admin, { q: 'محمد' }))).toContain(muhammad);
+  });
+
+  it('TD-10: French names fold accents and ignore case', async () => {
+    const admin = await makeStaff('admin');
+    const aicha = await person({ nameArabic: 'عائشة', nameFrench: 'Aïcha' });
+
+    expect(idsOf(await listUsers(prisma, admin, { q: 'aicha' }))).toContain(aicha);
+    expect(idsOf(await listUsers(prisma, admin, { q: 'AICHA' }))).toContain(aicha);
+  });
+
+  it('TD-10: nickname and phone are searchable, phone ignoring spaces and +', async () => {
+    const admin = await makeStaff('admin');
+    const target = await person({
+      nameArabic: 'خديجة',
+      nickname: 'أم يوسف',
+      phone: '+212 612 345 678',
+    });
+
+    expect(idsOf(await listUsers(prisma, admin, { q: 'يوسف' }))).toContain(target);
+    expect(idsOf(await listUsers(prisma, admin, { q: '0612345678'.slice(1) }))).toContain(target);
+    expect(idsOf(await listUsers(prisma, admin, { q: '+212612345678' }))).toContain(target);
+  });
+
+  it('TD-10 Revision 15: email search spans BOTH channels', async () => {
+    const admin = await makeStaff('admin');
+    // An unclaimed account: no identity row exists yet.
+    const unclaimed = await preProvision(prisma, admin, {
+      nameArabic: `${TAG} غير مرتبطة`,
+      email: 'findme-unclaimed@example.com',
+    });
+    // A bound account: the address lives on UserIdentity.
+    const bound = await person({ nameArabic: 'مرتبطة' });
+    await prisma.userIdentity.create({
+      data: {
+        userId: bound,
+        provider: 'google',
+        providerSubjectId: `find-sub-${Date.now()}`,
+        email: 'findme-bound@example.com',
+      },
+    });
+
+    // Searching only UserIdentity would hide exactly the accounts staff most
+    // need to find — the ones nobody has claimed yet.
+    expect(idsOf(await listUsers(prisma, admin, { q: 'findme-unclaimed' }))).toContain(unclaimed.id);
+    expect(idsOf(await listUsers(prisma, admin, { q: 'findme-bound' }))).toContain(bound);
+  });
+
+  it("TD-10: a child is findable by their linked PARENT's name", async () => {
+    const admin = await makeStaff('admin');
+    const parent = await person({ nameArabic: 'والدة بديعة' });
+    const child = await person({ nameArabic: 'طفلة' });
+    await prisma.familyLink.create({
+      data: { parentId: parent, studentId: child, status: 'approved' },
+    });
+
+    const page = await listUsers(prisma, admin, { q: 'بديعة' });
+    expect(idsOf(page)).toContain(child);
+  });
+
+  it('TD-10: a one-character query is refused', async () => {
+    const admin = await makeStaff('admin');
+    await expect(listUsers(prisma, admin, { q: 'س' })).rejects.toMatchObject({
+      code: 'VALIDATION_FAILED',
+    });
+  });
+
+  it('§14.2 filters: role, branch and status', async () => {
+    const admin = await makeStaff('admin');
+    const branch = await prisma.branch.create({
+      data: { name: `${TAG} فرع`, operationalStartDate: new Date('2026-01-01') },
+    });
+    const teacher = await preProvision(prisma, admin, {
+      nameArabic: `${TAG} معلمة مرشحة`,
+      email: addr(),
+      role: 'teacher',
+      branchId: branch.id,
+      preApproved: true,
+    });
+    const plain = await person({ nameArabic: 'بدون دور', status: 'pending' });
+
+    const byRole = await listUsers(prisma, admin, { role: 'teacher' });
+    expect(idsOf(byRole)).toContain(teacher.id);
+    expect(idsOf(byRole)).not.toContain(plain);
+
+    const byBranch = await listUsers(prisma, admin, { branchId: branch.id });
+    expect(idsOf(byBranch)).toEqual([teacher.id]);
+
+    const byStatus = await listUsers(prisma, admin, { status: 'pending' });
+    expect(idsOf(byStatus)).toContain(plain);
+    expect(idsOf(byStatus)).not.toContain(teacher.id);
+
+    await prisma.userBranchRole.deleteMany({ where: { userId: teacher.id } });
+    await prisma.user.deleteMany({ where: { id: teacher.id } });
+    await prisma.branch.delete({ where: { id: branch.id } });
+  });
+
+  it('a REVOKED role no longer keeps someone in a role-filtered list', async () => {
+    const admin = await makeStaff('admin');
+    const teacher = await preProvision(prisma, admin, {
+      nameArabic: `${TAG} معلمة سابقة`,
+      email: addr(),
+      role: 'teacher',
+    });
+    expect(idsOf(await listUsers(prisma, admin, { role: 'teacher' }))).toContain(teacher.id);
+
+    await prisma.userBranchRole.updateMany({
+      where: { userId: teacher.id },
+      data: { deletedAt: new Date() },
+    });
+    expect(idsOf(await listUsers(prisma, admin, { role: 'teacher' }))).not.toContain(teacher.id);
+  });
+
+  it('soft-deleted people are not listed', async () => {
+    const admin = await makeStaff('admin');
+    const gone = await person({ nameArabic: 'مغادرة تماما' });
+    await prisma.user.update({ where: { id: gone }, data: { deletedAt: new Date() } });
+
+    expect(idsOf(await listUsers(prisma, admin, { q: 'مغادرة' }))).not.toContain(gone);
+  });
+
+  it('§4.10: the list never carries StudentSocialProfile fields', async () => {
+    const admin = await makeStaff('admin');
+    await person({ nameArabic: 'طالبة' });
+    const page = await listUsers(prisma, admin, {});
+
+    // §14.2 fixes the columns; anything §4.10 restricts to assigned teachers
+    // must not ride along on a list every Admin can call.
+    for (const row of page.data) {
+      expect(Object.keys(row).sort()).toEqual(
+        ['accountStatus', 'id', 'nameArabic', 'nickname', 'phone', 'roles'].sort(),
+      );
+    }
+  });
+
+  it('TD-10 envelope: default 25, max 100, stable ordering', async () => {
+    const admin = await makeStaff('admin');
+    const page = await listUsers(prisma, admin, {});
+    expect(page.meta.page_size).toBe(25);
+    expect(page.meta.page).toBe(1);
+
+    expect((await listUsers(prisma, admin, { pageSize: 500 })).meta.page_size).toBe(100);
+
+    // Same query twice must return the same order (id tiebreaker).
+    const a = await listUsers(prisma, admin, { pageSize: 10 });
+    const b = await listUsers(prisma, admin, { pageSize: 10 });
+    expect(idsOf(a)).toEqual(idsOf(b));
+  });
+
+  it('TD-2: a teacher cannot browse the user list', async () => {
+    const teacher = await makeStaff('teacher');
+    await expect(listUsers(prisma, teacher, {})).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 });
