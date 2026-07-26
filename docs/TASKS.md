@@ -82,8 +82,15 @@
   - △ Later milestone (M2) — authenticated layouts, the account switcher, and the unified registration form
 
 ## M2 — Registration, Approvals, Family
-- [ ] Unified parent+child registration transaction (TD-4.1) + adult path
-- [ ] ConsentRecord model + versioned text + staff-recorded method (§4.1a)
+- [x] Unified parent+child registration transaction (TD-4.1) + adult path
+  - ✓ Backend — `POST /registrations`; replay guard consumed FIRST so the `jti` is authoritative; both paths in one transaction
+  - ✓ Tests — 11 integration tests incl. the §18 mid-transaction atomicity check and concurrent submission of one token
+  - ✓ Security — schema **rejects** `email`/`provider_subject_id` outright (§20 rule 9); replay → `STATE_CONFLICT`; fails closed with no consent text version
+  - △ Frontend integration (M2) — the unified registration form
+- [~] ConsentRecord model + versioned text + staff-recorded method (§4.1a)
+  - ✓ Backend — `online_form` consents written in the registration transaction with the active text version from `SystemSetting`
+  - ✓ Tests — a declined media release is recorded with actor + timestamp, not omitted (BR-1)
+  - △ Later milestone (M2) — the `staff_recorded` path and consent management UI
 - [ ] Staff pre-provisioning UI/flow (bind-on-first-login) (§4.1b 4b, TD-4.10)
 - [ ] Approval queue: bundles, approve (TD-4.2 atomic) / reject with reason
 - [ ] FamilyLink lifecycle (TD-1); unique partial index enforced

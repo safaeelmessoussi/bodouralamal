@@ -113,6 +113,32 @@ export function toEnvelope(error: AppError, requestId: string): ErrorEnvelope {
  * Concurrency outcomes are translated rather than surfaced as 500s (TD-15.3):
  * a unique-constraint race is `DUPLICATE`, not "Internal Server Error".
  */
+/**
+ * Extracts the column names of a violated unique constraint from a Prisma error.
+ *
+ * Prisma 7 with a driver adapter reports them at
+ * `meta.driverAdapterError.cause.constraint.fields`, **not** the `meta.target`
+ * that older versions used. Reading only `meta.target` silently matches nothing,
+ * which is how a §4.1b onboarding-token replay came back as `DUPLICATE` instead
+ * of `STATE_CONFLICT` — so both shapes are handled here, in one place, rather
+ * than re-derived per call site.
+ */
+export function uniqueViolationFields(error: unknown): string[] {
+  if (typeof error !== "object" || error === null) return [];
+  const meta = (error as { meta?: unknown }).meta;
+  if (typeof meta !== "object" || meta === null) return [];
+
+  const adapterFields = (
+    meta as { driverAdapterError?: { cause?: { constraint?: { fields?: unknown } } } }
+  ).driverAdapterError?.cause?.constraint?.fields;
+  if (Array.isArray(adapterFields)) return adapterFields.map(String);
+
+  const target = (meta as { target?: unknown }).target;
+  if (Array.isArray(target)) return target.map(String);
+  if (typeof target === "string") return [target];
+  return [];
+}
+
 export function normalize(error: unknown): AppError {
   if (error instanceof AppError) return error;
 

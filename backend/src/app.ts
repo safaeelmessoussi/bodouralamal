@@ -2,6 +2,7 @@ import express, { type Express, type Request, type Response } from 'express';
 
 import * as auth from './controllers/auth.controller.js';
 import * as branch from './controllers/branch.controller.js';
+import { createRegistration } from './controllers/registration.controller.js';
 import { healthController } from './controllers/health.controller.js';
 import type { PrismaClient } from './generated/prisma/client.js';
 import { verifyAccessToken } from './lib/access-token.js';
@@ -73,6 +74,9 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
   api.post('/auth/refresh', auth.refresh(prisma, config));
   api.post('/auth/logout', auth.logout(prisma));
   api.get('/me', meController(prisma, config));
+  // Public, gated by the signed onboarding token — no session exists yet
+  // (§4.1b step 4c, TD-3.2).
+  api.post('/registrations', createRegistration(prisma, config));
 
   // Branches & Rooms (§5.6, §14.2). Everything below requires a live Active
   // session; role and branch-scope checks live in the service (TD-2).
