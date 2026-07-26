@@ -92,7 +92,13 @@
   - ✓ Tests — a declined media release is recorded with actor + timestamp, not omitted (BR-1)
   - △ Later milestone (M2) — the `staff_recorded` path and consent management UI
 - [ ] Staff pre-provisioning UI/flow (bind-on-first-login) (§4.1b 4b, TD-4.10)
-- [ ] Approval queue: bundles, approve (TD-4.2 atomic) / reject with reason
+- [~] Approval queue: bundles, approve (TD-4.2 atomic) / reject with reason
+  - ✓ Backend — `GET /admin/approvals` + approve/reject; both item types (registration bundle, standalone §4.3 link); a pending child never appears as its own entry, so the family is approved once; TD-10 paginated
+  - ✓ Backend — TD-12 freshness policy (`assertFreshActive`) re-reads the caller and rebuilds roles from live rows; it returns the fresh roles rather than a boolean so a caller cannot verify freshness and then act on the token's stale authority
+  - ✓ Tests — 11 service-level + 10 HTTP-level integration tests; the HTTP layer covers route mounting, the TD-3.8 envelope and status codes, which service tests cannot see
+  - ✓ Security — TD-2 admin/super-admin only; a *validly signed* token claiming `admin` for a non-admin user is refused; suspension and role revocation take effect on the next request; first-wins on concurrent decisions (TD-15.3) with 409, never a 500; rejection requires a reason within TD-9's 500 chars
+  - ✓ Security — all five guards mutation-tested (freshness status check, freshness role check, bundle exclusion, child activation, mandatory reason); every mutant is caught
+  - △ Frontend integration — the §5.6 queue screen and §14.2 columns
 - [ ] FamilyLink lifecycle (TD-1); unique partial index enforced
 - [ ] `X-Active-Child-ID` middleware: (parent+child) match, Student-role self-bypass via JWT sub, 400/404 semantics, never from body/query (§4.3)
 - [ ] Revoke an approved family link = soft-delete (§4.3, Revision 16); TD-2 row + `familylink.revoke` audit; middleware already 404s the next request

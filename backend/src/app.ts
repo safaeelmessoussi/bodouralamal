@@ -1,6 +1,7 @@
 import express, { type Express, type Request, type Response } from 'express';
 
 import * as auth from './controllers/auth.controller.js';
+import * as approvals from './controllers/approval.controller.js';
 import * as branch from './controllers/branch.controller.js';
 import { createRegistration } from './controllers/registration.controller.js';
 import { healthController } from './controllers/health.controller.js';
@@ -82,6 +83,11 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
   // session; role and branch-scope checks live in the service (TD-2).
   const guarded = express.Router();
   guarded.use(authenticate(config));
+  // Approvals (§5.6, TD-3.2). TD-12 marks these high-risk, so the service
+  // re-asserts the caller's live status against the database per request.
+  guarded.get('/admin/approvals', approvals.list(prisma));
+  guarded.post('/admin/approvals/:id/approve', approvals.approve(prisma));
+  guarded.post('/admin/approvals/:id/reject', approvals.reject(prisma));
   guarded.get('/admin/branches', branch.listBranches(prisma));
   guarded.post('/admin/branches', branch.createBranch(prisma));
   guarded.patch('/admin/branches/:id', branch.updateBranch(prisma));

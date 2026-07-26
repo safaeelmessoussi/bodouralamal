@@ -93,6 +93,72 @@
         }
       }
     },
+    "/admin/approvals": {
+      "get": {
+        "summary": "Approval queue",
+        "description": "Admin or Super Admin only (TD-2), re-asserted against live rows per request because approvals are a TD-12 high-risk surface. Two item types share the queue: `registration` (a pending applicant together with any pending child and link that arrived as one §4.1 bundle) and `family-link` (a standalone §4.3 \"Link a Child\" request). A pending child is never listed separately — it appears inside its parent's bundle so the family is approved once. Paginated per TD-10 (default 25, max 100), oldest first.",
+        "responses": {
+          "200": {
+            "description": "Queue page; each item carries its applicants and what approving it will change."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8)."
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN when the caller is no longer Active or the admin role assignment no longer exists (TD-12)."
+          }
+        }
+      }
+    },
+    "/admin/approvals/{id}/approve": {
+      "post": {
+        "summary": "Approve a queue item",
+        "description": "TD-4.2: parent activation, child activation, link approval and the audit row commit in ONE transaction — §4.3 requires all three atomically, since a half-approved bundle is a parent who can see a child whose own record is still Pending. TD-1 transition Pending → Active. Approval does NOT assign roles. Concurrent decisions are first-wins (TD-15.3): the loser gets 409, never a 500.",
+        "responses": {
+          "200": {
+            "description": "Approved; reports the item type and how many accounts were activated."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8)."
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN (TD-12 freshness or TD-2 role)."
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an unknown id."
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT when the item was already decided."
+          }
+        }
+      }
+    },
+    "/admin/approvals/{id}/reject": {
+      "post": {
+        "summary": "Reject a queue item",
+        "description": "Requires a reason (§5.6, §14.2) of at most 500 characters (TD-9) — rejecting a family's application without recording why is not an auditable decision. Rejection is atomic across the bundle in the same way as approval (TD-4.2): the parent and child are never left half-decided. TD-1 transition Pending → Rejected.",
+        "responses": {
+          "200": {
+            "description": "Rejected; the reason is stored on the decision and in the audit row."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED when the reason is missing or too long."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8)."
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8)."
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8)."
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT when the item was already decided."
+          }
+        }
+      }
+    },
     "/admin/branches": {
       "get": {
         "summary": "List branches",
@@ -219,6 +285,12 @@
       }
     },
     "/healthz": {
+      "servers": [
+        {
+          "url": "/",
+          "description": "Served at the origin root (TD-14)"
+        }
+      ],
       "get": {
         "summary": "Health check",
         "description": "Public. Checks database, storage and job-queue components (TD-14); §19.1 step 8 asserts a 200 here on deployment.",

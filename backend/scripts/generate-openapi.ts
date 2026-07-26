@@ -89,6 +89,15 @@ const document = {
     '/registrations': {
       post: op('Unified registration', 'Public, gated by the signed onboarding token in X-Onboarding-Token (§4.1b step 4c). Adult self-registration or parent+child in ONE transaction (TD-4.1). Identity comes solely from the token payload — the schema rejects email/provider_subject_id outright (§20 rule 9). New accounts enter Pending.', { '201': 'Created; account_status pending.', '400': `${ENVELOPE} VALIDATION_FAILED or CONSENT_REQUIRED.`, '409': `${ENVELOPE} STATE_CONFLICT on token replay; DUPLICATE if the identity exists.`, '503': `${ENVELOPE} consent text version not configured (§2.3).` }),
     },
+    '/admin/approvals': {
+      get: op('Approval queue', 'Admin or Super Admin only (TD-2), re-asserted against live rows per request because approvals are a TD-12 high-risk surface. Two item types share the queue: `registration` (a pending applicant together with any pending child and link that arrived as one §4.1 bundle) and `family-link` (a standalone §4.3 "Link a Child" request). A pending child is never listed separately — it appears inside its parent\'s bundle so the family is approved once. Paginated per TD-10 (default 25, max 100), oldest first.', { '200': 'Queue page; each item carries its applicants and what approving it will change.', '401': ENVELOPE, '403': `${ENVELOPE} FORBIDDEN when the caller is no longer Active or the admin role assignment no longer exists (TD-12).` }),
+    },
+    '/admin/approvals/{id}/approve': {
+      post: op('Approve a queue item', 'TD-4.2: parent activation, child activation, link approval and the audit row commit in ONE transaction — §4.3 requires all three atomically, since a half-approved bundle is a parent who can see a child whose own record is still Pending. TD-1 transition Pending → Active. Approval does NOT assign roles. Concurrent decisions are first-wins (TD-15.3): the loser gets 409, never a 500.', { '200': 'Approved; reports the item type and how many accounts were activated.', '401': ENVELOPE, '403': `${ENVELOPE} FORBIDDEN (TD-12 freshness or TD-2 role).`, '404': `${ENVELOPE} NOT_FOUND for an unknown id.`, '409': `${ENVELOPE} STATE_CONFLICT when the item was already decided.` }),
+    },
+    '/admin/approvals/{id}/reject': {
+      post: op('Reject a queue item', 'Requires a reason (§5.6, §14.2) of at most 500 characters (TD-9) — rejecting a family\'s application without recording why is not an auditable decision. Rejection is atomic across the bundle in the same way as approval (TD-4.2): the parent and child are never left half-decided. TD-1 transition Pending → Rejected.', { '200': 'Rejected; the reason is stored on the decision and in the audit row.', '400': `${ENVELOPE} VALIDATION_FAILED when the reason is missing or too long.`, '401': ENVELOPE, '403': ENVELOPE, '404': ENVELOPE, '409': `${ENVELOPE} STATE_CONFLICT when the item was already decided.` }),
+    },
     '/admin/branches': {
       get: op('List branches', 'Ordered by display_order ASC NULLS LAST then name (ar-x-icu collated, §2.2/TD-10). Admins see their scoped branches; Super Admins see all.', { '200': 'Branch list.', '401': ENVELOPE, '403': ENVELOPE }),
       post: op('Create a branch', 'Admin or Super Admin (TD-2). display_order is Super Admin only (§2.2).', { '201': 'Created.', '400': ENVELOPE, '403': ENVELOPE }),
@@ -106,6 +115,12 @@ const document = {
       delete: op('Soft-delete a room', 'Prohibited while Groups reference it (TD-5).', { '204': 'Deleted.', '404': ENVELOPE, '409': `${ENVELOPE} STATE_CONFLICT when referenced.` }),
     },
     '/healthz': {
+      // TD-14 serves this at the ORIGIN root, outside the /api/v1 prefix, so the
+      // document must override the global server base. Without this the contract
+      // advertises /api/v1/healthz, which falls inside the guarded router and
+      // answers 401 — a consumer following the document would call the wrong URL
+      // and conclude the service was unhealthy.
+      servers: [{ url: '/', description: 'Served at the origin root (TD-14)' }],
       get: op(
         'Health check',
         'Public. Checks database, storage and job-queue components (TD-14); §19.1 step 8 ' +
