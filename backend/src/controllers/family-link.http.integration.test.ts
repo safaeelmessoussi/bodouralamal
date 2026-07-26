@@ -2,7 +2,8 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { issueAccessToken } from '../lib/access-token.js';
 import { loadConfig } from '../lib/config.js';
-import { createPrismaClient } from '../lib/prisma.js';
+import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
+import { httpCall } from '../test-support/http-client.js';
 
 /**
  * `DELETE /admin/family-links/{id}` over real HTTP (§4.3 Revision 16).
@@ -15,28 +16,12 @@ import { createPrismaClient } from '../lib/prisma.js';
  *   docker compose up -d --build api
  */
 const config = loadConfig();
-const prisma = createPrismaClient(config.DATABASE_URL);
+const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);
 const BASE = `${config.PUBLIC_BASE_URL}/api/v1`;
 const TAG = '[fam-http-test]';
 
 async function call(method: string, path: string, token?: string, body?: unknown) {
-  const res = await fetch(`${BASE}${path}`, {
-    method,
-    headers: {
-      ...(token ? { authorization: `Bearer ${token}` } : {}),
-      ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
-    },
-    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-    redirect: 'manual',
-  });
-  const text = await res.text();
-  let parsed: { error?: { code?: string }; revoked?: boolean } = {};
-  try {
-    parsed = text ? JSON.parse(text) : {};
-  } catch {
-    parsed = {};
-  }
-  return { status: res.status, body: parsed };
+  return httpCall<{ error?: { code?: string }; revoked?: boolean; id?: string }>(BASE, method, path, { token, ...(body !== undefined ? { body } : {}) });
 }
 
 function bearer(userId: string, roles: string[]): string {
@@ -103,7 +88,12 @@ beforeEach(async () => {
   // Remove each link's Trash snapshot before the link itself, or the snapshot
   // outlives it and its `deleted_by` reference blocks teardown.
   const links = await prisma.familyLink.findMany({
-    where: { parent: { nameArabic: { startsWith: TAG } } },
+    where: {
+      OR: [
+        { parent: { nameArabic: { startsWith: TAG } } },
+        { student: { nameArabic: { startsWith: TAG } } },
+      ],
+    },
     select: { id: true },
   });
   const linkIds = links.map((l) => l.id);
@@ -201,5 +191,71 @@ describe('DELETE /api/v1/admin/family-links/{id}', () => {
     });
     expect(res.status).toBe(409);
     expect(res.body.error?.code).toBe('STATE_CONFLICT');
+  });
+});
+
+describe('POST /api/v1/family-links (staff-mediated, §4.3 R23)', () => {
+  it('is mounted and creates a Pending link for staff', async () => {
+    const parentId = await makeUser('والدة');
+    const studentId = await makeUser('طفلة');
+
+    const res = await call('POST', '/family-links', adminToken, {
+      parent_id: parentId,
+      student_id: studentId,
+    });
+
+    expect(res.status).toBe(201);
+    const link = await prisma.familyLink.findFirst({ where: { parentId, studentId } });
+    expect(link?.status).toBe('pending');
+  });
+
+  it('is NOT parent self-service: a parent caller gets 403', async () => {
+    // The core of Revision 23 — there is no parent-facing path to an existing
+    // child, so this must be refused at the edge, not merely unlinked in the UI.
+    const parentCaller = await makeStaff('parent');
+    const studentId = await makeUser('طفلة');
+
+    const res = await call('POST', '/family-links', bearer(parentCaller, ['parent']), {
+      parent_id: parentCaller,
+      student_id: studentId,
+    });
+
+    expect(res.status).toBe(403);
+    expect(await prisma.familyLink.count({ where: { studentId } })).toBe(0);
+  });
+
+  it('refuses an anonymous caller', async () => {
+    const res = await call('POST', '/family-links', undefined, {
+      parent_id: '11111111-2222-4333-8444-555555555555',
+      student_id: '11111111-2222-4333-8444-555555555556',
+    });
+    expect(res.status).toBe(401);
+  });
+
+  it('rejects a malformed body with 400', async () => {
+    expect((await call('POST', '/family-links', adminToken, {})).status).toBe(400);
+    expect(
+      (await call('POST', '/family-links', adminToken, { parent_id: 'x', student_id: 'y' })).status,
+    ).toBe(400);
+  });
+
+  it('a duplicate live link answers 409 DUPLICATE', async () => {
+    const parentId = await makeUser('والدة');
+    const studentId = await makeUser('طفلة');
+    const body = { parent_id: parentId, student_id: studentId };
+
+    expect((await call('POST', '/family-links', adminToken, body)).status).toBe(201);
+    const dup = await call('POST', '/family-links', adminToken, body);
+    expect(dup.status).toBe(409);
+    expect(dup.body.error?.code).toBe('DUPLICATE');
+  });
+
+  it('an unknown party is 404', async () => {
+    const parentId = await makeUser('والدة');
+    const res = await call('POST', '/family-links', adminToken, {
+      parent_id: parentId,
+      student_id: '11111111-2222-4333-8444-555555555555',
+    });
+    expect(res.status).toBe(404);
   });
 });

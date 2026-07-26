@@ -89,6 +89,7 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
   guarded.get('/admin/approvals', approvals.list(prisma));
   guarded.post('/admin/approvals/:id/approve', approvals.approve(prisma));
   guarded.post('/admin/approvals/:id/reject', approvals.reject(prisma));
+  guarded.post('/family-links', familyLinks.create(prisma));
   guarded.delete('/admin/family-links/:id', familyLinks.revoke(prisma));
   guarded.get('/admin/branches', branch.listBranches(prisma));
   guarded.post('/admin/branches', branch.createBranch(prisma));

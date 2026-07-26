@@ -2,7 +2,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { loadConfig } from '../lib/config.js';
 import { issueOnboardingToken } from '../lib/onboarding-token.js';
-import { createPrismaClient } from '../lib/prisma.js';
+import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
 import { CONSENT_TEXT_VERSION_KEY, register } from './registration.service.js';
 import type { RegistrationInput } from '../validators/registration.validators.js';
 
@@ -12,7 +12,7 @@ import type { RegistrationInput } from '../validators/registration.validators.js
  * unique constraint, so a mocked client would prove nothing.
  */
 const config = loadConfig();
-const prisma = createPrismaClient(config.DATABASE_URL);
+const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);
 const KEY = config.ONBOARDING_TOKEN_KEY;
 const TAG = '[reg-test]';
 const TEXT_VERSION = 'reg-test-v1';

@@ -159,6 +159,32 @@
         }
       }
     },
+    "/family-links": {
+      "post": {
+        "summary": "Link an existing child to a parent (staff-mediated)",
+        "description": "§4.3 Revision 23: the MVP gives parents NO search over existing children — there is no parent-facing directory and TD-10 search belongs to the staff-only §14.2 screen — so this is an Admin/Super Admin operation (TD-2) with the TD-12 freshness assertion. Both parties are identified from §14.2, where staff are already authorized to browse users, which is why accepting ids here raises no enumeration concern. The link is created `Pending` even though staff created it (§4.3 retains that rule without exception) and is decided in the §5.6 approval queue. Parent self-service remains registering a NEW child through §4.1b. Body: `{ parent_id, student_id }`.",
+        "responses": {
+          "201": {
+            "description": "Pending link created; awaits an approval decision."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED for a bad id pair, or a user named as their own parent."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8)."
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN (TD-12 freshness or TD-2 role)."
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND when either party does not exist or is soft-deleted."
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). DUPLICATE when a live link already exists — never FAMILY_LINK_PENDING, whose TD-3.8 definition is restricted to own-resource contexts."
+          }
+        }
+      }
+    },
     "/admin/family-links/{id}": {
       "delete": {
         "summary": "Revoke an approved family link",

@@ -3,7 +3,8 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { issueAccessToken } from '../lib/access-token.js';
 import { loadConfig } from '../lib/config.js';
 import { issueOnboardingToken } from '../lib/onboarding-token.js';
-import { createPrismaClient } from '../lib/prisma.js';
+import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
+import { httpCall } from '../test-support/http-client.js';
 import { CONSENT_TEXT_VERSION_KEY, register } from '../services/registration.service.js';
 
 /**
@@ -18,7 +19,7 @@ import { CONSENT_TEXT_VERSION_KEY, register } from '../services/registration.ser
  *   docker compose up -d --build api
  */
 const config = loadConfig();
-const prisma = createPrismaClient(config.DATABASE_URL);
+const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);
 const BASE = `${config.PUBLIC_BASE_URL}/api/v1`;
 const TAG = '[http-appr-test]';
 
@@ -28,23 +29,7 @@ interface Res {
 }
 
 async function call(method: string, path: string, token?: string, body?: unknown): Promise<Res> {
-  const res = await fetch(`${BASE}${path}`, {
-    method,
-    headers: {
-      ...(token ? { authorization: `Bearer ${token}` } : {}),
-      ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
-    },
-    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
-    redirect: 'manual',
-  });
-  const text = await res.text();
-  let parsed: Res['body'] = {};
-  try {
-    parsed = text ? (JSON.parse(text) as Res['body']) : {};
-  } catch {
-    parsed = {};
-  }
-  return { status: res.status, body: parsed };
+  return httpCall<Res['body']>(BASE, method, path, { token, ...(body !== undefined ? { body } : {}) });
 }
 
 function bearer(userId: string, roles: string[], accountStatus = 'active'): string {

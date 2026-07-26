@@ -18,8 +18,84 @@ import * as audit from '../repositories/audit.repository.js';
  * record rather than colliding with the revoked one.
  */
 
-/** TD-2: revoking a link is an Admin or Super Admin action. */
+/** TD-2: creating and revoking links are Admin or Super Admin actions. */
 const REVOKER_ROLES = ['admin', 'super_admin'] as const;
+const LINKER_ROLES = REVOKER_ROLES;
+
+/**
+ * Links an EXISTING child to a parent — staff-mediated (§4.3, Revision 23).
+ *
+ * The MVP gives parents no search over existing children, so this is not a
+ * parent-facing route: both parties are identified from the §14.2 User Management
+ * screen, where staff are already authorized to browse users. That is exactly why
+ * accepting raw ids here raises no enumeration concern, while a parent-facing
+ * version of the same endpoint would have.
+ *
+ * The link is created `Pending` **even though staff created it** (§4.3 retains
+ * that rule without exception) and is decided in the §5.6 approval queue — which
+ * is also what keeps that queue's standalone family-link item type reachable.
+ *
+ * Parent self-service remains registering a NEW child through §4.1b, unchanged.
+ */
+export async function createLink(
+  prisma: PrismaClient,
+  actorUserId: string,
+  parentId: string,
+  studentId: string,
+): Promise<{ id: string; status: string }> {
+  const actor = await assertFreshActive(prisma, actorUserId, LINKER_ROLES);
+
+  if (parentId === studentId) {
+    throw new AppError('VALIDATION_FAILED', 'a user cannot be their own parent');
+  }
+
+  return prisma.$transaction(async (tx) => {
+    // Both parties must exist and not be soft-deleted. Statuses are deliberately
+    // NOT constrained to Active: the §4.1 registration flow itself creates a
+    // Pending parent, a Pending child and a Pending link together, so demanding
+    // Active here would contradict TD-4.1.
+    const [parent, student] = await Promise.all([
+      tx.user.findFirst({ where: { id: parentId, deletedAt: null }, select: { id: true } }),
+      tx.user.findFirst({ where: { id: studentId, deletedAt: null }, select: { id: true } }),
+    ]);
+    if (!parent || !student) {
+      // One 404 for either missing party: staff can already see who exists via
+      // §14.2, so there is nothing to disclose, but there is also no reason to
+      // report which half of the pair was wrong through this channel.
+      throw new AppError('NOT_FOUND', 'parent or student not found');
+    }
+
+    // TD-6's partial unique index covers non-deleted rows only, so a previously
+    // revoked link does not block a fresh request — but a live one does.
+    const existing = await tx.familyLink.findFirst({
+      where: { parentId, studentId, deletedAt: null },
+      select: { id: true, status: true },
+    });
+    if (existing) {
+      // DUPLICATE, not FAMILY_LINK_PENDING: TD-3.8 restricts that code to
+      // own-resource contexts, and this caller is staff acting on someone else's
+      // relationship (§4.3 Revision 23).
+      throw new AppError('DUPLICATE', 'a live link already exists for this pair');
+    }
+
+    const link = await tx.familyLink.create({
+      data: { parentId, studentId, status: 'pending' },
+      select: { id: true, status: true },
+    });
+
+    // TD-8's grid is a minimum and explicitly permits added coverage. A staff
+    // member creating a route into a minor's record must be attributable.
+    await audit.write(tx, {
+      actorUserId: actor.userId,
+      actionType: 'familylink.create',
+      targetEntity: 'FamilyLink',
+      targetId: link.id,
+      detail: { parent_id: parentId, student_id: studentId, created_by: 'staff' },
+    });
+
+    return link;
+  });
+}
 
 /**
  * Soft-deletes an approved link (§4.3 Revision 16).

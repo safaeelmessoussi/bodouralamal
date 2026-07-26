@@ -2,7 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { bootstrapSuperAdmin } from '../../prisma/seed/super-admin.js';
 import { loadConfig } from '../lib/config.js';
-import { createPrismaClient } from '../lib/prisma.js';
+import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
 
 /**
  * §15.1 Super Admin bootstrap (Revision 22).
@@ -14,7 +14,7 @@ import { createPrismaClient } from '../lib/prisma.js';
  * privileged and unclaimed. These tests pin the new gate against a real database.
  */
 const config = loadConfig();
-const prisma = createPrismaClient(config.DATABASE_URL);
+const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);
 const TAG = '[sa-boot-test]';
 
 /** The seeded production Super Admin must not interfere, and must survive. */
@@ -244,5 +244,25 @@ describe('§15.1 Revision 22 — SUPER_ADMIN_EMAIL is a bootstrap value', () => 
 
     await bootstrapSuperAdmin(prisma, 'sa-boot-after-revoke@example.com');
     expect(await activeSuperAdmins()).toHaveLength(1);
+  });
+});
+
+describe('§15.1 Revision 23 — SUPER_ADMIN_EMAIL is conditionally required', () => {
+  it('fails LOUDLY, naming the variable, when the gate is open and it is absent', async () => {
+    // A first deployment that forgot the value must not quietly finish with a
+    // platform nobody can approve anyone into.
+    await expect(bootstrapSuperAdmin(prisma, undefined)).rejects.toThrow(/SUPER_ADMIN_EMAIL/);
+    await expect(bootstrapSuperAdmin(prisma, '   ')).rejects.toThrow(/SUPER_ADMIN_EMAIL/);
+    expect(await activeSuperAdmins()).toHaveLength(0);
+  });
+
+  it('is NOT required once an active Super Administrator exists', async () => {
+    await bootstrapSuperAdmin(prisma, 'sa-boot-r23@example.com');
+    const before = await activeSuperAdmins();
+    expect(before).toHaveLength(1);
+
+    // Every later deployment may omit the variable entirely (TD-13 R23).
+    await expect(bootstrapSuperAdmin(prisma, undefined)).resolves.toBeUndefined();
+    expect(await activeSuperAdmins()).toEqual(before);
   });
 });

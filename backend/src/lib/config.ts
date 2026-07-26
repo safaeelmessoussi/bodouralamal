@@ -21,7 +21,11 @@ export const REQUIRED_ENV_VARS = [
   'MINIO_SECRET_KEY',
   'PUBLIC_BASE_URL',
   'STORAGE_BASE_URL',
-  'SUPER_ADMIN_EMAIL',
+  // SUPER_ADMIN_EMAIL is deliberately NOT here (TD-13, Revision 23): it is a
+  // bootstrap value consumed by the seed, never by the running API, so demanding
+  // it at boot would force operators to keep a line that no longer does anything.
+  // The seed requires it only while no active Super Administrator exists, and
+  // fails loudly naming it in that case.
   'NODE_ENV',
 ] as const;
 
@@ -47,6 +51,17 @@ export class InvalidEnvValueError extends Error {
 // NODE_ENV: TD-13 lists production | development; `test` is accepted as a
 // non-production value for the §19.2 test runners (the §15.2 fixture guard
 // checks NODE_ENV != production, which `test` satisfies).
+/**
+ * An operator "removing" an optional variable usually leaves `NAME=` in `.env`,
+ * which arrives as an empty string rather than as absent — and `.optional()`
+ * alone then fails validation, so the API refuses to boot on a variable it does
+ * not even use. Revision 23 promises the value MAY be removed, so blank and
+ * absent must mean the same thing. Found by running the real image, not the
+ * unit test, which passed `undefined`.
+ */
+const blankAsAbsent = <T extends z.ZodTypeAny>(schema: T) =>
+  z.preprocess((value) => (typeof value === 'string' && value.trim() === '' ? undefined : value), schema);
+
 const envSchema = z.object({
   DATABASE_URL: z.string().min(1),
   GOOGLE_CLIENT_ID: z.string().min(1),
@@ -58,9 +73,9 @@ const envSchema = z.object({
   MINIO_SECRET_KEY: z.string().min(1),
   PUBLIC_BASE_URL: z.string().min(1),
   STORAGE_BASE_URL: z.string().min(1),
-  SUPER_ADMIN_EMAIL: z.string().min(1),
+  SUPER_ADMIN_EMAIL: blankAsAbsent(z.string().min(1).optional()),
   NODE_ENV: z.enum(['production', 'development', 'test']),
-  BACKUP_TARGET_SSH: z.string().min(1).optional(),
+  BACKUP_TARGET_SSH: blankAsAbsent(z.string().min(1).optional()),
   TZ: z.string().min(1).default('Africa/Casablanca'),
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   LOG_LEVEL: z.enum(['info', 'debug']).default('info'),

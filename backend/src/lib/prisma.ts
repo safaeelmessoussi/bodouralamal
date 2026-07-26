@@ -22,10 +22,23 @@ import { PrismaClient } from '../generated/prisma/client.js';
 /** TD-13 pinned Prisma connection limit. */
 export const PRISMA_CONNECTION_LIMIT = 10;
 
-export function createPrismaClient(databaseUrl: string): PrismaClient {
+/**
+ * `maxConnections` exists for the integration suite, which runs many files each
+ * holding their own client against one 30-connection server (TD-13). At the
+ * production limit two overlapping test clients alone can exhaust the budget, so
+ * the suite asks for a small pool. Production callers pass nothing and get the
+ * pinned TD-13 limit; a larger value is never permitted.
+ */
+export function createPrismaClient(
+  databaseUrl: string,
+  maxConnections: number = PRISMA_CONNECTION_LIMIT,
+): PrismaClient {
   const adapter = new PrismaPg({
     connectionString: databaseUrl,
-    max: PRISMA_CONNECTION_LIMIT,
+    max: Math.min(maxConnections, PRISMA_CONNECTION_LIMIT),
   });
   return new PrismaClient({ adapter });
 }
+
+/** Pool size for test clients — see `maxConnections` above. */
+export const TEST_CONNECTION_LIMIT = 3;

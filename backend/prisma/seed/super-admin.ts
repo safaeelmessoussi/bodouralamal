@@ -21,7 +21,7 @@ import type { PrismaClient } from '../../src/generated/prisma/client.js';
  * No placeholder identity row is written — §7 prohibits stub identities, and no
  * password exists anywhere in this system (§20 rule 10).
  */
-export async function bootstrapSuperAdmin(prisma: PrismaClient, email: string): Promise<void> {
+export async function bootstrapSuperAdmin(prisma: PrismaClient, email: string | undefined): Promise<void> {
   const role = await prisma.role.findUnique({ where: { name: 'super_admin' } });
   if (!role) throw new Error('super_admin role missing — seedRoles must run first');
 
@@ -40,6 +40,16 @@ export async function bootstrapSuperAdmin(prisma: PrismaClient, email: string): 
     // administrators no matter what SUPER_ADMIN_EMAIL currently says.
     console.log('  super admin: active administrator exists — SUPER_ADMIN_EMAIL ignored (§15.1 R22)');
     return;
+  }
+
+  // Revision 23: the value is required only HERE, and only now that the gate is
+  // open. Failing loudly is the point — completing the seed without an
+  // administrator would leave a platform nobody can approve anyone into.
+  if (!email?.trim()) {
+    throw new Error(
+      'No active Super Administrator exists and SUPER_ADMIN_EMAIL is not set. ' +
+        'Set it for this first deployment (§15.1, TD-13 Revision 23); it may be removed afterwards.',
+    );
   }
 
   // TD-12: lowercase before every lookup and every write, so a capitalised

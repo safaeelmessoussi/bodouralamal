@@ -92,6 +92,10 @@
   - ✓ Backend — `online_form` consents written in the registration transaction with the active text version from `SystemSetting`
   - ✓ Tests — a declined media release is recorded with actor + timestamp, not omitted (BR-1)
   - △ Later milestone (M2) — the `staff_recorded` path and consent management UI
+- [x] `POST /family-links` — staff-mediated link of an existing child (§4.3 Revision 23)
+  - ✓ Backend — Admin/Super Admin only with the TD-12 freshness assertion; creates a `Pending` link decided in the §5.6 queue; duplicate answers `DUPLICATE`, never `FAMILY_LINK_PENDING`
+  - ✓ Tests — 11 service + 6 HTTP tests; five mutations caught, including one reopening parent self-service
+  - ✓ Security — there is no parent-facing path to an existing child; a parent caller is refused at the edge, not merely unlinked in the UI
 - [ ] Staff pre-provisioning UI/flow (bind-on-first-login) (§4.1b 4b, TD-4.10)
 - [x] Super Admin bootstrap semantics (§15.1, SRS Revision 22) — the last open specification ambiguity, resolved
   - ✓ Backend — gate is "an active Super Administrator exists", not "a row matching this email"; ignored permanently afterwards; grants rather than duplicates; activates a matched non-active account; fails loudly on a soft-deleted holder

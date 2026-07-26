@@ -2,7 +2,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { loadConfig } from '../lib/config.js';
 import { issueOnboardingToken } from '../lib/onboarding-token.js';
-import { createPrismaClient } from '../lib/prisma.js';
+import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
 import { decide, listApprovals } from './approval.service.js';
 import { CONSENT_TEXT_VERSION_KEY, register } from './registration.service.js';
 
@@ -12,7 +12,7 @@ import { CONSENT_TEXT_VERSION_KEY, register } from './registration.service.js';
  * and by status guards, so this has to run against PostgreSQL.
  */
 const config = loadConfig();
-const prisma = createPrismaClient(config.DATABASE_URL);
+const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);
 const KEY = config.ONBOARDING_TOKEN_KEY;
 const TAG = '[appr-test]';
 

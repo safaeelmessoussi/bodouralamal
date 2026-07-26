@@ -1,7 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { loadConfig } from '../lib/config.js';
-import { createPrismaClient } from '../lib/prisma.js';
+import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
 import {
   AUTH_AUDIT_RETENTION_DAYS,
   PURGEABLE_ACTION_TYPES,
@@ -16,7 +16,7 @@ import {
  * failure is a row that vanishes, and that only shows up if you check for it.
  */
 const config = loadConfig();
-const prisma = createPrismaClient(config.DATABASE_URL);
+const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);
 
 /** Every action type TD-8 retains INDEFINITELY. None may ever be purged. */
 const RETAINED_FOREVER = [

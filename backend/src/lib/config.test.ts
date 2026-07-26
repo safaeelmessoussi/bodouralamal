@@ -33,6 +33,20 @@ describe('loadConfig (TD-13 fail-fast)', () => {
     expect(config.NODE_ENV).toBe('test');
   });
 
+  it('boots WITHOUT SUPER_ADMIN_EMAIL (TD-13 Revision 23: bootstrap-only)', () => {
+    // The running API never reads it — only the seed does — so demanding it at
+    // boot would force an operator to keep a line that no longer does anything.
+    const config = loadConfig(validEnv({ SUPER_ADMIN_EMAIL: undefined }));
+    expect(config.SUPER_ADMIN_EMAIL).toBeUndefined();
+    expect(REQUIRED_ENV_VARS).not.toContain('SUPER_ADMIN_EMAIL');
+
+    // An operator who "removes" it usually leaves `SUPER_ADMIN_EMAIL=` in .env,
+    // which arrives as an empty string. Blank must mean absent, or the promise
+    // that it may be removed is only half true and the API refuses to boot.
+    expect(loadConfig(validEnv({ SUPER_ADMIN_EMAIL: '' })).SUPER_ADMIN_EMAIL).toBeUndefined();
+    expect(loadConfig(validEnv({ SUPER_ADMIN_EMAIL: '   ' })).SUPER_ADMIN_EMAIL).toBeUndefined();
+  });
+
   it('applies TD-13 defaults for optional variables', () => {
     const config = loadConfig(validEnv());
     expect(config.TZ).toBe('Africa/Casablanca');

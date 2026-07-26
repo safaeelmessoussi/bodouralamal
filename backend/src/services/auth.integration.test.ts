@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { loadConfig } from '../lib/config.js';
-import { createPrismaClient } from '../lib/prisma.js';
+import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
 import { resolveLogin } from './auth.service.js';
 
 /**
@@ -12,7 +12,7 @@ import { resolveLogin } from './auth.service.js';
  * is exercised rather than assumed.
  */
 const config = loadConfig();
-const prisma = createPrismaClient(config.DATABASE_URL);
+const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);
 
 const TAG = '[auth-test]';
 

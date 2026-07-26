@@ -1,9 +1,9 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { loadConfig } from '../lib/config.js';
-import { createPrismaClient } from '../lib/prisma.js';
+import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
 import { resolveActingStudent } from '../middleware/child-context.js';
-import { revokeLink } from './family-link.service.js';
+import { createLink, revokeLink } from './family-link.service.js';
 
 /**
  * FamilyLink revocation (§4.3 Revision 16) against the real database.
@@ -14,7 +14,7 @@ import { revokeLink } from './family-link.service.js';
  * rather than trusting the column.
  */
 const config = loadConfig();
-const prisma = createPrismaClient(config.DATABASE_URL);
+const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);
 const TAG = '[fam-link-test]';
 
 async function makeUser(label: string, status = 'active'): Promise<string> {
@@ -241,5 +241,135 @@ describe('§4.3 Revision 16 — revoking an approved link', () => {
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
     await expect(resolveActingStudent(prisma, { userId: p2, roles: ['parent'] }, c)).resolves
       .toMatchObject({ studentId: c });
+  });
+});
+
+describe('§4.3 Revision 23 — POST /family-links is staff-mediated', () => {
+  it('creates a PENDING link that lands in the approval queue', async () => {
+    const admin = await makeStaff('admin');
+    const p = await makeUser('والدة');
+    const c = await makeUser('طفلة');
+
+    const link = await createLink(prisma, admin, p, c);
+
+    // Pending even though STAFF created it: §4.3 retains that rule without
+    // exception, which is also what keeps the queue's family-link type reachable.
+    expect(link.status).toBe('pending');
+    // And it grants nothing yet (BR-4).
+    await expect(
+      resolveActingStudent(prisma, { userId: p, roles: ['parent'] }, c),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('writes an attributable audit row for the staff member who created it', async () => {
+    const admin = await makeStaff('admin');
+    const p = await makeUser('والدة');
+    const c = await makeUser('طفلة');
+
+    const link = await createLink(prisma, admin, p, c);
+
+    const row = await prisma.auditLog.findFirst({
+      where: { targetId: link.id, actionType: 'familylink.create' },
+    });
+    expect(row?.actorUserId).toBe(admin);
+    const detail = row!.detail as Record<string, unknown>;
+    expect(detail['parent_id']).toBe(p);
+    expect(detail['student_id']).toBe(c);
+  });
+
+  it('TD-2: a parent cannot create a link — there is no parent self-service path', async () => {
+    const parentCaller = await makeStaff('parent');
+    const c = await makeUser('طفلة');
+
+    // This is the whole point of Revision 23: a parent has no route to link
+    // themselves to an existing child.
+    await expect(createLink(prisma, parentCaller, parentCaller, c)).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
+    await expect(createLink(prisma, parentCaller, parentCaller, c)).rejects.toMatchObject({
+      code: 'FORBIDDEN',
+    });
+    expect(await prisma.familyLink.count({ where: { studentId: c } })).toBe(0);
+  });
+
+  it('TD-2: a teacher cannot create a link either', async () => {
+    const teacher = await makeStaff('teacher');
+    const p = await makeUser('والدة');
+    const c = await makeUser('طفلة');
+    await expect(createLink(prisma, teacher, p, c)).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+
+  it('TD-12: an admin suspended mid-session cannot create a link', async () => {
+    const admin = await makeStaff('admin');
+    const p = await makeUser('والدة');
+    const c = await makeUser('طفلة');
+    await prisma.user.update({ where: { id: admin }, data: { accountStatus: 'suspended' } });
+
+    await expect(createLink(prisma, admin, p, c)).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    expect(await prisma.familyLink.count({ where: { studentId: c } })).toBe(0);
+  });
+
+  it('a duplicate live link is DUPLICATE, never FAMILY_LINK_PENDING', async () => {
+    const admin = await makeStaff('admin');
+    const p = await makeUser('والدة');
+    const c = await makeUser('طفلة');
+    await createLink(prisma, admin, p, c);
+
+    // TD-3.8 restricts FAMILY_LINK_PENDING to own-resource contexts; this caller
+    // is staff acting on someone else's relationship, so the review state of the
+    // existing link must not be disclosed through the error code.
+    await expect(createLink(prisma, admin, p, c)).rejects.toMatchObject({ code: 'DUPLICATE' });
+    expect(await prisma.familyLink.count({ where: { parentId: p, studentId: c } })).toBe(1);
+  });
+
+  it('a REVOKED link does not block a fresh staff-created one (TD-6 partial index)', async () => {
+    const admin = await makeStaff('admin');
+    const p = await makeUser('والدة');
+    const c = await makeUser('طفلة');
+    const first = await approvedLink(p, c);
+    await revokeLink(prisma, admin, first, 'انتقال الحضانة');
+
+    const again = await createLink(prisma, admin, p, c);
+    expect(again.status).toBe('pending');
+  });
+
+  it('refuses a nonexistent or soft-deleted party with 404', async () => {
+    const admin = await makeStaff('admin');
+    const p = await makeUser('والدة');
+    const gone = await makeUser('محذوفة');
+    await prisma.user.update({ where: { id: gone }, data: { deletedAt: new Date() } });
+
+    await expect(
+      createLink(prisma, admin, p, '11111111-2222-4333-8444-555555555555'),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(createLink(prisma, admin, p, gone)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('refuses a user as their own parent', async () => {
+    const admin = await makeStaff('admin');
+    const self = await makeUser('نفسها');
+    await expect(createLink(prisma, admin, self, self)).rejects.toMatchObject({
+      code: 'VALIDATION_FAILED',
+    });
+  });
+
+  it('the created link becomes usable only after approval, then revocable', async () => {
+    const admin = await makeStaff('admin');
+    const p = await makeUser('والدة');
+    const c = await makeUser('طفلة');
+    const link = await createLink(prisma, admin, p, c);
+
+    // Approve it the way the §5.6 queue does.
+    await prisma.familyLink.update({
+      where: { id: link.id },
+      data: { status: 'approved', decidedAt: new Date(), decidedById: admin },
+    });
+    await expect(resolveActingStudent(prisma, { userId: p, roles: ['parent'] }, c)).resolves
+      .toMatchObject({ studentId: c });
+
+    await revokeLink(prisma, admin, link.id, 'انتهت الحاجة');
+    await expect(
+      resolveActingStudent(prisma, { userId: p, roles: ['parent'] }, c),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 });

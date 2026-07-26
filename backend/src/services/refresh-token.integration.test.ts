@@ -2,7 +2,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { RefreshRevokedReason } from '../generated/prisma/enums.js';
 import { loadConfig } from '../lib/config.js';
-import { createPrismaClient } from '../lib/prisma.js';
+import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
 import * as auditRepo from '../repositories/audit.repository.js';
 import {
   hashToken,
@@ -21,7 +21,7 @@ import {
  * nothing.
  */
 const config = loadConfig();
-const prisma = createPrismaClient(config.DATABASE_URL);
+const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);
 
 const TEST_TAG = '[refresh-token-test]';
 
