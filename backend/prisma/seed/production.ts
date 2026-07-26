@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { Visibility } from '../../src/generated/prisma/enums.js';
 import { loadConfig } from '../../src/lib/config.js';
 import { createPrismaClient } from '../../src/lib/prisma.js';
+import { bootstrapSuperAdmin } from './super-admin.js';
 
 /**
  * Production seed (SRS §15.1) — runs on EVERY fresh deployment (§19.1 step 6)
@@ -202,55 +203,6 @@ async function seedSystemSettings(categoryIds: Map<string, string>): Promise<voi
   console.log(`  system settings: ${settings.length}`);
 }
 
-/**
- * §15.1 Super Admin. One `active` User whose `pre_provisioned_email` holds the
- * lowercased SUPER_ADMIN_EMAIL (§7, Revision 15); its `UserIdentity` is created
- * on FIRST GOOGLE LOGIN (§4.1b step 4b).
- *
- * No placeholder identity row is written — §7 prohibits stub identities, and no
- * password exists anywhere in this system (§20 rule 10).
- */
-async function seedSuperAdmin(email: string): Promise<void> {
-  // TD-12: lowercase before every lookup and every write, so a capitalised
-  // value in .env can never create an account that its owner cannot claim.
-  const normalized = email.trim().toLowerCase();
-
-  const role = await prisma.role.findUnique({ where: { name: 'super_admin' } });
-  if (!role) throw new Error('super_admin role missing — seedRoles must run first');
-
-  const existing = await prisma.user.findFirst({
-    where: { preProvisionedEmail: normalized, deletedAt: null },
-  });
-
-  const user =
-    existing ??
-    (await prisma.user.create({
-      data: {
-        nameArabic: 'المشرف العام',
-        preProvisionedEmail: normalized,
-        // Pre-approved by definition: the Super Admin must not land in the
-        // approval queue that only a Super Admin could clear.
-        accountStatus: 'active',
-      },
-    }));
-
-  // Unscoped role assignment: Super Admin is not branch-scoped (§2.1).
-  const assignment = await prisma.userBranchRole.findFirst({
-    where: { userId: user.id, roleId: role.id, branchId: null, deletedAt: null },
-  });
-  if (!assignment) {
-    await prisma.userBranchRole.create({
-      data: { userId: user.id, roleId: role.id, branchId: null },
-    });
-  }
-
-  const identityCount = await prisma.userIdentity.count({ where: { userId: user.id } });
-  console.log(
-    `  super admin: ${existing ? 'already present' : 'created'} ` +
-      `(identity ${identityCount === 0 ? 'not yet bound — binds on first Google login' : 'bound'})`,
-  );
-}
-
 async function main(): Promise<void> {
   console.log('Production seed (§15.1) — idempotent\n');
 
@@ -261,7 +213,7 @@ async function main(): Promise<void> {
   await seedQuranSurahs();
   await seedSystemSettings(categoryIds);
 
-  await seedSuperAdmin(config.SUPER_ADMIN_EMAIL);
+  await bootstrapSuperAdmin(prisma, config.SUPER_ADMIN_EMAIL);
 
   console.log('\nSeed complete.');
 }

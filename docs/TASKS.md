@@ -92,6 +92,10 @@
   - ✓ Tests — a declined media release is recorded with actor + timestamp, not omitted (BR-1)
   - △ Later milestone (M2) — the `staff_recorded` path and consent management UI
 - [ ] Staff pre-provisioning UI/flow (bind-on-first-login) (§4.1b 4b, TD-4.10)
+- [x] Super Admin bootstrap semantics (§15.1, SRS Revision 22) — the last open specification ambiguity, resolved
+  - ✓ Backend — gate is "an active Super Administrator exists", not "a row matching this email"; ignored permanently afterwards; grants rather than duplicates; activates a matched non-active account; fails loudly on a soft-deleted holder
+  - ✓ Tests — 11 integration tests; six mutations of the gate all caught, including one restoring the exact pre-R22 bug
+  - ✓ Security — reopening the gate on total lockout is the sanctioned recovery path and grants no new authority (the seed is a manual host step, §19.1 step 6)
 - [~] Approval queue: bundles, approve (TD-4.2 atomic) / reject with reason
   - ✓ Backend — `GET /admin/approvals` + approve/reject; both item types (registration bundle, standalone §4.3 link); a pending child never appears as its own entry, so the family is approved once; TD-10 paginated
   - ✓ Backend — TD-12 freshness policy (`assertFreshActive`) re-reads the caller and rebuilds roles from live rows; it returns the fresh roles rather than a boolean so a caller cannot verify freshness and then act on the token's stale authority
