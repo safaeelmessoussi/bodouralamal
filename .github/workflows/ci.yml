@@ -25,6 +25,8 @@ jobs:
         run: bash scripts/ci/check-migrations.sh
       - name: DROP/RENAME migration lint (TD-6b)
         run: bash scripts/ci/check-migration-drop-rename.sh
+      - name: Prisma mass-write filter guard
+        run: bash scripts/ci/check-prisma-mass-write.sh
 
   contract:
     name: API contract — regenerate and verify no drift

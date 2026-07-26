@@ -37,6 +37,27 @@ async function activeSuperAdmins(): Promise<string[]> {
   return [...new Set(rows.map((r) => r.userId))];
 }
 
+/**
+ * Returns the single id a test expects, refusing to hand back `undefined`.
+ *
+ * This exists because of a proven footgun: Prisma treats `undefined` in a
+ * `where` clause as "filter not supplied", so
+ * `updateMany({ where: { userId: undefined } })` matches **every row in the
+ * table**. A `!` non-null assertion silences TypeScript and changes nothing at
+ * runtime, so an empty result here would quietly turn a one-row update into a
+ * whole-table update. Verified against this database: a `where` of
+ * `{ userId: undefined }` matched 3 of 3 rows.
+ */
+function onlyId(ids: string[], context: string): string {
+  if (ids.length !== 1) {
+    throw new Error(
+      `${context}: expected exactly one id, got ${ids.length}. Refusing to continue — ` +
+        'an undefined id in a Prisma where clause matches every row.',
+    );
+  }
+  return ids[0]!;
+}
+
 async function clear(): Promise<void> {
   const users = await prisma.user.findMany({
     where: { OR: [{ nameArabic: { startsWith: TAG } }, { preProvisionedEmail: { contains: 'sa-boot-' } }] },
@@ -211,10 +232,10 @@ describe('§15.1 Revision 22 — SUPER_ADMIN_EMAIL is a bootstrap value', () => 
 
   it('reopens the gate when every Super Admin is suspended — the recovery path', async () => {
     await bootstrapSuperAdmin(prisma, 'sa-boot-lockout@example.com');
-    const [first] = await activeSuperAdmins();
+    const first = onlyId(await activeSuperAdmins(), 'lockout-recovery test');
 
     // Simulate the lockout: the only administrator is suspended.
-    await prisma.user.update({ where: { id: first! }, data: { accountStatus: 'suspended' } });
+    await prisma.user.update({ where: { id: first }, data: { accountStatus: 'suspended' } });
     expect(await activeSuperAdmins()).toHaveLength(0);
 
     await bootstrapSuperAdmin(prisma, 'sa-boot-recovered@example.com');
@@ -226,8 +247,8 @@ describe('§15.1 Revision 22 — SUPER_ADMIN_EMAIL is a bootstrap value', () => 
 
   it('a soft-deleted Super Admin does not hold the gate open', async () => {
     await bootstrapSuperAdmin(prisma, 'sa-boot-gone@example.com');
-    const [first] = await activeSuperAdmins();
-    await prisma.user.update({ where: { id: first! }, data: { deletedAt: new Date() } });
+    const first = onlyId(await activeSuperAdmins(), 'soft-deleted Super Admin test');
+    await prisma.user.update({ where: { id: first }, data: { deletedAt: new Date() } });
 
     await bootstrapSuperAdmin(prisma, 'sa-boot-successor@example.com');
     expect(await activeSuperAdmins()).toHaveLength(1);
@@ -235,12 +256,16 @@ describe('§15.1 Revision 22 — SUPER_ADMIN_EMAIL is a bootstrap value', () => 
 
   it('a REVOKED role assignment does not hold the gate open', async () => {
     await bootstrapSuperAdmin(prisma, 'sa-boot-revoked@example.com');
-    const [first] = await activeSuperAdmins();
+    const first = onlyId(await activeSuperAdmins(), 'revoked-role test');
     // The account stays Active but loses the role — it is no longer an admin.
-    await prisma.userBranchRole.updateMany({
-      where: { userId: first! },
+    // `userId` is asserted non-empty above: an undefined value here would match
+    // EVERY role row in the database rather than this one user's.
+    const revoked = await prisma.userBranchRole.updateMany({
+      where: { userId: first },
       data: { deletedAt: new Date() },
     });
+    // Blast-radius assertion: this must touch exactly the rows of one user.
+    expect(revoked.count).toBeLessThanOrEqual(1);
 
     await bootstrapSuperAdmin(prisma, 'sa-boot-after-revoke@example.com');
     expect(await activeSuperAdmins()).toHaveLength(1);
