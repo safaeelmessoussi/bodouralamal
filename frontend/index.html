@@ -1,8 +1,19 @@
 <!doctype html>
+<!--
+  RTL-first, Arabic-only at launch (SRS §3.1, §6). `lang`/`dir` are set on the
+  document rather than toggled by script so the very first paint is correct —
+  a right-to-left layout that reflows after hydration reads as broken.
+  The FR/EN language switcher ships post-MVP (§10.1); the i18n keys exist now.
+-->
 <html lang="ar" dir="rtl">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Derived from the supplied branding assets; the originals are far too
+         large for a mobile-first client (§2.2). -->
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <meta name="theme-color" content="#0f5132" />
     <title>بذور الأمل</title>
   </head>
   <body>

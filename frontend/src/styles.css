@@ -1,0 +1,105 @@
+/*
+ * RTL-first, mobile-first (SRS §6, §14.7 tests at 360 px minimum).
+ * No web font is linked: §3.1's CSP is `default-src 'self'` with no font host,
+ * and a blocked font request would silently fall back anyway. System Arabic
+ * faces render correctly and cost nothing on a weak mobile link (§2.2).
+ */
+:root {
+  --ink: #1a1a1a;
+  --muted: #5c6470;
+  --rule: #dfe3e8;
+  --surface: #ffffff;
+  --ground: #f7f8f7;
+  --brand: #0f5132;
+  --danger: #b3261e;
+  --space: 1rem;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: system-ui, -apple-system, 'Segoe UI', 'Noto Naskh Arabic', 'Tahoma', sans-serif;
+  line-height: 1.7;
+  /* Arabic numerals stay in the reader's expected form; no forced latin. */
+  font-variant-numeric: normal;
+}
+
+main { max-width: 60rem; margin: 0 auto; padding: calc(var(--space) * 2) var(--space); }
+
+h1 { font-size: clamp(1.5rem, 5vw, 2.25rem); margin: 0 0 0.5rem; }
+h2 { font-size: 1.25rem; margin: calc(var(--space) * 2) 0 var(--space); }
+p { margin: 0 0 var(--space); max-width: 62ch; }
+
+.logo { display: block; height: auto; max-width: 100%; }
+.logo-large { margin: 0 auto var(--space); }
+
+.hero { text-align: center; padding-bottom: calc(var(--space) * 2); border-bottom: 1px solid var(--rule); }
+.tagline { color: var(--muted); }
+
+.cta { display: flex; flex-wrap: wrap; gap: 0.75rem; justify-content: center; margin-top: var(--space); }
+
+.button {
+  display: inline-block;
+  padding: 0.65rem 1.25rem;
+  border: 1px solid var(--brand);
+  border-radius: 4px;
+  background: var(--surface);
+  color: var(--brand);
+  font: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+.button.primary { background: var(--brand); color: #fff; }
+.button:focus-visible, a:focus-visible, button:focus-visible {
+  outline: 3px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.auth-page, .status-screen { text-align: center; }
+/* §2.1: the approval-status screen is a dedicated, prominently styled full page. */
+.status-screen {
+  min-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+.error-banner {
+  border: 1px solid var(--danger);
+  border-inline-start-width: 5px;
+  background: #fbeae9;
+  color: var(--danger);
+  padding: 0.75rem 1rem;
+  border-radius: 4px;
+  text-align: start;
+}
+
+.state { padding: var(--space) 0; color: var(--muted); }
+.request-id { font-size: 0.85rem; color: var(--muted); }
+
+/* Skeleton rather than a spinner for tabular loading (§14.4). */
+.skeleton {
+  height: 1.1rem;
+  margin-bottom: 0.6rem;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--rule), #eef1f4, var(--rule));
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+@keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+
+/* §14.4 accessibility: respect a reduced-motion preference. */
+@media (prefers-reduced-motion: reduce) {
+  .skeleton { animation: none; }
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px; height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+}

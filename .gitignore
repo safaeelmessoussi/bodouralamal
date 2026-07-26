@@ -14,3 +14,13 @@ infra.env
 
 # Prisma client is generated from schema.prisma at build time (never committed)
 backend/src/generated/
+
+# Original high-resolution branding assets and source media are NOT committed:
+# 62 MB into a 4.5 MB repo would live in git history forever, and §2.2 requires
+# large-file operations be kept to a minimum. The client bundle carries only the
+# small derived assets under frontend/public/ (see docs/CHANGES.log).
+/assets-source/
+/logo.png
+/favicon.png
+/intro-video.mp4
+/landing_Image.png

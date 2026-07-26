@@ -43,11 +43,8 @@
 - [x] Session layer: 1 h access JWT, 30 d rotating refresh cookie (HttpOnly/Secure/SameSite=Lax), hashed-never-raw storage, revocation list (TD-12)
 - [x] Rotation / logout / revoke-on-suspension transactions (TD-4.13/14/15); 10 s grace window is idempotent (no chain fork); reuse outside grace revokes the whole session
 - [x] Token-lifecycle acceptance criteria T1–T12 green (§18, Revision 16)
-- [~] Pending hard-redirect; zero data access except `GET /me` + logout (TD-1); client-side global Pending route guard (§14.4)
-  - ✓ Backend — only `GET /me` and logout serve a Pending session; the callback routes Pending to the status screen
-  - ✓ Tests — Pending routing covered in the §4.1b suite
-  - ✓ Security — server-side denial is the enforcement; the guard is UX only (§14.4)
-  - △ Frontend integration — the global router guard needs the React shell
+- [x] Pending hard-redirect; zero data access except `GET /me` + logout (TD-1); client-side global Pending route guard (§14.4)
+  - ✓ Backend · ✓ Tests · ✓ Security · ✓ Frontend — `PendingGuard` renders the §2.1 status screen before any authenticated route mounts, so no skeleton leaks
 - [x] Error envelope middleware + canonical code catalog incl. VERSION_CONFLICT/SERVICE_UNAVAILABLE + i18n message keys (TD-3.8)
 - [x] Optimistic-locking helper (conditional UPDATE + version bump) shared across TD-15 entities
   - ✓ Backend — `updateWithVersion` for any TD-15 delegate; distinguishes VERSION_CONFLICT from NOT_FOUND
@@ -66,11 +63,8 @@
   - ✓ Security — `audit.purge` allowlist mutation-tested; an equally-ancient security event survived
   - △ Later milestone (M3/M6) — `JobsRepository` same-transaction enqueue, which needs a job-triggering mutation to exist
 - [x] Pool/memory pins: Prisma limit 10, pg-boss ≤5, PG max_connections 30, statement_timeout 10s; shared_buffers/GOMEMLIMIT/max-old-space (TD-13)
-- [~] OAuth callback failure redirects (/login?error=…, 4 keys) + OAUTH_EXCHANGE_FAILED + single-flight refresh w/ 10s grace (§4.1b, TD-12)
-  - ✓ Backend — all four failure keys redirect (never JSON); `OAUTH_EXCHANGE_FAILED` mapped; 10 s server-side grace implemented
-  - ✓ Tests — grace window is §18 T3/T12; the four failure keys verified live through Nginx
-  - ✓ Security — refusals are indistinguishable to the caller; no partial state persisted on any failure path
-  - △ Frontend integration — the client-side single-flight refresh mutex
+- [x] OAuth callback failure redirects (/login?error=…, 4 keys) + OAUTH_EXCHANGE_FAILED + single-flight refresh w/ 10s grace (§4.1b, TD-12)
+  - ✓ Backend · ✓ Tests · ✓ Security · ✓ Frontend — all four keys render as i18n messages with a retry affordance; the client shares one in-flight refresh promise so concurrent tabs cannot race each other into a logout
 - [x] AuditLog table + write helper (TD-8); auth.login / login_denied / identity_bound / refresh / logout / token_revoked rows
 - [x] OpenAPI generation wired; contract = implementation (TD-3)
   - ✓ Reproducible — regeneration is byte-identical to the committed document
@@ -82,6 +76,10 @@
   - ✓ Security — §2.2 display_order refused for a plain Admin **and** allowed when absent; out-of-scope is 404 not 403 (§20 rule 17)
   - △ Frontend integration — the `/admin/branches` screen (§14.2) needs the React shell
 - [ ] §18 Authentication & Onboarding checklist green
+
+- [x] Client shell: RTL-first Arabic-only (§3.1, §6), i18n keys for every string (§16.2), §14.4 state components, §14.1 public routes only, branding assets
+  - ✓ Frontend · ✓ Security — CSP unchanged (`default-src 'self'`, no font/CDN host); access token in memory only, read from the URL fragment and stripped from history (TD-12)
+  - △ Later milestone (M2) — authenticated layouts, the account switcher, and the unified registration form
 
 ## M2 — Registration, Approvals, Family
 - [ ] Unified parent+child registration transaction (TD-4.1) + adult path
