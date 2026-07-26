@@ -3,6 +3,7 @@ import express, { type Express, type Request, type Response } from 'express';
 import * as auth from './controllers/auth.controller.js';
 import * as approvals from './controllers/approval.controller.js';
 import * as familyLinks from './controllers/family-link.controller.js';
+import * as users from './controllers/user.controller.js';
 import * as branch from './controllers/branch.controller.js';
 import { createRegistration } from './controllers/registration.controller.js';
 import { healthController } from './controllers/health.controller.js';
@@ -89,6 +90,7 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
   guarded.get('/admin/approvals', approvals.list(prisma));
   guarded.post('/admin/approvals/:id/approve', approvals.approve(prisma));
   guarded.post('/admin/approvals/:id/reject', approvals.reject(prisma));
+  guarded.post('/admin/users', users.create(prisma));
   guarded.post('/family-links', familyLinks.create(prisma));
   guarded.delete('/admin/family-links/:id', familyLinks.revoke(prisma));
   guarded.get('/admin/branches', branch.listBranches(prisma));

@@ -42,6 +42,7 @@ GET /admin/approvals                          # TD-3.2, §5.6
 POST /admin/approvals/{id}/approve            # TD-3.2, TD-4.2
 POST /admin/approvals/{id}/reject             # TD-3.2, §5.6
 POST /family-links                            # TD-3.2, §4.3 Revision 23 (staff-mediated, existing child)
+POST /admin/users                             # §5.6 /admin/users "create (staff pre-provisioning against a Google email)"; §4.1b step 4b; TD-2
 DELETE /admin/family-links/{id}                # §4.3 Revision 16 (soft-delete IS revocation), TD-2, TD-8 familylink.revoke
 
 # ── Calendar & events (TD-3.4)

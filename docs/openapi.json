@@ -159,6 +159,32 @@
         }
       }
     },
+    "/admin/users": {
+      "post": {
+        "summary": "Pre-provision an account against a Google email",
+        "description": "Staff-assisted registration under Google-only auth (§3.1, §5.6 `/admin/users`, §4.1b step 4b). There is no password to issue, so staff record the person's details plus the Google address **authorized to claim** the account. **No `UserIdentity` is created** — §7 prohibits placeholder identity rows, because a half-populated identity would break the \"has an identity implies has authenticated\" predicate the whole §4.1b routing rests on. The binding happens on that address's first successful Google login (TD-4.10). The email is stored lowercase (TD-12) and is unique among non-null values via a TD-6 partial index spanning deleted users too, so an address can never be made claimable twice. Admin or Super Admin (TD-2) with the TD-12 freshness assertion; only a Super Admin may create another Admin. Accounts default to `Pending`; `pre_approved` yields `Active`, which §4.1b step 4b explicitly contemplates.",
+        "responses": {
+          "201": {
+            "description": "Account created and claimable; not yet bound to any identity."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED on a missing name or malformed email."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8)."
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN (TD-12 freshness, TD-2 role, or an Admin attempting to create an Admin)."
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND when the named branch scope does not exist."
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). DUPLICATE when that email may already claim an account."
+          }
+        }
+      }
+    },
     "/family-links": {
       "post": {
         "summary": "Link an existing child to a parent (staff-mediated)",
