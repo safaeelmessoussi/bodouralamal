@@ -1,5 +1,6 @@
 import type { PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
+import { rolesOf, toRoleScopes, type RoleScope } from './branch-scope.js';
 
 /**
  * High-risk endpoint freshness (SRS TD-12).
@@ -26,7 +27,7 @@ import { AppError } from '../lib/errors.js';
 export interface FreshActor {
   userId: string;
   roles: string[];
-  branchScopes: string[];
+  roleScopes: RoleScope[];
 }
 
 /**
@@ -57,7 +58,8 @@ export async function assertFreshActive(
     where: { userId, deletedAt: null },
     include: { role: true },
   });
-  const roles = [...new Set(assignments.map((a) => a.role.name))];
+  const roleScopes = toRoleScopes(assignments);
+  const roles = rolesOf(roleScopes);
 
   // TD-12 requires the invoked role/scope assignment to still EXIST, not merely
   // to have existed when the token was minted — a revoked role takes effect now.
@@ -68,6 +70,6 @@ export async function assertFreshActive(
   return {
     userId: user.id,
     roles,
-    branchScopes: [...new Set(assignments.flatMap((a) => (a.branchId ? [a.branchId] : [])))],
+    roleScopes,
   };
 }

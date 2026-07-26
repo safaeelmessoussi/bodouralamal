@@ -44,7 +44,7 @@ export function authenticate(config: AppConfig) {
     req.actor = {
       userId: verified.claims.sub,
       roles: verified.claims.roles,
-      branchScopes: verified.claims.branch_scopes,
+      roleScopes: verified.claims.role_scopes,
     };
     next();
   };

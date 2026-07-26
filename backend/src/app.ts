@@ -50,7 +50,7 @@ function meController(prisma: PrismaClient, config: AppConfig) {
       id: user.id,
       account_status: user.accountStatus,
       roles: verified.claims.roles,
-      branch_scopes: verified.claims.branch_scopes,
+      role_scopes: verified.claims.role_scopes,
       // §14.3 ChildContextSwitcher renders approved links only (§4.3).
       approved_child_links: links.map((link) => link.studentId),
     });

@@ -11,8 +11,7 @@ const OTHER_KEY = 'a-different-signing-key';
 
 const PARAMS = {
   userId: '11111111-1111-1111-1111-111111111111',
-  roles: ['teacher'],
-  branchScopes: ['22222222-2222-2222-2222-222222222222'],
+  roleScopes: ['teacher'].map((role) => ({ role, branches: null })),
   accountStatus: 'active',
 };
 
@@ -20,7 +19,7 @@ describe('access token (TD-12)', () => {
   it('carries exactly the TD-12 claims and nothing else', () => {
     const { claims } = issueAccessToken(PARAMS, KEY);
     expect(Object.keys(claims).sort()).toEqual(
-      ['account_status', 'branch_scopes', 'exp', 'iat', 'roles', 'sub'].sort(),
+      ['account_status', 'role_scopes', 'exp', 'iat', 'roles', 'sub'].sort(),
     );
   });
 
@@ -100,11 +99,52 @@ describe('access token (TD-12)', () => {
     }
   });
 
-  it('an unscoped Super Admin carries an empty branch_scopes array', () => {
+  it('§4.2 R24: an all-branches assignment carries branches: null, not an empty list', () => {
+    // The distinction is the whole point: an empty list reaches NO branches,
+    // while null reaches ALL of them. Conflating them made an all-branches Admin
+    // able to see nothing.
     const { claims } = issueAccessToken(
-      { ...PARAMS, roles: ['super_admin'], branchScopes: [] },
+      { ...PARAMS, roleScopes: [{ role: 'admin', branches: null }] },
       KEY,
     );
-    expect(claims.branch_scopes).toEqual([]);
+    expect(claims.role_scopes).toEqual([{ role: 'admin', branches: null }]);
+    expect(claims.roles).toEqual(['admin']);
+  });
+
+  it('roles[] is DERIVED, so it can never disagree with role_scopes[]', () => {
+    const { claims } = issueAccessToken(
+      {
+        ...PARAMS,
+        roleScopes: [
+          { role: 'teacher', branches: ['b-casa'] },
+          { role: 'admin', branches: ['b-marrakesh'] },
+        ],
+      },
+      KEY,
+    );
+    // There is no way to pass a roles[] that contradicts the scopes, because
+    // IssueParams does not accept one.
+    expect(claims.roles.sort()).toEqual(['admin', 'teacher']);
+    expect(claims.role_scopes).toHaveLength(2);
+  });
+
+  it('per-role scopes survive the round trip distinctly, never flattened', () => {
+    const { token } = issueAccessToken(
+      {
+        ...PARAMS,
+        roleScopes: [
+          { role: 'teacher', branches: ['b-casa'] },
+          { role: 'admin', branches: ['b-marrakesh'] },
+        ],
+      },
+      KEY,
+    );
+    const verified = verifyAccessToken(token, KEY);
+    expect(verified.valid).toBe(true);
+    if (!verified.valid) return;
+    // The teaching branch must not appear under the admin role: that flattening
+    // is exactly what let a Teacher-in-Casablanca administer Casablanca.
+    const admin = verified.claims.role_scopes.find((s) => s.role === 'admin');
+    expect(admin?.branches).toEqual(['b-marrakesh']);
   });
 });

@@ -82,6 +82,12 @@
   - ✓ Frontend · ✓ Security — CSP unchanged (`default-src 'self'`, no font/CDN host); access token in memory only, read from the URL fragment and stripped from history (TD-12)
   - △ Later milestone (M2) — authenticated layouts, the account switcher, and the unified registration form
 
+- [x] Branch-scoped authorization model made precise (§4.2, SRS Revision 24)
+  - ✓ Backend — `policies/branch-scope.ts`; per-role resolution; `branch_id IS NULL` = all branches; Super Admin bypasses by role
+  - ✓ Tests — 15 unit tests; five mutations caught, one per original defect
+  - ✓ Security — fixed an all-branches Admin seeing nothing (proved 0 of 2 → 2 of 2 over HTTP) and a cross-role over-grant; `roles[]` derived from scopes so a token cannot self-contradict
+  - ⚠ Supersedes OPEN AMBIGUITY 4 — user-list branch scoping should now be decided under this model
+
 ## M2 — Registration, Approvals, Family
 - [x] Unified parent+child registration transaction (TD-4.1) + adult path
   - ✓ Backend — `POST /registrations`; replay guard consumed FIRST so the `jti` is authoritative; both paths in one transaction

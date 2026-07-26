@@ -1,3 +1,4 @@
+import { rolesOf, type RoleScope } from '../policies/branch-scope.js';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 
 /**
@@ -9,7 +10,12 @@ import { createHmac, timingSafeEqual } from 'node:crypto';
  * components) for no capability we lack.
  *
  * Claims are exactly what TD-12 allows and nothing more:
- *   sub, roles[], branch_scopes[], account_status, iat, exp
+ *   sub, roles[], role_scopes[], account_status, iat, exp
+ *
+ * `role_scopes[]` carries one entry per role with the branches that assignment
+ * reaches (`branches: null` = all branches, §4.2 Revision 24). A flat
+ * `branch_scopes[]` is deliberately absent: it cannot express "all branches",
+ * and unioning scopes across roles extends one role's authority to another's.
  * **No PII beyond these — in particular no email** (TD-12), and **never the
  * active child**, which is asserted per request via `X-Active-Child-ID` and
  * verified against an Approved FamilyLink so a revoked link takes effect
@@ -24,7 +30,7 @@ const ALG = 'HS256';
 export interface AccessTokenClaims {
   sub: string;
   roles: string[];
-  branch_scopes: string[];
+  role_scopes: RoleScope[];
   account_status: string;
   iat: number;
   exp: number;
@@ -32,9 +38,13 @@ export interface AccessTokenClaims {
 
 export interface IssueParams {
   userId: string;
-  roles: string[];
-  /** Branch ids the caller is scoped to; empty for an unscoped Super Admin. */
-  branchScopes: string[];
+  /**
+   * One entry per role held, with the branches that assignment reaches
+   * (`branches: null` = all branches, §4.2 Revision 24). `roles[]` is derived
+   * from this at issue time rather than passed in, so a caller cannot mint a
+   * token whose roles and scopes disagree.
+   */
+  roleScopes: RoleScope[];
   accountStatus: string;
 }
 
@@ -56,8 +66,9 @@ export function issueAccessToken(
 
   const claims: AccessTokenClaims = {
     sub: params.userId,
-    roles: params.roles,
-    branch_scopes: params.branchScopes,
+    // Derived, so the two can never disagree (TD-12 Revision 24).
+    roles: rolesOf(params.roleScopes),
+    role_scopes: params.roleScopes,
     account_status: params.accountStatus,
     iat,
     exp,

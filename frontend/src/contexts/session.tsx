@@ -12,7 +12,8 @@ export interface Me {
   id: string;
   account_status: 'pending' | 'active' | 'rejected' | 'suspended';
   roles: string[];
-  branch_scopes: string[];
+  /** One entry per role; `branches: null` = all branches (§4.2 Revision 24). */
+  role_scopes: { role: string; branches: string[] | null }[];
   approved_child_links: string[];
 }
 

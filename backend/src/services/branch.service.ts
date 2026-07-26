@@ -1,4 +1,6 @@
 import type { Branch, PrismaClient, Room } from '../generated/prisma/client.js';
+import * as scope from '../policies/branch-scope.js';
+import { type RoleScope } from '../policies/branch-scope.js';
 import { AppError } from '../lib/errors.js';
 import * as audit from '../repositories/audit.repository.js';
 import { assertNoBlockingReferences, updateWithVersion } from '../repositories/optimistic-lock.js';
@@ -15,11 +17,18 @@ export interface Actor {
   userId: string;
   roles: string[];
   /** Branch ids this actor is scoped to; empty for an unscoped Super Admin. */
-  branchScopes: string[];
+  roleScopes: RoleScope[];
 }
 
-const isSuperAdmin = (actor: Actor): boolean => actor.roles.includes('super_admin');
-const isAdmin = (actor: Actor): boolean => actor.roles.includes('admin') || isSuperAdmin(actor);
+const isSuperAdmin = (actor: Actor): boolean => scope.isSuperAdmin(actor.roleScopes);
+const isAdmin = (actor: Actor): boolean => scope.hasRole(actor.roleScopes, 'admin') || isSuperAdmin(actor);
+
+/**
+ * The role whose assignments bound branch management (§4.2 Revision 24). Naming
+ * it is what keeps this a per-role check rather than a union across every role
+ * the caller happens to hold.
+ */
+const MANAGING_ROLE = 'admin';
 
 /** TD-2: managing branches/rooms is Admin (own branches) or Super Admin. */
 function assertCanManage(actor: Actor): void {
@@ -40,7 +49,7 @@ function assertMaySetDisplayOrder(actor: Actor, data: { displayOrder?: number | 
 /** Admins are scoped to their assigned branches; Super Admins are unscoped. */
 function assertInScope(actor: Actor, branchId: string): void {
   if (isSuperAdmin(actor)) return;
-  if (!actor.branchScopes.includes(branchId)) {
+  if (!scope.canActOnBranch(actor.roleScopes, MANAGING_ROLE, branchId)) {
     // §20 rule 17: out-of-scope is 404, never 403 — no existence leaks.
     throw new AppError('NOT_FOUND', 'branch out of scope');
   }
@@ -56,7 +65,7 @@ export async function listBranches(prisma: PrismaClient, actor: Actor): Promise<
   return prisma.branch.findMany({
     where: {
       deletedAt: null,
-      ...(isSuperAdmin(actor) ? {} : { id: { in: actor.branchScopes } }),
+      ...scope.branchFilter(actor.roleScopes, [MANAGING_ROLE]),
     },
     orderBy: [{ displayOrder: { sort: 'asc', nulls: 'last' } }, { name: 'asc' }, { id: 'asc' }],
   });

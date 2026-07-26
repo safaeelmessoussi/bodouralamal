@@ -34,7 +34,7 @@ async function call(method: string, path: string, token?: string, body?: unknown
 
 function bearer(userId: string, roles: string[], accountStatus = 'active'): string {
   return issueAccessToken(
-    { userId, roles, branchScopes: [], accountStatus: accountStatus as never },
+    { userId, roleScopes: roles.map((role) => ({ role, branches: null })), accountStatus: accountStatus as never },
     config.JWT_SIGNING_KEY,
   ).token;
 }

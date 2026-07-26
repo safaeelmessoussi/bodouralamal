@@ -1,5 +1,6 @@
 import type { User } from '../generated/prisma/client.js';
 
+import { rolesOf, toRoleScopes, type RoleScope } from '../policies/branch-scope.js';
 import type { Db } from './audit.repository.js';
 
 /**
@@ -10,7 +11,7 @@ import type { Db } from './audit.repository.js';
 export interface ResolvedAccount {
   user: User;
   roles: string[];
-  branchScopes: string[];
+  roleScopes: RoleScope[];
 }
 
 async function loadRoles(db: Db, userId: string): Promise<Omit<ResolvedAccount, 'user'>> {
@@ -18,11 +19,10 @@ async function loadRoles(db: Db, userId: string): Promise<Omit<ResolvedAccount, 
     where: { userId, deletedAt: null },
     include: { role: true },
   });
-  return {
-    roles: [...new Set(assignments.map((a) => a.role.name))],
-    // A null branch means unscoped (Super Admin, §2.1) and contributes no scope.
-    branchScopes: [...new Set(assignments.flatMap((a) => (a.branchId ? [a.branchId] : [])))],
-  };
+  // §4.2 Revision 24: one entry per role, with `branches: null` meaning ALL
+  // branches. Never a flat union across roles.
+  const roleScopes = toRoleScopes(assignments);
+  return { roles: rolesOf(roleScopes), roleScopes };
 }
 
 /**

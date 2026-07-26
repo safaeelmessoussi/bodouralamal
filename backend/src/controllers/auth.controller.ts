@@ -4,6 +4,7 @@ import type { PrismaClient } from '../generated/prisma/client.js';
 import { issueAccessToken } from '../lib/access-token.js';
 import { clearCookie, parseCookies, serializeCookie } from '../lib/cookies.js';
 import type { AppConfig } from '../lib/config.js';
+import { toRoleScopes } from '../policies/branch-scope.js';
 import { AppError } from '../lib/errors.js';
 import {
   buildAuthorizationUrl,
@@ -167,8 +168,7 @@ export function oauthCallback(prisma: PrismaClient, config: AppConfig) {
     const { token } = issueAccessToken(
       {
         userId: route.account.user.id,
-        roles: route.account.roles,
-        branchScopes: route.account.branchScopes,
+        roleScopes: route.account.roleScopes,
         accountStatus: route.account.user.accountStatus,
       },
       config.JWT_SIGNING_KEY,
@@ -221,8 +221,7 @@ export function refresh(prisma: PrismaClient, config: AppConfig) {
     const { token, expiresAt } = issueAccessToken(
       {
         userId: account.id,
-        roles: [...new Set(assignments.map((a) => a.role.name))],
-        branchScopes: [...new Set(assignments.flatMap((a) => (a.branchId ? [a.branchId] : [])))],
+        roleScopes: toRoleScopes(assignments),
         accountStatus: account.accountStatus,
       },
       config.JWT_SIGNING_KEY,
