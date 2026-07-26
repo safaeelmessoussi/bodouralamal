@@ -13,6 +13,26 @@ import type { RegistrationInput } from '../validators/registration.validators.js
  * either all land or none do. §4.1 puts it plainly — "never a parent without
  * their child or vice versa" — and §4.1b step 6 requires that an abandoned or
  * failed submission persist nothing at all.
+ *
+ * ## Token-consumption invariant (binding)
+ *
+ * **The onboarding token is consumed ONLY as part of the same transaction that
+ * creates every registration row. If any later write fails, the rollback also
+ * un-consumes the token, so the applicant can retry. No path may permanently
+ * consume the token unless the registration commits.**
+ *
+ * This follows from §4.1b's "the `jti` is inserted … inside the registration
+ * transaction" and TD-4.1's "the token-consumption insert inside this
+ * transaction is the replay guard", but the *retry consequence* is not spelled
+ * out there, so it is stated here and pinned by two tests: one asserts the `jti`
+ * row is absent after a failure at the final write, and one performs the actual
+ * retry with the same token and requires it to succeed.
+ *
+ * The failure mode this prevents is severe and silent: a token consumed by a
+ * half-failed attempt would leave the applicant holding a single-use credential
+ * that no longer works, with no account and no way to obtain another except by
+ * restarting the whole Google flow — and §4.1b issues exactly one token per
+ * callback.
  */
 
 /**

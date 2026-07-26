@@ -171,6 +171,47 @@ describe('§4.1b step 5 / TD-4.1 unified registration', () => {
     expect(await prisma.consumedToken.count({ where: { jti: claims.jti } })).toBe(0);
   });
 
+  it('RETRY: after a rolled-back attempt the SAME token still works', async () => {
+    // The token-consumption invariant, proven from the applicant's side rather
+    // than by inspecting a row: a failed attempt must not burn their one
+    // single-use credential (§4.1b issues exactly one token per callback).
+    const id = identity();
+    const blocker = await prisma.user.create({
+      data: { nameArabic: `${TAG} حاجز`, accountStatus: 'active' },
+    });
+    const blockingIdentity = await prisma.userIdentity.create({
+      data: {
+        userId: blocker.id,
+        provider: 'google',
+        providerSubjectId: id.providerSubjectId,
+        email: id.email,
+      },
+    });
+
+    const { token, claims } = issueOnboardingToken(id, KEY);
+
+    // Attempt 1 fails at the final write and rolls back.
+    await expect(register(prisma, token, parentChild(), KEY)).rejects.toMatchObject({
+      code: 'DUPLICATE',
+    });
+    expect(await prisma.consumedToken.count({ where: { jti: claims.jti } })).toBe(0);
+
+    // The transient cause is removed — as an admin merging a duplicate would do.
+    await prisma.userIdentity.delete({ where: { id: blockingIdentity.id } });
+
+    // Attempt 2 with the SAME token must now succeed.
+    const result = await register(prisma, token, parentChild(), KEY);
+    expect(result.accountStatus).toBe('pending');
+    expect(result.childId).not.toBeNull();
+    // And only now is the token spent.
+    expect(await prisma.consumedToken.count({ where: { jti: claims.jti } })).toBe(1);
+
+    // A third attempt is a genuine replay.
+    await expect(register(prisma, token, parentChild(), KEY)).rejects.toMatchObject({
+      code: 'STATE_CONFLICT',
+    });
+  });
+
   it('refuses a missing data_processing consent with CONSENT_REQUIRED', async () => {
     const { token } = issueOnboardingToken(identity(), KEY);
     const input = parentChild();
