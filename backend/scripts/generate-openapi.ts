@@ -1,5 +1,33 @@
 import { writeFileSync } from 'node:fs';
 
+import { createApp } from '../src/app.js';
+import { createPrismaClient } from '../src/lib/prisma.js';
+import type { AppConfig } from '../src/lib/config.js';
+
+/**
+ * Placeholder values used only to build the router for introspection. Generation
+ * must not require a configured environment — CI's contract job deliberately runs
+ * with no secrets — and nothing here is ever used to serve a request or to reach
+ * the network.
+ */
+const SYNTHETIC_CONFIG: AppConfig = {
+  DATABASE_URL: 'postgresql://unused:unused@127.0.0.1:1/unused',
+  GOOGLE_CLIENT_ID: 'unused',
+  GOOGLE_CLIENT_SECRET: 'unused',
+  JWT_SIGNING_KEY: 'unused',
+  ONBOARDING_TOKEN_KEY: 'unused',
+  MINIO_ENDPOINT: 'http://127.0.0.1:1',
+  MINIO_ACCESS_KEY: 'unused',
+  MINIO_SECRET_KEY: 'unused',
+  PUBLIC_BASE_URL: 'http://127.0.0.1',
+  STORAGE_BASE_URL: 'http://127.0.0.1/storage',
+  SUPER_ADMIN_EMAIL: 'unused@example.com',
+  NODE_ENV: 'test',
+  TZ: 'Africa/Casablanca',
+  PORT: 3000,
+  LOG_LEVEL: 'info',
+};
+
 /**
  * Generates `docs/openapi.json` from the routes this implementation actually
  * serves (SRS §3.1, §19.2).
@@ -98,6 +126,9 @@ const document = {
     '/admin/approvals/{id}/reject': {
       post: op('Reject a queue item', 'Requires a reason (§5.6, §14.2) of at most 500 characters (TD-9) — rejecting a family\'s application without recording why is not an auditable decision. Rejection is atomic across the bundle in the same way as approval (TD-4.2): the parent and child are never left half-decided. TD-1 transition Pending → Rejected.', { '200': 'Rejected; the reason is stored on the decision and in the audit row.', '400': `${ENVELOPE} VALIDATION_FAILED when the reason is missing or too long.`, '401': ENVELOPE, '403': ENVELOPE, '404': ENVELOPE, '409': `${ENVELOPE} STATE_CONFLICT when the item was already decided.` }),
     },
+    '/admin/family-links/{id}': {
+      delete: op('Revoke an approved family link', 'Admin or Super Admin (TD-2), asserted against live rows per request. §4.3 Revision 16: soft-deleting the row IS the revocation mechanism — TD-1 keeps `Approved` terminal and no `Approved → Revoked` transition exists, because enforcement is already complete: the `X-Active-Child-ID` middleware re-checks the link on every request, so revocation takes effect on the very NEXT request. Follows the ordinary TD-4.8 soft-delete transaction (`deleted_at`/`deleted_by` + Trash snapshot + `familylink.revoke` audit carrying both parties and the reason). A reason of 1–500 characters is required (TD-9). The TD-6 partial unique index covers non-deleted rows only, so the same pair can be requested again later as a fresh Pending link.', { '200': 'Revoked; the parent loses access to that child immediately.', '400': `${ENVELOPE} VALIDATION_FAILED when the reason is missing or too long.`, '401': ENVELOPE, '403': `${ENVELOPE} FORBIDDEN (TD-12 freshness or TD-2 role).`, '404': `${ENVELOPE} NOT_FOUND for an unknown or already-revoked link.`, '409': `${ENVELOPE} STATE_CONFLICT when the link is not Approved — pending and rejected links are decided through the approval queue.` }),
+    },
     '/admin/branches': {
       get: op('List branches', 'Ordered by display_order ASC NULLS LAST then name (ar-x-icu collated, §2.2/TD-10). Admins see their scoped branches; Super Admins see all.', { '200': 'Branch list.', '401': ENVELOPE, '403': ENVELOPE }),
       post: op('Create a branch', 'Admin or Super Admin (TD-2). display_order is Super Admin only (§2.2).', { '201': 'Created.', '400': ENVELOPE, '403': ENVELOPE }),
@@ -131,6 +162,86 @@ const document = {
   },
 };
 
+// ── Reconcile against the routes the application ACTUALLY serves ────────────
+//
+// The path map above is hand-written, so on its own it proves nothing: a route
+// documented here and in the TD-3 registry, but never mounted on the router,
+// passed every gate while returning 404 to real callers. That happened, and only
+// an HTTP-level test caught it — the drift check compares this file's output to
+// the committed copy, and the §3.1 conformance check compares that output to the
+// registry, so neither ever consults the router.
+//
+// Walking the real Express stack here is what makes "generated from the
+// implementation" true rather than aspirational. `createApp` takes its config and
+// client as parameters, so this needs no environment and no database connection —
+// constructing a PrismaClient does not connect.
+function mountedOperations(): Set<string> {
+  const app = createApp(createPrismaClient(SYNTHETIC_CONFIG.DATABASE_URL), SYNTHETIC_CONFIG);
+
+  const found = new Set<string>();
+  const walk = (stack: unknown[], prefix: string): void => {
+    for (const entry of stack) {
+      const layer = entry as {
+        route?: { path?: string; methods?: Record<string, boolean> };
+        name?: string;
+        handle?: { stack?: unknown[] };
+        path?: string;
+      };
+
+      if (layer.route?.path) {
+        // Express 5 normalizes `:id` params; the contract uses `{id}`.
+        const path = `${prefix}${layer.route.path}`.replace(/:([A-Za-z_]\w*)/g, '{$1}');
+        for (const [method, enabled] of Object.entries(layer.route.methods ?? {})) {
+          if (enabled && method !== '_all') found.add(`${method.toUpperCase()} ${path}`);
+        }
+      } else if (layer.handle?.stack) {
+        // A nested router. Express 5 does not expose the mount path reliably on
+        // the layer, so recurse with the same prefix: every nested router in this
+        // application is mounted at the API prefix, which the comparison strips
+        // anyway.
+        walk(layer.handle.stack, prefix);
+      }
+    }
+  };
+
+  const root = (app as unknown as { router?: { stack?: unknown[] } }).router;
+  walk(root?.stack ?? [], '');
+  return found;
+}
+
+const documented = new Set<string>();
+for (const [path, item] of Object.entries(document.paths)) {
+  for (const method of Object.keys(item)) {
+    if (method === 'servers') continue;
+    documented.add(`${method.toUpperCase()} ${path}`);
+  }
+}
+
+const mounted = mountedOperations();
+const undocumented = [...mounted].filter((op) => !documented.has(op)).sort();
+const unserved = [...documented].filter((op) => !mounted.has(op)).sort();
+
+if (undocumented.length > 0 || unserved.length > 0) {
+  if (unserved.length > 0) {
+    process.stderr.write(
+      `DOCUMENTED BUT NOT SERVED (the contract would advertise a 404):\n  ${unserved.join('\n  ')}\n`,
+    );
+  }
+  if (undocumented.length > 0) {
+    process.stderr.write(
+      `SERVED BUT NOT DOCUMENTED (§3.1 forbids undocumented endpoints):\n  ${undocumented.join('\n  ')}\n`,
+    );
+  }
+  process.stderr.write(
+    'The OpenAPI path map and the Express router disagree. Fix whichever is wrong —\n' +
+      'do not "resolve" this by editing docs/openapi.json (§3.1).\n',
+  );
+  process.exit(1);
+}
+
 const target = new URL('../../docs/openapi.json', import.meta.url);
 writeFileSync(target, `${JSON.stringify(document, null, 2)}\n`, 'utf-8');
-process.stdout.write(`openapi.json written: ${Object.keys(document.paths).length} paths\n`);
+process.stdout.write(
+  `openapi.json written: ${Object.keys(document.paths).length} paths, ` +
+    `${documented.size} operations, all reconciled against the live router\n`,
+);
