@@ -8,10 +8,10 @@ account approvals, and grade tracking for its first live branch cohort. The inte
 **Arabic-only and RTL-first**; it is sized for roughly 900 users at launch against a 5,000-user
 design ceiling, deployed to a single Moroccan VPS.
 
-> **Status: under active development.** Milestones M0 and M1 are essentially complete and M2 is in
-> progress; M3–M8 have not been started. Only the backend and a small public client shell exist
-> today — there are no authenticated screens yet. See [Current state](#current-state) for exactly
-> what runs.
+> **Status: under active development.** A pre-MVP site is publicly live at
+> **[bodouralamal.com](https://bodouralamal.com)**. Milestones M0 and M1 are essentially complete and
+> M2 is in progress; M3–M8 have not been started. See [Current state](#current-state) for exactly
+> what runs, and [Live pre-MVP site](#live-pre-mvp-site) for what is deployed.
 
 ---
 
@@ -118,6 +118,19 @@ UI driving them.
 
 **Not started:** scheduling and the dual Gregorian/Hijri calendar, Quran progress tracking, exams and
 grading, and content/consent/storage workflows.
+
+### Live pre-MVP site
+
+A **pre-MVP** site is publicly live at **[bodouralamal.com](https://bodouralamal.com)** — an Arabic,
+RTL single-page client served over HTTPS.
+
+It is a **front-end deployment only.** The platform API described above is not served there: every
+path, including `/api/v1/healthz`, returns the same client shell. Nothing on the live site is backed
+by the endpoints listed above, and no beneficiary data is held there.
+
+The full stack — API, PostgreSQL, MinIO, and the job queue — currently runs only in local
+development. Production deployment of the platform itself follows SRS §19.1 and lands with the
+milestones above.
 
 ---
 
