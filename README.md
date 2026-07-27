@@ -1,7 +1,8 @@
 # منصة بذور الأمل — Bodour Al-Amal Platform
 
-Institute management platform for **جمعية بذور الأمل**, a Marrakesh-based nonprofit running Quran
-memorization, Islamic studies, and adult-literacy programs for women, teens, and children.
+Management platform for the learning institute run by **جمعية بذور الأمل** (Bodour Al-Amal), a
+Moroccan educational association based in Marrakesh. The institute offers Quran memorization,
+Islamic studies, and adult literacy to women, teens, and children.
 
 The association currently runs on paper and spreadsheets. This platform replaces manual scheduling,
 account approvals, and grade tracking for its first live branch cohort. The interface is
