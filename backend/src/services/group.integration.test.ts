@@ -185,6 +185,30 @@ describe('§4.4 — room/time conflict detection', () => {
     ).rejects.toMatchObject({ code: 'STATE_CONFLICT' });
   });
 
+  it('the conflict carries structured details, not just a code', async () => {
+    const branchId = await makeBranch('مراكش');
+    const roomId = await makeRoom(branchId, 'قاعة');
+    const first = await createGroup(prisma, superAdmin(), input({ branchId, roomId }));
+
+    // TD-3.8's vocabulary is deliberately not expanded per conflict kind; the
+    // distinction a client needs travels in `details` instead.
+    let err: { code?: string; details?: Record<string, unknown> } = {};
+    try {
+      await createGroup(
+        prisma,
+        superAdmin(),
+        input({ branchId, roomId, startTime: at(10), endTime: at(11) }),
+      );
+    } catch (e) {
+      err = e as { code?: string; details?: Record<string, unknown> };
+    }
+
+    expect(err.code).toBe('STATE_CONFLICT');
+    expect(err.details?.['reason']).toBe('ROOM_TIME_OVERLAP');
+    expect(err.details?.['constraint']).toBe('ROOM_SCHEDULE');
+    expect(err.details?.['conflicting_group_id']).toBe(first.id);
+  });
+
   it('allows BACK-TO-BACK slots — half-open intervals do not collide', async () => {
     const branchId = await makeBranch('مراكش');
     const roomId = await makeRoom(branchId, 'قاعة');

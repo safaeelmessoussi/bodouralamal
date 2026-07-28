@@ -42,6 +42,10 @@ GET /admin/approvals                          # TD-3.2, §5.6
 POST /admin/approvals/{id}/approve            # TD-3.2, TD-4.2
 POST /admin/approvals/{id}/reject             # TD-3.2, §5.6
 POST /family-links                            # TD-3.2, §4.3 Revision 23 (staff-mediated, existing child)
+GET /admin/groups                             # §5.6 Groups screen (operational, R26); §14.2
+POST /admin/groups                            # §4.4 "Group CRUD with conflict detection"; TD-15
+PATCH /admin/groups/{id}                      # §4.4; TD-15 optimistic locking
+DELETE /admin/groups/{id}                     # §4.4; guarded by TD-5 (enrolments block)
 GET /students/{id}/consents                   # §4.1a, BR-1; TD-2 "Record staff-declared consent grants/revocations"
 POST /students/{id}/consents                  # §4.1a staff_recorded; TD-2, TD-8 consent.grant/revoke, TD-7 consent.reevaluate
 GET /students/{id}/social-profile              # §4.10, BR-16, TD-2 Revision 28; §19.2 "assigned-teacher-only, API test"

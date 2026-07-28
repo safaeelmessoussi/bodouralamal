@@ -4,6 +4,7 @@ import * as auth from './controllers/auth.controller.js';
 import * as approvals from './controllers/approval.controller.js';
 import * as familyLinks from './controllers/family-link.controller.js';
 import * as consents from './controllers/consent.controller.js';
+import * as groups from './controllers/group.controller.js';
 import * as socialProfile from './controllers/social-profile.controller.js';
 import * as users from './controllers/user.controller.js';
 import * as branch from './controllers/branch.controller.js';
@@ -92,6 +93,10 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
   guarded.get('/admin/approvals', approvals.list(prisma));
   guarded.post('/admin/approvals/:id/approve', approvals.approve(prisma));
   guarded.post('/admin/approvals/:id/reject', approvals.reject(prisma));
+  guarded.get('/admin/groups', groups.list(prisma));
+  guarded.post('/admin/groups', groups.create(prisma));
+  guarded.patch('/admin/groups/:id', groups.update(prisma));
+  guarded.delete('/admin/groups/:id', groups.remove(prisma));
   guarded.get('/students/:id/consents', consents.read(prisma));
   guarded.post('/students/:id/consents', consents.record(prisma));
   guarded.get('/students/:id/social-profile', socialProfile.read(prisma));

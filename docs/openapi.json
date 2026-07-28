@@ -159,6 +159,94 @@
         }
       }
     },
+    "/admin/groups": {
+      "get": {
+        "summary": "List groups",
+        "description": "Operational data (Revision 26): Admins see groups in their own branches, Super Admins all. Ordered by day then start time.",
+        "responses": {
+          "200": {
+            "description": "Groups, with `start_time`/`end_time` as local wall-clock `HH:MM` (TD-11)."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8)."
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8)."
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a group",
+        "description": "§4.4: *scheduling is Group-driven, not Event-driven* — a Group carries its own weekly slot and enrolling in it IS the standing class time. Times are **local Moroccan wall-clock** `HH:MM` (TD-11), never instants, so a 09:00 class stays at 09:00 across a DST change. **Room/time conflict detection** rejects an overlapping slot in the same room on the same day; intervals are **half-open**, so a group starting exactly when another ends does not collide. A room belonging to another branch is refused. Admin within branch scope or Super Admin (TD-2, R26).",
+        "responses": {
+          "201": {
+            "description": "Created."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — including end_time not after start_time."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8)."
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8)."
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an out-of-scope branch, or a level/room that does not exist."
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT on a room/time overlap. TD-3.8 deliberately has no dedicated schedule code — the distinction travels in `details`: `{ reason: \"ROOM_TIME_OVERLAP\", constraint: \"ROOM_SCHEDULE\", conflicting_group_id }`."
+          }
+        }
+      }
+    },
+    "/admin/groups/{id}": {
+      "patch": {
+        "summary": "Update a group",
+        "description": "Optimistic locking on `version` (TD-15): a stale version returns 409 VERSION_CONFLICT rather than overwriting a colleague's edit. Re-runs conflict detection on the merged slot, and a group never conflicts with itself. Moving a group to another branch requires scope over the destination too.",
+        "responses": {
+          "200": {
+            "description": "Updated."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8)."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8)."
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8)."
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8)."
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). VERSION_CONFLICT, or STATE_CONFLICT with `details.reason = \"ROOM_TIME_OVERLAP\"`."
+          }
+        }
+      },
+      "delete": {
+        "summary": "Soft-delete a group",
+        "description": "Blocked while students are enrolled (TD-5) — un-enrolment is a deliberate roster action, not a side effect. Writes a Trash snapshot and an audit row (TD-4.8). A deleted group frees its room slot.",
+        "responses": {
+          "204": {
+            "description": "Deleted."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8)."
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8)."
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8)."
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT while enrolments remain."
+          }
+        }
+      }
+    },
     "/students/{id}/consents": {
       "get": {
         "summary": "Read a student's effective consent state",

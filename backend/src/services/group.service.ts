@@ -108,9 +108,15 @@ async function assertNoRoomConflict(
     ),
   );
   if (clash) {
-    // TD-3.8 has no dedicated schedule-conflict code; 409 is defined as
-    // "state/constraint conflict", which a room double-booking is.
-    throw new AppError('STATE_CONFLICT', 'room is already booked for an overlapping slot');
+    // TD-3.8 deliberately has no dedicated schedule-conflict code: a room/time
+    // collision is a specific kind of state conflict, and the global error
+    // vocabulary is not expanded for each one. The distinction a client needs
+    // travels in the envelope's `details` instead, which already exists.
+    throw new AppError('STATE_CONFLICT', 'room is already booked for an overlapping slot', {
+      reason: 'ROOM_TIME_OVERLAP',
+      constraint: 'ROOM_SCHEDULE',
+      conflicting_group_id: clash.id,
+    });
   }
 }
 
