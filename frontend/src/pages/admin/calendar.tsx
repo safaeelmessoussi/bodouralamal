@@ -13,7 +13,8 @@ const HIJRI_MONTHS = [
   "رجب", "شعبان", "رمضان", "شوال", "ذو القعدة", "ذو الحجة"
 ]
 
-const DAY_NAMES = ["الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت", "الأحد"]
+// Day names from Sunday to Saturday (right-to-left layout)
+const DAY_NAMES = ["الأحد", "السبت", "الجمعة", "الخميس", "الأربعاء", "الثلاثاء", "الاثنين"]
 
 interface CalendarState {
   year: number
@@ -27,6 +28,8 @@ export default function CalendarPage() {
   })
   const [selectedDay, setSelectedDay] = useState<number | null>(null)
   const [viewMode, setViewMode] = useState<"monthly" | "weekly" | "agenda">("monthly")
+  const [selectedBranch, setSelectedBranch] = useState("جميع الفروع")
+  
   const branches = getAvailableBranches()
   const events = getCalendarEvents()
 
@@ -36,8 +39,8 @@ export default function CalendarPage() {
 
   const getFirstDayOfMonth = (year: number, month: number) => {
     const day = new Date(year, month, 1).getDay()
-    // Convert from JS (0=Sunday) to our format (0=Monday)
-    return day === 0 ? 6 : day - 1
+    // Convert from JS (0=Sunday) to our RTL layout (0=Sunday on right)
+    return day
   }
 
   const handlePreviousMonth = () => {
@@ -47,7 +50,6 @@ export default function CalendarPage() {
       }
       return { ...prev, month: prev.month - 1 }
     })
-    setSelectedDay(null)
   }
 
   const handleNextMonth = () => {
@@ -57,7 +59,6 @@ export default function CalendarPage() {
       }
       return { ...prev, month: prev.month + 1 }
     })
-    setSelectedDay(null)
   }
 
   const handleToday = () => {
@@ -78,7 +79,7 @@ export default function CalendarPage() {
     }
   }
 
-  const renderCalendarForBranch = (branch: string) => {
+  const renderCalendarGrid = () => {
     const daysInMonth = getDaysInMonth(calendar.year, calendar.month)
     const firstDay = getFirstDayOfMonth(calendar.year, calendar.month)
     const days: (number | null)[] = []
@@ -98,172 +99,227 @@ export default function CalendarPage() {
       days.push(null)
     }
 
+    // Reverse days array for RTL (right-to-left) layout
+    const reversedDays: (number | null)[] = []
+    for (let i = days.length - 1; i >= 0; i--) {
+      reversedDays.push(days[i])
+    }
+
     const hijriDate = getHijriDate(calendar.month)
-    const branchEvents = events.filter(e => e.branch === branch || e.branch === "all")
+    const branchEvents = selectedBranch === "جميع الفروع" 
+      ? events 
+      : events.filter(e => e.branch === selectedBranch || e.branch === "جميع الفروع")
 
     return (
-      <div key={branch} className="mb-12" dir="rtl">
-        {/* Branch Title */}
-        <h2 className="text-2xl font-bold mb-6 text-foreground">جدول مقر {branch}</h2>
-
-        {/* Controls Row */}
-        <div className="flex items-center justify-between mb-6 gap-4">
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleToday}
-              className="px-3 py-1 text-sm h-8"
-            >
-              اليوم
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleNextMonth}
-              className="p-1 h-8 w-8"
-            >
-              <ChevronRight className="w-4 h-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handlePreviousMonth}
-              className="p-1 h-8 w-8"
-            >
-              <ChevronLeft className="w-4 h-4" />
-            </Button>
-            <span className="text-sm font-medium whitespace-nowrap">
-              {GREGORIAN_MONTHS[calendar.month]} {calendar.year}|{hijriDate.month} / {hijriDate.year}
-            </span>
+      <div className="flex-1" dir="rtl">
+        {/* Calendar Grid */}
+        <div className="bg-white border border-border rounded">
+          {/* Day headers */}
+          <div className="grid grid-cols-7 border-b border-border bg-muted">
+            {DAY_NAMES.map(day => (
+              <div
+                key={day}
+                className="p-3 text-center font-bold text-sm border-l border-border last:border-l-0 text-foreground"
+              >
+                {day}
+              </div>
+            ))}
           </div>
 
-          <div className="flex items-center gap-2">
-            <Button
-              variant={viewMode === "monthly" ? "default" : "ghost"}
-              size="sm"
-              onClick={() => setViewMode("monthly")}
-              className="px-3 py-1 text-sm h-8"
-            >
-              شهري
-            </Button>
-            <Button
-              variant={viewMode === "weekly" ? "default" : "ghost"}
-              size="sm"
-              onClick={() => setViewMode("weekly")}
-              className="px-3 py-1 text-sm h-8"
-            >
-              أسبوعي
-            </Button>
-            <Button
-              variant={viewMode === "agenda" ? "default" : "ghost"}
-              size="sm"
-              onClick={() => setViewMode("agenda")}
-              className="px-3 py-1 text-sm h-8"
-            >
-              أجندة
-            </Button>
+          {/* Calendar days */}
+          <div className="grid grid-cols-7 auto-rows-fr">
+            {reversedDays.map((day, idx) => {
+              const isSelected = day === selectedDay
+              const isToday = 
+                day === new Date().getDate() &&
+                calendar.month === new Date().getMonth() &&
+                calendar.year === new Date().getFullYear()
+              
+              const dayEvents = day ? branchEvents.filter(e => {
+                const eventDate = new Date(e.date)
+                return (
+                  eventDate.getDate() === day &&
+                  eventDate.getMonth() === calendar.month &&
+                  eventDate.getFullYear() === calendar.year
+                )
+              }) : []
+
+              return (
+                <div
+                  key={idx}
+                  onClick={() => day && setSelectedDay(day)}
+                  className={`
+                    min-h-24 p-2 border-l border-b border-border last-of-type:border-l-0 flex flex-col
+                    ${day ? "cursor-pointer hover:bg-accent/30" : "bg-muted/20"}
+                    ${isSelected ? "bg-blue-50" : ""}
+                    ${isToday && !isSelected ? "border-orange-400 border-2 border-l-2" : ""}
+                    ${!day ? "bg-muted/30" : "bg-white"}
+                  `}
+                >
+                  {day && (
+                    <>
+                      <div className={`text-sm font-bold mb-1 ${isToday ? "text-orange-500" : "text-muted-foreground"}`}>
+                        {day}
+                      </div>
+                      <div className="flex-1 flex flex-col gap-0.5 overflow-hidden text-xs">
+                        {dayEvents.slice(0, 3).map((event, i) => (
+                          <div
+                            key={i}
+                            className={`
+                              px-1 py-0.5 rounded text-white font-medium truncate
+                              ${event.type === "exam" ? "bg-orange-500" : ""}
+                              ${event.type === "meeting" ? "bg-blue-500" : ""}
+                              ${event.type === "ceremony" ? "bg-purple-500" : ""}
+                              ${event.type === "holiday" ? "bg-gray-500" : ""}
+                            `}
+                            title={event.title}
+                          >
+                            {event.title}
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )
+            })}
           </div>
         </div>
-
-        {/* Calendar Grid */}
-        {viewMode === "monthly" && (
-          <div className="border border-border rounded-lg overflow-hidden">
-            {/* Day headers */}
-            <div className="grid grid-cols-7 bg-muted border-b border-border">
-              {DAY_NAMES.map(day => (
-                <div
-                  key={day}
-                  className="p-3 text-center font-semibold text-sm border-e border-border last:border-e-0"
-                >
-                  {day}
-                </div>
-              ))}
-            </div>
-
-            {/* Calendar days */}
-            <div className="grid grid-cols-7">
-              {days.map((day, idx) => {
-                const isSelected = day === selectedDay
-                const isToday = 
-                  day === new Date().getDate() &&
-                  calendar.month === new Date().getMonth() &&
-                  calendar.year === new Date().getFullYear()
-                
-                const dayEvents = day ? branchEvents.filter(e => {
-                  const eventDate = new Date(e.date)
-                  return (
-                    eventDate.getDate() === day &&
-                    eventDate.getMonth() === calendar.month &&
-                    eventDate.getFullYear() === calendar.year
-                  )
-                }) : []
-
-                return (
-                  <div
-                    key={idx}
-                    onClick={() => day && setSelectedDay(day)}
-                    className={`
-                      aspect-square p-2 border-e border-b border-border last-of-type:border-e-0 flex flex-col
-                      ${day ? "cursor-pointer hover:bg-accent/50" : "bg-muted/30"}
-                      ${isSelected ? "bg-primary/20 border-primary border-2" : ""}
-                      ${isToday && !isSelected ? "border-orange-500 border-2" : ""}
-                      ${!day ? "bg-muted/50" : ""}
-                    `}
-                  >
-                    {day && (
-                      <>
-                        <div className="text-xs font-semibold text-foreground mb-1">{day}</div>
-                        <div className="flex-1 flex flex-col gap-0.5 overflow-hidden">
-                          {dayEvents.slice(0, 2).map((event, i) => (
-                            <div
-                              key={i}
-                              className={`
-                                text-xs px-1 py-0.5 rounded truncate text-white font-medium
-                                ${event.type === "exam" ? "bg-orange-500" : ""}
-                                ${event.type === "meeting" ? "bg-blue-500" : ""}
-                                ${event.type === "ceremony" ? "bg-purple-500" : ""}
-                                ${event.type === "holiday" ? "bg-gray-500" : ""}
-                              `}
-                            >
-                              {event.title}
-                            </div>
-                          ))}
-                          {dayEvents.length > 2 && (
-                            <div className="text-xs text-muted-foreground">
-                              +{dayEvents.length - 2}
-                            </div>
-                          )}
-                        </div>
-                      </>
-                    )}
-                  </div>
-                )
-              })}
-            </div>
-          </div>
-        )}
-
-        {/* Weekly view placeholder */}
-        {viewMode === "weekly" && (
-          <div className="text-center py-8 text-muted-foreground">
-            العرض الأسبوعي قريباً
-          </div>
-        )}
-
-        {/* Agenda view placeholder */}
-        {viewMode === "agenda" && (
-          <div className="text-center py-8 text-muted-foreground">
-            عرض الأجندة قريباً
-          </div>
-        )}
       </div>
     )
   }
 
   return (
-    <div className="space-y-8 py-6">
-      {branches.map(branch => renderCalendarForBranch(branch))}
+    <div className="h-full flex flex-col p-6 gap-6" dir="rtl">
+      {/* Branch selector chips */}
+      <div className="flex flex-wrap gap-2 justify-center pb-4 border-b border-border">
+        <button
+          onClick={() => setSelectedBranch("جميع الفروع")}
+          className={`
+            px-4 py-2 rounded-full border-2 font-medium text-sm transition-colors
+            ${selectedBranch === "جميع الفروع" 
+              ? "bg-gray-800 text-white border-gray-800" 
+              : "bg-white text-foreground border-gray-300 hover:border-gray-400"}
+          `}
+        >
+          ⋮
+        </button>
+        {branches.map((branch, idx) => {
+          const colors = [
+            "border-teal-400 text-teal-600",
+            "border-red-300 text-red-600",
+            "border-cyan-400 text-cyan-600",
+            "border-pink-400 text-pink-600",
+            "border-purple-400 text-purple-600",
+            "border-amber-400 text-amber-600",
+            "border-green-400 text-green-600",
+          ]
+          const colorClass = colors[idx % colors.length]
+          
+          return (
+            <button
+              key={branch}
+              onClick={() => setSelectedBranch(branch)}
+              className={`
+                px-4 py-2 rounded-full border-2 font-medium text-sm transition-colors
+                ${selectedBranch === branch 
+                  ? `bg-white ${colorClass}` 
+                  : `bg-white border-gray-300 text-gray-600 hover:border-gray-400`}
+              `}
+            >
+              • {branch.split(" ")[1]}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Main content with sidebar layout */}
+      <div className="flex gap-6 flex-1 overflow-hidden">
+        {/* Left sidebar - View mode toggles */}
+        <div className="flex flex-col gap-2 w-24">
+          <button
+            onClick={() => setViewMode("agenda")}
+            className={`px-3 py-2 text-sm font-medium rounded border transition-colors
+              ${viewMode === "agenda" 
+                ? "bg-gray-200 text-gray-800 border-gray-300" 
+                : "bg-white text-gray-600 border-gray-200 hover:border-gray-300"}`}
+          >
+            أجندة
+          </button>
+          <button
+            onClick={() => setViewMode("weekly")}
+            className={`px-3 py-2 text-sm font-medium rounded border transition-colors
+              ${viewMode === "weekly" 
+                ? "bg-gray-200 text-gray-800 border-gray-300" 
+                : "bg-white text-gray-600 border-gray-200 hover:border-gray-300"}`}
+          >
+            أسبوعي
+          </button>
+          <button
+            onClick={() => setViewMode("monthly")}
+            className={`px-3 py-2 text-sm font-medium rounded border transition-colors
+              ${viewMode === "monthly" 
+                ? "bg-gray-200 text-gray-800 border-gray-300" 
+                : "bg-white text-gray-600 border-gray-200 hover:border-gray-300"}`}
+          >
+            شهري
+          </button>
+        </div>
+
+        {/* Center - Calendar grid */}
+        {viewMode === "monthly" && renderCalendarGrid()}
+
+        {/* Right sidebar - Day navigation and month info */}
+        <div className="flex flex-col gap-4 w-28">
+          <div className="text-center">
+            <div className="text-lg font-bold text-orange-500">
+              {GREGORIAN_MONTHS[calendar.month]} {calendar.year}
+            </div>
+            <div className="text-xs text-muted-foreground">
+              {getHijriDate(calendar.month).month} / {getHijriDate(calendar.month).year}
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleToday}
+              className="w-full text-xs"
+            >
+              اليوم
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleNextMonth}
+              className="w-full text-xs"
+            >
+              التالي
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handlePreviousMonth}
+              className="w-full text-xs"
+            >
+              السابق
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      {/* Weekly and Agenda view placeholders */}
+      {viewMode === "weekly" && (
+        <div className="flex-1 flex items-center justify-center text-muted-foreground">
+          العرض الأسبوعي قريباً
+        </div>
+      )}
+      {viewMode === "agenda" && (
+        <div className="flex-1 flex items-center justify-center text-muted-foreground">
+          عرض الأجندة قريباً
+        </div>
+      )}
     </div>
   )
 }
