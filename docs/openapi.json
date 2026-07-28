@@ -258,7 +258,7 @@
     "/admin/branches": {
       "get": {
         "summary": "List branches",
-        "description": "Ordered by display_order ASC NULLS LAST then name (ar-x-icu collated, §2.2/TD-10). Admins see their scoped branches; Super Admins see all.",
+        "description": "**Read access is retained for Admins** (branch-scoped) because operational work depends on it — a Group references a Branch, a Level and a Room (TD-2 Revision 26). Ordered by display_order ASC NULLS LAST then name (ar-x-icu collated, §2.2/TD-10). Super Admins see all.",
         "responses": {
           "200": {
             "description": "Branch list."
@@ -273,7 +273,7 @@
       },
       "post": {
         "summary": "Create a branch",
-        "description": "Admin or Super Admin (TD-2). display_order is Super Admin only (§2.2).",
+        "description": "**Super Admin only** — Branches are reference/configuration data (TD-2 Revision 26). This also removes an incoherence: branch creation cannot be scope-checked, since no branch exists yet to check against, so an Admin previously created a branch they could not then see.",
         "responses": {
           "201": {
             "description": "Created."
@@ -290,7 +290,7 @@
     "/admin/branches/{id}": {
       "patch": {
         "summary": "Update a branch",
-        "description": "Optimistic locking on `version` (TD-15): a stale version returns 409 VERSION_CONFLICT rather than overwriting silently.",
+        "description": "**Super Admin only** (reference data, TD-2 Revision 26); `operational_start_date` and `display_order` included, since activating a branch is an organisational decision. Optimistic locking on `version` (TD-15): a stale version returns 409 VERSION_CONFLICT rather than overwriting silently.",
         "responses": {
           "200": {
             "description": "Updated."
@@ -305,7 +305,7 @@
       },
       "delete": {
         "summary": "Soft-delete a branch",
-        "description": "Prohibited while Rooms or Groups reference it (TD-5) — 409 STATE_CONFLICT. Writes a Trash snapshot and an audit row (TD-4.8).",
+        "description": "**Super Admin only** (reference data, TD-2 Revision 26). Prohibited while Rooms or Groups reference it (TD-5) — 409 STATE_CONFLICT. Writes a Trash snapshot and an audit row (TD-4.8).",
         "responses": {
           "204": {
             "description": "Deleted."
@@ -322,7 +322,7 @@
     "/admin/branches/{id}/rooms": {
       "get": {
         "summary": "List a branch's rooms",
-        "description": "Scoped to the branch (§5.6).",
+        "description": "**Read access retained for Admins**, scoped to branches they administer (TD-2 Revision 26) — an Admin must be able to pick a Room even though only a Super Admin may create one. Out-of-scope answers 404 (§20 rule 17).",
         "responses": {
           "200": {
             "description": "Room list."
@@ -334,7 +334,7 @@
       },
       "post": {
         "summary": "Create a room",
-        "description": "Within the given branch (§5.6).",
+        "description": "**Super Admin only** — Rooms are reference/configuration data (TD-2 Revision 26). Recorded as the most likely future exception, being per-branch and higher-churn than the rest of the set.",
         "responses": {
           "201": {
             "description": "Created."
@@ -351,7 +351,7 @@
     "/admin/rooms/{id}": {
       "patch": {
         "summary": "Update a room",
-        "description": "Optimistic locking on `version` (TD-15).",
+        "description": "**Super Admin only** (reference data, TD-2 Revision 26). Optimistic locking on `version` (TD-15).",
         "responses": {
           "200": {
             "description": "Updated."
@@ -366,7 +366,7 @@
       },
       "delete": {
         "summary": "Soft-delete a room",
-        "description": "Prohibited while Groups reference it (TD-5).",
+        "description": "**Super Admin only** (reference data, TD-2 Revision 26). Prohibited while Groups reference it (TD-5).",
         "responses": {
           "204": {
             "description": "Deleted."

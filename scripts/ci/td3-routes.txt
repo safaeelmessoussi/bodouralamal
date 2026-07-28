@@ -56,13 +56,13 @@ POST /admin/branches/{id}/event-backfill      # TD-3.4, §4.4
 # ── Branches & Rooms CRUD (Revision 21: documented by the §5.6 screen and the
 #    §14.2 screen standard; TD-3 seeds only the backfill route above)
 GET /admin/branches                           # §5.6, §14.2 Branches screen
-POST /admin/branches                          # §5.6 "CRUD"
-PATCH /admin/branches/{id}                    # §5.6 "CRUD"; display_order Super Admin only (§2.2)
-DELETE /admin/branches/{id}                   # §5.6 "CRUD"; guarded by TD-5
+POST /admin/branches                          # §5.6; Super Admin only (reference data, TD-2 R26)
+PATCH /admin/branches/{id}                    # §5.6; Super Admin only incl. display_order + operational_start_date (TD-2 R26)
+DELETE /admin/branches/{id}                   # §5.6; Super Admin only (TD-2 R26); guarded by TD-5
 GET /admin/branches/{id}/rooms                # §5.6 "Branches & Rooms", §14.2 row action "Rooms"
-POST /admin/branches/{id}/rooms               # §5.6 "Branches & Rooms"
-PATCH /admin/rooms/{id}                       # §5.6 "Branches & Rooms"
-DELETE /admin/rooms/{id}                      # §5.6; guarded by TD-5 (Rooms block on Groups)
+POST /admin/branches/{id}/rooms               # §5.6; Super Admin only (reference data, TD-2 R26)
+PATCH /admin/rooms/{id}                       # §5.6; Super Admin only (TD-2 R26)
+DELETE /admin/rooms/{id}                      # §5.6; Super Admin only (TD-2 R26); guarded by TD-5
 
 # ── Storage (TD-3.5)
 POST /uploads/initiate                        # TD-3.5, §4.9

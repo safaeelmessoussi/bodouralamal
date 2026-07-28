@@ -30,9 +30,29 @@ const isAdmin = (actor: Actor): boolean => scope.hasRole(actor.roleScopes, 'admi
  */
 const MANAGING_ROLE = 'admin';
 
-/** TD-2: managing branches/rooms is Admin (own branches) or Super Admin. */
-function assertCanManage(actor: Actor): void {
-  if (!isAdmin(actor)) throw new AppError('FORBIDDEN', 'branch management requires admin');
+/**
+ * TD-2 (Revision 26): Branches and Rooms are **reference/configuration data** —
+ * only a Super Admin may create, edit or delete them. Activating a branch is an
+ * organisational decision, so `operational_start_date` and `display_order` fall
+ * under the same rule.
+ *
+ * This also removes an incoherence: an Admin could previously create a branch,
+ * but creation cannot be scope-checked (no branch exists yet to check against),
+ * so the result was a branch its own creator could not then see.
+ */
+function assertCanWriteReferenceData(actor: Actor): void {
+  if (!isSuperAdmin(actor)) {
+    throw new AppError('FORBIDDEN', 'reference data is Super Admin only (§4.2, TD-2 Revision 26)');
+  }
+}
+
+/**
+ * TD-2 (Revision 26): Admins **read** reference data, branch-scoped, because
+ * operational work depends on it — a Group references a Branch, a Level and a
+ * Room, so withdrawing read access would make Group management impossible.
+ */
+function assertCanReadReferenceData(actor: Actor): void {
+  if (!isAdmin(actor)) throw new AppError('FORBIDDEN', 'branch access requires admin');
 }
 
 /**
@@ -61,7 +81,7 @@ function assertInScope(actor: Actor, branchId: string): void {
  * `ar-x-icu` (TD-6a). Never add a per-query COLLATE; fix the column instead.
  */
 export async function listBranches(prisma: PrismaClient, actor: Actor): Promise<Branch[]> {
-  assertCanManage(actor);
+  assertCanReadReferenceData(actor);
   return prisma.branch.findMany({
     where: {
       deletedAt: null,
@@ -76,7 +96,7 @@ export async function createBranch(
   actor: Actor,
   data: { name: string; operationalStartDate?: Date | null; displayOrder?: number | null },
 ): Promise<Branch> {
-  assertCanManage(actor);
+  assertCanWriteReferenceData(actor);
   assertMaySetDisplayOrder(actor, data);
 
   return prisma.$transaction(async (tx) => {
@@ -107,7 +127,7 @@ export async function updateBranch(
   expectedVersion: number,
   data: { name?: string; operationalStartDate?: Date | null; displayOrder?: number | null },
 ): Promise<Branch> {
-  assertCanManage(actor);
+  assertCanWriteReferenceData(actor);
   assertInScope(actor, id);
   assertMaySetDisplayOrder(actor, data);
 
@@ -134,7 +154,7 @@ export async function deleteBranch(
   actor: Actor,
   id: string,
 ): Promise<void> {
-  assertCanManage(actor);
+  assertCanWriteReferenceData(actor);
   assertInScope(actor, id);
 
   await prisma.$transaction(async (tx) => {
@@ -185,7 +205,7 @@ export async function listRooms(
   actor: Actor,
   branchId: string,
 ): Promise<Room[]> {
-  assertCanManage(actor);
+  assertCanReadReferenceData(actor);
   assertInScope(actor, branchId);
   return prisma.room.findMany({
     where: { branchId, deletedAt: null },
@@ -199,7 +219,7 @@ export async function createRoom(
   branchId: string,
   data: { name: string },
 ): Promise<Room> {
-  assertCanManage(actor);
+  assertCanWriteReferenceData(actor);
   assertInScope(actor, branchId);
 
   return prisma.$transaction(async (tx) => {
@@ -225,7 +245,7 @@ export async function updateRoom(
   expectedVersion: number,
   data: { name?: string },
 ): Promise<Room> {
-  assertCanManage(actor);
+  assertCanWriteReferenceData(actor);
   const room = await prisma.room.findFirst({ where: { id, deletedAt: null } });
   if (!room) throw new AppError('NOT_FOUND', 'room not found');
   assertInScope(actor, room.branchId);
@@ -241,7 +261,7 @@ export async function updateRoom(
 
 /** TD-5: deleting a Room is **prohibited while Groups reference it**. */
 export async function deleteRoom(prisma: PrismaClient, actor: Actor, id: string): Promise<void> {
-  assertCanManage(actor);
+  assertCanWriteReferenceData(actor);
 
   await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT id FROM "room" WHERE id = ${id}::uuid FOR UPDATE`;
