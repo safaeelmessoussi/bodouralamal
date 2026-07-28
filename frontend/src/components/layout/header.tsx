@@ -1,9 +1,11 @@
 import { useState } from "react"
-import { useLocation } from "react-router-dom"
+import { useLocation, useNavigate } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { useTheme } from "@/components/theme-provider"
+import { useAuth } from "@/contexts/auth-context"
+import { toast } from "sonner"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -48,9 +50,21 @@ interface HeaderProps {
 
 export default function Header({ onMenuClick }: HeaderProps) {
   const { theme, setTheme } = useTheme()
+  const { user, logout } = useAuth()
   const location = useLocation()
+  const navigate = useNavigate()
   const [searchOpen, setSearchOpen] = useState(false)
   const crumbs = breadcrumbMap[location.pathname] ?? ["الرئيسية"]
+
+  const handleLogout = async () => {
+    try {
+      await logout()
+      navigate("/login")
+      toast.success("Logged out successfully")
+    } catch (error) {
+      toast.error("Failed to log out")
+    }
+  }
 
   return (
     <header
@@ -112,32 +126,41 @@ export default function Header({ onMenuClick }: HeaderProps) {
         <Separator orientation="vertical" className="h-5 mx-1" />
 
         {/* User menu */}
-        <DropdownMenu>
-          <DropdownMenuTrigger>
-            <Button variant="ghost" className="h-8 gap-2 px-2 text-sm">
-              <div className="flex items-center justify-center size-6 rounded-full bg-primary text-primary-foreground text-[10px] font-bold">
-                م
+        {user && (
+          <DropdownMenu>
+            <DropdownMenuTrigger>
+              <Button variant="ghost" className="h-8 gap-2 px-2 text-sm">
+                <div className="flex items-center justify-center size-6 rounded-full bg-primary text-primary-foreground text-[10px] font-bold">
+                  {user.name.charAt(0).toUpperCase()}
+                </div>
+                <span className="hidden sm:block text-sm font-medium">{user.name}</span>
+                <ChevronDown className="size-3 text-muted-foreground" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48" dir="rtl">
+              <div className="px-2 py-1.5 text-xs text-muted-foreground border-b">
+                <p className="font-semibold text-foreground">{user.name}</p>
+                <p className="text-[11px]">{user.email}</p>
+                <Badge variant="secondary" className="mt-1 text-[10px] capitalize">
+                  {user.role}
+                </Badge>
               </div>
-              <span className="hidden sm:block text-sm font-medium">مدير النظام</span>
-              <ChevronDown className="size-3 text-muted-foreground" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-48" dir="rtl">
-            <DropdownMenuItem className="gap-2">
-              <User className="size-4" />
-              الملف الشخصي
-            </DropdownMenuItem>
-            <DropdownMenuItem className="gap-2">
-              <Settings className="size-4" />
-              الإعدادات
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem className="gap-2 text-destructive focus:text-destructive">
-              <LogOut className="size-4" />
-              تسجيل الخروج
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+              <DropdownMenuItem className="gap-2">
+                <User className="size-4" />
+                الملف الشخصي
+              </DropdownMenuItem>
+              <DropdownMenuItem className="gap-2">
+                <Settings className="size-4" />
+                الإعدادات
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem className="gap-2 text-destructive focus:text-destructive" onClick={handleLogout}>
+                <LogOut className="size-4" />
+                تسجيل الخروج
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
       </div>
 
       {searchOpen && (

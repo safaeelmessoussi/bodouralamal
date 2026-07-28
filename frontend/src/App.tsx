@@ -1,4 +1,5 @@
 import { Routes, Route, Navigate } from "react-router-dom"
+import { AuthProvider } from "./contexts/auth-context"
 import AppShell from "./components/layout/app-shell"
 import LoginPage from "./pages/login"
 import RegisterPage from "./pages/register"
@@ -21,38 +22,40 @@ import SettingsPage from "./pages/admin/settings"
 
 export default function App() {
   return (
-    <Routes>
-      {/* Public */}
-      <Route path="/" element={<LandingPage />} />
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/register" element={<RegisterPage />} />
+    <AuthProvider>
+      <Routes>
+        {/* Public */}
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<RegisterPage />} />
 
-      {/* App shell */}
-      <Route element={<AppShell />}>
-        {/* Admin */}
-        <Route path="/admin" element={<AdminDashboard />} />
-        <Route path="/admin/approvals" element={<ApprovalsPage />} />
-        <Route path="/admin/users" element={<UsersPage />} />
-        <Route path="/admin/branches" element={<BranchesPage />} />
-        <Route path="/admin/groups" element={<GroupsPage />} />
-        <Route path="/admin/calendar" element={<CalendarPage />} />
-        <Route path="/admin/content" element={<ContentPage />} />
-        <Route path="/admin/settings" element={<SettingsPage />} />
+        {/* App shell */}
+        <Route element={<AppShell />}>
+          {/* Admin */}
+          <Route path="/admin" element={<AdminDashboard />} />
+          <Route path="/admin/approvals" element={<ApprovalsPage />} />
+          <Route path="/admin/users" element={<UsersPage />} />
+          <Route path="/admin/branches" element={<BranchesPage />} />
+          <Route path="/admin/groups" element={<GroupsPage />} />
+          <Route path="/admin/calendar" element={<CalendarPage />} />
+          <Route path="/admin/content" element={<ContentPage />} />
+          <Route path="/admin/settings" element={<SettingsPage />} />
 
-        {/* Teacher */}
-        <Route path="/teacher" element={<TeacherDashboard />} />
-        <Route path="/teacher/groups" element={<TeacherGroups />} />
-        <Route path="/teacher/quran" element={<TeacherQuran />} />
-        <Route path="/teacher/exams" element={<TeacherExams />} />
-        <Route path="/teacher/content" element={<TeacherContent />} />
+          {/* Teacher */}
+          <Route path="/teacher" element={<TeacherDashboard />} />
+          <Route path="/teacher/groups" element={<TeacherGroups />} />
+          <Route path="/teacher/quran" element={<TeacherQuran />} />
+          <Route path="/teacher/exams" element={<TeacherExams />} />
+          <Route path="/teacher/content" element={<TeacherContent />} />
 
-        {/* Parent & Student */}
-        <Route path="/parent" element={<ParentDashboard />} />
-        <Route path="/student" element={<StudentDashboard />} />
+          {/* Parent & Student */}
+          <Route path="/parent" element={<ParentDashboard />} />
+          <Route path="/student" element={<StudentDashboard />} />
 
-        {/* Fallback */}
-        <Route path="*" element={<Navigate to="/admin" replace />} />
-      </Route>
-    </Routes>
+          {/* Fallback */}
+          <Route path="*" element={<Navigate to="/admin" replace />} />
+        </Route>
+      </Routes>
+    </AuthProvider>
   )
 }

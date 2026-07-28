@@ -1,14 +1,48 @@
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { useNavigate, Link } from "react-router-dom"
+import { useNavigate, Link, useSearchParams } from "react-router-dom"
 import { Mail, Lock, Globe } from "lucide-react"
+import { useAuth } from "@/contexts/auth-context"
+import { apiClient } from "@/services/api"
+import { toast } from "sonner"
 
 export default function LoginPage() {
   const navigate = useNavigate()
+  const { loginWithGoogle, isAuthenticated } = useAuth()
+  const [searchParams] = useSearchParams()
   const [isLoading, setIsLoading] = useState(false)
   const [formData, setFormData] = useState({ email: "", password: "" })
+
+  // Handle OAuth callback
+  useEffect(() => {
+    const code = searchParams.get("code")
+    if (code) {
+      handleOAuthCallback(code)
+    }
+  }, [searchParams])
+
+  // Redirect if already authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate("/admin")
+    }
+  }, [isAuthenticated, navigate])
+
+  const handleOAuthCallback = async (code: string) => {
+    try {
+      setIsLoading(true)
+      await loginWithGoogle(code)
+      navigate("/admin")
+      toast.success("Signed in successfully!")
+    } catch (error) {
+      toast.error("Failed to sign in with Google")
+      console.error("[v0] OAuth login failed:", error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData(prev => ({ ...prev, [e.target.name]: e.target.value }))
@@ -16,17 +50,19 @@ export default function LoginPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setIsLoading(true)
-    // Mock login logic
-    setTimeout(() => {
-      navigate("/admin")
-      setIsLoading(false)
-    }, 1000)
+    toast.error("Email/password login not yet available. Please use Google Sign-In.")
   }
 
-  const handleGoogleLogin = () => {
-    // Mock Google OAuth
-    window.location.href = "/api/auth/google"
+  const handleGoogleLogin = async () => {
+    try {
+      setIsLoading(true)
+      const authUrl = await apiClient.initiateGoogleAuth()
+      window.location.href = authUrl
+    } catch (error) {
+      toast.error("Failed to initiate Google login")
+      console.error("[v0] Google login initiation failed:", error)
+      setIsLoading(false)
+    }
   }
 
   return (
