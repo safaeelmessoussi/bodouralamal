@@ -6,18 +6,19 @@
  * Nothing here participates in scheduling arithmetic — it renders a second
  * label beside a date that has already been decided.
  *
- * **Revision 31: the official Moroccan calendar is the source of truth.** The
- * Ministry of Habous fixes each month by local moon sighting, so it regularly
- * differs from Umm al-Qura and from every library algorithm — and it differs by
- * a margin that varies month to month, which is why the former global ±2-day
- * offset was removed rather than retuned. Values come from recorded official
- * data in `HijriMonthStart`, and **nothing here computes a Hijri date
+ * **Revisions 31–32: the Ministry's official announcements are the source of
+ * truth.** The Ministry of Habous fixes each month by local moon sighting, so it
+ * regularly differs from Umm al-Qura and from every library algorithm — and it
+ * differs by a margin that varies month to month, which is why the former global
+ * ±2-day offset was removed rather than retuned. Values come from the
+ * announcements **recorded** in `HijriMonthStart` — a Super Admin transcribes
+ * them and does not decide them — and **nothing here computes a Hijri date
  * astronomically**. `baseHijri` is the single seam every consumer goes through.
  *
  * **A month that is not recorded and published has no overlay.** The honest
  * answer to "what is the official Hijri date" for a month the Ministry has not
  * yet announced is silence, not a guess — fabricating one would defeat the
- * purpose of this revision. Callers receive `null` and render the Gregorian
+ * purpose of these revisions. Callers receive `null` and render the Gregorian
  * date alone (§14.3 `DualDateDisplay`).
  */
 

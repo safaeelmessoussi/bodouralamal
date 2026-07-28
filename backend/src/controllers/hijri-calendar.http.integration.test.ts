@@ -6,7 +6,8 @@ import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
 import { httpCall } from '../test-support/http-client.js';
 
 /**
- * Official Hijri calendar management over real HTTP — SRS Revision 31, §5.7.
+ * Recording the Ministry's official Hijri announcements over real HTTP — SRS
+ * Revisions 31–32, §5.7.
  *
  * The service suite proves the invariants; this proves the **wiring**: paths,
  * the authenticate middleware, status codes, the `YYYY-MM-DD` boundary format
@@ -87,7 +88,7 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 
-const setMonth = (month: number, date: string, version?: number) =>
+const recordMonth = (month: number, date: string, version?: number) =>
   call('PUT', `/admin/hijri-calendar/${YEAR}/${month}`, superToken, {
     gregorian_start_date: date,
     ...(version !== undefined ? { version } : {}),
@@ -95,7 +96,7 @@ const setMonth = (month: number, date: string, version?: number) =>
 
 describe('GET /admin/hijri-calendar', () => {
   it('returns all twelve months of the requested year', async () => {
-    await setMonth(1, '2026-06-17');
+    await recordMonth(1, '2026-06-17');
     const res = await call('GET', `/admin/hijri-calendar?year=${YEAR}`, superToken);
 
     expect(res.status).toBe(200);
@@ -128,7 +129,7 @@ describe('GET /admin/hijri-calendar', () => {
 
 describe('PUT /admin/hijri-calendar/{year}/{month}', () => {
   it('records a month start and returns it as YYYY-MM-DD', async () => {
-    const res = await setMonth(1, '2026-06-17');
+    const res = await recordMonth(1, '2026-06-17');
 
     expect(res.status).toBe(200);
     // TD-11: a local calendar date at the boundary, never an ISO instant.
@@ -137,21 +138,21 @@ describe('PUT /admin/hijri-calendar/{year}/{month}', () => {
   });
 
   it('TD-15: correcting requires the version, and a stale one is 409', async () => {
-    const first = await setMonth(1, '2026-06-17');
+    const first = await recordMonth(1, '2026-06-17');
     const stale = first.body.version!;
 
     // No version at all on an existing month is a 400, not a silent overwrite.
-    expect((await setMonth(1, '2026-06-18')).status).toBe(400);
+    expect((await recordMonth(1, '2026-06-18')).status).toBe(400);
 
-    expect((await setMonth(1, '2026-06-18', stale)).status).toBe(200);
-    const conflict = await setMonth(1, '2026-06-19', stale);
+    expect((await recordMonth(1, '2026-06-18', stale)).status).toBe(200);
+    const conflict = await recordMonth(1, '2026-06-19', stale);
     expect(conflict.status).toBe(409);
     expect(conflict.body.error?.code).toBe('VERSION_CONFLICT');
   });
 
   it('an out-of-order month is 400 with structured details', async () => {
-    await setMonth(1, '2026-06-17');
-    const res = await setMonth(2, '2026-06-01');
+    await recordMonth(1, '2026-06-17');
+    const res = await recordMonth(2, '2026-06-01');
 
     expect(res.status).toBe(400);
     expect(res.body.error?.code).toBe('VALIDATION_FAILED');
@@ -160,9 +161,9 @@ describe('PUT /admin/hijri-calendar/{year}/{month}', () => {
   });
 
   it('rejects a malformed date and an out-of-range month at the boundary', async () => {
-    expect((await setMonth(1, '17/06/2026')).status).toBe(400);
-    expect((await setMonth(13, '2026-06-17')).status).toBe(400);
-    expect((await setMonth(0, '2026-06-17')).status).toBe(400);
+    expect((await recordMonth(1, '17/06/2026')).status).toBe(400);
+    expect((await recordMonth(13, '2026-06-17')).status).toBe(400);
+    expect((await recordMonth(0, '2026-06-17')).status).toBe(400);
   });
 
   it('TD-2: an Admin cannot record a month', async () => {
@@ -175,8 +176,8 @@ describe('PUT /admin/hijri-calendar/{year}/{month}', () => {
 
 describe('POST /admin/hijri-calendar/{year}/publish', () => {
   it('publishes the year’s drafts and reports the count', async () => {
-    await setMonth(1, '2026-06-17');
-    await setMonth(2, '2026-07-16');
+    await recordMonth(1, '2026-06-17');
+    await recordMonth(2, '2026-07-16');
 
     const res = await call('POST', `/admin/hijri-calendar/${YEAR}/publish`, superToken);
     expect(res.status).toBe(200);
@@ -187,7 +188,7 @@ describe('POST /admin/hijri-calendar/{year}/publish', () => {
   });
 
   it('publishing with nothing to publish is 409, not a silent success', async () => {
-    await setMonth(1, '2026-06-17');
+    await recordMonth(1, '2026-06-17');
     await call('POST', `/admin/hijri-calendar/${YEAR}/publish`, superToken);
 
     const again = await call('POST', `/admin/hijri-calendar/${YEAR}/publish`, superToken);
@@ -198,45 +199,15 @@ describe('POST /admin/hijri-calendar/{year}/publish', () => {
 
 describe('GET /admin/hijri-calendar/{year}/history', () => {
   it('returns the audit trail carrying both the old and new date', async () => {
-    const first = await setMonth(1, '2026-06-17');
-    await setMonth(1, '2026-06-18', first.body.version!);
+    const first = await recordMonth(1, '2026-06-17');
+    await recordMonth(1, '2026-06-18', first.body.version!);
 
     const res = await call('GET', `/admin/hijri-calendar/${YEAR}/history`, superToken);
     expect(res.status).toBe(200);
 
     const latest = res.body.data![0] as unknown as { action_type: string; detail: Record<string, unknown> };
-    expect(latest.action_type).toBe('hijri.month_start.set');
+    expect(latest.action_type).toBe('hijri.month_start.record');
     expect(latest.detail['previous_start_date']).toBe('2026-06-17');
     expect(latest.detail['new_start_date']).toBe('2026-06-18');
-  });
-});
-
-describe('POST /admin/hijri-calendar/import', () => {
-  it('reports NOT_CONFIGURED while no official source is wired', async () => {
-    // Revision 31: the MVP ships the integration point, not an importer — the
-    // Ministry publishes no machine-readable calendar to consume.
-    const res = await call('POST', '/admin/hijri-calendar/import', superToken, {
-      year: YEAR,
-      source: 'habous',
-    });
-
-    expect(res.status).toBe(503);
-    expect(res.body.error?.code).toBe('SERVICE_UNAVAILABLE');
-    expect(res.body.error?.details?.['reason']).toBe('NOT_CONFIGURED');
-  });
-
-  it('requires a year and a source', async () => {
-    expect((await call('POST', '/admin/hijri-calendar/import', superToken, {})).status).toBe(400);
-    expect(
-      (await call('POST', '/admin/hijri-calendar/import', superToken, { year: YEAR })).status,
-    ).toBe(400);
-  });
-
-  it('TD-2: an Admin cannot trigger an import', async () => {
-    const res = await call('POST', '/admin/hijri-calendar/import', adminToken, {
-      year: YEAR,
-      source: 'habous',
-    });
-    expect(res.status).toBe(403);
   });
 });

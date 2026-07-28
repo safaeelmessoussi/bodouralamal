@@ -49,10 +49,10 @@ export interface Occurrence {
   visibility: string | null;
   branchId: string | null;
   /**
-   * The decorative Hijri overlay (§4.4, §5.7), read from the **official**
-   * Moroccan calendar recorded in `HijriMonthStart` (Revision 31). `null` when
-   * the month has not been recorded and published — `DualDateDisplay` then
-   * renders the Gregorian date alone rather than a computed guess.
+   * The decorative Hijri overlay (§4.4, §5.7), read from the Ministry's
+   * official announcements as recorded in `HijriMonthStart` (Revisions 31–32).
+   * `null` when the month has not been recorded and published — `DualDateDisplay`
+   * then renders the Gregorian date alone rather than a computed guess.
    */
   hijriDate: string | null;
   hijriMonthArabic: string | null;
@@ -60,7 +60,7 @@ export interface Occurrence {
 
 /**
  * Loads the published official month starts that could cover this range
- * (Revision 31). One query per request, not one per occurrence.
+ * (Revisions 31–32). One query per request, not one per occurrence.
  *
  * The window is widened by a month on each side because resolution walks
  * **backwards** to the month containing a date: a date early in `from`'s month

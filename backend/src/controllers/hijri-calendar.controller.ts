@@ -6,19 +6,22 @@ import { AppError } from '../lib/errors.js';
 import { MAX_HIJRI_YEAR, MIN_HIJRI_YEAR, MONTHS_IN_YEAR } from '../lib/hijri.js';
 import { requireActor } from '../middleware/authenticate.js';
 import {
-  importYear,
   listYear,
   publishYear,
-  setMonthStart,
+  recordMonthStart,
   yearHistory,
 } from '../services/hijri-calendar.service.js';
 import type { Actor } from './../services/group.service.js';
 
 /**
- * Official Moroccan Hijri calendar management — TD-3.4 (Revision 31), §5.7.
+ * Recording the Ministry's official Hijri announcements — TD-3.4 (Revisions
+ * 31–32), §5.7.
  *
  * Super Admin only; the service enforces that, not the URL prefix (Revision 26:
  * *"the URL prefix is not the permission boundary"*).
+ *
+ * The vocabulary is deliberate (Revision 32): a Super Admin **records** the
+ * Ministry's official announcement. No import route exists — see §10.1.
  */
 
 /** Local calendar date, `YYYY-MM-DD` (TD-11) — never an instant. */
@@ -30,15 +33,13 @@ const calendarDate = z
 const yearParam = z.coerce.number().int().min(MIN_HIJRI_YEAR).max(MAX_HIJRI_YEAR);
 const monthParam = z.coerce.number().int().min(1).max(MONTHS_IN_YEAR);
 
-const setSchema = z
+const recordSchema = z
   .object({
     gregorian_start_date: calendarDate,
-    /** Required when correcting an existing month (TD-15); absent on first entry. */
+    /** Required when correcting an existing month (TD-15); absent on first recording. */
     version: z.number().int().min(0).optional(),
   })
   .strict();
-
-const importSchema = z.object({ year: yearParam, source: z.string().min(1).max(80) }).strict();
 
 const actorOf = (req: Request): Actor => {
   const a = requireActor(req);
@@ -73,16 +74,16 @@ export function list(prisma: PrismaClient) {
   };
 }
 
-export function setMonth(prisma: PrismaClient) {
+export function recordMonth(prisma: PrismaClient) {
   return async (req: Request, res: Response): Promise<void> => {
     const year = pathYear(req);
     const month = monthParam.safeParse(req.params['month']);
     if (!month.success) throw new AppError('VALIDATION_FAILED', 'invalid hijri month');
 
-    const parsed = setSchema.safeParse(req.body ?? {});
+    const parsed = recordSchema.safeParse(req.body ?? {});
     if (!parsed.success) throw new AppError('VALIDATION_FAILED', 'invalid month payload');
 
-    const row = await setMonthStart(prisma, actorOf(req), {
+    const row = await recordMonthStart(prisma, actorOf(req), {
       year,
       month: month.data,
       gregorianStartDate: parsed.data.gregorian_start_date,
@@ -118,15 +119,5 @@ export function history(prisma: PrismaClient) {
         detail: e.detail,
       })),
     });
-  };
-}
-
-export function runImport(prisma: PrismaClient) {
-  return async (req: Request, res: Response): Promise<void> => {
-    const parsed = importSchema.safeParse(req.body ?? {});
-    if (!parsed.success) throw new AppError('VALIDATION_FAILED', 'year and source are required');
-
-    const result = await importYear(prisma, actorOf(req), parsed.data.year, parsed.data.source);
-    res.json({ imported: result.imported, source: result.source });
   };
 }

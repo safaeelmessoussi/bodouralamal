@@ -5,18 +5,18 @@ import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
 import type { RoleScope } from '../policies/branch-scope.js';
 import type { Actor } from './group.service.js';
 import {
-  clearImportSources,
-  importYear,
   listYear,
   publishYear,
-  registerImportSource,
-  setMonthStart,
+  recordMonthStart,
   yearHistory,
 } from './hijri-calendar.service.js';
 
 /**
- * Official Moroccan Hijri calendar management — SRS Revision 31, §5.7, TD-2,
- * TD-9, TD-15.
+ * Recording the Ministry's official Hijri announcements — SRS Revisions 31–32,
+ * §5.7, TD-2, TD-9, TD-15.
+ *
+ * The Super Admin records what the Ministry announced; nobody here decides when
+ * a month begins (Revision 32). No importer exists in the MVP (§10.1).
  *
  * The dates are the officially announced Moroccan ones: 1 Muharram 1448 fell on
  * Wednesday 17 June 2026, where Umm al-Qura gives 16 June.
@@ -59,7 +59,6 @@ async function clear(): Promise<void> {
 
 beforeEach(async () => {
   await clear();
-  clearImportSources();
   const u = await prisma.user.create({
     data: { nameArabic: `${TAG} مشرف عام`, accountStatus: 'active' },
   });
@@ -68,7 +67,6 @@ beforeEach(async () => {
 
 afterAll(async () => {
   await clear();
-  clearImportSources();
   await prisma.$disconnect();
 });
 
@@ -77,19 +75,16 @@ describe('TD-2 / Revision 26 — the official calendar is Super Admin only', () 
     for (const actor of [admin(), teacher()]) {
       await expect(listYear(prisma, actor, YEAR)).rejects.toMatchObject({ code: 'FORBIDDEN' });
       await expect(
-        setMonthStart(prisma, actor, { year: YEAR, month: 1, gregorianStartDate: day('2026-06-17') }),
+        recordMonthStart(prisma, actor, { year: YEAR, month: 1, gregorianStartDate: day('2026-06-17') }),
       ).rejects.toMatchObject({ code: 'FORBIDDEN' });
       await expect(publishYear(prisma, actor, YEAR)).rejects.toMatchObject({ code: 'FORBIDDEN' });
       await expect(yearHistory(prisma, actor, YEAR)).rejects.toMatchObject({ code: 'FORBIDDEN' });
-      await expect(importYear(prisma, actor, YEAR, 'x')).rejects.toMatchObject({
-        code: 'FORBIDDEN',
-      });
     }
   });
 
   it('a refused write leaves no row behind', async () => {
     await expect(
-      setMonthStart(prisma, admin(), { year: YEAR, month: 1, gregorianStartDate: day('2026-06-17') }),
+      recordMonthStart(prisma, admin(), { year: YEAR, month: 1, gregorianStartDate: day('2026-06-17') }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
 
     expect(await prisma.hijriMonthStart.count({ where: { hijriYear: YEAR } })).toBe(0);
@@ -98,7 +93,7 @@ describe('TD-2 / Revision 26 — the official calendar is Super Admin only', () 
 
 describe('§5.7 — the year grid', () => {
   it('always returns twelve months, recorded or not', async () => {
-    await setMonthStart(prisma, superAdmin(), {
+    await recordMonthStart(prisma, superAdmin(), {
       year: YEAR,
       month: 1,
       gregorianStartDate: day('2026-06-17'),
@@ -122,7 +117,7 @@ describe('§5.7 — the year grid', () => {
 
   it('rejects a month outside 1–12', async () => {
     await expect(
-      setMonthStart(prisma, superAdmin(), {
+      recordMonthStart(prisma, superAdmin(), {
         year: YEAR,
         month: 13,
         gregorianStartDate: day('2026-06-17'),
@@ -133,7 +128,7 @@ describe('§5.7 — the year grid', () => {
 
 describe('TD-9 — months must start in calendar order', () => {
   async function record(month: number, iso: string) {
-    return setMonthStart(prisma, superAdmin(), {
+    return recordMonthStart(prisma, superAdmin(), {
       year: YEAR,
       month,
       gregorianStartDate: day(iso),
@@ -163,7 +158,7 @@ describe('TD-9 — months must start in calendar order', () => {
 
   it('checks across the year boundary in both directions', async () => {
     // Month 12 of the previous year and month 1 of the next are real neighbours.
-    await setMonthStart(prisma, superAdmin(), {
+    await recordMonthStart(prisma, superAdmin(), {
       year: YEAR - 1,
       month: 12,
       gregorianStartDate: day('2026-05-18'),
@@ -186,14 +181,14 @@ describe('TD-9 — months must start in calendar order', () => {
 
 describe('TD-15 — corrections do not clobber each other', () => {
   it('requires a version to correct an existing month', async () => {
-    await setMonthStart(prisma, superAdmin(), {
+    await recordMonthStart(prisma, superAdmin(), {
       year: YEAR,
       month: 1,
       gregorianStartDate: day('2026-06-17'),
     });
 
     await expect(
-      setMonthStart(prisma, superAdmin(), {
+      recordMonthStart(prisma, superAdmin(), {
         year: YEAR,
         month: 1,
         gregorianStartDate: day('2026-06-18'),
@@ -202,14 +197,14 @@ describe('TD-15 — corrections do not clobber each other', () => {
   });
 
   it('a stale version is VERSION_CONFLICT and the first writer survives', async () => {
-    const row = await setMonthStart(prisma, superAdmin(), {
+    const row = await recordMonthStart(prisma, superAdmin(), {
       year: YEAR,
       month: 1,
       gregorianStartDate: day('2026-06-17'),
     });
     const stale = row.version;
 
-    await setMonthStart(prisma, superAdmin(), {
+    await recordMonthStart(prisma, superAdmin(), {
       year: YEAR,
       month: 1,
       gregorianStartDate: day('2026-06-18'),
@@ -217,7 +212,7 @@ describe('TD-15 — corrections do not clobber each other', () => {
     });
 
     await expect(
-      setMonthStart(prisma, superAdmin(), {
+      recordMonthStart(prisma, superAdmin(), {
         year: YEAR,
         month: 1,
         gregorianStartDate: day('2026-06-19'),
@@ -232,7 +227,7 @@ describe('TD-15 — corrections do not clobber each other', () => {
   });
 
   it('a correction returns the month to draft so it must be republished', async () => {
-    const row = await setMonthStart(prisma, superAdmin(), {
+    const row = await recordMonthStart(prisma, superAdmin(), {
       year: YEAR,
       month: 1,
       gregorianStartDate: day('2026-06-17'),
@@ -244,7 +239,7 @@ describe('TD-15 — corrections do not clobber each other', () => {
     });
     expect(published!.status).toBe('published');
 
-    await setMonthStart(prisma, superAdmin(), {
+    await recordMonthStart(prisma, superAdmin(), {
       year: YEAR,
       month: 1,
       gregorianStartDate: day('2026-06-18'),
@@ -262,12 +257,12 @@ describe('TD-15 — corrections do not clobber each other', () => {
 
 describe('§5.7 — publishing is what makes a month visible', () => {
   it('publishes a year’s drafts and reports the count', async () => {
-    await setMonthStart(prisma, superAdmin(), {
+    await recordMonthStart(prisma, superAdmin(), {
       year: YEAR,
       month: 1,
       gregorianStartDate: day('2026-06-17'),
     });
-    await setMonthStart(prisma, superAdmin(), {
+    await recordMonthStart(prisma, superAdmin(), {
       year: YEAR,
       month: 2,
       gregorianStartDate: day('2026-07-16'),
@@ -280,7 +275,7 @@ describe('§5.7 — publishing is what makes a month visible', () => {
   });
 
   it('publishing again with nothing to publish is a coded conflict, not a silent no-op', async () => {
-    await setMonthStart(prisma, superAdmin(), {
+    await recordMonthStart(prisma, superAdmin(), {
       year: YEAR,
       month: 1,
       gregorianStartDate: day('2026-06-17'),
@@ -294,12 +289,12 @@ describe('§5.7 — publishing is what makes a month visible', () => {
   });
 
   it('does not publish another year’s drafts', async () => {
-    await setMonthStart(prisma, superAdmin(), {
+    await recordMonthStart(prisma, superAdmin(), {
       year: YEAR,
       month: 1,
       gregorianStartDate: day('2026-06-17'),
     });
-    await setMonthStart(prisma, superAdmin(), {
+    await recordMonthStart(prisma, superAdmin(), {
       year: YEAR + 1,
       month: 1,
       gregorianStartDate: day('2027-06-06'),
@@ -313,12 +308,12 @@ describe('§5.7 — publishing is what makes a month visible', () => {
 
 describe('TD-8 — history is the audit trail', () => {
   it('records both the previous and the new start date on a correction', async () => {
-    const row = await setMonthStart(prisma, superAdmin(), {
+    const row = await recordMonthStart(prisma, superAdmin(), {
       year: YEAR,
       month: 1,
       gregorianStartDate: day('2026-06-17'),
     });
-    await setMonthStart(prisma, superAdmin(), {
+    await recordMonthStart(prisma, superAdmin(), {
       year: YEAR,
       month: 1,
       gregorianStartDate: day('2026-06-18'),
@@ -332,13 +327,13 @@ describe('TD-8 — history is the audit trail', () => {
     // every date in its month, so both values are on the record.
     expect(latest['previous_start_date']).toBe('2026-06-17');
     expect(latest['new_start_date']).toBe('2026-06-18');
-    // First entry has no previous value, and says so rather than omitting it.
+    // The first recording has no previous value, and says so rather than omitting it.
     const first = history[history.length - 1]!.detail as Record<string, unknown>;
     expect(first['previous_start_date']).toBeNull();
   });
 
   it('records publishing as its own event', async () => {
-    await setMonthStart(prisma, superAdmin(), {
+    await recordMonthStart(prisma, superAdmin(), {
       year: YEAR,
       month: 1,
       gregorianStartDate: day('2026-06-17'),
@@ -351,91 +346,12 @@ describe('TD-8 — history is the audit trail', () => {
   });
 
   it('scopes history to the requested year', async () => {
-    await setMonthStart(prisma, superAdmin(), {
+    await recordMonthStart(prisma, superAdmin(), {
       year: YEAR + 1,
       month: 1,
       gregorianStartDate: day('2027-06-06'),
     });
     expect(await yearHistory(prisma, superAdmin(), YEAR)).toHaveLength(0);
     expect((await yearHistory(prisma, superAdmin(), YEAR + 1)).length).toBeGreaterThan(0);
-  });
-});
-
-describe('Revision 31 — the import integration point', () => {
-  it('reports NOT_CONFIGURED while no official source is wired', async () => {
-    await expect(importYear(prisma, superAdmin(), YEAR, 'habous')).rejects.toMatchObject({
-      code: 'SERVICE_UNAVAILABLE',
-      details: { reason: 'NOT_CONFIGURED' },
-    });
-  });
-
-  it('audits a refused import, so the attempt is never invisible', async () => {
-    await expect(importYear(prisma, superAdmin(), YEAR, 'habous')).rejects.toThrow();
-
-    const history = await yearHistory(prisma, superAdmin(), YEAR);
-    expect(history[0]!.actionType).toBe('hijri.import');
-    expect((history[0]!.detail as Record<string, unknown>)['outcome']).toBe('NOT_CONFIGURED');
-  });
-
-  it('an adapter writes through the SAME path as a manual edit', async () => {
-    // The architectural requirement of Revision 31: imported rows land in
-    // HijriMonthStart via setMonthStart, so they cannot bypass the ordering
-    // rule, the audit trail, or the draft state.
-    registerImportSource({
-      id: 'test-ministry',
-      fetchMonthStarts: async () => [
-        { month: 1, gregorianStartDate: day('2026-06-17') },
-        { month: 2, gregorianStartDate: day('2026-07-16') },
-      ],
-    });
-
-    expect(await importYear(prisma, superAdmin(), YEAR, 'test-ministry')).toEqual({
-      imported: 2,
-      source: 'test-ministry',
-    });
-
-    const rows = await prisma.hijriMonthStart.findMany({
-      where: { hijriYear: YEAR },
-      orderBy: { hijriMonth: 'asc' },
-    });
-    expect(rows.map((r) => r.hijriMonth)).toEqual([1, 2]);
-    // Imported data is NOT live until published — same as manual entry.
-    expect(rows.every((r) => r.status === 'draft')).toBe(true);
-    // Provenance is recorded on the row itself.
-    expect(rows.every((r) => r.source === 'test-ministry')).toBe(true);
-
-    const history = await yearHistory(prisma, superAdmin(), YEAR);
-    expect(history.filter((h) => h.actionType === 'hijri.month_start.set')).toHaveLength(2);
-  });
-
-  it('an import obeys the ordering rule exactly as manual entry does', async () => {
-    registerImportSource({
-      id: 'bad-source',
-      fetchMonthStarts: async () => [
-        { month: 1, gregorianStartDate: day('2026-06-17') },
-        { month: 2, gregorianStartDate: day('2026-06-01') },
-      ],
-    });
-
-    await expect(importYear(prisma, superAdmin(), YEAR, 'bad-source')).rejects.toMatchObject({
-      code: 'VALIDATION_FAILED',
-      details: { reason: 'MONTH_ORDER' },
-    });
-  });
-
-  it('re-importing corrects existing rows rather than failing on version', async () => {
-    await setMonthStart(prisma, superAdmin(), {
-      year: YEAR,
-      month: 1,
-      gregorianStartDate: day('2026-06-17'),
-    });
-    registerImportSource({
-      id: 'test-ministry',
-      fetchMonthStarts: async () => [{ month: 1, gregorianStartDate: day('2026-06-18') }],
-    });
-
-    expect((await importYear(prisma, superAdmin(), YEAR, 'test-ministry')).imported).toBe(1);
-    const row = await prisma.hijriMonthStart.findFirst({ where: { hijriYear: YEAR, hijriMonth: 1 } });
-    expect(row!.gregorianStartDate.toISOString().slice(0, 10)).toBe('2026-06-18');
   });
 });

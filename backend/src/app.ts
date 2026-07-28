@@ -104,13 +104,13 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
   guarded.post('/events', events.create(prisma));
   guarded.patch('/events/:id', events.update(prisma));
 
-  // §5.7/TD-3.4 (Revision 31) — the official Moroccan Hijri calendar. Super
-  // Admin only, enforced in the service: the URL prefix is not the boundary.
+  // §5.7/TD-3.4 (Revisions 31–32) — recording the Ministry's official Hijri
+  // announcements. Super Admin only, enforced in the service: the URL prefix is
+  // not the boundary. No import route ships (§10.1).
   guarded.get('/admin/hijri-calendar', hijri.list(prisma));
-  guarded.put('/admin/hijri-calendar/:year/:month', hijri.setMonth(prisma));
+  guarded.put('/admin/hijri-calendar/:year/:month', hijri.recordMonth(prisma));
   guarded.post('/admin/hijri-calendar/:year/publish', hijri.publish(prisma));
   guarded.get('/admin/hijri-calendar/:year/history', hijri.history(prisma));
-  guarded.post('/admin/hijri-calendar/import', hijri.runImport(prisma));
   guarded.delete('/events/:id', events.remove(prisma));
   guarded.get('/admin/branches/:id/event-backfill', events.listBackfill(prisma));
   guarded.post('/admin/branches/:id/event-backfill', events.applyBackfill(prisma));

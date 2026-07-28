@@ -209,17 +209,19 @@
 - [~] Operational-start-date graying in branch-scoped views
   - ✓ Backend — nothing before a branch's `operational_start_date` is returned in a branch-scoped read
   - △ Remaining — the visual graying itself is a frontend concern
-- [x] Hijri overlay: the official Moroccan calendar (`HijriMonthStart`) + Super Admin management screen (§4.4, §5.7, Revision 31)
+- [x] Hijri overlay: recording the Ministry's official announcements (`HijriMonthStart`) + Super Admin screen (§4.4, §5.7, Revisions 31–32)
   - ✓ SRS **Revision 31** — the official Ministry of Habous calendar is the source of truth; the global ±2-day offset is **removed** from the model, `SystemSetting`, TD-9 and every screen
+  - ✓ SRS **Revision 32** — the Super Admin **records** the Ministry's announcement rather than deciding it; required vocabulary *record / publish official month / official Ministry announcement*, prohibited *choose / define / set*, applied across the SRS, the contract and the code (`setMonthStart` → `recordMonthStart`, audit `hijri.month_start.set` → `.record`)
   - ✓ Investigation (as instructed) — **no official machine-readable source exists**: the Ministry publishes each month start as a prose news announcement, with no API, feed or dataset, and because months are fixed by sighting on the evening of the 29th a year cannot be published in advance. Manual entry is therefore the primary path, not a fallback
   - ✓ Model — `HijriMonthStart` (year, month, Gregorian start, draft/published, source, version, audit/soft-delete) + TD-9 CHECK constraints; the offset constraint and its settings row are migrated away with a TD-6b contract-phase tag
   - ✓ `baseHijri()` is the single seam — every consumer reads recorded data; **nothing computes a Hijri date astronomically**
-  - ✓ Endpoints — `GET /admin/hijri-calendar`, `PUT /admin/hijri-calendar/{year}/{month}` (TD-15), `POST …/{year}/publish`, `GET …/{year}/history`, `POST …/import`; Super Admin only
-  - ✓ Import is an **integration point**: an adapter writes through the same service a Super Admin uses, so imported and hand-entered rows share one execution path; reports `NOT_CONFIGURED` until one is wired, and audits the attempt either way
-  - ✓ Tests — 21 unit + 30 integration/HTTP; **twelve mutations caught**, two of which exposed real defects
-  - ✓ §18 check green — the overlay reproduces the recorded official calendar, and an unpublished or unrecorded month renders nothing
+  - ✓ Endpoints — `GET /admin/hijri-calendar`, `PUT /admin/hijri-calendar/{year}/{month}` (TD-15), `POST …/{year}/publish`, `GET …/{year}/history`; Super Admin only
+  - ✓ **Importer removed from the MVP (Revision 32)** — route, contract entry, provider interface, registry and tests all gone; moved to §10.1. There is no machine-readable Ministry source, so the endpoint could only ever answer *not configured*, and an endpoint that cannot succeed invites clients to build against a promise the system cannot keep
+  - ✓ Extensibility kept **by data, not scaffolding** — `recordMonthStart` is the single write path a future importer would call (inheriting ordering, TD-15 locking, draft state and audit), and `HijriMonthStart.source` records provenance; no abstract provider interface ships without an implementation
+  - ✓ Tests — 21 unit + 22 integration/HTTP; **twelve mutations caught**, two of which exposed real defects
+  - ✓ §18 check green — the overlay reproduces the Ministry's recorded announcements, and an unpublished or unrecorded month renders nothing
   - △ Frontend — the `/superadmin/hijri-calendar` screen and `DualDateDisplay` (renders the Gregorian date alone when `hijri_date` is null)
-  - ⚠ For the Document Owner — a **recurring monthly** owner task now exists (§2.3): each month must be entered and published after the Ministry announces it, or dates in it carry no Hijri label
+  - ⚠ For the Document Owner — a **recurring monthly** owner task exists (§2.3): each month must be recorded and published after the Ministry announces it, or dates in it carry no Hijri label. The task is transcription, not judgement
 - [ ] §18 Scheduling & Calendar checklist green (incl. Ramadan DST regression test)
 
 ## M4 — Quran Progress

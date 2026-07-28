@@ -11,11 +11,14 @@ import type { Actor } from './group.service.js';
  * TD-9, TD-15.
  *
  * The platform reproduces exactly the calendar published by the Ministry of
- * Habous and Islamic Affairs. This service is the only way rows enter
- * `HijriMonthStart`, whether typed by a Super Admin or delivered by a future
- * importer — Revision 31 requires both paths to be the same path, so that an
- * automated import can never populate data by a route the Super Admin cannot
- * inspect or correct.
+ * Habous and Islamic Affairs. **A Super Admin records the Ministry's official
+ * announcements; nobody here decides when a month begins** (Revision 32).
+ *
+ * This service is the only way rows enter `HijriMonthStart`. **No importer
+ * ships** (Revision 32): the Ministry publishes no machine-readable calendar, so
+ * an import route could only ever answer *not configured*. Extensibility is
+ * preserved by keeping this the single write path and recording provenance on
+ * the row — not by an abstract provider interface with no implementation.
  *
  * **Reference/configuration data (Revision 26): Super Admin only.**
  */
@@ -132,28 +135,40 @@ async function assertOrdered(
   }
 }
 
-export interface SetMonthInput {
+export interface RecordMonthInput {
   year: number;
   month: number;
   gregorianStartDate: Date;
   /** Required for an existing row (TD-15); omitted when creating one. */
   expectedVersion?: number | undefined;
-  /** `manual`, or an importer's identifier — Revision 31 provenance. */
+  /**
+   * Provenance. `manual` — a Super Admin recording an official announcement —
+   * is the only MVP value; an importer would record its own identifier here
+   * (§10.1), which is why the column exists rather than an abstraction layer.
+   */
   source?: string;
 }
 
 /**
- * Records or corrects one official month start.
+ * Records — or corrects — the Ministry's official announcement for one month.
  *
- * A correction is the interesting event, not the first entry: this table
- * reproduces an official publication, and a wrong start date silently mislabels
- * every date in its month. The audit row therefore carries **both** the
- * previous and the new value.
+ * **The Super Admin is not deciding when the month begins** (Revision 32). The
+ * Ministry of Habous decides, by sighting; this transcribes what it announced.
+ * The distinction is not cosmetic: it is why the value is never computed, never
+ * defaulted, and never inferred from a neighbouring month.
+ *
+ * A correction is the interesting event, not the first recording: a wrong start
+ * date silently mislabels every date in its month, so the audit row carries
+ * **both** the previous and the new value.
+ *
+ * **This is the single write path** — the extension point a future importer
+ * (§10.1) would call, inheriting the ordering rule, the optimistic locking, the
+ * draft state and the audit trail rather than reimplementing them.
  */
-export async function setMonthStart(
+export async function recordMonthStart(
   prisma: PrismaClient,
   actor: Actor,
-  input: SetMonthInput,
+  input: RecordMonthInput,
 ): Promise<HijriMonthStart> {
   assertSuperAdmin(actor);
   assertValidCoordinates(input.year, input.month);
@@ -199,7 +214,7 @@ export async function setMonthStart(
 
     await audit.write(tx, {
       actorUserId: actor.userId,
-      actionType: 'hijri.month_start.set',
+      actionType: 'hijri.month_start.record',
       targetEntity: 'HijriMonthStart',
       targetId: row.id,
       detail: {
@@ -284,7 +299,7 @@ export async function yearHistory(
   const rows = await prisma.auditLog.findMany({
     where: {
       targetEntity: 'HijriMonthStart',
-      actionType: { in: ['hijri.month_start.set', 'hijri.year.publish', 'hijri.import'] },
+      actionType: { in: ['hijri.month_start.record', 'hijri.year.publish'] },
       detail: { path: ['hijri_year'], equals: year },
     },
     orderBy: { createdAt: 'desc' },
@@ -297,89 +312,4 @@ export async function yearHistory(
     actionType: r.actionType,
     detail: r.detail,
   }));
-}
-
-/**
- * The Revision-31 **import integration point**.
- *
- * Not a completed importer, deliberately. The investigation Revision 31 records
- * found the Ministry publishes each month start as a prose news announcement
- * with no API, feed or downloadable dataset — and because Morocco fixes months
- * by observation on the evening of the 29th, a year cannot be published in
- * advance at all. So there is nothing authoritative to consume yet.
- *
- * What ships is the seam: an adapter implementing this interface writes through
- * `setMonthStart` like any manual edit, so imported and hand-entered data
- * follow the identical execution path and land in the same table.
- */
-export interface HijriCalendarImportSource {
-  /** Stable identifier recorded as the row's `source` and in the audit row. */
-  readonly id: string;
-  fetchMonthStarts(year: number): Promise<{ month: number; gregorianStartDate: Date }[]>;
-}
-
-/** Registered adapters. Empty in the MVP — see `importYear`. */
-const IMPORT_SOURCES = new Map<string, HijriCalendarImportSource>();
-
-export function registerImportSource(source: HijriCalendarImportSource): void {
-  IMPORT_SOURCES.set(source.id, source);
-}
-
-/** Test-support and re-registration; keeps the registry from leaking between suites. */
-export function clearImportSources(): void {
-  IMPORT_SOURCES.clear();
-}
-
-export async function importYear(
-  prisma: PrismaClient,
-  actor: Actor,
-  year: number,
-  sourceId: string,
-): Promise<{ imported: number; source: string }> {
-  assertSuperAdmin(actor);
-  assertValidCoordinates(year, 1);
-
-  const source = IMPORT_SOURCES.get(sourceId);
-  if (!source) {
-    // Audited even when refused: an attempt to populate the official calendar
-    // is never invisible (TD-8, Revision 31).
-    await audit.write(prisma, {
-      actorUserId: actor.userId,
-      actionType: 'hijri.import',
-      targetEntity: 'HijriMonthStart',
-      detail: { hijri_year: year, source: sourceId, outcome: 'NOT_CONFIGURED', months_written: 0 },
-    });
-    throw new AppError('SERVICE_UNAVAILABLE', 'no official import source is configured', {
-      reason: 'NOT_CONFIGURED',
-      source: sourceId,
-    });
-  }
-
-  const months = await source.fetchMonthStarts(year);
-
-  // Written one at a time through the same service a Super Admin uses, so an
-  // import cannot bypass the ordering rule or skip an audit row.
-  let imported = 0;
-  for (const m of months) {
-    const existing = await prisma.hijriMonthStart.findFirst({
-      where: { hijriYear: year, hijriMonth: m.month, deletedAt: null },
-      select: { version: true },
-    });
-    await setMonthStart(prisma, actor, {
-      year,
-      month: m.month,
-      gregorianStartDate: m.gregorianStartDate,
-      expectedVersion: existing?.version,
-      source: source.id,
-    });
-    imported += 1;
-  }
-
-  await audit.write(prisma, {
-    actorUserId: actor.userId,
-    actionType: 'hijri.import',
-    targetEntity: 'HijriMonthStart',
-    detail: { hijri_year: year, source: source.id, outcome: 'OK', months_written: imported },
-  });
-  return { imported, source: source.id };
 }

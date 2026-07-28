@@ -71,7 +71,8 @@ GET /admin/hijri-calendar                     # TD-3.4 R31, ?year=
 PUT /admin/hijri-calendar/{year}/{month}      # TD-3.4 R31, TD-15
 POST /admin/hijri-calendar/{year}/publish     # TD-3.4 R31
 GET /admin/hijri-calendar/{year}/history      # TD-3.4 R31, TD-8
-POST /admin/hijri-calendar/import             # TD-3.4 R31 integration point
+# (No import route: Revision 32 removed it from the MVP — no machine-readable
+#  Ministry source exists, so it could only ever answer 'not configured'.)
 POST /admin/branches/{id}/event-backfill      # TD-3.4, §4.4
 
 # ── Branches & Rooms CRUD (Revision 21: documented by the §5.6 screen and the

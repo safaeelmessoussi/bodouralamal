@@ -246,7 +246,7 @@
     "/admin/hijri-calendar": {
       "get": {
         "summary": "Read one Hijri year",
-        "description": "SRS Revision 31, §5.7. The platform **reproduces exactly the official Hijri calendar published by the Ministry of Habous and Islamic Affairs** — never Umm al-Qura, never a library algorithm, and there is no day-offset (the Ministry's divergence varies month to month, so a uniform offset cannot express it). Always returns **twelve** rows: a month the Ministry has not yet announced is a blank to fill, not a missing row. **Super Admin only** (Revision 26 reference data), enforced server-side — the `/admin/*` prefix is not the permission boundary.",
+        "description": "SRS Revisions 31–32, §5.7. The platform **reproduces exactly the official Hijri calendar published by the Ministry of Habous and Islamic Affairs** — never Umm al-Qura, never a library algorithm, and there is no day-offset (the Ministry's divergence varies month to month, so a uniform offset cannot express it). Always returns **twelve** rows: a month the Ministry has not yet announced is a blank to fill, not a missing row. **Super Admin only** (Revision 26 reference data), enforced server-side — the `/admin/*` prefix is not the permission boundary.",
         "responses": {
           "200": {
             "description": "The twelve months, recorded or blank, with status and version."
@@ -265,8 +265,8 @@
     },
     "/admin/hijri-calendar/{year}/{month}": {
       "put": {
-        "summary": "Record or correct one official month start",
-        "description": "Writes the Gregorian date on which that Hijri month **officially began**. **TD-15 optimistic locking**: `version` is required when correcting an existing month and a stale one is `409` — two Super Admins correcting the same month must not clobber each other. **A correction returns the month to `draft`**, so a change to live data must be reviewed and republished deliberately. **TD-9 ordering** is enforced across the year boundary in both directions: month *n+1* must start after month *n* and no two months may share a start date, because an out-of-order pair makes date resolution ambiguous — and resolution is what every Hijri label in the platform depends on. Dates are `YYYY-MM-DD`, local calendar dates (TD-11), never instants.",
+        "summary": "Record the official start of one Hijri month",
+        "description": "**Records the Ministry of Habous's official announcement** for this month — the Gregorian date on which it announced the month began. **The Super Admin is not deciding this date** (Revision 32); the Ministry decides it by sighting, and this transcribes it. **TD-15 optimistic locking**: `version` is required when correcting an existing month and a stale one is `409` — two Super Admins correcting the same month must not clobber each other. **A correction returns the month to `draft`**, so a change to live data must be reviewed and republished deliberately. **TD-9 ordering** is enforced across the year boundary in both directions: month *n+1* must start after month *n* and no two months may share a start date, because an out-of-order pair makes date resolution ambiguous — and resolution is what every Hijri label in the platform depends on. Dates are `YYYY-MM-DD`, local calendar dates (TD-11), never instants.",
         "responses": {
           "200": {
             "description": "The recorded month with its new version."
@@ -288,8 +288,8 @@
     },
     "/admin/hijri-calendar/{year}/publish": {
       "post": {
-        "summary": "Publish a Hijri year",
-        "description": "**Publishing is what makes a month visible platform-wide**: only published months are rendered anywhere, so a year can be entered progressively and reviewed before anyone sees it. Publishes every `draft` month of the year in one transaction and reports the count. Publishing when there is nothing to publish is a coded `409` rather than a silent success, so the client can tell \"already live\" from \"just published\".",
+        "summary": "Publish the official months of a Hijri year",
+        "description": "**Publishing is what makes a month visible platform-wide**: only published months are rendered anywhere, so a year can be recorded progressively and reviewed before anyone sees it. Publishes every `draft` month of the year in one transaction and reports the count. Publishing when there is nothing to publish is a coded `409` rather than a silent success, so the client can tell \"already live\" from \"just published\".",
         "responses": {
           "200": {
             "description": "The number of months moved from draft to published."
@@ -312,7 +312,7 @@
     "/admin/hijri-calendar/{year}/history": {
       "get": {
         "summary": "Read the change history for a Hijri year",
-        "description": "The TD-8 audit trail, which **is** the history — it is append-only and already records both the previous and the new start date on every change, so a separate history table would duplicate it and could drift from it. The correction is the interesting event: this table reproduces an official publication, and a wrong start date silently mislabels every date in its month.",
+        "description": "The TD-8 audit trail, which **is** the history — it is append-only and already records both the previous and the new start date on every change, so a separate history table would duplicate it and could drift from it. The correction is the interesting event: this table reproduces the Ministry's official announcements, and a wrong start date silently mislabels every date in its month.",
         "responses": {
           "200": {
             "description": "Audit entries, newest first."
@@ -325,29 +325,6 @@
           },
           "403": {
             "description": "Error envelope (TD-3.8)."
-          }
-        }
-      }
-    },
-    "/admin/hijri-calendar/import": {
-      "post": {
-        "summary": "Import the official calendar",
-        "description": "**An integration point, not a completed importer** (Revision 31). The investigation this revision records found the Ministry publishes each month start as a **prose news announcement** with no API, feed or downloadable dataset — and because Morocco fixes months by observation on the evening of the 29th, a year cannot be published in advance at all. So this route returns `503 NOT_CONFIGURED` until an adapter is registered. **Imported data is never consumed directly**: an adapter writes through the same service a Super Admin uses, so imported rows land in the same table, obey the same ordering rule, arrive as `draft`, and produce the same audit rows — there is no second code path that could diverge. The attempt is audited **even when refused**, so trying to populate the official calendar is never invisible.",
-        "responses": {
-          "200": {
-            "description": "Months written, with the source identifier."
-          },
-          "400": {
-            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — year and source are required."
-          },
-          "401": {
-            "description": "Error envelope (TD-3.8)."
-          },
-          "403": {
-            "description": "Error envelope (TD-3.8)."
-          },
-          "503": {
-            "description": "Error envelope (TD-3.8). SERVICE_UNAVAILABLE with `reason: 'NOT_CONFIGURED'`."
           }
         }
       }
