@@ -26,6 +26,22 @@ export interface BranchesResponse {
   page: number
 }
 
+export interface User {
+  id: string
+  email: string
+  name: string
+  role: "admin" | "teacher" | "parent" | "student" | "branch_manager"
+  status: "active" | "inactive" | "pending"
+  created_at: string
+  last_login?: string
+}
+
+export interface UsersResponse {
+  data: User[]
+  total: number
+  page: number
+}
+
 export class ApiClient {
   private accessToken: string | null = null
   private refreshToken: string | null = null
@@ -171,6 +187,32 @@ export class ApiClient {
 
   async deleteBranch(id: string): Promise<void> {
     await this.request(`/admin/branches/${id}`, { method: "DELETE" })
+  }
+
+  async getUsers(page: number = 1, limit: number = 10): Promise<UsersResponse> {
+    return this.request(`/admin/users?page=${page}&limit=${limit}`)
+  }
+
+  async getUser(id: string): Promise<User> {
+    return this.request(`/admin/users/${id}`)
+  }
+
+  async createUser(data: Partial<User>): Promise<User> {
+    return this.request("/admin/users", {
+      method: "POST",
+      body: JSON.stringify(data),
+    })
+  }
+
+  async updateUser(id: string, data: Partial<User>): Promise<User> {
+    return this.request(`/admin/users/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    })
+  }
+
+  async deleteUser(id: string): Promise<void> {
+    await this.request(`/admin/users/${id}`, { method: "DELETE" })
   }
 
   isAuthenticated(): boolean {
