@@ -52,7 +52,7 @@ export interface RegistrationResult {
   accountStatus: 'pending';
 }
 
-async function activeConsentTextVersion(
+export async function activeConsentTextVersion(
   tx: Pick<PrismaClient, 'systemSetting'>,
 ): Promise<string> {
   const setting = await tx.systemSetting.findUnique({

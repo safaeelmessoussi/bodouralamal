@@ -24,6 +24,16 @@ export const QUEUES = {
   tokenPurge: 'token.purge',
   rateLimitPurge: 'ratelimit.purge',
   auditPurge: 'audit.purge',
+  /**
+   * §4.1a: enqueued by every `ConsentRecord` change, roster change and upload.
+   * The queue is **registered here but has no worker yet** — `pgboss.job` is
+   * partitioned by queue name, so registration is what makes the §16.2
+   * same-transaction insert possible at all. The handler recomputes a group's
+   * consent state and force-corrects recording visibility, which needs the
+   * content and bucket-migration machinery of M6; until then jobs accumulate and
+   * drain on restart, exactly as TD-16 describes for a stopped worker.
+   */
+  consentReevaluate: 'consent.reevaluate',
 } as const;
 
 /** Daily, small hours local time. TZ is pinned to Africa/Casablanca (TD-11). */

@@ -159,6 +159,50 @@
         }
       }
     },
+    "/students/{id}/consents": {
+      "get": {
+        "summary": "Read a student's effective consent state",
+        "description": "BR-1: the effective status of each consent type is its **most recent** record, and **absence of any record is no consent** — never a default of granted. Admin or Super Admin (TD-2), scoped, with the TD-12 freshness assertion.",
+        "responses": {
+          "200": {
+            "description": "Effective state per consent type; null where no record exists."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8)."
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8)."
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for a student out of scope or nonexistent."
+          }
+        }
+      },
+      "post": {
+        "summary": "Record a consent decision declared in person",
+        "description": "§4.1a `staff_recorded` — the second capture method alongside the registration form. It is a first-class path, not a fallback: §2.2 records that many beneficiaries cannot complete a web form themselves. **Admin and Super Admin only (TD-2)** — a Teacher may view a student's data but may not declare a decision on a family's behalf. Writes a **new row, never an update** (§7 append/state-change only), so the history of what a family agreed to survives a later change. Fails closed when no `legal.consent_text_version` is configured (§2.3), because a decision that cannot be tied to a wording is not a record of consent. **Every change enqueues `consent.reevaluate` for each of the student's groups inside the same transaction** (§4.1a, TD-7, TD-4), so the group consent gate can never drift from the records.",
+        "responses": {
+          "201": {
+            "description": "Recorded; reports how many groups were queued for re-evaluation."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8)."
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN (TD-12 freshness or TD-2 role)."
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for a student out of scope or nonexistent."
+          },
+          "503": {
+            "description": "Error envelope (TD-3.8). consent text version not configured (§2.3)."
+          }
+        }
+      }
+    },
     "/students/{id}/social-profile": {
       "get": {
         "summary": "Read a student's social profile",

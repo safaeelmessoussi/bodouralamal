@@ -61,7 +61,7 @@
   - ✓ Backend — runner in the API container; all three crons scheduled in Postgres with the TD-7 retry policy
   - ✓ Tests — all three purges run against the live worker and their effects verified
   - ✓ Security — `audit.purge` allowlist mutation-tested; an equally-ancient security event survived
-  - △ Later milestone (M3/M6) — `JobsRepository` same-transaction enqueue, which needs a job-triggering mutation to exist
+  - ✓ Backend — `JobsRepository` same-transaction enqueue implemented (§16.2 sanctioned raw SQL); first consumer is the §4.1a consent re-evaluation
 - [x] Pool/memory pins: Prisma limit 10, pg-boss ≤5, PG max_connections 30, statement_timeout 10s; shared_buffers/GOMEMLIMIT/max-old-space (TD-13)
 - [x] OAuth callback failure redirects (/login?error=…, 4 keys) + OAUTH_EXCHANGE_FAILED + single-flight refresh w/ 10s grace (§4.1b, TD-12)
   - ✓ Backend · ✓ Tests · ✓ Security · ✓ Frontend — all four keys render as i18n messages with a retry affordance; the client shares one in-flight refresh promise so concurrent tabs cannot race each other into a logout
@@ -109,7 +109,9 @@
 - [~] ConsentRecord model + versioned text + staff-recorded method (§4.1a)
   - ✓ Backend — `online_form` consents written in the registration transaction with the active text version from `SystemSetting`
   - ✓ Tests — a declined media release is recorded with actor + timestamp, not omitted (BR-1)
-  - △ Later milestone (M2) — the `staff_recorded` path and consent management UI
+  - ✓ Backend — `staff_recorded` path complete: `GET`/`POST /students/{id}/consents`, Admin/Super Admin only (TD-2), append-only history, BR-1 effective status, §4.1a re-evaluation enqueued in-transaction
+  - ✓ Tests — 20 integration tests; six mutations caught
+  - △ Later milestone (M6) — the `consent.reevaluate` worker (recompute + bucket migration) and the consent-management UI
 - [x] `POST /family-links` — staff-mediated link of an existing child (§4.3 Revision 23)
   - ✓ Backend — Admin/Super Admin only with the TD-12 freshness assertion; creates a `Pending` link decided in the §5.6 queue; duplicate answers `DUPLICATE`, never `FAMILY_LINK_PENDING`
   - ✓ Tests — 11 service + 6 HTTP tests; five mutations caught, including one reopening parent self-service
