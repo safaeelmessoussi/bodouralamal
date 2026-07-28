@@ -1,37 +1,19 @@
 import { Button } from "@/components/ui/button"
 import { useNavigate } from "react-router-dom"
 import { Lightbulb, Users, BookOpen, Zap } from "lucide-react"
+import { ApplicationHeader } from "@/components/header"
 import { ar } from "@/i18n/ar"
 
 export default function LandingPage() {
   const navigate = useNavigate()
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background to-muted" dir="rtl">
-      {/* Header */}
-      <header className="sticky top-0 z-50 border-b border-border/50 bg-background/80 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
-          <nav className="flex items-center gap-4">
-            <Button
-              onClick={() => navigate("/login")}
-              variant="ghost"
-            >
-              {ar.login.title}
-            </Button>
-            <Button onClick={() => navigate("/register")}>
-              {ar.registration.title}
-            </Button>
-          </nav>
-          <div className="flex items-center gap-3">
-            <span className="text-xl font-bold text-foreground">{ar.common.appName}</span>
-            <img
-              src="https://hebbkx1anhila5yf.public.blob.vercel-storage.com/logo.png-kMUX9pf6eYIFbqTaPivPBbHvNW25ww.jpeg"
-              alt="Bodour Al-Amal"
-              className="h-10 w-10"
-            />
-          </div>
-        </div>
-      </header>
+    <div className="min-h-screen flex flex-col bg-gradient-to-br from-background to-muted" dir="rtl">
+      {/* Navigation Header */}
+      <ApplicationHeader sticky />
+      
+      {/* Main content */}
+      <div className="flex-1">
 
       {/* Hero */}
       <section className="mx-auto max-w-7xl px-4 py-20 text-center sm:px-6 lg:px-8">
@@ -98,12 +80,13 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Footer */}
-      <footer className="border-t border-border bg-muted/50">
-        <div className="mx-auto max-w-7xl px-4 py-8 text-center text-sm text-muted-foreground sm:px-6 lg:px-8">
-          <p>&copy; 2026 {ar.common.appName}</p>
-        </div>
-      </footer>
+        {/* Footer */}
+        <footer className="border-t border-border bg-muted/50">
+          <div className="mx-auto max-w-7xl px-4 py-8 text-center text-sm text-muted-foreground sm:px-6 lg:px-8">
+            <p>&copy; 2026 {ar.common.appName}</p>
+          </div>
+        </footer>
+      </div>
     </div>
   )
 }
