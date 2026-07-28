@@ -1,6 +1,6 @@
 import type { PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
-import { toHijri } from '../lib/hijri.js';
+import { baseHijri, sortMonthStarts, type MonthStart } from '../lib/hijri.js';
 import * as scope from '../policies/branch-scope.js';
 import type { RoleScope } from '../policies/branch-scope.js';
 import { teacherGroupIds } from '../policies/teacher-scope.js';
@@ -49,30 +49,49 @@ export interface Occurrence {
   visibility: string | null;
   branchId: string | null;
   /**
-   * The decorative Hijri overlay (§4.4, §5.7) with the admin day-offset already
-   * applied, so `DualDateDisplay` renders it without re-deriving anything. It
-   * is a label: nothing in scheduling or recurrence reads it back.
+   * The decorative Hijri overlay (§4.4, §5.7), read from the **official**
+   * Moroccan calendar recorded in `HijriMonthStart` (Revision 31). `null` when
+   * the month has not been recorded and published — `DualDateDisplay` then
+   * renders the Gregorian date alone rather than a computed guess.
    */
-  hijriDate: string;
-  hijriMonthArabic: string;
+  hijriDate: string | null;
+  hijriMonthArabic: string | null;
 }
-
-/** §5.7/TD-9: the Super-Admin-set day-offset, −2…+2. */
-const HIJRI_OFFSET_KEY = 'hijri.day_offset';
 
 /**
- * Reads the offset for this request. An absent or non-numeric row means 0 —
- * `/calendar` is public and must not fail over a decorative label; TD-9's range
- * is enforced where the setting is written, and `toHijri` clamps regardless.
+ * Loads the published official month starts that could cover this range
+ * (Revision 31). One query per request, not one per occurrence.
+ *
+ * The window is widened by a month on each side because resolution walks
+ * **backwards** to the month containing a date: a date early in `from`'s month
+ * belongs to a month that began before `from`, and the *following* start is
+ * what bounds the last month's length.
  */
-async function hijriOffset(prisma: Pick<PrismaClient, 'systemSetting'>): Promise<number> {
-  const row = await prisma.systemSetting.findUnique({ where: { key: HIJRI_OFFSET_KEY } });
-  return typeof row?.value === 'number' ? row.value : 0;
+async function publishedMonthStarts(
+  prisma: Pick<PrismaClient, 'hijriMonthStart'>,
+  from: Date,
+  to: Date,
+): Promise<MonthStart[]> {
+  const MARGIN_DAYS = 40;
+  const margin = MARGIN_DAYS * 86_400_000;
+  const rows = await prisma.hijriMonthStart.findMany({
+    where: {
+      deletedAt: null,
+      status: 'published',
+      gregorianStartDate: {
+        gte: new Date(from.getTime() - margin),
+        lte: new Date(to.getTime() + margin),
+      },
+    },
+    select: { hijriYear: true, hijriMonth: true, gregorianStartDate: true },
+  });
+  return sortMonthStarts(rows);
 }
 
-/** The overlay fields for one occurrence, offset already applied. */
-function hijri(date: Date, offset: number): Pick<Occurrence, 'hijriDate' | 'hijriMonthArabic'> {
-  const h = toHijri(date, offset);
+/** The overlay fields for one occurrence, resolved from official data. */
+function hijri(date: Date, starts: readonly MonthStart[]): Pick<Occurrence, 'hijriDate' | 'hijriMonthArabic'> {
+  const h = baseHijri(date, starts);
+  if (!h) return { hijriDate: null, hijriMonthArabic: null };
   return { hijriDate: h.iso, hijriMonthArabic: h.monthNameArabic };
 }
 
@@ -322,7 +341,7 @@ export async function readCalendar(
   });
 
   // One read per request, applied to every occurrence below.
-  const offset = await hijriOffset(prisma);
+  const monthStarts = await publishedMonthStarts(prisma, from, query.to);
 
   const out: Occurrence[] = [];
   for (const event of events) {
@@ -336,7 +355,7 @@ export async function readCalendar(
         endTime: hhmm(event.endTime),
         visibility: event.visibility,
         branchId: event.branchScopes[0]?.branchId ?? null,
-        ...hijri(date, offset),
+        ...hijri(date, monthStarts),
       });
     }
   }
@@ -373,7 +392,7 @@ export async function readCalendar(
           endTime: hhmm(group.endTime),
           visibility: null,
           branchId: group.branchId,
-          ...hijri(date, offset),
+          ...hijri(date, monthStarts),
         });
       }
     }

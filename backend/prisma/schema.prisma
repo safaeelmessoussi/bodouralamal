@@ -1149,6 +1149,54 @@ model Trash {
 /// Application-level runtime config (TD-13): branding, legal/consent text
 /// versions, Hijri day offset (−2…+2, CHECK in SQL), category default
 /// visibilities, per-level passing defaults.
+/// The official Moroccan Hijri calendar (SRS Revision 31, §4.4, §7).
+///
+/// One row per Hijri month, recording the Gregorian date on which that month
+/// officially began according to the Ministry of Habous and Islamic Affairs.
+/// This table is the SOLE source of every Hijri value the platform displays —
+/// no caller computes one astronomically, and there is no day-offset.
+///
+/// Rows arrive either by manual entry or, later, by an automated import; both
+/// write here, so the two paths cannot diverge.
+model HijriMonthStart {
+  id String @id @default(uuid()) @db.Uuid
+
+  hijriYear  Int @map("hijri_year")
+  /// 1–12.
+  hijriMonth Int @map("hijri_month")
+
+  /// Local calendar date (TD-11) — a `date`, never an instant.
+  gregorianStartDate DateTime @map("gregorian_start_date") @db.Date
+
+  /// Only `published` months are rendered anywhere, so a year can be entered
+  /// progressively and reviewed before it becomes visible.
+  status HijriMonthStatus @default(draft)
+
+  /// The provenance of the row: `manual`, or an importer's source identifier.
+  source String @default("manual") @db.VarChar(80)
+
+  version Int @default(0)
+
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedById String?   @map("updated_by") @db.Uuid
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  deletedById String?   @map("deleted_by") @db.Uuid
+
+  @@unique([hijriYear, hijriMonth])
+  /// Resolution walks backwards from a Gregorian date to the month containing
+  /// it, so this is the index that read path uses.
+  @@index([gregorianStartDate])
+  @@map("hijri_month_start")
+}
+
+enum HijriMonthStatus {
+  draft
+  published
+
+  @@map("hijri_month_status")
+}
+
 model SystemSetting {
   key   String @id @db.VarChar(80)
   value Json   @db.JsonB

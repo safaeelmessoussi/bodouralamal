@@ -1,97 +1,170 @@
 import { describe, expect, it } from 'vitest';
 
-import { MAX_OFFSET, MIN_OFFSET, toHijri } from './hijri.js';
+import {
+  MAX_HIJRI_YEAR,
+  MIN_HIJRI_YEAR,
+  baseHijri,
+  hijriMonthNameArabic,
+  sortMonthStarts,
+  type MonthStart,
+} from './hijri.js';
 
 /**
- * Hijri overlay (§4.4, §5.7, TD-9).
+ * The Revision-31 resolution seam. Pure computation, so these are unit tests.
  *
- * Pure computation, so these are unit tests. The properties that matter are
- * that the offset shifts whole days **across month and year boundaries**, and
- * that a bad offset cannot take the public calendar down.
+ * The dates below are the **officially announced** Moroccan ones: the Ministry
+ * of Habous fixed 1 Muharram 1448 to Wednesday 17 June 2026, where Umm al-Qura
+ * gives 16 June. That one-day divergence is the whole reason this table exists,
+ * so it is what the fixtures encode.
  */
 const day = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
 
-describe('toHijri — the algorithmic base', () => {
-  it('converts a Gregorian date to a Hijri date with an Arabic month name', () => {
-    const h = toHijri(day('2026-02-18'));
+const start = (year: number, month: number, iso: string): MonthStart => ({
+  hijriYear: year,
+  hijriMonth: month,
+  gregorianStartDate: day(iso),
+});
 
-    expect(h.year).toBe(1447);
-    expect(h.month).toBe(9);
-    expect(h.day).toBe(1);
-    expect(h.monthNameArabic).toBe('رمضان');
-    expect(h.iso).toBe('1447-09-01');
+/** Dhu al-Hijja 1447 → Safar 1448, with the officially announced new year. */
+const OFFICIAL: MonthStart[] = [
+  start(1447, 12, '2026-05-18'),
+  start(1448, 1, '2026-06-17'),
+  start(1448, 2, '2026-07-16'),
+];
+
+describe('baseHijri — resolution from recorded official data', () => {
+  it('resolves the first day of a recorded month', () => {
+    expect(baseHijri(day('2026-06-17'), OFFICIAL)).toMatchObject({
+      year: 1448,
+      month: 1,
+      day: 1,
+      iso: '1448-01-01',
+      monthNameArabic: 'محرم',
+    });
+  });
+
+  it('counts days forward within the month', () => {
+    expect(baseHijri(day('2026-06-18'), OFFICIAL)!.day).toBe(2);
+    expect(baseHijri(day('2026-07-15'), OFFICIAL)!.iso).toBe('1448-01-29');
+  });
+
+  it('rolls to the next month exactly on its official start', () => {
+    // The boundary is the whole point: one day earlier is still Muharram.
+    expect(baseHijri(day('2026-07-15'), OFFICIAL)!.month).toBe(1);
+    expect(baseHijri(day('2026-07-16'), OFFICIAL)!.month).toBe(2);
+  });
+
+  it('crosses the Hijri year boundary using the recorded dates', () => {
+    expect(baseHijri(day('2026-06-16'), OFFICIAL)).toMatchObject({ year: 1447, month: 12 });
+    expect(baseHijri(day('2026-06-17'), OFFICIAL)).toMatchObject({ year: 1448, month: 1 });
+  });
+
+  it('reproduces the OFFICIAL date, not the algorithmic one', () => {
+    // Umm al-Qura puts 1 Muharram 1448 on 16 June 2026; Morocco announced the
+    // 17th. On the 16th the official answer is still Dhu al-Hijja 1447 — if this
+    // ever returns 1448-01-01, an algorithm has crept back in.
+    expect(baseHijri(day('2026-06-16'), OFFICIAL)!.iso).not.toBe('1448-01-01');
+    expect(baseHijri(day('2026-06-16'), OFFICIAL)!.year).toBe(1447);
   });
 
   it('zero-pads the iso form so it sorts and compares as text', () => {
-    expect(toHijri(day('2026-02-18')).iso).toBe('1447-09-01');
-    expect(toHijri(day('2026-02-18')).iso).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-  });
-
-  it('advances by one Hijri day for each Gregorian day', () => {
-    expect(toHijri(day('2026-02-19')).day).toBe(2);
-    expect(toHijri(day('2026-02-20')).day).toBe(3);
+    expect(baseHijri(day('2026-06-17'), OFFICIAL)!.iso).toMatch(/^\d{4}-\d{2}-\d{2}$/);
   });
 });
 
-describe('the admin day-offset (§4.4 Morocco tuning)', () => {
-  it('shifts the result by whole days in both directions', () => {
-    // Morocco fixes months by local sighting and regularly starts Ramadan a day
-    // after Umm al-Qura — which is precisely what the offset exists to express.
-    expect(toHijri(day('2026-02-19'), -1).iso).toBe('1447-09-01');
-    expect(toHijri(day('2026-02-17'), 1).iso).toBe('1447-09-01');
+describe('baseHijri — silence where the official answer is unknown', () => {
+  it('returns null before the earliest recorded month', () => {
+    expect(baseHijri(day('2026-05-17'), OFFICIAL)).toBeNull();
   });
 
-  it('crosses a Hijri MONTH boundary correctly', () => {
-    // The reason the offset is applied to the Gregorian input: stepping back
-    // from 1 Ramadan must land on the last day of Sha'ban, whose length differs
-    // month to month. Shifting the Hijri day number would have to know it.
-    const back = toHijri(day('2026-02-18'), -1);
-
-    expect(back.month).toBe(8);
-    expect(back.monthNameArabic).toBe('شعبان');
-    expect(back.day).toBeGreaterThanOrEqual(29);
+  it('returns null when there is no recorded data at all', () => {
+    expect(baseHijri(day('2026-06-17'), [])).toBeNull();
   });
 
-  it('crosses a Hijri YEAR boundary correctly', () => {
-    // 2026-06-16 is 1 Muharram 1448. Stepping back a day must land in Dhu
-    // al-Hijja **1447** — not on day 0 of the same year.
-    expect(toHijri(day('2026-06-16')).iso).toBe('1448-01-01');
-
-    const back = toHijri(day('2026-06-16'), -1);
-    expect(back.year).toBe(1447);
-    expect(back.month).toBe(12);
-    expect(back.monthNameArabic).toBe('ذو الحجة');
-
-    // And forward across it from the other side.
-    expect(toHijri(day('2026-06-15'), 1).iso).toBe('1448-01-01');
+  it('resolves days 1–29 of a trailing month, whose length is guaranteed', () => {
+    // Every Hijri month is 29 or 30 days, so with no following start recorded
+    // the first 29 days are still certain.
+    const trailing = [start(1448, 2, '2026-07-16')];
+    expect(baseHijri(day('2026-07-16'), trailing)!.day).toBe(1);
+    expect(baseHijri(day('2026-08-13'), trailing)!.day).toBe(29);
   });
 
-  it('offset 0 is the untuned base', () => {
-    expect(toHijri(day('2026-02-18'), 0).iso).toBe(toHijri(day('2026-02-18')).iso);
+  it('returns null past day 29 of a trailing month', () => {
+    // Day 30 depends on the NEXT sighting, which has not happened. Guessing here
+    // is precisely what Revision 31 forbids.
+    const trailing = [start(1448, 2, '2026-07-16')];
+    expect(baseHijri(day('2026-08-14'), trailing)).toBeNull();
+    expect(baseHijri(day('2026-09-20'), trailing)).toBeNull();
+  });
+
+  it('resolves day 30 once the FOLLOWING month is recorded', () => {
+    // The next start is what proves the month ran 30 days rather than 29.
+    const bounded = [start(1448, 2, '2026-07-16'), start(1448, 3, '2026-08-15')];
+    expect(baseHijri(day('2026-08-14'), bounded)!.day).toBe(30);
+    expect(baseHijri(day('2026-08-15'), bounded)!.month).toBe(3);
+  });
+
+  it('will not claim day 30 across a GAP, where 29 may have been the last day', () => {
+    // Muharram and Rabi al-Awwal recorded, Safar missing. 29 days into Muharram
+    // is either 30 Muharram or 1 Safar, and only the missing month start says
+    // which — so the honest answer is nothing.
+    const gapped = [start(1448, 1, '2026-06-17'), start(1448, 3, '2026-08-15')];
+    expect(baseHijri(day('2026-07-15'), gapped)!.day).toBe(29);
+    expect(baseHijri(day('2026-07-16'), gapped)).toBeNull();
+  });
+
+  it('claims day 30 only when the next CONSECUTIVE month is recorded', () => {
+    const consecutive = [start(1448, 1, '2026-06-17'), start(1448, 2, '2026-07-17')];
+    expect(baseHijri(day('2026-07-16'), consecutive)!.day).toBe(30);
+  });
+
+  it('treats month 12 → month 1 of the next year as consecutive', () => {
+    const across = [start(1447, 12, '2026-05-18'), start(1448, 1, '2026-06-17')];
+    expect(baseHijri(day('2026-06-16'), across)!.iso).toBe('1447-12-30');
+  });
+
+  it('but NOT month 12 → month 2, which skips a month across the boundary', () => {
+    // A year-boundary neighbour is not automatically the consecutive month:
+    // Muharram is missing here, so 30 Dhu al-Hijja is unproven.
+    const skipped = [start(1447, 12, '2026-05-18'), start(1448, 2, '2026-07-16')];
+    expect(baseHijri(day('2026-06-15'), skipped)!.day).toBe(29);
+    expect(baseHijri(day('2026-06-16'), skipped)).toBeNull();
+  });
+
+  it('leaves a gap unresolved rather than stretching the month before it', () => {
+    // Muharram recorded, Safar missing, Rabi al-Awwal recorded: dates inside the
+    // gap must not be attributed to Muharram.
+    const gapped = [start(1448, 1, '2026-06-17'), start(1448, 3, '2026-08-15')];
+    expect(baseHijri(day('2026-07-20'), gapped)).toBeNull();
   });
 });
 
-describe('a bad offset cannot break the public calendar', () => {
-  it('clamps beyond TD-9 range rather than throwing', () => {
-    // /calendar is anonymous-reachable; a corrupt settings row must degrade to
-    // the nearest legal offset, not a 500 on a decorative label.
-    expect(toHijri(day('2026-02-18'), 99).iso).toBe(toHijri(day('2026-02-18'), MAX_OFFSET).iso);
-    expect(toHijri(day('2026-02-18'), -99).iso).toBe(toHijri(day('2026-02-18'), MIN_OFFSET).iso);
+describe('sortMonthStarts and month names', () => {
+  it('orders rows by Gregorian start date', () => {
+    const shuffled = [OFFICIAL[2]!, OFFICIAL[0]!, OFFICIAL[1]!];
+    expect(sortMonthStarts(shuffled).map((s) => s.hijriMonth)).toEqual([12, 1, 2]);
   });
 
-  it('treats a non-finite offset as NO offset, not as a clamp', () => {
-    // NaN and Infinity carry no direction to clamp toward, so the safe reading
-    // is "untuned" rather than a guess at ±2.
-    expect(toHijri(day('2026-02-18'), Number.NaN).iso).toBe('1447-09-01');
-    expect(toHijri(day('2026-02-18'), Number.POSITIVE_INFINITY).iso).toBe('1447-09-01');
-    expect(toHijri(day('2026-02-18'), Number.NEGATIVE_INFINITY).iso).toBe('1447-09-01');
+  it('does not mutate its input', () => {
+    const shuffled = [OFFICIAL[2]!, OFFICIAL[0]!];
+    sortMonthStarts(shuffled);
+    expect(shuffled[0]!.hijriMonth).toBe(2);
   });
 
-  it('truncates a fractional offset to whole days', () => {
-    expect(toHijri(day('2026-02-18'), 1.9).iso).toBe(toHijri(day('2026-02-18'), 1).iso);
+  it('resolution depends on the sorted order', () => {
+    const shuffled = [OFFICIAL[2]!, OFFICIAL[0]!, OFFICIAL[1]!];
+    expect(baseHijri(day('2026-06-17'), sortMonthStarts(shuffled))!.iso).toBe('1448-01-01');
   });
 
-  it('TD-9 pins the range at −2…+2', () => {
-    expect([MIN_OFFSET, MAX_OFFSET]).toEqual([-2, 2]);
+  it('names all twelve months in Arabic and nothing outside the range', () => {
+    expect(hijriMonthNameArabic(1)).toBe('محرم');
+    expect(hijriMonthNameArabic(9)).toBe('رمضان');
+    expect(hijriMonthNameArabic(12)).toBe('ذو الحجة');
+    expect(hijriMonthNameArabic(0)).toBe('');
+    expect(hijriMonthNameArabic(13)).toBe('');
+  });
+
+  it('TD-9 pins the Hijri year range', () => {
+    expect([MIN_HIJRI_YEAR, MAX_HIJRI_YEAR]).toEqual([1300, 1600]);
   });
 });

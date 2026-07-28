@@ -23,8 +23,8 @@ interface Row {
   date: string;
   start_time: string | null;
   visibility: string | null;
-  hijri_date: string;
-  hijri_month_ar: string;
+  hijri_date: string | null;
+  hijri_month_ar: string | null;
 }
 interface Body {
   error?: { code?: string };
@@ -65,6 +65,7 @@ async function clear(): Promise<void> {
   await prisma.userBranchRole.deleteMany({ where: { userId: { in: userIds } } });
   await prisma.user.deleteMany({ where: { id: { in: userIds } } });
   await prisma.branch.deleteMany({ where: { name: { startsWith: TAG } } });
+  await prisma.hijriMonthStart.deleteMany({ where: { hijriYear: 1447 } });
 }
 
 /** Events created directly: this suite tests the READ path, not creation. */
@@ -108,9 +109,26 @@ describe('GET /calendar — public access', () => {
     expect(rows.map((r) => r.visibility)).toEqual(['public']);
     // Wall-clock time survives the boundary (TD-11).
     expect(rows[0]!.start_time).toBe('14:00');
-    // §4.4/§5.7: the decorative Hijri overlay reaches the client already
-    // offset, so `DualDateDisplay` derives nothing. 2026-06-15 = 29 Dhu al-Hijja.
+    // Revision 31: with no official month recorded, the overlay is absent
+    // rather than computed. The Gregorian date still renders.
     expect(rows[0]!.date).toBe('2026-06-15');
+    expect(rows[0]!.hijri_date).toBeNull();
+    expect(rows[0]!.hijri_month_ar).toBeNull();
+  });
+
+  it('carries the official Hijri overlay once the month is published', async () => {
+    // The officially announced Moroccan date: 1 Dhu al-Hijja 1447 = 18 May 2026.
+    await prisma.hijriMonthStart.create({
+      data: {
+        hijriYear: 1447,
+        hijriMonth: 12,
+        gregorianStartDate: new Date('2026-05-18T00:00:00.000Z'),
+        status: 'published',
+      },
+    });
+
+    const rows = mine((await call(`/calendar?${RANGE}`)).body);
+
     expect(rows[0]!.hijri_date).toBe('1447-12-29');
     expect(rows[0]!.hijri_month_ar).toBe('ذو الحجة');
   });

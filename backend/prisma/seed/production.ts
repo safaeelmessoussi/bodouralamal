@@ -194,7 +194,6 @@ async function seedQuranSurahs(): Promise<void> {
 async function seedSystemSettings(categoryIds: Map<string, string>): Promise<void> {
   const settings: { key: string; value: unknown }[] = [
     // Hijri overlay offset, constrained to −2…+2 by a CHECK (TD-6).
-    { key: 'hijri.day_offset', value: 0 },
     // Association grading scale: 10/20 default pass mark, held in basis points
     // so comparisons stay integer-only (§4.6, Revision 14).
     { key: 'grading.display_scale', value: 20 },

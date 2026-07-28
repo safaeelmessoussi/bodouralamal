@@ -209,13 +209,17 @@
 - [~] Operational-start-date graying in branch-scoped views
   - ✓ Backend — nothing before a branch's `operational_start_date` is returned in a branch-scoped read
   - △ Remaining — the visual graying itself is a frontend concern
-- [~] Hijri overlay: Morocco-tuned source + admin offset (−2..+2) + DualDateDisplay (§4.4, §5.7)
-  - ✓ Backend — `src/lib/hijri.ts` per §16.1; the offset is applied to the **Gregorian** input so it crosses Hijri month and year boundaries correctly
-  - ✓ Calendar — every occurrence (group and event alike) carries `hijri_date` and `hijri_month_ar` with the offset already applied; the Gregorian date never moves (TD-11)
-  - ✓ Tests — 11 unit + 4 integration; seven mutations caught; §18's *"Hijri overlay renders with admin offset applied"* check is green
-  - ⚠ **BLOCKED, needs a Document Owner decision** — the offset can be **read but not written**: §5.7 and §14.1 define the `/superadmin/settings` screen and TD-2 grants Super Admin *"Manage system settings … Hijri offset"*, but **TD-3 registers no settings endpoint at all**, and §3.1's gate forbids inventing one. Structurally identical to Revision 16's F1 (`POST /auth/refresh`). The seeded default 0 is in effect until this is resolved
-  - ⚠ **"Morocco-tuned" currently means Umm al-Qura + offset.** The Ministry of Habous fixes months by local sighting; no authoritative month-start table is available to this repository. `baseHijri()` is the single seam where such a table would replace the algorithm, with no caller changing
-  - △ Frontend — `DualDateDisplay` (§14.3) consumes the fields; no client-side conversion is needed
+- [x] Hijri overlay: the official Moroccan calendar (`HijriMonthStart`) + Super Admin management screen (§4.4, §5.7, Revision 31)
+  - ✓ SRS **Revision 31** — the official Ministry of Habous calendar is the source of truth; the global ±2-day offset is **removed** from the model, `SystemSetting`, TD-9 and every screen
+  - ✓ Investigation (as instructed) — **no official machine-readable source exists**: the Ministry publishes each month start as a prose news announcement, with no API, feed or dataset, and because months are fixed by sighting on the evening of the 29th a year cannot be published in advance. Manual entry is therefore the primary path, not a fallback
+  - ✓ Model — `HijriMonthStart` (year, month, Gregorian start, draft/published, source, version, audit/soft-delete) + TD-9 CHECK constraints; the offset constraint and its settings row are migrated away with a TD-6b contract-phase tag
+  - ✓ `baseHijri()` is the single seam — every consumer reads recorded data; **nothing computes a Hijri date astronomically**
+  - ✓ Endpoints — `GET /admin/hijri-calendar`, `PUT /admin/hijri-calendar/{year}/{month}` (TD-15), `POST …/{year}/publish`, `GET …/{year}/history`, `POST …/import`; Super Admin only
+  - ✓ Import is an **integration point**: an adapter writes through the same service a Super Admin uses, so imported and hand-entered rows share one execution path; reports `NOT_CONFIGURED` until one is wired, and audits the attempt either way
+  - ✓ Tests — 21 unit + 30 integration/HTTP; **twelve mutations caught**, two of which exposed real defects
+  - ✓ §18 check green — the overlay reproduces the recorded official calendar, and an unpublished or unrecorded month renders nothing
+  - △ Frontend — the `/superadmin/hijri-calendar` screen and `DualDateDisplay` (renders the Gregorian date alone when `hijri_date` is null)
+  - ⚠ For the Document Owner — a **recurring monthly** owner task now exists (§2.3): each month must be entered and published after the Ministry announces it, or dates in it carry no Hijri label
 - [ ] §18 Scheduling & Calendar checklist green (incl. Ramadan DST regression test)
 
 ## M4 — Quran Progress

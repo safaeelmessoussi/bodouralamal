@@ -65,6 +65,13 @@ POST /events                                  # TD-3.4, §4.4
 PATCH /events/{id}                            # TD-3.4, §4.4
 DELETE /events/{id}                           # TD-3.4, TD-5
 GET /admin/branches/{id}/event-backfill       # §4.4 "listing applicable global/recurring events to attach"
+
+# ── Official Moroccan Hijri calendar (TD-3.4, Revision 31)
+GET /admin/hijri-calendar                     # TD-3.4 R31, ?year=
+PUT /admin/hijri-calendar/{year}/{month}      # TD-3.4 R31, TD-15
+POST /admin/hijri-calendar/{year}/publish     # TD-3.4 R31
+GET /admin/hijri-calendar/{year}/history      # TD-3.4 R31, TD-8
+POST /admin/hijri-calendar/import             # TD-3.4 R31 integration point
 POST /admin/branches/{id}/event-backfill      # TD-3.4, §4.4
 
 # ── Branches & Rooms CRUD (Revision 21: documented by the §5.6 screen and the

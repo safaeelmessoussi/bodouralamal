@@ -405,78 +405,109 @@ describe('§4.4 — operational boundary and range guards', () => {
   });
 });
 
-describe('§4.4/§5.7 — the decorative Hijri overlay with admin offset', () => {
-  const HIJRI_KEY = 'hijri.day_offset';
+describe('§4.4/§5.7 — the Hijri overlay from official recorded data (Revision 31)', () => {
+  /** The officially announced Moroccan dates: 1 Muharram 1448 = 17 June 2026. */
+  const OFFICIAL: [number, number, string][] = [
+    [1447, 12, '2026-05-18'],
+    [1448, 1, '2026-06-17'],
+    [1448, 2, '2026-07-16'],
+  ];
 
-  async function setOffset(value: number): Promise<void> {
-    await prisma.systemSetting.upsert({
-      where: { key: HIJRI_KEY },
-      update: { value },
-      create: { key: HIJRI_KEY, value },
-    });
+  async function record(published: boolean): Promise<void> {
+    for (const [y, m, iso] of OFFICIAL) {
+      await prisma.hijriMonthStart.create({
+        data: {
+          hijriYear: y,
+          hijriMonth: m,
+          gregorianStartDate: day(iso),
+          status: published ? 'published' : 'draft',
+        },
+      });
+    }
   }
 
-  // The suite shares one database and the offset is global, so it is always
-  // returned to its §17 seeded default.
-  afterEach(async () => {
-    await setOffset(0);
-  });
+  async function clearMonths(): Promise<void> {
+    await prisma.hijriMonthStart.deleteMany({ where: { hijriYear: { in: [1447, 1448] } } });
+  }
 
-  it('every occurrence carries a Hijri label alongside its Gregorian date', async () => {
-    await setOffset(0);
-    await makeEvent('public', { startDate: day('2026-06-15') });
+  beforeEach(clearMonths);
+  afterEach(clearMonths);
 
-    const rows = scoped(await readCalendar(prisma, null, range));
+  it('labels occurrences from the recorded official calendar', async () => {
+    await record(true);
+    await makeEvent('public', { startDate: day('2026-06-20') });
+
+    const rows = scoped(await readCalendar(prisma, null, { from: day('2026-06-01'), to: day('2026-06-30') }));
     const event = rows.find((r) => r.kind === 'event');
 
-    // 2026-06-15 is 29 Dhu al-Hijja 1447.
-    expect(event!.hijriDate).toBe('1447-12-29');
-    expect(event!.hijriMonthArabic).toBe('ذو الحجة');
+    // 20 June is the fourth day of Muharram, counting from the announced 17th.
+    expect(event!.hijriDate).toBe('1448-01-04');
+    expect(event!.hijriMonthArabic).toBe('محرم');
     // Decorative only (§4.4): the Gregorian date is untouched.
-    expect(event!.date).toBe('2026-06-15');
+    expect(event!.date).toBe('2026-06-20');
   });
 
-  it('§18: the admin offset is applied to what the calendar renders', async () => {
-    await makeEvent('public', { startDate: day('2026-06-15') });
+  it('reproduces the OFFICIAL date rather than the algorithmic one', async () => {
+    // Umm al-Qura puts 1 Muharram 1448 on 16 June; Morocco announced the 17th.
+    // On the 16th the official answer is still Dhu al-Hijja 1447. If this ever
+    // reads 1448-01-01, an algorithm has crept back in.
+    await record(true);
+    await makeEvent('public', { startDate: day('2026-06-16') });
 
-    await setOffset(1);
-    const forward = scoped(await readCalendar(prisma, null, range)).find((r) => r.kind === 'event');
-    // +1 crosses into the new Hijri year — the boundary the offset must handle.
-    expect(forward!.hijriDate).toBe('1448-01-01');
-    expect(forward!.hijriMonthArabic).toBe('محرم');
+    const rows = scoped(await readCalendar(prisma, null, { from: day('2026-06-01'), to: day('2026-06-30') }));
+    const event = rows.find((r) => r.kind === 'event');
 
-    await setOffset(-1);
-    const back = scoped(await readCalendar(prisma, null, range)).find((r) => r.kind === 'event');
-    expect(back!.hijriDate).toBe('1447-12-28');
-
-    // The Gregorian date never moves: the offset tunes the overlay, not the
-    // schedule (TD-11).
-    expect(forward!.date).toBe('2026-06-15');
-    expect(back!.date).toBe('2026-06-15');
+    expect(event!.hijriDate).toBe('1447-12-30');
+    expect(event!.hijriMonthArabic).toBe('ذو الحجة');
   });
 
-  it('a missing offset row leaves the public calendar working, untuned', async () => {
-    // /calendar is anonymous-reachable; a decorative label must never be able
-    // to fail the whole read.
-    await prisma.systemSetting.deleteMany({ where: { key: HIJRI_KEY } });
-    await makeEvent('public', { startDate: day('2026-06-15') });
+  it('renders NO overlay for a month that is recorded but not yet published', async () => {
+    await record(false);
+    await makeEvent('public', { startDate: day('2026-06-20') });
 
-    const rows = scoped(await readCalendar(prisma, null, range));
-    expect(rows.find((r) => r.kind === 'event')!.hijriDate).toBe('1447-12-29');
+    const rows = scoped(await readCalendar(prisma, null, { from: day('2026-06-01'), to: day('2026-06-30') }));
+    const event = rows.find((r) => r.kind === 'event');
+
+    // Publishing is what makes a month visible; a draft must not leak out.
+    expect(event!.hijriDate).toBeNull();
+    expect(event!.hijriMonthArabic).toBeNull();
+  });
+
+  it('renders NO overlay for a month the Ministry has not announced', async () => {
+    // §18/Revision 31: silence where the official answer is genuinely unknown,
+    // never a computed guess. The Gregorian date still renders.
+    await makeEvent('public', { startDate: day('2026-06-20') });
+
+    const rows = scoped(await readCalendar(prisma, null, { from: day('2026-06-01'), to: day('2026-06-30') }));
+    const event = rows.find((r) => r.kind === 'event');
+
+    expect(event!.hijriDate).toBeNull();
+    expect(event!.date).toBe('2026-06-20');
   });
 
   it('group occurrences carry the overlay too, not only events', async () => {
-    await setOffset(0);
+    await record(true);
     const branchId = await makeBranch('مراكش');
     await makeGroup(branchId);
     const student = await person('طالبة');
 
     const rows = scoped(
-      await readCalendar(prisma, viewer(student, ['student']), range),
+      await readCalendar(prisma, viewer(student, ['student']), {
+        from: day('2026-06-18'),
+        to: day('2026-06-30'),
+      }),
     );
     const session = rows.find((r) => r.kind === 'group');
 
-    expect(session!.hijriDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
-    expect(session!.hijriMonthArabic).not.toBe('');
+    expect(session!.hijriDate).toMatch(/^1448-01-\d{2}$/);
+    expect(session!.hijriMonthArabic).toBe('محرم');
+  });
+
+  it('crosses the Hijri year boundary on the recorded date', async () => {
+    await record(true);
+    await makeEvent('public', { startDate: day('2026-06-17') });
+
+    const rows = scoped(await readCalendar(prisma, null, { from: day('2026-06-01'), to: day('2026-06-30') }));
+    expect(rows.find((r) => r.kind === 'event')!.hijriDate).toBe('1448-01-01');
   });
 });

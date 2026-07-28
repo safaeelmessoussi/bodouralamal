@@ -6,6 +6,7 @@ import * as familyLinks from './controllers/family-link.controller.js';
 import * as consents from './controllers/consent.controller.js';
 import * as calendar from './controllers/calendar.controller.js';
 import * as events from './controllers/event.controller.js';
+import * as hijri from './controllers/hijri-calendar.controller.js';
 import * as groups from './controllers/group.controller.js';
 import * as socialProfile from './controllers/social-profile.controller.js';
 import * as users from './controllers/user.controller.js';
@@ -102,6 +103,14 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
   guarded.post('/admin/approvals/:id/reject', approvals.reject(prisma));
   guarded.post('/events', events.create(prisma));
   guarded.patch('/events/:id', events.update(prisma));
+
+  // §5.7/TD-3.4 (Revision 31) — the official Moroccan Hijri calendar. Super
+  // Admin only, enforced in the service: the URL prefix is not the boundary.
+  guarded.get('/admin/hijri-calendar', hijri.list(prisma));
+  guarded.put('/admin/hijri-calendar/:year/:month', hijri.setMonth(prisma));
+  guarded.post('/admin/hijri-calendar/:year/publish', hijri.publish(prisma));
+  guarded.get('/admin/hijri-calendar/:year/history', hijri.history(prisma));
+  guarded.post('/admin/hijri-calendar/import', hijri.runImport(prisma));
   guarded.delete('/events/:id', events.remove(prisma));
   guarded.get('/admin/branches/:id/event-backfill', events.listBackfill(prisma));
   guarded.post('/admin/branches/:id/event-backfill', events.applyBackfill(prisma));

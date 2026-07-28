@@ -1,25 +1,24 @@
 /**
- * Hijri overlay — §4.4, §5.7, §16.1 (`/lib … hijri`), TD-9.
+ * Hijri overlay — SRS Revision 31, §4.4, §5.7, §16.1 (`/lib … hijri`), TD-9.
  *
  * §4.4 is explicit that this is **decorative**: every schedule, recurrence and
  * comparison in the system is Gregorian on Moroccan wall-clock time (TD-11).
  * Nothing here participates in scheduling arithmetic — it renders a second
  * label beside a date that has already been decided.
  *
- * **On "Morocco-tuned" (§4.4).** Morocco's Ministry of Habous fixes each Hijri
- * month by **local moon sighting**, so it regularly differs from Umm al-Qura
- * and from generic library algorithms — the SRS says exactly this, and answers
- * it with the **admin day-offset (−2…+2)**. This module therefore computes an
- * algorithmic base and applies that offset:
+ * **Revision 31: the official Moroccan calendar is the source of truth.** The
+ * Ministry of Habous fixes each month by local moon sighting, so it regularly
+ * differs from Umm al-Qura and from every library algorithm — and it differs by
+ * a margin that varies month to month, which is why the former global ±2-day
+ * offset was removed rather than retuned. Values come from recorded official
+ * data in `HijriMonthStart`, and **nothing here computes a Hijri date
+ * astronomically**. `baseHijri` is the single seam every consumer goes through.
  *
- *   - the base is ICU's `islamic-umalqura`, the closest widely-available
- *     algorithmic approximation, isolated in `baseHijri` below;
- *   - the offset is the tuning knob §4.4 mandates, and shifts the result by
- *     whole days.
- *
- * A genuinely Morocco-tuned base would be a table of observed month starts
- * published by the Ministry. `baseHijri` is the single seam where such a table
- * would replace the algorithm, and no caller would change.
+ * **A month that is not recorded and published has no overlay.** The honest
+ * answer to "what is the official Hijri date" for a month the Ministry has not
+ * yet announced is silence, not a guess — fabricating one would defeat the
+ * purpose of this revision. Callers receive `null` and render the Gregorian
+ * date alone (§14.3 `DualDateDisplay`).
  */
 
 /** Hijri month names, ar. Fixed here rather than taken from ICU locale data so
@@ -39,6 +38,27 @@ const MONTH_NAMES_AR = [
   'ذو الحجة',
 ] as const;
 
+export const MONTHS_IN_YEAR = 12;
+
+/** TD-9 (Revision 31): the range a Hijri year must fall in. */
+export const MIN_HIJRI_YEAR = 1300;
+export const MAX_HIJRI_YEAR = 1600;
+
+export function hijriMonthNameArabic(month: number): string {
+  return MONTH_NAMES_AR[month - 1] ?? '';
+}
+
+/**
+ * One recorded official month start. Deliberately a plain shape rather than the
+ * Prisma row: this module is pure, and the caller decides what to load.
+ */
+export interface MonthStart {
+  hijriYear: number;
+  hijriMonth: number;
+  /** The Gregorian date the month officially began, at UTC midnight. */
+  gregorianStartDate: Date;
+}
+
 export interface HijriDate {
   year: number;
   /** 1–12. */
@@ -50,60 +70,79 @@ export interface HijriDate {
   iso: string;
 }
 
-/** TD-9: `SystemSetting` Hijri offset: `-2 <= value <= 2`. */
-export const MIN_OFFSET = -2;
-export const MAX_OFFSET = 2;
-
 const MS_PER_DAY = 86_400_000;
 
-const formatter = new Intl.DateTimeFormat('en-u-ca-islamic-umalqura-nu-latn', {
-  timeZone: 'UTC',
-  year: 'numeric',
-  month: 'numeric',
-  day: 'numeric',
-});
+/** Every Hijri month reaches 29 days; the 30th depends on the next sighting. */
+const CERTAIN_MONTH_LENGTH = 29;
 
-/**
- * The algorithmic base, before any Morocco tuning. The one seam a real
- * Ministry-of-Habous month-start table would replace.
- */
-function baseHijri(gregorian: Date): { year: number; month: number; day: number } {
-  const parts = formatter.formatToParts(gregorian);
-  const part = (type: string): number => {
-    const found = parts.find((p) => p.type === type);
-    if (!found) throw new Error(`hijri: ICU returned no ${type} part`);
-    // The year arrives as "1447" and, in some ICU builds, with an era suffix.
-    return Number.parseInt(found.value, 10);
-  };
-  return { year: part('year'), month: part('month'), day: part('day') };
+/** Whether `next` is the month immediately after `current` in the Hijri year. */
+function isConsecutive(current: MonthStart, next: MonthStart | undefined): boolean {
+  if (!next) return false;
+  if (current.hijriMonth === MONTHS_IN_YEAR) {
+    return next.hijriYear === current.hijriYear + 1 && next.hijriMonth === 1;
+  }
+  return next.hijriYear === current.hijriYear && next.hijriMonth === current.hijriMonth + 1;
+}
+
+/** Whole days between two dates, both taken at UTC midnight. */
+function daysBetween(from: Date, to: Date): number {
+  return Math.round((to.getTime() - from.getTime()) / MS_PER_DAY);
 }
 
 /**
- * Converts a Gregorian calendar date to its Hijri overlay.
+ * **The single implementation seam** (Revision 31). Every Hijri value in the
+ * platform resolves through here, and here reads recorded official data only.
  *
- * `dayOffset` is applied by shifting the **Gregorian** input, which is what
- * makes the arithmetic correct across month and year boundaries: an offset of
- * −1 on the first of a Hijri month must land on the last day of the previous
- * one, whose length differs from month to month. Shifting the Hijri day number
- * directly would have to know that length; shifting the input does not.
+ * `starts` must be the **published** month starts, sorted ascending by
+ * `gregorianStartDate`. Resolution walks back to the latest month that began on
+ * or before `gregorian`, then counts days.
  *
- * Out-of-range and non-finite offsets are **clamped**, not rejected: this feeds
- * the public calendar, and a bad settings row must not take a decorative label
- * down with it. TD-9's range is enforced where the setting is *written*.
+ * Returns `null` when the date falls outside recorded data in either direction:
+ * before the earliest recorded month, or on or after the day the *next*
+ * unrecorded month would begin. The second case is the subtle one — knowing
+ * when a month started tells you nothing about when it ends, because that
+ * depends on the *next* sighting. A month is therefore only safe to resolve
+ * while the following month is also recorded, or while the date is within the
+ * 29-day floor every Hijri month is guaranteed to reach.
  */
-export function toHijri(gregorian: Date, dayOffset = 0): HijriDate {
-  const offset = Number.isFinite(dayOffset)
-    ? Math.min(MAX_OFFSET, Math.max(MIN_OFFSET, Math.trunc(dayOffset)))
-    : 0;
+export function baseHijri(gregorian: Date, starts: readonly MonthStart[]): HijriDate | null {
+  let index = -1;
+  for (let i = 0; i < starts.length; i += 1) {
+    if (starts[i]!.gregorianStartDate.getTime() <= gregorian.getTime()) index = i;
+    else break;
+  }
+  if (index === -1) return null;
 
-  const shifted = new Date(gregorian.getTime() + offset * MS_PER_DAY);
-  const { year, month, day } = baseHijri(shifted);
+  const current = starts[index]!;
+  const offsetDays = daysBetween(current.gregorianStartDate, gregorian);
 
+  // Days 1–29 are certain: every Hijri month reaches 29 days. **Day 30 is only
+  // certain when the next CONSECUTIVE month is recorded**, because that start is
+  // what proves the month ran 30 days rather than 29.
+  //
+  // Requiring consecutiveness — not merely "some later month exists" — is what
+  // makes a gap in the data safe. With Muharram and Rabi al-Awwal recorded but
+  // Safar missing, a date 29 days into Muharram would otherwise be labelled
+  // 30 Muharram when it may well be 1 Safar, and one 33 days in would resolve as
+  // "day 34" of a month that has no such day.
+  const next = starts[index + 1];
+  if (offsetDays >= CERTAIN_MONTH_LENGTH && !isConsecutive(current, next)) return null;
+
+  const day = offsetDays + 1;
   return {
-    year,
-    month,
+    year: current.hijriYear,
+    month: current.hijriMonth,
     day,
-    monthNameArabic: MONTH_NAMES_AR[month - 1] ?? '',
-    iso: `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
+    monthNameArabic: hijriMonthNameArabic(current.hijriMonth),
+    iso: `${current.hijriYear}-${String(current.hijriMonth).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
   };
+}
+
+/**
+ * Sorts month starts into the order `baseHijri` expects. Callers that load rows
+ * from the database in another order pass them through here rather than
+ * re-implementing the comparison.
+ */
+export function sortMonthStarts(starts: readonly MonthStart[]): MonthStart[] {
+  return [...starts].sort((a, b) => a.gregorianStartDate.getTime() - b.gregorianStartDate.getTime());
 }
