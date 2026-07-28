@@ -1,5 +1,6 @@
 import type { PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
+import { toHijri } from '../lib/hijri.js';
 import * as scope from '../policies/branch-scope.js';
 import type { RoleScope } from '../policies/branch-scope.js';
 import { teacherGroupIds } from '../policies/teacher-scope.js';
@@ -47,6 +48,32 @@ export interface Occurrence {
   endTime: string | null;
   visibility: string | null;
   branchId: string | null;
+  /**
+   * The decorative Hijri overlay (§4.4, §5.7) with the admin day-offset already
+   * applied, so `DualDateDisplay` renders it without re-deriving anything. It
+   * is a label: nothing in scheduling or recurrence reads it back.
+   */
+  hijriDate: string;
+  hijriMonthArabic: string;
+}
+
+/** §5.7/TD-9: the Super-Admin-set day-offset, −2…+2. */
+const HIJRI_OFFSET_KEY = 'hijri.day_offset';
+
+/**
+ * Reads the offset for this request. An absent or non-numeric row means 0 —
+ * `/calendar` is public and must not fail over a decorative label; TD-9's range
+ * is enforced where the setting is written, and `toHijri` clamps regardless.
+ */
+async function hijriOffset(prisma: Pick<PrismaClient, 'systemSetting'>): Promise<number> {
+  const row = await prisma.systemSetting.findUnique({ where: { key: HIJRI_OFFSET_KEY } });
+  return typeof row?.value === 'number' ? row.value : 0;
+}
+
+/** The overlay fields for one occurrence, offset already applied. */
+function hijri(date: Date, offset: number): Pick<Occurrence, 'hijriDate' | 'hijriMonthArabic'> {
+  const h = toHijri(date, offset);
+  return { hijriDate: h.iso, hijriMonthArabic: h.monthNameArabic };
 }
 
 /** TD-10-style guard: an unbounded range would expand every recurrence forever. */
@@ -294,6 +321,9 @@ export async function readCalendar(
     include: { branchScopes: { select: { branchId: true }, take: 1 } },
   });
 
+  // One read per request, applied to every occurrence below.
+  const offset = await hijriOffset(prisma);
+
   const out: Occurrence[] = [];
   for (const event of events) {
     for (const date of expandEvent(event, from, query.to)) {
@@ -306,6 +336,7 @@ export async function readCalendar(
         endTime: hhmm(event.endTime),
         visibility: event.visibility,
         branchId: event.branchScopes[0]?.branchId ?? null,
+        ...hijri(date, offset),
       });
     }
   }
@@ -342,6 +373,7 @@ export async function readCalendar(
           endTime: hhmm(group.endTime),
           visibility: null,
           branchId: group.branchId,
+          ...hijri(date, offset),
         });
       }
     }

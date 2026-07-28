@@ -66,6 +66,9 @@ export function read(prisma: PrismaClient) {
         end_time: o.endTime,
         visibility: o.visibility,
         branch_id: o.branchId,
+        // §4.4 decorative overlay, admin offset applied server-side.
+        hijri_date: o.hijriDate,
+        hijri_month_ar: o.hijriMonthArabic,
       })),
     });
   };

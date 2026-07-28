@@ -209,7 +209,13 @@
 - [~] Operational-start-date graying in branch-scoped views
   - ✓ Backend — nothing before a branch's `operational_start_date` is returned in a branch-scoped read
   - △ Remaining — the visual graying itself is a frontend concern
-- [ ] Hijri overlay: Morocco-tuned source + admin offset (−2..+2) + DualDateDisplay (§4.4, §5.7)
+- [~] Hijri overlay: Morocco-tuned source + admin offset (−2..+2) + DualDateDisplay (§4.4, §5.7)
+  - ✓ Backend — `src/lib/hijri.ts` per §16.1; the offset is applied to the **Gregorian** input so it crosses Hijri month and year boundaries correctly
+  - ✓ Calendar — every occurrence (group and event alike) carries `hijri_date` and `hijri_month_ar` with the offset already applied; the Gregorian date never moves (TD-11)
+  - ✓ Tests — 11 unit + 4 integration; seven mutations caught; §18's *"Hijri overlay renders with admin offset applied"* check is green
+  - ⚠ **BLOCKED, needs a Document Owner decision** — the offset can be **read but not written**: §5.7 and §14.1 define the `/superadmin/settings` screen and TD-2 grants Super Admin *"Manage system settings … Hijri offset"*, but **TD-3 registers no settings endpoint at all**, and §3.1's gate forbids inventing one. Structurally identical to Revision 16's F1 (`POST /auth/refresh`). The seeded default 0 is in effect until this is resolved
+  - ⚠ **"Morocco-tuned" currently means Umm al-Qura + offset.** The Ministry of Habous fixes months by local sighting; no authoritative month-start table is available to this repository. `baseHijri()` is the single seam where such a table would replace the algorithm, with no caller changing
+  - △ Frontend — `DualDateDisplay` (§14.3) consumes the fields; no client-side conversion is needed
 - [ ] §18 Scheduling & Calendar checklist green (incl. Ramadan DST regression test)
 
 ## M4 — Quran Progress

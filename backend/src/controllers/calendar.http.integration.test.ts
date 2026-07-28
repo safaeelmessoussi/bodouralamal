@@ -23,6 +23,8 @@ interface Row {
   date: string;
   start_time: string | null;
   visibility: string | null;
+  hijri_date: string;
+  hijri_month_ar: string;
 }
 interface Body {
   error?: { code?: string };
@@ -106,6 +108,11 @@ describe('GET /calendar — public access', () => {
     expect(rows.map((r) => r.visibility)).toEqual(['public']);
     // Wall-clock time survives the boundary (TD-11).
     expect(rows[0]!.start_time).toBe('14:00');
+    // §4.4/§5.7: the decorative Hijri overlay reaches the client already
+    // offset, so `DualDateDisplay` derives nothing. 2026-06-15 = 29 Dhu al-Hijja.
+    expect(rows[0]!.date).toBe('2026-06-15');
+    expect(rows[0]!.hijri_date).toBe('1447-12-29');
+    expect(rows[0]!.hijri_month_ar).toBe('ذو الحجة');
   });
 
   it('a PENDING token is served the public tier, not refused', async () => {
