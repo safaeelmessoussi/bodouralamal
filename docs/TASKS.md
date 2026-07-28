@@ -170,8 +170,9 @@
 > SystemSettings are **reference/configuration data — writes are Super Admin only, reads are Admin (branch-scoped)**.
 > None of them has an endpoint yet, so the rule is currently unenforced for want of a surface; it must be applied when
 > `/admin/levels` and `/admin/taxonomy` are built here.
-> **Open question from the same sweep:** TD-2's R26 read row grants Teachers read access to reference data, which the
-> implementation denies and a test pins as denied — awaiting a Document Owner decision.
+> **Resolved by Revision 30:** Teachers are `⊘` for reading reference data. They receive branch, room, level and
+> subject information only through the operational APIs they are authorised to use, never by browsing reference-data
+> endpoints. The implementation already behaved this way and is unchanged.
 - [ ] Group CRUD: wall-clock times, room/time conflict detection, capacity (FOR UPDATE, TD-15), co-teaching, optimistic version locking (§4.4, TD-11, TD-15)
 - [ ] Roster management + consent re-evaluation enqueue on every mutation (TD-4.6)
 - [ ] Event model: visibility enum, recurrence (none/daily/weekly/biweekly-alternating/yearly) (§4.4)

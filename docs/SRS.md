@@ -1,7 +1,7 @@
 # Software Requirements Specification
 ## بذور الأمل — Institute Management Platform
 
-**Status:** Final MVP Blueprint (Revision 29 — registration metadata and reference data are separate concerns), **immutable source of truth** — changed only by an explicit Document Owner revision, never by an implementing agent
+**Status:** Final MVP Blueprint (Revision 30 — reference data is an administrative concern; Teachers read it only through operational APIs), **immutable source of truth** — changed only by an explicit Document Owner revision, never by an implementing agent
 **Revision date:** 2026-07-26
 **Canonical location:** `docs/SRS.md` in the project repository
 **Document Owner:** [assign]
@@ -23,6 +23,8 @@ This is a standalone, self-contained specification. It does not reference extern
 * **§18 — Module Acceptance Checklists.**
 * **§19 — Environments, Deployment Pipeline & Testing Strategy.**
 * **§20 — AI Implementation Rules:** hard guardrails for any autonomous coding agent. §20 closes the document deliberately: it is the last thing an agent reads before writing code.
+
+**Revision 30 (Document Owner decision — Teachers do not browse reference data, 2026-07-28):** corrects TD-2's Revision-26 *Read reference/configuration data* row, which granted **Teacher `✔ (own groups)`** — wider than Revision 26's own justification, which was that **Group management** depends on selecting a Branch, Level and Room, and that is administrative work. Found by a pre-M3 verification sweep: the implementation required Admin and a test pinned a Teacher as refused, so the SRS and the code disagreed. **Teacher is now `⊘` for reading reference/configuration data.** **Intent, normative:** reference/configuration data is an **administrative concern**; Teachers receive branch, room, level, subject and other reference information **only through the operational APIs they are authorised to use** — Groups, assignments, schedule — and never by browsing reference-data endpoints directly. The implementation is unchanged; this aligns the matrix to it.
 
 **Revision 29 (Document Owner clarification — registration metadata versus reference data, 2026-07-28):** separates two concerns that a convenience endpoint would otherwise merge. **Registration metadata carries only the information required to render and validate the registration workflow** — field definitions, registration profiles, required fields, onboarding rules — and **must not expose or duplicate reference/configuration data**. **Reference/configuration entities (Revision 26: Categories, Levels, Branches, Rooms, Subjects, AcademicYear) continue to be exposed through their own reference-data APIs and must not be bundled into a registration metadata endpoint**, so that Revision 26's permission split remains the single place those entities are governed — bundling would smuggle Super-Admin-managed data through a public registration surface. **Applicants never select Branch, Room, Level or Group during self-registration. Registration creates a pending applicant only. Assignment to Branch, Room, Level and Group is an administrative action performed after approval.** This resolves the item Revision 25 left open: registration will **not** capture a branch. **Consequence, intended:** because an applicant carries no branch, a branch-scoped Admin never sees pending registrations in the §14.2 user list (R25 makes unassigned users Super-Admin-visible); the §5.6 approval queue, deliberately unscoped, is the **permanent** path by which a branch Admin encounters applicants — by design, not a gap awaiting a fix. Verified against the implementation at adoption: the registration payload carries person fields and consents only, and no registration metadata endpoint exists.
 
@@ -470,7 +472,7 @@ The registration/login entry is **OAuth-first**: the registration form is never 
 * **User Management (`/admin/users`)** — search (fields: TD-10), filter, list, create (staff pre-provisioning against a Google email), edit, approve, reject, deactivate, role/branch-scope assignment, consent-record management.
 * **Branches & Rooms (`/admin/branches`)** — **reference data: CRUD is Super Admin only (Revision 26)**, including `operational_start_date` and `display_order` (§2.2). **Admins read this screen** (branch-scoped) because Group management depends on it. The **branch-activation event backfill action stays an Admin capability** for their own branches — it is operational (§4.4), not reference management. The route stays `/admin/branches`: TD-2 is enforced server-side and the URL prefix is not the permission boundary.
 * **Groups (`/admin/groups`)** — **operational: Admin-managed within branch scope.** CRUD, weekly timetable and co-teacher assignment. A Group *references* a Branch, Level and Room, which the Admin selects but cannot modify (Revision 26).
-* **Levels (`/admin/levels`)** — **reference data: CRUD is Super Admin only (Revision 26)**, including `gender_restriction`. Admins and Teachers read it for group and curriculum work.
+* **Levels (`/admin/levels`)** — **reference data: CRUD is Super Admin only (Revision 26)**, including `gender_restriction`. **Admins read it** for group and curriculum work; **Teachers do not browse it (Revision 30)** — they receive level information through the operational APIs they are authorised to use.
 * **Group Enrollment (`/admin/groups/{id}/roster`)** — add/remove students; enforces `max_students`; every roster change enqueues consent re-evaluation (§4.1a).
 * **Categories & Subjects (`/admin/taxonomy`)** — reference-data CRUD (single Arabic `name` column), **Super Admin only (Revision 26)**; Admins read it. (Committees: post-MVP, §10.1.)
 * **Calendar & Events (`/admin/calendar`)** — Events with explicit four-way join population, visibility tier selection, Vacation events.
@@ -709,7 +711,7 @@ consent_forced_private = true → public   ONLY via Admin override with justific
 |---|---|---|---|---|---|---|
 | Manage system settings, `display_order`, AcademicYear, Hijri offset | ✔ | ⊘ | ⊘ | ⊘ | ⊘ | ⊘ |
 | **Manage reference/configuration data** — Branches, Rooms, Levels, Categories, Subjects, AcademicYear, SystemSettings, `display_order`, Hijri offset, `operational_start_date` *(Revision 26)* | ✔ | ⊘ | ⊘ | ⊘ | ⊘ | ⊘ |
-| **Read reference data** for operational work (branch / level / room selection) *(Revision 26)* | ✔ | ✔ (own branches) | ✔ (own groups) | ⊘ | ⊘ | ⊘ |
+| **Read reference/configuration data** for operational work (branch / level / room selection) *(Revision 26; Teacher corrected to `⊘` by Revision 30)* | ✔ | ✔ (own branches) | ⊘ | ⊘ | ⊘ | ⊘ |
 | Branch event backfill (§4.4 — operational, not reference management) *(Revision 26)* | ✔ | ✔ (own branches) | ⊘ | ⊘ | ⊘ | ⊘ |
 | Approve/reject registrations & family links | ✔ | ✔ | ⊘ | ⊘ | ⊘ | ⊘ |
 | Revoke an approved family link (soft-delete, §4.3) *(Revision 16)* | ✔ | ✔ | ⊘ | ⊘ | ⊘ | ⊘ |
