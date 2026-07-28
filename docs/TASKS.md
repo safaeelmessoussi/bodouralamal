@@ -176,10 +176,16 @@
 - [~] Group CRUD: wall-clock times, room/time conflict detection, capacity (FOR UPDATE, TD-15), co-teaching, optimistic version locking (§4.4, TD-11, TD-15)
   - ✓ Backend (service) — create/update/delete/list; half-open room/time conflict detection; TD-15 optimistic locking; TD-5 enrolment guard; R26 scoping
   - ✓ Tests — 18 integration tests; six of seven mutations caught
-  - ⚠ The TD-15 row lock is retained but NOT proven by test — the concurrency test passes without it; needs a widened window
+  - ⓘ Accepted by the Document Owner — the TD-15 lock is implemented as required and the test verifies observable behaviour; proving the mechanism itself is not MVP work
   - ✓ HTTP — `GET`/`POST /admin/groups`, `PATCH`/`DELETE /admin/groups/{id}`; wall-clock `HH:MM` at the boundary; conflict returns `STATE_CONFLICT` with structured `details` rather than a new error code
   - ✓ Co-teaching — `assignTeacher`/`unassignTeacher` with the §4.4 two-slot cap; assignment IS the §4.2 scope (asserted via `teachesStudent`)
-- [ ] Roster management + consent re-evaluation enqueue on every mutation (TD-4.6)
+- [~] Roster management + consent re-evaluation enqueue on every mutation (TD-4.6)
+  - ✓ Backend — `max_students` under the TD-4.6 Group row lock; `CAPACITY_FULL` with structured details; TD-5 soft-delete of the enrolment row only
+  - ✓ §19.2 named regression — concurrent adds at capacity − 1 admit exactly one
+  - ✓ §4.1a — every roster change enqueues `consent.reevaluate` in-transaction; a refused enrolment enqueues nothing; un-enrolment names the group explicitly
+  - ✓ HTTP — roster and instructor routes with `HH:MM` boundary validation and structured conflict details
+  - ✓ Tests — 18 service + 12 HTTP tests; seven mutations caught
+  - △ Frontend integration — the §5.6 roster screen
 - [ ] Event model: visibility enum, recurrence (none/daily/weekly/biweekly-alternating/yearly) (§4.4)
 - [ ] Explicit four-way scope-join population at creation; operational-start filter (§4.4)
 - [ ] Branch-activation manual backfill action + endpoint (§4.4, TD-3.4)
