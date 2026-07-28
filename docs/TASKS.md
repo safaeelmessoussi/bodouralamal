@@ -178,7 +178,7 @@
   - ✓ Tests — 18 integration tests; six of seven mutations caught
   - ⚠ The TD-15 row lock is retained but NOT proven by test — the concurrency test passes without it; needs a widened window
   - ✓ HTTP — `GET`/`POST /admin/groups`, `PATCH`/`DELETE /admin/groups/{id}`; wall-clock `HH:MM` at the boundary; conflict returns `STATE_CONFLICT` with structured `details` rather than a new error code
-  - △ Remaining — co-teacher assignment endpoints (`GroupTeacher` write surface)
+  - ✓ Co-teaching — `assignTeacher`/`unassignTeacher` with the §4.4 two-slot cap; assignment IS the §4.2 scope (asserted via `teachesStudent`)
 - [ ] Roster management + consent re-evaluation enqueue on every mutation (TD-4.6)
 - [ ] Event model: visibility enum, recurrence (none/daily/weekly/biweekly-alternating/yearly) (§4.4)
 - [ ] Explicit four-way scope-join population at creation; operational-start filter (§4.4)

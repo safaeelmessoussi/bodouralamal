@@ -291,3 +291,104 @@ export async function deleteGroup(prisma: PrismaClient, actor: Actor, id: string
     });
   });
 }
+
+
+/**
+ * §4.4/§7: **two instructor slots per group.** Co-teaching is supported and
+ * capped — a third assignment is refused rather than silently accepted, because
+ * `GroupTeacher` is the resolution table for *all* teacher scoping (§4.2), so an
+ * unbounded roster of teachers would quietly widen access to every student in
+ * the group.
+ */
+const INSTRUCTOR_SLOTS = 2;
+
+export async function assignTeacher(
+  prisma: PrismaClient,
+  actor: Actor,
+  groupId: string,
+  teacherId: string,
+): Promise<{ id: string; slotsUsed: number }> {
+  assertCanManage(actor);
+
+  return prisma.$transaction(async (tx) => {
+    const group = await tx.group.findFirst({ where: { id: groupId, deletedAt: null } });
+    if (!group) throw new AppError('NOT_FOUND', 'no such group');
+    assertInScope(actor, group.branchId);
+
+    // The person must actually hold the teacher role: assigning someone who
+    // does not would grant §4.2 teaching reach to an account that TD-2 never
+    // intended to have it.
+    const holdsRole = await tx.userBranchRole.findFirst({
+      where: { userId: teacherId, deletedAt: null, role: { name: 'teacher' }, user: { deletedAt: null } },
+      select: { id: true },
+    });
+    if (!holdsRole) throw new AppError('NOT_FOUND', 'no such teacher');
+
+    const existing = await tx.groupTeacher.findFirst({ where: { groupId, teacherId } });
+    if (existing && existing.deletedAt === null) {
+      throw new AppError('DUPLICATE', 'teacher already assigned to this group');
+    }
+
+    // TD-15: check-then-write on a bounded invariant, so lock the governing row.
+    await tx.$queryRaw`SELECT id FROM "group" WHERE id = ${groupId}::uuid FOR UPDATE`;
+    const used = await tx.groupTeacher.count({ where: { groupId, deletedAt: null } });
+    if (used >= INSTRUCTOR_SLOTS) {
+      throw new AppError('STATE_CONFLICT', `group already has ${INSTRUCTOR_SLOTS} instructors`, {
+        reason: 'INSTRUCTOR_SLOTS_FULL',
+        constraint: 'GROUP_TEACHER_SLOTS',
+        slots: INSTRUCTOR_SLOTS,
+      });
+    }
+
+    // A previously revoked assignment is revived rather than duplicated: §7's
+    // unique (group_id, teacher_id) spans deleted rows.
+    const row = existing
+      ? await tx.groupTeacher.update({
+          where: { id: existing.id },
+          data: { deletedAt: null, deletedById: null },
+          select: { id: true },
+        })
+      : await tx.groupTeacher.create({ data: { groupId, teacherId }, select: { id: true } });
+
+    await audit.write(tx, {
+      actorUserId: actor.userId,
+      actionType: 'groupteacher.assign',
+      targetEntity: 'GroupTeacher',
+      targetId: row.id,
+      detail: { group_id: groupId, teacher_id: teacherId, slots_used: used + 1 },
+    });
+    return { id: row.id, slotsUsed: used + 1 };
+  });
+}
+
+export async function unassignTeacher(
+  prisma: PrismaClient,
+  actor: Actor,
+  groupId: string,
+  teacherId: string,
+): Promise<void> {
+  assertCanManage(actor);
+
+  await prisma.$transaction(async (tx) => {
+    const group = await tx.group.findFirst({ where: { id: groupId, deletedAt: null } });
+    if (!group) throw new AppError('NOT_FOUND', 'no such group');
+    assertInScope(actor, group.branchId);
+
+    const row = await tx.groupTeacher.findFirst({ where: { groupId, teacherId, deletedAt: null } });
+    if (!row) throw new AppError('NOT_FOUND', 'teacher is not assigned to this group');
+
+    // Soft-delete: §4.2 resolves teacher reach through live rows, so this ends
+    // their access to the group's students on the very next request.
+    await tx.groupTeacher.update({
+      where: { id: row.id },
+      data: { deletedAt: new Date(), deletedById: actor.userId },
+    });
+    await audit.write(tx, {
+      actorUserId: actor.userId,
+      actionType: 'groupteacher.unassign',
+      targetEntity: 'GroupTeacher',
+      targetId: row.id,
+      detail: { group_id: groupId, teacher_id: teacherId },
+    });
+  });
+}
