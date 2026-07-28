@@ -95,6 +95,11 @@
   - ✓ Tests — 7 tests; four mutations caught (sex optional, sex as free string, applicant sex dropped, child sex dropped)
   - ✓ Architecture — sex never on Category; availability is which Levels exist, so opening Teen+Male is Super Admin data entry with no code change
 
+- [x] Registration never places a beneficiary (§4.1, §4.1b, SRS Revision 29)
+  - ✓ Backend — payload carries person fields and consents only; `personCore` is `.strict()` so placement fields are refused, not silently stripped
+  - ✓ Tests — 2 regression tests; the strictness guard is mutation-tested
+  - ✓ Architecture — reference data stays behind its own APIs under the R26 permission split; assignment is an administrative action after approval
+
 ## M2 — Registration, Approvals, Family
 - [x] Unified parent+child registration transaction (TD-4.1) + adult path
   - ✓ Backend — `POST /registrations`; replay guard consumed FIRST so the `jti` is authoritative; both paths in one transaction

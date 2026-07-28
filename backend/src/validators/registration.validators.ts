@@ -42,7 +42,13 @@ const personCore = z.object({
   phone: phone.optional(),
   notes: notes.optional(),
   sex: z.enum(['female', 'male']),
-});
+})
+  // `.strict()` for the same reason §20 rule 9 refuses identity fields: an
+  // unknown key must be REFUSED, not silently stripped. Revision 29 forbids
+  // applicants selecting a Branch, Room, Level or Group — and a payload that
+  // quietly drops `branch_id` would let a client believe a placement was
+  // recorded when registration creates a pending applicant only.
+  .strict();
 
 /**
  * Consent decisions (§4.1, §4.1a). Every form carries the generic

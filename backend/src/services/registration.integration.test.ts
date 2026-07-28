@@ -61,6 +61,44 @@ afterAll(async () => {
 });
 
 
+describe('§4.1 Revision 29 — registration never places a beneficiary', () => {
+  it('the schema REJECTS placement fields outright', () => {
+    // Not merely ignored: `.strict()` refuses them, so a client cannot believe a
+    // placement was recorded. Registration creates a pending applicant only —
+    // assignment is an administrative action after approval.
+    for (const field of ['branch_id', 'room_id', 'level_id', 'group_id', 'category_id']) {
+      const parsed = registrationSchema.safeParse({
+        kind: 'adult',
+        applicant: { name_arabic: 'خديجة', sex: 'female', [field]: 'anything' },
+        consents: { data_processing: true },
+      });
+      expect(parsed.success, `${field} must be rejected`).toBe(false);
+    }
+  });
+
+  it('a registered applicant holds NO branch assignment', async () => {
+    const { token } = issueOnboardingToken(identity(), KEY);
+    const result = await register(
+      prisma,
+      token,
+      {
+        kind: 'adult',
+        applicant: { name_arabic: `${TAG} بلا تعيين`, sex: 'female' },
+        consents: { data_processing: true },
+      },
+      KEY,
+    );
+
+    // The consequence R29 records: an applicant carries no branch, so a
+    // branch-scoped Admin never sees them in the §14.2 list — the approval
+    // queue is the permanent path by which they are encountered.
+    expect(
+      await prisma.userBranchRole.count({ where: { userId: result.applicantId } }),
+    ).toBe(0);
+    expect(await prisma.studentGroup.count({ where: { studentId: result.applicantId } })).toBe(0);
+  });
+});
+
 describe('§4.1b step 5 Revision 27 — registration captures sex before the User exists', () => {
   it('persists sex for BOTH people created by a parent+child registration', async () => {
     const { token } = issueOnboardingToken(identity(), KEY);
