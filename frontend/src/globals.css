@@ -136,11 +136,64 @@
 @layer base {
   * {
     @apply border-border outline-ring/50;
-    }
+  }
   body {
     @apply bg-background text-foreground;
-    }
+  }
   html {
     @apply font-sans;
-    }
+  }
+
+  /* RTL Language Support */
+  [dir="rtl"] {
+    direction: rtl;
+    text-align: right;
+  }
+
+  [dir="ltr"] {
+    direction: ltr;
+    text-align: left;
+  }
+
+  /* Arabic Typography Enhancements */
+  [dir="rtl"] h1,
+  [dir="rtl"] h2,
+  [dir="rtl"] h3,
+  [dir="rtl"] h4,
+  [dir="rtl"] h5,
+  [dir="rtl"] h6 {
+    font-weight: 600;
+    line-height: 1.4;
+  }
+
+  [dir="rtl"] body {
+    line-height: 1.6;
+    letter-spacing: 0.02em;
+  }
+
+  /* Button Text Direction */
+  button[dir="rtl"],
+  [dir="rtl"] button {
+    text-align: center;
+  }
+
+  /* Form Fields RTL */
+  [dir="rtl"] input,
+  [dir="rtl"] select,
+  [dir="rtl"] textarea {
+    text-align: right;
+    padding-right: 0.75rem;
+    padding-left: 0.75rem;
+  }
+
+  /* Icon alignment for RTL */
+  [dir="rtl"] .icon-left {
+    margin-left: 0.5rem;
+    margin-right: 0;
+  }
+
+  [dir="rtl"] .icon-right {
+    margin-right: 0.5rem;
+    margin-left: 0;
+  }
 }

@@ -9,10 +9,10 @@ export default function TeacherDashboard() {
   const navigate = useNavigate()
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8" dir="rtl">
       <PageHeader
-        title="Teacher Dashboard"
-        description="Manage your groups, track student progress, and conduct exams"
+        title="لوحة تحكم المعلمة"
+        description="أدر مجموعاتك، تابع تقدم الطلاب، وأجر الامتحانات"
       >
         <Button onClick={() => navigate("/teacher/groups")}>
           Manage Groups
