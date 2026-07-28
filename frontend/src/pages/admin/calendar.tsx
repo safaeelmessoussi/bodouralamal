@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { toast } from "sonner"
-import { ChevronRight, ChevronLeft, Plus, Calendar, Clock, MapPin } from "lucide-react"
+import { ChevronRight, ChevronLeft, Plus, Clock, MapPin } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -8,27 +8,13 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import PageHeader from "@/components/page-header"
+import { getCalendarEvents, getAvailableBranches, type CalendarEvent } from "@/services/calendar-adapter"
 
 const DAYS_AR = ["الأحد", "الاثنين", "الثلاثاء", "الأربعاء", "الخميس", "الجمعة", "السبت"]
 const MONTHS_AR = ["يناير", "فبراير", "مارس", "أبريل", "مايو", "يونيو", "يوليو", "أغسطس", "سبتمبر", "أكتوبر", "نوفمبر", "ديسمبر"]
 
-interface Event {
-  id: number
-  title: string
-  date: string
-  time: string
-  location: string
-  type: "exam" | "meeting" | "ceremony" | "holiday"
-  branch: string
-}
-
-const events: Event[] = [
-  { id: 1, title: "اختبار الحفظ الشهري", date: "2026-07-26", time: "9:00–11:00", location: "جميع الفروع", type: "exam", branch: "all" },
-  { id: 2, title: "اجتماع المعلمات", date: "2026-07-28", time: "3:00–5:00", location: "فرع الحي المحمدي", type: "meeting", branch: "فرع الحي المحمدي" },
-  { id: 3, title: "حفل التكريم الفصلي", date: "2026-08-02", time: "10:00–13:00", location: "المقر الرئيسي", type: "ceremony", branch: "all" },
-  { id: 4, title: "عطلة رسمية", date: "2026-08-14", time: "طوال اليوم", location: "—", type: "holiday", branch: "all" },
-  { id: 5, title: "اختبار التجويد", date: "2026-07-30", time: "10:00–12:00", location: "فرع القدس", type: "exam", branch: "فرع القدس" },
-]
+const events: CalendarEvent[] = getCalendarEvents()
+const availableBranches = getAvailableBranches()
 
 const typeColors = {
   exam: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400",
@@ -224,10 +210,9 @@ export default function CalendarPage() {
                 <Select>
                   <SelectTrigger className="h-9"><SelectValue placeholder="الفرع" /></SelectTrigger>
                   <SelectContent dir="rtl">
-                    <SelectItem value="all">جميع الفروع</SelectItem>
-                    <SelectItem value="branch1">فرع الحي المحمدي</SelectItem>
-                    <SelectItem value="branch2">فرع القدس</SelectItem>
-                    <SelectItem value="branch3">فرع السلام</SelectItem>
+                    {availableBranches.map((branch) => (
+                      <SelectItem key={branch} value={branch}>{branch}</SelectItem>
+                    ))}
                   </SelectContent>
                 </Select>
               </div>
@@ -243,7 +228,7 @@ export default function CalendarPage() {
   )
 }
 
-function EventRow({ event, compact }: { event: Event; compact?: boolean }) {
+function EventRow({ event, compact }: { event: CalendarEvent; compact?: boolean }) {
   return (
     <div className={`flex items-start gap-2.5 ${compact ? "" : "rounded-lg border border-border px-3 py-2.5"}`}>
       <div className={`size-2 rounded-full mt-1.5 shrink-0 ${event.type === "exam" ? "bg-orange-500" : event.type === "meeting" ? "bg-blue-500" : event.type === "ceremony" ? "bg-primary" : "bg-muted-foreground"}`} />
