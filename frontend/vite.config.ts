@@ -10,12 +10,4 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
-  server: {
-    middlewareMode: false,
-    hmr: {
-      protocol: "ws",
-      host: "localhost",
-      port: 5173,
-    },
-  },
 })
