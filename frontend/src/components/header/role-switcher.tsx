@@ -65,10 +65,9 @@ export function RoleSwitcher({
 
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
-      <DropdownMenuTrigger asChild>
-        <Button
-          variant="ghost"
-          className={cn('h-8 gap-2 px-2', className)}
+      <DropdownMenuTrigger>
+        <button
+          className={cn('h-8 gap-2 px-2 inline-flex items-center gap-1 rounded-md bg-transparent hover:bg-accent hover:text-accent-foreground', className)}
           aria-haspopup="listbox"
           aria-expanded={open}
           aria-label={`Current role: ${currentRole.label}. Click to change role`}
@@ -79,8 +78,8 @@ export function RoleSwitcher({
               {currentRole.label}
             </span>
           </div>
-          <ChevronDown className={cn('h-4 w-4 transition-transform', open && 'rotate-180')} />
-        </Button>
+          <ChevronDown className="h-4 w-4" />
+        </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-48" role="listbox" dir="rtl">
         <div className="px-2 py-1.5 text-xs text-muted-foreground border-b">

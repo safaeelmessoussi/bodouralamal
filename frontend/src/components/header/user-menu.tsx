@@ -66,10 +66,9 @@ export function UserMenu({
 
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
-      <DropdownMenuTrigger asChild>
-        <Button
-          variant="ghost"
-          className={cn('h-8 gap-2 px-2', className)}
+      <DropdownMenuTrigger>
+        <button
+          className={cn('h-8 gap-2 px-2 inline-flex items-center gap-1 rounded-md bg-transparent hover:bg-accent hover:text-accent-foreground', className)}
           aria-haspopup="menu"
           aria-expanded={open}
           aria-label={`User menu: ${user.name}`}
@@ -88,7 +87,7 @@ export function UserMenu({
             )}
           </div>
           <ChevronDown className={cn('h-4 w-4 transition-transform', open && 'rotate-180')} />
-        </Button>
+        </button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56" role="menu" dir="rtl">
         {/* User Info Section */}

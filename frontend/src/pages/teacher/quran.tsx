@@ -19,9 +19,8 @@ export default function TeacherQuran() {
       <PageHeader
         title="Quran Memorization Tracking"
         description="Monitor student progress through the Quran"
-      >
-        <Button>Add Milestone</Button>
-      </PageHeader>
+        actions={<Button>Add Milestone</Button>}
+      />
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <Card>

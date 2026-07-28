@@ -51,14 +51,12 @@ export default function AdminDashboard() {
       <PageHeader
         title={ar.admin?.dashboard?.title || "لوحة التحكم"}
         description={ar.admin?.dashboard?.description || "نظرة عامة على منصة بذور الأمل"}
-        action={
-          <Button asChild>
-            <Link to="/admin/approvals">
-              <CheckCircle className="size-4 me-2" />
-              مراجعة الطلبات
-              <Badge className="ms-2 h-5 px-1.5 text-[10px] bg-white/20 border-0">12</Badge>
-            </Link>
-          </Button>
+        actions={
+          <Link to="/admin/approvals" className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 bg-primary text-primary-foreground hover:bg-primary/90 h-9 px-4 py-2">
+            <CheckCircle className="size-4 me-2" />
+            مراجعة الطلبات
+            <Badge className="ms-2 h-5 px-1.5 text-[10px] bg-white/20 border-0">12</Badge>
+          </Link>
         }
       />
 
@@ -98,9 +96,9 @@ export default function AdminDashboard() {
               <p className="text-sm text-muted-foreground">لا توجد فروع حتى الآن</p>
             )}
             <Separator className="my-2" />
-            <Button asChild variant="ghost" className="w-full text-sm" size="sm">
-              <Link to="/admin/branches">عرض جميع الفروع</Link>
-            </Button>
+            <Link to="/admin/branches" className="inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 w-full text-sm h-9 px-3">
+              عرض جميع الفروع
+            </Link>
           </CardContent>
         </Card>
 

@@ -140,10 +140,10 @@ export default function UsersPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader 
+      <PageHeader
         title="User Management" 
         description="Manage institute users and permissions"
-        action={
+        actions={
           <Button variant="outline" size="sm" onClick={loadUsers} disabled={isRefreshing}>
             <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
             {isRefreshing ? "Loading..." : "Refresh"}
@@ -209,7 +209,7 @@ export default function UsersPage() {
                   </div>
 
                   <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
+                    <DropdownMenuTrigger>
                       <Button variant="ghost" size="sm" className="flex-shrink-0">
                         <MoreHorizontal className="h-4 w-4" />
                       </Button>

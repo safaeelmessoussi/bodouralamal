@@ -111,7 +111,7 @@ export default function ContentPage() {
                         <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{item.description}</p>
                       </div>
                       <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
+                        <DropdownMenuTrigger>
                           <Button variant="ghost" size="icon" className="size-6 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
                             <MoreHorizontal className="size-3.5 text-muted-foreground" />
                           </Button>

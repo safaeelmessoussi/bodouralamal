@@ -137,10 +137,10 @@ export default function GroupsPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader 
+      <PageHeader
         title="Study Groups" 
         description="Manage study groups and classes"
-        action={
+        actions={
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={loadGroups} disabled={isRefreshing}>
               <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? "animate-spin" : ""}`} />
@@ -187,7 +187,7 @@ export default function GroupsPage() {
                       <p className="text-xs text-muted-foreground mt-1">{group.branch_id}</p>
                     </div>
                     <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
+                      <DropdownMenuTrigger>
                         <Button variant="ghost" size="sm">
                           <MoreHorizontal className="h-4 w-4" />
                         </Button>

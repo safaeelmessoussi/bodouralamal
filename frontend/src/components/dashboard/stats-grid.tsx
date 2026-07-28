@@ -29,9 +29,9 @@ export default function StatsGrid({
           title={metric.title}
           value={metric.value}
           description={metric.description}
-          icon={icons?.[idx]}
-          trend={metric.trend}
-          isLoading={isLoading}
+          icon={icons?.[idx] || (() => null)}
+          delta={metric.trend?.value ? String(metric.trend.value) : undefined}
+          deltaUp={metric.trend?.direction === 'up'}
         />
       ))}
     </div>

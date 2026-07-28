@@ -104,10 +104,10 @@ export default function BranchesPage() {
 
   return (
     <div className="space-y-4">
-      <PageHeader 
+      <PageHeader
         title="Branches & Rooms" 
         description="Manage institute branches and facilities"
-        action={
+        actions={
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={loadBranches} disabled={isRefreshing}>
               <RefreshCw className="mr-2 h-4 w-4" />
@@ -144,7 +144,7 @@ export default function BranchesPage() {
                   </CardDescription>
                 </div>
                 <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
+                  <DropdownMenuTrigger>
                     <Button variant="ghost" size="sm">
                       <MoreHorizontal className="h-4 w-4" />
                     </Button>

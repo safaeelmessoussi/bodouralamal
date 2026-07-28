@@ -58,12 +58,13 @@ export default function TeacherExams() {
       <PageHeader
         title="Exam Management"
         description="Create, grade, and track student exams"
-      >
-        <Button>
-          <Plus className="mr-2 h-4 w-4" />
-          Create Exam
-        </Button>
-      </PageHeader>
+        actions={
+          <Button>
+            <Plus className="mr-2 h-4 w-4" />
+            Create Exam
+          </Button>
+        }
+      />
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
         <Card>

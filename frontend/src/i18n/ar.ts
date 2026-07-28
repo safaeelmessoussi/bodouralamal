@@ -148,6 +148,7 @@ export const ar = {
   admin: {
     dashboard: {
       title: "لوحة التحكم",
+      description: "نظرة عامة على منصة بذور الأمل",
       totalBranches: "إجمالي الفروع",
       totalUsers: "إجمالي المستخدمين",
       totalGroups: "إجمالي المجموعات",
@@ -206,7 +207,7 @@ export const ar = {
       title: "لوحة تحكم الطالب",
       myGrade: "درجتي",
       surahsCompleted: "السور المكتملة",
-      attendance: "الحضور",
+      attendance: "ال��ضور",
       nextClass: "الحصة القادمة",
       currentAverage: "المعدل الحالي",
       of: "من",

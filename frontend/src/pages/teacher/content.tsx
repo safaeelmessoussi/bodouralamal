@@ -72,12 +72,13 @@ export default function TeacherContent() {
       <PageHeader
         title="Content Library"
         description="Manage your teaching materials and resources"
-      >
-        <Button>
-          <Plus className="mr-2 h-4 w-4" />
-          Upload Content
-        </Button>
-      </PageHeader>
+        actions={
+          <Button>
+            <Plus className="mr-2 h-4 w-4" />
+            Upload Content
+          </Button>
+        }
+      />
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
         <Card>

@@ -15,11 +15,12 @@ export default function TeacherDashboard() {
       <PageHeader
         title={ar.teacher.dashboard.title}
         description={ar.teacher.dashboard.myGroups}
-      >
-        <Button onClick={() => navigate("/teacher/groups")}>
-          {ar.teacher.groups.manage}
-        </Button>
-      </PageHeader>
+        actions={
+          <Button onClick={() => navigate("/teacher/groups")}>
+            {ar.teacher.groups.manage}
+          </Button>
+        }
+      />
 
       <StatsGrid metrics={stats.metrics} isLoading={stats.isLoading} />
 

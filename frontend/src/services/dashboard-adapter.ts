@@ -10,8 +10,8 @@ export interface StatMetric {
   value: string
   description: string
   trend?: {
-    value: number
-    label: string
+    value: number | string
+    direction?: 'up' | 'down'
   }
 }
 
@@ -68,7 +68,7 @@ export function getStudentStats(): DashboardStats {
         title: "السور المكتملة",
         value: "12",
         description: "من 114",
-        trend: { value: 2, label: "هذا الشهر" },
+        trend: { value: "2", direction: "up" },
       },
       {
         title: "الحضور",
@@ -141,13 +141,13 @@ export function getParentStats(): DashboardStats {
         title: "الحضور",
         value: "94%",
         description: "الشهر الحالي",
-        trend: { value: 2, label: "من الشهر الماضي" },
+        trend: { value: "2%", direction: "up" },
       },
       {
         title: "السور المكتملة",
         value: "12",
         description: "من 114",
-        trend: { value: 3, label: "هذا الشهر" },
+        trend: { value: "3", direction: "up" },
       },
       {
         title: "التقييم القادم",
@@ -178,7 +178,7 @@ export function getTeacherStats(): DashboardStats {
         title: "متوسط الحضور",
         value: "92%",
         description: "هذا الفصل",
-        trend: { value: 5, label: "من الفصل الماضي" },
+        trend: { value: "5%", direction: "up" },
       },
       {
         title: "الجلسات هذا الأسبوع",

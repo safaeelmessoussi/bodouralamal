@@ -52,9 +52,8 @@ export default function TeacherGroups() {
       <PageHeader
         title="Manage Groups"
         description="View and manage all your teaching groups"
-      >
-        <Button>Add Group</Button>
-      </PageHeader>
+        actions={<Button>Add Group</Button>}
+      />
 
       <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-2">
         {groups.map((group) => (
