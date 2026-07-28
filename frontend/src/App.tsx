@@ -3,6 +3,7 @@ import { AuthProvider } from "./contexts/auth-context"
 import AppShell from "./components/layout/app-shell"
 import LoginPage from "./pages/login"
 import RegisterPage from "./pages/register"
+import PendingApprovalPage from "./pages/pending-approval"
 import LandingPage from "./pages/landing"
 import AdminDashboard from "./pages/admin/dashboard"
 import ApprovalsPage from "./pages/admin/approvals"
@@ -28,6 +29,7 @@ export default function App() {
         <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
+        <Route path="/pending-approval" element={<PendingApprovalPage />} />
 
         {/* App shell */}
         <Route element={<AppShell />}>

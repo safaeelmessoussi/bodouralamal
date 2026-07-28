@@ -6,6 +6,7 @@ import { Separator } from "@/components/ui/separator"
 import { useTheme } from "@/components/theme-provider"
 import { useAuth } from "@/contexts/auth-context"
 import { toast } from "sonner"
+import { ar } from "@/i18n/ar"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -60,9 +61,9 @@ export default function Header({ onMenuClick }: HeaderProps) {
     try {
       await logout()
       navigate("/login")
-      toast.success("Logged out successfully")
+      toast.success("تم تسجيل الخروج بنجاح")
     } catch (error) {
-      toast.error("Failed to log out")
+      toast.error("فشل تسجيل الخروج")
     }
   }
 
