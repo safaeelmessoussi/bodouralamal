@@ -1,6 +1,7 @@
 import type { PrismaClient } from '../generated/prisma/client.js';
 import { AppError, uniqueViolationFields } from '../lib/errors.js';
 import { MIN_QUERY_LENGTH, normalizePhone, normalizeSearchText } from '../lib/search-normalize.js';
+import { branchesForRole } from '../policies/branch-scope.js';
 import { assertFreshActive } from '../policies/freshness.policy.js';
 import * as audit from '../repositories/audit.repository.js';
 
@@ -139,16 +140,19 @@ export async function preProvision(
  * from `StudentSocialProfile`: §4.10 restricts those fields to assigned
  * teachers, so a list screen is the last place they belong.
  *
- * **Branch scope, flagged as a specification ambiguity rather than resolved:**
- * §14.2 lists Branch as a *filter*, while TD-2 states that "Admin actions are
- * always constrained to assigned branch scope". Those pull in different
- * directions here, because a `User` is not a branch-scoped entity — a person may
- * hold roles in several branches or in none at all (parents, students awaiting a
- * group, and every pre-provisioned account). Constraining implicitly would hide
- * exactly those people from every Admin and make the screen unusable, while
- * choosing which unscoped people to reveal would be inventing a rule. Branch is
- * therefore implemented as the explicit filter §14.2 names, and the question is
- * recorded for the Document Owner.
+ * **Visibility is branch-scoped (§4.2, Revision 25).** A branch-scoped Admin
+ * sees only users holding a live role assignment to one of that Admin's managed
+ * branches. Users with **no** branch assignment — parents, unassigned students,
+ * and pre-provisioned accounts not yet attached to one of those branches — are
+ * visible to **Super Admins only**, so unrelated people are never exposed to a
+ * branch-scoped administrator. An Admin whose own assignment is all-branches
+ * (`NULL`) sees every user.
+ *
+ * Consequence worth knowing: the §4.1b registration transaction records no
+ * branch, so a self-registered applicant is unassigned and therefore
+ * Super-Admin-visible here until staff attach them to a branch. The §5.6
+ * approval queue is a separate surface and is deliberately not scoped by this
+ * rule, so it stays the path by which a branch Admin encounters applicants.
  */
 export interface UserListFilters {
   q?: string;
@@ -187,11 +191,21 @@ export async function listUsers(
 ): Promise<Page<UserListItem>> {
   // TD-12: browsing beneficiary records is a user-management surface, so the
   // caller's status and role are re-read from live rows on every request.
-  await assertFreshActive(prisma, actorUserId, USER_ADMIN_ROLES);
+  const actor = await assertFreshActive(prisma, actorUserId, USER_ADMIN_ROLES);
 
   const { skip, take, page, pageSize } = pagination(filters.page, filters.pageSize);
 
   const where: Record<string, unknown> = { deletedAt: null };
+
+  // §4.2 Revision 25: visibility follows the caller's OWN admin scope. Resolved
+  // per role — the branches reachable through some other role the caller holds
+  // must not widen what they may browse here.
+  const managed = branchesForRole(actor.roleScopes, 'admin');
+  if (managed !== null) {
+    // A branch-scoped Admin: only users assigned to one of those branches.
+    // Unassigned people stay invisible, which is the point of the rule.
+    where['branchRoles'] = { some: { deletedAt: null, branchId: { in: managed } } };
+  }
   if (filters.status) where['accountStatus'] = filters.status;
 
   // Role and Branch filters (§14.2) both look at LIVE assignments: a revoked
@@ -199,7 +213,16 @@ export async function listUsers(
   const assignment: Record<string, unknown> = { deletedAt: null };
   if (filters.role) assignment['role'] = { name: filters.role };
   if (filters.branchId) assignment['branchId'] = filters.branchId;
-  if (filters.role || filters.branchId) where['branchRoles'] = { some: assignment };
+  if (filters.role || filters.branchId) {
+    // AND with the scope above rather than replacing it: a `branch_id` filter is
+    // a narrowing convenience, never a way to reach outside one's own scope.
+    const clauses = [{ branchRoles: { some: assignment } }];
+    if (where['branchRoles']) {
+      clauses.push({ branchRoles: where['branchRoles'] as never });
+      delete where['branchRoles'];
+    }
+    where['AND'] = clauses;
+  }
 
   if (filters.q) {
     const raw = filters.q.trim();

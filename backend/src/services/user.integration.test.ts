@@ -457,3 +457,182 @@ describe('§14.2 / TD-10 — user list, filters and search', () => {
     await expect(listUsers(prisma, teacher, {})).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 });
+
+
+describe('§4.2 Revision 25 — user-list visibility is branch-scoped', () => {
+  /** An admin scoped to specific branches, or to all when `branchIds` is empty. */
+  async function scopedAdmin(branchIds: string[]): Promise<string> {
+    const user = await prisma.user.create({
+      data: { nameArabic: `${TAG} مشرفة مجالية`, accountStatus: 'active' },
+    });
+    const roleRow = await prisma.role.findUnique({ where: { name: 'admin' } });
+    if (branchIds.length === 0) {
+      await prisma.userBranchRole.create({
+        data: { userId: user.id, roleId: roleRow!.id, branchId: null },
+      });
+    } else {
+      for (const branchId of branchIds) {
+        await prisma.userBranchRole.create({
+          data: { userId: user.id, roleId: roleRow!.id, branchId },
+        });
+      }
+    }
+    return user.id;
+  }
+
+  async function branch(name: string): Promise<string> {
+    const b = await prisma.branch.create({
+      data: { name: `${TAG} ${name}`, operationalStartDate: new Date('2026-01-01') },
+    });
+    return b.id;
+  }
+
+  async function memberOf(branchId: string, role = 'teacher'): Promise<string> {
+    const u = await prisma.user.create({
+      data: { nameArabic: `${TAG} منتسبة`, accountStatus: 'active' },
+    });
+    const roleRow = await prisma.role.findUnique({ where: { name: role } });
+    await prisma.userBranchRole.create({
+      data: { userId: u.id, roleId: roleRow!.id, branchId },
+    });
+    return u.id;
+  }
+
+  const idsOf = (page: { data: { id: string }[] }) => page.data.map((u) => u.id);
+
+  it('a branch-scoped Admin sees their own branch and NOT another', async () => {
+    const marrakesh = await branch('مراكش');
+    const casablanca = await branch('الدار البيضاء');
+    const mine = await memberOf(marrakesh);
+    const theirs = await memberOf(casablanca);
+    const admin = await scopedAdmin([marrakesh]);
+
+    const ids = idsOf(await listUsers(prisma, admin, {}));
+    expect(ids).toContain(mine);
+    expect(ids).not.toContain(theirs);
+  });
+
+  it('unassigned people are invisible to a branch-scoped Admin', async () => {
+    const marrakesh = await branch('مراكش');
+    const admin = await scopedAdmin([marrakesh]);
+    // A parent, an unassigned student, and a pre-provisioned account.
+    const parent = await prisma.user.create({
+      data: { nameArabic: `${TAG} والدة`, accountStatus: 'active' },
+    });
+    const preprov = await preProvision(prisma, admin, {
+      nameArabic: `${TAG} غير منتسبة`,
+      email: addr(),
+    });
+
+    const ids = idsOf(await listUsers(prisma, admin, {}));
+    expect(ids).not.toContain(parent.id);
+    expect(ids).not.toContain(preprov.id);
+  });
+
+  it('a Super Admin sees the unassigned people a branch Admin cannot', async () => {
+    const marrakesh = await branch('مراكش');
+    const branchAdmin = await scopedAdmin([marrakesh]);
+    const superAdmin = await makeStaff('super_admin');
+    const parent = await prisma.user.create({
+      data: { nameArabic: `${TAG} والدة`, accountStatus: 'active' },
+    });
+
+    expect(idsOf(await listUsers(prisma, branchAdmin, {}))).not.toContain(parent.id);
+    expect(idsOf(await listUsers(prisma, superAdmin, {}))).toContain(parent.id);
+  });
+
+  it('an all-branches (NULL) Admin sees everyone, assigned or not', async () => {
+    const marrakesh = await branch('مراكش');
+    const assigned = await memberOf(marrakesh);
+    const unassigned = await prisma.user.create({
+      data: { nameArabic: `${TAG} بلا فرع`, accountStatus: 'active' },
+    });
+    const admin = await scopedAdmin([]); // branch_id NULL = all branches
+
+    const ids = idsOf(await listUsers(prisma, admin, {}));
+    expect(ids).toContain(assigned);
+    expect(ids).toContain(unassigned.id);
+  });
+
+  it('an Admin scoped to several branches sees all of them', async () => {
+    const marrakesh = await branch('مراكش');
+    const casablanca = await branch('الدار البيضاء');
+    const rabat = await branch('الرباط');
+    const a = await memberOf(marrakesh);
+    const b = await memberOf(casablanca);
+    const c = await memberOf(rabat);
+    const admin = await scopedAdmin([marrakesh, casablanca]);
+
+    const ids = idsOf(await listUsers(prisma, admin, {}));
+    expect(ids).toEqual(expect.arrayContaining([a, b]));
+    expect(ids).not.toContain(c);
+  });
+
+  it('the branch FILTER cannot reach outside the Admin\'s own scope', async () => {
+    const marrakesh = await branch('مراكش');
+    const casablanca = await branch('الدار البيضاء');
+    const theirs = await memberOf(casablanca);
+    const admin = await scopedAdmin([marrakesh]);
+
+    // Asking explicitly for another branch must narrow, never widen.
+    const ids = idsOf(await listUsers(prisma, admin, { branchId: casablanca }));
+    expect(ids).not.toContain(theirs);
+    expect(ids).toEqual([]);
+  });
+
+  it('SEARCH cannot reach outside scope either', async () => {
+    const marrakesh = await branch('مراكش');
+    const casablanca = await branch('الدار البيضاء');
+    const outsider = await prisma.user.create({
+      data: { nameArabic: `${TAG} سعاد الغريبة`, accountStatus: 'active' },
+    });
+    const roleRow = await prisma.role.findUnique({ where: { name: 'teacher' } });
+    await prisma.userBranchRole.create({
+      data: { userId: outsider.id, roleId: roleRow!.id, branchId: casablanca },
+    });
+    const admin = await scopedAdmin([marrakesh]);
+
+    // A name search must not become a way around the scope.
+    expect(idsOf(await listUsers(prisma, admin, { q: 'سعاد' }))).not.toContain(outsider.id);
+  });
+
+  it('a REVOKED assignment removes the user from that branch Admin\'s view', async () => {
+    // Visibility must follow live assignments. A soft-deleted assignment that
+    // still granted visibility would mean revoking someone from a branch left
+    // their record exposed to that branch's administrator indefinitely.
+    const marrakesh = await branch('مراكش');
+    const member = await memberOf(marrakesh);
+    const admin = await scopedAdmin([marrakesh]);
+
+    expect(idsOf(await listUsers(prisma, admin, {}))).toContain(member);
+
+    await prisma.userBranchRole.updateMany({
+      where: { userId: member },
+      data: { deletedAt: new Date() },
+    });
+
+    expect(idsOf(await listUsers(prisma, admin, {}))).not.toContain(member);
+  });
+
+  it('scope comes from the ADMIN role only, not from another role the caller holds', async () => {
+    // §4.2's per-role rule applied to browsing: being a Teacher in Casablanca
+    // must not let this person browse Casablanca's users as an Admin.
+    const marrakesh = await branch('مراكش');
+    const casablanca = await branch('الدار البيضاء');
+    const casaMember = await memberOf(casablanca);
+
+    const dual = await prisma.user.create({
+      data: { nameArabic: `${TAG} مزدوجة`, accountStatus: 'active' },
+    });
+    const adminRole = await prisma.role.findUnique({ where: { name: 'admin' } });
+    const teacherRole = await prisma.role.findUnique({ where: { name: 'teacher' } });
+    await prisma.userBranchRole.create({
+      data: { userId: dual.id, roleId: adminRole!.id, branchId: marrakesh },
+    });
+    await prisma.userBranchRole.create({
+      data: { userId: dual.id, roleId: teacherRole!.id, branchId: casablanca },
+    });
+
+    expect(idsOf(await listUsers(prisma, dual.id, {}))).not.toContain(casaMember);
+  });
+});
