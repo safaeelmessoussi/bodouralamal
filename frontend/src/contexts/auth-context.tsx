@@ -20,29 +20,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const checkAuth = async () => {
       try {
-        console.log("[v0] Checking authentication state...")
         if (apiClient.isAuthenticated()) {
-          console.log("[v0] User has token, fetching user data...")
           try {
             const currentUser = await apiClient.getCurrentUser()
-            console.log("[v0] User data loaded:", currentUser)
             setUser(currentUser)
           } catch (err) {
-            console.warn("[v0] Failed to load user data, clearing tokens:", err)
-            // Clear invalid tokens
+            // Failed to load user data, clear tokens
             localStorage.removeItem("access_token")
             localStorage.removeItem("refresh_token")
           }
-        } else {
-          console.log("[v0] No authentication token found")
         }
       } catch (error) {
-        console.error("[v0] Error in checkAuth:", error)
-        // Clear invalid tokens
+        // Error in checkAuth
         localStorage.removeItem("access_token")
         localStorage.removeItem("refresh_token")
       } finally {
-        console.log("[v0] Auth check complete, setting loading to false")
         setIsLoading(false)
       }
     }
@@ -53,9 +45,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (email: string, password: string) => {
     setIsLoading(true)
     try {
-      // For now, just use email/password placeholder
-      // This will be implemented when backend adds email/password auth
-      console.warn("[v0] Email/password auth not yet implemented")
+      // Email/password auth will be implemented when backend adds support
       throw new Error("Email/password authentication not available yet. Please use Google login.")
     } finally {
       setIsLoading(false)

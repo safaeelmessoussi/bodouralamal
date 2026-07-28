@@ -1,5 +1,3 @@
-console.log("[v0] Starting app initialization...")
-
 import { StrictMode } from "react"
 import { createRoot } from "react-dom/client"
 import { BrowserRouter } from "react-router-dom"
@@ -10,12 +8,8 @@ import { Toaster } from "sonner"
 import App from "./App"
 import "./globals.css"
 
-console.log("[v0] All imports successful")
-
 const rootElement = document.getElementById("root")
-console.log("[v0] Root element:", rootElement)
 if (rootElement) {
-  console.log("[v0] Creating React root...")
   try {
     createRoot(rootElement).render(
       <ErrorBoundary>
@@ -31,11 +25,8 @@ if (rootElement) {
         </StrictMode>
       </ErrorBoundary>
     )
-    console.log("[v0] Render successful")
   } catch (err) {
-    console.error("[v0] Render failed:", err)
+    console.error("Failed to render app:", err)
     document.body.innerHTML = `<div style="color: red; padding: 20px;">Error: ${err}</div>`
   }
-} else {
-  console.error("[v0] Root element not found!")
 }
