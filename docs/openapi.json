@@ -76,7 +76,7 @@
     "/registrations": {
       "post": {
         "summary": "Unified registration",
-        "description": "Public, gated by the signed onboarding token in X-Onboarding-Token (§4.1b step 4c). Adult self-registration or parent+child in ONE transaction (TD-4.1). Identity comes solely from the token payload — the schema rejects email/provider_subject_id outright (§20 rule 9). New accounts enter Pending. **The payload carries no placement (Revision 29)** — no Branch, Room, Level or Group — because registration creates a pending applicant only; assignment is an administrative action after approval, and reference data stays behind its own APIs.",
+        "description": "Public, gated by the signed onboarding token in X-Onboarding-Token (§4.1b step 4c). Adult self-registration or parent+child in ONE transaction (TD-4.1). Identity comes solely from the token payload — the schema rejects email/provider_subject_id outright (§20 rule 9). New accounts enter Pending. **`sex` (`female` | `male`) is REQUIRED for every person the transaction creates (Revision 27)** — the applicant, and the child on the parent+child path — because the registration exists before the User does; it is the person-side half of `Level.gender_restriction` and is written in the same transaction, never patched on afterwards. Person objects are **strict**: an unknown key is refused, not silently stripped. **The payload carries no placement (Revision 29)** — no Branch, Room, Level or Group — because registration creates a pending applicant only; assignment is an administrative action after approval, and reference data stays behind its own APIs.",
         "responses": {
           "201": {
             "description": "Created; account_status pending."
