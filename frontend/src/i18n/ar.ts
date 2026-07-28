@@ -319,4 +319,38 @@ export const ar = {
     rejected: "مرفوض",
     deleted: "محذوف",
   },
+
+  // Empty States
+  emptyStates: {
+    noData: "لا توجد بيانات",
+    noResults: "لم يتم العثور على نتائج",
+    trySearching: "جرب البحث بكلمات أخرى",
+    noItems: "لا توجد عناصر حتى الآن",
+    startByAdding: "ابدأ بإضافة عنصر جديد",
+    noTasks: "لا توجد مهام",
+    createFirst: "قم بإنشاء مهمتك الأولى",
+    noNotifications: "لا توجد إخطارات",
+    checkBackLater: "تحقق لاحقاً",
+  },
+
+  // Error States
+  errorStates: {
+    somethingWentWrong: "حدث خطأ ما",
+    tryAgain: "حاول مرة أخرى",
+    retry: "إعادة محاولة",
+    loadingFailed: "فشل في التحميل",
+    connectionError: "خطأ في الاتصال",
+    pageNotFound: "لم يتم العثور على الصفحة",
+    unauthorized: "لا توجد لديك صلاحيات للوصول",
+  },
+
+  // Loading States
+  loadingStates: {
+    loading: "جاري التحميل...",
+    loadingData: "جاري تحميل البيانات...",
+    saving: "جاري الحفظ...",
+    deleting: "جاري الحذف...",
+    updating: "جاري التحديث...",
+    processing: "جاري المعالجة...",
+  },
 };
