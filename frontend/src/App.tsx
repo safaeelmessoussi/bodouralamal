@@ -31,8 +31,12 @@ export default function App() {
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/pending-approval" element={<PendingApprovalPage />} />
 
-        {/* App shell */}
+        {/* Public shared routes */}
         <Route element={<AppShell />}>
+          <Route path="/levels" element={<AdminDashboard />} />
+          <Route path="/calendar" element={<CalendarPage />} />
+          <Route path="/content" element={<ContentPage />} />
+
           {/* Admin */}
           <Route path="/admin" element={<AdminDashboard />} />
           <Route path="/admin/approvals" element={<ApprovalsPage />} />
