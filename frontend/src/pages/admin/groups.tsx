@@ -55,8 +55,45 @@ export default function GroupsPage() {
         const response = await apiClient.getGroups(1, 100)
         setGroups(response.data)
       } catch (error) {
-        toast.error("Failed to load groups")
-        console.error("[v0] Failed to load groups:", error)
+        console.warn("[v0] Groups endpoint not available, using mock data:", error)
+        // Fallback to mock data while backend endpoint is under development
+        const mockGroups: Group[] = [
+          {
+            id: "g1",
+            name: "حفظ القرآن - المستوى الأول",
+            branch_id: "b1",
+            type: "quran",
+            teacher_id: "t1",
+            students_count: 18,
+            max_capacity: 25,
+            status: "active",
+            created_at: "2024-01-01T00:00:00Z",
+          },
+          {
+            id: "g2",
+            name: "الدراسات الإسلامية - المستوى الثاني",
+            branch_id: "b1",
+            type: "islamic_studies",
+            teacher_id: "t2",
+            students_count: 22,
+            max_capacity: 25,
+            status: "active",
+            created_at: "2024-01-02T00:00:00Z",
+          },
+          {
+            id: "g3",
+            name: "محو الأمية النسائي",
+            branch_id: "b2",
+            type: "literacy",
+            teacher_id: "t3",
+            students_count: 12,
+            max_capacity: 20,
+            status: "active",
+            created_at: "2024-01-03T00:00:00Z",
+          },
+        ]
+        setGroups(mockGroups)
+        toast.info("Showing demo data (groups endpoint pending)")
       } finally {
         setIsLoading(false)
       }
