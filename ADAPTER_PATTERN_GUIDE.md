@@ -8,7 +8,68 @@ The frontend uses an **adapter pattern** to isolate all backend dependencies int
 
 **No backend contracts are assumed in React components.** All backend calls go through adapter functions, each clearly marked with TODO comments explaining what backend information is pending.
 
+## Critical Architectural Rule
+
+**The frontend contains NO business logic. All decisions are driven by backend-supplied metadata.**
+
+- Frontend never infers eligibility from category names
+- Frontend never assumes what fields mean or who needs them
+- Backend supplies complete metadata that tells frontend exactly what to render
+- React components are purely presentational
+
+Example: "Showing parent fields" is NOT decided by `category === "child"` in the frontend. Instead, the backend metadata field `requiresParentInformation: true` drives this decision.
+
 ## Adapter Functions
+
+### 0. `getRegistrationMetadata()` - NEW
+
+**Purpose**: Get metadata that controls form behavior (backend business logic)
+
+**Current Implementation**: Mock metadata in adapter
+```typescript
+const metadata = getRegistrationMetadata()
+// Returns:
+{
+  registrationProfile: "adult" | "minor",
+  requiresParentInformation: boolean,
+  availableGenders: [{ value: string, label: string }, ...],
+  availableCategories: [{ value: string, label: string }, ...],
+  availableLevels?: [...]
+}
+```
+
+**What the Backend Team Needs to Define**:
+- [ ] API endpoint that returns this metadata (called after authentication)
+- [ ] How to determine `registrationProfile` (adult vs minor)?
+  - Option A: Based on age from Google profile?
+  - Option B: Based on previous registration preferences?
+  - Option C: Explicit user selection during flow?
+- [ ] How to determine `requiresParentInformation`?
+  - Always true if minor, false if adult?
+  - Any other factors?
+- [ ] What are ALL possible gender options (not just male/female)?
+- [ ] What are ALL possible categories and their labels?
+- [ ] Are there levels/groups to display?
+
+**File Reference**: `frontend/src/services/registration-adapter.ts:124-170`
+
+**After Backend is Ready**:
+```typescript
+export function getRegistrationMetadata(): RegistrationMetadata {
+  // Replace with real API call:
+  const response = await apiClient.get("/registration/metadata")
+  return response.data
+}
+```
+
+**Impact**: Once this endpoint works, the form automatically adapts to any changes in:
+- Gender options
+- Category options
+- Adult/minor eligibility rules
+- Parent information requirements
+- Future fields or levels
+
+---
 
 ### 1. `extractOnboardingSession()`
 
@@ -189,20 +250,53 @@ useEffect(() => {
 
 ---
 
+## How the Form Uses Metadata
+
+The registration form (`src/pages/register.tsx`) is purely presentational:
+
+```typescript
+// 1. Load metadata
+const metadata = getRegistrationMetadata()
+
+// 2. Render gender options from metadata (not hardcoded)
+metadata.availableGenders.map(gender => (
+  <option value={gender.value}>{gender.label}</option>
+))
+
+// 3. Render category options from metadata (not hardcoded)
+metadata.availableCategories.map(category => (
+  <option value={category.value}>{category.label}</option>
+))
+
+// 4. Show/hide parent fields based on metadata flag (not category name)
+{metadata.requiresParentInformation && (
+  // Parent fields JSX
+)}
+
+// 5. Show/hide adult fields based on metadata (not business logic)
+{!metadata.requiresParentInformation && (
+  // Adult fields JSX
+)}
+```
+
+**Key Result**: Zero frontend business logic. Backend changes (new categories, changing eligibility rules) require only backend changes. Frontend adapts automatically.
+
+---
+
 ## Integration Checklist
 
 When backend contracts are ready:
 
 ### Step 1: Define Contracts
+- [ ] Registration metadata endpoint - what it returns and when
 - [ ] Onboarding token format and payload
-- [ ] Registration endpoint (URL, request, response)
-- [ ] Minor determination logic
-- [ ] Approval status mechanism
+- [ ] Registration submission endpoint (URL, request, response)
+- [ ] Approval status mechanism (polling endpoint vs OAuth callback)
 
-### Step 2: Update Adapter Functions
+### Step 2: Update Adapter Functions (in `registration-adapter.ts`)
+- [ ] Replace `getRegistrationMetadata()` mock with real API call
 - [ ] Replace `extractOnboardingSession()` mock
 - [ ] Replace `submitRegistration()` mock
-- [ ] Replace `isMinor()` logic
 - [ ] Replace `getPendingRegistrationStatus()` mock
 
 ### Step 3: Test Registration Flow
@@ -222,9 +316,27 @@ When backend contracts are ready:
 
 ## Current Status
 
-**Adapter Functions**: ✅ All implemented as mocks with TODO comments
-**React Components**: ✅ All use adapters only, zero backend assumptions
-**Testing**: ✅ Fully functional with mock data, ready for backend integration
+**Architecture**: ✅ No business logic in frontend
+- Metadata-driven form rendering
+- All eligibility decisions in adapter
+- All category/gender/level data from backend metadata
+
+**Adapter Functions**: ✅ All implemented with mock metadata and TODO comments
+- `getRegistrationMetadata()` - NEW: Returns all form structure metadata
+- `extractOnboardingSession()` - Extracts Google user data
+- `submitRegistration()` - Submits form data
+- `getPendingRegistrationStatus()` - Checks approval status
+
+**React Components**: ✅ Purely presentational
+- Register form renders from metadata arrays
+- Parent/adult fields visibility from metadata flag
+- Validation uses metadata requirements
+- Zero hardcoded business rules
+
+**Testing**: ✅ Fully functional with mock data
+- Form adapts to different metadata values
+- Change metadata → form changes automatically
+- Ready for backend integration
 
 **Files to Modify When Backend is Ready**:
 - `frontend/src/services/registration-adapter.ts` (only file that needs changes)
