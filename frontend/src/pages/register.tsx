@@ -7,22 +7,20 @@ import { ArrowLeft } from "lucide-react"
 import { toast } from "sonner"
 import { ar } from "@/i18n/ar"
 import { Spinner } from "@/components/ui/spinner"
+import {
+  extractOnboardingSession,
+  submitRegistration,
+  isMinor,
+  RegistrationFormData,
+  OnboardingSession,
+} from "@/services/registration-adapter"
 
-interface RegistrationData {
-  firstName: string
-  lastName: string
-  gender: "male" | "female" | ""
-  category: "child" | "youth" | "woman" | ""
-  phone?: string
-  parentName?: string
-  parentPhone?: string
-  parentEmail?: string
-}
+type RegistrationData = RegistrationFormData
 
 export default function RegisterPage() {
   const navigate = useNavigate()
+  const [session, setSession] = useState<OnboardingSession | null>(null)
   const [onboardingToken, setOnboardingToken] = useState<string | null>(null)
-  const [email, setEmail] = useState<string>("")
   const [formData, setFormData] = useState<RegistrationData>({
     firstName: "",
     lastName: "",
@@ -32,33 +30,39 @@ export default function RegisterPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [showParentFields, setShowParentFields] = useState(false)
 
-  // Extract onboarding token from URL fragment
+  // Extract onboarding session from URL
   useEffect(() => {
+    const onboarding = extractOnboardingSession()
+    if (!onboarding) {
+      navigate("/login")
+      return
+    }
+
+    setSession(onboarding)
+
+    // Extract onboarding token from fragment for submission
+    // TODO: Backend must clarify token format and handling
     const fragment = window.location.hash.slice(1)
     const params = new URLSearchParams(fragment)
     const token = params.get("onboarding_token")
-
     if (token) {
       setOnboardingToken(token)
-      // Decode token to extract email (it's a JWT in base64url format)
-      try {
-        const payload = token.split(".")[0]
-        const decoded = JSON.parse(Buffer.from(payload, "base64url").toString("utf8"))
-        setEmail(decoded.email || "")
-        // TODO: backend should return whether this applicant is a minor
-        // For now, we'll show parent fields if category is "child"
-      } catch (error) {
-        toast.error(ar.registration.errors.invalidToken)
-        navigate("/login")
-      }
-    } else {
-      navigate("/login")
+    }
+
+    // Populate name fields from Google data if available
+    if (onboarding.givenName || onboarding.familyName) {
+      setFormData((prev) => ({
+        ...prev,
+        firstName: onboarding.givenName || "",
+        lastName: onboarding.familyName || "",
+      }))
     }
   }, [navigate])
 
-  // Show parent fields based on category (this should be driven by backend metadata)
+  // Show parent fields based on category
+  // TODO: Once backend provides metadata, use that to determine if minor instead of category
   useEffect(() => {
-    setShowParentFields(formData.category === "child")
+    setShowParentFields(isMinor(formData.category))
   }, [formData.category])
 
   const handleChange = (
@@ -112,27 +116,15 @@ export default function RegisterPage() {
 
     setIsLoading(true)
     try {
-      // TODO: Call backend registration endpoint once it's available
-      // For now, store data in session and show pending approval
-      sessionStorage.setItem("registration_data", JSON.stringify(formData))
-      sessionStorage.setItem("oauth_destination", "/pending-approval")
+      // TODO: Replace with real backend API call once contract is defined
+      const response = await submitRegistration(onboardingToken, formData)
 
-      // This would normally call:
-      // const response = await apiClient.register({
-      //   onboarding_token: onboardingToken,
-      //   first_name: formData.firstName,
-      //   last_name: formData.lastName,
-      //   gender: formData.gender,
-      //   category: formData.category,
-      //   phone: formData.phone,
-      //   parent_name: formData.parentName,
-      //   parent_phone: formData.parentPhone,
-      //   parent_email: formData.parentEmail,
-      // })
-
-      toast.success(ar.registration.buttons.submit)
-      // Redirect to pending approval page
-      navigate("/pending-approval")
+      if (response.success) {
+        toast.success(response.message || ar.registration.buttons.submit)
+        navigate("/pending-approval")
+      } else {
+        toast.error(response.message || ar.registration.errors.registrationFailed)
+      }
     } catch (error: any) {
       const errorMessage = error?.message || ar.registration.errors.registrationFailed
       toast.error(errorMessage)
@@ -142,7 +134,7 @@ export default function RegisterPage() {
     }
   }
 
-  if (!onboardingToken) {
+  if (!session) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-background to-muted" dir="rtl">
         <Card className="border-0 shadow-lg">
@@ -211,7 +203,7 @@ export default function RegisterPage() {
                 </label>
                 <Input
                   type="email"
-                  value={email}
+                  value={session?.email || ""}
                   disabled
                   className="bg-muted"
                 />
