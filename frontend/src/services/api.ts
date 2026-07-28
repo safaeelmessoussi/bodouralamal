@@ -42,6 +42,24 @@ export interface UsersResponse {
   page: number
 }
 
+export interface Group {
+  id: string
+  name: string
+  branch_id: string
+  type: "quran" | "islamic_studies" | "literacy"
+  teacher_id: string
+  students_count: number
+  max_capacity: number
+  status: "active" | "inactive"
+  created_at: string
+}
+
+export interface GroupsResponse {
+  data: Group[]
+  total: number
+  page: number
+}
+
 export class ApiClient {
   private accessToken: string | null = null
   private refreshToken: string | null = null
@@ -213,6 +231,32 @@ export class ApiClient {
 
   async deleteUser(id: string): Promise<void> {
     await this.request(`/admin/users/${id}`, { method: "DELETE" })
+  }
+
+  async getGroups(page: number = 1, limit: number = 10): Promise<GroupsResponse> {
+    return this.request(`/admin/groups?page=${page}&limit=${limit}`)
+  }
+
+  async getGroup(id: string): Promise<Group> {
+    return this.request(`/admin/groups/${id}`)
+  }
+
+  async createGroup(data: Partial<Group>): Promise<Group> {
+    return this.request("/admin/groups", {
+      method: "POST",
+      body: JSON.stringify(data),
+    })
+  }
+
+  async updateGroup(id: string, data: Partial<Group>): Promise<Group> {
+    return this.request(`/admin/groups/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    })
+  }
+
+  async deleteGroup(id: string): Promise<void> {
+    await this.request(`/admin/groups/${id}`, { method: "DELETE" })
   }
 
   isAuthenticated(): boolean {
