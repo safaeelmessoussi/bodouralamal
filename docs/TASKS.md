@@ -173,7 +173,11 @@
 > **Resolved by Revision 30:** Teachers are `⊘` for reading reference data. They receive branch, room, level and
 > subject information only through the operational APIs they are authorised to use, never by browsing reference-data
 > endpoints. The implementation already behaved this way and is unchanged.
-- [ ] Group CRUD: wall-clock times, room/time conflict detection, capacity (FOR UPDATE, TD-15), co-teaching, optimistic version locking (§4.4, TD-11, TD-15)
+- [~] Group CRUD: wall-clock times, room/time conflict detection, capacity (FOR UPDATE, TD-15), co-teaching, optimistic version locking (§4.4, TD-11, TD-15)
+  - ✓ Backend (service) — create/update/delete/list; half-open room/time conflict detection; TD-15 optimistic locking; TD-5 enrolment guard; R26 scoping
+  - ✓ Tests — 18 integration tests; six of seven mutations caught
+  - ⚠ The TD-15 row lock is retained but NOT proven by test — the concurrency test passes without it; needs a widened window
+  - △ Remaining — HTTP controller/routes, contract entries, and co-teacher assignment endpoints
 - [ ] Roster management + consent re-evaluation enqueue on every mutation (TD-4.6)
 - [ ] Event model: visibility enum, recurrence (none/daily/weekly/biweekly-alternating/yearly) (§4.4)
 - [ ] Explicit four-way scope-join population at creation; operational-start filter (§4.4)

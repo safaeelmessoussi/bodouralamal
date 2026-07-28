@@ -98,19 +98,37 @@ export function canActOnBranch(
 }
 
 /**
- * A Prisma `where` fragment limiting `Branch` rows to those the given roles
- * reach. `{}` means unrestricted.
+ * The branch ids the given roles reach, or `null` for unrestricted.
+ *
+ * Callers apply this to **their own** branch column, which matters: the
+ * `Branch` model keys it as `id` while every other model keys it as
+ * `branch_id`. Reusing a Branch-shaped filter on `Group` once silently filtered
+ * `group.id IN (branchIds)` and matched nothing — a caught defect, and the
+ * reason this returns ids rather than a ready-made fragment.
+ */
+export function reachableBranches(
+  scopes: readonly RoleScope[],
+  roles: readonly string[],
+): string[] | null {
+  if (isSuperAdmin(scopes)) return null;
+  const reachable = new Set<string>();
+  for (const role of roles) {
+    const branches = branchesForRole(scopes, role);
+    if (branches === null) return null;
+    for (const b of branches) reachable.add(b);
+  }
+  return [...reachable];
+}
+
+/**
+ * A Prisma `where` fragment limiting **`Branch`** rows — keyed on `id`, so it is
+ * for the Branch model only. Other models use `reachableBranches` against their
+ * own `branchId`. `{}` means unrestricted.
  */
 export function branchFilter(
   scopes: readonly RoleScope[],
   roles: readonly string[],
 ): Record<string, unknown> {
-  if (isSuperAdmin(scopes)) return {};
-  const reachable = new Set<string>();
-  for (const role of roles) {
-    const branches = branchesForRole(scopes, role);
-    if (branches === null) return {};
-    for (const b of branches) reachable.add(b);
-  }
-  return { id: { in: [...reachable] } };
+  const reachable = reachableBranches(scopes, roles);
+  return reachable === null ? {} : { id: { in: reachable } };
 }
