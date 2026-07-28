@@ -197,9 +197,16 @@
 - [~] Branch-activation manual backfill action + endpoint (§4.4, TD-3.4)
   - ✓ Backend — list-then-attach, idempotent, branch-scoped; the gap is neither auto-filled nor ignored
   - ✓ HTTP — `GET`/`POST /admin/branches/{id}/event-backfill`; idempotence proven over HTTP
-- [ ] Calendar views: month/week/agenda, filters, glance view, session popup, Monday start
-- [ ] Three-tier visibility filtering per role incl. public tier for anonymous (§4.4, TD-2)
-- [ ] Operational-start-date graying in branch-scoped views
+- [~] Calendar views: month/week/agenda, filters, glance view, session popup, Monday start
+  - ✓ Backend — unified grid over Groups + Events; all five recurrence types; Monday-based week; branch/level/group filters; 366-day range guard
+  - ✓ Tests — 20 integration tests; eight mutations caught
+  - △ Remaining — `GET /calendar` HTTP route (public, anonymous-capable) and the frontend views
+- [x] Three-tier visibility filtering per role incl. public tier for anonymous (§4.4, TD-2)
+  - ✓ Backend — resolved server-side for anonymous, Pending, Student, Parent, Teacher, Admin and Super Admin
+  - ✓ Security — each SRS asymmetry pinned by test: student private unfiltered by branch (R-6), hidden unscoped for Admins, private branch-scoped, Pending = anonymous, timetable never public
+- [~] Operational-start-date graying in branch-scoped views
+  - ✓ Backend — nothing before a branch's `operational_start_date` is returned in a branch-scoped read
+  - △ Remaining — the visual graying itself is a frontend concern
 - [ ] Hijri overlay: Morocco-tuned source + admin offset (−2..+2) + DualDateDisplay (§4.4, §5.7)
 - [ ] §18 Scheduling & Calendar checklist green (incl. Ramadan DST regression test)
 
