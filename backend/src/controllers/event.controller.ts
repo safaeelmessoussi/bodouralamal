@@ -9,6 +9,7 @@ import {
   backfillCandidates,
   createEvent,
   deleteEvent,
+  updateEvent,
 } from '../services/event.service.js';
 import type { Actor } from '../services/group.service.js';
 
@@ -51,6 +52,32 @@ const createSchema = z
     category_ids: z.array(z.uuid()).max(50).optional(),
     level_ids: z.array(z.uuid()).max(100).optional(),
     group_ids: z.array(z.uuid()).max(200).optional(),
+  })
+  .strict();
+
+/**
+ * `PATCH /events/{id}` — the event's own attributes only.
+ *
+ * `.strict()` matters here: scope keys (`global`, `branch_ids`, …) are **not**
+ * editable, and a strict schema **rejects** them with a 400 rather than
+ * accepting the request and silently dropping them. §4.4 materialises scope at
+ * creation and provides the manual backfill action for later attachment; see
+ * `updateEvent` for why re-resolving on edit would break that rule.
+ */
+const patchSchema = z
+  .object({
+    version: z.number().int().min(0),
+    title: z.string().trim().min(1).max(120).optional(),
+    description: z.string().trim().max(2000).nullable().optional(),
+    visibility: z.enum(['public', 'private', 'hidden']).optional(),
+    start_date: calendarDate.optional(),
+    end_date: calendarDate.nullable().optional(),
+    start_time: clock.nullable().optional(),
+    end_time: clock.nullable().optional(),
+    recurrence_type: z
+      .enum(['none', 'daily', 'weekly', 'biweekly_alternating', 'yearly'])
+      .optional(),
+    recurrence_end_date: calendarDate.nullable().optional(),
   })
   .strict();
 
@@ -97,6 +124,37 @@ export function create(prisma: PrismaClient) {
       // Reports what was ACTUALLY attached, which may be fewer branches than
       // requested: §4.4 excludes branches that are not yet operational.
       attached: result.attached,
+    });
+  };
+}
+
+export function update(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const id = pathId(req);
+    const parsed = patchSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      throw new AppError('VALIDATION_FAILED', 'invalid event patch; scope is not editable');
+    }
+    const { version, ...b } = parsed.data;
+
+    const event = await updateEvent(prisma, actorOf(req), id, version, {
+      ...(b.title !== undefined ? { title: b.title } : {}),
+      ...(b.description !== undefined ? { description: b.description } : {}),
+      ...(b.visibility !== undefined ? { visibility: b.visibility } : {}),
+      ...(b.start_date !== undefined ? { startDate: b.start_date } : {}),
+      ...(b.end_date !== undefined ? { endDate: b.end_date } : {}),
+      ...(b.start_time !== undefined ? { startTime: b.start_time } : {}),
+      ...(b.end_time !== undefined ? { endTime: b.end_time } : {}),
+      ...(b.recurrence_type !== undefined ? { recurrenceType: b.recurrence_type } : {}),
+      ...(b.recurrence_end_date !== undefined ? { recurrenceEndDate: b.recurrence_end_date } : {}),
+    });
+
+    res.json({
+      id: event.id,
+      title: event.title,
+      visibility: event.visibility,
+      recurrence_type: event.recurrenceType,
+      version: event.version,
     });
   };
 }

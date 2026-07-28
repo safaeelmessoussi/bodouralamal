@@ -200,6 +200,30 @@
       }
     },
     "/events/{id}": {
+      "patch": {
+        "summary": "Edit an event",
+        "description": "TD-15 optimistic locking: send the `version` you loaded; a stale one is `409 VERSION_CONFLICT`, never a silent overwrite of a colleague's edit. **Scope is not editable and scope keys are rejected** (`400`) rather than silently dropped — §4.4 materialises the four scope joins *at creation time* and provides the manual branch-activation **backfill** as the one sanctioned way to attach a branch later; re-resolving scope on edit would let a global event silently gain every branch that opened since it was created, which is exactly the auto-fill §4.4 forbids. Dates validate on the **merged** event, so clearing `recurrence_end_date` while the recurrence is still weekly fails. Who may edit is narrower than who may create: a branch-scoped Admin only for an event **every** branch of which is inside their scope, and a Teacher only for one scoped exclusively to groups they teach — anyone else gets `404`, not `403` (§20 rule 17).",
+        "responses": {
+          "200": {
+            "description": "The updated event with its new version."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — unknown/scope keys, a malformed date or time, or an invalid merged recurrence."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8)."
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8)."
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an unknown event or one outside the caller's reach."
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). VERSION_CONFLICT."
+          }
+        }
+      },
       "delete": {
         "summary": "Delete an event",
         "description": "TD-5: the event is soft-deleted and **its scope join rows are removed** — they are the materialised reach of an event that no longer applies, and carry no history of their own. Attached content keeps its `event_id` for provenance but no longer surfaces under the event.",

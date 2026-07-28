@@ -21,6 +21,9 @@ interface Body {
   error?: { code?: string };
   data?: { id: string }[];
   id?: string;
+  title?: string;
+  visibility?: string;
+  version?: number;
   attached?: { branches: number; groups: number };
 }
 
@@ -189,5 +192,113 @@ describe('DELETE /events/{id} and the backfill endpoints', () => {
     expect(
       (await call('POST', `/admin/branches/${branchId}/event-backfill`, superToken, { event_ids: [] })).status,
     ).toBe(400);
+  });
+});
+
+describe('PATCH /events/{id}', () => {
+  async function makeEvent(branchId: string): Promise<{ id: string; version: number }> {
+    const res = await call('POST', '/events', superToken, payload({ branch_ids: [branchId] }));
+    expect(res.status).toBe(201);
+    const row = await prisma.event.findUnique({ where: { id: res.body.id! } });
+    return { id: row!.id, version: row!.version };
+  }
+
+  it('edits attributes and returns the new version', async () => {
+    const branchId = await makeBranch('مراكش');
+    const event = await makeEvent(branchId);
+
+    const res = await call('PATCH', `/events/${event.id}`, superToken, {
+      version: event.version,
+      title: `${TAG} معدّل`,
+      visibility: 'public',
+    });
+
+    expect(res.status).toBe(200);
+    expect(res.body.title).toBe(`${TAG} معدّل`);
+    expect(res.body.visibility).toBe('public');
+    expect(res.body.version).toBe(event.version + 1);
+  });
+
+  it('TD-15: a stale version is 409 VERSION_CONFLICT', async () => {
+    const branchId = await makeBranch('مراكش');
+    const event = await makeEvent(branchId);
+    const stale = event.version;
+
+    expect(
+      (await call('PATCH', `/events/${event.id}`, superToken, { version: stale, title: `${TAG} أ` }))
+        .status,
+    ).toBe(200);
+
+    const second = await call('PATCH', `/events/${event.id}`, superToken, {
+      version: stale,
+      title: `${TAG} ب`,
+    });
+    expect(second.status).toBe(409);
+    expect(second.body.error?.code).toBe('VERSION_CONFLICT');
+  });
+
+  it('REJECTS scope keys rather than silently dropping them', async () => {
+    // §4.4 materialises scope at creation; a request that believes it is
+    // re-scoping must be told it is not, not answered 200.
+    const branchId = await makeBranch('مراكش');
+    const other = await makeBranch('أكادير');
+    const event = await makeEvent(branchId);
+
+    const res = await call('PATCH', `/events/${event.id}`, superToken, {
+      version: event.version,
+      branch_ids: [other],
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.error?.code).toBe('VALIDATION_FAILED');
+
+    expect(await prisma.eventBranch.count({ where: { eventId: event.id, branchId: other } })).toBe(0);
+  });
+
+  it('refuses a malformed date or clock value at the boundary', async () => {
+    const branchId = await makeBranch('مراكش');
+    const event = await makeEvent(branchId);
+
+    expect(
+      (await call('PATCH', `/events/${event.id}`, superToken, {
+        version: event.version,
+        start_date: '15/06/2026',
+      })).status,
+    ).toBe(400);
+    expect(
+      (await call('PATCH', `/events/${event.id}`, superToken, {
+        version: event.version,
+        start_time: '9am',
+      })).status,
+    ).toBe(400);
+  });
+
+  it('requires a version', async () => {
+    const branchId = await makeBranch('مراكش');
+    const event = await makeEvent(branchId);
+    expect(
+      (await call('PATCH', `/events/${event.id}`, superToken, { title: `${TAG} بلا نسخة` })).status,
+    ).toBe(400);
+  });
+
+  it('refuses an anonymous caller and a Parent', async () => {
+    const branchId = await makeBranch('مراكش');
+    const event = await makeEvent(branchId);
+
+    expect((await call('PATCH', `/events/${event.id}`, undefined, { version: event.version })).status)
+      .toBe(401);
+    expect(
+      (await call('PATCH', `/events/${event.id}`, parentToken, {
+        version: event.version,
+        title: `${TAG} محاولة`,
+      })).status,
+    ).toBe(403);
+  });
+
+  it('an unknown id is 404', async () => {
+    const res = await call('PATCH', '/events/00000000-0000-4000-8000-000000000000', superToken, {
+      version: 0,
+      title: `${TAG} محاولة`,
+    });
+    expect(res.status).toBe(404);
   });
 });

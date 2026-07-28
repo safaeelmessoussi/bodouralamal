@@ -101,6 +101,7 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
   guarded.post('/admin/approvals/:id/approve', approvals.approve(prisma));
   guarded.post('/admin/approvals/:id/reject', approvals.reject(prisma));
   guarded.post('/events', events.create(prisma));
+  guarded.patch('/events/:id', events.update(prisma));
   guarded.delete('/events/:id', events.remove(prisma));
   guarded.get('/admin/branches/:id/event-backfill', events.listBackfill(prisma));
   guarded.post('/admin/branches/:id/event-backfill', events.applyBackfill(prisma));

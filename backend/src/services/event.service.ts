@@ -3,6 +3,7 @@ import { AppError } from '../lib/errors.js';
 import * as scope from '../policies/branch-scope.js';
 import { teacherGroupIds } from '../policies/teacher-scope.js';
 import * as audit from '../repositories/audit.repository.js';
+import { updateWithVersion } from '../repositories/optimistic-lock.js';
 import type { Actor } from './group.service.js';
 
 /**
@@ -209,6 +210,139 @@ export async function createEvent(
         groups: groupIds.length,
       },
     };
+  });
+}
+
+/**
+ * TD-2 *"Schedule/edit Events"* — who may edit an EXISTING event.
+ *
+ * Editing is narrower than creating, because the event's reach already exists:
+ *  - Super Admin, and an Admin with all-branches scope: any event.
+ *  - A branch-scoped Admin: only an event **every** branch of which is inside
+ *    their scope. An event reaching a branch they do not manage is not theirs
+ *    to retitle or re-time, and one carrying no branch rows at all (a teacher's
+ *    group-only event) is not attributable to them either.
+ *  - A Teacher: only an event scoped **exclusively** to groups they teach —
+ *    the same shape `assertMayScope` permits them to create.
+ *
+ * A caller who fails the test gets `NOT_FOUND`, not `FORBIDDEN` (§20 rule 17):
+ * whether an event they cannot reach exists is not information they are owed.
+ */
+async function assertMayEdit(
+  tx: Prisma.TransactionClient,
+  actor: Actor,
+  eventId: string,
+): Promise<void> {
+  if (isSuperAdmin(actor)) return;
+
+  const [branches, categories, levels, groups] = await Promise.all([
+    tx.eventBranch.findMany({ where: { eventId }, select: { branchId: true } }),
+    tx.eventCategory.count({ where: { eventId } }),
+    tx.eventLevel.count({ where: { eventId } }),
+    tx.eventGroup.findMany({ where: { eventId }, select: { groupId: true } }),
+  ]);
+
+  if (isAdmin(actor)) {
+    const reachable = scope.reachableBranches(actor.roleScopes, [MANAGING_ROLE]);
+    if (reachable === null) return; // all-branches Admin
+    const outside = branches.length === 0 || branches.some((b) => !reachable.includes(b.branchId));
+    if (outside) throw new AppError('NOT_FOUND', 'no such event');
+    return;
+  }
+
+  if (!isTeacher(actor)) throw new AppError('FORBIDDEN', 'editing events requires staff');
+
+  // A teacher's reach is groups only; any wider scope row puts the event beyond
+  // them even if one of its groups happens to be theirs.
+  if (branches.length > 0 || categories > 0 || levels > 0 || groups.length === 0) {
+    throw new AppError('NOT_FOUND', 'no such event');
+  }
+  const own = new Set(await teacherGroupIds(tx as unknown as PrismaClient, actor.userId));
+  if (groups.some((g) => !own.has(g.groupId))) throw new AppError('NOT_FOUND', 'no such event');
+}
+
+/** The event's own attributes. Scope is deliberately absent — see `updateEvent`. */
+export type EventPatch = Partial<Omit<EventInput, keyof EventScopes>>;
+
+/**
+ * `PATCH /events/{id}` (TD-3.4) — edits the event's own attributes under TD-15
+ * optimistic locking.
+ *
+ * **Scope is not editable here, by design.** §4.4 populates the four join
+ * tables *"at creation time"* and provides the manual **backfill** action as the
+ * one sanctioned way to attach a branch afterwards. Re-resolving scope on edit
+ * would mean a global event silently gaining every branch that opened since it
+ * was created — precisely the auto-fill §4.4 forbids (*"never silently
+ * auto-filled and never silently ignored"*). Scope keys are therefore rejected
+ * at the API boundary rather than quietly ignored.
+ */
+export async function updateEvent(
+  prisma: PrismaClient,
+  actor: Actor,
+  id: string,
+  expectedVersion: number,
+  patch: EventPatch,
+): Promise<Event> {
+  if (!isAdmin(actor) && !isTeacher(actor)) {
+    throw new AppError('FORBIDDEN', 'editing events requires staff');
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const existing = await tx.event.findFirst({ where: { id, deletedAt: null } });
+    if (!existing) throw new AppError('NOT_FOUND', 'no such event');
+    await assertMayEdit(tx, actor, id);
+
+    // Validated on the MERGED event: clearing a recurrence end date while the
+    // recurrence stays weekly must fail, and only the merge can see that.
+    const merged: EventInput = {
+      title: patch.title ?? existing.title,
+      description: patch.description === undefined ? existing.description : patch.description,
+      visibility: (patch.visibility ?? existing.visibility) as EventInput['visibility'],
+      startDate: patch.startDate ?? existing.startDate,
+      endDate: patch.endDate === undefined ? existing.endDate : patch.endDate,
+      startTime: patch.startTime === undefined ? existing.startTime : patch.startTime,
+      endTime: patch.endTime === undefined ? existing.endTime : patch.endTime,
+      recurrenceType: (patch.recurrenceType ?? existing.recurrenceType) as EventInput['recurrenceType'],
+      recurrenceEndDate:
+        patch.recurrenceEndDate === undefined ? existing.recurrenceEndDate : patch.recurrenceEndDate,
+    };
+    assertValidDates(merged);
+
+    // TD-15.1: conditional UPDATE on `version` — a stale version is a coded 409,
+    // never a silent overwrite of a colleague's edit.
+    const updated = await updateWithVersion<Event>({
+      delegate: tx.event,
+      id,
+      expectedVersion,
+      requireNotDeleted: true,
+      data: {
+        title: merged.title,
+        description: merged.description ?? null,
+        visibility: merged.visibility as never,
+        startDate: merged.startDate,
+        endDate: merged.endDate ?? null,
+        startTime: merged.startTime ?? null,
+        endTime: merged.endTime ?? null,
+        recurrenceType: merged.recurrenceType as never,
+        recurrenceEndDate: merged.recurrenceEndDate ?? null,
+      },
+    });
+
+    await audit.write(tx, {
+      actorUserId: actor.userId,
+      actionType: 'event.update',
+      targetEntity: 'Event',
+      targetId: id,
+      detail: {
+        fields_changed: Object.keys(patch),
+        // Recorded explicitly: a visibility change moves the event between
+        // audience tiers, which is the edit most worth being able to trace.
+        ...(patch.visibility && patch.visibility !== existing.visibility
+          ? { visibility_from: existing.visibility, visibility_to: patch.visibility }
+          : {}),
+      },
+    });
+    return updated;
   });
 }
 

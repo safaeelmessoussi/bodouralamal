@@ -190,7 +190,8 @@
   - ✓ Backend — create/delete with all five recurrence types; unbounded recurrence refused; TD-5 delete removes the scope joins
   - ✓ Tests — 20 integration tests; seven mutations caught incl. a teacher privilege-escalation path
   - ✓ HTTP — `POST /events`, `DELETE /events/{id}` with `YYYY-MM-DD`/`HH:MM` boundary validation; response reports what was actually attached
-  - △ Remaining — `PATCH /events/{id}` (documented, PENDING); visibility FILTERING lands with the calendar read
+  - ✓ HTTP — `PATCH /events/{id}` under TD-15 optimistic locking; **scope keys are rejected, not silently dropped** (§4.4 materialises scope at creation and backfill is the one sanctioned later attachment); edit rights are narrower than create rights
+  - ⚠ For the Document Owner — an event's scope is therefore **not editable** in the MVP; a mis-scoped event is deleted and recreated. Widening this needs a decision on how a re-resolved global event avoids §4.4's silent auto-fill
 - [x] Explicit four-way scope-join population at creation; operational-start filter (§4.4)
   - ✓ Backend — rows written at creation, never a runtime wildcard; only already-operational branches attached
   - ✓ Tests — asserts real rows in all four join tables and the exclusion of a future-opening branch

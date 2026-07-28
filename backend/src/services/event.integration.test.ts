@@ -9,6 +9,7 @@ import {
   backfillCandidates,
   createEvent,
   deleteEvent,
+  updateEvent,
   type EventInput,
 } from './event.service.js';
 
@@ -417,5 +418,272 @@ describe('§4.4 — branch-activation backfill', () => {
     await expect(backfillCandidates(prisma, admin([mine]), theirs)).rejects.toMatchObject({
       code: 'NOT_FOUND',
     });
+  });
+});
+
+describe('TD-15 / §4.4 — editing an event', () => {
+  const teacherActor = (userId: string): Actor => ({
+    userId,
+    roles: ['teacher'],
+    roleScopes: [{ role: 'teacher', branches: null }],
+  });
+
+  it('edits attributes and increments the version', async () => {
+    const branchId = await makeBranch('مراكش');
+    const { event } = await createEvent(
+      prisma,
+      superAdmin(),
+      eventInput({ branchIds: [branchId] }),
+      TODAY,
+    );
+
+    const updated = await updateEvent(prisma, superAdmin(), event.id, event.version, {
+      title: `${TAG} نشاط معدّل`,
+      visibility: 'public',
+    });
+
+    expect(updated.title).toBe(`${TAG} نشاط معدّل`);
+    expect(updated.visibility).toBe('public');
+    expect(updated.version).toBe(event.version + 1);
+  });
+
+  it('TD-15: a stale version is VERSION_CONFLICT, not a silent overwrite', async () => {
+    const branchId = await makeBranch('مراكش');
+    const { event } = await createEvent(
+      prisma,
+      superAdmin(),
+      eventInput({ branchIds: [branchId] }),
+      TODAY,
+    );
+    const stale = event.version;
+    await updateEvent(prisma, superAdmin(), event.id, stale, { title: `${TAG} أولى` });
+
+    await expect(
+      updateEvent(prisma, superAdmin(), event.id, stale, { title: `${TAG} ثانية` }),
+    ).rejects.toMatchObject({ code: 'VERSION_CONFLICT' });
+
+    // The first writer's value survives — nothing is merged, nothing is lost.
+    const row = await prisma.event.findUnique({ where: { id: event.id } });
+    expect(row!.title).toBe(`${TAG} أولى`);
+  });
+
+  it('validates the MERGED event, not the patch in isolation', async () => {
+    const branchId = await makeBranch('مراكش');
+    const { event } = await createEvent(
+      prisma,
+      superAdmin(),
+      eventInput({
+        branchIds: [branchId],
+        recurrenceType: 'weekly',
+        recurrenceEndDate: day('2026-08-01'),
+      }),
+      TODAY,
+    );
+
+    // Clearing the end date while the recurrence stays weekly leaves an
+    // unbounded recurrence, which would expand forever in every calendar read.
+    await expect(
+      updateEvent(prisma, superAdmin(), event.id, event.version, { recurrenceEndDate: null }),
+    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+
+    // Dropping the recurrence along with it is coherent, and accepted.
+    const ok = await updateEvent(prisma, superAdmin(), event.id, event.version, {
+      recurrenceType: 'none',
+      recurrenceEndDate: null,
+    });
+    expect(ok.recurrenceType).toBe('none');
+  });
+
+  it('§4.4: scope is untouched by an edit', async () => {
+    // The joins are materialised at creation and changed only by backfill; an
+    // edit must not re-resolve them.
+    const branchId = await makeBranch('مراكش');
+    const { event } = await createEvent(
+      prisma,
+      superAdmin(),
+      eventInput({ branchIds: [branchId] }),
+      TODAY,
+    );
+    await updateEvent(prisma, superAdmin(), event.id, event.version, { title: `${TAG} جديد` });
+
+    const rows = await prisma.eventBranch.findMany({ where: { eventId: event.id } });
+    expect(rows.map((r) => r.branchId)).toEqual([branchId]);
+  });
+
+  it('a branch-scoped Admin cannot edit an event reaching a branch they do not manage', async () => {
+    const mine = await makeBranch('مراكش');
+    const theirs = await makeBranch('الدار البيضاء');
+    const { event } = await createEvent(
+      prisma,
+      superAdmin(),
+      eventInput({ branchIds: [mine, theirs] }),
+      TODAY,
+    );
+
+    // §20 rule 17: 404, not 403 — its existence is not theirs to learn.
+    await expect(
+      updateEvent(prisma, admin([mine]), event.id, event.version, { title: `${TAG} محاولة` }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+
+    const row = await prisma.event.findUnique({ where: { id: event.id } });
+    expect(row!.title).toBe(`${TAG} نشاط`);
+  });
+
+  it('a branch-scoped Admin edits an event confined to their own branches', async () => {
+    const mine = await makeBranch('مراكش');
+    const { event } = await createEvent(
+      prisma,
+      superAdmin(),
+      eventInput({ branchIds: [mine] }),
+      TODAY,
+    );
+
+    const updated = await updateEvent(prisma, admin([mine]), event.id, event.version, {
+      title: `${TAG} مسموح`,
+    });
+    expect(updated.title).toBe(`${TAG} مسموح`);
+  });
+
+  it('a Teacher edits their own group event but not another group’s', async () => {
+    const branchId = await makeBranch('مراكش');
+    const ownGroup = await makeGroup(branchId);
+    const otherGroup = await makeGroup(branchId);
+    const t = await teacherUser('معلمة');
+    await assignTeacher(prisma, superAdmin(), ownGroup, t);
+
+    const own = await createEvent(
+      prisma,
+      teacherActor(t),
+      eventInput({ visibility: 'hidden', groupIds: [ownGroup] }),
+      TODAY,
+    );
+    const foreign = await createEvent(
+      prisma,
+      superAdmin(),
+      eventInput({ groupIds: [otherGroup] }),
+      TODAY,
+    );
+
+    const updated = await updateEvent(prisma, teacherActor(t), own.event.id, own.event.version, {
+      title: `${TAG} تعديل المعلمة`,
+    });
+    expect(updated.title).toBe(`${TAG} تعديل المعلمة`);
+
+    await expect(
+      updateEvent(prisma, teacherActor(t), foreign.event.id, foreign.event.version, {
+        title: `${TAG} محاولة`,
+      }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('a Teacher cannot edit a branch-wide event even when it reaches their group', async () => {
+    // The escalation mirror of the creation guard: a wider scope row puts the
+    // event beyond a teacher regardless of which groups it also names.
+    const branchId = await makeBranch('مراكش');
+    const groupId = await makeGroup(branchId);
+    const t = await teacherUser('معلمة');
+    await assignTeacher(prisma, superAdmin(), groupId, t);
+
+    const { event } = await createEvent(
+      prisma,
+      superAdmin(),
+      eventInput({ branchIds: [branchId], groupIds: [groupId] }),
+      TODAY,
+    );
+
+    await expect(
+      updateEvent(prisma, teacherActor(t), event.id, event.version, { visibility: 'public' }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('a branch-scoped Admin cannot edit an event carrying NO branch rows', async () => {
+    // A teacher's group-only event has no branch scope at all, so no branch
+    // Admin can show it is theirs. Without this, "none of its branches are
+    // outside my scope" would be vacuously true and any Admin could edit it.
+    const branchId = await makeBranch('مراكش');
+    const groupId = await makeGroup(branchId);
+    const t = await teacherUser('معلمة');
+    await assignTeacher(prisma, superAdmin(), groupId, t);
+    const { event } = await createEvent(
+      prisma,
+      teacherActor(t),
+      eventInput({ groupIds: [groupId] }),
+      TODAY,
+    );
+    expect(await prisma.eventBranch.count({ where: { eventId: event.id } })).toBe(0);
+
+    await expect(
+      updateEvent(prisma, admin([branchId]), event.id, event.version, { title: `${TAG} محاولة` }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('an explicit null clears the description; an omitted key leaves it alone', async () => {
+    // `undefined` and `null` mean different things in a PATCH — "leave it" and
+    // "clear it" — and collapsing them makes a field impossible to empty.
+    const branchId = await makeBranch('مراكش');
+    const { event } = await createEvent(
+      prisma,
+      superAdmin(),
+      eventInput({ branchIds: [branchId], description: 'وصف' }),
+      TODAY,
+    );
+
+    const kept = await updateEvent(prisma, superAdmin(), event.id, event.version, {
+      title: `${TAG} بلا لمس الوصف`,
+    });
+    expect(kept.description).toBe('وصف');
+
+    const cleared = await updateEvent(prisma, superAdmin(), event.id, kept.version, {
+      description: null,
+    });
+    expect(cleared.description).toBeNull();
+  });
+
+  it('a Parent cannot edit an event at all', async () => {
+    const branchId = await makeBranch('مراكش');
+    const { event } = await createEvent(
+      prisma,
+      superAdmin(),
+      eventInput({ branchIds: [branchId] }),
+      TODAY,
+    );
+
+    await expect(
+      updateEvent(prisma, parent(), event.id, event.version, { title: `${TAG} محاولة` }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+
+  it('a soft-deleted event is NOT_FOUND rather than editable', async () => {
+    const branchId = await makeBranch('مراكش');
+    const { event } = await createEvent(
+      prisma,
+      superAdmin(),
+      eventInput({ branchIds: [branchId] }),
+      TODAY,
+    );
+    await deleteEvent(prisma, superAdmin(), event.id);
+
+    await expect(
+      updateEvent(prisma, superAdmin(), event.id, event.version, { title: `${TAG} محاولة` }),
+    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+
+  it('records a visibility change explicitly in the audit detail', async () => {
+    const branchId = await makeBranch('مراكش');
+    const { event } = await createEvent(
+      prisma,
+      superAdmin(),
+      eventInput({ branchIds: [branchId], visibility: 'hidden' }),
+      TODAY,
+    );
+    await updateEvent(prisma, superAdmin(), event.id, event.version, { visibility: 'public' });
+
+    const row = await prisma.auditLog.findFirst({
+      where: { actionType: 'event.update', targetId: event.id },
+      orderBy: { createdAt: 'desc' },
+    });
+    const detail = row!.detail as Record<string, unknown>;
+    expect(detail['visibility_from']).toBe('hidden');
+    expect(detail['visibility_to']).toBe('public');
   });
 });
