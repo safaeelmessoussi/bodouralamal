@@ -10,8 +10,9 @@ import { Spinner } from "@/components/ui/spinner"
 import {
   extractOnboardingSession,
   submitRegistration,
-  isMinor,
+  getRegistrationMetadata,
   RegistrationFormData,
+  RegistrationMetadata,
   OnboardingSession,
 } from "@/services/registration-adapter"
 
@@ -21,6 +22,7 @@ export default function RegisterPage() {
   const navigate = useNavigate()
   const [session, setSession] = useState<OnboardingSession | null>(null)
   const [onboardingToken, setOnboardingToken] = useState<string | null>(null)
+  const [metadata, setMetadata] = useState<RegistrationMetadata | null>(null)
   const [formData, setFormData] = useState<RegistrationData>({
     firstName: "",
     lastName: "",
@@ -28,9 +30,8 @@ export default function RegisterPage() {
     category: "",
   })
   const [isLoading, setIsLoading] = useState(false)
-  const [showParentFields, setShowParentFields] = useState(false)
 
-  // Extract onboarding session from URL
+  // Extract onboarding session and metadata from backend
   useEffect(() => {
     const onboarding = extractOnboardingSession()
     if (!onboarding) {
@@ -40,7 +41,6 @@ export default function RegisterPage() {
 
     setSession(onboarding)
 
-    // Extract onboarding token from fragment for submission
     // TODO: Backend must clarify token format and handling
     const fragment = window.location.hash.slice(1)
     const params = new URLSearchParams(fragment)
@@ -57,13 +57,11 @@ export default function RegisterPage() {
         lastName: onboarding.familyName || "",
       }))
     }
-  }, [navigate])
 
-  // Show parent fields based on category
-  // TODO: Once backend provides metadata, use that to determine if minor instead of category
-  useEffect(() => {
-    setShowParentFields(isMinor(formData.category))
-  }, [formData.category])
+    // Get registration metadata from backend (determines form behavior)
+    const meta = getRegistrationMetadata()
+    setMetadata(meta)
+  }, [navigate])
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
@@ -90,7 +88,8 @@ export default function RegisterPage() {
       return false
     }
 
-    if (showParentFields) {
+    // Validate conditional fields based on backend metadata
+    if (metadata?.requiresParentInformation) {
       if (!formData.parentName?.trim()) {
         toast.error("اسم ولي الأمر مطلوب")
         return false
@@ -134,7 +133,7 @@ export default function RegisterPage() {
     }
   }
 
-  if (!session) {
+  if (!session || !metadata) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-background to-muted" dir="rtl">
         <Card className="border-0 shadow-lg">
@@ -209,7 +208,7 @@ export default function RegisterPage() {
                 />
               </div>
 
-              {/* Gender */}
+              {/* Gender - Rendered from backend metadata */}
               <div className="space-y-2">
                 <label className="text-sm font-medium text-foreground">
                   {ar.registration.fields.gender}
@@ -218,16 +217,19 @@ export default function RegisterPage() {
                   name="gender"
                   value={formData.gender}
                   onChange={handleChange}
-                  disabled={isLoading}
+                  disabled={isLoading || !metadata}
                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <option value="">{ar.common.loading}</option>
-                  <option value="male">{ar.registration.fields.maleLabel}</option>
-                  <option value="female">{ar.registration.fields.femaleLabel}</option>
+                  {metadata?.availableGenders.map((gender) => (
+                    <option key={gender.value} value={gender.value}>
+                      {gender.label}
+                    </option>
+                  ))}
                 </select>
               </div>
 
-              {/* Category */}
+              {/* Category - Rendered from backend metadata */}
               <div className="space-y-2">
                 <label className="text-sm font-medium text-foreground">
                   {ar.registration.fields.category}
@@ -236,18 +238,20 @@ export default function RegisterPage() {
                   name="category"
                   value={formData.category}
                   onChange={handleChange}
-                  disabled={isLoading}
+                  disabled={isLoading || !metadata}
                   className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
                 >
                   <option value="">{ar.common.loading}</option>
-                  <option value="child">{ar.registration.fields.categoryChild}</option>
-                  <option value="youth">{ar.registration.fields.categoryYouth}</option>
-                  <option value="woman">{ar.registration.fields.categoryWoman}</option>
+                  {metadata?.availableCategories.map((category) => (
+                    <option key={category.value} value={category.value}>
+                      {category.label}
+                    </option>
+                  ))}
                 </select>
               </div>
 
-              {/* Parent Fields (shown only for minors) */}
-              {showParentFields && (
+              {/* Parent Fields - Shown based on backend metadata */}
+              {metadata?.requiresParentInformation && (
                 <>
                   <div className="space-y-3 border-t pt-4">
                     <h4 className="font-medium text-foreground">{ar.registration.parentInfo.title}</h4>
@@ -295,8 +299,8 @@ export default function RegisterPage() {
                 </>
               )}
 
-              {/* Adult Fields */}
-              {!showParentFields && formData.category && (
+              {/* Adult Fields - Shown based on backend metadata */}
+              {!metadata?.requiresParentInformation && formData.category && (
                 <>
                   <div className="space-y-3 border-t pt-4">
                     <h4 className="font-medium text-foreground">{ar.registration.adultInfo.title}</h4>

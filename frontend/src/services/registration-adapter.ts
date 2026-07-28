@@ -18,12 +18,45 @@ export interface OnboardingSession {
 export interface RegistrationFormData {
   firstName: string
   lastName: string
-  gender: "male" | "female"
-  category: "child" | "youth" | "woman"
+  gender: string
+  category: string
   phone?: string
   parentName?: string
   parentPhone?: string
   parentEmail?: string
+}
+
+/**
+ * Registration Metadata - Defines how the form should behave
+ * 
+ * TODO: These values should come from backend API
+ * The backend determines what fields to show, what values are valid, etc.
+ * Frontend simply renders according to this metadata.
+ */
+export interface RegistrationMetadata {
+  // What type of registration profile is this person (determines which fields to show)
+  registrationProfile: "adult" | "minor"
+
+  // Whether parent information is required for this registration
+  requiresParentInformation: boolean
+
+  // Available gender options (backend determines valid values)
+  availableGenders: Array<{
+    value: string
+    label: string
+  }>
+
+  // Available category options (backend determines valid values and their meanings)
+  availableCategories: Array<{
+    value: string
+    label: string
+  }>
+
+  // Additional levels/groups if applicable (e.g., educational levels)
+  availableLevels?: Array<{
+    value: string
+    label: string
+  }>
 }
 
 export interface RegistrationResponse {
@@ -122,19 +155,54 @@ export async function submitRegistration(
 }
 
 /**
- * ADAPTER: Check if applicant is a minor
+ * ADAPTER: Get registration metadata that determines form behavior
  * 
- * TODO: Backend must define:
- * - How minors are determined (age, category, explicit flag?)
- * - Whether this info comes from Google profile or user form
- * - API endpoint to fetch this metadata
+ * This metadata tells the frontend what fields to show, what values are valid, etc.
+ * It's determined entirely by backend business logic, not frontend assumptions.
  * 
- * For now, we hardcode: "child" category means minor
+ * TODO: Backend must provide API endpoint that returns this metadata
+ * Endpoint should be called after authentication to determine:
+ * - Is this person registering as adult or minor?
+ * - Do they need to provide parent information?
+ * - What are the valid gender options for this region/context?
+ * - What are the valid category options and their labels?
+ * 
+ * For now, this is mock metadata with TODO comments for backend replacement
  */
-export function isMinor(category: string): boolean {
-  // TODO: This should come from backend based on actual business logic
-  // For now: assume "child" category means a minor
-  return category === "child"
+export function getRegistrationMetadata(): RegistrationMetadata {
+  // TODO: Replace entire function with real API call:
+  // const response = await apiClient.get("/registration/metadata")
+  // return response.data
+
+  // MOCK METADATA: What the backend would determine
+  // These values represent business rules that only backend should know
+  return {
+    // TODO: Backend determines if this is adult or minor registration
+    // Could be based on: age from Google profile, previous preferences, etc.
+    registrationProfile: "adult", // or "minor"
+
+    // TODO: Backend determines if parent info is needed
+    // Derived from registrationProfile and business rules
+    requiresParentInformation: false,
+
+    // TODO: Backend provides available gender options
+    // Could vary by region, organization policy, or other factors
+    availableGenders: [
+      { value: "male", label: "ذكر" },
+      { value: "female", label: "أنثى" },
+    ],
+
+    // TODO: Backend provides available category options
+    // Category names and availability are business decisions
+    // Frontend has no hardcoded knowledge of what they mean
+    availableCategories: [
+      { value: "child", label: "الطفل" },
+      { value: "youth", label: "اليافعات" },
+      { value: "woman", label: "المرأة" },
+    ],
+
+    // availableLevels could be used for educational tiers, etc.
+  }
 }
 
 /**
@@ -144,13 +212,17 @@ export function isMinor(category: string): boolean {
  * - GET /api/v1/registration/status endpoint
  * - Status values (pending, approved, rejected, etc.)
  * - Whether to poll or use websockets
+ * - Error messages for each status
  */
 export async function getPendingRegistrationStatus(): Promise<{
   status: "pending" | "approved" | "rejected"
   message: string
 }> {
-  // TODO: Replace with real API call
-  // For now, return mock pending status
+  // TODO: Replace with real API call:
+  // const response = await apiClient.get("/registration/status")
+  // return response.data
+
+  // MOCK: Return pending status
   const pending = sessionStorage.getItem("registration_pending")
   if (pending) {
     return {
