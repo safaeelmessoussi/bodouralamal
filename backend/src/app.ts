@@ -4,6 +4,7 @@ import * as auth from './controllers/auth.controller.js';
 import * as approvals from './controllers/approval.controller.js';
 import * as familyLinks from './controllers/family-link.controller.js';
 import * as consents from './controllers/consent.controller.js';
+import * as calendar from './controllers/calendar.controller.js';
 import * as events from './controllers/event.controller.js';
 import * as groups from './controllers/group.controller.js';
 import * as socialProfile from './controllers/social-profile.controller.js';
@@ -15,7 +16,7 @@ import type { PrismaClient } from './generated/prisma/client.js';
 import { verifyAccessToken } from './lib/access-token.js';
 import type { AppConfig } from './lib/config.js';
 import { AppError } from './lib/errors.js';
-import { authenticate } from './middleware/authenticate.js';
+import { authenticate, optionalAuthenticate } from './middleware/authenticate.js';
 import {
   accessLog,
   errorHandler,
@@ -87,6 +88,11 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
 
   // Branches & Rooms (§5.6, §14.2). Everything below requires a live Active
   // session; role and branch-scope checks live in the service (TD-2).
+  // §4.4/TD-3.4: the calendar is PUBLIC — an anonymous visitor sees the public
+  // tier. It therefore mounts BEFORE the guarded router, with optional
+  // authentication, and the service resolves the tier from the live actor.
+  api.get('/calendar', optionalAuthenticate(config), calendar.read(prisma));
+
   const guarded = express.Router();
   guarded.use(authenticate(config));
   // Approvals (§5.6, TD-3.2). TD-12 marks these high-risk, so the service

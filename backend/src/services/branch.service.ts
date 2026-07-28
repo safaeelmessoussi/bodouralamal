@@ -16,6 +16,12 @@ import { assertNoBlockingReferences, updateWithVersion } from '../repositories/o
 export interface Actor {
   userId: string;
   roles: string[];
+  /**
+   * Carried so a **public** endpoint can apply §4.4's rule that a `Pending`
+   * account sees the public tier — the guarded router refuses non-active
+   * callers outright, but `/calendar` must serve them something.
+   */
+  accountStatus?: string;
   /** Branch ids this actor is scoped to; empty for an unscoped Super Admin. */
   roleScopes: RoleScope[];
 }

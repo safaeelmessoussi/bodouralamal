@@ -45,6 +45,47 @@ export function authenticate(config: AppConfig) {
       userId: verified.claims.sub,
       roles: verified.claims.roles,
       roleScopes: verified.claims.role_scopes,
+      accountStatus: verified.claims.account_status,
+    };
+    next();
+  };
+}
+
+/**
+ * Optional authentication, for the **public** endpoints §4.4 defines — currently
+ * `GET /calendar`, which serves an anonymous visitor the public tier.
+ *
+ * Three cases, deliberately distinguished:
+ *
+ *   - **No token** → anonymous. The handler sees `req.actor` undefined and
+ *     applies the public tier.
+ *   - **A token that does not verify** → `401`. It is *not* silently downgraded
+ *     to anonymous: a logged-in user whose token expired would otherwise watch
+ *     their calendar quietly shrink, with nothing telling the client to refresh.
+ *   - **A valid token for a non-active account** → passed through **with** its
+ *     status, because §4.4 gives a `Pending` user the public tier rather than a
+ *     refusal. The guarded router still rejects them everywhere else.
+ */
+export function optionalAuthenticate(config: AppConfig) {
+  return (req: Request, _res: Response, next: NextFunction): void => {
+    const header = req.header('authorization');
+    const bearer = header?.startsWith('Bearer ') ? header.slice(7) : null;
+    if (!bearer) {
+      next();
+      return;
+    }
+
+    const verified = verifyAccessToken(bearer, config.JWT_SIGNING_KEY);
+    if (!verified.valid) {
+      next(new AppError('AUTH_REQUIRED', verified.reason));
+      return;
+    }
+
+    req.actor = {
+      userId: verified.claims.sub,
+      roles: verified.claims.roles,
+      roleScopes: verified.claims.role_scopes,
+      accountStatus: verified.claims.account_status,
     };
     next();
   };

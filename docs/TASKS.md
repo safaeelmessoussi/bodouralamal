@@ -200,7 +200,8 @@
 - [~] Calendar views: month/week/agenda, filters, glance view, session popup, Monday start
   - ✓ Backend — unified grid over Groups + Events; all five recurrence types; Monday-based week; branch/level/group filters; 366-day range guard
   - ✓ Tests — 20 integration tests; eight mutations caught
-  - △ Remaining — `GET /calendar` HTTP route (public, anonymous-capable) and the frontend views
+  - ✓ HTTP — `GET /calendar`, the one **public** route: mounted before the guarded router with optional authentication, so an anonymous visitor is served the public tier rather than a 401
+  - △ Remaining — the frontend month/week/agenda views
 - [x] Three-tier visibility filtering per role incl. public tier for anonymous (§4.4, TD-2)
   - ✓ Backend — resolved server-side for anonymous, Pending, Student, Parent, Teacher, Admin and Super Admin
   - ✓ Security — each SRS asymmetry pinned by test: student private unfiltered by branch (R-6), hidden unscoped for Admins, private branch-scoped, Pending = anonymous, timetable never public
