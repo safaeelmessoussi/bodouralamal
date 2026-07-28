@@ -189,13 +189,14 @@
 - [~] Event model: visibility enum, recurrence (none/daily/weekly/biweekly-alternating/yearly) (§4.4)
   - ✓ Backend — create/delete with all five recurrence types; unbounded recurrence refused; TD-5 delete removes the scope joins
   - ✓ Tests — 20 integration tests; seven mutations caught incl. a teacher privilege-escalation path
-  - △ Remaining — HTTP routes and contract entries; visibility FILTERING lands with the calendar read
+  - ✓ HTTP — `POST /events`, `DELETE /events/{id}` with `YYYY-MM-DD`/`HH:MM` boundary validation; response reports what was actually attached
+  - △ Remaining — `PATCH /events/{id}` (documented, PENDING); visibility FILTERING lands with the calendar read
 - [x] Explicit four-way scope-join population at creation; operational-start filter (§4.4)
   - ✓ Backend — rows written at creation, never a runtime wildcard; only already-operational branches attached
   - ✓ Tests — asserts real rows in all four join tables and the exclusion of a future-opening branch
 - [~] Branch-activation manual backfill action + endpoint (§4.4, TD-3.4)
   - ✓ Backend — list-then-attach, idempotent, branch-scoped; the gap is neither auto-filled nor ignored
-  - △ Remaining — the HTTP endpoint (`POST /admin/branches/{id}/event-backfill`, already in TD-3)
+  - ✓ HTTP — `GET`/`POST /admin/branches/{id}/event-backfill`; idempotence proven over HTTP
 - [ ] Calendar views: month/week/agenda, filters, glance view, session popup, Monday start
 - [ ] Three-tier visibility filtering per role incl. public tier for anonymous (§4.4, TD-2)
 - [ ] Operational-start-date graying in branch-scoped views

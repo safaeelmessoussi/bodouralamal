@@ -1,0 +1,141 @@
+import type { Request, Response } from 'express';
+import { z } from 'zod';
+
+import type { PrismaClient } from '../generated/prisma/client.js';
+import { AppError } from '../lib/errors.js';
+import { requireActor } from '../middleware/authenticate.js';
+import {
+  backfillAttach,
+  backfillCandidates,
+  createEvent,
+  deleteEvent,
+} from '../services/event.service.js';
+import type { Actor } from '../services/group.service.js';
+
+/**
+ * Events — TD-3.4 (`/events`, `/admin/branches/{id}/event-backfill`), §4.4.
+ *
+ * Scope selection is validated here; which scopes a caller may actually reach is
+ * decided in the service, server-side.
+ */
+
+/** Local calendar date, `YYYY-MM-DD` (TD-11) — never an instant. */
+const calendarDate = z
+  .string()
+  .regex(/^\d{4}-\d{2}-\d{2}$/, 'YYYY-MM-DD')
+  .transform((v) => new Date(`${v}T00:00:00.000Z`));
+
+/** Local wall-clock `HH:MM`, matching the Group boundary format. */
+const clock = z
+  .string()
+  .regex(/^([01]\d|2[0-3]):[0-5]\d$/, 'HH:MM, 24-hour')
+  .transform((v) => {
+    const [h, m] = v.split(':').map(Number);
+    return new Date(Date.UTC(1970, 0, 1, h!, m!, 0));
+  });
+
+const createSchema = z
+  .object({
+    title: z.string().trim().min(1).max(120),
+    description: z.string().trim().max(2000).nullable().optional(),
+    visibility: z.enum(['public', 'private', 'hidden']),
+    start_date: calendarDate,
+    end_date: calendarDate.nullable().optional(),
+    start_time: clock.nullable().optional(),
+    end_time: clock.nullable().optional(),
+    recurrence_type: z.enum(['none', 'daily', 'weekly', 'biweekly_alternating', 'yearly']),
+    recurrence_end_date: calendarDate.nullable().optional(),
+    // Scope selection — §4.4 materialises these into join rows at creation.
+    global: z.boolean().optional(),
+    branch_ids: z.array(z.uuid()).max(50).optional(),
+    category_ids: z.array(z.uuid()).max(50).optional(),
+    level_ids: z.array(z.uuid()).max(100).optional(),
+    group_ids: z.array(z.uuid()).max(200).optional(),
+  })
+  .strict();
+
+const backfillSchema = z.object({ event_ids: z.array(z.uuid()).min(1).max(200) }).strict();
+
+const actorOf = (req: Request): Actor => {
+  const a = requireActor(req);
+  return { userId: a.userId, roles: a.roles, roleScopes: a.roleScopes };
+};
+
+function pathId(req: Request): string {
+  const parsed = z.uuid().safeParse(req.params['id']);
+  if (!parsed.success) throw new AppError('NOT_FOUND', 'not found');
+  return parsed.data;
+}
+
+export function create(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const parsed = createSchema.safeParse(req.body ?? {});
+    if (!parsed.success) throw new AppError('VALIDATION_FAILED', 'invalid event payload');
+    const b = parsed.data;
+
+    const result = await createEvent(prisma, actorOf(req), {
+      title: b.title,
+      ...(b.description !== undefined ? { description: b.description } : {}),
+      visibility: b.visibility,
+      startDate: b.start_date,
+      ...(b.end_date !== undefined ? { endDate: b.end_date } : {}),
+      ...(b.start_time !== undefined ? { startTime: b.start_time } : {}),
+      ...(b.end_time !== undefined ? { endTime: b.end_time } : {}),
+      recurrenceType: b.recurrence_type,
+      ...(b.recurrence_end_date !== undefined ? { recurrenceEndDate: b.recurrence_end_date } : {}),
+      ...(b.global !== undefined ? { global: b.global } : {}),
+      ...(b.branch_ids ? { branchIds: b.branch_ids } : {}),
+      ...(b.category_ids ? { categoryIds: b.category_ids } : {}),
+      ...(b.level_ids ? { levelIds: b.level_ids } : {}),
+      ...(b.group_ids ? { groupIds: b.group_ids } : {}),
+    });
+
+    res.status(201).json({
+      id: result.event.id,
+      visibility: result.event.visibility,
+      recurrence_type: result.event.recurrenceType,
+      // Reports what was ACTUALLY attached, which may be fewer branches than
+      // requested: §4.4 excludes branches that are not yet operational.
+      attached: result.attached,
+    });
+  };
+}
+
+export function remove(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    await deleteEvent(prisma, actorOf(req), pathId(req));
+    res.status(204).end();
+  };
+}
+
+/** `GET /admin/branches/{id}/event-backfill` — §4.4 "listing applicable events". */
+export function listBackfill(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const events = await backfillCandidates(prisma, actorOf(req), pathId(req));
+    res.json({
+      data: events.map((e) => ({
+        id: e.id,
+        title: e.title,
+        start_date: e.startDate.toISOString().slice(0, 10),
+        recurrence_type: e.recurrenceType,
+        visibility: e.visibility,
+      })),
+    });
+  };
+}
+
+/** `POST /admin/branches/{id}/event-backfill` — attach, or knowingly skip (§4.4). */
+export function applyBackfill(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const parsed = backfillSchema.safeParse(req.body ?? {});
+    if (!parsed.success) throw new AppError('VALIDATION_FAILED', 'event_ids is required');
+
+    const attached = await backfillAttach(
+      prisma,
+      actorOf(req),
+      pathId(req),
+      parsed.data.event_ids,
+    );
+    res.json({ attached });
+  };
+}

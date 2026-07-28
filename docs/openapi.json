@@ -159,6 +159,90 @@
         }
       }
     },
+    "/events": {
+      "post": {
+        "summary": "Create an event",
+        "description": "§4.4's exception layer — holidays, one-off activities, exams, ceremonies. The recurring weekly timetable belongs to Groups, so an Event never duplicates it. **Scope reach is materialised into the four join tables at creation** (`EventBranch`/`EventCategory`/`EventLevel`/`EventGroup`), *never* evaluated at read time: a wildcard would be re-interpreted on every calendar read and its meaning would silently change as branches are added. **Only branches whose `operational_start_date` has already occurred are attached** — a branch opening later is deliberately excluded, and the manual backfill action is how it joins, so the gap is neither auto-filled nor ignored. The response reports what was ACTUALLY attached, which may be fewer branches than requested. All five recurrence types are supported including biweekly-alternating; a recurring event **must** carry `recurrence_end_date`, since an unbounded recurrence would expand forever in every calendar query. Dates are `YYYY-MM-DD` and times `HH:MM`, local wall-clock (TD-11). TD-2: Admin and Super Admin may schedule any scope; a **Teacher may schedule only for their own groups** (hidden allowed) and cannot pair a group with a wider branch/level/global scope.",
+        "responses": {
+          "201": {
+            "description": "Created; reports the scope rows actually written."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — bad dates, or a recurring event without an end date."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8)."
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN when a Teacher attempts a scope beyond their groups."
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for a group the caller does not teach (§20 rule 17)."
+          }
+        }
+      }
+    },
+    "/events/{id}": {
+      "delete": {
+        "summary": "Delete an event",
+        "description": "TD-5: the event is soft-deleted and **its scope join rows are removed** — they are the materialised reach of an event that no longer applies, and carry no history of their own. Attached content keeps its `event_id` for provenance but no longer surfaces under the event.",
+        "responses": {
+          "204": {
+            "description": "Deleted."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8)."
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8)."
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8)."
+          }
+        }
+      }
+    },
+    "/admin/branches/{id}/event-backfill": {
+      "get": {
+        "summary": "List backfill candidates for a branch",
+        "description": "§4.4: the events a late-opening branch missed — those reaching some other branch but not this one. Listing is deliberately separate from attaching, because the gap must be neither silently auto-filled nor silently ignored: an Admin sees the candidates and chooses.",
+        "responses": {
+          "200": {
+            "description": "Candidate events."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8)."
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8)."
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for a branch out of scope."
+          }
+        }
+      },
+      "post": {
+        "summary": "Attach events to a branch",
+        "description": "§4.4 manual backfill. **Idempotent** — attaching an event the branch already carries is a no-op rather than an error, so a retried request cannot duplicate scope rows. Reports how many were newly attached.",
+        "responses": {
+          "200": {
+            "description": "Reports the number newly attached."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8)."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8)."
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8)."
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an out-of-scope branch or unknown event."
+          }
+        }
+      }
+    },
     "/admin/groups": {
       "get": {
         "summary": "List groups",
