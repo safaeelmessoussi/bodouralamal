@@ -63,7 +63,7 @@ describe('§18 token lifecycle acceptance criteria', () => {
     const predecessor = await prisma.refreshToken.findUnique({
       where: { tokenHash: hashToken(first.rawToken) },
     });
-    expect(predecessor?.revokedAt).not.toBeNull();
+    expect(predecessor?.revokedAt).toBeInstanceOf(Date);
 
     const successor = await prisma.refreshToken.findUnique({
       where: { tokenHash: hashToken(outcome.rawToken) },

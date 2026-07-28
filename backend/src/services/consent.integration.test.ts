@@ -163,7 +163,7 @@ describe('§4.1a — recording a decision declared in person', () => {
       granted: false,
     });
     const row = await prisma.consentRecord.findUnique({ where: { id: recordId } });
-    expect(row?.revokedAt).not.toBeNull();
+    expect(row?.revokedAt).toBeInstanceOf(Date);
     expect(row?.revokedByUserId).toBe(admin);
   });
 

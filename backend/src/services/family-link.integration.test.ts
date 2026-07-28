@@ -96,14 +96,14 @@ describe('§4.3 Revision 16 — revoking an approved link', () => {
     await revokeLink(prisma, admin, linkId, 'بناء على طلب الأسرة');
 
     const link = await prisma.familyLink.findUnique({ where: { id: linkId } });
-    expect(link?.deletedAt).not.toBeNull();
+    expect(link?.deletedAt).toBeInstanceOf(Date);
     expect(link?.deletedById).toBe(admin);
     // TD-1: Approved stays terminal — revocation is the delete, not a new status.
     expect(link?.status).toBe('approved');
 
     const trash = await prisma.trash.findFirst({ where: { targetId: linkId } });
     expect(trash?.targetEntity).toBe('FamilyLink');
-    expect(trash?.purgeAfter).not.toBeNull();
+    expect(trash?.purgeAfter).toBeInstanceOf(Date);
 
     const row = await prisma.auditLog.findFirst({
       where: { targetId: linkId, actionType: 'familylink.revoke' },

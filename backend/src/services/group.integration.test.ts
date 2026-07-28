@@ -148,7 +148,7 @@ describe('§4.4 — Group CRUD', () => {
 
     await deleteGroup(prisma, superAdmin(), group.id);
 
-    expect((await prisma.group.findUnique({ where: { id: group.id } }))?.deletedAt).not.toBeNull();
+    expect((await prisma.group.findUnique({ where: { id: group.id } }))?.deletedAt).toBeInstanceOf(Date);
     expect(await prisma.trash.count({ where: { targetId: group.id } })).toBe(1);
     expect(
       await prisma.auditLog.count({ where: { targetId: group.id, actionType: 'group.delete' } }),

@@ -247,6 +247,116 @@
         }
       }
     },
+    "/admin/groups/{id}/roster": {
+      "get": {
+        "summary": "List a group's roster",
+        "description": "§5.6 Group Enrollment. Admin within branch scope or Super Admin (TD-2).",
+        "responses": {
+          "200": {
+            "description": "Enrolled students, ordered by Arabic name."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8)."
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8)."
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for a group out of scope or nonexistent."
+          }
+        }
+      },
+      "post": {
+        "summary": "Enrol a student",
+        "description": "§5.6: enforces `max_students`. The capacity check runs under a **`SELECT … FOR UPDATE` lock on the Group row** (TD-4.6/TD-15), because it is check-then-write — without it two concurrent enrolments at capacity − 1 both see the last seat. **Every roster change enqueues `consent.reevaluate` for the group in the SAME transaction** (§4.1a, TD-4), so the consent gate cannot drift from the roster; a refused enrolment enqueues nothing. Re-enrolling a previously removed student revives their row rather than duplicating it.",
+        "responses": {
+          "201": {
+            "description": "Enrolled; reports the new count and the capacity."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8)."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8)."
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8)."
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an out-of-scope group or unknown student."
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). DUPLICATE if already enrolled, or CAPACITY_FULL with `details = { reason: \"MAX_STUDENTS_REACHED\", constraint: \"GROUP_CAPACITY\", capacity }`."
+          }
+        }
+      }
+    },
+    "/admin/groups/{id}/roster/{studentId}": {
+      "delete": {
+        "summary": "Un-enrol a student",
+        "description": "**TD-5: a soft-delete of the enrolment row ONLY.** It never touches the student's Grades, exam submissions or Quran progress — those are the historical academic record and survive the student leaving, so a re-enrolled student rejoins a group that still knows what they did. Enqueues `consent.reevaluate` naming the group explicitly, since after this write the student is no longer in it and a derived lookup would skip the very group whose gate changed.",
+        "responses": {
+          "204": {
+            "description": "Un-enrolled."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8)."
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8)."
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND if the group is out of scope or the student is not enrolled."
+          }
+        }
+      }
+    },
+    "/admin/groups/{id}/instructors": {
+      "post": {
+        "summary": "Assign an instructor",
+        "description": "§4.4 co-teaching, **capped at two instructor slots** (§7). A third assignment is refused rather than silently accepted, because `GroupTeacher` is the resolution table for **all** teacher scoping (§4.2) — an unbounded teacher list would quietly widen access to every student in the group. The person must already hold the `teacher` role, for the same reason. Re-assigning a previously removed teacher revives their row rather than duplicating it.",
+        "responses": {
+          "201": {
+            "description": "Assigned; reports slots used."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8)."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8)."
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8)."
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an out-of-scope group, or a user who does not hold the teacher role."
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). DUPLICATE if already assigned, or STATE_CONFLICT with `details.reason = \"INSTRUCTOR_SLOTS_FULL\"`."
+          }
+        }
+      }
+    },
+    "/admin/groups/{id}/instructors/{teacherId}": {
+      "delete": {
+        "summary": "Remove an instructor",
+        "description": "Soft-deletes the assignment, which **ends that teacher's §4.2 reach to the group's students on the very next request** — the scope is resolved from live rows, never cached. Frees an instructor slot.",
+        "responses": {
+          "204": {
+            "description": "Removed."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8)."
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8)."
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND if the group is out of scope or the teacher is not assigned."
+          }
+        }
+      }
+    },
     "/students/{id}/consents": {
       "get": {
         "summary": "Read a student's effective consent state",

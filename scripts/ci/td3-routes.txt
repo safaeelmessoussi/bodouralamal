@@ -46,6 +46,11 @@ GET /admin/groups                             # §5.6 Groups screen (operational
 POST /admin/groups                            # §4.4 "Group CRUD with conflict detection"; TD-15
 PATCH /admin/groups/{id}                      # §4.4; TD-15 optimistic locking
 DELETE /admin/groups/{id}                     # §4.4; guarded by TD-5 (enrolments block)
+GET /admin/groups/{id}/roster                 # §5.6 Group Enrollment screen
+POST /admin/groups/{id}/roster                # §5.6; enforces max_students (TD-4.6); enqueues consent.reevaluate (§4.1a)
+DELETE /admin/groups/{id}/roster/{studentId}  # §5.6; TD-5 soft-delete of the enrolment row only
+POST /admin/groups/{id}/instructors           # §4.4 co-teaching, two instructor slots
+DELETE /admin/groups/{id}/instructors/{teacherId} # §4.4; ends §4.2 teacher reach on the next request
 GET /students/{id}/consents                   # §4.1a, BR-1; TD-2 "Record staff-declared consent grants/revocations"
 POST /students/{id}/consents                  # §4.1a staff_recorded; TD-2, TD-8 consent.grant/revoke, TD-7 consent.reevaluate
 GET /students/{id}/social-profile              # §4.10, BR-16, TD-2 Revision 28; §19.2 "assigned-teacher-only, API test"

@@ -224,7 +224,7 @@ describe('§4.1b step 5 / TD-4.1 unified registration', () => {
     // record with an actor and timestamp so the history is auditable.
     expect(media).not.toBeNull();
     expect(media?.granted).toBe(false);
-    expect(media?.revokedAt).not.toBeNull();
+    expect(media?.revokedAt).toBeInstanceOf(Date);
     expect(media?.revokedByUserId).toBe(result.applicantId);
   });
 

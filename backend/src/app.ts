@@ -97,6 +97,11 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
   guarded.post('/admin/groups', groups.create(prisma));
   guarded.patch('/admin/groups/:id', groups.update(prisma));
   guarded.delete('/admin/groups/:id', groups.remove(prisma));
+  guarded.get('/admin/groups/:id/roster', groups.roster(prisma));
+  guarded.post('/admin/groups/:id/roster', groups.enrol(prisma));
+  guarded.delete('/admin/groups/:id/roster/:studentId', groups.unenrol(prisma));
+  guarded.post('/admin/groups/:id/instructors', groups.addInstructor(prisma));
+  guarded.delete('/admin/groups/:id/instructors/:teacherId', groups.removeInstructor(prisma));
   guarded.get('/students/:id/consents', consents.read(prisma));
   guarded.post('/students/:id/consents', consents.record(prisma));
   guarded.get('/students/:id/social-profile', socialProfile.read(prisma));

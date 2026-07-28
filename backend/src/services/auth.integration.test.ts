@@ -174,7 +174,7 @@ describe('§4.1b login resolution and routing', () => {
 
     // Refused, never bound, never reactivated.
     expect(await prisma.userIdentity.count({ where: { userId } })).toBe(0);
-    expect((await prisma.user.findUnique({ where: { id: userId } }))?.deletedAt).not.toBeNull();
+    expect((await prisma.user.findUnique({ where: { id: userId } }))?.deletedAt).toBeInstanceOf(Date);
   });
 
   it('a deactivated identity (user soft-deleted after binding) does not resolve (TD-5)', async () => {

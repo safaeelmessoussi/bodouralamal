@@ -125,7 +125,7 @@ describe('DELETE /api/v1/admin/family-links/{id}', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.revoked).toBe(true);
-    expect((await prisma.familyLink.findUnique({ where: { id: link.id } }))?.deletedAt).not.toBeNull();
+    expect((await prisma.familyLink.findUnique({ where: { id: link.id } }))?.deletedAt).toBeInstanceOf(Date);
   });
 
   it('refuses an anonymous caller with the TD-3.8 envelope', async () => {

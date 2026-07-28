@@ -5,12 +5,15 @@ import type { PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
 import { requireActor } from '../middleware/authenticate.js';
 import {
+  assignTeacher,
   createGroup,
   deleteGroup,
   listGroups,
+  unassignTeacher,
   updateGroup,
   type Actor,
 } from '../services/group.service.js';
+import { enrolStudent, listRoster, unenrolStudent } from '../services/roster.service.js';
 
 /**
  * `/admin/groups` — Group management (§4.4, §5.6, TD-2).
@@ -138,6 +141,58 @@ export function update(prisma: PrismaClient) {
 export function remove(prisma: PrismaClient) {
   return async (req: Request, res: Response): Promise<void> => {
     await deleteGroup(prisma, actorOf(req), groupId(req));
+    res.status(204).end();
+  };
+}
+
+// ── Roster and instructors (§5.6 `/admin/groups/{id}/roster`, §4.4) ──────────
+
+const memberSchema = z.object({ student_id: z.uuid() }).strict();
+const instructorSchema = z.object({ teacher_id: z.uuid() }).strict();
+
+function memberId(req: Request, key: 'id' | 'studentId' | 'teacherId'): string {
+  const parsed = z.uuid().safeParse(req.params[key]);
+  if (!parsed.success) throw new AppError('NOT_FOUND', 'not found');
+  return parsed.data;
+}
+
+export function roster(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const rows = await listRoster(prisma, actorOf(req), groupId(req));
+    res.json({ data: rows.map((r) => ({ student_id: r.studentId, name_arabic: r.nameArabic })) });
+  };
+}
+
+export function enrol(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const parsed = memberSchema.safeParse(req.body ?? {});
+    if (!parsed.success) throw new AppError('VALIDATION_FAILED', 'student_id is required');
+
+    const result = await enrolStudent(prisma, actorOf(req), groupId(req), parsed.data.student_id);
+    res.status(201).json({ enrolled: result.enrolled, capacity: result.capacity });
+  };
+}
+
+export function unenrol(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    await unenrolStudent(prisma, actorOf(req), groupId(req), memberId(req, 'studentId'));
+    res.status(204).end();
+  };
+}
+
+export function addInstructor(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const parsed = instructorSchema.safeParse(req.body ?? {});
+    if (!parsed.success) throw new AppError('VALIDATION_FAILED', 'teacher_id is required');
+
+    const result = await assignTeacher(prisma, actorOf(req), groupId(req), parsed.data.teacher_id);
+    res.status(201).json({ id: result.id, slots_used: result.slotsUsed });
+  };
+}
+
+export function removeInstructor(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    await unassignTeacher(prisma, actorOf(req), groupId(req), memberId(req, 'teacherId'));
     res.status(204).end();
   };
 }

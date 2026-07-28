@@ -221,7 +221,7 @@ describe('§15.1 Revision 22 — SUPER_ADMIN_EMAIL is a bootstrap value', () => 
 
     // §4.1 forbids silent reactivation, and no parallel account may appear —
     // the TD-6 partial unique index spans deleted rows, so one would break it.
-    expect((await prisma.user.findUnique({ where: { id: deleted.id } }))?.deletedAt).not.toBeNull();
+    expect((await prisma.user.findUnique({ where: { id: deleted.id } }))?.deletedAt).toBeInstanceOf(Date);
     expect(
       await prisma.user.count({
         where: { preProvisionedEmail: 'sa-boot-deleted@example.com', deletedAt: null },
