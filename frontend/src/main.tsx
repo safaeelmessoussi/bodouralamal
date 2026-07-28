@@ -1,9 +1,24 @@
-import { StrictMode } from 'react';
-import { createRoot } from 'react-dom/client';
+import { StrictMode } from "react"
+import { createRoot } from "react-dom/client"
+import { BrowserRouter } from "react-router-dom"
+import { ThemeProvider } from "./components/theme-provider"
+import { TooltipProvider } from "@/components/ui/tooltip"
+import { Toaster } from "sonner"
+import App from "./App"
+import "./globals.css"
 
-// Application shell lands with M1+; pages follow the §14.1 sitemap only.
-// All UI strings flow through i18n keys (SRS §16.2) — none exist yet.
-const rootElement = document.getElementById('root');
+const rootElement = document.getElementById("root")
 if (rootElement) {
-  createRoot(rootElement).render(<StrictMode>{null}</StrictMode>);
+  createRoot(rootElement).render(
+    <StrictMode>
+      <BrowserRouter>
+        <ThemeProvider defaultTheme="light" storageKey="bodour-theme">
+          <TooltipProvider>
+            <App />
+            <Toaster richColors position="top-center" />
+          </TooltipProvider>
+        </ThemeProvider>
+      </BrowserRouter>
+    </StrictMode>
+  )
 }

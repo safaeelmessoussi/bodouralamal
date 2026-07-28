@@ -1,0 +1,9 @@
+{
+  "name": "bodour-amal-root",
+  "private": true,
+  "scripts": {
+    "dev": "cd bodour-ui && npm run dev",
+    "build": "cd bodour-ui && npm run build",
+    "start": "cd bodour-ui && npm run start"
+  }
+}
