@@ -353,4 +353,36 @@ export const ar = {
     updating: "جاري التحديث...",
     processing: "جاري المعالجة...",
   },
+
+  // Toast/Alert Messages
+  toasts: {
+    // Success messages
+    savedSuccessfully: "تم الحفظ بنجاح",
+    createdSuccessfully: "تم الإنشاء بنجاح",
+    deletedSuccessfully: "تم الحذف بنجاح",
+    updatedSuccessfully: "تم التحديث بنجاح",
+    submittedSuccessfully: "تم الإرسال بنجاح",
+    actionCompleted: "اكتملت العملية بنجاح",
+
+    // Error messages
+    saveFailed: "فشل الحفظ",
+    createFailed: "فشل الإنشاء",
+    deleteFailed: "فشل الحذف",
+    updateFailed: "فشل التحديث",
+    submitFailed: "فشل الإرسال",
+    actionFailed: "فشلت العملية",
+    tryAgain: "حاول مرة أخرى",
+    networkError: "خطأ في الاتصال",
+    invalidInput: "المدخلات غير صحيحة",
+
+    // Warning messages
+    unsavedChanges: "هناك تغييرات لم تُحفظ",
+    confirmDelete: "هل تريد فعلاً حذف هذا العنصر؟",
+    confirmAction: "هل تريد فعلاً تنفيذ هذه العملية؟",
+
+    // Info messages
+    noChanges: "لم يتم إجراء أي تغييرات",
+    moreInfo: "معلومات إضافية",
+    helpText: "للمزيد من المساعدة",
+  },
 };
