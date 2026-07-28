@@ -25,12 +25,23 @@ const phone = z
   .regex(/^[0-9+ ]+$/, 'digits, + and spaces only');
 const notes = z.string().trim().max(2000);
 
+/**
+ * §4.1b step 5, Revision 27: `sex` is **required** on every person the
+ * registration transaction creates. The registration exists *before* the User
+ * does, so sex arrives here and is written in the same TD-4.1 transaction — it
+ * is never patched on afterwards.
+ *
+ * It is the person-side half of `Level.gender_restriction`: without it nothing
+ * can compare a person against a `girls_only` Level, and enrolment enforcement
+ * treats a missing sex as *not eligible* rather than as a wildcard.
+ */
 const personCore = z.object({
   name_arabic: nameArabic,
   name_french: nameFrench.optional(),
   nickname: nickname.optional(),
   phone: phone.optional(),
   notes: notes.optional(),
+  sex: z.enum(['female', 'male']),
 });
 
 /**

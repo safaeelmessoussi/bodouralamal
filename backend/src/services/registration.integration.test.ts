@@ -3,6 +3,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { loadConfig } from '../lib/config.js';
 import { issueOnboardingToken } from '../lib/onboarding-token.js';
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
+import { registrationSchema } from '../validators/registration.validators.js';
 import { CONSENT_TEXT_VERSION_KEY, register } from './registration.service.js';
 import type { RegistrationInput } from '../validators/registration.validators.js';
 
@@ -25,8 +26,8 @@ function identity() {
 
 const parentChild = (): RegistrationInput => ({
   kind: 'parent_child',
-  parent: { name_arabic: `${TAG} والدة`, phone: '+212 600 000 001' },
-  child: { name_arabic: `${TAG} طفلة` },
+  parent: { name_arabic: `${TAG} والدة`, phone: '+212 600 000 001', sex: 'female' as const },
+  child: { name_arabic: `${TAG} طفلة`, sex: 'female' as const },
   consents: { data_processing: true, media_release: true },
 });
 
@@ -57,6 +58,76 @@ afterAll(async () => {
   await clear();
   await prisma.systemSetting.deleteMany({ where: { key: CONSENT_TEXT_VERSION_KEY } });
   await prisma.$disconnect();
+});
+
+
+describe('§4.1b step 5 Revision 27 — registration captures sex before the User exists', () => {
+  it('persists sex for BOTH people created by a parent+child registration', async () => {
+    const { token } = issueOnboardingToken(identity(), KEY);
+    const result = await register(
+      prisma,
+      token,
+      {
+        kind: 'parent_child',
+        parent: { name_arabic: `${TAG} والدة`, sex: 'female' },
+        child: { name_arabic: `${TAG} ابن`, sex: 'male' },
+        consents: { data_processing: true, media_release: true },
+      },
+      KEY,
+    );
+
+    const parent = await prisma.user.findUnique({ where: { id: result.applicantId } });
+    const child = await prisma.user.findUnique({ where: { id: result.childId! } });
+    // Written in the same transaction that created them — never patched on.
+    expect(parent?.sex).toBe('female');
+    expect(child?.sex).toBe('male');
+  });
+
+  it('persists sex on the adult self-registration path', async () => {
+    const { token } = issueOnboardingToken(identity(), KEY);
+    const result = await register(
+      prisma,
+      token,
+      {
+        kind: 'adult',
+        applicant: { name_arabic: `${TAG} راشدة`, sex: 'female' },
+        consents: { data_processing: true },
+      },
+      KEY,
+    );
+    expect((await prisma.user.findUnique({ where: { id: result.applicantId } }))?.sex).toBe('female');
+  });
+
+  it('the API boundary refuses a registration with no sex (§16.2: Zod validates there)', () => {
+    // `register()` deliberately trusts its input — §16.2 applies Zod schemas at
+    // the API boundary, so that is where this rule lives and is asserted.
+    const parsed = registrationSchema.safeParse({
+      kind: 'adult',
+      applicant: { name_arabic: 'خديجة' },
+      consents: { data_processing: true },
+    });
+    expect(parsed.success).toBe(false);
+  });
+
+  it('the API boundary refuses an invalid sex value', () => {
+    const parsed = registrationSchema.safeParse({
+      kind: 'adult',
+      applicant: { name_arabic: 'خديجة', sex: 'other' },
+      consents: { data_processing: true },
+    });
+    expect(parsed.success).toBe(false);
+  });
+
+  it('the boundary accepts either permitted value', () => {
+    for (const sex of ['female', 'male']) {
+      const parsed = registrationSchema.safeParse({
+        kind: 'adult',
+        applicant: { name_arabic: 'خديجة', sex },
+        consents: { data_processing: true },
+      });
+      expect(parsed.success).toBe(true);
+    }
+  });
 });
 
 describe('§4.1b step 5 / TD-4.1 unified registration', () => {
@@ -238,7 +309,7 @@ describe('§4.1b step 5 / TD-4.1 unified registration', () => {
       token,
       {
         kind: 'adult',
-        applicant: { name_arabic: `${TAG} خديجة` },
+        applicant: { name_arabic: `${TAG} خديجة`, sex: 'female' as const },
         consents: { data_processing: true },
       },
       KEY,

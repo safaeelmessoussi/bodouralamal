@@ -62,6 +62,17 @@ enum AuthProvider {
   @@map("auth_provider")
 }
 
+/// §7 Revision 27: the person-side half of `Level.gender_restriction`. Without
+/// it the restriction is unenforceable — nothing could compare a person against
+/// a `girls_only` Level. Nullable, so pre-Revision-27 accounts and staff need no
+/// backfill; enrolment treats null as NOT eligible for a restricted Level.
+enum Sex {
+  female
+  male
+
+  @@map("sex")
+}
+
 enum GenderRestriction {
   any
   girls_only
@@ -181,6 +192,9 @@ model User {
   nameFrench String? @map("name_french") @db.VarChar(120)
   nickname   String? @db.VarChar(60)
   phone      String? @db.VarChar(20)
+  /// Captured at registration (§4.1b step 5, Revision 27) — never patched on
+  /// afterwards, because the registration exists before the User does.
+  sex        Sex?    @map("sex")
   notes      String? @db.VarChar(2000)
 
   /// The email authorized to claim this account BEFORE any external identity

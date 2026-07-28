@@ -44,8 +44,8 @@ async function submitBundle(): Promise<{ parentId: string; childId: string }> {
     token,
     {
       kind: 'parent_child',
-      parent: { name_arabic: `${TAG} والدة` },
-      child: { name_arabic: `${TAG} طفلة` },
+      parent: { name_arabic: `${TAG} والدة`, sex: 'female' as const },
+      child: { name_arabic: `${TAG} طفلة`, sex: 'female' as const },
       consents: { data_processing: true, media_release: true },
     },
     KEY,

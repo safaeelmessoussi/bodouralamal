@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { Visibility } from '../../src/generated/prisma/enums.js';
+import { GenderRestriction, Visibility } from '../../src/generated/prisma/enums.js';
 import { loadConfig } from '../../src/lib/config.js';
 import { createPrismaClient } from '../../src/lib/prisma.js';
 import { bootstrapSuperAdmin } from './super-admin.js';
@@ -28,9 +28,16 @@ const seedDir = dirname(fileURLToPath(import.meta.url));
 const ROLES = ['super_admin', 'admin', 'teacher', 'student', 'parent'] as const;
 
 /** §15.1 categories, ordered per §2.2 `display_order`. */
+/**
+ * §15.1 categories — **generic educational stages (Revision 27)**. Sex is never
+ * encoded in a category name: it lives on `Level.gender_restriction`, paired
+ * with `User.sex`. The legacy names المرأة / اليافعات are renamed in place by
+ * the Revision-27 migration, so an upgraded deployment matches these names here
+ * and no duplicate categories are created.
+ */
 const CATEGORIES = [
-  { name: 'المرأة', displayOrder: 1, defaultVisibility: Visibility.public },
-  { name: 'اليافعات', displayOrder: 2, defaultVisibility: Visibility.private },
+  { name: 'الكبار', displayOrder: 1, defaultVisibility: Visibility.public },
+  { name: 'اليافعون', displayOrder: 2, defaultVisibility: Visibility.private },
   { name: 'الطفل', displayOrder: 3, defaultVisibility: Visibility.private },
 ] as const;
 
@@ -41,9 +48,22 @@ const CATEGORIES = [
  * within its category.
  */
 const LEVELS: Record<string, number[]> = {
-  المرأة: [0, 1, 2, 3, 4, 5, 6, 7],
-  اليافعات: [1, 2, 3, 4, 5, 6],
+  الكبار: [0, 1, 2, 3, 4, 5, 6, 7],
+  اليافعون: [1, 2, 3, 4, 5, 6],
   الطفل: [0, 1, 2, 3, 4, 5, 6],
+};
+
+/**
+ * §15.1 Revision 27: the MVP's intended availability, seeded as **data a query
+ * can read** rather than implied by a category name. A (stage, sex) combination
+ * is available precisely when a Level exists whose restriction admits that sex,
+ * so opening Teen+Male or Adult+Male later is Super Admin data entry (R26) —
+ * no rename, no schema change, no registration-flow change.
+ */
+const LEVEL_GENDER: Record<string, GenderRestriction> = {
+  الكبار: GenderRestriction.girls_only,
+  اليافعون: GenderRestriction.girls_only,
+  الطفل: GenderRestriction.any,
 };
 
 /** §15.1 subjects — the Quran is deliberately NOT a Subject (§4.4b). */
@@ -99,9 +119,10 @@ async function seedCategoriesAndLevels(): Promise<Map<string, string>> {
             name: levelName,
             categoryId: row.id,
             displayOrder: levelNumber,
-            // §4.4b: checked generically by progression logic, never hardcoded
-            // against a level name. Association may narrow it at data entry.
-            genderRestriction: 'any',
+            // §4.4b/§15.1 Revision 27: the restriction lives HERE, not in the
+            // category name, so a query can read it. A Super Admin may add
+            // Levels with other restrictions to open further combinations.
+            genderRestriction: LEVEL_GENDER[category.name] ?? GenderRestriction.any,
           },
         });
       }

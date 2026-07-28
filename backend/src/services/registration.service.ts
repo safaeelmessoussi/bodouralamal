@@ -132,6 +132,9 @@ export async function register(
           nickname: applicantData.nickname ?? null,
           phone: applicantData.phone ?? null,
           notes: applicantData.notes ?? null,
+          // §4.1b step 5, Revision 27: written HERE, in the same transaction
+          // that creates the person — the registration precedes the User.
+          sex: applicantData.sex,
           accountStatus: 'pending',
         },
       });
@@ -165,6 +168,7 @@ export async function register(
             nickname: input.child.nickname ?? null,
             phone: input.child.phone ?? null,
             notes: input.child.notes ?? null,
+            sex: input.child.sex,
             accountStatus: 'pending',
           },
         });
