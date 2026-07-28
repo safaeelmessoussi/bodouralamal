@@ -163,7 +163,15 @@
   - ✓ Visibility — RESOLVED by SRS Revision 25: branch-scoped Admins see only users assigned to their branches; unassigned users are Super Admin only; the branch filter narrows within scope and cannot escape it
   - ⚠ Open for a future decision — registration records no branch, so pending registrations are unassigned and Super-Admin-visible; the §5.6 queue is deliberately unscoped and remains the branch Admin's path to applicants
   - △ Frontend integration — the §14.2 table, filters and search box
-- [ ] §18 Registration, Approvals & Family checklist green (incl. mid-transaction kill test)
+- [~] §18 Registration, Approvals & Family checklist — **backend green**, one frontend item outstanding
+  - ✓ *unified atomic transaction incl. ConsumedToken* — and the **kill test is now literal**: a child process is parked inside the real transaction, past every write and before the commit, then **SIGKILL**ed. That is a different failure from an error-driven rollback, which was already covered: nothing is raised, no `finally` runs, no teardown happens — what protects the database is PostgreSQL discarding an uncommitted transaction when the connection dies
+  - ✓ Proven non-vacuous **before** the kill: `pg_stat_activity.backend_xid` is asserted non-null on the parked backend, which is direct evidence the rows exist and are uncommitted. Without it, a Prisma that buffered writes until commit would make the whole test prove nothing
+  - ✓ Falsifiable — letting the transaction commit before the kill makes it fail
+  - ✓ *consent records versioned, both types* — parent `data_processing` + child `data_processing` + child `media_release`, all carrying the active text version; a declined media release is **recorded**, not omitted (BR-1)
+  - ✓ *bundle approval atomic* — approve/reject act on parent+child together, never half; TD-15.3 double-approval first-wins and the concurrent-admin race both covered
+  - ✓ *FamilyLink pending grants zero visibility* — pending and rejected links both resolve to nothing (BR-4)
+  - ✓ *X-Active-Child-ID middleware* — all five specified cases plus soft-deleted link/child, malformed and empty headers, the dual-role ordering rule, and the Parent-only bypass being unreachable: **15 tests**
+  - △ *child context switcher drives the header* — frontend (v0); the backend contract it consumes is complete
 
 ## M3 — Scheduling & Calendar
 > **Carry-over from Revision 26 (recorded in the pre-M3 sweep):** Levels, Categories, Subjects, AcademicYear and
@@ -222,7 +230,11 @@
   - ✓ §18 check green — the overlay reproduces the Ministry's recorded announcements, and an unpublished or unrecorded month renders nothing
   - △ Frontend — the `/superadmin/hijri-calendar` screen and `DualDateDisplay` (renders the Gregorian date alone when `hijri_date` is null)
   - ⚠ For the Document Owner — a **recurring monthly** owner task exists (§2.3): each month must be recorded and published after the Ministry announces it, or dates in it carry no Hijri label. The task is transcription, not judgement
-- [ ] §18 Scheduling & Calendar checklist green (incl. Ramadan DST regression test)
+- [x] §18 Scheduling & Calendar checklist green (incl. the Ramadan DST regression test)
+  - ✓ group CRUD + half-open room/time conflict detection · co-teaching via `GroupTeacher` (two-slot cap) · all five recurrence types incl. biweekly-alternating · three visibility tiers per role · four-way scope joins written at creation · manual branch-activation backfill · the Hijri overlay from recorded official announcements
+  - ✓ **§19.2 Ramadan DST regression** — a weekly 09:00 class expanded across both of Morocco's 2026 clock transitions reads 09:00–10:30 on every occurrence
+  - ✓ *operational-start-date gating* — **and a weak assertion was found and fixed while signing this off**: `[].every()` is true, so the boundary check would have passed had the filter removed everything. It now proves the after-side survives and that the pre-boundary event is specifically gone; mutation-tested by ignoring the floor
+  - △ The *graying* itself is frontend; the backend returns nothing before the boundary
 
 ## M4 — Quran Progress
 - [ ] QuranProgressLog CRUD (teacher-scoped) with soft delete (TD-5)

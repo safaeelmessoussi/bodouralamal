@@ -1,3 +1,6 @@
+import { spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { loadConfig } from '../lib/config.js';
@@ -53,6 +56,17 @@ beforeEach(async () => {
     create: { key: CONSENT_TEXT_VERSION_KEY, value: TEXT_VERSION },
   });
 });
+
+const countTagged = () => prisma.user.count({ where: { nameArabic: { startsWith: TAG } } });
+
+/** Polls rather than sleeping a fixed time: the rollback is asynchronous. */
+async function waitFor(condition: () => Promise<boolean>, timeoutMs = 15_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await condition()) return;
+    await new Promise((r) => setTimeout(r, 200));
+  }
+}
 
 afterAll(async () => {
   await clear();
@@ -279,6 +293,73 @@ describe('§4.1b step 5 / TD-4.1 unified registration', () => {
     // strand them with no way to register.
     expect(await prisma.consumedToken.count({ where: { jti: claims.jti } })).toBe(0);
   });
+
+  it('§18 KILL: SIGKILL mid-transaction persists nothing — not even the jti', async () => {
+    // The §18 check taken literally: kill the PROCESS, not the transaction.
+    //
+    // This is a different failure from the one above. There, an error is raised
+    // and Prisma rolls back — application code participates. Here nothing is
+    // raised, no `finally` runs, and no teardown happens: SIGKILL cannot be
+    // intercepted. What has to protect the database is PostgreSQL discarding an
+    // uncommitted transaction when the client connection dies. If registration
+    // were ever split across two transactions, or if any write escaped the
+    // transaction, this is the test that would catch it.
+    const id = identity();
+    const victim = fileURLToPath(new URL('../test-support/registration-victim.ts', import.meta.url));
+
+    const child = spawn('npx', ['tsx', victim, TAG, id.email, id.providerSubjectId], {
+      cwd: fileURLToPath(new URL('../..', import.meta.url)),
+      env: process.env,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+
+    // Wait until it is genuinely parked INSIDE the transaction, past every write
+    // but before the commit — a timer would be a guess, and a guess that fired
+    // early would make this test prove nothing.
+    const parked = await new Promise<boolean>((resolve) => {
+      const timer = setTimeout(() => resolve(false), 60_000);
+      child.stdout.on('data', (chunk: Buffer) => {
+        if (chunk.toString().includes('READY')) {
+          clearTimeout(timer);
+          resolve(true);
+        }
+      });
+    });
+    expect(parked).toBe(true);
+
+    // Prove the test is not vacuous BEFORE killing anything. If Prisma buffered
+    // the writes until commit, nothing would ever have reached the database and
+    // the rollback below would be proving nothing at all. PostgreSQL assigns a
+    // transaction id only to a transaction that has actually written, so a
+    // parked backend carrying an xid is direct evidence that the rows exist and
+    // are uncommitted.
+    const writing = await prisma.$queryRaw<{ count: bigint }[]>`
+      SELECT count(*) AS count
+      FROM pg_stat_activity
+      WHERE state = 'idle in transaction' AND backend_xid IS NOT NULL
+        AND datname = current_database()
+    `;
+    expect(Number(writing[0]!.count)).toBeGreaterThan(0);
+
+    const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()));
+    child.kill('SIGKILL');
+    await exited;
+
+    // Give PostgreSQL a moment to notice the dead connection and roll back.
+    await waitFor(async () => (await countTagged()) === 0);
+
+    expect(await countTagged()).toBe(0);
+    expect(
+      await prisma.familyLink.count({ where: { parent: { nameArabic: { startsWith: TAG } } } }),
+    ).toBe(0);
+    expect(await prisma.consentRecord.count({ where: { consentTextVersion: TEXT_VERSION } })).toBe(0);
+    expect(
+      await prisma.userIdentity.count({ where: { providerSubjectId: id.providerSubjectId } }),
+    ).toBe(0);
+    // And the applicant is not stranded: their single-use token survives the
+    // crash unconsumed, so they can simply try again.
+    expect(await prisma.consumedToken.count({ where: { purpose: 'onboarding' } })).toBe(0);
+  }, 90_000);
 
   it('RETRY: after a rolled-back attempt the SAME token still works', async () => {
     // The token-consumption invariant, proven from the applicant's side rather

@@ -376,8 +376,16 @@ describe('§4.4 — operational boundary and range guards', () => {
       branchId,
     });
 
+    const ours = scoped(rows);
+    // `[].every()` is true, so the boundary assertion alone would pass if the
+    // filter removed EVERYTHING. Prove the after-side survives first.
+    expect(ours.length).toBeGreaterThan(0);
+    expect(ours.some((r) => r.kind === 'group')).toBe(true);
     // §4.4: no scheduling data or events before the branch opens.
-    expect(scoped(rows).every((r) => r.date >= '2026-06-15')).toBe(true);
+    expect(ours.every((r) => r.date >= '2026-06-15')).toBe(true);
+    // And the event deliberately placed before the boundary is genuinely gone,
+    // rather than merely absent from a list that is empty for another reason.
+    expect(ours.some((r) => r.date === '2026-06-02')).toBe(false);
   });
 
   it('refuses an inverted or oversized range', async () => {
