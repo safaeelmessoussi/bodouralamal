@@ -89,6 +89,12 @@
   - ✓ Security — fixed an all-branches Admin seeing nothing (proved 0 of 2 → 2 of 2 over HTTP) and a cross-role over-grant; `roles[]` derived from scopes so a token cannot self-contradict
   - ⚠ Supersedes OPEN AMBIGUITY 4 — user-list branch scoping should now be decided under this model
 
+- [x] Generic educational stages + sex on the person (§4.4b, §7, §15.1, SRS Revision 27)
+  - ✓ Backend — `User.sex` captured at registration inside the TD-4.1 transaction; seeded Levels carry real `gender_restriction`
+  - ✓ Migration — DDL plus a data migration renaming categories in place, preserving all 21 Levels (verified before and after); seed re-run leaves 3 categories and 21 levels
+  - ✓ Tests — 7 tests; four mutations caught (sex optional, sex as free string, applicant sex dropped, child sex dropped)
+  - ✓ Architecture — sex never on Category; availability is which Levels exist, so opening Teen+Male is Super Admin data entry with no code change
+
 ## M2 — Registration, Approvals, Family
 - [x] Unified parent+child registration transaction (TD-4.1) + adult path
   - ✓ Backend — `POST /registrations`; replay guard consumed FIRST so the `jti` is authoritative; both paths in one transaction
