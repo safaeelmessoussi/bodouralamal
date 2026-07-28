@@ -14,3 +14,6 @@ infra.env
 
 # Prisma client is generated from schema.prisma at build time (never committed)
 backend/src/generated/
+
+# Ignore leftover Next.js project from UI design phase (using Vite frontend instead)
+bodour-ui/
