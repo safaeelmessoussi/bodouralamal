@@ -131,7 +131,11 @@
   - ✓ Security — TD-2 admin-only with the TD-12 freshness assertion; revoking one link leaves the parent's other children and the child's other parent untouched
 
 - [ ] ChildContextSwitcher component + API-client header injection (§14.3, §16.1)
-- [ ] GroupTeacher join + teacher-scoping resolution helpers (§4.2)
+- [~] GroupTeacher join + teacher-scoping resolution helpers (§4.2)
+  - ✓ Backend — `policies/teacher-scope.ts`; reach resolves exclusively through `GroupTeacher`, never through a Teacher's branch assignment
+  - ✓ Tests — 16 integration tests against real branches, groups and enrolments; six mutations caught
+  - ✓ Security — out-of-scope is 404 not 403 (no existence leak for a minor's record); revoking an assignment, un-enrolling, or deleting the group each end reach on the next call
+  - △ Later milestone (M3) — the admin UI that creates groups and assigns teachers arrives with Group CRUD
 - [ ] StudentSocialProfile field-level restriction (assigned teachers only) (§4.10, TD-2)
 - [~] User Management screen per §14.2 incl. normalized-shadow-column substring search, no fuzzy (TD-10)
   - ✓ Backend — `GET /admin/users`; §14.2 columns exactly; filters read live assignments; TD-10 envelope and ar-x-icu ordering
