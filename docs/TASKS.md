@@ -186,9 +186,16 @@
   - ✓ HTTP — roster and instructor routes with `HH:MM` boundary validation and structured conflict details
   - ✓ Tests — 18 service + 12 HTTP tests; seven mutations caught
   - △ Frontend integration — the §5.6 roster screen
-- [ ] Event model: visibility enum, recurrence (none/daily/weekly/biweekly-alternating/yearly) (§4.4)
-- [ ] Explicit four-way scope-join population at creation; operational-start filter (§4.4)
-- [ ] Branch-activation manual backfill action + endpoint (§4.4, TD-3.4)
+- [~] Event model: visibility enum, recurrence (none/daily/weekly/biweekly-alternating/yearly) (§4.4)
+  - ✓ Backend — create/delete with all five recurrence types; unbounded recurrence refused; TD-5 delete removes the scope joins
+  - ✓ Tests — 20 integration tests; seven mutations caught incl. a teacher privilege-escalation path
+  - △ Remaining — HTTP routes and contract entries; visibility FILTERING lands with the calendar read
+- [x] Explicit four-way scope-join population at creation; operational-start filter (§4.4)
+  - ✓ Backend — rows written at creation, never a runtime wildcard; only already-operational branches attached
+  - ✓ Tests — asserts real rows in all four join tables and the exclusion of a future-opening branch
+- [~] Branch-activation manual backfill action + endpoint (§4.4, TD-3.4)
+  - ✓ Backend — list-then-attach, idempotent, branch-scoped; the gap is neither auto-filled nor ignored
+  - △ Remaining — the HTTP endpoint (`POST /admin/branches/{id}/event-backfill`, already in TD-3)
 - [ ] Calendar views: month/week/agenda, filters, glance view, session popup, Monday start
 - [ ] Three-tier visibility filtering per role incl. public tier for anonymous (§4.4, TD-2)
 - [ ] Operational-start-date graying in branch-scoped views
