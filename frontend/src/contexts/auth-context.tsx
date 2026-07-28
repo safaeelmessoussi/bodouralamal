@@ -20,16 +20,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const checkAuth = async () => {
       try {
+        console.log("[v0] Checking authentication state...")
         if (apiClient.isAuthenticated()) {
-          const currentUser = await apiClient.getCurrentUser()
-          setUser(currentUser)
+          console.log("[v0] User has token, fetching user data...")
+          try {
+            const currentUser = await apiClient.getCurrentUser()
+            console.log("[v0] User data loaded:", currentUser)
+            setUser(currentUser)
+          } catch (err) {
+            console.warn("[v0] Failed to load user data, clearing tokens:", err)
+            // Clear invalid tokens
+            localStorage.removeItem("access_token")
+            localStorage.removeItem("refresh_token")
+          }
+        } else {
+          console.log("[v0] No authentication token found")
         }
       } catch (error) {
-        console.error("[v0] Failed to load user:", error)
+        console.error("[v0] Error in checkAuth:", error)
         // Clear invalid tokens
         localStorage.removeItem("access_token")
         localStorage.removeItem("refresh_token")
       } finally {
+        console.log("[v0] Auth check complete, setting loading to false")
         setIsLoading(false)
       }
     }
