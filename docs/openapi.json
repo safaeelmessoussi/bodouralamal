@@ -159,6 +159,47 @@
         }
       }
     },
+    "/students/{id}/social-profile": {
+      "get": {
+        "summary": "Read a student's social profile",
+        "description": "Minors' case-file data — the most restricted surface in the system (§4.10, BR-16). Visible **only** to Super Admin, to Admin within branch scope, and to a Teacher for their **specifically-assigned** students, resolved server-side through the §4.2 `GroupTeacher` predicate. **Never** to students, **never** to guardians including the child's own linked parents, and never to teachers at large (TD-2 Revision 28). TD-12 names any StudentSocialProfile read as high-risk, so the caller's status and role are re-read from live rows on every request. **The read is audited** (`socialprofile.view`, TD-8 R28): viewing a safeguarding record is itself a security-sensitive act. Out of scope answers **404, never 403** (§20 rule 17) — a 403 would confirm that a particular child has a case file.",
+        "responses": {
+          "200": {
+            "description": "The profile; fields are null when no record exists yet."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8)."
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN when the caller is no longer Active or holds none of the three roles (TD-12)."
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for a student out of scope OR nonexistent — deliberately indistinguishable."
+          }
+        }
+      },
+      "put": {
+        "summary": "Create or update a student's social profile",
+        "description": "Same audience as the read (TD-2 Revision 28): Super Admin, Admin within branch scope, and a Teacher for their assigned students only. Upsert, because §7 makes the case file one record per student and staff should not have to know whether one exists. **Only the fields supplied are written**, so a partial update never blanks a colleague's entry by omission. **Audited** (`socialprofile.update`, TD-8 R28) recording **which fields changed, never their values** — §14 forbids PII in logs, and copying a child's health condition into the audit detail would move the very data BR-16 restricts into a table with a different access rule.",
+        "responses": {
+          "200": {
+            "description": "The stored profile."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED against the §7 column limits."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8)."
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8)."
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for a student out of scope or nonexistent."
+          }
+        }
+      }
+    },
     "/admin/users": {
       "get": {
         "summary": "List, filter and search users",

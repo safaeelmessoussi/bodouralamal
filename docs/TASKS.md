@@ -144,7 +144,11 @@
   - ✓ Security — out-of-scope is 404 not 403 (no existence leak for a minor's record); revoking an assignment, un-enrolling, or deleting the group each end reach on the next call
   - ✓ Abstraction — `taughtByTeacher()` composable predicate is the primary form; `teachesStudent`/`teacherStudentIds` are built on it (one query each). Adopted while zero production call sites existed
   - △ Later milestone (M3) — the admin UI that creates groups and assigns teachers arrives with Group CRUD
-- [ ] StudentSocialProfile field-level restriction (assigned teachers only) (§4.10, TD-2)
+- [~] StudentSocialProfile field-level restriction (assigned teachers only) (§4.10, TD-2, SRS Revision 28)
+  - ✓ Backend — `GET`/`PUT /students/{id}/social-profile`; authorization server-side via the §4.2 predicate + TD-12 freshness
+  - ✓ Tests — 19 integration tests asserting the matrix in both directions, the audit trail for reads and writes, and 404-not-403
+  - ✓ Security — seven mutations caught; audit records field names never values; `socialprofile.*` excluded from the R19 purge allowlist (verified with a 2099 horizon)
+  - △ Frontend integration — the §14 case-file screen
 - [~] User Management screen per §14.2 incl. normalized-shadow-column substring search, no fuzzy (TD-10)
   - ✓ Backend — `GET /admin/users`; §14.2 columns exactly; filters read live assignments; TD-10 envelope and ar-x-icu ordering
   - ✓ Tests — 14 list/search tests + a 38-entry parity corpus proving the TS normalizer matches the SQL function byte for byte; eight mutations caught
