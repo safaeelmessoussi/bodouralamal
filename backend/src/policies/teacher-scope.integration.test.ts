@@ -5,6 +5,8 @@ import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
 import type { RoleScope } from './branch-scope.js';
 import {
   assertCanAccessGroup,
+  groupTaughtByTeacher,
+  taughtByTeacher,
   assertCanAccessStudent,
   teacherGroupIds,
   teacherStudentIds,
@@ -361,5 +363,139 @@ describe('TD-2 — staff reach alongside teachers', () => {
         student,
       ),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+  });
+});
+
+
+describe('§4.2 — the composable predicate (the abstraction endpoints must use)', () => {
+  it('composes with a search filter in ONE query, without materialising ids', async () => {
+    const branch = await makeBranch('مراكش');
+    const mine = await makeGroup(branch, 'مجموعتي');
+    const theirs = await makeGroup(branch, 'مجموعتهم');
+    const teacher = await person('معلمة');
+    await assign(mine, teacher);
+
+    const myStudent = await person('سعاد طالبتي');
+    const otherStudent = await person('سعاد طالبتهم');
+    await enrol(mine, myStudent);
+    await enrol(theirs, otherStudent);
+
+    // The whole point: scope AND search evaluated together by Postgres. An id
+    // list would force loading every student first and filtering in memory,
+    // which cannot use the TD-10 shadow-column index.
+    const found = await prisma.user.findMany({
+      where: {
+        deletedAt: null,
+        nameArabic: { contains: 'سعاد' },
+        ...taughtByTeacher(teacher),
+      },
+      select: { id: true },
+    });
+    expect(found.map((f) => f.id)).toEqual([myStudent]);
+  });
+
+  it('composes with pagination, so scope is not applied after the page is cut', async () => {
+    const branch = await makeBranch('مراكش');
+    const group = await makeGroup(branch, 'مجموعة');
+    const teacher = await person('معلمة');
+    await assign(group, teacher);
+    const students = [];
+    for (const label of ['أ', 'ب', 'ج']) students.push(await person(`طالبة ${label}`));
+    for (const s of students) await enrol(group, s);
+    // Someone outside the teacher's reach who would otherwise occupy a slot.
+    await person('طالبة خارج النطاق');
+
+    const page = await prisma.user.findMany({
+      where: { deletedAt: null, ...taughtByTeacher(teacher) },
+      orderBy: { id: 'asc' },
+      take: 2,
+    });
+    expect(page).toHaveLength(2);
+    expect(students).toEqual(expect.arrayContaining(page.map((p) => p.id)));
+  });
+
+  it('reflects a revoked assignment immediately — no stale snapshot', async () => {
+    const branch = await makeBranch('مراكش');
+    const group = await makeGroup(branch, 'مجموعة');
+    const teacher = await person('معلمة');
+    const student = await person('طالبة');
+    const assignmentId = await assign(group, teacher);
+    await enrol(group, student);
+
+    const before = await prisma.user.count({
+      where: { deletedAt: null, ...taughtByTeacher(teacher) },
+    });
+    expect(before).toBe(1);
+
+    await prisma.groupTeacher.update({
+      where: { id: assignmentId },
+      data: { deletedAt: new Date() },
+    });
+
+    const after = await prisma.user.count({
+      where: { deletedAt: null, ...taughtByTeacher(teacher) },
+    });
+    expect(after).toBe(0);
+  });
+
+  it('agrees exactly with the boolean and list helpers built on it', async () => {
+    const branch = await makeBranch('مراكش');
+    const g1 = await makeGroup(branch, 'أ');
+    const g2 = await makeGroup(branch, 'ب');
+    const teacher = await person('معلمة');
+    await assign(g1, teacher);
+    await assign(g2, teacher);
+    const a = await person('طالبة أ');
+    const b = await person('طالبة ب');
+    const outsider = await person('طالبة خارجية');
+    await enrol(g1, a);
+    await enrol(g2, b);
+
+    const viaPredicate = (
+      await prisma.user.findMany({
+        where: { deletedAt: null, ...taughtByTeacher(teacher) },
+        select: { id: true },
+      })
+    ).map((u) => u.id);
+
+    expect(viaPredicate.sort()).toEqual((await teacherStudentIds(prisma, teacher)).sort());
+    expect(await teachesStudent(prisma, teacher, a)).toBe(true);
+    expect(await teachesStudent(prisma, teacher, outsider)).toBe(false);
+  });
+
+  it('a student enrolled in two of the teacher\'s groups is returned once', async () => {
+    const branch = await makeBranch('مراكش');
+    const g1 = await makeGroup(branch, 'أ');
+    const g2 = await makeGroup(branch, 'ب');
+    const teacher = await person('معلمة');
+    await assign(g1, teacher);
+    await assign(g2, teacher);
+    const shared = await person('طالبة مشتركة');
+    await enrol(g1, shared);
+    await enrol(g2, shared);
+
+    // `some` is an EXISTS, so no row multiplication — an IN-list built from a
+    // join would have needed de-duplication.
+    const found = await prisma.user.findMany({
+      where: { deletedAt: null, ...taughtByTeacher(teacher) },
+      select: { id: true },
+    });
+    expect(found).toHaveLength(1);
+  });
+
+  it('the group predicate selects only the teacher\'s own groups', async () => {
+    const branch = await makeBranch('مراكش');
+    const mine = await makeGroup(branch, 'مجموعتي');
+    const theirs = await makeGroup(branch, 'مجموعتهم');
+    const teacher = await person('معلمة');
+    const other = await person('معلمة أخرى');
+    await assign(mine, teacher);
+    await assign(theirs, other);
+
+    const groups = await prisma.group.findMany({
+      where: groupTaughtByTeacher(teacher),
+      select: { id: true },
+    });
+    expect(groups.map((g) => g.id)).toEqual([mine]);
   });
 });

@@ -24,6 +24,48 @@ import { branchesForRole, hasRole, isSuperAdmin, type RoleScope } from './branch
  * of a minor's record. The same answer is given for "no such student".
  */
 
+/**
+ * **The composable predicate — the primary abstraction (§4.2).**
+ *
+ * A Prisma `where` fragment selecting the students a teacher reaches. Every
+ * scope-aware query composes this instead of materialising ids and issuing
+ * `WHERE student_id IN (…)`.
+ *
+ * The reason is composability and freshness rather than raw speed. Materialising
+ * ids first costs an extra round trip, and — more importantly — takes a
+ * **snapshot**: between computing the set and using it, a group assignment can
+ * be revoked, so the request acts on scope that is no longer true. TD-12's whole
+ * posture is that authorization is re-evaluated per request; a single query that
+ * joins scope and data evaluates both at one instant. It also composes with
+ * TD-10 pagination and the normalized-shadow-column search, which an in-memory
+ * id list cannot do without re-filtering in application code.
+ *
+ * Postgres receives nested `EXISTS` subqueries and plans the joins itself.
+ *
+ * Both sides are live: a soft-deleted enrolment, a revoked assignment, or a
+ * deleted group each remove the student, on the very next query.
+ */
+export function taughtByTeacher(teacherId: string): {
+  enrollments: { some: Record<string, unknown> };
+} {
+  return {
+    enrollments: {
+      some: {
+        deletedAt: null,
+        group: {
+          deletedAt: null,
+          teachers: { some: { teacherId, deletedAt: null } },
+        },
+      },
+    },
+  };
+}
+
+/** The `Group` counterpart, for roster and exam-authoring scope ("own groups"). */
+export function groupTaughtByTeacher(teacherId: string): Record<string, unknown> {
+  return { deletedAt: null, teachers: { some: { teacherId, deletedAt: null } } };
+}
+
 /** Live group assignments for a teacher; soft-deleted rows never count. */
 export async function teacherGroupIds(prisma: PrismaClient, teacherId: string): Promise<string[]> {
   const rows = await prisma.groupTeacher.findMany({
@@ -58,19 +100,13 @@ export async function teachesStudent(
   teacherId: string,
   studentId: string,
 ): Promise<boolean> {
-  const groupIds = await teacherGroupIds(prisma, teacherId);
-  if (groupIds.length === 0) return false;
-
-  const enrolment = await prisma.studentGroup.findFirst({
-    where: {
-      studentId,
-      groupId: { in: groupIds },
-      deletedAt: null,
-      student: { deletedAt: null },
-    },
+  // One query via the predicate: scope and subject are evaluated together, so
+  // there is no window in which the assignment could change between them.
+  const student = await prisma.user.findFirst({
+    where: { id: studentId, deletedAt: null, ...taughtByTeacher(teacherId) },
     select: { id: true },
   });
-  return enrolment !== null;
+  return student !== null;
 }
 
 /** The students a teacher may act on, across every group they are assigned to. */
@@ -78,14 +114,15 @@ export async function teacherStudentIds(
   prisma: PrismaClient,
   teacherId: string,
 ): Promise<string[]> {
-  const groupIds = await teacherGroupIds(prisma, teacherId);
-  if (groupIds.length === 0) return [];
-
-  const rows = await prisma.studentGroup.findMany({
-    where: { groupId: { in: groupIds }, deletedAt: null, student: { deletedAt: null } },
-    select: { studentId: true },
+  // Retained for the genuine "list my students" case, but built on the same
+  // predicate so there is one definition of reach. Endpoints that filter
+  // students should compose `taughtByTeacher` directly rather than call this and
+  // then issue `IN (…)`.
+  const students = await prisma.user.findMany({
+    where: { deletedAt: null, ...taughtByTeacher(teacherId) },
+    select: { id: true },
   });
-  return [...new Set(rows.map((r) => r.studentId))];
+  return students.map((s) => s.id);
 }
 
 /** The caller as the freshness policy resolves them (§4.2 Revision 24). */
@@ -135,6 +172,8 @@ export async function assertCanAccessStudent(
     return;
   }
 
+  // §20 rule 17: identical answer for out-of-scope and nonexistent, so the
+  // response cannot be used to discover that a minor's record exists.
   throw new AppError('NOT_FOUND', 'no such student in scope');
 }
 

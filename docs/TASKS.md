@@ -142,6 +142,7 @@
   - ✓ Backend — `policies/teacher-scope.ts`; reach resolves exclusively through `GroupTeacher`, never through a Teacher's branch assignment
   - ✓ Tests — 16 integration tests against real branches, groups and enrolments; six mutations caught
   - ✓ Security — out-of-scope is 404 not 403 (no existence leak for a minor's record); revoking an assignment, un-enrolling, or deleting the group each end reach on the next call
+  - ✓ Abstraction — `taughtByTeacher()` composable predicate is the primary form; `teachesStudent`/`teacherStudentIds` are built on it (one query each). Adopted while zero production call sites existed
   - △ Later milestone (M3) — the admin UI that creates groups and assigns teachers arrives with Group CRUD
 - [ ] StudentSocialProfile field-level restriction (assigned teachers only) (§4.10, TD-2)
 - [~] User Management screen per §14.2 incl. normalized-shadow-column substring search, no fuzzy (TD-10)
