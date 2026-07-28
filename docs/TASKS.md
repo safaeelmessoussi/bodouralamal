@@ -181,7 +181,13 @@
 > **Resolved by Revision 30:** Teachers are `⊘` for reading reference data. They receive branch, room, level and
 > subject information only through the operational APIs they are authorised to use, never by browsing reference-data
 > endpoints. The implementation already behaved this way and is unchanged.
-- [~] Group CRUD: wall-clock times, room/time conflict detection, capacity (FOR UPDATE, TD-15), co-teaching, optimistic version locking (§4.4, TD-11, TD-15)
+>
+> **M3 backend status (2026-07-29): complete.** Every TD-3.4 scheduling and calendar endpoint is implemented,
+> documented and router-reconciled; the §18 Scheduling & Calendar checklist is green. The 16 TD-3 endpoints still
+> pending all belong to **M4 (Quran), M5 (Exams/Grading) and Storage/Content** — none is scheduling work. Items below
+> that remain `[~]` are held open **only** by frontend work owned by v0 (the roster screen, the month/week/agenda
+> views, operational-start graying); the backend contracts they consume are finished and stable.
+- [x] Group CRUD: wall-clock times, room/time conflict detection, capacity (FOR UPDATE, TD-15), co-teaching, optimistic version locking (§4.4, TD-11, TD-15)
   - ✓ Backend (service) — create/update/delete/list; half-open room/time conflict detection; TD-15 optimistic locking; TD-5 enrolment guard; R26 scoping
   - ✓ Tests — 18 integration tests; six of seven mutations caught
   - ⓘ Accepted by the Document Owner — the TD-15 lock is implemented as required and the test verifies observable behaviour; proving the mechanism itself is not MVP work
@@ -194,7 +200,7 @@
   - ✓ HTTP — roster and instructor routes with `HH:MM` boundary validation and structured conflict details
   - ✓ Tests — 18 service + 12 HTTP tests; seven mutations caught
   - △ Frontend integration — the §5.6 roster screen
-- [~] Event model: visibility enum, recurrence (none/daily/weekly/biweekly-alternating/yearly) (§4.4)
+- [x] Event model: visibility enum, recurrence (none/daily/weekly/biweekly-alternating/yearly) (§4.4)
   - ✓ Backend — create/delete with all five recurrence types; unbounded recurrence refused; TD-5 delete removes the scope joins
   - ✓ Tests — 20 integration tests; seven mutations caught incl. a teacher privilege-escalation path
   - ✓ HTTP — `POST /events`, `DELETE /events/{id}` with `YYYY-MM-DD`/`HH:MM` boundary validation; response reports what was actually attached
@@ -203,7 +209,7 @@
 - [x] Explicit four-way scope-join population at creation; operational-start filter (§4.4)
   - ✓ Backend — rows written at creation, never a runtime wildcard; only already-operational branches attached
   - ✓ Tests — asserts real rows in all four join tables and the exclusion of a future-opening branch
-- [~] Branch-activation manual backfill action + endpoint (§4.4, TD-3.4)
+- [x] Branch-activation manual backfill action + endpoint (§4.4, TD-3.4)
   - ✓ Backend — list-then-attach, idempotent, branch-scoped; the gap is neither auto-filled nor ignored
   - ✓ HTTP — `GET`/`POST /admin/branches/{id}/event-backfill`; idempotence proven over HTTP
 - [~] Calendar views: month/week/agenda, filters, glance view, session popup, Monday start
