@@ -113,7 +113,7 @@ export default function Header({ onMenuClick }: HeaderProps) {
 
         {/* User menu */}
         <DropdownMenu>
-          <DropdownMenuTrigger asChild>
+          <DropdownMenuTrigger>
             <Button variant="ghost" className="h-8 gap-2 px-2 text-sm">
               <div className="flex items-center justify-center size-6 rounded-full bg-primary text-primary-foreground text-[10px] font-bold">
                 م

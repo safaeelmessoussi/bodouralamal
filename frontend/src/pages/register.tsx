@@ -2,9 +2,8 @@ import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Select } from "@/components/ui/select"
 import { useNavigate, Link } from "react-router-dom"
-import { User, Mail, Lock, UserCheck } from "lucide-react"
+import { User, Mail, Lock } from "lucide-react"
 
 export default function RegisterPage() {
   const navigate = useNavigate()
@@ -117,11 +116,15 @@ export default function RegisterPage() {
                 <label htmlFor="role" className="text-sm font-medium text-foreground">
                   Register as
                 </label>
-                <Select value={formData.role} onValueChange={handleRoleChange}>
+                <select
+                  value={formData.role}
+                  onChange={(e) => handleRoleChange(e.target.value)}
+                  className="w-full rounded-lg border border-input bg-transparent px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-input/30"
+                >
                   <option value="student">Student</option>
                   <option value="parent">Parent</option>
                   <option value="teacher">Teacher</option>
-                </Select>
+                </select>
               </div>
 
               <div className="space-y-2">

@@ -1,5 +1,5 @@
-import { PageHeader } from "@/components/page-header"
-import { StatCard } from "@/components/stat-card"
+import PageHeader from "@/components/page-header"
+import StatCard from "@/components/stat-card"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Users, BookOpen, Award, Clock } from "lucide-react"

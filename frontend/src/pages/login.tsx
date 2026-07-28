@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { useNavigate, Link } from "react-router-dom"
-import { Mail, Lock, Chrome } from "lucide-react"
+import { Mail, Lock, Globe } from "lucide-react"
 
 export default function LoginPage() {
   const navigate = useNavigate()
@@ -112,7 +112,7 @@ export default function LoginPage() {
               variant="outline"
               className="w-full"
             >
-              <Chrome className="mr-2 h-4 w-4" />
+              <Globe className="mr-2 h-4 w-4" />
               Sign in with Google
             </Button>
 

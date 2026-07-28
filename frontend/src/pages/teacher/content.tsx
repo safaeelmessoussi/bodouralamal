@@ -1,9 +1,9 @@
-import { PageHeader } from "@/components/page-header"
+import PageHeader from "@/components/page-header"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { Upload, FileText, Video, Audio, Trash2, Plus } from "lucide-react"
+import { Upload, FileText, Video, Music, Trash2, Plus } from "lucide-react"
 
 export default function TeacherContent() {
   const content = [
@@ -50,7 +50,7 @@ export default function TeacherContent() {
       case "video":
         return <Video className="h-4 w-4" />
       case "audio":
-        return <Audio className="h-4 w-4" />
+        return <Music className="h-4 w-4" />
       default:
         return <FileText className="h-4 w-4" />
     }
