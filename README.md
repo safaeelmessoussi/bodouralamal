@@ -80,6 +80,12 @@ application code is restricted to row locks and same-transaction job inserts.
   administer Casablanca. Teachers derive teaching access exclusively through group assignment.
 - High-risk endpoints **re-read the caller from the database on every request** rather than trusting
   an unexpired token, so suspending an account or revoking a role takes effect immediately.
+- **Authentication failure has exactly one rule per mount** (SRS Revision 34). Protected endpoints
+  (`authenticate`) answer `401` to any credential that is missing or fails verification. Public
+  endpoints (`optionalAuthenticate`, currently `GET /calendar`) **never return `401`**: an invalid,
+  malformed or expired credential is *ignored* and the request proceeds as anonymous, because a
+  credential that fails verification carries no identity to act on — and the landing page renders
+  the public calendar for visitors who have none.
 - Access to a minor's data flows through an approved family link, verified per request via the
   `X-Active-Child-ID` header against **both** the authenticated parent and the child. Every failure
   mode returns an indistinguishable `404`, so responses cannot be used to probe which children exist.
@@ -205,7 +211,7 @@ because the properties it checks — transaction atomicity, constraint enforceme
 signatures surviving the proxy — do not exist in a mock. It runs serially, since the suites share one
 database.
 
-Current totals: **97 unit tests and 464 integration tests**.
+Current totals: **97 unit tests and 466 integration tests**.
 
 ---
 

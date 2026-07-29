@@ -55,16 +55,24 @@ export function authenticate(config: AppConfig) {
  * Optional authentication, for the **public** endpoints §4.4 defines — currently
  * `GET /calendar`, which serves an anonymous visitor the public tier.
  *
- * Three cases, deliberately distinguished:
+ * **A public endpoint never returns `401`** (Revision 34). Three cases:
  *
  *   - **No token** → anonymous. The handler sees `req.actor` undefined and
  *     applies the public tier.
- *   - **A token that does not verify** → `401`. It is *not* silently downgraded
- *     to anonymous: a logged-in user whose token expired would otherwise watch
- *     their calendar quietly shrink, with nothing telling the client to refresh.
+ *   - **A token that does not verify** — malformed, expired, wrong signature →
+ *     **ignored, and the request proceeds as anonymous.** A credential that
+ *     fails verification carries no identity to act on, so the only honest
+ *     reading is that the caller is anonymous. Refusing instead would mean a
+ *     returning visitor whose token expired while the tab sat open is served an
+ *     error on the **landing page** (§5.1), which has no login requirement at
+ *     all — and a client treating `401` as *redirect to login* would login-wall
+ *     a public page. The client learns its session state from `POST
+ *     /auth/refresh` and `GET /me`, never from a public read.
  *   - **A valid token for a non-active account** → passed through **with** its
  *     status, because §4.4 gives a `Pending` user the public tier rather than a
- *     refusal. The guarded router still rejects them everywhere else.
+ *     refusal. The guarded router still rejects them everywhere else. This case
+ *     is unchanged by Revision 34, which concerns only credentials that fail
+ *     verification.
  */
 export function optionalAuthenticate(config: AppConfig) {
   return (req: Request, _res: Response, next: NextFunction): void => {
@@ -77,7 +85,9 @@ export function optionalAuthenticate(config: AppConfig) {
 
     const verified = verifyAccessToken(bearer, config.JWT_SIGNING_KEY);
     if (!verified.valid) {
-      next(new AppError('AUTH_REQUIRED', verified.reason));
+      // Revision 34: ignored, not refused. `req.actor` stays undefined, which
+      // is exactly the state a caller with no token at all produces.
+      next();
       return;
     }
 

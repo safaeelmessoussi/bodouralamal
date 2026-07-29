@@ -10,7 +10,7 @@ import { httpCall } from '../test-support/http-client.js';
  *
  * What only an HTTP test can show: that the route is genuinely reachable
  * **without a token**, that a Pending token is served rather than refused, and
- * that a malformed token is still a 401 rather than a silent downgrade.
+ * that a malformed token is IGNORED rather than refused (Revision 34).
  */
 const config = loadConfig();
 const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);
@@ -157,12 +157,45 @@ describe('GET /calendar — public access', () => {
     expect(rows.map((r) => r.visibility).sort()).toEqual(['hidden', 'private', 'public']);
   });
 
-  it('a token that does NOT verify is 401, not a silent downgrade', async () => {
-    // Otherwise a user whose token expired would watch their calendar quietly
-    // shrink with nothing telling the client to refresh.
-    const res = await call(`/calendar?${RANGE}`, `${bearer(await person('س'), ['student'])}x`);
-    expect(res.status).toBe(401);
-    expect(res.body.error?.code).toBe('AUTH_REQUIRED');
+  it('Revision 34: a token that does NOT verify is IGNORED, not refused', async () => {
+    // A public endpoint never returns 401. The landing page (§5.1) renders this
+    // calendar, so refusing a request that merely carries a stale token would
+    // serve an error on a page with no login requirement — and a client
+    // treating 401 as "redirect to login" would login-wall a public page.
+    const corrupt = `${bearer(await person('س'), ['student'])}x`;
+    const res = await call(`/calendar?${RANGE}`, corrupt);
+
+    expect(res.status).toBe(200);
+    expect(res.body.error).toBeUndefined();
+  });
+
+  it('an ignored credential yields EXACTLY the anonymous response', async () => {
+    // Not merely "also 200": a credential that fails verification carries no
+    // identity, so the caller must be indistinguishable from one who sent no
+    // token at all. A richer tier leaking through would mean the token was
+    // partly trusted.
+    const student = await person('طالبة معتمدة');
+    const expired = `${bearer(student, ['student'])}tampered`;
+
+    const ignored = await call(`/calendar?${RANGE}`, expired);
+    const anonymous = await call(`/calendar?${RANGE}`);
+
+    expect(ignored.status).toBe(anonymous.status);
+    expect(mine(ignored.body)).toEqual(mine(anonymous.body));
+    // And specifically: the private tier a valid student token would have
+    // unlocked is absent.
+    expect(mine(ignored.body).every((r) => r.visibility === 'public')).toBe(true);
+    expect(mine(ignored.body).length).toBeGreaterThan(0);
+  });
+
+  it('a garbage Authorization header is anonymous, not a 500', async () => {
+    // The header is attacker-controllable, so every shape has to be survivable.
+    for (const authorization of ['Bearer', 'Bearer ...', 'Basic abc', 'nonsense']) {
+      const res = await httpCall<Body>(BASE, 'GET', `/calendar?${RANGE}`, {
+        rawAuthorization: authorization,
+      });
+      expect(res.status, `Authorization: ${authorization}`).toBe(200);
+    }
   });
 });
 

@@ -1,7 +1,7 @@
 # Software Requirements Specification
 ## بذور الأمل — Institute Management Platform
 
-**Status:** Final MVP Blueprint (Revision 33 — pre-frontend consistency sweep; no scope or behaviour change), **immutable source of truth** — changed only by an explicit Document Owner revision, never by an implementing agent
+**Status:** Final MVP Blueprint (Revision 34 — invalid credentials on a public endpoint are anonymous, not an error), **immutable source of truth** — changed only by an explicit Document Owner revision, never by an implementing agent
 **Revision date:** 2026-07-26
 **Canonical location:** `docs/SRS.md` in the project repository
 **Document Owner:** [assign]
@@ -23,6 +23,17 @@ This is a standalone, self-contained specification. It does not reference extern
 * **§18 — Module Acceptance Checklists.**
 * **§19 — Environments, Deployment Pipeline & Testing Strategy.**
 * **§20 — AI Implementation Rules:** hard guardrails for any autonomous coding agent. §20 closes the document deliberately: it is the last thing an agent reads before writing code.
+
+**Revision 34 (Document Owner decision — invalid credentials on a public endpoint are anonymous, 2026-07-29):** closes an ambiguity the second Release-Candidate audit raised. §4.4 says the public tier is *"visible to unauthenticated visitors"* but never said what an **invalid or expired** credential means on an endpoint that is public by design; the implementation had chosen to refuse it with `401`. That choice is now reversed, and the rule is stated **project-wide** so it is decided once rather than per endpoint:
+
+* **`authenticate()` — protected endpoints.** A missing, malformed, expired or otherwise unverifiable credential is **`401 AUTH_REQUIRED`**. Unchanged.
+* **`optionalAuthenticate()` — public endpoints.** An invalid, malformed or expired credential is **ignored, and the request proceeds as anonymous**. It is never an error.
+
+**Why the reversal.** The public calendar renders on the **landing page (§5.1)**, which unauthenticated visitors are expected to reach. Refusing a request because it happened to carry a stale token means a returning visitor — whose token expired while the tab sat open — is served an error on a page that has no login requirement at all, and a client that treats `401` as *redirect to login* would **login-wall a public page**. The former justification, that a silent downgrade hides an expired session from the user, does not survive scrutiny: the client learns its session state from `POST /auth/refresh` and `GET /me`, which are the surfaces that exist for exactly that purpose, and never from a public read.
+
+**The distinction that remains.** A **valid** token for a non-active account is still passed through with its `account_status`, because §4.4 gives a `Pending` user the public tier deliberately. Revision 34 concerns only credentials that **fail verification** — those carry no identity to act on, so the only honest reading is that the caller is anonymous. A public endpoint therefore has exactly one failure mode left for authentication: none.
+
+**Binding consequence:** an endpoint mounted with `optionalAuthenticate()` must never return `401`, and its contract entry must not document one.
 
 **Revision 33 (pre-frontend Release-Candidate consistency sweep — Document Owner authorised, 2026-07-29):** a handover-grade audit of this document against the implementation, before any frontend is exposed. **No scope change, no behaviour change, no new requirement** — every edit removes a contradiction or an instance of drift, and prior decisions are marked superseded rather than rewritten. Four corrections: **(1) §4.10 claimed the `/admin/audit` browsing UI "remains in MVP"**, contradicting Revision 12 and three other places (§5.6, §9's OUT list, §10.1) that correctly place it post-MVP — a Revision-12 sweep leftover, now aligned; audit *writing* was and remains mandatory. **(2) §1.4, §4.2 and §4.4b still named the Categories "Women (المرأة) / Teens (اليافعات) / Children (الطفل)"** — the sex-encoded names **Revision 27 prohibits** and migrated away from, while §4.4b's own next paragraph and §15.1 correctly state the generic stages. The three stale copies now match the seeded reality (الكبار / اليافعون / الطفل); the prose that described adult self-registration as the "Women's track" is restated as the adult stage, since the whole point of Revision 27 is that a stage does not imply a sex. **(3) TD-2's *Browse AuditLog* row** granted a capability whose only surface is post-MVP, unannotated while the comparable *Restore soft-deleted records* row carried its "(MVP: manual-SQL runbook)" note; it now carries the same kind of annotation. **(4) §7's "Concurrency columns (TD-15)" list omitted `HijriMonthStart`**, which TD-15 itself includes (Revision 31) — the same requirement stated in two places, one of which drifted; §7 now points at TD-15 as the single list rather than restating it, so the pair cannot diverge again. **Recorded for the next reader:** the duplication in (4) is the general hazard here — where this document states one requirement twice, the copies drift silently, and the fix is a cross-reference rather than a second copy.
 
@@ -1083,6 +1094,15 @@ quarantine/{content_id}/…        (soft-deleted objects)
 * Presigned **GET** URLs (private bucket): TTL **10 minutes**, single content object, minted only after the TD-2 permission check (including child-context verification where the requester is a Parent).
 * Presigned single-shot **PUT** URLs: TTL **1 hour**; initiated-but-never-completed uploads garbage-collected after 48 h (`upload.gc`, TD-7).
 * Google OAuth: `state` + PKCE enforced; only the configured client ID accepted; email must be verified by Google.
+
+**Authentication failure semantics by mount (normative, Revision 34).** Two middlewares, one rule each, decided project-wide rather than per endpoint:
+
+| Mount | Missing credential | Invalid / malformed / expired credential | Valid credential, non-active account |
+|---|---|---|---|
+| `authenticate()` — protected endpoints | `401 AUTH_REQUIRED` | `401 AUTH_REQUIRED` | `403 FORBIDDEN` (TD-1: a Pending session reaches no endpoint but `GET /me` and logout) |
+| `optionalAuthenticate()` — public endpoints (§4.4 `GET /calendar`) | anonymous | **anonymous** — the credential is ignored, never an error | passed through with `account_status`; §4.4 gives `Pending` the public tier |
+
+A public endpoint **must never return `401`**, and its OpenAPI entry must not document one. A credential that fails verification carries no identity to act on, so the caller is anonymous; the client discovers an expired session from `POST /auth/refresh` and `GET /me`, which exist for that purpose.
 
 ### TD-13 — Configuration & Environment Catalog
 

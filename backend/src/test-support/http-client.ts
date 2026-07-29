@@ -19,6 +19,8 @@ export interface HttpResponse<B = Record<string, unknown>> {
 }
 
 export interface CallOptions {
+  /** Verbatim `Authorization` value, bypassing the `Bearer <token>` shorthand. */
+  rawAuthorization?: string;
   token?: string | undefined;
   body?: unknown;
   /** Set for tests that assert rate limiting itself, so the 429 is returned. */
@@ -39,13 +41,19 @@ export async function httpCall<B = Record<string, unknown>>(
   path: string,
   options: CallOptions = {},
 ): Promise<HttpResponse<B>> {
-  const { token, body, noRetryOn429 } = options;
+  const { token, body, noRetryOn429, rawAuthorization } = options;
 
   for (let attempt = 1; ; attempt += 1) {
     const res = await fetch(`${base}${path}`, {
       method,
       headers: {
-        ...(token ? { authorization: `Bearer ${token}` } : {}),
+        // `rawAuthorization` sends the header verbatim, for tests that need a
+        // malformed value the bearer shorthand cannot express.
+        ...(rawAuthorization !== undefined
+          ? { authorization: rawAuthorization }
+          : token
+            ? { authorization: `Bearer ${token}` }
+            : {}),
         ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
       },
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
