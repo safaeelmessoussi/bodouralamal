@@ -293,10 +293,6 @@ img {
   font-weight: 700;
   font-size: 1.05rem;
 }
-.logo-link__sub {
-  font-size: 0.72rem;
-  color: var(--muted);
-}
 
 .app-header__nav {
   /* Sits beside the logo; the actions block below takes the free space. */

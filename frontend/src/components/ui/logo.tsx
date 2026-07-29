@@ -19,7 +19,6 @@ export function Logo({
       {showText ? (
         <span className="logo-link__text">
           <span className="logo-link__name">{t('app.name')}</span>
-          <span className="logo-link__sub">{t('landing.footerCity')}</span>
         </span>
       ) : null}
     </>

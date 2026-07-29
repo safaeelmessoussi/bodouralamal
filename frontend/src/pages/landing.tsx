@@ -104,9 +104,6 @@ function Hero(): ReactNode {
               <ButtonLink href="/api/v1/auth/google" variant="primary">
                 {t('landing.ctaLogin')}
               </ButtonLink>
-              <ButtonLink href="/calendar" variant="secondary">
-                {t('landing.ctaExplore')}
-              </ButtonLink>
             </div>
           </div>
 
