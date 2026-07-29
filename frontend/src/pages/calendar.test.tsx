@@ -3,9 +3,10 @@ import { describe, expect, it } from 'vitest';
 
 import { CalendarDayCell } from '../components/calendar/calendar-day-cell.js';
 import { CalendarGrid } from '../components/calendar/calendar-grid.js';
+import { EventChip } from '../components/calendar/event-chip.js';
+import { EventDetailsDialog } from '../components/calendar/event-details-dialog.js';
 import { MonthSelector } from '../components/calendar/month-selector.js';
 import { SelectedDayCard } from '../components/calendar/selected-day-card.js';
-import { UpcomingEvents } from '../components/calendar/upcoming-events.js';
 import type { Occurrence } from '../adapters/calendar.js';
 import { leadingBlanks, monthGrid, toIsoDate } from '../lib/dates.js';
 
@@ -65,6 +66,7 @@ describe('the month grid renders', () => {
       today={new Date(2026, 5, 10)}
       selected={new Date(2026, 5, 15)}
       onSelect={() => undefined}
+      onOpenEvent={() => undefined}
     />,
   );
 
@@ -100,6 +102,7 @@ describe('a day cell', () => {
         isToday={false}
         isSelected={false}
         onSelect={() => undefined}
+      onOpenEvent={() => undefined}
       />,
     );
     expect(html).toContain('<button');
@@ -109,18 +112,37 @@ describe('a day cell', () => {
 
   it('renders padding as an inert cell, not a dead control', () => {
     const html = renderToStaticMarkup(
-      <CalendarDayCell date={null} occurrences={[]} isToday={false} isSelected={false} onSelect={() => undefined} />,
+      <CalendarDayCell date={null} occurrences={[]} isToday={false} isSelected={false} onSelect={() => undefined}
+      onOpenEvent={() => undefined} />,
     );
     expect(html).not.toContain('<button');
     expect(html).toContain('aria-hidden="true"');
   });
 
   it('summarises overflow instead of overflowing the cell', () => {
-    const many = [occurrence({ id: 'a' }), occurrence({ id: 'b' }), occurrence({ id: 'c' }), occurrence({ id: 'd' })];
+    // Cells now carry four events before summarising; the cap exists so one
+    // unusually busy day cannot stretch its whole week.
+    const many = [
+      occurrence({ id: 'a' }),
+      occurrence({ id: 'b' }),
+      occurrence({ id: 'c' }),
+      occurrence({ id: 'd' }),
+      occurrence({ id: 'e' }),
+      occurrence({ id: 'f' }),
+    ];
     const html = renderToStaticMarkup(
-      <CalendarDayCell date={new Date(2026, 5, 15)} occurrences={many} isToday={false} isSelected={false} onSelect={() => undefined} />,
+      <CalendarDayCell date={new Date(2026, 5, 15)} occurrences={many} isToday={false} isSelected={false} onSelect={() => undefined}
+      onOpenEvent={() => undefined} />,
     );
     expect(html).toContain('+2');
+  });
+
+  it('shows four events in full before summarising', () => {
+    const four = ['a','b','c','d'].map((id) => occurrence({ id }));
+    const html = renderToStaticMarkup(
+      <CalendarDayCell date={new Date(2026, 5, 15)} occurrences={four} isToday={false} isSelected={false} onSelect={() => undefined} onOpenEvent={() => undefined} />,
+    );
+    expect(html).not.toContain('+');
   });
 });
 
@@ -140,24 +162,7 @@ describe('the side panels', () => {
     expect(withHijri).toContain('1447-12-29');
   });
 
-  it('upcoming lists only what is still ahead', () => {
-    const html = renderToStaticMarkup(
-      <UpcomingEvents
-        occurrences={[
-          occurrence({ id: 'past', title: 'ماضٍ', date: '2026-06-01' }),
-          occurrence({ id: 'future', title: 'قادم', date: '2026-06-20' }),
-        ]}
-        from="2026-06-10"
-      />,
-    );
-    expect(html).toContain('قادم');
-    expect(html).not.toContain('ماضٍ');
-  });
 
-  it('upcoming says so when there is nothing ahead', () => {
-    const html = renderToStaticMarkup(<UpcomingEvents occurrences={[]} from="2026-06-10" />);
-    expect(html).toContain('لا توجد أنشطة قادمة');
-  });
 });
 
 describe('month navigation', () => {
@@ -171,5 +176,56 @@ describe('month navigation', () => {
     // Icon-only controls need names.
     expect(html).toContain('aria-label="الشهر السابق"');
     expect(html).toContain('aria-label="الشهر التالي"');
+  });
+});
+
+describe('event details', () => {
+  it('an event chip is a button, so focus can return to it', () => {
+    const html = renderToStaticMarkup(
+      <EventChip occurrence={occurrence()} onOpen={() => undefined} />,
+    );
+    expect(html).toContain('<button');
+    expect(html).toContain('عرض التفاصيل');
+  });
+
+  it('a chip with no handler is inert text, not a dead control', () => {
+    const html = renderToStaticMarkup(<EventChip occurrence={occurrence()} />);
+    expect(html).not.toContain('<button');
+  });
+
+  it('the card leads with the title and puts the time beneath', () => {
+    const html = renderToStaticMarkup(<EventChip occurrence={occurrence()} />);
+    expect(html.indexOf('event-chip__title')).toBeLessThan(html.indexOf('event-chip__time'));
+  });
+
+  it('the dialog renders nothing until an event is chosen', () => {
+    const html = renderToStaticMarkup(
+      <EventDetailsDialog occurrence={null} onClose={() => undefined} />,
+    );
+    // The element exists (the native dialog must be in the DOM to be opened)
+    // but carries no event content.
+    expect(html).not.toContain('حلقة تحفيظ');
+  });
+
+  it('the dialog labels every field rather than running them together', () => {
+    const html = renderToStaticMarkup(
+      <EventDetailsDialog
+        occurrence={occurrence({ visibility: 'public', hijri_date: '1447-12-29' })}
+        onClose={() => undefined}
+      />,
+    );
+    expect(html).toContain('التاريخ');
+    expect(html).toContain('التوقيت');
+    expect(html).toContain('النوع');
+    expect(html).toContain('مستوى الظهور');
+    expect(html).toContain('1447-12-29');
+    expect(html).toContain('<dl');
+  });
+
+  it('omits the Hijri line when the backend supplied none (Revision 31)', () => {
+    const html = renderToStaticMarkup(
+      <EventDetailsDialog occurrence={occurrence()} onClose={() => undefined} />,
+    );
+    expect(html).not.toContain('details__hijri');
   });
 });

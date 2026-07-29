@@ -27,6 +27,10 @@
   --color-danger: var(--red-600);
   --color-danger-soft: var(--red-50);
 
+  /* The scrim behind a modal — the brand ground at partial opacity, so it
+     reads as the platform dimming rather than a generic black wash. */
+  --color-backdrop: color-mix(in srgb, var(--color-primary-strong) 45%, transparent);
+
   /* Inverse surfaces (the hero band): fixed light values, because they sit on
      the brand ground rather than on a themed surface. */
   --color-on-primary: #f4f7f4;

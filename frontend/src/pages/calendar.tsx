@@ -3,7 +3,8 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { fetchBranches, type PublicBranch } from '../adapters/branches.js';
 import { fetchOccurrences, type Occurrence } from '../adapters/calendar.js';
 import { CalendarGrid } from '../components/calendar/calendar-grid.js';
-import { CalendarSidebar } from '../components/calendar/calendar-sidebar.js';
+import { EventDetailsDialog } from '../components/calendar/event-details-dialog.js';
+import { SelectedDayCard } from '../components/calendar/selected-day-card.js';
 import { CalendarToolbar } from '../components/calendar/calendar-toolbar.js';
 import { ApplicationHeader } from '../components/header/application-header.js';
 import { SiteFooter } from '../components/site-footer.js';
@@ -34,6 +35,7 @@ export function CalendarPage(): ReactNode {
   const [branchId, setBranchId] = useState<string | null>(null);
   const [branches, setBranches] = useState<PublicBranch[]>([]);
   const [load, setLoad] = useState<Load>({ kind: 'loading' });
+  const [openEvent, setOpenEvent] = useState<Occurrence | null>(null);
 
   // The branch list is independent of the month, so it is fetched once rather
   // than on every navigation.
@@ -124,31 +126,34 @@ export function CalendarPage(): ReactNode {
             <div aria-live="polite" aria-busy={load.kind === 'loading'}>
               {load.kind === 'error' ? <p className="muted">{t('calendar.error')}</p> : null}
 
-              <div className="cal-layout">
-                <div className="cal-layout__grid">
-                  <CalendarGrid
-                    month={month}
-                    byDate={byDate}
-                    today={today}
-                    selected={selected}
-                    onSelect={setSelected}
-                  />
-                  {load.kind === 'ready' && occurrences.length === 0 ? (
-                    <p className="muted cal-page__empty">{t('calendar.monthEmpty')}</p>
-                  ) : null}
-                </div>
+              {/* The grid is the page: full width, and tall enough that a
+                  day's programme is readable in place rather than only in a
+                  side panel. The selected day sits beneath it, so nothing
+                  competes with the calendar for width. */}
+              <CalendarGrid
+                month={month}
+                byDate={byDate}
+                today={today}
+                selected={selected}
+                onSelect={setSelected}
+                onOpenEvent={setOpenEvent}
+              />
+              {load.kind === 'ready' && occurrences.length === 0 ? (
+                <p className="muted cal-page__empty">{t('calendar.monthEmpty')}</p>
+              ) : null}
 
-                <CalendarSidebar
-                  selectedDate={selected}
-                  selectedOccurrences={byDate.get(toIsoDate(selected)) ?? []}
-                  occurrences={occurrences}
-                  today={toIsoDate(today)}
+              <div className="cal-daypanel">
+                <SelectedDayCard
+                  date={selected}
+                  occurrences={byDate.get(toIsoDate(selected)) ?? []}
+                  onOpenEvent={setOpenEvent}
                 />
               </div>
             </div>
           </Container>
         </section>
       </main>
+      <EventDetailsDialog occurrence={openEvent} onClose={() => setOpenEvent(null)} />
       <SiteFooter />
     </>
   );

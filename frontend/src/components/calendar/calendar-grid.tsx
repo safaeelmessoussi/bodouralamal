@@ -19,12 +19,14 @@ export function CalendarGrid({
   today,
   selected,
   onSelect,
+  onOpenEvent,
 }: {
   month: Date;
   byDate: Map<string, Occurrence[]>;
   today: Date;
   selected: Date | null;
   onSelect: (date: Date) => void;
+  onOpenEvent: (occurrence: Occurrence) => void;
 }): ReactNode {
   const cells = monthGrid(month);
   const weeks: (Date | null)[][] = [];
@@ -53,6 +55,7 @@ export function CalendarGrid({
                 isToday={date ? toIsoDate(date) === toIsoDate(today) : false}
                 isSelected={date && selected ? toIsoDate(date) === toIsoDate(selected) : false}
                 onSelect={onSelect}
+                onOpenEvent={onOpenEvent}
               />
             ))}
           </tr>

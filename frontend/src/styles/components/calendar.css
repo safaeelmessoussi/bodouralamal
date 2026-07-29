@@ -56,16 +56,9 @@
   padding: 0.55rem 0.7rem;
 }
 
-/* Grid beside panel on wide screens; panel below on narrow. */
-.cal-layout {
-  display: grid;
-  gap: var(--space-6);
-}
-@media (min-width: 60rem) {
-  .cal-layout {
-    grid-template-columns: minmax(0, 2.2fr) minmax(16rem, 1fr);
-    align-items: start;
-  }
+/* The selected day sits beneath the grid, so nothing competes for width. */
+.cal-daypanel {
+  margin-block-start: var(--space-6);
 }
 
 .cal-grid {
@@ -89,7 +82,9 @@
   border: 1px solid var(--color-border);
   padding: 0;
   vertical-align: top;
-  height: 6.5rem;
+  /* A real day's programme, not a teaser. `height` on a table cell is a
+     minimum, so a busy week grows rather than clipping. */
+  height: 9.5rem;
 }
 .cal-cell--blank {
   background: color-mix(in srgb, var(--color-background) 60%, transparent);
@@ -102,6 +97,15 @@
   width: 100%;
   height: 100%;
   padding: 0.4rem;
+  text-align: start;
+}
+
+/* The date is the day-select control; the chips above it are their own
+   buttons, so the cell is not one giant nested button. */
+.cal-day__select {
+  display: block;
+  width: 100%;
+  padding: 0;
   border: 0;
   background: transparent;
   color: inherit;
@@ -110,7 +114,7 @@
   cursor: pointer;
 }
 .cal-day:hover {
-  background: var(--color-primary-soft);
+  background: color-mix(in srgb, var(--color-primary-soft) 45%, transparent);
 }
 .cal-day__number {
   font-weight: 700;
@@ -133,7 +137,7 @@
 .cal-day__events {
   display: flex;
   flex-direction: column;
-  gap: 0.2rem;
+  gap: var(--space-1);
   overflow: hidden;
 }
 .cal-day__more {
@@ -141,34 +145,44 @@
   color: var(--color-text-muted);
 }
 
+/* A compact card: title first, time beneath, rounded, no heavy border. The
+   colour alone separates a routine group session from a one-off event (§4.4),
+   which keeps several of them in one cell readable rather than striped. */
 .event-chip {
-  display: flex;
-  align-items: baseline;
-  gap: 0.35rem;
-  padding: 0.15rem 0.35rem;
-  border-radius: var(--radius-sm);
+  display: block;
+  width: 100%;
+  padding: 0.3rem 0.45rem;
+  border: 0;
+  border-radius: var(--radius-md);
+  font: inherit;
   font-size: var(--font-size-xs);
-  line-height: 1.45;
-  /* A group session is the routine timetable; an event is the exception layer
-     over it (§4.4) — they read differently on purpose. */
+  line-height: 1.35;
+  text-align: start;
   background: var(--color-primary-soft);
   color: var(--color-primary);
-  border-inline-start: 3px solid var(--color-primary-emphasis);
 }
 .event-chip--event {
-  background: color-mix(in srgb, var(--color-accent) 14%, transparent);
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
   color: var(--color-accent);
-  border-inline-start-color: var(--color-accent);
 }
-.event-chip__time {
-  font-variant-numeric: tabular-nums;
-  font-weight: 700;
-  flex: none;
+.event-chip--interactive {
+  cursor: pointer;
+  transition: filter var(--transition-fast);
+}
+.event-chip--interactive:hover {
+  filter: brightness(0.96);
 }
 .event-chip__title {
+  display: block;
+  font-weight: 700;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+.event-chip__time {
+  display: block;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.85;
 }
 
 .cal-sidebar {
@@ -212,9 +226,11 @@
 /* On a phone the fixed cell height wastes the screen; let the rows shrink. */
 @media (max-width: 44rem) {
   .cal-cell {
-    height: 4.5rem;
+    height: 5.5rem;
   }
-  .event-chip__title {
+  /* The time is what goes on a 360 px cell, not the title — a nameless block
+     tells the reader nothing. */
+  .event-chip__time {
     display: none;
   }
   .cal-toolbar {

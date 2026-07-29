@@ -85,6 +85,9 @@ export const ar = {
 
     footerRights: 'جميع الحقوق محفوظة لجمعية بذور الأمل',
   },
+  common: {
+    close: 'إغلاق',
+  },
   calendar: {
     title: 'الجدول الزمني',
     lede: 'مواعيد الحلقات الأسبوعية والأنشطة والمناسبات في مقرات الجمعية.',
@@ -107,6 +110,16 @@ export const ar = {
     kindGroup: 'حلقة',
     kindEvent: 'نشاط',
     hijriUnavailable: 'لم يُسجَّل التاريخ الهجري لهذا الشهر بعد.',
+    detailsTitle: 'تفاصيل النشاط',
+    detailsDate: 'التاريخ',
+    detailsTime: 'التوقيت',
+    detailsKind: 'النوع',
+    detailsBranch: 'الفرع',
+    detailsVisibility: 'مستوى الظهور',
+    openDetails: 'عرض التفاصيل',
+    visibilityPublic: 'عام',
+    visibilityPrivate: 'خاص',
+    visibilityHidden: 'مخفي',
     months: [
       'يناير',
       'فبراير',

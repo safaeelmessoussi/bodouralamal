@@ -16,9 +16,11 @@ import { EventChip } from './event-chip.js';
 export function SelectedDayCard({
   date,
   occurrences,
+  onOpenEvent,
 }: {
   date: Date;
   occurrences: Occurrence[];
+  onOpenEvent?: (occurrence: Occurrence) => void;
 }): ReactNode {
   const months = tList('calendar.months');
   const heading = `${date.getDate()} ${months[date.getMonth()] ?? ''} ${date.getFullYear()}`;
@@ -45,7 +47,7 @@ export function SelectedDayCard({
         <ul className="cal-panel__list">
           {occurrences.map((occurrence) => (
             <li key={`${occurrence.kind}-${occurrence.id}`}>
-              <EventChip occurrence={occurrence} />
+              <EventChip occurrence={occurrence} {...(onOpenEvent ? { onOpen: onOpenEvent } : {})} />
             </li>
           ))}
         </ul>
