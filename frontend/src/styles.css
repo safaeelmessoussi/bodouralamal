@@ -13,26 +13,42 @@
  * The palette is drawn from the association's own world rather than a template:
  * the deep green of Moroccan zellij, brass as the single accent, and neutrals
  * biased warm-green so nothing reads as unconsidered grey.
+ *
+ * **The platform is light-only (Document Owner decision).** There is no dark
+ * theme and no `prefers-color-scheme` branch. `color-scheme: light` above is
+ * part of that and is not cosmetic: it is what stops the browser rendering
+ * **native** controls — the branch `<select>`, scrollbars, date and form
+ * widgets — in dark on a dark operating system, which is the mismatch that
+ * actually looks broken. Removing the media query alone would have left those.
+ *
+ * The tokens stay structured, so re-introducing a dark theme later is one block
+ * of overrides rather than a rewrite.
  */
 
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
 
   --brand-900: #073826;
   --brand-700: #0b4a33;
   --brand-500: #146b4a;
-  --brand-100: #e3efe8;
-  --brass: #a97b28;
+  --brand-100: #e6f0ea;
+  /* Brass is used for section eyebrows and step numbers — real text, so it has
+     to clear 4.5:1 on BOTH `--surface` and `--ground`. The lighter tone this
+     replaced measured 4.49:1 on white and 4.17:1 on the ground: a near miss
+     that is still a fail, and only measuring catches it. */
+  --brass: #8f6720;
 
-  --ink: #16211c;
-  --ink-soft: #3a4741;
-  --muted: #5b6862;
-  --rule: #dde4de;
+  --ink: #14201b;
+  --ink-soft: #35433d;
+  /* Darkened from #5b6862: secondary text has to stay legible on `--surface`
+     as well as on `--ground`, and the lighter tone was marginal on white. */
+  --muted: #52605a;
+  --rule: #e3e8e4;
   --surface: #ffffff;
   --surface-raised: #ffffff;
-  --ground: #f6f5f0;
-  --danger: #b3261e;
-  --danger-soft: #fbeae9;
+  --ground: #f5f7f5;
+  --danger: #a81f18;
+  --danger-soft: #fdeeed;
 
   --space: 1rem;
   --radius: 10px;
@@ -48,48 +64,6 @@
   --step-2: clamp(1.45rem, 1.3rem + 0.8vw, 1.9rem);
   --step-3: clamp(1.8rem, 1.5rem + 1.5vw, 2.8rem);
   --step-4: clamp(2.1rem, 1.6rem + 2.6vw, 3.6rem);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --brand-100: #10281e;
-    --ink: #e9efea;
-    --ink-soft: #c3cec7;
-    --muted: #9aa8a0;
-    --rule: #27332c;
-    --surface: #131b17;
-    --surface-raised: #17211c;
-    --ground: #0d1310;
-    --danger: #ef9a94;
-    --danger-soft: #2a1614;
-    --shadow: 0 1px 2px rgb(0 0 0 / 40%), 0 8px 24px -12px rgb(0 0 0 / 60%);
-  }
-}
-
-/* The viewer's toggle stamps the root and must win over the media query. */
-:root[data-theme='dark'] {
-  --brand-100: #10281e;
-  --ink: #e9efea;
-  --ink-soft: #c3cec7;
-  --muted: #9aa8a0;
-  --rule: #27332c;
-  --surface: #131b17;
-  --surface-raised: #17211c;
-  --ground: #0d1310;
-  --danger: #ef9a94;
-  --danger-soft: #2a1614;
-}
-:root[data-theme='light'] {
-  --brand-100: #e3efe8;
-  --ink: #16211c;
-  --ink-soft: #3a4741;
-  --muted: #5b6862;
-  --rule: #dde4de;
-  --surface: #ffffff;
-  --surface-raised: #ffffff;
-  --ground: #f6f5f0;
-  --danger: #b3261e;
-  --danger-soft: #fbeae9;
 }
 
 *,
@@ -259,8 +233,8 @@ img {
   position: sticky;
   inset-block-start: 0;
   z-index: 50;
-  background: color-mix(in srgb, var(--surface) 88%, transparent);
-  backdrop-filter: blur(10px);
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  backdrop-filter: blur(8px);
   border-block-end: 1px solid var(--rule);
 }
 
