@@ -1,0 +1,91 @@
+/* Part of the design system — see `src/styles/index.css` for the layering. */
+
+/* ── Cards & grids ───────────────────────────────────────────────────────── */
+
+.grid {
+  display: grid;
+  gap: var(--space-5);
+}
+@media (min-width: 44rem) {
+  .grid--3 {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .grid--2 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.card {
+  padding: clamp(1.25rem, 3vw, 1.75rem);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.card__icon {
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: var(--radius-md);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  margin-block-end: 0.35rem;
+}
+.card__title {
+  font-size: var(--font-size-md);
+}
+.card__meta {
+  margin-block-start: auto;
+  padding-block-start: 0.6rem;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+/* Numbered because the enrolment path genuinely is a sequence (§4.1b). */
+.steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-5);
+  counter-reset: step;
+}
+@media (min-width: 48rem) {
+  .steps {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+.step {
+  counter-increment: step;
+  padding-block-start: var(--space-4);
+  border-block-start: 3px solid var(--color-accent);
+}
+.step::before {
+  content: counter(step);
+  display: block;
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  color: var(--color-accent);
+  margin-block-end: 0.35rem;
+}
+.step__title {
+  font-size: var(--font-size-md);
+  margin-block-end: 0.35rem;
+}
+
+.callout {
+  padding: clamp(1.5rem, 4vw, 2.5rem);
+  background: var(--color-primary-soft);
+  border: 1px solid color-mix(in srgb, var(--color-primary-emphasis) 25%, transparent);
+  border-radius: var(--radius-lg);
+  text-align: center;
+  display: grid;
+  gap: var(--space-4);
+  justify-items: center;
+}
+.callout p {
+  margin-inline: auto;
+}

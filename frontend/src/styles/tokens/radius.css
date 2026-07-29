@@ -1,0 +1,10 @@
+/* Part of the design system — see `src/styles/index.css` for the layering. */
+
+/* LAYER 3 — corner radii. */
+:root {
+  --radius-xs: 3px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-full: 50%;
+}

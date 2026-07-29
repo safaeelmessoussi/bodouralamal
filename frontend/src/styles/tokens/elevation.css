@@ -1,0 +1,10 @@
+/* Part of the design system — see `src/styles/index.css` for the layering. */
+
+/* LAYER 3 — elevation. */
+:root {
+  /* Elevation. Only `md` is consumed today; the scale exists so the next
+     raised surface picks a step instead of inventing a shadow. */
+  --shadow-sm: 0 1px 2px rgb(7 56 38 / 6%);
+  --shadow-md: 0 1px 2px rgb(7 56 38 / 6%), 0 8px 24px -12px rgb(7 56 38 / 18%);
+  --shadow-lg: 0 2px 4px rgb(7 56 38 / 8%), 0 16px 40px -16px rgb(7 56 38 / 24%);
+}

@@ -1,0 +1,110 @@
+/* Part of the design system — see `src/styles/index.css` for the layering. */
+
+/* ── Hero ────────────────────────────────────────────────────────────────── */
+
+.hero {
+  position: relative;
+  overflow: hidden;
+  background: var(--color-primary-strong);
+  color: var(--color-on-primary);
+  padding-block: clamp(3.5rem, 11vw, 7.5rem);
+}
+
+/*
+ * A zellij-derived motif built from two overlaid conic gradients — CSS rather
+ * than an image or SVG path data, so it costs no request on a weak connection
+ * (§2.2), scales without artefacts, and stays crisp at any density.
+ */
+.hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    conic-gradient(
+      from 22.5deg at 50% 50%,
+      var(--color-on-primary-motif) 0 25%,
+      transparent 0 50%,
+      var(--color-on-primary-motif) 0 75%,
+      transparent 0
+    ),
+    conic-gradient(
+      from 0deg at 50% 50%,
+      var(--color-on-primary-motif-soft) 0 25%,
+      transparent 0 50%,
+      var(--color-on-primary-motif-soft) 0 75%,
+      transparent 0
+    );
+  background-size: 88px 88px, 88px 88px;
+  pointer-events: none;
+}
+/* Fade the motif behind the text so nothing competes with the reading. */
+.hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(120% 90% at 78% 30%, transparent 20%, var(--color-primary-strong) 78%);
+  pointer-events: none;
+}
+
+.hero__inner {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: clamp(2rem, 5vw, 3.5rem);
+  align-items: center;
+}
+@media (min-width: 56rem) {
+  .hero__inner {
+    grid-template-columns: 1.15fr 0.85fr;
+  }
+}
+
+.hero__eyebrow {
+  color: var(--color-on-primary-accent);
+}
+.hero__title {
+  font-size: var(--font-size-2xl);
+  margin-block-end: var(--space-4);
+}
+.hero__lede {
+  color: var(--color-on-primary-secondary);
+  font-size: var(--font-size-md);
+  max-width: 46ch;
+}
+.hero__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-block-start: var(--space-8);
+}
+.hero .btn--secondary {
+  background: transparent;
+  border-color: var(--color-on-primary-border);
+  color: var(--color-text-inverse);
+}
+.hero .btn--secondary:hover {
+  border-color: var(--color-text-inverse);
+  background: var(--color-on-primary-overlay);
+  color: var(--color-text-inverse);
+}
+.hero__note {
+  margin-block-start: var(--space-5);
+  font-size: var(--font-size-xs);
+  color: var(--color-on-primary-muted);
+  max-width: 46ch;
+}
+
+.hero__badge {
+  justify-self: center;
+  display: grid;
+  place-items: center;
+  padding: clamp(1.5rem, 4vw, 2.5rem);
+  background: var(--color-on-primary-panel);
+  border: 1px solid var(--color-on-primary-panel-border);
+  border-radius: var(--radius-full);
+  aspect-ratio: 1;
+  width: min(20rem, 62vw);
+}
+.hero__badge img {
+  width: 72%;
+}

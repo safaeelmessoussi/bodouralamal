@@ -1,0 +1,46 @@
+/* Part of the design system — see `src/styles/index.css` for the layering. */
+
+/* ── Buttons ─────────────────────────────────────────────────────────────── */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 0.7rem 1.35rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: transparent;
+  color: var(--color-text);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
+}
+.btn--primary {
+  background: var(--color-primary);
+  color: var(--color-text-inverse);
+}
+.btn--primary:hover {
+  background: var(--color-primary-hover);
+}
+.btn--secondary {
+  border-color: var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+.btn--secondary:hover {
+  border-color: var(--color-primary-emphasis);
+  color: var(--color-primary);
+}
+.btn--ghost:hover {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+.btn--block {
+  width: 100%;
+  justify-content: center;
+}
+.btn__icon {
+  flex: none;
+}

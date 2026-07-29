@@ -1,0 +1,227 @@
+/* Part of the design system — see `src/styles/index.css` for the layering. */
+
+/* ── Calendar (§4.4, §5.1) ───────────────────────────────────────────────── */
+
+.cal-page__empty {
+  padding-block-start: var(--space-4);
+}
+
+.cal-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  align-items: end;
+  justify-content: space-between;
+  padding: var(--space-4);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  margin-block-end: var(--space-6);
+}
+
+.branch-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 13rem;
+}
+.branch-selector__label {
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  color: var(--color-text-muted);
+}
+.branch-selector__control {
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+}
+
+.month-selector {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.month-selector__label {
+  min-width: 9rem;
+  text-align: center;
+  font-weight: 700;
+  font-size: var(--font-size-md);
+}
+/* The chevrons are not mirrored in markup — `dir="rtl"` already reverses the
+   buttons, so "previous" lands where an Arabic reader expects it. */
+.month-selector .btn {
+  padding: 0.55rem 0.7rem;
+}
+
+/* Grid beside panel on wide screens; panel below on narrow. */
+.cal-layout {
+  display: grid;
+  gap: var(--space-6);
+}
+@media (min-width: 60rem) {
+  .cal-layout {
+    grid-template-columns: minmax(0, 2.2fr) minmax(16rem, 1fr);
+    align-items: start;
+  }
+}
+
+.cal-grid {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.cal-grid__weekday {
+  padding: 0.6rem 0.35rem;
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  color: var(--color-text-muted);
+  background: var(--color-background);
+  border-block-end: 1px solid var(--color-border);
+}
+.cal-cell {
+  border: 1px solid var(--color-border);
+  padding: 0;
+  vertical-align: top;
+  height: 6.5rem;
+}
+.cal-cell--blank {
+  background: color-mix(in srgb, var(--color-background) 60%, transparent);
+}
+
+.cal-day {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  width: 100%;
+  height: 100%;
+  padding: 0.4rem;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.cal-day:hover {
+  background: var(--color-primary-soft);
+}
+.cal-day__number {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.cal-day.is-today .cal-day__number {
+  display: inline-grid;
+  place-items: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  border-radius: var(--radius-full);
+  background: var(--color-primary);
+  color: var(--color-text-inverse);
+}
+.cal-day.is-selected {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+  background: color-mix(in srgb, var(--color-primary-soft) 70%, transparent);
+}
+.cal-day__events {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  overflow: hidden;
+}
+.cal-day__more {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+
+.event-chip {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35rem;
+  padding: 0.15rem 0.35rem;
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
+  line-height: 1.45;
+  /* A group session is the routine timetable; an event is the exception layer
+     over it (§4.4) — they read differently on purpose. */
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  border-inline-start: 3px solid var(--color-primary-emphasis);
+}
+.event-chip--event {
+  background: color-mix(in srgb, var(--color-accent) 14%, transparent);
+  color: var(--color-accent);
+  border-inline-start-color: var(--color-accent);
+}
+.event-chip__time {
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  flex: none;
+}
+.event-chip__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cal-sidebar {
+  display: grid;
+  gap: var(--space-5);
+}
+.cal-panel__date {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: baseline;
+  font-weight: 700;
+}
+.cal-panel__hijri {
+  font-size: var(--font-size-xs);
+  font-weight: 400;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.cal-panel__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+.cal-panel__list li {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: baseline;
+}
+.cal-upcoming__date {
+  flex: none;
+  min-width: 5rem;
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  color: var(--color-text-muted);
+}
+
+/* On a phone the fixed cell height wastes the screen; let the rows shrink. */
+@media (max-width: 44rem) {
+  .cal-cell {
+    height: 4.5rem;
+  }
+  .event-chip__title {
+    display: none;
+  }
+  .cal-toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .month-selector {
+    justify-content: space-between;
+  }
+}

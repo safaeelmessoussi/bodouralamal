@@ -1,0 +1,30 @@
+/* Part of the design system — see `src/styles/index.css` for the layering. */
+
+/* LAYER 1 — the association's actual colours. Only `semantic.css` reads
+ * these; a component that names one has hardcoded a branding decision. */
+:root {
+  color-scheme: light;
+
+  /* ── 1. PRIMITIVES ─────────────────────────────────────────────────────── */
+
+  /* Moroccan zellij green — the association's identity. */
+  --brand-green-900: #073826;
+  --brand-green-700: #0b4a33;
+  --brand-green-500: #146b4a;
+  --brand-green-100: #e6f0ea;
+
+  /* Brass, the single accent. Dark enough to carry text at 4.5:1 on both the
+     surface and the background — it is used for eyebrows and step numbers. */
+  --brand-gold: #8f6720;
+
+  /* Neutrals, biased warm-green so nothing reads as unconsidered grey. */
+  --neutral-0: #ffffff;
+  --neutral-50: #f5f7f5;
+  --neutral-200: #e3e8e4;
+  --neutral-600: #52605a;
+  --neutral-700: #35433d;
+  --neutral-900: #14201b;
+
+  --red-50: #fdeeed;
+  --red-600: #a81f18;
+}

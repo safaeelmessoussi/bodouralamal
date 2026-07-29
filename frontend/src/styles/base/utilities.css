@@ -1,0 +1,42 @@
+/* Part of the design system — see `src/styles/index.css` for the layering. */
+
+.skeleton {
+  height: 1.1rem;
+  margin-bottom: 0.6rem;
+  border-radius: var(--radius-xs);
+  background: linear-gradient(90deg, var(--color-border), var(--color-background), var(--color-border));
+  background-size: 200% 100%;
+  animation: shimmer 1.4s linear infinite;
+}
+@keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .skeleton {
+    animation: none;
+  }
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}

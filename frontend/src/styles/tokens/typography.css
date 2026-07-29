@@ -1,0 +1,15 @@
+/* Part of the design system — see `src/styles/index.css` for the layering. */
+
+/* LAYER 3 — type scale and family. */
+:root {
+  /* Typography — minor-third scale, clamped so 360 px never overflows. */
+  --font-size-xs: clamp(0.82rem, 0.8rem + 0.1vw, 0.88rem);
+  --font-size-sm: clamp(1rem, 0.97rem + 0.15vw, 1.06rem);
+  --font-size-md: clamp(1.2rem, 1.12rem + 0.4vw, 1.4rem);
+  --font-size-lg: clamp(1.45rem, 1.3rem + 0.8vw, 1.9rem);
+  --font-size-xl: clamp(1.8rem, 1.5rem + 1.5vw, 2.8rem);
+  --font-size-2xl: clamp(2.1rem, 1.6rem + 2.6vw, 3.6rem);
+  --font-family-base: 'Noto Naskh Arabic', 'Segoe UI', system-ui, -apple-system, 'Tahoma', sans-serif;
+  --line-height-base: 1.75;
+  --line-height-tight: 1.25;
+}

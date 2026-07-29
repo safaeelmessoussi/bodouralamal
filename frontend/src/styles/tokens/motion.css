@@ -1,0 +1,8 @@
+/* Part of the design system — see `src/styles/index.css` for the layering. */
+
+/* LAYER 3 — motion. */
+:root {
+  /* Motion. One duration, so nothing in the interface moves at a rate nobody
+     chose; `prefers-reduced-motion` collapses it at the foot of this file. */
+  --transition-fast: 0.15s ease;
+}

@@ -1,0 +1,42 @@
+/* Part of the design system — see `src/styles/index.css` for the layering. */
+
+/* LAYER 2 — what colours MEAN. This is the only colour vocabulary a
+ * component may use, and the single place rebranding touches. */
+:root {
+  /* ── 2. SEMANTIC ───────────────────────────────────────────────────────── */
+
+  --color-primary: var(--brand-green-700);
+  --color-primary-hover: var(--brand-green-900);
+  /* The full-strength brand ground, for inverse-themed bands like the hero. */
+  --color-primary-strong: var(--brand-green-900);
+  --color-primary-emphasis: var(--brand-green-500);
+  --color-primary-soft: var(--brand-green-100);
+  --color-accent: var(--brand-gold);
+
+  --color-background: var(--neutral-50);
+  --color-surface: var(--neutral-0);
+  --color-surface-raised: var(--neutral-0);
+
+  --color-border: var(--neutral-200);
+
+  --color-text: var(--neutral-900);
+  --color-text-secondary: var(--neutral-700);
+  --color-text-muted: var(--neutral-600);
+  --color-text-inverse: var(--neutral-0);
+
+  --color-danger: var(--red-600);
+  --color-danger-soft: var(--red-50);
+
+  /* Inverse surfaces (the hero band): fixed light values, because they sit on
+     the brand ground rather than on a themed surface. */
+  --color-on-primary: #f4f7f4;
+  --color-on-primary-secondary: #d5e2da;
+  --color-on-primary-muted: #b9ccc0;
+  --color-on-primary-accent: #e3c98d;
+  --color-on-primary-border: rgb(255 255 255 / 35%);
+  --color-on-primary-overlay: rgb(255 255 255 / 8%);
+  --color-on-primary-panel: rgb(255 255 255 / 6%);
+  --color-on-primary-panel-border: rgb(255 255 255 / 14%);
+  --color-on-primary-motif: rgb(255 255 255 / 5%);
+  --color-on-primary-motif-soft: rgb(255 255 255 / 4%);
+}

@@ -1,0 +1,51 @@
+/* Part of the design system — see `src/styles/index.css` for the layering. */
+
+/* ── Layout primitives ───────────────────────────────────────────────────── */
+
+.container {
+  width: min(100% - 2rem, 72rem);
+  margin-inline: auto;
+}
+.container--narrow {
+  width: min(100% - 2rem, 52rem);
+}
+
+.stack > * + * {
+  margin-block-start: var(--flow, 1rem);
+}
+
+.section {
+  padding-block: clamp(3rem, 8vw, 6rem);
+}
+.section--tint {
+  background: var(--color-surface);
+  border-block: 1px solid var(--color-border);
+}
+
+.section__head {
+  max-width: var(--measure);
+  margin-block-end: clamp(1.5rem, 4vw, 2.75rem);
+}
+
+.eyebrow {
+  display: inline-block;
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--color-accent);
+  margin-block-end: var(--space-2);
+}
+
+.section__title {
+  font-size: var(--font-size-lg);
+}
+
+.lede {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-md);
+  line-height: 1.7;
+}
+
+.muted {
+  color: var(--color-text-muted);
+}

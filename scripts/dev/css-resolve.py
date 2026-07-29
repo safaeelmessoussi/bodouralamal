@@ -99,7 +99,36 @@ def declarations(css: str) -> dict[str, str]:
     return out
 
 
+def assemble(entry: str) -> str:
+    """Inline `@import` in order, which is what the bundler does.
+
+    Import order IS the cascade here — every rule has single-class specificity,
+    so the last file to declare a property wins. Resolving the graph rather than
+    reading one file is what lets the guards keep checking the stylesheet as it
+    actually renders, now that it lives in twenty files.
+    """
+    import os
+    seen: set[str] = set()
+
+    def walk(path: str) -> str:
+        real = os.path.realpath(path)
+        if real in seen:
+            return ""
+        seen.add(real)
+        raw = open(real, encoding="utf-8").read()
+        out: list[str] = []
+        for line in raw.split("\n"):
+            match = re.match(r"\s*@import\s+['\"](.+?)['\"]\s*;", line)
+            if match:
+                out.append(walk(os.path.join(os.path.dirname(real), match.group(1))))
+            else:
+                out.append(line)
+        return "\n".join(out)
+
+    return walk(entry)
+
+
 if __name__ == "__main__":
-    text = strip_comments(open(sys.argv[1], encoding="utf-8").read())
+    text = strip_comments(assemble(sys.argv[1]))
     for key, value in sorted(declarations(text).items()):
         print(f"{key} = {value}")

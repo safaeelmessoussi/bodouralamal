@@ -48,10 +48,21 @@ consume **only** the semantic layer. `--color-primary`, never `--brand-green-700
 `--space-4`, never `1rem`. Rebranding is therefore an edit to the mappings in
 [`frontend/src/styles.css`](frontend/src/styles.css) and to nothing else.
 
-The architecture is documented **once**, at the top of that stylesheet, where it
+Styles live in [`frontend/src/styles/`](frontend/src/styles/) — `tokens/`,
+`base/`, `components/` — assembled by `src/styles.css`, whose **import order is
+the cascade**: every rule has single-class specificity, so which declaration
+wins is decided by which file loads last.
+
+The architecture is documented **once**, at the top of that index, where it
 cannot drift from the code it describes. `scripts/ci/check-design-tokens.sh`
-enforces the boundary: a raw colour or a reach past the semantic layer fails the
-build.
+enforces the boundary — a raw colour, a reach past the semantic layer, or a
+stylesheet nobody imports fails the build.
+
+**Verifying a styling refactor changed nothing:** `scripts/dev/css-resolve.py`
+resolves every `var()` to literals and reports one line per declaration, which
+catches changed *values*; comparing the built `dist/assets/*.css` before and
+after catches changed *order*. Both are needed — the first cannot see a rule
+moving past another.
 
 ## Architecture
 

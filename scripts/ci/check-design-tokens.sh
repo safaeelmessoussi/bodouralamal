@@ -15,12 +15,29 @@ CSS="frontend/src/styles.css"
 python3 - "$CSS" <<'PY'
 import re, sys
 
-css = open(sys.argv[1], encoding="utf-8").read()
-# Everything after the token block is component territory.
+import os
+def assemble(entry):
+    seen = set()
+    def walk(path):
+        real = os.path.realpath(path)
+        if real in seen:
+            return ""
+        seen.add(real)
+        out = []
+        for line in open(real, encoding="utf-8").read().split("\n"):
+            m = re.match(r"\s*@import\s+[\'\"](.+?)[\'\"]\s*;", line)
+            out.append(walk(os.path.join(os.path.dirname(real), m.group(1))) if m else line)
+        return "\n".join(out)
+    return walk(entry)
+
+css = assemble(sys.argv[1])
+# The token FILES are the token layer; everything else is component territory.
+# Assembling puts the tokens first (the index guarantees that order), so the
+# boundary is still the first non-token rule.
 try:
     body_at = css.index("\n*,\n*::before,")
 except ValueError:
-    print("FAIL: could not locate the end of the token block")
+    print("FAIL: could not locate the end of the token layer (base/reset.css)")
     raise SystemExit(1)
 tokens, body = css[:body_at], css[body_at:]
 
@@ -57,6 +74,33 @@ for used, fallback in re.findall(r"var\(\s*(--[\w-]+)\s*(,)?", css):
     if used not in defined and not fallback:
         failures.append((0, f"undefined token {used} with no fallback", ""))
 
+# 5. Every stylesheet must be reachable from the index.
+#    Splitting into files introduced a failure mode the monolith could not
+#    have: a file that exists, is edited, is reviewed — and renders nothing,
+#    because nobody added the @import. That is far quieter than a missing rule.
+import os
+entry = os.path.realpath(sys.argv[1])
+root = os.path.dirname(entry)
+reachable = set()
+def walk(path):
+    real = os.path.realpath(path)
+    if real in reachable:
+        return
+    reachable.add(real)
+    for line in open(real, encoding="utf-8").read().split("\n"):
+        m = re.match(r"\s*@import\s+['\"](.+?)['\"]\s*;", line)
+        if m:
+            walk(os.path.join(os.path.dirname(real), m.group(1)))
+walk(entry)
+for dirpath, _dirs, names in os.walk(os.path.join(root, "styles")):
+    for name in names:
+        if not name.endswith(".css"):
+            continue
+        full = os.path.realpath(os.path.join(dirpath, name))
+        if full not in reachable:
+            rel = os.path.relpath(full, root)
+            failures.append((0, f"orphaned stylesheet {rel} — never @imported, so it renders nothing", ""))
+
 if failures:
     print("FAIL: design-token discipline")
     for number, why, text in failures:
@@ -66,5 +110,5 @@ if failures:
             print(f"      {text}")
     raise SystemExit(1)
 
-print(f"OK: components consume only semantic tokens ({len(defined)} defined).")
+print(f"OK: components consume only semantic tokens ({len(defined)} defined; {len(reachable)} stylesheets reachable).")
 PY

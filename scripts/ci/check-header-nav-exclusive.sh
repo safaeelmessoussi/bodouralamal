@@ -21,7 +21,22 @@ CSS="frontend/src/styles.css"
 python3 - "$CSS" <<'PY'
 import re, sys
 
-css = open(sys.argv[1], encoding="utf-8").read()
+import os
+def assemble(entry):
+    seen = set()
+    def walk(path):
+        real = os.path.realpath(path)
+        if real in seen:
+            return ""
+        seen.add(real)
+        out = []
+        for line in open(real, encoding="utf-8").read().split("\n"):
+            m = re.match(r"\s*@import\s+[\'\"](.+?)[\'\"]\s*;", line)
+            out.append(walk(os.path.join(os.path.dirname(real), m.group(1))) if m else line)
+        return "\n".join(out)
+    return walk(entry)
+
+css = assemble(sys.argv[1])
 QUERY = "@media (min-width: 48rem)"
 
 def display_rules(selector):
