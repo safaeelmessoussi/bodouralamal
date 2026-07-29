@@ -24,7 +24,10 @@ interface SessionState {
   setAccessToken: (token: string | null) => void;
 }
 
-const SessionContext = createContext<SessionState | null>(null);
+/** Exported so a test can render the header in a chosen session state without
+ *  standing up a provider that would fetch. Application code uses
+ *  `SessionProvider` / `useSession`, never this directly. */
+export const SessionContext = createContext<SessionState | null>(null);
 
 /** Single-flight refresh (TD-12): rotation makes concurrent refreshes from
  *  multiple tabs a logout race, so one in-flight refresh is shared and

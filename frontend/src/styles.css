@@ -341,24 +341,16 @@ img {
  * four links and the sign-in button — actually needs, rather than at a round
  * number that would hide a navigation which fits perfectly well.
  */
-.app-header__nav,
-.app-header__actions--desktop {
-  display: none;
-}
-@media (min-width: 48rem) {
-  .app-header__nav,
-  .app-header__actions--desktop {
-    display: flex;
-  }
-  .app-header__burger {
-    display: none;
-  }
-}
-
+/*
+ * The burger's own styling comes FIRST, so the media query below is the last
+ * word on its `display`. Declaring it afterwards is what previously broke this:
+ * `display: inline-flex` sat after the query, same specificity, later in the
+ * file — so it won at every width and the burger was never hidden. The visual
+ * bug lived entirely in rule order, not in either rule.
+ */
 .app-header__burger {
   /* Same slot the sign-in button occupies on wide screens: the far left. */
   margin-inline-start: auto;
-  display: inline-flex;
   align-items: center;
   justify-content: center;
   width: 2.75rem;
@@ -368,6 +360,27 @@ img {
   background: var(--surface);
   color: var(--ink);
   cursor: pointer;
+}
+
+/* Narrow: burger only. */
+.app-header__nav,
+.app-header__actions--desktop {
+  display: none;
+}
+.app-header__burger {
+  display: inline-flex;
+}
+
+/* Wide enough for the whole bar: full navigation, and NO burger. The two are
+ * mutually exclusive by construction — one query flips both. */
+@media (min-width: 48rem) {
+  .app-header__nav,
+  .app-header__actions--desktop {
+    display: flex;
+  }
+  .app-header__burger {
+    display: none;
+  }
 }
 
 /* ── Mobile menu ─────────────────────────────────────────────────────────── */

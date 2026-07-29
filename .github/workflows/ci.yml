@@ -27,6 +27,8 @@ jobs:
         run: bash scripts/ci/check-migration-drop-rename.sh
       - name: Prisma mass-write filter guard
         run: bash scripts/ci/check-prisma-mass-write.sh
+      - name: Header navigation exclusivity (burger vs horizontal nav)
+        run: bash scripts/ci/check-header-nav-exclusive.sh
 
   contract:
     name: API contract — regenerate and verify no drift
