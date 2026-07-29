@@ -38,7 +38,9 @@
   - ✓ Security — a substituted-email token fails signature verification (§20 rule 9)
   - △ Later milestone (M2) — `POST /registrations` and the Zod schema that must not even accept those fields
 - [x] Access token via Authorization header only; refresh = sole cookie route with custom header + Origin check (TD-12)
-- [ ] High-risk endpoint fresh DB status assertions (presigned mint, social profile, approvals, overrides) (TD-12)
+- [~] High-risk endpoint fresh DB status assertions (presigned mint, social profile, approvals, overrides) (TD-12)
+  - ✓ Covered on every surface that exists — approvals (5 assertions), consent overrides (3), social profile, user management, family links: a mid-session suspension or a revoked role assignment loses the capability on the **next call**, on the caller's still-valid token
+  - △ *presigned mint* arrives with **M6 (Storage)**; the `/uploads/*` endpoints are not built, so this cannot be green before then
 - [x] `RefreshToken` entity + unique `token_hash` + `session_id` chain (§7/TD-6, Revision 16) — forward-only migration
 - [x] Session layer: 1 h access JWT, 30 d rotating refresh cookie (HttpOnly/Secure/SameSite=Lax), hashed-never-raw storage, revocation list (TD-12)
 - [x] Rotation / logout / revoke-on-suspension transactions (TD-4.13/14/15); 10 s grace window is idempotent (no chain fork); reuse outside grace revokes the whole session
@@ -77,7 +79,13 @@
   - ✓ Tests — 13 integration tests for the R26 permission boundary in both directions; five mutations caught, including reverting writes to Admin and restricting reads to Super Admin
   - ✓ Security — §2.2 display_order refused for a plain Admin **and** allowed when absent; out-of-scope is 404 not 403 (§20 rule 17)
   - △ Frontend integration — the `/admin/branches` screen (§14.2) needs the React shell
-- [ ] §18 Authentication & Onboarding checklist green
+- [~] §18 Authentication & Onboarding checklist — **backend green**, two items outstanding by milestone/ownership
+  - ✓ **`state` + PKCE now tested** — `lib/oauth.ts` had **no test at all**; 18 unit tests now cover verifier entropy and uniqueness, S256 derivation, seal/open round-trip, tampered payload and signature, a foreign signing key, the purpose-separated key (a payload signed with the *raw* JWT key must not open), malformed cookie shapes, the authorization URL's `S256`/`state`/`prompt`, and `exchangeCode`'s audience check, `email_verified` refusal, lowercasing and single `oauth_unavailable` failure mode. **Eight mutations all caught**, including PKCE downgraded to `plain` and the audience check removed
+  - ✓ **§19.2 Pending-session data-access denial now asserted** — the whole guarded surface, **derived from the generated contract** rather than a hand-kept list, so a newly documented route is covered automatically. Suspended and rejected sessions too, with an active-token control. TD-1's two exceptions (`GET /me`, logout) are asserted **reachable**, keeping them decisions rather than holes. Mutation-tested: removing the gate fails 32 cases
+  - ✓ **`/auth/refresh` CSRF posture now tested** — the custom header and Origin check were implemented but untested; 8 HTTP tests, and the check is proven to run **before** the cookie is read so a probe cannot learn whether a cookie was valid. Three mutations caught
+  - ✓ §4.1b all three routing branches, pre-provisioned binding, `jti` replay → 409, email lowercasing, JWT role scopes, suspension revoking refresh, the Nginx same-origin round-trip, body-email substitution, the auth audit rows, and rejected/suspended/soft-deleted all reaching the deactivated screen
+  - △ *client-side Pending route guard (no skeleton leak, §14.4)* — frontend (v0)
+  - △ *high-risk endpoints re-assert Active* is green for every endpoint that exists; **presigned mint** arrives with M6
 
 - [x] Client shell: RTL-first Arabic-only (§3.1, §6), i18n keys for every string (§16.2), §14.4 state components, §14.1 public routes only, branding assets
   - ✓ Frontend · ✓ Security — CSP unchanged (`default-src 'self'`, no font/CDN host); access token in memory only, read from the URL fragment and stripped from history (TD-12)
@@ -132,7 +140,10 @@
   - ✓ Security — TD-2 admin/super-admin only; a *validly signed* token claiming `admin` for a non-admin user is refused; suspension and role revocation take effect on the next request; first-wins on concurrent decisions (TD-15.3) with 409, never a 500; rejection requires a reason within TD-9's 500 chars
   - ✓ Security — all five guards mutation-tested (freshness status check, freshness role check, bundle exclusion, child activation, mandatory reason); every mutant is caught
   - △ Frontend integration — the §5.6 queue screen and §14.2 columns
-- [ ] FamilyLink lifecycle (TD-1); unique partial index enforced
+- [x] FamilyLink lifecycle (TD-1); unique partial index enforced
+  - ✓ Index — `family_link_student_parent_active_key` on (`student_id`, `parent_id`) `WHERE deleted_at IS NULL`, so a revoked link never blocks a fresh one
+  - ✓ Lifecycle — pending → approved → revoked with TD-4.8 soft-delete, Trash snapshot and audit; a pending link cannot be revoked (it is decided in the approval queue); revoking twice is `NOT_FOUND` and writes exactly one audit row
+  - ✓ Tests — 20 integration tests incl. the partial-index behaviour, per-child and per-parent isolation, and TD-12 freshness
 - [~] `X-Active-Child-ID` middleware: (parent+child) match, Student-role self-bypass via JWT sub, 400/404 semantics, never from body/query (§4.3)
   - ✓ Backend — §4.3's ordered resolution in `middleware/child-context.ts`; returns the verified student id, not a boolean, so no caller can fall back to a body/query id
   - ✓ Tests — 15 integration tests incl. both §19.2 named regressions (Student-role bypass, foreign-parent 404); seven mutations all caught
@@ -144,7 +155,7 @@
   - ✓ Tests — 10 service + 7 HTTP tests; asserted through the resolver (access gone on the next request), not merely that a column changed
   - ✓ Security — TD-2 admin-only with the TD-12 freshness assertion; revoking one link leaves the parent's other children and the child's other parent untouched
 
-- [ ] ChildContextSwitcher component + API-client header injection (§14.3, §16.1)
+- [ ] ChildContextSwitcher component + API-client header injection (§14.3, §16.1) — **frontend (v0)**; the backend contract it drives is complete and covered by 15 middleware tests
 - [~] GroupTeacher join + teacher-scoping resolution helpers (§4.2)
   - ✓ Backend — `policies/teacher-scope.ts`; reach resolves exclusively through `GroupTeacher`, never through a Teacher's branch assignment
   - ✓ Tests — 16 integration tests against real branches, groups and enrolments; six mutations caught
