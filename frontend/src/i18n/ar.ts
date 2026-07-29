@@ -116,6 +116,7 @@ export const ar = {
     detailsKind: 'النوع',
     detailsBranch: 'الفرع',
     detailsResources: 'الموارد المرفقة',
+    detailsInstructors: 'المؤطِّرات',
     detailsVisibility: 'مستوى الظهور',
     openDetails: 'عرض التفاصيل',
     visibilityPublic: 'عام',

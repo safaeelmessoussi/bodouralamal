@@ -1,7 +1,7 @@
 # Software Requirements Specification
 ## بذور الأمل — Institute Management Platform
 
-**Status:** Final MVP Blueprint (Revision 36 — calendar bootstrap document and a self-sufficient occurrence payload), **immutable source of truth** — changed only by an explicit Document Owner revision, never by an implementing agent
+**Status:** Final MVP Blueprint (Revision 36.1 — the backend decides an instructor's public name), **immutable source of truth** — changed only by an explicit Document Owner revision, never by an implementing agent
 **Revision date:** 2026-07-26
 **Canonical location:** `docs/SRS.md` in the project repository
 **Document Owner:** [assign]
@@ -23,6 +23,14 @@ This is a standalone, self-contained specification. It does not reference extern
 * **§18 — Module Acceptance Checklists.**
 * **§19 — Environments, Deployment Pipeline & Testing Strategy.**
 * **§20 — AI Implementation Rules:** hard guardrails for any autonomous coding agent. §20 closes the document deliberately: it is the last thing an agent reads before writing code.
+
+**Revision 36.1 (Document Owner decision — public instructor display name, 2026-07-29):** Revision 36 put `instructor_names` on the public calendar and recorded that as an explicit decision about personal data. This refines it so the choice belongs to the person rather than to the schema.
+
+**`User.public_display_name` (optional, §7).** Where it is present and non-empty it is the name shown on **every public-facing surface** — the calendar, event details, public pages, anything anonymous. Otherwise the person's full name is used. A مؤطِّرة may therefore appear publicly as *أم عبد الله* while the platform continues to hold her legal name for the records that need it, which is a materially better answer than the binary Revision 36 offered.
+
+**The resolution happens in the backend, and only there.** The occurrence payload changes from `instructor_names: string[]` to **`instructors: [{ id, display_name }]`**, where `display_name` is already resolved. **The frontend renders that value exactly and implements no fallback** — a client-side `publicName || fullName` would be a second source of truth for the same question, and the two would eventually disagree about which name a person had agreed to publish. That is not a styling detail: the wrong branch leaks a legal name.
+
+**Why the field lives on `User` and not on a teacher profile.** There is no teacher-profile entity, and inventing one for a single column would be the wrong shape — this is a person-level preference that any public surface may consult, not something specific to teaching. It sits beside `nickname` for that reason, and differs from it: `nickname` is an internal convenience for staff searching (TD-10), while this is a deliberate publication choice.
 
 **Revision 36 (Document Owner decision — one bootstrap document for the calendar screen, 2026-07-29):** the calendar page needs four things beyond its events — the Hijri mapping for every displayed day, the month metadata behind the dual-calendar title, the Category and Level lists for its filters, and the branch list. The obvious shape is four endpoints. This revision rejects that in favour of **one composite read**, and records why, because the alternative is the more conventional answer.
 
@@ -560,6 +568,7 @@ The registration/login entry is **OAuth-first**: the registration form is never 
 
 * **User** — core identity; `account_status` (pending/active/rejected/suspended, lifecycle TD-1) separate from branch `user_status` (active/left/paused).
   * **`sex` (`female | male`, nullable) — Revision 27.** The person-side half of `Level.gender_restriction`: without it the restriction is unenforceable, because nothing can compare a person against a `girls_only` Level. **Captured at registration for every person the transaction creates** (§4.1b step 5) — the registration exists *before* the User does, so sex arrives in the payload and is written in the same TD-4.1 transaction rather than patched on afterwards. Nullable so that accounts predating this revision, and staff for whom it is irrelevant, need no backfill; enrolment enforcement treats a null as *not eligible* for a restricted Level rather than as a wildcard. Minor students are `User` rows with **no identity records** (login-less), accessed via approved `FamilyLink` context only (`X-Active-Child-ID`, §4.3).
+  * **`public_display_name` (nullable) — Revision 36.1.** The name shown on **every public-facing surface** when set and non-empty; otherwise the person's full name is used. It lets a مؤطِّرة appear publicly as a kunya while the platform keeps her legal name for the records that need it. **The backend resolves it — always.** Clients receive the resolved value and never the inputs, because a client-side fallback would be a second source of truth for which name a person agreed to publish, and the wrong branch leaks a legal name. Distinct from `nickname`, which is an internal search convenience (TD-10); this is a publication choice.
   * **`pre_provisioned_email` (nullable) — Revision 15.** The email address **authorized to claim this account before any external identity exists**. Staff set it when pre-provisioning an account (§3.1, §4.1b step 4b); it is the *only* way an unbound account can be found by email, because `UserIdentity` rows exist solely for **completed** bindings. Stored lowercase (application-normalized per TD-12, with a database `CHECK` backstop) and **unique among non-null values** via a partial unique index (TD-6). **Null for every self-registered account** — those receive their `UserIdentity` in the same transaction that creates them (§4.1b step 5), so they never pass through a pre-provisioned state.
   * **Retained, not cleared, after binding (binding rule):** once the identity is bound the column keeps its value. Clearing it would destroy the provenance of how the account was created and would release the address for a second account to claim; retention is harmless because the login lookup consults `UserIdentity` **first** (§4.1b step 3). The partial unique index therefore also guarantees one email maps to at most one account, bound or not.
   * **The pre-provision fallback matches regardless of `deleted_at` (Revision 20 — option (a)); the routing condition, not the lookup, is what refuses an account.** The earlier wording scoped this lookup to `deleted_at IS NULL` *and* claimed a deleted account would reach the "Account deactivated" screen — which that scoping made unreachable, since an invisible account falls through to onboarding and the platform would have invited a deleted person to **re-register**, contrary to §4.1. There is now one rule: the lookup finds the account, and §4.1b step 4a refuses it because `deleted_at IS NOT NULL`. A deleted person therefore **cannot register again without staff action**, and is **never silently reactivated** — authenticating changes no status.
@@ -837,7 +846,10 @@ GET  /calendar?from=&to=&branch_id=&level_id=&group_id=&category_id=   (public s
                  kind, id, title, description, date, start_time, end_time,
                  visibility, recurrence, branch_id, branch_name, room_name,
                  category_id, category_name, level_id, level_name,
-                 instructor_names[], hijri_date, hijri_month_ar.
+                 instructors[{ id, display_name }], hijri_date, hijri_month_ar.
+                 `display_name` is ALREADY RESOLVED by the backend (Revision
+                 36.1): public_display_name when set, otherwise the full name.
+                 Clients render it verbatim and implement no fallback.
                  NOT cached — an event edit must be visible immediately.
 POST /events                          → creates event + explicit scope joins (Global scope: Admin+ only)
 PATCH /events/{id}    DELETE /events/{id}
@@ -1115,6 +1127,7 @@ Every action below writes an `AuditLog` row (actor, timestamp, action_type, targ
 * Arabic name: max 120 chars. French name (person profiles only): max 120 chars. Nickname: max 60 chars. Structural entity `name`: max 120 chars, Arabic.
 * Notes: max 2,000 chars. Consent-override justification: 10–1,000 chars (mandatory).
 * Rejection/approval reasons: max 500 chars.
+* **`public_display_name` (Revision 36.1):** optional, max 120 chars — the same limit as any person name, since it stands in for one. Trimmed; an empty or whitespace-only value is stored as `NULL` rather than as a blank, so "unset" has exactly one representation and the fallback cannot be defeated by a space.
 * **Branch public fields (Revision 35):** `address` **required**, 5–300 chars. `phone` optional, and where present follows the same rule as any phone above (5–20 chars, digits/`+`/spaces). `email` optional, max 254 chars, stored and compared lowercase like every other address (TD-12). `opening_hours_ar` **required**, 3–500 chars, newlines permitted — it is displayed verbatim and never parsed (§7). `google_maps_url` optional, max 500 chars, and **must be an absolute `https://` URL**, because the value becomes an outbound link on a public page and a relative or `javascript:` value there is an injection vector rather than a typo.
 
 **Upload limits & MIME whitelist:**

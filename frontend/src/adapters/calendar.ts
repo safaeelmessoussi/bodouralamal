@@ -20,6 +20,22 @@ export interface Occurrence {
   end_time: string | null;
   visibility: string | null;
   branch_id: string | null;
+  description: string | null;
+  recurrence: string | null;
+  branch_name: string | null;
+  room_name: string | null;
+  category_id: string | null;
+  category_name: string | null;
+  level_id: string | null;
+  level_name: string | null;
+  /**
+   * `display_name` is **already resolved by the backend** (Revision 36.1) —
+   * `public_display_name` when the person set one, their full name otherwise.
+   * Render it verbatim: a client-side fallback would be a second source of
+   * truth for which name a person agreed to publish, and the wrong branch
+   * leaks a legal name.
+   */
+  instructors: { id: string; display_name: string }[];
   /** The official Hijri overlay, or null when the month is not yet recorded. */
   hijri_date: string | null;
   hijri_month_ar: string | null;

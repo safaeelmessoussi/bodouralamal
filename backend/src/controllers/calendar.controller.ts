@@ -76,7 +76,10 @@ export function read(prisma: PrismaClient) {
         category_name: o.categoryName,
         level_id: o.levelId,
         level_name: o.levelName,
-        instructor_names: o.instructorNames,
+        instructors: o.instructors.map((instructor) => ({
+          id: instructor.id,
+          display_name: instructor.displayName,
+        })),
         // §4.4 decorative overlay, admin offset applied server-side.
         hijri_date: o.hijriDate,
         hijri_month_ar: o.hijriMonthArabic,

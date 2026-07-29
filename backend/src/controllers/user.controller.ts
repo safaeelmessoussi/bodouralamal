@@ -17,6 +17,16 @@ const createSchema = z.object({
   role: z.enum(['admin', 'teacher', 'student', 'parent']).optional(),
   branch_id: z.uuid().optional(),
   pre_approved: z.boolean().optional(),
+  /* TD-9 (Revision 36.1): trimmed, and an empty value becomes NULL so "unset"
+     has exactly one representation — a blank would read as set and render as
+     nothing, defeating the fallback. */
+  public_display_name: z
+    .string()
+    .trim()
+    .max(120)
+    .transform((v) => (v === '' ? null : v))
+    .nullable()
+    .optional(),
 });
 
 export function create(prisma: PrismaClient) {
@@ -73,6 +83,7 @@ export function list(prisma: PrismaClient) {
         id: u.id,
         name_arabic: u.nameArabic,
         nickname: u.nickname,
+        public_display_name: u.publicDisplayName,
         phone: u.phone,
         account_status: u.accountStatus,
         roles: u.roles.map((r) => ({

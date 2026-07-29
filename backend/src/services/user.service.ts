@@ -168,6 +168,7 @@ export interface UserListItem {
   id: string;
   nameArabic: string;
   nickname: string | null;
+  publicDisplayName: string | null;
   phone: string | null;
   accountStatus: string;
   roles: { role: string; branchId: string | null; branchName: string | null }[];
@@ -253,6 +254,7 @@ export async function listUsers(
         id: true,
         nameArabic: true,
         nickname: true,
+        publicDisplayName: true,
         phone: true,
         accountStatus: true,
         branchRoles: {
@@ -274,6 +276,7 @@ export async function listUsers(
       id: u.id,
       nameArabic: u.nameArabic,
       nickname: u.nickname,
+      publicDisplayName: u.publicDisplayName,
       phone: u.phone,
       accountStatus: u.accountStatus,
       roles: u.branchRoles.map((r) => ({

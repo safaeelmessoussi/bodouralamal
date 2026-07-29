@@ -431,9 +431,23 @@ describe('§14.2 / TD-10 — user list, filters and search', () => {
 
     // §14.2 fixes the columns; anything §4.10 restricts to assigned teachers
     // must not ride along on a list every Admin can call.
+    //
+    // `publicDisplayName` joined deliberately in Revision 36.1: it is a name
+    // the person chose to PUBLISH, so it is less sensitive than the legal name
+    // already on this row, and staff need to see who has set one. This
+    // assertion is the review gate for that kind of addition — a field must be
+    // argued onto the list, never arrive on it by accident.
     for (const row of page.data) {
       expect(Object.keys(row).sort()).toEqual(
-        ['accountStatus', 'id', 'nameArabic', 'nickname', 'phone', 'roles'].sort(),
+        [
+          'accountStatus',
+          'id',
+          'nameArabic',
+          'nickname',
+          'phone',
+          'publicDisplayName',
+          'roles',
+        ].sort(),
       );
     }
   });

@@ -16,16 +16,16 @@ import { Dialog } from '../ui/dialog.js';
  * Rendered as a definition list, so each field is announced with its label
  * rather than as a run of unlabelled text.
  *
- * **Only fields the backend actually sends are rendered.** `GET /calendar`
- * returns `kind, id, title, date, start_time, end_time, visibility, branch_id`
- * and the Hijri overlay — so category, level, room, instructor, recurrence and
- * description have no source yet and are **absent rather than shown empty**.
- * Rows for them appear here the moment the contract carries them; inventing a
- * placeholder would be worse than an honest omission.
+ * **Only fields the backend actually sends are rendered**, and a field with no
+ * value is **absent rather than shown empty** — an empty row claims the value
+ * is blank, which is a different statement from "not recorded".
  *
- * The branch **name** is the one field resolved rather than displayed raw: the
- * page already holds the public branch directory, so the id is looked up rather
- * than re-fetched or hardcoded.
+ * Revision 36 made the occurrence self-sufficient, so opening an event costs no
+ * further request. Instructor names arrive **already resolved** (Revision 36.1):
+ * the backend decided which name is public, and this renders it verbatim. A
+ * client-side `publicName || fullName` here would be a second source of truth
+ * for which name a person agreed to publish, and the wrong branch leaks a legal
+ * name.
  */
 export function EventDetailsDialog({
   occurrence,
@@ -81,6 +81,15 @@ export function EventDetailsDialog({
               <>
                 <dt>{t('calendar.detailsBranch')}</dt>
                 <dd>{branch}</dd>
+              </>
+            ) : null}
+
+            {occurrence.instructors.length > 0 ? (
+              <>
+                <dt>{t('calendar.detailsInstructors')}</dt>
+                {/* Rendered exactly as returned — the backend already decided
+                    which name is public (Revision 36.1). */}
+                <dd>{occurrence.instructors.map((i) => i.display_name).join('، ')}</dd>
               </>
             ) : null}
 

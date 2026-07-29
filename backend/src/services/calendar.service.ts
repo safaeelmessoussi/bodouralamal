@@ -1,5 +1,6 @@
 import type { PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
+import { publicDisplayName } from '../lib/display-name.js';
 import { baseHijri, sortMonthStarts, type MonthStart } from '../lib/hijri.js';
 import * as scope from '../policies/branch-scope.js';
 import type { RoleScope } from '../policies/branch-scope.js';
@@ -61,7 +62,9 @@ export interface Occurrence {
   categoryName: string | null;
   levelId: string | null;
   levelName: string | null;
-  instructorNames: string[];
+  /** Revision 36.1: `displayName` is ALREADY RESOLVED — clients render it
+   *  verbatim and implement no fallback. */
+  instructors: { id: string; displayName: string }[];
   /**
    * The decorative Hijri overlay (§4.4, §5.7), read from the Ministry's
    * official announcements as recorded in `HijriMonthStart` (Revisions 31–32).
@@ -386,7 +389,7 @@ export async function readCalendar(
         categoryName: event.categoryScopes[0]?.category.name ?? null,
         levelId: event.levelScopes[0]?.level.id ?? null,
         levelName: event.levelScopes[0]?.level.name ?? null,
-        instructorNames: [],
+        instructors: [],
         ...hijri(date, monthStarts),
       });
     }
@@ -419,7 +422,9 @@ export async function readCalendar(
         level: { select: { id: true, name: true, category: { select: { id: true, name: true } } } },
         teachers: {
           where: { deletedAt: null },
-          select: { teacher: { select: { nameArabic: true } } },
+          select: {
+            teacher: { select: { id: true, nameArabic: true, publicDisplayName: true } },
+          },
         },
       },
     });
@@ -445,7 +450,10 @@ export async function readCalendar(
           categoryName: group.level.category.name,
           levelId: group.level.id,
           levelName: group.level.name,
-          instructorNames: group.teachers.map((t) => t.teacher.nameArabic),
+          instructors: group.teachers.map((assignment) => ({
+            id: assignment.teacher.id,
+            displayName: publicDisplayName(assignment.teacher),
+          })),
           ...hijri(date, monthStarts),
         });
       }

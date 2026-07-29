@@ -191,6 +191,14 @@ model User {
   nameArabic String  @map("name_arabic") @db.VarChar(120)
   nameFrench String? @map("name_french") @db.VarChar(120)
   nickname   String? @db.VarChar(60)
+
+  /// Revision 36.1 — the name shown on every PUBLIC surface when set;
+  /// otherwise `nameArabic` is used. The backend resolves it and clients
+  /// receive only the result: a client-side fallback would be a second source
+  /// of truth for which name a person agreed to publish, and the wrong branch
+  /// leaks a legal name. Distinct from `nickname`, which is an internal search
+  /// convenience (TD-10).
+  publicDisplayName String? @map("public_display_name") @db.VarChar(120)
   phone      String? @db.VarChar(20)
   /// Captured at registration (§4.1b step 5, Revision 27) — never patched on
   /// afterwards, because the registration exists before the User does.
