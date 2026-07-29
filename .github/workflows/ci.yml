@@ -31,6 +31,8 @@ jobs:
         run: bash scripts/ci/check-header-nav-exclusive.sh
       - name: Design-token discipline (components use semantic tokens only)
         run: bash scripts/ci/check-design-tokens.sh
+      - name: Public display identity resolved server-side (§7, §20 rule 21)
+        run: bash scripts/ci/check-display-identity.sh
 
   contract:
     name: API contract — regenerate and verify no drift

@@ -29,11 +29,13 @@ export interface Occurrence {
   level_id: string | null;
   level_name: string | null;
   /**
-   * `display_name` is **already resolved by the backend** (Revision 36.1) —
-   * `public_display_name` when the person set one, their full name otherwise.
-   * Render it verbatim: a client-side fallback would be a second source of
-   * truth for which name a person agreed to publish, and the wrong branch
-   * leaks a legal name.
+   * `display_name` is **already resolved by the backend** — see §7's Public
+   * display identity invariant, which is the single statement of that rule.
+   *
+   * **Render it verbatim** (§20 rule 21). This type deliberately does not
+   * carry the inputs: a client that cannot see them cannot choose between
+   * them, and the wrong choice publishes a legal name where a kunya was
+   * asked for.
    */
   instructors: { id: string; display_name: string }[];
   /** The official Hijri overlay, or null when the month is not yet recorded. */
