@@ -22,6 +22,7 @@ const querySchema = z.object({
   to: calendarDate,
   branch_id: z.uuid().optional(),
   level_id: z.uuid().optional(),
+  category_id: z.uuid().optional(),
   group_id: z.uuid().optional(),
 });
 
@@ -53,6 +54,7 @@ export function read(prisma: PrismaClient) {
       to: q.to,
       ...(q.branch_id ? { branchId: q.branch_id } : {}),
       ...(q.level_id ? { levelId: q.level_id } : {}),
+      ...(q.category_id ? { categoryId: q.category_id } : {}),
       ...(q.group_id ? { groupId: q.group_id } : {}),
     });
 
@@ -66,6 +68,15 @@ export function read(prisma: PrismaClient) {
         end_time: o.endTime,
         visibility: o.visibility,
         branch_id: o.branchId,
+        description: o.description,
+        recurrence: o.recurrence,
+        branch_name: o.branchName,
+        room_name: o.roomName,
+        category_id: o.categoryId,
+        category_name: o.categoryName,
+        level_id: o.levelId,
+        level_name: o.levelName,
+        instructor_names: o.instructorNames,
         // §4.4 decorative overlay, admin offset applied server-side.
         hijri_date: o.hijriDate,
         hijri_month_ar: o.hijriMonthArabic,

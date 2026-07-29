@@ -7,6 +7,7 @@ import * as consents from './controllers/consent.controller.js';
 import * as calendar from './controllers/calendar.controller.js';
 import * as events from './controllers/event.controller.js';
 import * as hijri from './controllers/hijri-calendar.controller.js';
+import * as calendarBootstrap from './controllers/calendar-bootstrap.controller.js';
 import * as publicBranches from './controllers/public-branch.controller.js';
 import * as groups from './controllers/group.controller.js';
 import * as socialProfile from './controllers/social-profile.controller.js';
@@ -99,6 +100,10 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
   // anonymous, and mounted BEFORE the guarded router for that reason. No
   // optional authentication: there is no tier to resolve here, so a credential
   // could only ever be ignored.
+  // TD-3.10 (Revision 36): the calendar screen's reference data in one read.
+  // Public and cacheable; mounted before the guarded router for that reason.
+  api.get('/calendar/bootstrap', calendarBootstrap.read(prisma));
+
   api.get('/branches', publicBranches.list(prisma));
 
   const guarded = express.Router();

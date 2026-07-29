@@ -1,7 +1,7 @@
 # Software Requirements Specification
 ## بذور الأمل — Institute Management Platform
 
-**Status:** Final MVP Blueprint (Revision 35 — public branch directory: contact fields on `Branch` and a public `GET /branches`), **immutable source of truth** — changed only by an explicit Document Owner revision, never by an implementing agent
+**Status:** Final MVP Blueprint (Revision 36 — calendar bootstrap document and a self-sufficient occurrence payload), **immutable source of truth** — changed only by an explicit Document Owner revision, never by an implementing agent
 **Revision date:** 2026-07-26
 **Canonical location:** `docs/SRS.md` in the project repository
 **Document Owner:** [assign]
@@ -23,6 +23,24 @@ This is a standalone, self-contained specification. It does not reference extern
 * **§18 — Module Acceptance Checklists.**
 * **§19 — Environments, Deployment Pipeline & Testing Strategy.**
 * **§20 — AI Implementation Rules:** hard guardrails for any autonomous coding agent. §20 closes the document deliberately: it is the last thing an agent reads before writing code.
+
+**Revision 36 (Document Owner decision — one bootstrap document for the calendar screen, 2026-07-29):** the calendar page needs four things beyond its events — the Hijri mapping for every displayed day, the month metadata behind the dual-calendar title, the Category and Level lists for its filters, and the branch list. The obvious shape is four endpoints. This revision rejects that in favour of **one composite read**, and records why, because the alternative is the more conventional answer.
+
+**`GET /calendar/bootstrap?from=&to=`** (TD-3.10, public) returns everything the calendar needs to *render its chrome*; **`GET /calendar` keeps returning only occurrences**. The page therefore makes exactly **two** requests and never a third — including when an event is opened.
+
+**Why one document rather than four endpoints.** *(a) Round trips are the scarce resource here.* §2.2 targets unreliable mobile connections; four sequential reference reads before the grid can draw its first cell is four chances to stall, on the one screen a visitor is most likely to open. *(b) One cache policy instead of four.* This is also the first endpoint in the platform with a **stated caching policy** (below) — writing that policy once, over one document, is materially safer than getting four independent policies consistent. *(c) The grouping is a real concept, not a bundle.* "What the calendar screen must know before it can draw" is nameable and stable; a Category list and a Hijri mapping genuinely share that lifecycle even though they share nothing else.
+
+**The objection, and the limit that answers it.** A screen-shaped endpoint couples the API to one UI, which is normally an anti-pattern. Two things make it correct here rather than convenient: TD-3 is **already** screen-oriented — §5.x screens define endpoints throughout this document — so this is consistent with the existing architecture rather than a departure; and the endpoint is bounded by an explicit rule: **the bootstrap carries reference data required to render the calendar chrome, and never operational data.** Events, enrolments, progress and grades are not admissible, whatever a future screen would find convenient. Without that limit a bootstrap becomes a dumping ground, and that is the failure mode being guarded against.
+
+**It is not a list endpoint, so TD-10 does not apply** — a point worth stating because TD-10 says *every* list endpoint is paginated. The bootstrap is a **composite document** whose contained lists are bounded by the domain rather than by a page size: three Categories, ~21 Levels, ≤10 Branches (§2.4), and at most 366 days by the range guard §4.4 already enforces. Paginating any of them would be meaningless — a caller cannot use half a filter.
+
+**Caching (the platform's first such policy).** The bootstrap is **public and cacheable**: `Cache-Control: public, max-age=300` and a strong `ETag` over its content. Five minutes is chosen against what actually changes — a Super Admin recording a Hijri month or adding a Level is not a change a visitor must see within seconds, while `/calendar` itself stays uncached because an event edit is. Reference data and event data have different rates of change, and that difference is the seam this split follows.
+
+**Occurrences become self-sufficient.** `GET /calendar` now carries, per occurrence: `description`, `recurrence`, `branch_name`, `room_name`, `category_id`/`category_name`, `level_id`/`level_name` and `instructor_names`. The event dialog therefore opens with **no further request** — the alternative was an N+1 on a public screen. Visibility is unchanged: §4.4's tiers decide *which occurrences* a caller receives, and these fields describe occurrences the caller is already entitled to see.
+
+**Instructor names on a public endpoint — an explicit decision, recorded so it can be reversed.** These are staff members' names published to anonymous visitors. Nothing in this document forbade it (§4.10 and BR-16 restrict *students'* case-file data, not staff identity) and a timetable naming its مؤطِّرة is ordinary for an institute — but it is personal data on the public tier, so it is decided here rather than implied. **Decision: included.** Reversing it means removing one field from the TD-3.10 projection; no other clause depends on it.
+
+**Categories use the Revision-27 names** — الكبار / اليافعون / الطفل. Filtering Levels by Category is server-side (`?category_id=`), so "no category selected" means all Levels and selecting one narrows them, without the client filtering a list it was handed.
 
 **Revision 35 (Document Owner decision — the public branch directory, 2026-07-29):** §5.1 has always required the landing page to show a **branch list**, but nothing in the model or the route registry could serve one: `Branch` carried only `name`, `operational_start_date` and `display_order`, and the sole way to read a branch was `GET /admin/branches`, which Revision 26 restricts to Admin/Super Admin and which answers `401` to the anonymous visitor §5.1 is about. This revision closes both halves.
 
@@ -375,7 +393,7 @@ The registration/login entry is **OAuth-first**: the registration form is never 
   2. **Private:** Hidden from the public. Visible to **any logged-in approved Student** (accepted decision: not filtered by the student's own branch/group — deliberate, recorded trade-off, Risk R-6 §11), to Parents in the context of linked students, and to Staff **within their branch scope**.
   3. **Hidden:** Hidden from all Student and Parent accounts. Visible to **Teachers only for events whose scope intersects their assigned groups** (an event scoped to the group itself, to the group's level, category, or branch, or a global event — resolution via `GroupTeacher` → Group; a Teacher never sees Hidden events belonging exclusively to groups/levels/branches they are not assigned to), and to **all Admins regardless of branch scope** (accepted decision), plus Super Admins.
   * `Pending` users see only the Public tier (effectively nothing beyond the public calendar — hard-redirect on login, §4.1).
-* Full dual-date (Hijri/Gregorian) calendar: Monthly/Weekly/Agenda views, branch/level/group filters, a unified grid rendering both the recurring Group timetable and one-off Events, and a session detail popup. Week starts Monday. The calendar supports a quick "day + morning/evening" glance view in addition to exact times.
+* Full dual-date (Hijri/Gregorian) calendar: Monthly/Weekly/Agenda views, branch/**category**/level/group filters (Revision 36 — selecting a Category restricts the Level list **server-side**, so the client never filters a list it was handed), a unified grid rendering both the recurring Group timetable and one-off Events, and a session detail popup. Week starts Monday. The calendar supports a quick "day + morning/evening" glance view in addition to exact times.
 * Event recurrence must support: none, daily, weekly, **biweekly-alternating ("week on/week off")**, and yearly. The alternating-week pattern must be modeled and tested explicitly.
 * **Multi-scope events:** An Event may apply to multiple branches, categories, levels, or groups simultaneously. When a global/multi-scope event is created, **the system explicitly populates the join tables** — `EventBranch`, `EventCategory`, `EventLevel`, `EventGroup` (§7) — at creation time (only for branches whose `operational_start_date` has occurred or is in the past), never runtime null/wildcard evaluation.
 * **Branch-activation backfill:** when a Branch's `operational_start_date` arrives (or a new branch is created), Admins have a **manual backfill action** listing applicable global/recurring events to attach — or knowingly skip. The gap is never silently auto-filled and never silently ignored.
@@ -748,6 +766,7 @@ consent_forced_private = true → public   ONLY via Admin override with justific
 |---|---|---|---|---|---|---|
 | Manage system settings, `display_order`, AcademicYear | ✔ | ⊘ | ⊘ | ⊘ | ⊘ | ⊘ |
 | **Record and publish the official Hijri calendar (`HijriMonthStart`)** *(Revision 31; Revision 32 — the Super Admin records the Ministry's announcement, and importing is not an MVP feature)* | ✔ | ⊘ | ⊘ | ⊘ | ⊘ | ⊘ |
+| **Read the calendar bootstrap** *(Revision 36)* — Hijri mapping, month metadata, Categories, Levels and Branches for the calendar screen; reference data only | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ (anonymous too) |
 | **Read the public branch directory** *(Revision 35)* — name, address, phone, email, opening hours and map link, via `GET /branches`; no other branch column is ever public | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ (anonymous too) |
 | **Read the Hijri calendar** *(Revision 31)* — the published overlay travels with the calendar payload and is visible to **everyone, including anonymous visitors**, exactly as the public tier of `/calendar` is | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ (public tier) |
 | **Manage reference/configuration data** — Branches, Rooms, Levels, Categories, Subjects, AcademicYear, SystemSettings, `display_order`, the Hijri calendar (`HijriMonthStart`, Revision 31), `operational_start_date` *(Revision 26)* | ✔ | ⊘ | ⊘ | ⊘ | ⊘ | ⊘ |
@@ -811,7 +830,15 @@ No approved (parent, child) match → 404 NOT_FOUND (no existence leak).
 
 **3.4 Calendar**
 ```
-GET  /calendar?from=&to=&branch_id=&level_id=&group_id=   (public sees public tier only)
+GET  /calendar?from=&to=&branch_id=&level_id=&group_id=&category_id=   (public sees public tier only)
+                 Occurrences only — the screen's reference data comes from
+                 /calendar/bootstrap (TD-3.10). Each occurrence is SELF-SUFFICIENT
+                 (Revision 36), so opening an event costs no further request:
+                 kind, id, title, description, date, start_time, end_time,
+                 visibility, recurrence, branch_id, branch_name, room_name,
+                 category_id, category_name, level_id, level_name,
+                 instructor_names[], hijri_date, hijri_month_ar.
+                 NOT cached — an event edit must be visible immediately.
 POST /events                          → creates event + explicit scope joins (Global scope: Admin+ only)
 PATCH /events/{id}    DELETE /events/{id}
 POST /admin/branches/{id}/event-backfill   → manual backfill action (§4.4)
@@ -858,6 +885,32 @@ POST /students/{id}/quran-logs            PATCH /quran-logs/{id}   DELETE /quran
 GET /jobs/{id}   → { state: created|active|completed|failed, progress, result|error }
 ```
 Any endpoint that enqueues a job returns `202 Accepted` with `{ job_id }`.
+
+**3.10 Calendar bootstrap (Revision 36)**
+```
+GET /calendar/bootstrap?from=&to=   (public — anonymous)
+      Everything the calendar screen needs to render its CHROME, in one read.
+      { data: { hijri: { days: [{ date, hijri_date, hijri_day, hijri_month,
+                                  hijri_month_ar, hijri_year }],
+                         months: [{ hijri_month, hijri_month_ar, hijri_year }] },
+                gregorian_months: [{ month, month_ar, year }],
+                categories: [{ id, name, display_order }],
+                levels: [{ id, name, category_id, display_order }],
+                branches: [{ id, name, display_order }] } }
+
+      `hijri.months` and `gregorian_months` are what let the client render the
+      dual title with NO month-transition logic: one entry each renders
+      "يوليوز 2026 | محرم 1448", two renders "يوليوز / غشت 2026 | محرم / صفر 1448".
+      A day whose Hijri month is not recorded and published omits its hijri_*
+      fields (Revision 31 — the platform says nothing rather than computing).
+
+      NOT a list endpoint: TD-10 does not apply. Its lists are bounded by the
+      domain (3 categories, ~21 levels, ≤10 branches, ≤366 days), not by a page.
+      Carries reference data only — NEVER operational data (events, enrolments,
+      progress, grades), whatever a future screen would find convenient.
+
+      Cacheable: `Cache-Control: public, max-age=300` + strong `ETag`.
+```
 
 **3.9 Public branch directory (Revision 35)**
 ```
@@ -1081,6 +1134,7 @@ quarantine/{content_id}/…        (soft-deleted objects)
 ### TD-10 — Pagination, Sorting & Search Standards
 
 * Every list endpoint is paginated: `?page=1&page_size=25`; **default 25, max 100**; response envelope `{ data: […], meta: { page, page_size, total } }`.
+* **A composite document is not a list endpoint** *(Revision 36)*. `GET /calendar/bootstrap` returns one object whose contained lists are bounded by the domain — three Categories, ~21 Levels, ≤10 Branches, ≤366 days — rather than by a page size, and paginating any of them would be meaningless because a caller cannot use half a filter. This is the **only** exemption, and it is narrow by construction: an endpoint returning an unbounded collection is a list and is paginated, whatever its shape.
 * All sorts include a deterministic tiebreaker (`id`) to keep pagination stable.
 * Structural entities sort by `display_order ASC NULLS LAST`, then by `name` — which is correct Arabic order automatically because the column is natively collated `ar-x-icu` (TD-6a). Never add per-query COLLATE workarounds; fix the column.
 * **Student search** (`GET /admin/users?role=student&q=…`) matches across: Arabic name, French name, nickname, phone, linked parent's name, and Google email. **Email search covers both `UserIdentity.email` and `User.pre_provisioned_email` (Revision 15)** — a pre-provisioned account has no identity row until its first login, so searching only `UserIdentity` would make exactly the accounts staff most need to find (the ones not yet claimed) invisible. Both columns are already lowercase (TD-6), so email matching needs no shadow column. **Search semantics (normative, Revision 9):**

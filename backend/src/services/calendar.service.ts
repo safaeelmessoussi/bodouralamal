@@ -35,6 +35,7 @@ export interface CalendarQuery {
   to: Date;
   branchId?: string;
   levelId?: string;
+  categoryId?: string;
   groupId?: string;
 }
 
@@ -48,6 +49,19 @@ export interface Occurrence {
   endTime: string | null;
   visibility: string | null;
   branchId: string | null;
+  /* Revision 36 — the occurrence is self-sufficient, so opening an event costs
+     no further request. Fields a given kind has no source for stay null rather
+     than being invented: an Event has no room or instructor, a Group no
+     description or recurrence. */
+  description: string | null;
+  recurrence: string | null;
+  branchName: string | null;
+  roomName: string | null;
+  categoryId: string | null;
+  categoryName: string | null;
+  levelId: string | null;
+  levelName: string | null;
+  instructorNames: string[];
   /**
    * The decorative Hijri overlay (§4.4, §5.7), read from the Ministry's
    * official announcements as recorded in `HijriMonthStart` (Revisions 31–32).
@@ -328,6 +342,9 @@ export async function readCalendar(
     });
   }
   if (query.levelId) scopeFilters.push({ levelScopes: { some: { levelId: query.levelId } } });
+  if (query.categoryId) {
+    scopeFilters.push({ categoryScopes: { some: { categoryId: query.categoryId } } });
+  }
   if (query.groupId) scopeFilters.push({ groupScopes: { some: { groupId: query.groupId } } });
 
   const events = await prisma.event.findMany({
@@ -337,7 +354,11 @@ export async function readCalendar(
       ...(await visibilityFilter(prisma, actor)),
       ...(scopeFilters.length ? { AND: scopeFilters } : {}),
     },
-    include: { branchScopes: { select: { branchId: true }, take: 1 } },
+    include: {
+      branchScopes: { select: { branch: { select: { id: true, name: true } } }, take: 1 },
+      categoryScopes: { select: { category: { select: { id: true, name: true } } }, take: 1 },
+      levelScopes: { select: { level: { select: { id: true, name: true } } }, take: 1 },
+    },
   });
 
   // One read per request, applied to every occurrence below.
@@ -354,7 +375,18 @@ export async function readCalendar(
         startTime: hhmm(event.startTime),
         endTime: hhmm(event.endTime),
         visibility: event.visibility,
-        branchId: event.branchScopes[0]?.branchId ?? null,
+        branchId: event.branchScopes[0]?.branch.id ?? null,
+        description: event.description,
+        recurrence: event.recurrenceType,
+        branchName: event.branchScopes[0]?.branch.name ?? null,
+        // An Event is the exception layer (§4.4); it has no room and no
+        // instructor of its own.
+        roomName: null,
+        categoryId: event.categoryScopes[0]?.category.id ?? null,
+        categoryName: event.categoryScopes[0]?.category.name ?? null,
+        levelId: event.levelScopes[0]?.level.id ?? null,
+        levelName: event.levelScopes[0]?.level.name ?? null,
+        instructorNames: [],
         ...hijri(date, monthStarts),
       });
     }
@@ -368,6 +400,8 @@ export async function readCalendar(
         deletedAt: null,
         ...(query.branchId ? { branchId: query.branchId } : {}),
         ...(query.levelId ? { levelId: query.levelId } : {}),
+        // A Group has no category of its own; it inherits it through its Level.
+        ...(query.categoryId ? { level: { categoryId: query.categoryId } } : {}),
         ...(query.groupId ? { id: query.groupId } : {}),
         // A Teacher sees their own groups; staff see their branch scope.
         ...(isAdmin(actor)
@@ -378,6 +412,15 @@ export async function readCalendar(
           : isTeacher(actor)
             ? { teachers: { some: { teacherId: actor.userId, deletedAt: null } } }
             : {}),
+      },
+      include: {
+        branch: { select: { name: true } },
+        room: { select: { name: true } },
+        level: { select: { id: true, name: true, category: { select: { id: true, name: true } } } },
+        teachers: {
+          where: { deletedAt: null },
+          select: { teacher: { select: { nameArabic: true } } },
+        },
       },
     });
 
@@ -392,6 +435,17 @@ export async function readCalendar(
           endTime: hhmm(group.endTime),
           visibility: null,
           branchId: group.branchId,
+          // A Group is the routine timetable; its description and recurrence
+          // are the weekly slot itself, so neither field applies.
+          description: null,
+          recurrence: null,
+          branchName: group.branch.name,
+          roomName: group.room?.name ?? null,
+          categoryId: group.level.category.id,
+          categoryName: group.level.category.name,
+          levelId: group.level.id,
+          levelName: group.level.name,
+          instructorNames: group.teachers.map((t) => t.teacher.nameArabic),
           ...hijri(date, monthStarts),
         });
       }

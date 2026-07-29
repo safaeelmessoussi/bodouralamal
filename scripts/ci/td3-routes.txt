@@ -75,6 +75,9 @@ GET /admin/hijri-calendar/{year}/history      # TD-3.4 R31, TD-8
 #  Ministry source exists, so it could only ever answer 'not configured'.)
 POST /admin/branches/{id}/event-backfill      # TD-3.4, §4.4
 
+# ── Calendar bootstrap (TD-3.10, Revision 36)
+GET /calendar/bootstrap                       # TD-3.10; anonymous; calendar chrome in one read
+
 # ── Public branch directory (TD-3.9, Revision 35)
 GET /branches                                 # TD-3.9; anonymous; §5.1 landing-page branch list
 

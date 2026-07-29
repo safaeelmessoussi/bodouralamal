@@ -119,6 +119,8 @@ const EXEMPT = new Set([
   '/healthz',
   // Revision 35: the §5.1 landing-page branch directory, anonymous.
   '/branches',
+  // Revision 36 (TD-3.10): the calendar screen's reference data, anonymous.
+  '/calendar/bootstrap',
   // §4.1b: the login flow itself, which a Pending user must be able to complete.
   '/auth/google',
   '/auth/google/callback',
