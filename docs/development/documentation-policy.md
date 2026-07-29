@@ -5,7 +5,9 @@
 **Documentation is part of the implementation. A feature is not Done until its documentation
 is updated — in the same commit.**
 
-Read this before your first pull request.
+Read this before your first pull request, and work through
+[the before/during/after sequence](#the-workflow-before-during-after) on **every** task —
+the assessment happens *before* you write code, not after.
 
 > **The obligation is normative, and it lives in the specification — SRS §16.4** (Revision
 > 37). This page is the working guide to satisfying it: which page to update for which
@@ -38,6 +40,42 @@ Three reasons, in increasing order of importance:
 3. **Drift is invisible.** Wrong code fails a test. Wrong documentation passes everything and
    waits.
 
+## The workflow: before, during, after
+
+Documentation is not a step at the end. It brackets the work.
+
+### 1. Before implementing
+
+**Read the documentation covering the area you are about to change, and decide which
+documents the task affects.** Do this *first*, before writing code.
+
+This is not ceremony, and it is the step most often skipped. It pays for itself three ways:
+
+- **You find the existing decision.** Half of what looks like a new problem was already
+  argued and recorded — often with the alternative you were about to pick, and the reason it
+  lost.
+- **You find the authoritative home.** Knowing where a concept already lives is what stops
+  you creating a second one.
+- **You size the task honestly.** "This is a two-line change" is usually false once you can
+  see that it touches an architectural claim, an operational procedure, and a contract.
+
+### 2. During implementation
+
+**Keep the documentation moving with the code.** When you make a decision, write it down
+while the reasoning is still in front of you.
+
+**Never leave documentation for "later".** Later is a commit that does not land, and the
+person who pays is whoever reads the stale page months from now and believes it.
+
+### 3. After implementing
+
+Update **every** affected document, then the connective tissue:
+
+- **Cross-references** — both directions. A new page nobody links to is invisible.
+- **Indexes** — the section `README.md`, and [`docs/README.md`](../README.md) if a page was
+  added or its purpose changed.
+- Then the per-change-type table below.
+
 ## What must be updated, by change type
 
 | If you changed… | Update |
@@ -47,6 +85,7 @@ Three reasons, in increasing order of importance:
 | A **business rule** | The **SRS** (Document Owner only — see below), then [Business rules](../reference/business-rules.md) and whichever [overview](../overview/business-processes.md) page describes the process |
 | **Authentication or authorization** | [Identity and access](../architecture/identity-and-access.md), and [Security](../architecture/security.md) if the posture moved |
 | A **frontend structure or pattern** | [Frontend](../architecture/frontend.md) |
+| **User-visible behaviour** — a screen, a state, a flow, wording that changes what someone sees or does | [Frontend](../architecture/frontend.md), and the [overview](../overview/business-processes.md) page describing that process if the *process* changed rather than only its presentation |
 | **Design tokens or the stylesheet index** | [Design system](../architecture/design-system.md) |
 | **Deployment, config, or infrastructure** | [Deployment](../operations/deployment.md), [Configuration](../operations/configuration.md), [Environments](../operations/environments.md) |
 | A **background job** | [Background jobs](../architecture/background-jobs.md) |
@@ -127,6 +166,29 @@ A design note that names the alternative and why it lost is the highest-value pa
 any of these pages. It is what prevented four separate near-regressions in this project's
 history.
 
+### Think past the change in front of you
+
+A task often produces knowledge worth more than the diff. Before you finish, ask whether it
+produced any of these — and if it did, write it where it belongs:
+
+| Produced | Goes to |
+|---|---|
+| A **design decision** | The relevant architecture page, with the alternative and why it lost |
+| **Architectural knowledge** — how two parts actually interact | The architecture page that owns the seam |
+| An **implementation pattern** worth copying | [Conventions](conventions.md), or the architecture page as a worked example |
+| A **constraint** discovered the hard way | Wherever someone would hit it — often [Database](../architecture/database.md) or [Performance](../architecture/performance-and-scale.md) |
+| An **operational consideration** | [Operations](../operations/README.md) — and a [runbook](../operations/runbooks.md) if it is a procedure |
+| A **maintenance note** — a trap, a stale-state gotcha | The troubleshooting table in [Getting started](getting-started.md), or beside the code as a comment |
+| **Developer guidance** | [Conventions](conventions.md) or [Getting started](getting-started.md) |
+
+The test is not *"is this part of the ticket?"* but **"would this help someone rebuilding or
+maintaining the platform later?"** If yes, it is in scope, and the moment you learned it is
+the cheapest moment to record it.
+
+This is where the project's most useful paragraphs came from: the stale-Prisma-client trap,
+the PostgreSQL 18 volume-mount requirement, the port-clash reasoning in the dev overlay, and
+the mutation-testing false negatives were all incidental discoveries, not deliverables.
+
 ## Style
 
 - **Cite, do not restate.** `§4.3`, `BR-5`, `TD-12`, "Revision 31".
@@ -148,18 +210,45 @@ Where something is specified but not built, **say so where it is described** —
 Documentation that describes an unbuilt feature in the present tense is worse than no
 documentation, because it costs a reader an hour before they discover it.
 
-## The checklist
+## Documentation is code
 
-Before opening a pull request:
+It is held to the same standards, and each one already has a home on this page rather than a
+restatement here:
 
-- [ ] Every document my change made inaccurate is updated **in this commit**
+| Standard | Where it lives |
+|---|---|
+| No duplication · one authoritative source | [The single-source-of-truth rule](#the-single-source-of-truth-rule) |
+| Correct cross-references | [Style](#style), enforced by [`check-doc-links.sh`](#enforcement) |
+| Clear hierarchy | [`docs/README.md`](../README.md) — every page reachable from an index |
+| No outdated information | [Status honesty](#status-honesty), and the same-commit rule above |
+
+Which means a documentation change is reviewed like code: a second home for a concept is a
+defect, a broken cross-reference fails the build, and a page describing something that is not
+true is a bug with a longer fuse than most.
+
+## Definition of Done
+
+A task is complete when **all six** are true. Not five.
+
+- [ ] **Implementation** complete
+- [ ] **Tests** passing
+- [ ] **Documentation** updated — every document the change made inaccurate, in this commit
+- [ ] **Cross-references** verified (`bash scripts/ci/check-doc-links.sh`)
+- [ ] [**`CHANGES.log`**](../CHANGES.log) updated, and [`TASKS.md`](../TASKS.md) ticked
+- [ ] **SRS** revised **only if a normative requirement changed** — and only by the Document
+      Owner, which means: if one did, you **stopped and reported** rather than editing
+
+Quality checks on the documentation half:
+
 - [ ] I stated **why**, not only what — including anything I rejected
 - [ ] I did not restate a rule that already lives somewhere; I linked to it
 - [ ] I did not create a second home for an existing concept
-- [ ] Every link I added resolves (`bash scripts/ci/check-doc-links.sh`)
 - [ ] Anything specified-but-unbuilt says so
-- [ ] [`CHANGES.log`](../CHANGES.log) has its entry; [`TASKS.md`](../TASKS.md) is ticked
-- [ ] If a **specification** change was needed, I **stopped and reported** rather than editing
+- [ ] I asked what else the task taught, and wrote down anything a future maintainer would
+      want ([above](#think-past-the-change-in-front-of-you))
+
+**Reporting "done" with the documentation outstanding is reporting done falsely.** The
+implementation is the visible half; the documentation is what makes it survivable.
 
 ## Enforcement
 

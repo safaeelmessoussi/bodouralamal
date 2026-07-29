@@ -18,19 +18,28 @@ Contributing to the platform.
 
 1. **Read [`CHANGES.log`](../CHANGES.log) and [`TASKS.md`](../TASKS.md) before starting.**
    They are the fastest read on the current state.
-2. **Consult only the specification sections you are implementing.** It is cross-referenced
+2. **Read the documentation covering the area you are about to change, and decide which
+   documents your task affects — *before* writing code**
+   ([why](documentation-policy.md#1-before-implementing)). It is how you find the decision
+   already recorded, the concept's existing home, and the honest size of the task.
+3. **Consult only the specification sections you are implementing.** It is cross-referenced
    by `§`/`BR-x`/`TD-x` identifiers for exactly that purpose — do not read it end to end for
    every task.
-3. **Never edit [`SRS.md`](../SRS.md).** It is immutable to contributors. If you believe it
+4. **Never edit [`SRS.md`](../SRS.md).** It is immutable to contributors. If you believe it
    is wrong, **stop and report**.
-4. **If the specification is silent, or two clauses conflict — stop and ask.** Do not invent
+5. **If the specification is silent, or two clauses conflict — stop and ask.** Do not invent
    behaviour, and do not silently pick a reading.
-5. **Write the tests.** Especially the one that asserts the *security property*, not the code
+6. **Write the tests.** Especially the one that asserts the *security property*, not the code
    path.
-6. **Update the documentation in the same commit.** A feature is not Done without it.
-7. **Record what you built** in `CHANGES.log`; tick `TASKS.md`.
-8. **Regenerate the API contract** if you touched a route.
-9. **Run the guards**, then commit atomically to `develop`.
+7. **Update the documentation in the same commit** — every affected page, plus
+   cross-references and indexes. A feature is not Done without it.
+8. **Record what you built** in `CHANGES.log`; tick `TASKS.md`.
+9. **Regenerate the API contract** if you touched a route.
+10. **Run the guards**, then commit atomically to `develop`.
+
+**Done means all six:** implementation · tests · documentation · cross-references verified ·
+`CHANGES.log` · SRS revised only if a normative requirement changed (Document Owner's call).
+See the [Definition of Done](documentation-policy.md#definition-of-done).
 
 ## The one habit worth copying
 
