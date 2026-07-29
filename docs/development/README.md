@@ -43,6 +43,11 @@ See the [Definition of Done](documentation-policy.md#definition-of-done).
 
 ## Reporting completion
 
+> **The structure is normative** — SRS §16.3 makes it a mandatory content of `CLAUDE.md` and
+> `AGENTS.md` (Revision 37.2), so it survives a rewrite of either file. This page owns the
+> **wording, the per-section guidance and the rationale**; the specification states only that
+> the six sections are required.
+
 When work is finished, report it in **these six sections, in this order**:
 
 | Section | Contains |

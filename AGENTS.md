@@ -16,7 +16,7 @@
   never restates it. Which page to update for which change is in
   `docs/development/documentation-policy.md`. Verify with
   `bash scripts/ci/check-doc-links.sh`.
-- **Report completion in the six fixed sections** — user-visible changes,
-  engineering highlights, documentation updates, additional defects discovered,
-  verification, remaining work. See `docs/development/README.md` under
-  *Reporting completion*.
+- **Report completion in the six fixed sections** (mandatory per SRS §16.3,
+  Revision 37.2) — user-visible changes, engineering highlights, documentation
+  updates, additional defects discovered, verification, remaining work. See
+  `docs/development/README.md` under *Reporting completion*.

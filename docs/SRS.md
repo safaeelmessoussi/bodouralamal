@@ -1,7 +1,7 @@
 # Software Requirements Specification
 ## بذور الأمل — Institute Management Platform
 
-**Status:** Final MVP Blueprint (Revision 37.1 — reading the relevant documentation before implementation joins §16.3's mandatory contents), **immutable source of truth** — changed only by an explicit Document Owner revision, never by an implementing agent
+**Status:** Final MVP Blueprint (Revision 37.2 — the completion-report structure joins §16.3's mandatory contents), **immutable source of truth** — changed only by an explicit Document Owner revision, never by an implementing agent
 **Revision date:** 2026-07-26
 **Canonical location:** `docs/SRS.md` in the project repository
 **Document Owner:** [assign]
@@ -23,6 +23,14 @@ This is a standalone, self-contained specification. It does not reference extern
 * **§18 — Module Acceptance Checklists.**
 * **§19 — Environments, Deployment Pipeline & Testing Strategy.**
 * **§20 — AI Implementation Rules:** hard guardrails for any autonomous coding agent. §20 closes the document deliberately: it is the last thing an agent reads before writing code.
+
+**Revision 37.2 (Document Owner decision — the completion-report structure is a mandatory content of the agent files, 2026-07-30):** the second of the two durability pins, and the same shape as Revision 37.1. Completion reports now follow **six sections, in order: user-visible changes · engineering highlights · documentation updates · additional defects discovered · verification · remaining work.** The convention was adopted in `CLAUDE.md` and the handbook; §16.3's mandatory-contents list did not require it, so it would have survived today and **not a future rewrite of the file.**
+
+**What is normative here is the *structure*, not the prose.** The Document Owner reads reports in order to **decide**, so *"what changed for the people using this"*, *"what did it cost"* and *"what is still open"* must be in fixed places rather than distributed through prose at the author's discretion. The wording, the per-section guidance and the rationale stay in the handbook (`docs/development/README.md`) — this document states the requirement, §16.4's tier split states why the *how* lives there, and duplicating the guidance through the SRS would contradict the revision that established that split.
+
+**Two of the six sections carry obligations this document already imposes**, which is what raises the structure above a formatting preference. **Additional defects discovered** is where §16.4's rule that discovered knowledge is technical debt *paid immediately* becomes **visible** rather than buried in a diff that only a line-by-line reviewer would catch — the calendar task alone produced three such fixes, including an accessibility defect that had been latent since the shared dialog was written. **Remaining work** is what keeps a reduction in scope the **Document Owner's decision** instead of an implementer's silence, which is exactly the failure §20 rule 20 guards against in the specification's own domain.
+
+**Applies to `/AGENTS.md` as well**, because an agent that never reads `CLAUDE.md` would otherwise report in whatever shape it chose, and the point of a fixed structure is that it is not per-author.
 
 **Revision 37.1 (Document Owner decision — reading the documentation first is a mandatory content of `CLAUDE.md`, 2026-07-29):** one line, for one reason: **durability.** The Revision-37 work established a per-task workflow whose first step is to *read the relevant project documentation before starting implementation, and determine which documents the task affects*. That step was added to `CLAUDE.md`, but §16.3's mandatory-contents list did not require it — so it would have survived today and not a future rewrite of the file.
 
@@ -1520,7 +1528,8 @@ Three files keep coding agents effective without re-reading this entire SRS on e
 * **commits are atomic**, and completed sub-tasks are pushed to `develop`;
 * **record what was built in `docs/CHANGES.log`** immediately on completion;
 * **if the SRS is silent, or two sections conflict — stop and ask, and report the conflict** (§20 rule 20);
-* **the §16.4 documentation obligation**, including that documentation is updated in the **same commit** and that drift is a defect.
+* **the §16.4 documentation obligation**, including that documentation is updated in the **same commit** and that drift is a defect;
+* **the completion-report structure** *(Revision 37.2)* — six sections, in order: **user-visible changes · engineering highlights · documentation updates · additional defects discovered · verification · remaining work**. Pinned here for durability, exactly as the read-first step above is: the *structure* is normative because the Document Owner reads reports to decide, and two of its sections carry obligations this document already imposes — **additional defects** is where §16.4's "discovered knowledge is paid immediately" becomes visible instead of buried in a diff, and **remaining work** is what keeps a scope reduction the Document Owner's decision rather than an implementer's silence. The wording, the per-section guidance and the rationale belong to the handbook (`docs/development/README.md`).
 
 **File 2 — `/AGENTS.md` (Codex / Cursor / Blackbox instructions).** A shorter file for agents that do not read `CLAUDE.md` automatically. Must state, at minimum:
 * **read `docs/CHANGES.log`** to establish what the prior session completed;
@@ -1528,7 +1537,8 @@ Three files keep coding agents effective without re-reading this entire SRS on e
 * PostgreSQL-specific CHECK constraints and ICU collations are **hand-written in migration SQL**, never in `schema.prisma`, and **`prisma db push` is never run** (TD-6a);
 * backend routes use the **TD-3.8 unified error envelope**;
 * **append output to `docs/CHANGES.log`**;
-* **the §16.4 documentation obligation**.
+* **the §16.4 documentation obligation**;
+* **the completion-report structure** *(Revision 37.2)* — the same six sections, since an agent that never reads `CLAUDE.md` would otherwise report in its own shape.
 
 **File 3 — `/docs/CHANGES.log` (append-only task ledger, initial state).** Reproduced below because, unlike the two above, this is a genuine **one-time bootstrap artifact** — the live ledger grows past it by design, so no drift is possible:
 ```markdown

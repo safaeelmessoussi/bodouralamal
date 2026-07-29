@@ -122,7 +122,7 @@ The technical core. Written for an engineer who has never seen the repository.
 
 | File | What it is | Mutable? |
 |---|---|---|
-| [`SRS.md`](SRS.md) | **The normative specification.** Revision 37.1 | Document Owner only |
+| [`SRS.md`](SRS.md) | **The normative specification.** Revision 37.2 | Document Owner only |
 | [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) | Milestone build order | Document Owner only |
 | [`TASKS.md`](TASKS.md) | Granular delivery checklist — the fastest read on what is done | Contributors |
 | [`CHANGES.log`](CHANGES.log) | Append-only ledger of what was built and why | Contributors, append-only |

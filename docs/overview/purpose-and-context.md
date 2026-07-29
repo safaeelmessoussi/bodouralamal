@@ -138,7 +138,7 @@ speculatively is prohibited.
 ## How the project is built
 
 Development is **specification-first**. [`SRS.md`](../SRS.md) is the authoritative
-requirements document, currently at **Revision 37.1**; the code conforms to it rather than
+requirements document, currently at **Revision 37.2**; the code conforms to it rather than
 the reverse. It is immutable to contributors and to AI agents, and changes only through a
 numbered revision approved by the Document Owner.
 

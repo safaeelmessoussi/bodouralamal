@@ -43,12 +43,12 @@ You are working on the بذور الأمل Platform.
   (`bash scripts/ci/check-doc-links.sh`) · `docs/CHANGES.log` updated · SRS
   revised **only if a normative requirement changed** — and that is the Document
   Owner's call, so stop and report rather than editing.
-- **Report completion in six fixed sections**, in order: user-visible changes ·
-  engineering highlights · documentation updates · additional defects discovered
-  · verification · remaining work. Use all six headings even when one is short
-  (write "None"), and keep the first free of `§`/`BR-x`/`TD-x` jargon. The
-  structure and its rationale are in `docs/development/README.md` under
-  *Reporting completion*.
+- **Report completion in six fixed sections** (mandatory per SRS §16.3, Revision
+  37.2), in order: user-visible changes · engineering highlights · documentation
+  updates · additional defects discovered · verification · remaining work. Use
+  all six headings even when one is short (write "None"), and keep the first free
+  of `§`/`BR-x`/`TD-x` jargon. The structure and its rationale are in
+  `docs/development/README.md` under *Reporting completion*.
 - The handbook lives in `docs/` and is indexed by `docs/README.md`. It is
   **mutable by you**, unlike `docs/SRS.md`, and it **cites the SRS rather than
   restating it** (§16.4).
