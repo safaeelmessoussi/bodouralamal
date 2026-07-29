@@ -27,6 +27,15 @@
   --color-danger: var(--red-600);
   --color-danger-soft: var(--red-50);
 
+  /* The two date systems, named for what they MEAN rather than for a hue, so a
+     rebrand moves them here and nowhere else. `-ink` is the readable variant
+     used for text; the plain value is for fills and marks (see the contrast
+     note in `primitives.css` — the logo colours cannot carry text). */
+  --color-gregorian: var(--brand-logo-orange-ink);
+  --color-gregorian-mark: var(--brand-logo-orange);
+  --color-hijri: var(--brand-logo-green-ink);
+  --color-hijri-mark: var(--brand-logo-green);
+
   /* The scrim behind a modal — the brand ground at partial opacity, so it
      reads as the platform dimming rather than a generic black wash. */
   --color-backdrop: color-mix(in srgb, var(--color-primary-strong) 45%, transparent);

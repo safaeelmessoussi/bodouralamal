@@ -3,19 +3,24 @@ import { describe, expect, it } from 'vitest';
 
 import { CalendarDayCell } from '../components/calendar/calendar-day-cell.js';
 import { CalendarGrid } from '../components/calendar/calendar-grid.js';
+import { CalendarTitle } from '../components/calendar/calendar-title.js';
+import { CategorySelector } from '../components/calendar/category-selector.js';
+import { DayEventsDialog } from '../components/calendar/day-events-dialog.js';
 import { EventChip } from '../components/calendar/event-chip.js';
 import { EventDetailsDialog } from '../components/calendar/event-details-dialog.js';
+import { LevelSelector } from '../components/calendar/level-selector.js';
 import { MonthSelector } from '../components/calendar/month-selector.js';
-import { SelectedDayCard } from '../components/calendar/selected-day-card.js';
-import type { Occurrence } from '../adapters/calendar.js';
+import type { HijriDay, Occurrence } from '../adapters/calendar.js';
 import { leadingBlanks, monthGrid, toIsoDate } from '../lib/dates.js';
 
 /**
- * The calendar's structure and its date arithmetic.
+ * The calendar's structure, its date arithmetic, and the rules that would fail
+ * silently if broken.
  *
- * The page itself fetches, so these cover the parts that decide what a visitor
- * actually sees: the grid's shape, the Monday week start (BR-17), and the
- * panels' empty states.
+ * The page itself fetches, so these cover what a visitor actually sees: the
+ * grid's shape, the Monday week start (BR-17), the dual-calendar rendering, and
+ * — most importantly — that **no Hijri value is ever invented** when the backend
+ * did not supply one (Revision 31, §20 rule 14).
  */
 const occurrence = (over: Partial<Occurrence> = {}): Occurrence => ({
   kind: 'group',
@@ -37,6 +42,16 @@ const occurrence = (over: Partial<Occurrence> = {}): Occurrence => ({
   instructors: [],
   hijri_date: null,
   hijri_month_ar: null,
+  ...over,
+});
+
+const hijriDay = (over: Partial<HijriDay> = {}): HijriDay => ({
+  date: '2026-06-15',
+  hijri_date: '1447-12-29',
+  hijri_day: 29,
+  hijri_month: 12,
+  hijri_month_ar: 'ذو الحجة',
+  hijri_year: 1447,
   ...over,
 });
 
@@ -72,6 +87,7 @@ describe('the month grid renders', () => {
     <CalendarGrid
       month={new Date(2026, 5, 1)}
       byDate={new Map([['2026-06-15', [occurrence()]]])}
+      hijriByDate={new Map([['2026-06-15', hijriDay()]])}
       today={new Date(2026, 5, 10)}
       selected={new Date(2026, 5, 15)}
       onSelect={() => undefined}
@@ -100,84 +116,274 @@ describe('the month grid renders', () => {
     expect(html).toContain('is-today');
     expect(html).toContain('is-selected');
   });
+
+  it('shows the Hijri day only on the day the backend supplied one for', () => {
+    // One cell has a recorded Hijri day; the other 29 do not, and must not
+    // acquire one by computation.
+    expect(html.split('cal-day__hijri"').length - 1).toBe(1);
+  });
 });
 
-describe('a day cell', () => {
+describe('a day cell carries both calendars', () => {
+  const withBoth = renderToStaticMarkup(
+    <CalendarDayCell
+      date={new Date(2026, 5, 15)}
+      hijri={hijriDay()}
+      occurrences={[occurrence()]}
+      isToday={false}
+      isSelected={false}
+      onSelect={() => undefined}
+      onOpenEvent={() => undefined}
+    />,
+  );
+
   it('is a button, so it is reachable by keyboard', () => {
+    expect(withBoth).toContain('<button');
+    // The two numerals alone would be announced as bare digits.
+    expect(withBoth).toContain('aria-label="2026-06-15');
+  });
+
+  it('shows the Gregorian and the Hijri day number', () => {
+    expect(withBoth).toContain('cal-day__gregorian');
+    expect(withBoth).toContain('cal-day__hijri');
+    expect(withBoth).toContain('>15<');
+    expect(withBoth).toContain('>29<');
+  });
+
+  it('puts the Hijri number FIRST in source order, so RTL lands it on the left', () => {
+    expect(withBoth.indexOf('cal-day__hijri')).toBeLessThan(
+      withBoth.indexOf('cal-day__gregorian'),
+    );
+  });
+
+  it('renders NO Hijri number when the month is not recorded (Revision 31)', () => {
     const html = renderToStaticMarkup(
       <CalendarDayCell
         date={new Date(2026, 5, 15)}
-        occurrences={[occurrence()]}
+        hijri={null}
+        occurrences={[]}
         isToday={false}
         isSelected={false}
         onSelect={() => undefined}
-      onOpenEvent={() => undefined}
+        onOpenEvent={() => undefined}
       />,
     );
-    expect(html).toContain('<button');
-    // The number alone would be announced as a bare digit.
-    expect(html).toContain('aria-label="2026-06-15');
+    // The slot is reserved for layout, but it is EMPTY — never a computed guess
+    // and never a placeholder dash.
+    expect(html).toContain('cal-day__hijri--absent');
+    expect(html).not.toMatch(/cal-day__hijri"[^>]*>\d/);
   });
 
   it('renders padding as an inert cell, not a dead control', () => {
     const html = renderToStaticMarkup(
-      <CalendarDayCell date={null} occurrences={[]} isToday={false} isSelected={false} onSelect={() => undefined}
-      onOpenEvent={() => undefined} />,
+      <CalendarDayCell
+        date={null}
+        hijri={null}
+        occurrences={[]}
+        isToday={false}
+        isSelected={false}
+        onSelect={() => undefined}
+        onOpenEvent={() => undefined}
+      />,
     );
     expect(html).not.toContain('<button');
     expect(html).toContain('aria-hidden="true"');
   });
 
-  it('summarises overflow instead of overflowing the cell', () => {
-    // Cells now carry four events before summarising; the cap exists so one
-    // unusually busy day cannot stretch its whole week.
-    const many = [
-      occurrence({ id: 'a' }),
-      occurrence({ id: 'b' }),
-      occurrence({ id: 'c' }),
-      occurrence({ id: 'd' }),
-      occurrence({ id: 'e' }),
-      occurrence({ id: 'f' }),
-    ];
+  it('lists every occurrence rather than truncating at a fixed count', () => {
+    // The cells scroll now, so "how many fit" is a height question. A cap would
+    // hide activities the taller cells were introduced to show.
+    const many = ['a', 'b', 'c', 'd', 'e', 'f', 'g'].map((id) => occurrence({ id }));
     const html = renderToStaticMarkup(
-      <CalendarDayCell date={new Date(2026, 5, 15)} occurrences={many} isToday={false} isSelected={false} onSelect={() => undefined}
-      onOpenEvent={() => undefined} />,
+      <CalendarDayCell
+        date={new Date(2026, 5, 15)}
+        hijri={null}
+        occurrences={many}
+        isToday={false}
+        isSelected={false}
+        onSelect={() => undefined}
+        onOpenEvent={() => undefined}
+      />,
     );
-    expect(html).toContain('+2');
-  });
-
-  it('shows four events in full before summarising', () => {
-    const four = ['a','b','c','d'].map((id) => occurrence({ id }));
-    const html = renderToStaticMarkup(
-      <CalendarDayCell date={new Date(2026, 5, 15)} occurrences={four} isToday={false} isSelected={false} onSelect={() => undefined} onOpenEvent={() => undefined} />,
-    );
-    expect(html).not.toContain('+');
+    expect(html.split('event-chip__title').length - 1).toBe(7);
+    expect(html).not.toContain('cal-day__more');
   });
 });
 
-describe('the side panels', () => {
-  it('the selected day states its emptiness rather than showing nothing', () => {
-    const html = renderToStaticMarkup(<SelectedDayCard date={new Date(2026, 5, 15)} occurrences={[]} />);
+describe('the dual-calendar title', () => {
+  it('renders Gregorian then Hijri, so RTL puts Gregorian on the right', () => {
+    const html = renderToStaticMarkup(
+      <CalendarTitle
+        gregorianMonths={[{ month: 7, month_ar: 'يوليوز', year: 2026 }]}
+        hijriMonths={[{ hijri_month: 1, hijri_month_ar: 'محرم', hijri_year: 1448 }]}
+      />,
+    );
+    expect(html.indexOf('cal-title__gregorian')).toBeLessThan(html.indexOf('cal-title__hijri'));
+    expect(html).toContain('يوليوز 2026');
+    expect(html).toContain('محرم 1448');
+  });
+
+  it('shows BOTH Hijri months when the Gregorian month spans two', () => {
+    const html = renderToStaticMarkup(
+      <CalendarTitle
+        gregorianMonths={[{ month: 7, month_ar: 'يوليوز', year: 2026 }]}
+        hijriMonths={[
+          { hijri_month: 12, hijri_month_ar: 'ذو الحجة', hijri_year: 1448 },
+          { hijri_month: 1, hijri_month_ar: 'محرم', hijri_year: 1448 },
+        ]}
+      />,
+    );
+    expect(html).toContain('ذو الحجة / محرم 1448');
+  });
+
+  it('prints the year twice only when the two months differ in year', () => {
+    const html = renderToStaticMarkup(
+      <CalendarTitle
+        gregorianMonths={[
+          { month: 12, month_ar: 'دجنبر', year: 2026 },
+          { month: 1, month_ar: 'يناير', year: 2027 },
+        ]}
+        hijriMonths={[]}
+      />,
+    );
+    expect(html).toContain('دجنبر 2026 / يناير 2027');
+  });
+
+  it('omits the Hijri side entirely when no month is recorded (Revision 31)', () => {
+    const html = renderToStaticMarkup(
+      <CalendarTitle
+        gregorianMonths={[{ month: 7, month_ar: 'يوليوز', year: 2026 }]}
+        hijriMonths={[]}
+      />,
+    );
+    expect(html).not.toContain('cal-title__hijri');
+    // No orphaned divider either.
+    expect(html).not.toContain('cal-title__divider');
+  });
+});
+
+describe('the category and level filters', () => {
+  it('renders categories from the backend, never a hardcoded list (§4.4b)', () => {
+    const html = renderToStaticMarkup(
+      <CategorySelector
+        categories={[
+          { id: 'c1', name: 'الكبار', display_order: 1 },
+          { id: 'c2', name: 'اليافعون', display_order: 2 },
+          { id: 'c3', name: 'الطفل', display_order: 3 },
+        ]}
+        value={null}
+        onChange={() => undefined}
+      />,
+    );
+    expect(html).toContain('الكبار');
+    expect(html).toContain('اليافعون');
+    expect(html).toContain('الطفل');
+    expect(html).toContain('كل الفئات');
+  });
+
+  it('disables the level select while the narrowed list is in flight', () => {
+    const html = renderToStaticMarkup(
+      <LevelSelector levels={[]} value={null} busy={true} onChange={() => undefined} />,
+    );
+    expect(html).toContain('disabled');
+    expect(html).toContain('aria-busy="true"');
+  });
+
+  it('renders exactly the levels it was given — it does no filtering of its own', () => {
+    // §4.4: the narrowing is server-side, "so the client never filters a list it
+    // was handed". This component has no category prop at all, which is what
+    // makes that structurally true rather than merely intended.
+    const html = renderToStaticMarkup(
+      <LevelSelector
+        levels={[
+          { id: 'l1', name: 'المستوى 1', category_id: 'c1', display_order: 1 },
+          { id: 'l2', name: 'المستوى 2', category_id: 'c1', display_order: 2 },
+        ]}
+        value={null}
+        busy={false}
+        onChange={() => undefined}
+      />,
+    );
+    expect(html.split('<option').length - 1).toBe(3); // "all" + two levels
+  });
+});
+
+describe('the day dialog', () => {
+  it('renders nothing until a day is chosen', () => {
+    const html = renderToStaticMarkup(
+      <DayEventsDialog
+        date={null}
+        hijri={null}
+        occurrences={[occurrence()]}
+        onClose={() => undefined}
+        onOpenEvent={() => undefined}
+      />,
+    );
+    expect(html).not.toContain('حلقة تحفيظ');
+  });
+
+  it('lists every activity of the day in full, not collapsed', () => {
+    const html = renderToStaticMarkup(
+      <DayEventsDialog
+        date={new Date(2026, 5, 15)}
+        hijri={hijriDay()}
+        occurrences={[occurrence({ id: 'a' }), occurrence({ id: 'b', title: 'درس تفسير' })]}
+        onClose={() => undefined}
+        onOpenEvent={() => undefined}
+      />,
+    );
+    expect(html).toContain('حلقة تحفيظ');
+    expect(html).toContain('درس تفسير');
+    expect(html.split('cal-dayrow__title').length - 1).toBe(2);
+  });
+
+  it('states emptiness rather than showing nothing', () => {
+    const html = renderToStaticMarkup(
+      <DayEventsDialog
+        date={new Date(2026, 5, 15)}
+        hijri={null}
+        occurrences={[]}
+        onClose={() => undefined}
+        onOpenEvent={() => undefined}
+      />,
+    );
     expect(html).toContain('لا توجد أنشطة في هذا اليوم');
   });
 
-  it('shows the Hijri overlay only when the backend supplied one (Revision 31)', () => {
-    const without = renderToStaticMarkup(<SelectedDayCard date={new Date(2026, 5, 15)} occurrences={[occurrence()]} />);
-    expect(without).not.toContain('1447');
-
+  it('shows the Hijri date only when recorded (Revision 31)', () => {
     const withHijri = renderToStaticMarkup(
-      <SelectedDayCard date={new Date(2026, 5, 15)} occurrences={[occurrence({ hijri_date: '1447-12-29' })]} />,
+      <DayEventsDialog
+        date={new Date(2026, 5, 15)}
+        hijri={hijriDay()}
+        occurrences={[]}
+        onClose={() => undefined}
+        onOpenEvent={() => undefined}
+      />,
     );
-    expect(withHijri).toContain('1447-12-29');
+    expect(withHijri).toContain('ذو الحجة');
+
+    const without = renderToStaticMarkup(
+      <DayEventsDialog
+        date={new Date(2026, 5, 15)}
+        hijri={null}
+        occurrences={[]}
+        onClose={() => undefined}
+        onOpenEvent={() => undefined}
+      />,
+    );
+    expect(without).not.toContain('cal-daydialog__hijri');
   });
-
-
 });
 
 describe('month navigation', () => {
   it('names the month and announces changes politely', () => {
     const html = renderToStaticMarkup(
-      <MonthSelector month={new Date(2026, 5, 1)} onPrevious={() => undefined} onNext={() => undefined} onToday={() => undefined} />,
+      <MonthSelector
+        month={new Date(2026, 5, 1)}
+        onPrevious={() => undefined}
+        onNext={() => undefined}
+        onToday={() => undefined}
+      />,
     );
     expect(html).toContain('يونيو 2026');
     expect(html).toContain('aria-live="polite"');
@@ -202,7 +408,7 @@ describe('event details', () => {
     expect(html).not.toContain('<button');
   });
 
-  it('the card leads with the title and puts the time beneath', () => {
+  it('leads with the title and puts the time after it', () => {
     const html = renderToStaticMarkup(<EventChip occurrence={occurrence()} />);
     expect(html.indexOf('event-chip__title')).toBeLessThan(html.indexOf('event-chip__time'));
   });
@@ -216,20 +422,80 @@ describe('event details', () => {
     expect(html).not.toContain('حلقة تحفيظ');
   });
 
-  it('the dialog labels every field rather than running them together', () => {
+  it('labels every field the backend supplied, and omits the rest', () => {
     const html = renderToStaticMarkup(
       <EventDetailsDialog
-        occurrence={occurrence({ visibility: 'public', hijri_date: '1447-12-29', branch_id: 'b1' })}
-        branchNames={new Map([['b1', 'مقر أمرشيش']])}
+        occurrence={occurrence({
+          visibility: 'public',
+          hijri_date: '1447-12-29',
+          description: 'حلقة أسبوعية لحفظ جزء البقرة.',
+          recurrence: 'weekly',
+          branch_name: 'مقر أمرشيش',
+          room_name: 'القاعة 2',
+          category_name: 'الكبار',
+          level_name: 'المستوى 3',
+          instructors: [{ id: 'u1', display_name: 'أم عبد الله' }],
+        })}
+        branchNames={new Map()}
         onClose={() => undefined}
       />,
     );
-    expect(html).toContain('التاريخ');
-    expect(html).toContain('التوقيت');
-    expect(html).toContain('النوع');
-    expect(html).toContain('مستوى الظهور');
-    expect(html).toContain('1447-12-29');
+    for (const label of [
+      'التاريخ',
+      'التوقيت',
+      'النوع',
+      'التكرار',
+      'الفئة',
+      'المستوى',
+      'الفرع',
+      'القاعة',
+      'المؤطِّرات',
+      'مستوى الظهور',
+    ]) {
+      expect(html).toContain(label);
+    }
+    expect(html).toContain('حلقة أسبوعية لحفظ جزء البقرة.');
+    expect(html).toContain('أسبوعي');
+    expect(html).toContain('القاعة 2');
+    expect(html).toContain('أم عبد الله');
     expect(html).toContain('<dl');
+  });
+
+  it('renders the instructor display name VERBATIM (§20 rule 21)', () => {
+    // The type carries no other name field, so there is nothing here to choose
+    // between — the backend already decided which name is public.
+    const html = renderToStaticMarkup(
+      <EventDetailsDialog
+        occurrence={occurrence({ instructors: [{ id: 'u1', display_name: 'أم عبد الله' }] })}
+        branchNames={new Map()}
+        onClose={() => undefined}
+      />,
+    );
+    expect(html).toContain('أم عبد الله');
+  });
+
+  it('omits recurrence entirely when it is `none`', () => {
+    // Every event carries `none` by default; printing it on all of them is noise.
+    const html = renderToStaticMarkup(
+      <EventDetailsDialog
+        occurrence={occurrence({ recurrence: 'none' })}
+        branchNames={new Map()}
+        onClose={() => undefined}
+      />,
+    );
+    expect(html).not.toContain('التكرار');
+  });
+
+  it('falls back to the raw value for a recurrence it does not know', () => {
+    // A pattern added server-side must be visible, not invisible.
+    const html = renderToStaticMarkup(
+      <EventDetailsDialog
+        occurrence={occurrence({ recurrence: 'quarterly' })}
+        branchNames={new Map()}
+        onClose={() => undefined}
+      />,
+    );
+    expect(html).toContain('quarterly');
   });
 
   it('omits the Hijri line when the backend supplied none (Revision 31)', () => {

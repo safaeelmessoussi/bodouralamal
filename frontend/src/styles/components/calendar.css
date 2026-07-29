@@ -1,35 +1,105 @@
-/* Part of the design system — see `src/styles/index.css` for the layering. */
+/* Part of the design system — see `src/styles.css` for the layering. */
 
-/* ── Calendar (§4.4, §5.1) ───────────────────────────────────────────────── */
+/* ── Calendar (§4.4, §5.1) ────────────────────────────────────────────────────
+ *
+ * A real institute timetable: the grid is the page, it runs nearly the full
+ * viewport, and everything else defers to it.
+ *
+ * TWO IDEAS CARRY THE WHOLE LOOK.
+ *
+ * 1. RULED, NOT BOXED. Cells are separated by hairlines on two edges only. A
+ *    full border around every cell reads as a wall of boxes; ruled lines let the
+ *    eye scan a week across, which is what a timetable is for.
+ *
+ * 2. COLOUR MEANS THE DATE SYSTEM. Orange is Gregorian, green is Hijri —
+ *    everywhere, in the title and in every cell. The reader learns the pairing
+ *    once. Both use the READABLE variants of the logo colours; the raw logo
+ *    values measure 2.5:1 and 1.9:1 on white and cannot carry small text (see
+ *    the contrast note in `tokens/primitives.css`).
+ * ─────────────────────────────────────────────────────────────────────────── */
 
-.cal-page__empty {
-  padding-block-start: var(--space-4);
+/* Wider than the standard container: a month of seven columns needs the room,
+   and this is the one page where content width beats reading measure. */
+.cal-page__inner {
+  width: min(100% - var(--space-8), 108rem);
+  margin-inline: auto;
 }
+
+.cal-page__head {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-2);
+  text-align: center;
+  margin-block-end: var(--space-8);
+}
+.cal-page__title {
+  font-size: var(--font-size-lg);
+}
+
+/* ── The dual-calendar title ─────────────────────────────────────────────────
+   Gregorian right, Hijri left, a hairline between. Source order is
+   Gregorian-then-Hijri and `dir="rtl"` does the placing. */
+.cal-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  max-width: none;
+  font-size: var(--font-size-md);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  line-height: var(--line-height-tight);
+}
+.cal-title__gregorian {
+  color: var(--color-gregorian);
+}
+.cal-title__hijri {
+  color: var(--color-hijri);
+}
+/* A hairline, not a "|" glyph: a character would inherit one side's colour and
+   imply it belongs to that side. */
+.cal-title__divider {
+  width: 1px;
+  align-self: stretch;
+  min-height: 1.4em;
+  background: var(--color-border);
+}
+
+/* ── Toolbar ─────────────────────────────────────────────────────────────── */
 
 .cal-toolbar {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-4);
+  gap: var(--space-5) var(--space-8);
   align-items: end;
   justify-content: space-between;
-  padding: var(--space-4);
-  background: var(--color-surface-raised);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-lg);
   margin-block-end: var(--space-6);
 }
+.cal-toolbar__filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  align-items: end;
+}
 
+/* One filter shape for all three, so adding a fourth needs no new CSS. The
+   branch selector keeps its own class names for the landing page, which uses
+   it outside this toolbar. */
+.cal-filter,
 .branch-selector {
   display: flex;
   flex-direction: column;
-  gap: 0.3rem;
-  min-width: 13rem;
+  gap: var(--space-1);
+  min-width: 11rem;
 }
+.cal-filter__label,
 .branch-selector__label {
   font-size: var(--font-size-xs);
   font-weight: 700;
   color: var(--color-text-muted);
 }
+.cal-filter__control,
 .branch-selector__control {
   padding: 0.6rem 0.7rem;
   border: 1px solid var(--color-border);
@@ -38,17 +108,22 @@
   color: var(--color-text);
   font: inherit;
 }
+.cal-filter__control:disabled {
+  background: var(--color-background);
+  color: var(--color-text-muted);
+  cursor: not-allowed;
+}
 
 .month-selector {
   display: flex;
   align-items: center;
-  gap: 0.4rem;
+  gap: var(--space-2);
 }
 .month-selector__label {
   min-width: 9rem;
   text-align: center;
   font-weight: 700;
-  font-size: var(--font-size-md);
+  font-size: var(--font-size-sm);
 }
 /* The chevrons are not mirrored in markup — `dir="rtl"` already reverses the
    buttons, so "previous" lands where an Arabic reader expects it. */
@@ -56,10 +131,7 @@
   padding: 0.55rem 0.7rem;
 }
 
-/* The selected day sits beneath the grid, so nothing competes for width. */
-.cal-daypanel {
-  margin-block-start: var(--space-6);
-}
+/* ── The grid ────────────────────────────────────────────────────────────── */
 
 .cal-grid {
   width: 100%;
@@ -67,12 +139,14 @@
   border-spacing: 0;
   table-layout: fixed;
   background: var(--color-surface-raised);
+  /* One outer hairline and a soft radius; no shadow. The page is a document,
+     not a stack of floating cards. */
   border: 1px solid var(--color-border);
   border-radius: var(--radius-lg);
   overflow: hidden;
 }
 .cal-grid__weekday {
-  padding: var(--space-3) var(--space-2);
+  padding: var(--space-3) var(--space-3);
   font-size: var(--font-size-xs);
   font-weight: 700;
   letter-spacing: 0.02em;
@@ -80,16 +154,16 @@
   background: var(--color-background);
   border-block-end: 1px solid var(--color-border);
 }
+
 .cal-cell {
-  /* Hairlines on two edges only: a full border around every cell reads as a
-     wall of boxes, where ruled lines let the eye scan a week across. */
   border-block-end: 1px solid var(--color-border);
   border-inline-start: 1px solid var(--color-border);
   padding: 0;
   vertical-align: top;
-  /* A real day's programme, not a teaser. `height` on a table cell is a
-     minimum, so a busy week grows rather than clipping. */
-  height: 9.5rem;
+  /* Substantially taller than before. `height` on a table cell is a MINIMUM,
+     so a heavier week grows rather than clipping — the priority is how many
+     activities are visible before anything is hidden. */
+  height: 13.5rem;
 }
 .cal-cell:last-child {
   border-inline-start: 0;
@@ -97,8 +171,10 @@
 tr:last-child .cal-cell {
   border-block-end: 0;
 }
+/* Padding days recede without a hard fill, so the month's shape reads without
+   the grid gaining a second colour. */
 .cal-cell--blank {
-  background: color-mix(in srgb, var(--color-background) 55%, transparent);
+  background: color-mix(in srgb, var(--color-background) 50%, transparent);
 }
 
 .cal-day {
@@ -107,16 +183,31 @@ tr:last-child .cal-cell {
   gap: var(--space-2);
   width: 100%;
   height: 100%;
-  padding: var(--space-2);
+  padding: var(--space-3);
   text-align: start;
+  /* `min-height: 0` is what lets the events list below actually scroll inside
+     a flex column instead of pushing the cell taller. */
+  min-height: 0;
+}
+.cal-day:hover {
+  background: color-mix(in srgb, var(--color-primary-soft) 40%, transparent);
+}
+.cal-day.is-selected {
+  /* An inset ring rather than an outline: it does not overlap the neighbouring
+     cell's hairline, so selecting a day does not thicken the grid. */
+  box-shadow: inset 0 0 0 2px var(--color-primary-emphasis);
+  background: color-mix(in srgb, var(--color-primary-soft) 50%, transparent);
 }
 
-/* The date is the day-select control; the chips above it are their own
-   buttons, so the cell is not one giant nested button. */
+/* ── The two day numbers ─────────────────────────────────────────────────────
+   A fixed header row, deliberately OUTSIDE the scrolling list: a day with
+   twenty activities must still show its date. `flex: none` is what pins it. */
 .cal-day__select {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
+  gap: var(--space-2);
+  flex: none;
   width: 100%;
   padding: 0;
   border: 0;
@@ -126,67 +217,76 @@ tr:last-child .cal-cell {
   text-align: start;
   cursor: pointer;
 }
-.cal-day:hover {
-  background: color-mix(in srgb, var(--color-primary-soft) 45%, transparent);
-}
-.cal-day__number {
+.cal-day__gregorian {
   font-weight: 700;
+  /* Dominant: this is the calendar the platform computes in (TD-11). */
   font-size: var(--font-size-md);
-  line-height: 1.1;
+  line-height: 1;
   font-variant-numeric: tabular-nums;
-  color: var(--color-accent);
+  color: var(--color-gregorian);
 }
-.cal-day.is-today .cal-day__number {
+.cal-day__hijri {
+  font-weight: 700;
+  /* Smaller — the overlay is decorative (§4.4) and must not compete. */
+  font-size: var(--font-size-xs);
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-hijri);
+}
+/* Reserves the slot so the Gregorian number does not drift left on days whose
+   Hijri month the Ministry has not announced (Revision 31). It renders NOTHING
+   — no dash, no placeholder, no computed guess. */
+.cal-day__hijri--absent {
+  min-width: 1ch;
+}
+/* Today: a filled disc on the Gregorian number, since that is the one a reader
+   looks for. */
+.cal-day.is-today .cal-day__gregorian {
   display: inline-grid;
   place-items: center;
-  width: 2.1rem;
-  height: 2.1rem;
+  width: 2.2rem;
+  height: 2.2rem;
   border-radius: var(--radius-full);
   background: var(--color-primary);
   color: var(--color-text-inverse);
 }
-.cal-day.is-selected {
-  /* An inset ring rather than an outline: it does not overlap the neighbouring
-     cell's hairline, so selecting a day no longer thickens the grid. */
-  box-shadow: inset 0 0 0 2px var(--color-accent);
-  background: color-mix(in srgb, var(--color-primary-soft) 55%, transparent);
-}
+
+/* ── Events inside a cell ────────────────────────────────────────────────────
+   Every occurrence is rendered; the area scrolls. A fixed cap would hide
+   exactly what the taller cells were introduced to show. */
 .cal-day__events {
+  list-style: none;
+  margin: 0;
+  padding: 0;
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
-  overflow: hidden;
-}
-.cal-day__more {
-  padding-inline: var(--space-2);
-  font-size: var(--font-size-xs);
-  font-weight: 700;
-  color: var(--color-text-muted);
+  min-height: 0;
+  overflow-y: auto;
+  /* Thin scrollbars, so a scrolling cell does not gain a heavy grey gutter. */
+  scrollbar-width: thin;
 }
 
-/* A compact card: title first, time beneath, rounded, no heavy border. The
-   colour alone separates a routine group session from a one-off event (§4.4),
-   which keeps several of them in one cell readable rather than striped. */
+/* Compact and quiet: no border, no shadow. Colour alone separates a routine
+   group session from a one-off event (§4.4), which keeps several in one cell
+   readable rather than striped. */
 .event-chip {
-  display: block;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
   width: 100%;
-  /* Tighter than before, and unchanged in height: the gain comes from the
-     padding and the line-height, not from removing the time. */
-  padding: 0.25rem var(--space-2);
+  padding: 0.3rem var(--space-2);
   border: 0;
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-sm);
   font: inherit;
   font-size: var(--font-size-xs);
-  line-height: 1.3;
+  line-height: 1.35;
   text-align: start;
   background: color-mix(in srgb, var(--color-primary-soft) 80%, var(--color-surface));
   color: var(--color-primary);
 }
 .event-chip--event {
-  /* Lifted from 12% so the two kinds carry comparable weight — at the old
-     value the event card read as a faded version of the group card rather
-     than a different one. */
-  background: color-mix(in srgb, var(--color-accent) 16%, var(--color-surface));
+  background: color-mix(in srgb, var(--color-accent) 15%, var(--color-surface));
   color: var(--color-accent);
 }
 .event-chip--interactive {
@@ -196,80 +296,178 @@ tr:last-child .cal-cell {
 .event-chip--interactive:hover {
   filter: brightness(0.96);
 }
+/* Title first and allowed to shrink; the time is short and never truncates.
+   `min-width: 0` is what actually lets the ellipsis appear inside a flex
+   ancestor — without it the text forces the cell wider instead. */
 .event-chip__title {
-  display: block;
-  font-weight: 700;
-  /* One line, ellipsised. `min-width: 0` is what actually lets the ellipsis
-     appear inside a flex/grid ancestor — without it the text forces the cell
-     wider instead of truncating. */
+  flex: 1 1 auto;
   min-width: 0;
+  font-weight: 700;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .event-chip__time {
-  display: block;
+  flex: none;
   font-size: 0.92em;
   font-weight: 400;
   font-variant-numeric: tabular-nums;
-  /* A tone rather than transparency: opacity would also fade the background
-     it sits on, which is what made the card look washed out. */
-  color: color-mix(in srgb, currentcolor 72%, transparent);
+  /* A tone rather than opacity: opacity would fade the background too, which
+     is what made the chip look washed out. */
+  color: color-mix(in srgb, currentcolor 70%, transparent);
 }
 
-.cal-sidebar {
-  display: grid;
-  gap: var(--space-5);
+.cal-page__empty {
+  padding-block-start: var(--space-6);
+  text-align: center;
 }
-.cal-panel__date {
+
+/* ── The day dialog ──────────────────────────────────────────────────────────
+   The full programme for one day, replacing the panel that used to sit below
+   the grid. Nothing here is truncated: the cell is the compact view, and this
+   is what makes that compactness affordable. */
+.cal-daydialog__date {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-2);
-  align-items: baseline;
+  align-items: center;
+  gap: var(--space-3);
+  max-width: none;
+  margin-block-end: var(--space-4);
+  padding-block-end: var(--space-4);
+  border-block-end: 1px solid var(--color-border);
   font-weight: 700;
-}
-.cal-panel__hijri {
-  font-size: var(--font-size-xs);
-  font-weight: 400;
-  color: var(--color-text-muted);
   font-variant-numeric: tabular-nums;
 }
-.cal-panel__list {
+.cal-daydialog__gregorian {
+  color: var(--color-gregorian);
+}
+.cal-daydialog__hijri {
+  color: var(--color-hijri);
+  font-size: var(--font-size-xs);
+}
+.cal-daydialog__divider {
+  width: 1px;
+  align-self: stretch;
+  min-height: 1.2em;
+  background: var(--color-border);
+}
+.cal-daydialog__list {
   list-style: none;
   margin: 0;
   padding: 0;
   display: grid;
   gap: var(--space-2);
 }
-.cal-panel__list li {
+
+/* One row per activity: time, then title with its context beneath. Separated
+   by a hairline rather than boxed, matching the grid. */
+.cal-dayrow {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
   align-items: baseline;
+  gap: var(--space-4);
+  width: 100%;
+  padding: var(--space-3);
+  border: 0;
+  border-inline-start: 3px solid var(--color-primary-emphasis);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-primary-soft) 45%, var(--color-surface));
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition: background var(--transition-fast);
 }
-.cal-upcoming__date {
+/* The one place a bar of colour earns its keep: it distinguishes the two kinds
+   at the start of the row, where the eye lands first. */
+.cal-dayrow--event {
+  border-inline-start-color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 10%, var(--color-surface));
+}
+.cal-dayrow:hover {
+  background: color-mix(in srgb, var(--color-primary-soft) 75%, var(--color-surface));
+}
+.cal-dayrow--event:hover {
+  background: color-mix(in srgb, var(--color-accent) 18%, var(--color-surface));
+}
+.cal-dayrow__time {
   flex: none;
-  min-width: 5rem;
-  font-size: var(--font-size-xs);
+  min-width: 7.5rem;
   font-weight: 700;
+  font-size: var(--font-size-xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-secondary);
+}
+.cal-dayrow__body {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+}
+.cal-dayrow__title {
+  font-weight: 700;
+}
+.cal-dayrow__meta {
+  font-size: var(--font-size-xs);
   color: var(--color-text-muted);
 }
 
-/* On a phone the fixed cell height wastes the screen; let the rows shrink. */
-@media (max-width: 44rem) {
+/* The event record's prose, above the field list and separated from it. */
+.details__description {
+  margin-block-end: var(--space-4);
+  padding-block-end: var(--space-4);
+  border-block-end: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
+}
+
+/* ── Narrow screens ─────────────────────────────────────────────────────────
+   Tested at 360 px (§14.7). The fixed cell height wastes a phone screen, and a
+   title is what identifies an activity — so the TIME is what goes, not the
+   name. */
+@media (max-width: 60rem) {
   .cal-cell {
-    height: 5.5rem;
+    height: 9rem;
   }
-  /* The time is what goes on a 360 px cell, not the title — a nameless block
-     tells the reader nothing. */
+}
+
+@media (max-width: 44rem) {
+  .cal-page__inner {
+    width: min(100% - var(--space-4), 108rem);
+  }
+  .cal-cell {
+    height: 6.5rem;
+  }
+  .cal-day {
+    padding: var(--space-2);
+  }
   .event-chip__time {
     display: none;
+  }
+  .cal-day__gregorian {
+    font-size: var(--font-size-sm);
+  }
+  .cal-day.is-today .cal-day__gregorian {
+    width: 1.9rem;
+    height: 1.9rem;
   }
   .cal-toolbar {
     flex-direction: column;
     align-items: stretch;
   }
+  .cal-toolbar__filters {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+  .cal-filter,
+  .branch-selector {
+    min-width: 0;
+  }
   .month-selector {
     justify-content: space-between;
+  }
+  .cal-dayrow {
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+  .cal-dayrow__time {
+    min-width: 0;
   }
 }

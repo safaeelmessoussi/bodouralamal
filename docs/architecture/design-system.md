@@ -13,6 +13,34 @@ A pure mid-grey reads as unchosen. The neutrals here have a slight hue bias towa
 accent, which is the difference between a palette that was picked and one that was
 inherited.
 
+### The logo's two colours, and why each exists twice
+
+Sampled from the logo itself: the arch and wordmark are **orange `#e89018`**, the seedling
+mark a fresh yellow-green **`#a8c838`**. The dual calendar uses them to tell the two date
+systems apart — orange is Gregorian, green is Hijri, in the title and in every day cell, so
+a reader learns the pairing once.
+
+**Neither can carry text.** On the white calendar surface the orange measures **2.5:1** and
+the green **1.9:1**, far below the 4.5:1 body-text floor — and the day numbers are small text
+on white.
+
+So each colour exists twice: the **true logo value** for fills and marks, and a **darkened
+same-hue variant** for text.
+
+| Token | Value | Contrast on white |
+|---|---|---|
+| `--color-gregorian` | `#a86206` | **4.71:1** |
+| `--color-hijri` | `#64791a` | **4.91:1** |
+| `--color-gregorian-mark`, `--color-hijri-mark` | the raw logo values | fills only |
+
+Same hue family, so the identity survives; enough luminance to be readable, so the screen
+does. **Changing either value means re-measuring** — the numbers are the reason they are these
+values and not prettier ones, and they are recorded beside the tokens for exactly that reason.
+
+The semantic names say *what the colour means* — a date system — rather than naming a hue, so
+a rebrand moves them in one place. This is the same discipline the brass accent got: it was
+chosen dark enough to carry text at 4.5:1, not chosen and then tested.
+
 ## No web font, and that is the right answer
 
 The content security policy is `default-src 'self'` with no font host, so a linked face

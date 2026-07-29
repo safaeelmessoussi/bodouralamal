@@ -22,12 +22,14 @@ export function EventChip({
   onOpen?: (occurrence: Occurrence) => void;
 }): ReactNode {
   const kindKey = occurrence.kind === 'group' ? 'calendar.kindGroup' : 'calendar.kindEvent';
+  // Title first, time second — the priority order that matters when a cell is
+  // scanned. Both live on ONE line: a two-line chip halves how many activities
+  // a cell can show, and the time is short enough to sit beside the title.
   const inner = (
     <>
       <span className="event-chip__title">{occurrence.title}</span>
       {occurrence.start_time ? (
-        // Beneath the title, and `dir="ltr"` so a clock value is not reordered
-        // by the surrounding RTL context.
+        // `dir="ltr"` so a clock value is not reordered by the RTL context.
         <time className="event-chip__time" dir="ltr">
           {occurrence.start_time}
         </time>

@@ -19,7 +19,18 @@ const calendarDate = z
   .regex(/^\d{4}-\d{2}-\d{2}$/, 'YYYY-MM-DD')
   .transform((v) => new Date(`${v}T00:00:00.000Z`));
 
-const querySchema = z.object({ from: calendarDate, to: calendarDate });
+/**
+ * `category_id` narrows the Level list, **server-side** — §4.4 requires it
+ * (*"so the client never filters a list it was handed"*) and Revision 36 names
+ * the parameter. It does not touch the Hijri days, the month metadata, the
+ * Category list or the Branch list: those are the calendar's chrome regardless
+ * of which Category is selected.
+ */
+const querySchema = z.object({
+  from: calendarDate,
+  to: calendarDate,
+  category_id: z.uuid().optional(),
+});
 
 const MS_PER_DAY = 86_400_000;
 /** Five minutes, chosen against what actually changes: a Super Admin recording
@@ -39,7 +50,7 @@ export function read(prisma: PrismaClient) {
       throw new AppError('VALIDATION_FAILED', `range exceeds ${MAX_RANGE_DAYS} days`);
     }
 
-    const bootstrap = await calendarBootstrap(prisma, from, to);
+    const bootstrap = await calendarBootstrap(prisma, from, to, parsed.data.category_id);
     const body = {
       data: {
         hijri: {

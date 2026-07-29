@@ -1,27 +1,42 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import { fetchBranches, type PublicBranch } from '../adapters/branches.js';
-import { fetchOccurrences, type Occurrence } from '../adapters/calendar.js';
+import {
+  fetchCalendarBootstrap,
+  fetchOccurrences,
+  type CalendarBootstrap,
+  type HijriDay,
+  type Occurrence,
+} from '../adapters/calendar.js';
 import { CalendarGrid } from '../components/calendar/calendar-grid.js';
-import { EventDetailsDialog } from '../components/calendar/event-details-dialog.js';
-import { SelectedDayCard } from '../components/calendar/selected-day-card.js';
+import { CalendarTitle } from '../components/calendar/calendar-title.js';
 import { CalendarToolbar } from '../components/calendar/calendar-toolbar.js';
+import { DayEventsDialog } from '../components/calendar/day-events-dialog.js';
+import { EventDetailsDialog } from '../components/calendar/event-details-dialog.js';
 import { ApplicationHeader } from '../components/header/application-header.js';
 import { SiteFooter } from '../components/site-footer.js';
-import { Container } from '../components/ui/container.js';
 import { t } from '../i18n/index.js';
 import { addMonths, endOfMonth, startOfMonth, toIsoDate } from '../lib/dates.js';
 
 /**
- * `/calendar` — the public monthly calendar (§5.1, §4.4, TD-3.4).
+ * `/calendar` — the public monthly calendar (§5.1, §4.4, TD-3.4, TD-3.10).
  *
- * The page is composition and state only: the grid, toolbar and panels are
- * their own components, and **all** data comes from the adapters. Nothing here
- * holds an event, a branch or a date literal.
+ * The page is composition and state only: the grid, toolbar, title and dialogs
+ * are their own components, and **all** data comes from the adapters. Nothing
+ * here holds an event, a branch or a date literal.
+ *
+ * **Exactly two requests per view, never a third** (Revision 36): the bootstrap
+ * for the screen's chrome — Hijri days, month metadata, categories, levels,
+ * branches — and `/calendar` for the occurrences. Opening a day or an event
+ * costs nothing further, because each occurrence is self-sufficient.
  *
  * Anonymous visitors get the public tier and the tier widens automatically once
- * signed in — that decision is the server's (§4.4), so this page does not
- * branch on the session at all.
+ * signed in — that decision is the server's (§4.4), so this page does not branch
+ * on the session at all.
+ *
+ * **The grid is the page.** It runs nearly the full viewport width and there is
+ * no panel beneath it: a day opens in a dialog, which is what lets the cells be
+ * tall enough to hold a real day's programme.
  */
 type Load =
   | { kind: 'loading' }
@@ -31,14 +46,23 @@ type Load =
 export function CalendarPage(): ReactNode {
   const today = useMemo(() => new Date(), []);
   const [month, setMonth] = useState(() => startOfMonth(today));
-  const [selected, setSelected] = useState<Date>(today);
   const [branchId, setBranchId] = useState<string | null>(null);
+  const [categoryId, setCategoryId] = useState<string | null>(null);
+  const [levelId, setLevelId] = useState<string | null>(null);
   const [branches, setBranches] = useState<PublicBranch[]>([]);
+  const [bootstrap, setBootstrap] = useState<CalendarBootstrap | null>(null);
+  const [bootstrapBusy, setBootstrapBusy] = useState(true);
   const [load, setLoad] = useState<Load>({ kind: 'loading' });
+  const [openDay, setOpenDay] = useState<Date | null>(null);
   const [openEvent, setOpenEvent] = useState<Occurrence | null>(null);
 
-  // The branch list is independent of the month, so it is fetched once rather
-  // than on every navigation.
+  const from = toIsoDate(startOfMonth(month));
+  const to = toIsoDate(endOfMonth(month));
+
+  // The branch directory is independent of the month and of every filter, so it
+  // is fetched once. (The bootstrap also carries branches; this adapter is kept
+  // because it is what the landing page uses and it carries contact details the
+  // bootstrap deliberately does not.)
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -46,8 +70,7 @@ export function CalendarPage(): ReactNode {
         const rows = await fetchBranches();
         if (!cancelled) setBranches(rows);
       } catch {
-        // A failed branch list costs the filter, not the calendar; the grid
-        // still renders every branch's occurrences.
+        // A failed branch list costs the filter, not the calendar.
         if (!cancelled) setBranches([]);
       }
     })();
@@ -56,15 +79,40 @@ export function CalendarPage(): ReactNode {
     };
   }, []);
 
-  const from = toIsoDate(startOfMonth(month));
-  const to = toIsoDate(endOfMonth(month));
+  /**
+   * The chrome. Re-requested when the month changes (different Hijri days and
+   * month metadata) and when the category changes — the latter because §4.4
+   * requires the Level list to be narrowed **server-side**, so selecting a
+   * category is a request, not a local filter.
+   */
+  useEffect(() => {
+    let cancelled = false;
+    setBootstrapBusy(true);
+    void (async () => {
+      try {
+        const next = await fetchCalendarBootstrap({ from, to, categoryId });
+        if (!cancelled) setBootstrap(next);
+      } catch {
+        // Losing the chrome costs the Hijri overlay and the filters, not the
+        // grid: the occurrences render regardless, which is the more important
+        // half of the screen.
+        if (!cancelled) setBootstrap(null);
+      } finally {
+        if (!cancelled) setBootstrapBusy(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [from, to, categoryId]);
 
+  /** The occurrences. Every filter narrows them server-side (TD-3.4). */
   useEffect(() => {
     let cancelled = false;
     setLoad({ kind: 'loading' });
     void (async () => {
       try {
-        const rows = await fetchOccurrences({ from, to, branchId });
+        const rows = await fetchOccurrences({ from, to, branchId, categoryId, levelId });
         if (!cancelled) setLoad({ kind: 'ready', occurrences: rows });
       } catch {
         if (!cancelled) setLoad({ kind: 'error' });
@@ -73,18 +121,18 @@ export function CalendarPage(): ReactNode {
     return () => {
       cancelled = true;
     };
-  }, [from, to, branchId]);
+  }, [from, to, branchId, categoryId, levelId]);
 
   const occurrences = load.kind === 'ready' ? load.occurrences : [];
 
-  /** Resolved once from the directory the page already holds — the dialog
-   *  shows a branch NAME without a second request or a hardcoded list. */
+  /** Resolved once from the directory the page already holds — a fallback for
+   *  the branch name, which Revision 36 now puts on the occurrence itself. */
   const branchNames = useMemo(
     () => new Map(branches.map((branch) => [branch.id, branch.name])),
     [branches],
   );
 
-  /** One pass, so neither the grid nor the panels re-scan the list per day. */
+  /** One pass, so neither the grid nor the dialogs re-scan the list per day. */
   const byDate = useMemo(() => {
     const map = new Map<string, Occurrence[]>();
     for (const occurrence of occurrences) {
@@ -92,14 +140,33 @@ export function CalendarPage(): ReactNode {
       if (list) list.push(occurrence);
       else map.set(occurrence.date, [occurrence]);
     }
+    // Within a day, earliest first; untimed items last, since "all day" has no
+    // position in a sequence of clock times.
+    for (const list of map.values()) {
+      list.sort((a, b) => (a.start_time ?? '99:99').localeCompare(b.start_time ?? '99:99'));
+    }
     return map;
   }, [occurrences]);
 
+  /** Recorded official Hijri days, keyed for O(1) lookup per cell. */
+  const hijriByDate = useMemo(() => {
+    const map = new Map<string, HijriDay>();
+    for (const day of bootstrap?.hijri.days ?? []) map.set(day.date, day);
+    return map;
+  }, [bootstrap]);
+
   function goToMonth(next: Date): void {
     setMonth(startOfMonth(next));
-    // Selecting the 1st keeps the panel in the month being viewed; leaving the
-    // old selection would show a day the grid no longer displays.
-    setSelected(startOfMonth(next));
+    // A day dialog left open would describe a day the grid no longer shows.
+    setOpenDay(null);
+  }
+
+  /** Changing category **resets the level**: the previous level almost certainly
+   *  belongs to the category just left, and keeping it would filter the grid to
+   *  nothing while both selects looked reasonable. */
+  function changeCategory(next: string | null): void {
+    setCategoryId(next);
+    setLevelId(null);
   }
 
   return (
@@ -107,25 +174,35 @@ export function CalendarPage(): ReactNode {
       <ApplicationHeader />
       <main id="main">
         <section className="section cal-page" aria-labelledby="calendar-title">
-          <Container>
-            <div className="section__head">
-              <h1 id="calendar-title" className="section__title">
+          {/* Deliberately NOT wrapped in the standard Container: the grid wants
+              nearly the full viewport width, which is the whole point of a
+              timetable. `cal-page__inner` sets its own wider bound. */}
+          <div className="cal-page__inner">
+            <div className="cal-page__head">
+              <h1 id="calendar-title" className="cal-page__title">
                 {t('calendar.title')}
               </h1>
-              <p className="lede">{t('calendar.lede')}</p>
+              <CalendarTitle
+                gregorianMonths={bootstrap?.gregorian_months ?? []}
+                hijriMonths={bootstrap?.hijri.months ?? []}
+              />
             </div>
 
             <CalendarToolbar
               branches={branches}
               branchId={branchId}
               onBranchChange={setBranchId}
+              categories={bootstrap?.categories ?? []}
+              categoryId={categoryId}
+              onCategoryChange={changeCategory}
+              levels={bootstrap?.levels ?? []}
+              levelId={levelId}
+              levelsBusy={bootstrapBusy}
+              onLevelChange={setLevelId}
               month={month}
               onPrevious={() => goToMonth(addMonths(month, -1))}
               onNext={() => goToMonth(addMonths(month, 1))}
-              onToday={() => {
-                setMonth(startOfMonth(today));
-                setSelected(today);
-              }}
+              onToday={() => goToMonth(today)}
             />
 
             {/* Announced politely so a keyboard user hears the month reload
@@ -133,33 +210,31 @@ export function CalendarPage(): ReactNode {
             <div aria-live="polite" aria-busy={load.kind === 'loading'}>
               {load.kind === 'error' ? <p className="muted">{t('calendar.error')}</p> : null}
 
-              {/* The grid is the page: full width, and tall enough that a
-                  day's programme is readable in place rather than only in a
-                  side panel. The selected day sits beneath it, so nothing
-                  competes with the calendar for width. */}
               <CalendarGrid
                 month={month}
                 byDate={byDate}
+                hijriByDate={hijriByDate}
                 today={today}
-                selected={selected}
-                onSelect={setSelected}
+                selected={openDay}
+                onSelect={setOpenDay}
                 onOpenEvent={setOpenEvent}
               />
+
               {load.kind === 'ready' && occurrences.length === 0 ? (
                 <p className="muted cal-page__empty">{t('calendar.monthEmpty')}</p>
               ) : null}
-
-              <div className="cal-daypanel">
-                <SelectedDayCard
-                  date={selected}
-                  occurrences={byDate.get(toIsoDate(selected)) ?? []}
-                  onOpenEvent={setOpenEvent}
-                />
-              </div>
             </div>
-          </Container>
+          </div>
         </section>
       </main>
+
+      <DayEventsDialog
+        date={openDay}
+        hijri={openDay ? (hijriByDate.get(toIsoDate(openDay)) ?? null) : null}
+        occurrences={openDay ? (byDate.get(toIsoDate(openDay)) ?? []) : []}
+        onClose={() => setOpenDay(null)}
+        onOpenEvent={setOpenEvent}
+      />
       <EventDetailsDialog
         occurrence={openEvent}
         branchNames={branchNames}

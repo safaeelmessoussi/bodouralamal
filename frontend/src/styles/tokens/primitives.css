@@ -17,6 +17,27 @@
      surface and the background — it is used for eyebrows and step numbers. */
   --brand-gold: #8f6720;
 
+  /* ── The logo's two colours, and why each has a second value ─────────────
+     Sampled from `public/logo.png`: the arch and wordmark are orange #e89018,
+     the seedling mark is a fresh yellow-green #a8c838. They identify the
+     association, and the dual calendar uses them to tell the two date systems
+     apart at a glance.
+
+     NEITHER CAN CARRY TEXT. On the white calendar surface #e89018 measures
+     2.5:1 and #a8c838 just 1.9:1 — both far below the 4.5:1 body-text floor,
+     and the day numbers are small text on white. So each colour exists twice:
+     the true logo value for FILLS and MARKS, and a darkened same-hue variant
+     for TEXT. Same hue family, so the identity survives; enough luminance to
+     be readable, so the screen does.
+
+     Measured against #ffffff: -ink orange 4.71:1, -ink green 4.91:1. Changing
+     either value means re-measuring — the numbers are the reason they are
+     these values and not prettier ones. */
+  --brand-logo-orange: #e89018;
+  --brand-logo-orange-ink: #a86206;
+  --brand-logo-green: #a8c838;
+  --brand-logo-green-ink: #64791a;
+
   /* Neutrals, biased warm-green so nothing reads as unconsidered grey. */
   --neutral-0: #ffffff;
   --neutral-50: #f5f7f5;

@@ -232,6 +232,14 @@ user opens an event.
 | `GET /calendar/bootstrap` | The **chrome**: Hijri day mapping, month metadata for the dual title, category, level, and branch lists | 5 minutes, strong ETag |
 | `GET /calendar` | The **occurrences**, each self-sufficient | No |
 
+`?category_id=` on the bootstrap narrows **only the Level list**, server-side — §4.4 requires
+that (*"so the client never filters a list it was handed"*). The Hijri days, month metadata,
+categories, and branches are the calendar's chrome regardless of which category is selected.
+
+An unknown category id yields an **empty** level list rather than falling back to all levels:
+a filter that quietly stops filtering is worse than one returning nothing, because the screen
+would show every level while claiming to show one category's.
+
 **Occurrences are self-sufficient** — carrying description, recurrence, branch and room
 names, category, level, and resolved instructor display names — so opening an event dialog
 costs no further request. The alternative was an N+1 on a public screen.
@@ -242,7 +250,14 @@ Without that limit a bootstrap becomes a dumping ground.
 
 The month metadata is what lets the client render the dual title *"يوليوز 2026 | محرم 1448"*
 — or *"يوليوز / غشت 2026 | محرم / صفر 1448"* across a boundary — **with no month-transition
-logic in the client at all.**
+logic in the client at all.** The rule the client follows is the whole of it: one entry
+renders one name, two render both joined by a slash; the year prints once when both months
+share it and twice when they do not.
+
+**Where a month has not been recorded, the client renders nothing at all** — no Hijri number
+in the day cell, and the title's Hijri side and its divider are both omitted rather than left
+blank. That is the same "silence over guessing" rule the backend follows, carried through to
+the pixel.
 
 > Design rationale in full: [API](api.md#designing-an-endpoint-the-bootstrap-as-a-worked-example)
 

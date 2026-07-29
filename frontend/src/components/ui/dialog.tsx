@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useId, useRef, type ReactNode } from 'react';
 
 import { t } from '../../i18n/index.js';
 import { Icon } from './icon.js';
@@ -14,19 +14,35 @@ import { Icon } from './icon.js';
  * Focus returns to whatever opened it, because the browser restores it to the
  * element that called `showModal()` — which is why the caller renders a real
  * button rather than a click handler on a div.
+ *
+ * **The heading id is generated per instance.** A native dialog must sit in the
+ * DOM to be openable, so a page with two of them — the calendar has a day
+ * dialog and an event dialog — keeps both mounted at all times. A hardcoded
+ * `aria-labelledby` target therefore produced *two elements with the same id*,
+ * and a screen reader resolving the reference finds whichever comes first: on
+ * the calendar, the event dialog would have announced the day dialog's title.
+ * `useId` is what makes that structurally impossible rather than a rule to
+ * remember.
+ *
+ * `wide` is for dialogs carrying a list rather than prose. The default width is
+ * a reading measure, which is right for the event record and too narrow for a
+ * day's timetable.
  */
 export function Dialog({
   open,
   onClose,
   title,
+  wide = false,
   children,
 }: {
   open: boolean;
   onClose: () => void;
   title: string;
+  wide?: boolean;
   children: ReactNode;
 }): ReactNode {
   const ref = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
 
   useEffect(() => {
     const element = ref.current;
@@ -48,8 +64,8 @@ export function Dialog({
   return (
     <dialog
       ref={ref}
-      className="dialog"
-      aria-labelledby="dialog-title"
+      className={wide ? 'dialog dialog--wide' : 'dialog'}
+      aria-labelledby={titleId}
       // Clicking the backdrop dismisses. The check is on the target being the
       // dialog itself: a click inside the panel bubbles to it otherwise.
       onClick={(event) => {
@@ -58,7 +74,7 @@ export function Dialog({
     >
       <div className="dialog__panel">
         <div className="dialog__head">
-          <h2 id="dialog-title" className="dialog__title">
+          <h2 id={titleId} className="dialog__title">
             {title}
           </h2>
           <button type="button" className="dialog__close" onClick={onClose}>

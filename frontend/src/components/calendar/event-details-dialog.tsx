@@ -33,13 +33,16 @@ export function EventDetailsDialog({
   onClose,
 }: {
   occurrence: Occurrence | null;
-  /** id → name, from the public `GET /branches` the page already loads. */
+  /** id → name, from the public `GET /branches` the page already loads. Used
+   *  only as a fallback: Revision 36 puts `branch_name` on the occurrence. */
   branchNames: Map<string, string>;
   onClose: () => void;
 }): ReactNode {
   const months = tList('calendar.months');
   const date = occurrence ? new Date(`${occurrence.date}T00:00:00`) : null;
-  const branch = occurrence?.branch_id ? branchNames.get(occurrence.branch_id) : undefined;
+  const branch =
+    occurrence?.branch_name ??
+    (occurrence?.branch_id ? branchNames.get(occurrence.branch_id) : undefined);
 
   return (
     <Dialog
@@ -49,6 +52,13 @@ export function EventDetailsDialog({
     >
       {occurrence && date ? (
         <>
+          {/* The description leads, because it is prose the reader wants before
+              a table of attributes — and it is the one field that cannot be
+              scanned. */}
+          {occurrence.description ? (
+            <p className="details__description">{occurrence.description}</p>
+          ) : null}
+
           <dl className="details">
             <dt>{t('calendar.detailsDate')}</dt>
             <dd>
@@ -77,6 +87,30 @@ export function EventDetailsDialog({
             <dt>{t('calendar.detailsKind')}</dt>
             <dd>{t(occurrence.kind === 'group' ? 'calendar.kindGroup' : 'calendar.kindEvent')}</dd>
 
+            {/* Recurrence is meaningful only when there is one; `none` is the
+                default every event carries, so printing "لا يتكرر" on every
+                single item would be noise. */}
+            {occurrence.recurrence && occurrence.recurrence !== 'none' ? (
+              <>
+                <dt>{t('calendar.detailsRecurrence')}</dt>
+                <dd>{recurrenceLabel(occurrence.recurrence)}</dd>
+              </>
+            ) : null}
+
+            {occurrence.category_name ? (
+              <>
+                <dt>{t('calendar.detailsCategory')}</dt>
+                <dd>{occurrence.category_name}</dd>
+              </>
+            ) : null}
+
+            {occurrence.level_name ? (
+              <>
+                <dt>{t('calendar.detailsLevel')}</dt>
+                <dd>{occurrence.level_name}</dd>
+              </>
+            ) : null}
+
             {branch ? (
               <>
                 <dt>{t('calendar.detailsBranch')}</dt>
@@ -84,11 +118,18 @@ export function EventDetailsDialog({
               </>
             ) : null}
 
+            {occurrence.room_name ? (
+              <>
+                <dt>{t('calendar.detailsRoom')}</dt>
+                <dd>{occurrence.room_name}</dd>
+              </>
+            ) : null}
+
             {occurrence.instructors.length > 0 ? (
               <>
                 <dt>{t('calendar.detailsInstructors')}</dt>
                 {/* Rendered exactly as returned — the backend already decided
-                    which name is public (Revision 36.1). */}
+                    which name is public (Revision 36.1, §20 rule 21). */}
                 <dd>{occurrence.instructors.map((i) => i.display_name).join('، ')}</dd>
               </>
             ) : null}
@@ -139,4 +180,18 @@ function visibilityLabel(visibility: string): string {
   const key = `calendar.visibility${visibility.charAt(0).toUpperCase()}${visibility.slice(1)}`;
   const label = t(key);
   return label === key ? visibility : label;
+}
+
+/**
+ * The recurrence enum, translated. Same fallback discipline as visibility: a
+ * pattern added server-side shows its raw value rather than vanishing.
+ *
+ * `biweekly_alternating` is the one §4.4 singles out as needing explicit
+ * modelling and testing, so it gets a label that says what it actually means
+ * rather than a transliteration.
+ */
+function recurrenceLabel(recurrence: string): string {
+  const key = `calendar.recurrence.${recurrence}`;
+  const label = t(key);
+  return label === key ? recurrence : label;
 }

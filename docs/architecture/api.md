@@ -192,6 +192,17 @@ carrying description, recurrence, branch and room names, category, level, and in
 so opening an event costs **no further request**. The alternative was an N+1 on a public
 screen.
 
+**And a third, added when the screen was built:** the bootstrap takes an optional
+`?category_id=` that narrows **only** its Level list. That parameter exists because §4.4
+requires the category→level narrowing to happen *server-side*, *"so the client never filters a
+list it was handed"* — client-side filtering would have been one line and would have violated
+the clause. The narrowing is scoped as tightly as the rule needs: everything else in the
+payload is the calendar's chrome regardless of the selection.
+
+An unknown id returns an **empty** list rather than silently widening to all levels, on the
+principle that **a filter which quietly stops filtering is worse than one that returns
+nothing** — the screen would otherwise show every level while claiming to show one category's.
+
 ## Public endpoints
 
 Three routes are anonymous, and each was a deliberate decision about what may be public:

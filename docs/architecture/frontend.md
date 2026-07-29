@@ -5,8 +5,8 @@
 React 19 + Vite 8, TypeScript strict, **no runtime dependencies beyond React itself.**
 
 > **Status:** a public shell. The landing page, login, OAuth error states, account status
-> screens, the public branch directory, and the calendar are built. **There are no
-> authenticated screens yet** — the M1–M3 endpoints have no interface driving them. This
+> screens, the public branch directory, and the **full dual calendar** are built. **There are
+> no authenticated screens yet** — the M1–M3 endpoints have no interface driving them. This
 > page describes what exists and the patterns the rest will follow.
 
 ## Dependency posture
@@ -149,21 +149,84 @@ The registry is build-once-reuse, and duplicating one per page is prohibited:
 `DualDateDisplay` carries a rule from the calendar design: it renders **the Gregorian date
 alone** when the Hijri month has not been published. No placeholder, no computed guess.
 
+`Dialog` takes a `wide` variant, for a dialog carrying a **list** rather than prose — the
+default width is a reading measure, which is right for an event record and too narrow for a
+day's timetable.
+
 ## The calendar page, as a worked example
 
-The calendar is decomposed into atomic components — toolbar, branch selector, month
-selector, grid, day cell, selected-day card, event chip, details dialog — each with a single
-responsibility.
+The most complete screen in the client, and the one whose decisions generalise furthest.
 
-Two decisions from its build are worth carrying forward:
+Decomposed into atomic components — title, toolbar, month selector, three filter selects,
+grid, day cell, event chip, day dialog, details dialog — each with a single responsibility.
 
-**The event details are a dialog, not a panel below the calendar.** Decided on the page's
-own shape: the grid claims most of the viewport height, so a panel underneath would open
-below the fold and make every click a scroll. The dialog keeps the grid in place, works as a
-sheet on a phone, and scrolls internally.
+### Two requests, never a third
 
-**A field with no value is absent, not shown empty.** An empty row claims the value *is*
-blank, which is a different statement from *"not recorded"*.
+| Request | Returns | Cached |
+|---|---|---|
+| `GET /calendar/bootstrap` | The **chrome**: Hijri days, month metadata, categories, levels, branches | 5 min + ETag |
+| `GET /calendar` | The **occurrences**, each self-sufficient | No |
+
+Opening a day or an event costs **nothing further**. That is what
+[occurrence self-sufficiency](calendar-and-hijri.md#the-calendar-screens-two-requests) buys,
+and it is why the details dialog needs no loading state.
+
+### The client computes no dates
+
+The dual title renders `gregorian_months` and `hijri.months` **as the backend assembled
+them**: one entry renders one name, two render both joined by a slash. A Gregorian month
+straddling two Hijri months therefore needs no special case in the client — which is the
+whole point, because computing a Hijri date in a client is prohibited outright (§20 rule 14).
+
+Per-cell Hijri numbers come from `hijri.days`, keyed once into a map for O(1) lookup.
+
+### Absence is rendered as absence
+
+The rule appears three times on this screen, and it is the same rule each time:
+
+- A day whose Hijri month is **not recorded** shows **no Hijri number** — not a dash, not a
+  computed guess. An empty slot is reserved so the Gregorian number does not shift.
+- When **no** month in view is recorded, the title's Hijri side **and its divider** are
+  omitted entirely rather than rendered blank.
+- A field the backend did not send is **absent** from the details dialog. An empty row claims
+  the value *is* blank, which is a different statement from *"not recorded"*.
+
+### Two dialogs, and why
+
+**Clicking a day** opens the full day programme; **clicking an event** opens its record. Both
+are dialogs rather than panels, decided on the page's shape: the grid now claims nearly the
+full viewport width and most of its height, so anything below it opens off-screen and turns
+every click into a scroll.
+
+The day dialog **replaced a panel** that used to sit beneath the grid. Removing it is what
+let the cells grow to hold a real day's programme — the cell is the compact view, and the
+dialog is the complete one, which is what makes the cell's compactness affordable.
+
+### Filters: the dependency is server-side
+
+Branch, category, and level. **Selecting a category re-requests the bootstrap with
+`category_id`**, and the server returns only that category's levels.
+
+This is not a preference. §4.4 requires the narrowing to happen server-side *"so the client
+never filters a list it was handed"*, and the level selector is built so that rule cannot be
+broken: **it has no category prop at all.** There is nothing in it to filter with.
+
+Changing category **resets the level**, in the page rather than in either select — the two
+are one filter with a dependency, and the reset belongs where that relationship is visible.
+Without it, a level from the previous category would silently filter the grid to nothing
+while both selects looked perfectly reasonable.
+
+### A defect worth remembering: the shared dialog id
+
+A native `<dialog>` must be in the DOM to be openable, so a page with two of them keeps both
+mounted permanently. The shared `Dialog` hardcoded `aria-labelledby="dialog-title"` — which
+was harmless with one dialog and became **two elements with the same id** the moment the
+calendar had two. A screen reader resolving the reference finds whichever comes first, so the
+event dialog would have announced the *day* dialog's title.
+
+Fixed with `useId`, which makes it structurally impossible rather than a rule to remember.
+The lesson generalises: **a hardcoded id in a reusable component is a latent collision**, and
+it stays invisible until the component is used twice on one page.
 
 ## Toasts
 

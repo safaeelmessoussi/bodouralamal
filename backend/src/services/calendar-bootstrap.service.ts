@@ -53,10 +53,24 @@ const MS_PER_DAY = 86_400_000;
  *  expand a day list forever. */
 export const MAX_RANGE_DAYS = 366;
 
+/**
+ * Narrows the Level list to one Category when given.
+ *
+ * **Server-side by rule, not by preference.** §4.4 requires that selecting a
+ * Category restricts the Level list *server-side*, *"so the client never filters
+ * a list it was handed"* — and Revision 36 names the parameter (`?category_id=`).
+ * Filtering client-side would be the obvious shortcut and would violate both.
+ *
+ * Absent means every Level, which is what "no category selected" means on the
+ * screen; an unknown id yields an empty list rather than silently falling back
+ * to all Levels, because a filter that quietly stops filtering is worse than one
+ * that returns nothing.
+ */
 export async function calendarBootstrap(
   prisma: PrismaClient,
   from: Date,
   to: Date,
+  categoryId?: string | undefined,
 ): Promise<CalendarBootstrap> {
   // Widened by a month on each side for the same reason the calendar read is:
   // resolution walks BACK to the month containing a date, so a day early in
@@ -80,7 +94,7 @@ export async function calendarBootstrap(
       orderBy: [{ displayOrder: { sort: 'asc', nulls: 'last' } }, { name: 'asc' }, { id: 'asc' }],
     }),
     prisma.level.findMany({
-      where: { deletedAt: null },
+      where: { deletedAt: null, ...(categoryId ? { categoryId } : {}) },
       select: { id: true, name: true, categoryId: true, displayOrder: true },
       orderBy: [{ displayOrder: { sort: 'asc', nulls: 'last' } }, { name: 'asc' }, { id: 'asc' }],
     }),

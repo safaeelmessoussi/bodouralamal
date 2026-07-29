@@ -14,7 +14,7 @@ Four layers, each testing something the others structurally cannot.
 **Coverage: ≥ 80 % on services and policies.** No coverage gate on generated or boilerplate
 code — a coverage number that counts generated clients measures nothing.
 
-Current totals: **102 backend unit · 473 integration · 48 frontend**.
+Current totals: **102 backend unit · 483 integration · 63 frontend**.
 
 ## Running them
 
@@ -41,6 +41,11 @@ Not mocks. The properties being checked **do not exist in a mock**:
 
 A mock returns whatever you told it to. The whole point of these tests is to find out what
 PostgreSQL, MinIO, and Nginx *really* do.
+
+**Some of the contract lives in headers.** The shared HTTP helper therefore returns
+`res.headers` alongside status and body — the calendar bootstrap's `Cache-Control` and `ETag`
+are a stated part of that endpoint's behaviour, and a body-only assertion cannot see whether
+the policy actually shipped.
 
 ## Test the property, not the path
 

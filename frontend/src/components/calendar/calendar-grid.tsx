@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 
-import type { Occurrence } from '../../adapters/calendar.js';
+import type { HijriDay, Occurrence } from '../../adapters/calendar.js';
 import { monthGrid, toIsoDate } from '../../lib/dates.js';
 import { t, tList } from '../../i18n/index.js';
 import { CalendarDayCell } from './calendar-day-cell.js';
@@ -16,6 +16,7 @@ import { CalendarDayCell } from './calendar-day-cell.js';
 export function CalendarGrid({
   month,
   byDate,
+  hijriByDate,
   today,
   selected,
   onSelect,
@@ -23,6 +24,9 @@ export function CalendarGrid({
 }: {
   month: Date;
   byDate: Map<string, Occurrence[]>;
+  /** Recorded official Hijri days, keyed by ISO date — absent for a month the
+   *  Ministry has not yet announced (Revision 31). */
+  hijriByDate: Map<string, HijriDay>;
   today: Date;
   selected: Date | null;
   onSelect: (date: Date) => void;
@@ -51,6 +55,7 @@ export function CalendarGrid({
               <CalendarDayCell
                 key={date ? toIsoDate(date) : `blank-${index}-${dayIndex}`}
                 date={date}
+                hijri={date ? (hijriByDate.get(toIsoDate(date)) ?? null) : null}
                 occurrences={date ? (byDate.get(toIsoDate(date)) ?? []) : []}
                 isToday={date ? toIsoDate(date) === toIsoDate(today) : false}
                 isSelected={date && selected ? toIsoDate(date) === toIsoDate(selected) : false}

@@ -16,6 +16,15 @@
 export interface HttpResponse<B = Record<string, unknown>> {
   status: number;
   body: B;
+  /**
+   * The response headers.
+   *
+   * Exposed because some of the contract lives in them and nowhere else — the
+   * calendar bootstrap's `Cache-Control` and `ETag` (TD-3.10) are a stated part
+   * of that endpoint's behaviour, and a body-only assertion cannot see whether
+   * the policy actually shipped.
+   */
+  headers: Headers;
 }
 
 export interface CallOptions {
@@ -74,6 +83,6 @@ export async function httpCall<B = Record<string, unknown>>(
     } catch {
       parsed = {} as B;
     }
-    return { status: res.status, body: parsed };
+    return { status: res.status, body: parsed, headers: res.headers };
   }
 }

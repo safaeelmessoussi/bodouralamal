@@ -16,6 +16,11 @@
   color: var(--color-text);
   box-shadow: var(--shadow-md);
 }
+/* For a dialog carrying a LIST rather than prose — a day's timetable needs the
+   width that a reading measure denies it. */
+.dialog--wide {
+  width: min(100% - var(--space-8), 46rem);
+}
 .dialog::backdrop {
   background: var(--color-backdrop);
 }

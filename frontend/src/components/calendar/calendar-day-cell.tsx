@@ -1,24 +1,36 @@
 import type { ReactNode } from 'react';
 
-import type { Occurrence } from '../../adapters/calendar.js';
+import type { HijriDay, Occurrence } from '../../adapters/calendar.js';
 import { toIsoDate } from '../../lib/dates.js';
 import { t } from '../../i18n/index.js';
 import { EventChip } from './event-chip.js';
 
 /**
- * One day in the month grid.
+ * One day in the month grid, carrying **both calendars**.
  *
- * A `<button>` rather than a styled `<div>`: selecting a day is an action, and
- * the element has to match it for keyboard and screen-reader users. Padding
- * cells render as an inert `<td>` so the grid keeps its shape without offering
- * a control that does nothing.
+ *     ┌──────────────────────────┐
+ *     │ ٢٣ (hijri)      23 (greg)│   ← green left, orange right
+ *     │ ─────────────────────────│
+ *     │ [ event ]                │
+ *     │ [ event ]                │
+ *     └──────────────────────────┘
+ *
+ * **The two numbers are a fixed header, not part of the scrolling list.** They
+ * sit in their own row above an independently-scrolling event area, so a day
+ * with twenty activities still shows its date — the alternative (numbers in
+ * normal flow) pushes them out of view exactly when a busy day most needs
+ * identifying.
+ *
+ * The Hijri number is rendered **only when the backend supplied one**. A month
+ * the Ministry has not announced leaves the slot empty rather than showing a
+ * computed guess or a placeholder dash (Revision 31, §20 rule 14).
+ *
+ * A `<button>` wraps the date rather than the whole cell: the cell now contains
+ * event buttons, and nesting buttons is invalid HTML that breaks keyboard order.
  */
-/** Above this a day is summarised rather than listed, so one busy day cannot
- *  stretch its whole week. */
-const MAX_VISIBLE = 4;
-
 export function CalendarDayCell({
   date,
+  hijri,
   occurrences,
   isToday,
   isSelected,
@@ -26,6 +38,7 @@ export function CalendarDayCell({
   onOpenEvent,
 }: {
   date: Date | null;
+  hijri: HijriDay | null;
   occurrences: Occurrence[];
   isToday: boolean;
   isSelected: boolean;
@@ -35,10 +48,7 @@ export function CalendarDayCell({
   if (!date) return <td className="cal-cell cal-cell--blank" aria-hidden="true" />;
 
   const iso = toIsoDate(date);
-  // Cells are tall enough now to carry a real day's programme rather than a
-  // teaser; the cap exists only so an unusually busy day cannot break the row.
-  const shown = occurrences.slice(0, MAX_VISIBLE);
-  const hidden = occurrences.length - shown.length;
+  const count = occurrences.length;
 
   return (
     <td className="cal-cell" role="gridcell" aria-selected={isSelected}>
@@ -47,36 +57,47 @@ export function CalendarDayCell({
           'cal-day',
           isToday ? 'is-today' : '',
           isSelected ? 'is-selected' : '',
-          occurrences.length > 0 ? 'has-events' : '',
+          count > 0 ? 'has-events' : '',
         ]
           .filter(Boolean)
           .join(' ')}
       >
-        {/* The date is its own control, so a day can be selected without the
-            whole cell (which now contains buttons) becoming one. Nested
-            buttons are invalid HTML and break keyboard order. */}
+        {/* Selecting the day opens the day dialog. The accessible name carries
+            the full date and the activity count, because the visible content is
+            two bare numerals. */}
         <button
           type="button"
           className="cal-day__select"
           onClick={() => onSelect(date)}
-          // The visible number alone would read as a bare digit; the full date
-          // and the activity count are what make the cell meaningful.
-          aria-label={`${iso}${occurrences.length ? ` — ${t('calendar.eventCount')}: ${occurrences.length}` : ''}`}
+          aria-label={`${iso}${count ? ` — ${t('calendar.eventCount')}: ${count}` : ''}`}
         >
-          <span className="cal-day__number" aria-hidden="true">
+          {/* RTL: the Hijri number is written first so it lands on the LEFT,
+              and the Gregorian on the right. Both are aria-hidden — the button
+              label above already states the date properly. */}
+          {hijri?.hijri_day != null ? (
+            <span className="cal-day__hijri" aria-hidden="true">
+              {hijri.hijri_day}
+            </span>
+          ) : (
+            <span className="cal-day__hijri cal-day__hijri--absent" aria-hidden="true" />
+          )}
+          <span className="cal-day__gregorian" aria-hidden="true">
             {date.getDate()}
           </span>
         </button>
-        <span className="cal-day__events">
-          {shown.map((occurrence) => (
-            <EventChip
-              key={`${occurrence.kind}-${occurrence.id}-${occurrence.date}`}
-              occurrence={occurrence}
-              onOpen={onOpenEvent}
-            />
-          ))}
-          {hidden > 0 ? <span className="cal-day__more">+{hidden}</span> : null}
-        </span>
+
+        {/* Every occurrence is rendered. The area scrolls rather than truncating
+            at a fixed count, so "how many fit" is a matter of cell height
+            instead of an arbitrary cap — which is what the taller cells buy. */}
+        {count > 0 ? (
+          <ul className="cal-day__events">
+            {occurrences.map((occurrence) => (
+              <li key={`${occurrence.kind}-${occurrence.id}-${occurrence.date}`}>
+                <EventChip occurrence={occurrence} onOpen={onOpenEvent} />
+              </li>
+            ))}
+          </ul>
+        ) : null}
       </div>
     </td>
   );
