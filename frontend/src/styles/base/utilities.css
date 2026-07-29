@@ -1,5 +1,21 @@
 /* Part of the design system — see `src/styles/index.css` for the layering. */
 
+/* Skeleton widths as modifiers — a `style` attribute cannot be themed, cannot
+   respond to a media query, and is invisible to the token guard. */
+.skeleton--title {
+  width: 45%;
+  height: 1.4rem;
+}
+.skeleton--wide {
+  width: 80%;
+}
+.skeleton--medium {
+  width: 60%;
+}
+.skeleton--narrow {
+  width: 70%;
+}
+
 .skeleton {
   height: 1.1rem;
   margin-bottom: 0.6rem;

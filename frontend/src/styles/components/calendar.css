@@ -63,7 +63,8 @@
 
 .cal-grid {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   table-layout: fixed;
   background: var(--color-surface-raised);
   border: 1px solid var(--color-border);
@@ -71,39 +72,51 @@
   overflow: hidden;
 }
 .cal-grid__weekday {
-  padding: 0.6rem 0.35rem;
+  padding: var(--space-3) var(--space-2);
   font-size: var(--font-size-xs);
   font-weight: 700;
+  letter-spacing: 0.02em;
   color: var(--color-text-muted);
   background: var(--color-background);
   border-block-end: 1px solid var(--color-border);
 }
 .cal-cell {
-  border: 1px solid var(--color-border);
+  /* Hairlines on two edges only: a full border around every cell reads as a
+     wall of boxes, where ruled lines let the eye scan a week across. */
+  border-block-end: 1px solid var(--color-border);
+  border-inline-start: 1px solid var(--color-border);
   padding: 0;
   vertical-align: top;
   /* A real day's programme, not a teaser. `height` on a table cell is a
      minimum, so a busy week grows rather than clipping. */
   height: 9.5rem;
 }
+.cal-cell:last-child {
+  border-inline-start: 0;
+}
+tr:last-child .cal-cell {
+  border-block-end: 0;
+}
 .cal-cell--blank {
-  background: color-mix(in srgb, var(--color-background) 60%, transparent);
+  background: color-mix(in srgb, var(--color-background) 55%, transparent);
 }
 
 .cal-day {
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: var(--space-2);
   width: 100%;
   height: 100%;
-  padding: 0.4rem;
+  padding: var(--space-2);
   text-align: start;
 }
 
 /* The date is the day-select control; the chips above it are their own
    buttons, so the cell is not one giant nested button. */
 .cal-day__select {
-  display: block;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
   width: 100%;
   padding: 0;
   border: 0;
@@ -118,21 +131,25 @@
 }
 .cal-day__number {
   font-weight: 700;
+  font-size: var(--font-size-md);
+  line-height: 1.1;
   font-variant-numeric: tabular-nums;
+  color: var(--color-accent);
 }
 .cal-day.is-today .cal-day__number {
   display: inline-grid;
   place-items: center;
-  width: 1.9rem;
-  height: 1.9rem;
+  width: 2.1rem;
+  height: 2.1rem;
   border-radius: var(--radius-full);
   background: var(--color-primary);
   color: var(--color-text-inverse);
 }
 .cal-day.is-selected {
-  outline: 2px solid var(--color-accent);
-  outline-offset: -2px;
-  background: color-mix(in srgb, var(--color-primary-soft) 70%, transparent);
+  /* An inset ring rather than an outline: it does not overlap the neighbouring
+     cell's hairline, so selecting a day no longer thickens the grid. */
+  box-shadow: inset 0 0 0 2px var(--color-accent);
+  background: color-mix(in srgb, var(--color-primary-soft) 55%, transparent);
 }
 .cal-day__events {
   display: flex;
@@ -141,7 +158,9 @@
   overflow: hidden;
 }
 .cal-day__more {
+  padding-inline: var(--space-2);
   font-size: var(--font-size-xs);
+  font-weight: 700;
   color: var(--color-text-muted);
 }
 
@@ -151,18 +170,23 @@
 .event-chip {
   display: block;
   width: 100%;
-  padding: 0.3rem 0.45rem;
+  /* Tighter than before, and unchanged in height: the gain comes from the
+     padding and the line-height, not from removing the time. */
+  padding: 0.25rem var(--space-2);
   border: 0;
   border-radius: var(--radius-md);
   font: inherit;
   font-size: var(--font-size-xs);
-  line-height: 1.35;
+  line-height: 1.3;
   text-align: start;
-  background: var(--color-primary-soft);
+  background: color-mix(in srgb, var(--color-primary-soft) 80%, var(--color-surface));
   color: var(--color-primary);
 }
 .event-chip--event {
-  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+  /* Lifted from 12% so the two kinds carry comparable weight — at the old
+     value the event card read as a faded version of the group card rather
+     than a different one. */
+  background: color-mix(in srgb, var(--color-accent) 16%, var(--color-surface));
   color: var(--color-accent);
 }
 .event-chip--interactive {
@@ -175,14 +199,22 @@
 .event-chip__title {
   display: block;
   font-weight: 700;
+  /* One line, ellipsised. `min-width: 0` is what actually lets the ellipsis
+     appear inside a flex/grid ancestor — without it the text forces the cell
+     wider instead of truncating. */
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 .event-chip__time {
   display: block;
+  font-size: 0.92em;
+  font-weight: 400;
   font-variant-numeric: tabular-nums;
-  opacity: 0.85;
+  /* A tone rather than transparency: opacity would also fade the background
+     it sits on, which is what made the card look washed out. */
+  color: color-mix(in srgb, currentcolor 72%, transparent);
 }
 
 .cal-sidebar {

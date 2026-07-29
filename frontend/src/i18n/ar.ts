@@ -115,6 +115,7 @@ export const ar = {
     detailsTime: 'التوقيت',
     detailsKind: 'النوع',
     detailsBranch: 'الفرع',
+    detailsResources: 'الموارد المرفقة',
     detailsVisibility: 'مستوى الظهور',
     openDetails: 'عرض التفاصيل',
     visibilityPublic: 'عام',

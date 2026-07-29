@@ -78,10 +78,13 @@ function BranchSkeletons(): ReactNode {
     <div className="grid grid--2" aria-hidden="true">
       {[0, 1].map((key) => (
         <div className="card" key={key}>
-          <div className="skeleton" style={{ width: '45%', height: '1.4rem' }} />
-          <div className="skeleton" style={{ width: '80%' }} />
-          <div className="skeleton" style={{ width: '60%' }} />
-          <div className="skeleton" style={{ width: '70%' }} />
+          {/* Widths come from modifier classes, not inline styles: a style
+              attribute cannot be themed, cannot respond to a media query, and
+              is invisible to the design-token guard. */}
+          <div className="skeleton skeleton--title" />
+          <div className="skeleton skeleton--wide" />
+          <div className="skeleton skeleton--medium" />
+          <div className="skeleton skeleton--narrow" />
         </div>
       ))}
     </div>

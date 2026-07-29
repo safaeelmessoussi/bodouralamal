@@ -77,6 +77,13 @@ export function CalendarPage(): ReactNode {
 
   const occurrences = load.kind === 'ready' ? load.occurrences : [];
 
+  /** Resolved once from the directory the page already holds — the dialog
+   *  shows a branch NAME without a second request or a hardcoded list. */
+  const branchNames = useMemo(
+    () => new Map(branches.map((branch) => [branch.id, branch.name])),
+    [branches],
+  );
+
   /** One pass, so neither the grid nor the panels re-scan the list per day. */
   const byDate = useMemo(() => {
     const map = new Map<string, Occurrence[]>();
@@ -153,7 +160,11 @@ export function CalendarPage(): ReactNode {
           </Container>
         </section>
       </main>
-      <EventDetailsDialog occurrence={openEvent} onClose={() => setOpenEvent(null)} />
+      <EventDetailsDialog
+        occurrence={openEvent}
+        branchNames={branchNames}
+        onClose={() => setOpenEvent(null)}
+      />
       <SiteFooter />
     </>
   );

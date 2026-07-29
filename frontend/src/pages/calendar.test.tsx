@@ -200,7 +200,7 @@ describe('event details', () => {
 
   it('the dialog renders nothing until an event is chosen', () => {
     const html = renderToStaticMarkup(
-      <EventDetailsDialog occurrence={null} onClose={() => undefined} />,
+      <EventDetailsDialog occurrence={null} branchNames={new Map()} onClose={() => undefined} />,
     );
     // The element exists (the native dialog must be in the DOM to be opened)
     // but carries no event content.
@@ -210,7 +210,8 @@ describe('event details', () => {
   it('the dialog labels every field rather than running them together', () => {
     const html = renderToStaticMarkup(
       <EventDetailsDialog
-        occurrence={occurrence({ visibility: 'public', hijri_date: '1447-12-29' })}
+        occurrence={occurrence({ visibility: 'public', hijri_date: '1447-12-29', branch_id: 'b1' })}
+        branchNames={new Map([['b1', 'مقر أمرشيش']])}
         onClose={() => undefined}
       />,
     );
@@ -224,7 +225,7 @@ describe('event details', () => {
 
   it('omits the Hijri line when the backend supplied none (Revision 31)', () => {
     const html = renderToStaticMarkup(
-      <EventDetailsDialog occurrence={occurrence()} onClose={() => undefined} />,
+      <EventDetailsDialog occurrence={occurrence()} branchNames={new Map()} onClose={() => undefined} />,
     );
     expect(html).not.toContain('details__hijri');
   });
