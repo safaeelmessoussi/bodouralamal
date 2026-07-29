@@ -1,7 +1,7 @@
 # Software Requirements Specification
 ## بذور الأمل — Institute Management Platform
 
-**Status:** Final MVP Blueprint (Revision 34 — invalid credentials on a public endpoint are anonymous, not an error), **immutable source of truth** — changed only by an explicit Document Owner revision, never by an implementing agent
+**Status:** Final MVP Blueprint (Revision 35 — public branch directory: contact fields on `Branch` and a public `GET /branches`), **immutable source of truth** — changed only by an explicit Document Owner revision, never by an implementing agent
 **Revision date:** 2026-07-26
 **Canonical location:** `docs/SRS.md` in the project repository
 **Document Owner:** [assign]
@@ -23,6 +23,18 @@ This is a standalone, self-contained specification. It does not reference extern
 * **§18 — Module Acceptance Checklists.**
 * **§19 — Environments, Deployment Pipeline & Testing Strategy.**
 * **§20 — AI Implementation Rules:** hard guardrails for any autonomous coding agent. §20 closes the document deliberately: it is the last thing an agent reads before writing code.
+
+**Revision 35 (Document Owner decision — the public branch directory, 2026-07-29):** §5.1 has always required the landing page to show a **branch list**, but nothing in the model or the route registry could serve one: `Branch` carried only `name`, `operational_start_date` and `display_order`, and the sole way to read a branch was `GET /admin/branches`, which Revision 26 restricts to Admin/Super Admin and which answers `401` to the anonymous visitor §5.1 is about. This revision closes both halves.
+
+**Five public fields join `Branch`** (§7): **`address`** (required), `phone`, `email`, **`opening_hours_ar`** (required), and `google_maps_url`. All are **public information about a physical place** — the sort a charity prints on a leaflet — which is what makes an anonymous endpoint appropriate for them and no other branch column.
+
+**Opening hours are one multiline Arabic text field, not structured data (Document Owner decision).** A weekday/interval model would be the reflex, and it is the wrong reflex here: the association's hours change for Ramadan and for exceptional weeks, and a structured model turns each of those into a schema conversation instead of an edit. Free text is administered by the person who knows the answer, renders exactly as written, and is honest about the fact that the platform is *displaying* a notice rather than *reasoning* about opening times. **Nothing may parse this field** — if scheduling logic ever needs machine-readable hours, that is a new field and a new revision, not an interpretation of this one.
+
+**No latitude/longitude (Document Owner decision).** `google_maps_url` is sufficient for the *"عرض الموقع على الخريطة"* action the landing page needs. Coordinates arrive only if embedded maps or a second map provider ever do — storing them now would be two representations of one fact, and the one nothing reads would drift.
+
+**Seeding is unchanged (recorded, because the first draft of this revision got it wrong):** §15.1 prohibits seeding Branches into production, and this revision does **not** create an exception — branches and their new contact fields are entered through the admin UI from real data (§2.3). The **development fixtures** (§15.2) carry the two real premises so the landing page renders against realistic data locally.
+
+**A dedicated public route, not a relaxed admin one:** **`GET /branches`** (TD-3.9), anonymous, returning **only** `id`, `name`, `address`, `phone`, `email`, `opening_hours_ar`, `google_maps_url` and `display_order`. **`version`, `operational_start_date`, `deleted_at`, `deleted_by`, `created_at` and `updated_at` are never exposed** — they are operational metadata, and a public endpoint that returns "everything except what we remembered to strip" is one careless `select` away from leaking. Widening `GET /admin/branches` was rejected for the same reason: an endpoint's audience is part of its contract, and one endpoint serving two audiences has to get the difference right on every future change. Soft-deleted branches never appear. Ordering follows §2.2 — `display_order ASC NULLS LAST`, then `name`, then `id`.
 
 **Revision 34 (Document Owner decision — invalid credentials on a public endpoint are anonymous, 2026-07-29):** closes an ambiguity the second Release-Candidate audit raised. §4.4 says the public tier is *"visible to unauthenticated visitors"* but never said what an **invalid or expired** credential means on an endpoint that is public by design; the implementation had chosen to refuse it with `401`. That choice is now reversed, and the rule is stated **project-wide** so it is decided once rather than per endpoint:
 
@@ -455,7 +467,7 @@ The registration/login entry is **OAuth-first**: the registration form is never 
 (The authoritative sitemap and navigation hierarchy is §14.1; this section describes each page's content and behavior. End-to-end journeys connecting these pages: §17.)
 
 ### 5.1 Public (unauthenticated)
-* **Landing Page (`/`)** — Association identity, mission, branch list, read-only public calendar, unrestricted public resources. Login/Register CTAs. (Language switcher ships with the FR/EN translations post-MVP, §10.1 — MVP is Arabic-only.)
+* **Landing Page (`/`)** — Association identity, mission, **branch list with contact details and a map link — served by the public `GET /branches` (TD-3.9, Revision 35) and never hardcoded, so a branch added in the back office appears here with no frontend change**, read-only public calendar, unrestricted public resources. Login/Register CTAs. (Language switcher ships with the FR/EN translations post-MVP, §10.1 — MVP is Arabic-only.)
 * **Registration Page (`/register`)** — "Continue with Google" entry executing the OAuth-first sequence (§4.1b); adult self-registration form or unified Parent + Child form with read-only pre-populated Google email; generic consent checkbox and explicit Parental Media Consent checkbox for minors; submits into `Pending`.
 * **Login Page (`/login`)** — Google OAuth button only. No password fields. Deactivated and Pending states per §4.1/§2.1.
 * **Content Access Changed Page (`/content-unavailable`)** — friendly error page for stale public links to now-private content (§3.1).
@@ -537,6 +549,10 @@ The registration/login entry is **OAuth-first**: the registration form is never 
 * **Role** — **seeded during bootstrap (§15.1) and not user-manageable in the MVP; no role CRUD exists or is to be built.** The entity and its relations are nonetheless first-class: the schema must not prevent future role creation, and **Super Admin role management is an intentional post-MVP extension point requiring no architectural change** (Revision 26).
 * **UserBranchRole** — many-to-many with branch scope; unique on `(user_id, role_id, branch_id)`, so one user may hold the same role once per branch. **`branch_id IS NULL` means ALL branches for that assignment** (Revision 24) — it is not a Super Admin marker; Super Admin's bypass follows from its role.
 * **Branch** — physical locations with single Arabic `name` (collated `ar-x-icu`), `operational_start_date`, optional integer `display_order`.
+  * **Public contact fields (Revision 35).** `address` (required), `phone` (optional), `email` (optional), `opening_hours_ar` (required), `google_maps_url` (optional). These are the fields `GET /branches` (TD-3.9) exposes to anonymous visitors, and the **only** branch columns that may ever be public — everything else on this entity is operational metadata.
+  * **`opening_hours_ar` is free multiline Arabic text and is never parsed.** Ramadan and exceptional weeks change the hours; free text lets the person who knows edit them, where a structured model would make each change a schema conversation. Machine-readable hours, if ever needed, are a new field and a new revision — never an interpretation of this one.
+  * **No coordinates in the MVP.** `google_maps_url` serves the map action; latitude/longitude arrive only with embedded maps or a second provider, because two representations of one fact means the unread one drifts.
+  * Columns are added **nullable at the database level** so branches predating this revision need no invented address (the same treatment `User.sex` received in Revision 27); *required* is enforced at the write boundary by TD-9, which is where a real value can actually be demanded.
 * **Room** — rooms linked to specific branches.
 * **Category** — academic track with single Arabic `name` (collated) and optional `display_order`.
 * **Level** — level sub-track with single Arabic `name` (collated), `gender_restriction`, optional `display_order` (scoped within its Category).
@@ -732,6 +748,7 @@ consent_forced_private = true → public   ONLY via Admin override with justific
 |---|---|---|---|---|---|---|
 | Manage system settings, `display_order`, AcademicYear | ✔ | ⊘ | ⊘ | ⊘ | ⊘ | ⊘ |
 | **Record and publish the official Hijri calendar (`HijriMonthStart`)** *(Revision 31; Revision 32 — the Super Admin records the Ministry's announcement, and importing is not an MVP feature)* | ✔ | ⊘ | ⊘ | ⊘ | ⊘ | ⊘ |
+| **Read the public branch directory** *(Revision 35)* — name, address, phone, email, opening hours and map link, via `GET /branches`; no other branch column is ever public | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ (anonymous too) |
 | **Read the Hijri calendar** *(Revision 31)* — the published overlay travels with the calendar payload and is visible to **everyone, including anonymous visitors**, exactly as the public tier of `/calendar` is | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ (public tier) |
 | **Manage reference/configuration data** — Branches, Rooms, Levels, Categories, Subjects, AcademicYear, SystemSettings, `display_order`, the Hijri calendar (`HijriMonthStart`, Revision 31), `operational_start_date` *(Revision 26)* | ✔ | ⊘ | ⊘ | ⊘ | ⊘ | ⊘ |
 | **Read reference/configuration data** for operational work (branch / level / room selection) *(Revision 26; Teacher corrected to `⊘` by Revision 30)* | ✔ | ✔ (own branches) | ⊘ | ⊘ | ⊘ | ⊘ |
@@ -841,6 +858,21 @@ POST /students/{id}/quran-logs            PATCH /quran-logs/{id}   DELETE /quran
 GET /jobs/{id}   → { state: created|active|completed|failed, progress, result|error }
 ```
 Any endpoint that enqueues a job returns `202 Accepted` with `{ job_id }`.
+
+**3.9 Public branch directory (Revision 35)**
+```
+GET /branches   (public — anonymous) → the §5.1 landing-page branch list
+                  Returns ONLY: id, name, address, phone, email,
+                  opening_hours_ar, google_maps_url, display_order.
+                  Never: version, operational_start_date, created_at,
+                  updated_at, deleted_at, deleted_by.
+                  Soft-deleted branches are excluded. Ordered by
+                  display_order ASC NULLS LAST, then name, then id (§2.2).
+                  Paginated per TD-10 like every other list endpoint.
+```
+This is deliberately **not** `GET /admin/branches` with the permission relaxed: an
+endpoint's audience is part of its contract, and one endpoint serving two
+audiences has to get the difference right on every future change.
 
 **3.8 Standard error contract (all endpoints)**
 
@@ -1030,6 +1062,7 @@ Every action below writes an `AuditLog` row (actor, timestamp, action_type, targ
 * Arabic name: max 120 chars. French name (person profiles only): max 120 chars. Nickname: max 60 chars. Structural entity `name`: max 120 chars, Arabic.
 * Notes: max 2,000 chars. Consent-override justification: 10–1,000 chars (mandatory).
 * Rejection/approval reasons: max 500 chars.
+* **Branch public fields (Revision 35):** `address` **required**, 5–300 chars. `phone` optional, and where present follows the same rule as any phone above (5–20 chars, digits/`+`/spaces). `email` optional, max 254 chars, stored and compared lowercase like every other address (TD-12). `opening_hours_ar` **required**, 3–500 chars, newlines permitted — it is displayed verbatim and never parsed (§7). `google_maps_url` optional, max 500 chars, and **must be an absolute `https://` URL**, because the value becomes an outbound link on a public page and a relative or `javascript:` value there is an injection vector rather than a typo.
 
 **Upload limits & MIME whitelist:**
 * Audio recordings: max **100 MB** (Revision 12 — reduced from 500 MB: ≈14 MB/hour at 32 kbps mono speech, so 100 MB ≈ 6+ hours; shrinks the R-9 single-shot blast radius, the disk budget, and the Nginx body limit together); MIME `audio/webm`, `audio/mp4`, `audio/ogg`, `audio/mpeg`, `audio/wav`.
@@ -1299,6 +1332,7 @@ Two seed tiers. **Production seed** runs on every fresh deployment (idempotent �
 ### 15.1 Production Seed (mandatory, idempotent)
 * **Super Admin (bootstrap only, Revision 22):** `SUPER_ADMIN_EMAIL` (TD-13) is a **bootstrap configuration value, not an operational one**. The seed reads it **only when no active Super Administrator exists** — an `active` `User` with `deleted_at IS NULL` holding a live `super_admin` assignment. **It is not required at boot and need not be present at all after bootstrap (Revision 23)**; if the gate is open and the value is absent, the seed **fails loudly naming the variable** rather than completing without an administrator. **Once at least one such administrator exists, `SUPER_ADMIN_EMAIL` is ignored permanently** and re-running the seed is a **no-op for administrators**; all subsequent role management (assignment, promotion, demotion, suspension) happens **exclusively through the application**, and the **database is the single source of truth for administrator accounts**. When the gate is open, resolution is, in order: **(1)** if the lowercased address already belongs to a non-deleted account — matched on a bound `UserIdentity.email` **or** on `User.pre_provisioned_email`, both lowercased (TD-12) — that account is **granted** the unscoped `super_admin` role, and is **set `active`** if it is not already, because bootstrap must yield a usable administrator; **(2)** otherwise 1 `User` (status `active`) is created with **`pre_provisioned_email` set to the lowercased `SUPER_ADMIN_EMAIL`** (§7 Revision 15), holding `super_admin`, its `UserIdentity` **created on first Google login** (§4.1b step 4b). **No placeholder identity row is seeded** (§7), and no password exists anywhere. **If the address belongs to a soft-deleted account the seed fails loudly, naming the conflict, and creates nothing** — §4.1 forbids silent reactivation (Revision 20), and the TD-6 partial unique index on `pre_provisioned_email` spans deleted rows, so a parallel account would violate it. **Recovery, intended:** if every Super Administrator is suspended or deleted the gate reopens, which is the sanctioned lockout-recovery path; it grants no new authority, since running the seed (§19.1 step 6, never on container boot) already requires `DATABASE_URL`.
 * **Roles:** `super_admin`, `admin`, `teacher`, `student`, `parent`. Seeded here and **not user-manageable in the MVP** (§7, Revision 26); a future revision may introduce Super Admin role management without architectural change.
+* **Branch contact fields (Revision 35)** — the five public fields are **not** added to the production seed. §15.1 already forbids seeding Branches there, and Revision 35 changes nothing about that: branches are entered through the admin UI from real data (§2.3), and the new fields are entered with them. **The development fixtures (§15.2) do carry the two real premises** — مقر أمرشيش and مقر تاركة — so the §5.1 landing page renders against realistic data locally without any production seed acquiring branch rows it is prohibited from having.
 * **Categories** — generic educational stages, sex never encoded in the name (Revision 27); single Arabic `name` with `display_order`: 1 **الكبار** (Adult), 2 **اليافعون** (Teen), 3 **الطفل** (Child). A deployment seeded before Revision 27 carries the legacy names المرأة / اليافعات; the seed renames those rows in place rather than creating duplicates, and a forward-only migration performs the same rename for existing data (TD-6b: data preservation, no schema rename).
 * **Levels:** Adult 0–7 (level 0 = literacy), Teen 1–6, Child 0–6 — each with `display_order` = level number within its Category. **`gender_restriction` is seeded to express the MVP's intended availability (Revision 27), not left blanket `any`:** Adult levels `girls_only`, Teen levels `girls_only`, Child levels `any`. This is what makes *"Teen + Male is unavailable"* a fact a query can read rather than an implication of a category name. A Super Admin may add Levels with other restrictions at any time to open further combinations (§4.4b).
 * **Subjects:** تفسير (Tafsir), فقه (Fiqh), محو الأمية (Literacy) — *the Quran is deliberately not a Subject* (§4.4b); extendable by Admins.

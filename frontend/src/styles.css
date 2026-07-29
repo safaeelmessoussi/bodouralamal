@@ -799,3 +799,44 @@ img {
     animation-duration: 0.01ms !important;
   }
 }
+
+/* ── Branch cards (§5.1, Revision 35) ────────────────────────────────────── */
+
+.branch-card__address {
+  color: var(--ink-soft);
+}
+.branch-card__contact {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+.branch-card__contact a {
+  color: var(--brand-700);
+  text-decoration: none;
+  width: fit-content;
+}
+.branch-card__contact a:hover {
+  text-decoration: underline;
+}
+/*
+ * `pre-line` is what makes the free-text opening hours render as the author
+ * wrote them — the field is displayed verbatim and never parsed (§7), so the
+ * line breaks are the content.
+ */
+.branch-card__hours {
+  white-space: pre-line;
+  padding-block-start: 0.4rem;
+  border-block-start: 1px solid var(--rule);
+  color: var(--ink-soft);
+}
+.branch-card__action {
+  margin-block-start: auto;
+  padding-block-start: 0.9rem;
+}
+
+/* A disabled action keeps the card's shape without pretending to be clickable. */
+.btn.is-disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  pointer-events: none;
+}

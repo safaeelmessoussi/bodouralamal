@@ -53,6 +53,12 @@ export function createBranch(prisma: PrismaClient) {
         ? { operationalStartDate: body.operational_start_date }
         : {}),
       ...(body.display_order !== undefined ? { displayOrder: body.display_order } : {}),
+      // Revision 35 public fields — same absent-stays-absent rule.
+      ...(body.address !== undefined ? { address: body.address } : {}),
+      ...(body.phone !== undefined ? { phone: body.phone } : {}),
+      ...(body.email !== undefined ? { email: body.email } : {}),
+      ...(body.opening_hours_ar !== undefined ? { openingHoursAr: body.opening_hours_ar } : {}),
+      ...(body.google_maps_url !== undefined ? { googleMapsUrl: body.google_maps_url } : {}),
     });
     res.status(201).json(branch);
   };
@@ -67,6 +73,12 @@ export function updateBranch(prisma: PrismaClient) {
         ? { operationalStartDate: body.operational_start_date }
         : {}),
       ...(body.display_order !== undefined ? { displayOrder: body.display_order } : {}),
+      // Revision 35 public fields — same absent-stays-absent rule.
+      ...(body.address !== undefined ? { address: body.address } : {}),
+      ...(body.phone !== undefined ? { phone: body.phone } : {}),
+      ...(body.email !== undefined ? { email: body.email } : {}),
+      ...(body.opening_hours_ar !== undefined ? { openingHoursAr: body.opening_hours_ar } : {}),
+      ...(body.google_maps_url !== undefined ? { googleMapsUrl: body.google_maps_url } : {}),
     });
     res.json(branch);
   };

@@ -75,6 +75,9 @@ GET /admin/hijri-calendar/{year}/history      # TD-3.4 R31, TD-8
 #  Ministry source exists, so it could only ever answer 'not configured'.)
 POST /admin/branches/{id}/event-backfill      # TD-3.4, §4.4
 
+# ── Public branch directory (TD-3.9, Revision 35)
+GET /branches                                 # TD-3.9; anonymous; §5.1 landing-page branch list
+
 # ── Branches & Rooms CRUD (Revision 21: documented by the §5.6 screen and the
 #    §14.2 screen standard; TD-3 seeds only the backfill route above)
 GET /admin/branches                           # §5.6, §14.2 Branches screen

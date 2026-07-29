@@ -211,7 +211,7 @@ because the properties it checks — transaction atomicity, constraint enforceme
 signatures surviving the proxy — do not exist in a mock. It runs serially, since the suites share one
 database.
 
-Current totals: **97 unit tests and 466 integration tests**.
+Current totals: **97 unit tests and 473 integration tests**.
 
 ---
 

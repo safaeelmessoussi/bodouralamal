@@ -2,7 +2,7 @@
 
 > **Backend Release-Candidate status (2026-07-29, SRS Revision 33).** M0–M3 are **complete on the backend**:
 > every TD-3 endpoint for those milestones is implemented, documented and router-reconciled, and both the
-> §18 *Registration, Approvals & Family* and *Scheduling & Calendar* checklists are green. 97 unit + 466
+> §18 *Registration, Approvals & Family* and *Scheduling & Calendar* checklists are green. 97 unit + 473
 > integration tests, six CI guards, zero contract drift. The only M0–M3 item still open is **frontend**
 > (`ChildContextSwitcher`, owned by v0). M4–M8 below are future milestones and are genuinely unstarted.
 **Granular implementation checklist. Mutable — agents tick items (`[x]`) as work completes and may split items into sub-items, but never add tasks for post-MVP features (SRS §10.1) and never contradict the SRS. Milestone order: `docs/IMPLEMENTATION_PLAN.md`. Completion log: `docs/CHANGES.log`. SRS references in parentheses are the authority for each item.**
@@ -189,6 +189,15 @@
   - ✓ *FamilyLink pending grants zero visibility* — pending and rejected links both resolve to nothing (BR-4)
   - ✓ *X-Active-Child-ID middleware* — all five specified cases plus soft-deleted link/child, malformed and empty headers, the dual-role ordering rule, and the Parent-only bypass being unreachable: **15 tests**
   - △ *child context switcher drives the header* — frontend (v0); the backend contract it consumes is complete
+
+- [x] **Revision 35 — public branch directory** (§5.1, §7, TD-2, TD-3.9, TD-9)
+  - ✓ `Branch` gains `address`, `phone`, `email`, `opening_hours_ar`, `google_maps_url`; nullable in the database (branches predating the revision need no invented address), *required* enforced at the write boundary by TD-9
+  - ✓ **Opening hours are free multiline Arabic text and are never parsed** — Ramadan and exceptional weeks change them, and a structured model would make each change a schema conversation
+  - ✓ No coordinates: `google_maps_url` serves the map action; lat/lng arrive only with embedded maps, since two representations of one fact means the unread one drifts
+  - ✓ **Dedicated public `GET /branches`**, not a relaxed admin route — an endpoint's audience is part of its contract. Explicit `select` projection, soft-deleted excluded, `display_order` honoured, TD-10 envelope
+  - ✓ Tests — 7 HTTP tests incl. *exposes nothing beyond the documented projection*; three mutations caught (soft-deleted leak, ordering ignored, a field dropped)
+  - ✓ Frontend — «فروعنا ومعلومات التواصل» renders entirely from the endpoint; a branch added in the back office appears with no frontend change, and a null map URL disables the button rather than fabricating a link
+  - ⓘ Seeding unchanged: §15.1 still prohibits production branch seeding; the **development fixtures** carry the two real premises
 
 ## M3 — Scheduling & Calendar
 > **Carry-over from Revision 26 (recorded in the pre-M3 sweep):** Levels, Categories, Subjects, AcademicYear and

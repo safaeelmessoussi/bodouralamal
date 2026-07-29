@@ -7,6 +7,7 @@ import * as consents from './controllers/consent.controller.js';
 import * as calendar from './controllers/calendar.controller.js';
 import * as events from './controllers/event.controller.js';
 import * as hijri from './controllers/hijri-calendar.controller.js';
+import * as publicBranches from './controllers/public-branch.controller.js';
 import * as groups from './controllers/group.controller.js';
 import * as socialProfile from './controllers/social-profile.controller.js';
 import * as users from './controllers/user.controller.js';
@@ -93,6 +94,12 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
   // tier. It therefore mounts BEFORE the guarded router, with optional
   // authentication, and the service resolves the tier from the live actor.
   api.get('/calendar', optionalAuthenticate(config), calendar.read(prisma));
+
+  // TD-3.9 (Revision 35): the §5.1 landing-page branch list. Public and
+  // anonymous, and mounted BEFORE the guarded router for that reason. No
+  // optional authentication: there is no tier to resolve here, so a credential
+  // could only ever be ignored.
+  api.get('/branches', publicBranches.list(prisma));
 
   const guarded = express.Router();
   guarded.use(authenticate(config));

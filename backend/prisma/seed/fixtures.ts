@@ -82,15 +82,45 @@ async function main(): Promise<void> {
     throw new Error('Run `npm run seed:production` first — no levels found for the category.');
   }
 
-  // --- 2 branches, each with 2 rooms and an operational_start_date in the past
-  const branchNames = [`${FIXTURE_TAG} فرع المدينة`, `${FIXTURE_TAG} فرع الحي`];
+  // --- 2 branches, each with 2 rooms and an operational_start_date in the past.
+  //
+  // These carry the association's real premises and their Revision-35 public
+  // contact fields, so the §5.1 landing page renders against realistic data in
+  // development. They stay HERE rather than in the production seed: §15.1
+  // prohibits seeding Branches there, and Revision 35 created no exception —
+  // production branches are entered through the admin UI from real data (§2.3).
+  const branchFixtures = [
+    {
+      name: `${FIXTURE_TAG} مقر أمرشيش`,
+      address: 'تجزئة الزيتون رقم 5، أمرشيش، مراكش',
+      phone: '0524292925',
+      email: 'bodoralamal@gmail.com',
+      openingHoursAr: 'الاثنين - السبت\n09:00 - 12:30\n15:00 - 18:00',
+      googleMapsUrl: 'https://maps.google.com/?q=Amerchich+Marrakesh',
+    },
+    {
+      name: `${FIXTURE_TAG} مقر تاركة`,
+      address: 'تجزئة صوفيا، حي الوردة 172، مراكش',
+      phone: '0524392829',
+      email: 'bodourtargua@gmail.com',
+      openingHoursAr: 'الاثنين - السبت\n09:00 - 12:30\n15:00 - 18:00',
+      // Deliberately absent, so the landing page's disabled-button path is
+      // exercised by the fixtures rather than only by a unit test.
+      googleMapsUrl: null,
+    },
+  ];
   const branches = [];
-  for (const [index, name] of branchNames.entries()) {
+  for (const [index, fixture] of branchFixtures.entries()) {
+    const name = fixture.name;
     const existing = await prisma.branch.findFirst({ where: { name, deletedAt: null } });
     const branch =
       existing ??
       (await prisma.branch.create({
-        data: { name, displayOrder: index + 1, operationalStartDate: daysAgo(180) },
+        data: {
+          ...fixture,
+          displayOrder: index + 1,
+          operationalStartDate: daysAgo(180),
+        },
       }));
     branches.push(branch);
 

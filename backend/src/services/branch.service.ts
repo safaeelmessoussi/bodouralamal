@@ -104,10 +104,35 @@ export async function listBranches(
   return page(rows, window, total);
 }
 
+/** The Revision-35 public contact fields, shared by create and update. */
+export interface BranchPublicFields {
+  address?: string | undefined;
+  phone?: string | null | undefined;
+  email?: string | null | undefined;
+  openingHoursAr?: string | undefined;
+  googleMapsUrl?: string | null | undefined;
+}
+
+/** Only what the caller actually supplied — an absent field must stay absent
+ *  rather than be written as null, which would erase a value on a partial edit. */
+function publicFieldData(data: BranchPublicFields): Record<string, unknown> {
+  return {
+    ...(data.address !== undefined ? { address: data.address } : {}),
+    ...(data.phone !== undefined ? { phone: data.phone } : {}),
+    ...(data.email !== undefined ? { email: data.email } : {}),
+    ...(data.openingHoursAr !== undefined ? { openingHoursAr: data.openingHoursAr } : {}),
+    ...(data.googleMapsUrl !== undefined ? { googleMapsUrl: data.googleMapsUrl } : {}),
+  };
+}
+
 export async function createBranch(
   prisma: PrismaClient,
   actor: Actor,
-  data: { name: string; operationalStartDate?: Date | null; displayOrder?: number | null },
+  data: {
+    name: string;
+    operationalStartDate?: Date | null;
+    displayOrder?: number | null;
+  } & BranchPublicFields,
 ): Promise<Branch> {
   assertCanWriteReferenceData(actor);
   assertMaySetDisplayOrder(actor, data);
@@ -120,6 +145,7 @@ export async function createBranch(
         // Absent stays absent (null in the column); the §2.2 guard above has
         // already refused a non-Super-Admin who tried to SET it.
         displayOrder: data.displayOrder ?? null,
+        ...publicFieldData(data),
       },
     });
     await audit.write(tx, {
@@ -138,7 +164,11 @@ export async function updateBranch(
   actor: Actor,
   id: string,
   expectedVersion: number,
-  data: { name?: string; operationalStartDate?: Date | null; displayOrder?: number | null },
+  data: {
+    name?: string;
+    operationalStartDate?: Date | null;
+    displayOrder?: number | null;
+  } & BranchPublicFields,
 ): Promise<Branch> {
   assertCanWriteReferenceData(actor);
   scope.assertCanActOnBranch(actor.roleScopes, MANAGING_ROLE, id);
@@ -151,7 +181,9 @@ export async function updateBranch(
     id,
     expectedVersion,
     requireNotDeleted: true,
-    data,
+    // Spread so the optional-property types widen to the index signature the
+    // repository takes; the keys are already the column names.
+    data: { ...data },
   });
 }
 

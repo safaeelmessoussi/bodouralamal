@@ -113,10 +113,12 @@ const NOWHERE = '00000000-0000-4000-8000-000000000000';
  * genuinely reachable.
  */
 const EXEMPT = new Set([
-  // §4.4 / §4.1b: public by design.
+  // §4.4 / §4.1b / TD-3.9: public by design.
   '/calendar',
   '/registrations',
   '/healthz',
+  // Revision 35: the §5.1 landing-page branch directory, anonymous.
+  '/branches',
   // §4.1b: the login flow itself, which a Pending user must be able to complete.
   '/auth/google',
   '/auth/google/callback',

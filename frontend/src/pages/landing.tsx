@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 
 import { ApplicationHeader } from '../components/header/application-header.js';
+import { BranchesSection } from '../components/branches-section.js';
 import { SiteFooter } from '../components/site-footer.js';
 import { Card, Step } from '../components/ui/card.js';
 import { ButtonLink } from '../components/ui/button.js';
@@ -79,6 +80,7 @@ export function Landing(): ReactNode {
             <Step title={t('landing.step3Title')} body={t('landing.step3Body')} />
           </ol>
         </Section>
+        <BranchesSection />
       </main>
       <SiteFooter />
     </>

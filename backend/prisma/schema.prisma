@@ -341,6 +341,22 @@ model Branch {
   /// Super-Admin-managed ordering (§2.2); CHECK (>= 0) in SQL.
   displayOrder         Int?      @map("display_order")
 
+  /// Public contact fields (Revision 35) — the ONLY branch columns `GET
+  /// /branches` may expose. Nullable at the database level so branches
+  /// predating the revision need no invented address (the treatment
+  /// `User.sex` received in Revision 27); *required* is enforced at the write
+  /// boundary by TD-9, which is where a real value can be demanded.
+  address            String? @db.VarChar(300)
+  phone              String? @db.VarChar(20)
+  email              String? @db.VarChar(254)
+  /// Free multiline Arabic text, displayed verbatim and NEVER parsed (§7).
+  /// Ramadan and exceptional weeks change the hours; free text lets the person
+  /// who knows edit them without a schema conversation.
+  openingHoursAr     String? @map("opening_hours_ar") @db.VarChar(500)
+  /// Absolute https:// URL only (TD-9) — it becomes an outbound link on a
+  /// public page, where a relative or javascript: value is an injection vector.
+  googleMapsUrl      String? @map("google_maps_url") @db.VarChar(500)
+
   version Int @default(0)
 
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)

@@ -419,6 +419,37 @@
         }
       }
     },
+    "/branches": {
+      "get": {
+        "summary": "Public branch directory",
+        "description": "TD-3.9 (Revision 35) — the §5.1 landing-page branch list, **anonymous**. Returns **only** `id`, `name`, `address`, `phone`, `email`, `opening_hours_ar`, `google_maps_url` and `display_order`; `version`, `operational_start_date`, `created_at`, `updated_at`, `deleted_at` and `deleted_by` are **never** exposed. The projection is an explicit `select`, not a filtered read, so a column added to `Branch` later joins the model and not this response. This is deliberately **not** `GET /admin/branches` with the permission relaxed: an endpoint's audience is part of its contract, and one endpoint serving two audiences has to get the difference right on every future change. **Soft-deleted branches never appear** — a closed premises must not keep advertising an address and a phone number. `opening_hours_ar` is free multiline Arabic text, displayed verbatim and **never parsed** (§7); `google_maps_url` is an absolute `https://` URL or `null`, and a client must degrade gracefully when it is null rather than fabricate a link. Ordered `display_order ASC NULLS LAST`, then `name` (correct Arabic order via the native collation), then `id`. **Paginated (TD-10):** `?page=` (default 1) and `?page_size=` (default 25, max 100 — capped, not refused).",
+        "responses": {
+          "200": {
+            "description": "The public branch list with the TD-10 envelope."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/calendar": {
       "get": {
         "summary": "Read the calendar",
