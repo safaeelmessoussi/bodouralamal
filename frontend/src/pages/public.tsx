@@ -1,5 +1,8 @@
 import type { ReactNode } from 'react';
 
+import { ApplicationHeader } from '../components/header/application-header.js';
+import { Logo } from '../components/ui/logo.js';
+import { SiteFooter } from '../components/site-footer.js';
 import { t } from '../i18n/index.js';
 
 /**
@@ -10,55 +13,6 @@ import { t } from '../i18n/index.js';
  * list, read-only public calendar, unrestricted public resources, and the
  * login/register CTAs.
  */
-
-function Logo({ large = false }: { large?: boolean }): ReactNode {
-  return (
-    <img
-      src={large ? '/logo-large.png' : '/logo.png'}
-      alt={t('app.logoAlt')}
-      className={large ? 'logo logo-large' : 'logo'}
-      width={large ? 552 : 184}
-      height={large ? 480 : 160}
-    />
-  );
-}
-
-export function Landing(): ReactNode {
-  return (
-    <main className="landing">
-      <header className="hero">
-        <Logo large />
-        <h1>{t('app.name')}</h1>
-        <p className="tagline">{t('app.tagline')}</p>
-        <nav className="cta">
-          {/* Full page loads, not client navigation: the OAuth entry is a
-              server redirect to Google (§4.1b step 1). */}
-          <a className="button primary" href="/api/v1/auth/google">
-            {t('landing.ctaLogin')}
-          </a>
-          <a className="button" href="/register">
-            {t('landing.ctaRegister')}
-          </a>
-        </nav>
-      </header>
-
-      {/* §5.1 sections. Their data arrives with the calendar (M3), the resources
-          directory (M6) and branch listing — each renders its §14.4 states then. */}
-      <section>
-        <h2>{t('landing.missionTitle')}</h2>
-      </section>
-      <section>
-        <h2>{t('landing.branchesTitle')}</h2>
-      </section>
-      <section>
-        <h2>{t('landing.calendarTitle')}</h2>
-      </section>
-      <section>
-        <h2>{t('landing.resourcesTitle')}</h2>
-      </section>
-    </main>
-  );
-}
 
 /** §14.1 `/login` — Google OAuth entry only. No password fields exist (§4.1). */
 export function Login(): ReactNode {
@@ -78,7 +32,7 @@ export function Login(): ReactNode {
 
   return (
     <main className="auth-page">
-      <Logo />
+      <Logo showText={false} />
       <h1>{t('nav.login')}</h1>
       {/* §4.1b step 7: failures arrive as a redirect key and are rendered as a
           friendly i18n message with a retry affordance. */}
@@ -99,7 +53,7 @@ export function Login(): ReactNode {
 export function ContentUnavailable(): ReactNode {
   return (
     <main className="auth-page" role="alert">
-      <Logo />
+      <Logo showText={false} />
       <h1>{t('content.unavailableTitle')}</h1>
       <p>{t('content.unavailableBody')}</p>
     </main>
@@ -110,9 +64,35 @@ export function ContentUnavailable(): ReactNode {
 export function AccountDeactivated(): ReactNode {
   return (
     <main className="status-screen" role="alert">
-      <Logo />
+      <Logo showText={false} />
       <h1>{t('auth.deactivatedTitle')}</h1>
       <p>{t('auth.deactivatedBody')}</p>
     </main>
+  );
+}
+
+/**
+ * A route that §14.1 defines but whose page is a later task.
+ *
+ * The header links to `/calendar` and `/resources` because those are real
+ * navigation nodes; until their pages exist, following one lands here rather
+ * than on a blank screen — §14.4 requires every surface to state which of its
+ * states it is in, and "not yet" is one of them.
+ */
+export function NotBuiltYet(): ReactNode {
+  return (
+    <>
+      <ApplicationHeader />
+      <main id="main" className="status-screen">
+        <h1>{t('states.notBuiltTitle')}</h1>
+        <p className="lede">{t('states.notBuiltBody')}</p>
+        <p>
+          <a className="button primary" href="/">
+            {t('nav.home')}
+          </a>
+        </p>
+      </main>
+      <SiteFooter />
+    </>
   );
 }

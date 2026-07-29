@@ -1,65 +1,710 @@
 /*
- * RTL-first, mobile-first (SRS §6, §14.7 tests at 360 px minimum).
- * No web font is linked: §3.1's CSP is `default-src 'self'` with no font host,
- * and a blocked font request would silently fall back anyway. System Arabic
- * faces render correctly and cost nothing on a weak mobile link (§2.2).
+ * بذور الأمل — design system.
+ *
+ * RTL-first, mobile-first (SRS §6; §14.7 tests at 360 px minimum).
+ *
+ * **No web font is linked, and none is inlined.** §3.1's CSP is
+ * `default-src 'self'` with no font host, so a linked face would be blocked and
+ * silently fall back; and an *inlined* Arabic face costs 200 KB–1 MB, which §2.2
+ * rules out for users on unreliable mobile connections. The system Arabic stack
+ * is therefore the correct choice here rather than a concession — so the
+ * typographic character comes from scale, weight, spacing and rhythm instead.
+ *
+ * The palette is drawn from the association's own world rather than a template:
+ * the deep green of Moroccan zellij, brass as the single accent, and neutrals
+ * biased warm-green so nothing reads as unconsidered grey.
  */
+
 :root {
-  --ink: #1a1a1a;
-  --muted: #5c6470;
-  --rule: #dfe3e8;
+  color-scheme: light dark;
+
+  --brand-900: #073826;
+  --brand-700: #0b4a33;
+  --brand-500: #146b4a;
+  --brand-100: #e3efe8;
+  --brass: #a97b28;
+
+  --ink: #16211c;
+  --ink-soft: #3a4741;
+  --muted: #5b6862;
+  --rule: #dde4de;
   --surface: #ffffff;
-  --ground: #f7f8f7;
-  --brand: #0f5132;
+  --surface-raised: #ffffff;
+  --ground: #f6f5f0;
   --danger: #b3261e;
+  --danger-soft: #fbeae9;
+
   --space: 1rem;
+  --radius: 10px;
+  --radius-sm: 6px;
+  --shadow: 0 1px 2px rgb(7 56 38 / 6%), 0 8px 24px -12px rgb(7 56 38 / 18%);
+  --measure: 64ch;
+  --header-h: 4.25rem;
+
+  /* Minor-third scale, clamped so 360 px never overflows. */
+  --step--1: clamp(0.82rem, 0.8rem + 0.1vw, 0.88rem);
+  --step-0: clamp(1rem, 0.97rem + 0.15vw, 1.06rem);
+  --step-1: clamp(1.2rem, 1.12rem + 0.4vw, 1.4rem);
+  --step-2: clamp(1.45rem, 1.3rem + 0.8vw, 1.9rem);
+  --step-3: clamp(1.8rem, 1.5rem + 1.5vw, 2.8rem);
+  --step-4: clamp(2.1rem, 1.6rem + 2.6vw, 3.6rem);
 }
 
-* { box-sizing: border-box; }
+@media (prefers-color-scheme: dark) {
+  :root {
+    --brand-100: #10281e;
+    --ink: #e9efea;
+    --ink-soft: #c3cec7;
+    --muted: #9aa8a0;
+    --rule: #27332c;
+    --surface: #131b17;
+    --surface-raised: #17211c;
+    --ground: #0d1310;
+    --danger: #ef9a94;
+    --danger-soft: #2a1614;
+    --shadow: 0 1px 2px rgb(0 0 0 / 40%), 0 8px 24px -12px rgb(0 0 0 / 60%);
+  }
+}
+
+/* The viewer's toggle stamps the root and must win over the media query. */
+:root[data-theme='dark'] {
+  --brand-100: #10281e;
+  --ink: #e9efea;
+  --ink-soft: #c3cec7;
+  --muted: #9aa8a0;
+  --rule: #27332c;
+  --surface: #131b17;
+  --surface-raised: #17211c;
+  --ground: #0d1310;
+  --danger: #ef9a94;
+  --danger-soft: #2a1614;
+}
+:root[data-theme='light'] {
+  --brand-100: #e3efe8;
+  --ink: #16211c;
+  --ink-soft: #3a4741;
+  --muted: #5b6862;
+  --rule: #dde4de;
+  --surface: #ffffff;
+  --surface-raised: #ffffff;
+  --ground: #f6f5f0;
+  --danger: #b3261e;
+  --danger-soft: #fbeae9;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
 
 body {
   margin: 0;
   background: var(--ground);
   color: var(--ink);
-  font-family: system-ui, -apple-system, 'Segoe UI', 'Noto Naskh Arabic', 'Tahoma', sans-serif;
-  line-height: 1.7;
-  /* Arabic numerals stay in the reader's expected form; no forced latin. */
-  font-variant-numeric: normal;
+  font-family: 'Noto Naskh Arabic', 'Segoe UI', system-ui, -apple-system, 'Tahoma', sans-serif;
+  font-size: var(--step-0);
+  line-height: 1.75;
+  -webkit-font-smoothing: antialiased;
 }
 
-main { max-width: 60rem; margin: 0 auto; padding: calc(var(--space) * 2) var(--space); }
+h1,
+h2,
+h3 {
+  line-height: 1.25;
+  text-wrap: balance;
+  margin: 0;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
 
-h1 { font-size: clamp(1.5rem, 5vw, 2.25rem); margin: 0 0 0.5rem; }
-h2 { font-size: 1.25rem; margin: calc(var(--space) * 2) 0 var(--space); }
-p { margin: 0 0 var(--space); max-width: 62ch; }
+p {
+  margin: 0;
+  max-width: var(--measure);
+}
 
-.logo { display: block; height: auto; max-width: 100%; }
-.logo-large { margin: 0 auto var(--space); }
+a {
+  color: inherit;
+}
 
-.hero { text-align: center; padding-bottom: calc(var(--space) * 2); border-bottom: 1px solid var(--rule); }
-.tagline { color: var(--muted); }
+img {
+  max-width: 100%;
+  height: auto;
+}
 
-.cta { display: flex; flex-wrap: wrap; gap: 0.75rem; justify-content: center; margin-top: var(--space); }
+:focus-visible {
+  outline: 3px solid var(--brass);
+  outline-offset: 3px;
+  border-radius: 3px;
+}
 
-.button {
-  display: inline-block;
-  padding: 0.65rem 1.25rem;
-  border: 1px solid var(--brand);
-  border-radius: 4px;
+/* ── Layout primitives ───────────────────────────────────────────────────── */
+
+.container {
+  width: min(100% - 2rem, 72rem);
+  margin-inline: auto;
+}
+.container--narrow {
+  width: min(100% - 2rem, 52rem);
+}
+
+.stack > * + * {
+  margin-block-start: var(--flow, 1rem);
+}
+
+.section {
+  padding-block: clamp(3rem, 8vw, 6rem);
+}
+.section--tint {
   background: var(--surface);
-  color: var(--brand);
+  border-block: 1px solid var(--rule);
+}
+
+.section__head {
+  max-width: var(--measure);
+  margin-block-end: clamp(1.5rem, 4vw, 2.75rem);
+}
+
+.eyebrow {
+  display: inline-block;
+  font-size: var(--step--1);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--brass);
+  margin-block-end: 0.5rem;
+}
+
+.section__title {
+  font-size: var(--step-2);
+}
+
+.lede {
+  color: var(--ink-soft);
+  font-size: var(--step-1);
+  line-height: 1.7;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+/* ── Buttons ─────────────────────────────────────────────────────────────── */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.7rem 1.35rem;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink);
   font: inherit;
+  font-weight: 600;
   text-decoration: none;
   cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
 }
-.button.primary { background: var(--brand); color: #fff; }
-.button:focus-visible, a:focus-visible, button:focus-visible {
-  outline: 3px solid var(--brand);
-  outline-offset: 2px;
+.btn--primary {
+  background: var(--brand-700);
+  color: #fff;
+}
+.btn--primary:hover {
+  background: var(--brand-900);
+}
+.btn--secondary {
+  border-color: var(--rule);
+  background: var(--surface);
+  color: var(--ink);
+}
+.btn--secondary:hover {
+  border-color: var(--brand-500);
+  color: var(--brand-700);
+}
+.btn--ghost:hover {
+  background: var(--brand-100);
+  color: var(--brand-700);
+}
+.btn--block {
+  width: 100%;
+  justify-content: center;
+}
+.btn__icon {
+  flex: none;
 }
 
-.auth-page, .status-screen { text-align: center; }
-/* §2.1: the approval-status screen is a dedicated, prominently styled full page. */
+/* ── Application header ──────────────────────────────────────────────────── */
+
+.skip-link {
+  position: absolute;
+  inset-inline-start: 1rem;
+  inset-block-start: -4rem;
+  z-index: 100;
+  padding: 0.6rem 1rem;
+  background: var(--brand-700);
+  color: #fff;
+  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  text-decoration: none;
+  transition: inset-block-start 0.15s ease;
+}
+.skip-link:focus {
+  inset-block-start: 0;
+}
+
+.app-header {
+  position: sticky;
+  inset-block-start: 0;
+  z-index: 50;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  backdrop-filter: blur(10px);
+  border-block-end: 1px solid var(--rule);
+}
+
+.app-header__bar {
+  min-height: var(--header-h);
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.logo-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  text-decoration: none;
+  color: inherit;
+  flex: none;
+}
+.logo-link__mark {
+  display: block;
+  width: auto;
+  height: 2.4rem;
+}
+.logo-link__text {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+.logo-link__name {
+  font-weight: 700;
+  font-size: 1.05rem;
+}
+.logo-link__sub {
+  font-size: 0.72rem;
+  color: var(--muted);
+}
+
+.app-header__nav {
+  margin-inline-start: auto;
+}
+.app-header__actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex: none;
+}
+
+.nav-menu {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.nav-item {
+  display: block;
+  padding: 0.5rem 0.85rem;
+  border-radius: var(--radius-sm);
+  text-decoration: none;
+  color: var(--ink-soft);
+  font-weight: 600;
+  white-space: nowrap;
+}
+.nav-item:hover {
+  background: var(--brand-100);
+  color: var(--brand-700);
+}
+.nav-item[aria-current='page'] {
+  color: var(--brand-700);
+  background: var(--brand-100);
+}
+
+/* Desktop nav and the burger swap at one breakpoint, so they can never both show. */
+.app-header__nav,
+.app-header__actions--desktop {
+  display: none;
+}
+@media (min-width: 60rem) {
+  .app-header__nav,
+  .app-header__actions--desktop {
+    display: flex;
+  }
+  .app-header__burger {
+    display: none;
+  }
+}
+
+.app-header__burger {
+  margin-inline-start: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+/* ── Mobile menu ─────────────────────────────────────────────────────────── */
+
+.mobile-menu {
+  border-block-start: 1px solid var(--rule);
+  background: var(--surface);
+  padding-block: 1rem;
+}
+.mobile-menu__list {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  display: grid;
+  gap: 0.15rem;
+}
+.mobile-menu .nav-item {
+  padding: 0.8rem 0.85rem;
+  font-size: 1.05rem;
+}
+.mobile-menu__actions {
+  display: grid;
+  gap: 0.6rem;
+  padding-block-start: 1rem;
+  border-block-start: 1px solid var(--rule);
+}
+
+/* ── Menus (user, role, child) ───────────────────────────────────────────── */
+
+.menu {
+  position: relative;
+}
+.menu__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.7rem;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  max-width: 14rem;
+}
+.menu__trigger:hover {
+  border-color: var(--brand-500);
+}
+.menu__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.menu__panel {
+  position: absolute;
+  inset-block-start: calc(100% + 0.4rem);
+  inset-inline-end: 0;
+  min-width: 14rem;
+  padding: 0.4rem;
+  background: var(--surface-raised);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  z-index: 60;
+}
+.menu__group-label {
+  padding: 0.4rem 0.6rem;
+  font-size: var(--step--1);
+  color: var(--muted);
+  font-weight: 700;
+}
+.menu__option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.55rem 0.6rem;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.menu__option:hover {
+  background: var(--brand-100);
+  color: var(--brand-700);
+}
+.menu__option[aria-checked='true'] {
+  font-weight: 700;
+  color: var(--brand-700);
+}
+.menu__check {
+  margin-inline-start: auto;
+  color: var(--brand-500);
+}
+.menu__sep {
+  height: 1px;
+  margin: 0.35rem 0.4rem;
+  background: var(--rule);
+}
+
+/* Inside the mobile sheet the menus render inline rather than as popovers. */
+.mobile-menu .menu__panel {
+  position: static;
+  box-shadow: none;
+  border: 0;
+  padding: 0;
+  min-width: 0;
+}
+.mobile-menu .menu__trigger {
+  width: 100%;
+  max-width: none;
+  justify-content: space-between;
+}
+
+/* ── Hero ────────────────────────────────────────────────────────────────── */
+
+.hero {
+  position: relative;
+  overflow: hidden;
+  background: var(--brand-900);
+  color: #f4f7f4;
+  padding-block: clamp(3.5rem, 11vw, 7.5rem);
+}
+
+/*
+ * A zellij-derived motif built from two overlaid conic gradients — CSS rather
+ * than an image or SVG path data, so it costs no request on a weak connection
+ * (§2.2), scales without artefacts, and stays crisp at any density.
+ */
+.hero::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image:
+    conic-gradient(
+      from 22.5deg at 50% 50%,
+      rgb(255 255 255 / 5%) 0 25%,
+      transparent 0 50%,
+      rgb(255 255 255 / 5%) 0 75%,
+      transparent 0
+    ),
+    conic-gradient(
+      from 0deg at 50% 50%,
+      rgb(255 255 255 / 4%) 0 25%,
+      transparent 0 50%,
+      rgb(255 255 255 / 4%) 0 75%,
+      transparent 0
+    );
+  background-size: 88px 88px, 88px 88px;
+  pointer-events: none;
+}
+/* Fade the motif behind the text so nothing competes with the reading. */
+.hero::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(120% 90% at 78% 30%, transparent 20%, var(--brand-900) 78%);
+  pointer-events: none;
+}
+
+.hero__inner {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: clamp(2rem, 5vw, 3.5rem);
+  align-items: center;
+}
+@media (min-width: 56rem) {
+  .hero__inner {
+    grid-template-columns: 1.15fr 0.85fr;
+  }
+}
+
+.hero__eyebrow {
+  color: #e3c98d;
+}
+.hero__title {
+  font-size: var(--step-4);
+  margin-block-end: 1rem;
+}
+.hero__lede {
+  color: #d5e2da;
+  font-size: var(--step-1);
+  max-width: 46ch;
+}
+.hero__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-block-start: 2rem;
+}
+.hero .btn--secondary {
+  background: transparent;
+  border-color: rgb(255 255 255 / 35%);
+  color: #fff;
+}
+.hero .btn--secondary:hover {
+  border-color: #fff;
+  background: rgb(255 255 255 / 8%);
+  color: #fff;
+}
+.hero__note {
+  margin-block-start: 1.25rem;
+  font-size: var(--step--1);
+  color: #b9ccc0;
+  max-width: 46ch;
+}
+
+.hero__badge {
+  justify-self: center;
+  display: grid;
+  place-items: center;
+  padding: clamp(1.5rem, 4vw, 2.5rem);
+  background: rgb(255 255 255 / 6%);
+  border: 1px solid rgb(255 255 255 / 14%);
+  border-radius: 50%;
+  aspect-ratio: 1;
+  width: min(20rem, 62vw);
+}
+.hero__badge img {
+  width: 72%;
+}
+
+/* ── Cards & grids ───────────────────────────────────────────────────────── */
+
+.grid {
+  display: grid;
+  gap: 1.25rem;
+}
+@media (min-width: 44rem) {
+  .grid--3 {
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .grid--2 {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+.card {
+  padding: clamp(1.25rem, 3vw, 1.75rem);
+  background: var(--surface-raised);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.card__icon {
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: var(--radius-sm);
+  background: var(--brand-100);
+  color: var(--brand-700);
+  margin-block-end: 0.35rem;
+}
+.card__title {
+  font-size: var(--step-1);
+}
+.card__meta {
+  margin-block-start: auto;
+  padding-block-start: 0.6rem;
+  font-size: var(--step--1);
+  color: var(--muted);
+}
+
+/* Numbered because the enrolment path genuinely is a sequence (§4.1b). */
+.steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 1.25rem;
+  counter-reset: step;
+}
+@media (min-width: 48rem) {
+  .steps {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+.step {
+  counter-increment: step;
+  padding-block-start: 1rem;
+  border-block-start: 3px solid var(--brass);
+}
+.step::before {
+  content: counter(step);
+  display: block;
+  font-size: var(--step--1);
+  font-weight: 700;
+  color: var(--brass);
+  margin-block-end: 0.35rem;
+}
+.step__title {
+  font-size: var(--step-1);
+  margin-block-end: 0.35rem;
+}
+
+.callout {
+  padding: clamp(1.5rem, 4vw, 2.5rem);
+  background: var(--brand-100);
+  border: 1px solid color-mix(in srgb, var(--brand-500) 25%, transparent);
+  border-radius: var(--radius);
+  text-align: center;
+  display: grid;
+  gap: 1rem;
+  justify-items: center;
+}
+.callout p {
+  margin-inline: auto;
+}
+
+/* ── Footer ──────────────────────────────────────────────────────────────── */
+
+.site-footer {
+  background: var(--surface);
+  border-block-start: 1px solid var(--rule);
+  padding-block: 2.5rem;
+  font-size: var(--step--1);
+  color: var(--muted);
+}
+.site-footer__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem 2rem;
+  align-items: center;
+  justify-content: space-between;
+}
+
+/* ── Legacy public pages (login, status screens) ─────────────────────────── */
+
+.auth-page,
+.status-screen {
+  text-align: center;
+  width: min(100% - 2rem, 36rem);
+  margin-inline: auto;
+  padding-block: clamp(3rem, 10vw, 6rem);
+}
 .status-screen {
   min-height: 60vh;
   display: flex;
@@ -67,39 +712,84 @@ p { margin: 0 0 var(--space); max-width: 62ch; }
   justify-content: center;
   align-items: center;
 }
-
 .error-banner {
   border: 1px solid var(--danger);
   border-inline-start-width: 5px;
-  background: #fbeae9;
+  background: var(--danger-soft);
   color: var(--danger);
   padding: 0.75rem 1rem;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   text-align: start;
 }
+.state {
+  padding: var(--space) 0;
+  color: var(--muted);
+}
+.request-id {
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+.button {
+  display: inline-block;
+  padding: 0.65rem 1.25rem;
+  border: 1px solid var(--brand-700);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--brand-700);
+  font: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+.button.primary {
+  background: var(--brand-700);
+  color: #fff;
+}
+.logo {
+  display: block;
+  height: auto;
+  max-width: 100%;
+}
+.logo-large {
+  margin: 0 auto var(--space);
+}
 
-.state { padding: var(--space) 0; color: var(--muted); }
-.request-id { font-size: 0.85rem; color: var(--muted); }
-
-/* Skeleton rather than a spinner for tabular loading (§14.4). */
 .skeleton {
   height: 1.1rem;
   margin-bottom: 0.6rem;
   border-radius: 3px;
-  background: linear-gradient(90deg, var(--rule), #eef1f4, var(--rule));
+  background: linear-gradient(90deg, var(--rule), var(--ground), var(--rule));
   background-size: 200% 100%;
   animation: shimmer 1.4s linear infinite;
 }
-@keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
-
-/* §14.4 accessibility: respect a reduced-motion preference. */
-@media (prefers-reduced-motion: reduce) {
-  .skeleton { animation: none; }
+@keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
 }
 
 .visually-hidden {
   position: absolute;
-  width: 1px; height: 1px;
+  width: 1px;
+  height: 1px;
   overflow: hidden;
   clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .skeleton {
+    animation: none;
+  }
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
 }

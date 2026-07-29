@@ -2,13 +2,10 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 
 import { PendingGuard } from './components/pending-guard.js';
+import { ActiveChildProvider } from './contexts/active-child.js';
 import { SessionProvider } from './contexts/session.js';
-import {
-  AccountDeactivated,
-  ContentUnavailable,
-  Landing,
-  Login,
-} from './pages/public.js';
+import { Landing } from './pages/landing.js';
+import { AccountDeactivated, ContentUnavailable, Login, NotBuiltYet } from './pages/public.js';
 import './styles.css';
 
 /**
@@ -33,6 +30,12 @@ function App(): React.ReactNode {
       return <Login />;
     case '/content-unavailable':
       return <ContentUnavailable />;
+    // Routes the header already links to (§14.1) whose pages are later tasks.
+    // They render an explicit §14.4 state rather than a blank screen, so a
+    // visitor who follows the link is told where they are.
+    case '/calendar':
+    case '/resources':
+      return <NotBuiltYet />;
     case '/pending-approval':
       // Rendered by the guard, which owns the Pending decision.
       return <PendingGuard>{null}</PendingGuard>;
@@ -50,7 +53,12 @@ if (rootElement) {
   createRoot(rootElement).render(
     <StrictMode>
       <SessionProvider>
-        <App />
+        {/* §4.3: the active child is per-session client state, and every
+            request carries it as a header. It wraps the app because the header
+            renders the switcher on every page. */}
+        <ActiveChildProvider>
+          <App />
+        </ActiveChildProvider>
       </SessionProvider>
     </StrictMode>,
   );
