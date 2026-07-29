@@ -117,6 +117,41 @@ fixture-pointing configuration that calls no real backend.
 4. Wire it into the workflow with a name that says which rule it enforces.
 5. Document it here and in [Conventions](conventions.md).
 
+### Two shell traps that have already produced false results here
+
+Both were found while proving `check-doc-links.sh`, and both make a guard report confidently
+wrong answers rather than failing loudly. Worth knowing before you write the next one.
+
+**`grep -q` inside a pipeline under `set -o pipefail` reports failure on success.**
+
+```bash
+set -uo pipefail
+if ! produce_list | grep -qxF "$needle"; then   # ✗ broken
+```
+
+`grep -q` exits **as soon as it matches**, which closes the pipe; the upstream producer then
+takes `SIGPIPE` (141), and `pipefail` propagates that as the pipeline's status. So a **found**
+needle reports **not found**. Capture first, then match:
+
+```bash
+haystack=$(produce_list)
+if ! grep -qxF "$needle" <<<"$haystack"; then   # ✓
+```
+
+This one made the link guard report **every anchor in the repository as broken**.
+
+**`printf '%s'` without `\n` silently concatenates a loop's output.**
+
+A helper emitting one value per call with no trailing newline turns 40 lines into one, after
+which `grep -x` matches nothing. Same guard, same debugging session, same symptom — which is
+why the trace-then-isolate order matters: `bash -x` located the first, and testing the helper
+in isolation located the second.
+
+**The general lesson:** when a guard reports something implausible — *everything* is broken,
+or *nothing* is — suspect the harness before the content. Three of this project's
+mutation-testing false negatives had the same shape
+([Testing](testing.md#mutation-testing)).
+
 ## Why guards rather than review notes
 
 A review note is followed until the reviewer is on holiday. Nine of the twenty-one binding

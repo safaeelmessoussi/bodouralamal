@@ -27,14 +27,17 @@ You are working on the بذور الأمل Platform.
 - **A feature is not complete until its documentation is updated — in the same
   commit.** Documentation drift is a defect, not a follow-up task. The rule is
   normative in `docs/SRS.md` §16.4; this bullet is a pointer to it.
-- **Before implementing anything, read the documentation covering the area and
-  decide which documents the task affects.** This is the step that finds the
-  decision already recorded, the concept's existing home, and the true size of
-  the task. Do it before writing code, not after.
+- **Before implementing anything, read the relevant project documentation and
+  decide which documents the task affects** (mandatory per SRS §16.3, Revision
+  37.1). This is the step that finds the decision already recorded, the concept's
+  existing home, and the true size of the task. Do it before writing code.
 - **During:** keep documentation moving with the code — never defer it.
 - **After:** update every affected document, then cross-references and indexes.
   Ask what else the task taught (a design decision, a constraint, an operational
   consideration, a trap) and record anything a future maintainer would want.
+- **Undocumented knowledge you discover is technical debt — document it
+  immediately**, even if nobody asked and even if it is unrelated to the task.
+  The moment of discovery is the cheapest moment to record it; deferring loses it.
 - **"Task completed" means all six:** implementation done · tests passing ·
   documentation updated · cross-references verified
   (`bash scripts/ci/check-doc-links.sh`) · `docs/CHANGES.log` updated · SRS

@@ -114,7 +114,7 @@ The technical core. Written for an engineer who has never seen the repository.
 | [Technical design constraints](reference/technical-design.md) | TD-1 … TD-16, with where each lives in the code |
 | [API endpoints](reference/api-endpoints.md) | Every route, its audience, and its status |
 | [Error codes](reference/error-codes.md) | The canonical catalogue and what a client should do with each |
-| [Decision log](reference/decision-log.md) | All 37 specification revisions, dated and summarised |
+| [Decision log](reference/decision-log.md) | Every specification revision, dated and summarised |
 
 ---
 
@@ -122,7 +122,7 @@ The technical core. Written for an engineer who has never seen the repository.
 
 | File | What it is | Mutable? |
 |---|---|---|
-| [`SRS.md`](SRS.md) | **The normative specification.** Revision 37 | Document Owner only |
+| [`SRS.md`](SRS.md) | **The normative specification.** Revision 37.1 | Document Owner only |
 | [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) | Milestone build order | Document Owner only |
 | [`TASKS.md`](TASKS.md) | Granular delivery checklist — the fastest read on what is done | Contributors |
 | [`CHANGES.log`](CHANGES.log) | Append-only ledger of what was built and why | Contributors, append-only |

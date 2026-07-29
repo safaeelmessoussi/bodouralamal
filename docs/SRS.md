@@ -1,7 +1,7 @@
 # Software Requirements Specification
 ## بذور الأمل — Institute Management Platform
 
-**Status:** Final MVP Blueprint (Revision 37 — documentation maintenance is binding; §16.3 stops carrying verbatim copies), **immutable source of truth** — changed only by an explicit Document Owner revision, never by an implementing agent
+**Status:** Final MVP Blueprint (Revision 37.1 — reading the relevant documentation before implementation joins §16.3's mandatory contents), **immutable source of truth** — changed only by an explicit Document Owner revision, never by an implementing agent
 **Revision date:** 2026-07-26
 **Canonical location:** `docs/SRS.md` in the project repository
 **Document Owner:** [assign]
@@ -23,6 +23,12 @@ This is a standalone, self-contained specification. It does not reference extern
 * **§18 — Module Acceptance Checklists.**
 * **§19 — Environments, Deployment Pipeline & Testing Strategy.**
 * **§20 — AI Implementation Rules:** hard guardrails for any autonomous coding agent. §20 closes the document deliberately: it is the last thing an agent reads before writing code.
+
+**Revision 37.1 (Document Owner decision — reading the documentation first is a mandatory content of `CLAUDE.md`, 2026-07-29):** one line, for one reason: **durability.** The Revision-37 work established a per-task workflow whose first step is to *read the relevant project documentation before starting implementation, and determine which documents the task affects*. That step was added to `CLAUDE.md`, but §16.3's mandatory-contents list did not require it — so it would have survived today and not a future rewrite of the file.
+
+**Scope, deliberately narrow.** This adds the **requirement** to §16.3's list and nothing else. The **process** — the before/during/after sequence, the routing of incidental knowledge, the six-condition Definition of Done — stays in the handbook (`docs/development/documentation-policy.md`) under §16.4, because §16.4's tier split is exactly that this document states *what must be true* and the handbook states *how*. Duplicating the procedure through the SRS would contradict the revision that established the split.
+
+**Why the step earns a normative line.** It is the cheapest defence against the failure this document has recorded five times: a second authoritative home for one concept. Reading first is what locates the existing home *before* a duplicate is created — and it is also what surfaces a decision already argued and recorded, which is how a reflex gets rejected rather than re-taken under deadline.
 
 **Revision 37 (Document Owner decision — documentation maintenance is binding, and §16.3 stops carrying verbatim copies, 2026-07-29):** the project documentation was reorganised into a hierarchy under `docs/` (indexed by `docs/README.md`), with a byte-exact pre-restructure snapshot retained under `docs/archive/`. That work established a working rule the Document Owner has adopted as **binding**, and it exposed a drift this revision closes.
 
@@ -1505,6 +1511,7 @@ Three files keep coding agents effective without re-reading this entire SRS on e
 **File 1 — `/CLAUDE.md` (Claude Code CLI instructions).** Must state, at minimum:
 * the **project context** — React frontend, Express + Prisma backend, PostgreSQL, MinIO — and that **`docs/SRS.md` is the source of truth which this file never overrides**;
 * **read `docs/CHANGES.log` and `docs/TASKS.md` before starting** a task;
+* **read the relevant project documentation before starting implementation** *(Revision 37.1)* — and determine which documents the task affects. Pinned here so the obligation survives any future rewrite of `CLAUDE.md`: it is the step that surfaces a decision already recorded, locates a concept's existing authoritative home before a second one is created, and establishes the true scope of the change. The process detail belongs to the handbook (§16.4);
 * **never read `docs/SRS.md` in full** unless explicitly asked — consult only the section(s) being implemented, which is what the §/BR-x/TD-x cross-referencing exists for;
 * **`docs/SRS.md` is immutable to the agent**: never edit it; if it appears wrong, **stop and report to the Document Owner**;
 * **§20 is the binding guardrail set — read it once per session**;

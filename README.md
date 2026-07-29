@@ -126,7 +126,7 @@ is what keeps sessions secure without any cross-origin configuration anywhere.
 ## The specification comes first
 
 This repository is built **specification-first**. [`docs/SRS.md`](docs/SRS.md) is the
-authoritative requirements document — currently at **Revision 37** — and the code conforms
+authoritative requirements document — currently at **Revision 37.1** — and the code conforms
 to it, not the other way around.
 
 - It is **immutable** to contributors and to AI agents. It changes only through a numbered

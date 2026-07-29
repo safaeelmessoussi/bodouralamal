@@ -12,6 +12,10 @@ the assessment happens *before* you write code, not after.
 > **The obligation is normative, and it lives in the specification — SRS §16.4** (Revision
 > 37). This page is the working guide to satisfying it: which page to update for which
 > change, and how to write it. Where the two differ, §16.4 wins and this page is the defect.
+>
+> **Reading the relevant documentation before starting implementation is additionally a
+> mandatory content of `CLAUDE.md`** (§16.3, Revision 37.1) — pinned there so the step
+> survives any future rewrite of that file.
 
 ---
 
@@ -184,6 +188,29 @@ produced any of these — and if it did, write it where it belongs:
 The test is not *"is this part of the ticket?"* but **"would this help someone rebuilding or
 maintaining the platform later?"** If yes, it is in scope, and the moment you learned it is
 the cheapest moment to record it.
+
+#### Undocumented knowledge is technical debt
+
+> **Standing rule.** Knowledge you discover during implementation that is not already
+> documented **is technical debt from the moment you discover it** — whether or not anyone
+> asked for it, and whether or not it relates to the task. **Document it immediately, in the
+> appropriate place.**
+
+It is debt in the strict sense: it accrues interest, and someone else pays. The interest is
+the hour the next person spends rediscovering it — or worse, the change they make *without*
+knowing it, because nothing warned them.
+
+Two properties make this rule worth stating separately from the table above:
+
+- **It has no "was it in scope?" exemption.** A trap found while fixing something unrelated
+  is still a trap. Deferring it to "a docs task later" is how it is lost, because by then the
+  discovery is no longer in anyone's head.
+- **It applies to small things.** A one-line troubleshooting row is often higher-value per
+  word than a page of architecture, because it converts a wasted afternoon into a lookup.
+
+**Where "immediately" means:** the same commit if it touches a page you are already editing;
+otherwise its own small commit, now, not queued. The correct home is usually obvious from the
+table above — and if it genuinely has no home, that absence is itself worth reporting.
 
 This is where the project's most useful paragraphs came from: the stale-Prisma-client trap,
 the PostgreSQL 18 volume-mount requirement, the port-clash reasoning in the dev overlay, and

@@ -2,8 +2,12 @@
 
 # Decision log
 
-Thirty-seven numbered specification revisions. Each records a decision, **and what was
-rejected** — which is usually the more valuable half.
+Every numbered specification revision, currently through **Revision 37.1**. Each records a
+decision, **and what was rejected** — which is usually the more valuable half.
+
+*(A hard count used to sit here. It was replaced with the current head, because a number that
+must be incremented by hand is a number that drifts — the hazard this log itself documents
+five times over.)*
 
 > Authoritative text: SRS §0, where each revision is stated in full with its reasoning. This
 > page is an index and a summary.
@@ -36,6 +40,7 @@ If you read only six, read these.
 
 | # | Date | Decision |
 |---|---|---|
+| **37.1** | 2026-07-29 | **Reading the relevant documentation before implementation joins §16.3's mandatory contents.** One line, for one reason: **durability.** Revision 37 established the per-task workflow and the step was added to `CLAUDE.md`, but §16.3's mandatory list did not require it — so it would have survived today and not a future rewrite of the file. **Scope deliberately narrow:** the *requirement* is now normative; the *process* (before/during/after, knowledge routing, the six-condition Done) stays in the handbook under §16.4, because duplicating procedure through the SRS would contradict the tier split R37 established. The step earns a normative line because it is the cheapest defence against a second authoritative home for one concept — reading first is what locates the existing home *before* a duplicate is created |
 | **37** | 2026-07-29 | **Documentation maintenance is binding (new §16.4), and §16.3 stops carrying verbatim copies.** *A feature is not complete until the documentation describing it is updated, in the same commit* — the ledger row recorded **what was done** but never **how the system now works**, so explanatory documentation could rot while every gate stayed green. Also fixed the **precedence** question the new hierarchy raised: the SRS is normative and says what MUST; the handbook is explanatory, cites rather than restates, and is a derived artifact. **The second half is a duplication removal:** §16.3 had carried a full verbatim copy of `CLAUDE.md` and `AGENTS.md`. Useful to bootstrap them at M0, those copies became a second home for one requirement — **and had already drifted.** §16.3 now states normatively *what each file must contain*; the files carry the wording. The `CHANGES.log` template is **retained**, because it is a genuine one-time artifact no live file can drift from |
 | **36.2** | 2026-07-29 | **Public display identity is an invariant, not an endpoint detail.** Generalised from one payload to *every* public surface, stated **once** in the data model with everything else cross-referencing it. Added guardrail rule 21 |
 | **36.1** | 2026-07-29 | **`public_display_name` on the person.** Lets an instructor appear publicly as a kunya while the platform keeps her legal name. Resolved **in the backend only**; the frontend implements no fallback. Placed on the person rather than a teacher profile — it is a person-level publication choice |
