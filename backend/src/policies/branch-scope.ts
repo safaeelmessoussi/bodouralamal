@@ -25,6 +25,8 @@
  */
 
 /** One role a user holds, with the branches that assignment reaches. */
+import { AppError } from '../lib/errors.js';
+
 export interface RoleScope {
   role: string;
   /** `null` = all branches (§4.2 Revision 24). */
@@ -95,6 +97,34 @@ export function canActOnBranch(
 ): boolean {
   const branches = branchesForRole(scopes, role);
   return branches === null || branches.includes(branchId);
+}
+
+/**
+ * The assertion form of `canActOnBranch`, for callers that refuse rather than
+ * branch on the answer.
+ *
+ * **The refusal is `NOT_FOUND`, never `FORBIDDEN`** (§20 rule 17): a `403`
+ * confirms that the branch exists, which is an existence leak to someone with
+ * no business knowing. Two services had written this check out identically —
+ * the kind of duplication where one copy quietly becoming a `403` would be a
+ * security regression that still passed every test the other copy had.
+ */
+export function assertCanActOnBranch(
+  scopes: readonly RoleScope[],
+  role: string,
+  branchId: string,
+  /**
+   * What the caller was looking for. It varies by surface on purpose: on the
+   * roster the caller named a *group*, and answering "branch out of scope"
+   * would leak that the group's branch exists. The security decision is shared;
+   * only the noun changes.
+   */
+  notFoundMessage = 'branch out of scope',
+): void {
+  if (isSuperAdmin(scopes)) return;
+  if (!canActOnBranch(scopes, role, branchId)) {
+    throw new AppError('NOT_FOUND', notFoundMessage);
+  }
 }
 
 /**

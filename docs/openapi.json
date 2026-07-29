@@ -11,6 +11,64 @@
       "description": "Same-origin API path (§3.1)"
     }
   ],
+  "components": {
+    "schemas": {
+      "ErrorEnvelope": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": [
+              "code",
+              "message_key",
+              "message",
+              "details",
+              "request_id"
+            ],
+            "properties": {
+              "code": {
+                "type": "string",
+                "description": "The canonical application error code (TD-3.8). Extensible only by SRS revision.",
+                "enum": [
+                  "VALIDATION_FAILED",
+                  "AUTH_REQUIRED",
+                  "FORBIDDEN",
+                  "NOT_FOUND",
+                  "STATE_CONFLICT",
+                  "VERSION_CONFLICT",
+                  "DUPLICATE",
+                  "CONSENT_REQUIRED",
+                  "CAPACITY_FULL",
+                  "SERVICE_UNAVAILABLE",
+                  "INTERNAL"
+                ]
+              },
+              "message_key": {
+                "type": "string",
+                "description": "i18n key; the client renders this."
+              },
+              "message": {
+                "type": "string",
+                "description": "Localised fallback text (Arabic at launch, §6)."
+              },
+              "details": {
+                "type": "object",
+                "additionalProperties": true,
+                "description": "Structured context for codes that carry it — e.g. `reason: ROOM_TIME_OVERLAP` with `conflicting_group_id`, `capacity` on CAPACITY_FULL, or `conflicting_month` on a Hijri ordering refusal. Empty object when there is nothing to add."
+              },
+              "request_id": {
+                "type": "string",
+                "description": "Correlates the response with the server log line."
+              }
+            }
+          }
+        }
+      }
+    }
+  },
   "paths": {
     "/auth/google": {
       "get": {
@@ -19,6 +77,16 @@
         "responses": {
           "302": {
             "description": "Redirect to Google."
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           }
         }
       }
@@ -30,6 +98,16 @@
         "responses": {
           "302": {
             "description": "Redirect by routing decision, or to /login?error=<key> on failure."
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           }
         }
       }
@@ -43,7 +121,24 @@
             "description": "New access token; a rotated refresh cookie unless the grace window applied."
           },
           "401": {
-            "description": "Error envelope (TD-3.8). All refusal reasons are deliberately indistinguishable."
+            "description": "Error envelope (TD-3.8). All refusal reasons are deliberately indistinguishable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           }
         }
       }
@@ -55,6 +150,16 @@
         "responses": {
           "204": {
             "description": "Session revoked. Idempotent."
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           }
         }
       }
@@ -68,7 +173,24 @@
             "description": "Current user."
           },
           "401": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           }
         }
       }
@@ -82,13 +204,44 @@
             "description": "Created; account_status pending."
           },
           "400": {
-            "description": "Error envelope (TD-3.8). VALIDATION_FAILED or CONSENT_REQUIRED."
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED or CONSENT_REQUIRED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "409": {
-            "description": "Error envelope (TD-3.8). STATE_CONFLICT on token replay; DUPLICATE if the identity exists."
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT on token replay; DUPLICATE if the identity exists.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "503": {
-            "description": "Error envelope (TD-3.8). consent text version not configured (§2.3)."
+            "description": "Error envelope (TD-3.8). consent text version not configured (§2.3).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           }
         }
       }
@@ -102,10 +255,34 @@
             "description": "Queue page; each item carries its applicants and what approving it will change."
           },
           "401": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "403": {
-            "description": "Error envelope (TD-3.8). FORBIDDEN when the caller is no longer Active or the admin role assignment no longer exists (TD-12)."
+            "description": "Error envelope (TD-3.8). FORBIDDEN when the caller is no longer Active or the admin role assignment no longer exists (TD-12).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           }
         }
       }
@@ -119,16 +296,54 @@
             "description": "Approved; reports the item type and how many accounts were activated."
           },
           "401": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "403": {
-            "description": "Error envelope (TD-3.8). FORBIDDEN (TD-12 freshness or TD-2 role)."
+            "description": "Error envelope (TD-3.8). FORBIDDEN (TD-12 freshness or TD-2 role).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "404": {
-            "description": "Error envelope (TD-3.8). NOT_FOUND for an unknown id."
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an unknown id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "409": {
-            "description": "Error envelope (TD-3.8). STATE_CONFLICT when the item was already decided."
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT when the item was already decided.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           }
         }
       }
@@ -142,19 +357,64 @@
             "description": "Rejected; the reason is stored on the decision and in the audit row."
           },
           "400": {
-            "description": "Error envelope (TD-3.8). VALIDATION_FAILED when the reason is missing or too long."
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED when the reason is missing or too long.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "401": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "403": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "404": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "409": {
-            "description": "Error envelope (TD-3.8). STATE_CONFLICT when the item was already decided."
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT when the item was already decided.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           }
         }
       }
@@ -168,10 +428,34 @@
             "description": "Occurrences, ordered by date then time then id."
           },
           "400": {
-            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — missing/invalid dates, an inverted range, or one longer than 366 days."
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — missing/invalid dates, an inverted range, or one longer than 366 days.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "401": {
-            "description": "Error envelope (TD-3.8). AUTH_REQUIRED only when a token IS supplied but does not verify; an absent token is anonymous, not an error."
+            "description": "Error envelope (TD-3.8). AUTH_REQUIRED only when a token IS supplied but does not verify; an absent token is anonymous, not an error.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           }
         }
       }
@@ -185,16 +469,54 @@
             "description": "Created; reports the scope rows actually written."
           },
           "400": {
-            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — bad dates, or a recurring event without an end date."
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — bad dates, or a recurring event without an end date.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "401": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "403": {
-            "description": "Error envelope (TD-3.8). FORBIDDEN when a Teacher attempts a scope beyond their groups."
+            "description": "Error envelope (TD-3.8). FORBIDDEN when a Teacher attempts a scope beyond their groups.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "404": {
-            "description": "Error envelope (TD-3.8). NOT_FOUND for a group the caller does not teach (§20 rule 17)."
+            "description": "Error envelope (TD-3.8). NOT_FOUND for a group the caller does not teach (§20 rule 17).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           }
         }
       }
@@ -208,19 +530,64 @@
             "description": "The updated event with its new version."
           },
           "400": {
-            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — unknown/scope keys, a malformed date or time, or an invalid merged recurrence."
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — unknown/scope keys, a malformed date or time, or an invalid merged recurrence.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "401": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "403": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "404": {
-            "description": "Error envelope (TD-3.8). NOT_FOUND for an unknown event or one outside the caller's reach."
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an unknown event or one outside the caller's reach.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "409": {
-            "description": "Error envelope (TD-3.8). VERSION_CONFLICT."
+            "description": "Error envelope (TD-3.8). VERSION_CONFLICT.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           }
         }
       },
@@ -232,13 +599,44 @@
             "description": "Deleted."
           },
           "401": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "403": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "404": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           }
         }
       }
@@ -252,13 +650,44 @@
             "description": "The twelve months, recorded or blank, with status and version."
           },
           "400": {
-            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — missing year, or one outside TD-9's 1300–1600 (which rejects a Gregorian year typed into the Hijri field)."
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — missing year, or one outside TD-9's 1300–1600 (which rejects a Gregorian year typed into the Hijri field).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "401": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "403": {
-            "description": "Error envelope (TD-3.8). FORBIDDEN for anyone below Super Admin."
+            "description": "Error envelope (TD-3.8). FORBIDDEN for anyone below Super Admin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           }
         }
       }
@@ -272,16 +701,54 @@
             "description": "The recorded month with its new version."
           },
           "400": {
-            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — malformed date, month outside 1–12, a missing version on an existing month, or `reason: 'MONTH_ORDER'` with the conflicting month in `details`."
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — malformed date, month outside 1–12, a missing version on an existing month, or `reason: 'MONTH_ORDER'` with the conflicting month in `details`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "401": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "403": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "409": {
-            "description": "Error envelope (TD-3.8). VERSION_CONFLICT."
+            "description": "Error envelope (TD-3.8). VERSION_CONFLICT.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           }
         }
       }
@@ -295,16 +762,54 @@
             "description": "The number of months moved from draft to published."
           },
           "400": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "401": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "403": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "409": {
-            "description": "Error envelope (TD-3.8). STATE_CONFLICT with `reason: 'NOTHING_TO_PUBLISH'`."
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT with `reason: 'NOTHING_TO_PUBLISH'`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           }
         }
       }
@@ -318,13 +823,44 @@
             "description": "Audit entries, newest first."
           },
           "400": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "401": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "403": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           }
         }
       }
@@ -338,13 +874,44 @@
             "description": "Candidate events."
           },
           "401": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "403": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "404": {
-            "description": "Error envelope (TD-3.8). NOT_FOUND for a branch out of scope."
+            "description": "Error envelope (TD-3.8). NOT_FOUND for a branch out of scope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           }
         }
       },
@@ -356,16 +923,54 @@
             "description": "Reports the number newly attached."
           },
           "400": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "401": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "403": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "404": {
-            "description": "Error envelope (TD-3.8). NOT_FOUND for an out-of-scope branch or unknown event."
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an out-of-scope branch or unknown event.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           }
         }
       }
@@ -379,10 +984,34 @@
             "description": "Groups, with `start_time`/`end_time` as local wall-clock `HH:MM` (TD-11)."
           },
           "401": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "403": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           }
         }
       },
@@ -394,19 +1023,64 @@
             "description": "Created."
           },
           "400": {
-            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — including end_time not after start_time."
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — including end_time not after start_time.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "401": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "403": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "404": {
-            "description": "Error envelope (TD-3.8). NOT_FOUND for an out-of-scope branch, or a level/room that does not exist."
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an out-of-scope branch, or a level/room that does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "409": {
-            "description": "Error envelope (TD-3.8). STATE_CONFLICT on a room/time overlap. TD-3.8 deliberately has no dedicated schedule code — the distinction travels in `details`: `{ reason: \"ROOM_TIME_OVERLAP\", constraint: \"ROOM_SCHEDULE\", conflicting_group_id }`."
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT on a room/time overlap. TD-3.8 deliberately has no dedicated schedule code — the distinction travels in `details`: `{ reason: \"ROOM_TIME_OVERLAP\", constraint: \"ROOM_SCHEDULE\", conflicting_group_id }`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           }
         }
       }
@@ -420,19 +1094,64 @@
             "description": "Updated."
           },
           "400": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "401": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "403": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "404": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "409": {
-            "description": "Error envelope (TD-3.8). VERSION_CONFLICT, or STATE_CONFLICT with `details.reason = \"ROOM_TIME_OVERLAP\"`."
+            "description": "Error envelope (TD-3.8). VERSION_CONFLICT, or STATE_CONFLICT with `details.reason = \"ROOM_TIME_OVERLAP\"`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           }
         }
       },
@@ -444,16 +1163,54 @@
             "description": "Deleted."
           },
           "401": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "403": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "404": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "409": {
-            "description": "Error envelope (TD-3.8). STATE_CONFLICT while enrolments remain."
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT while enrolments remain.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           }
         }
       }
@@ -467,13 +1224,44 @@
             "description": "Enrolled students, ordered by Arabic name."
           },
           "401": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "403": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "404": {
-            "description": "Error envelope (TD-3.8). NOT_FOUND for a group out of scope or nonexistent."
+            "description": "Error envelope (TD-3.8). NOT_FOUND for a group out of scope or nonexistent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           }
         }
       },
@@ -485,19 +1273,64 @@
             "description": "Enrolled; reports the new count and the capacity."
           },
           "400": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "401": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "403": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "404": {
-            "description": "Error envelope (TD-3.8). NOT_FOUND for an out-of-scope group or unknown student."
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an out-of-scope group or unknown student.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "409": {
-            "description": "Error envelope (TD-3.8). DUPLICATE if already enrolled, or CAPACITY_FULL with `details = { reason: \"MAX_STUDENTS_REACHED\", constraint: \"GROUP_CAPACITY\", capacity }`."
+            "description": "Error envelope (TD-3.8). DUPLICATE if already enrolled, or CAPACITY_FULL with `details = { reason: \"MAX_STUDENTS_REACHED\", constraint: \"GROUP_CAPACITY\", capacity }`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           }
         }
       }
@@ -511,13 +1344,44 @@
             "description": "Un-enrolled."
           },
           "401": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "403": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "404": {
-            "description": "Error envelope (TD-3.8). NOT_FOUND if the group is out of scope or the student is not enrolled."
+            "description": "Error envelope (TD-3.8). NOT_FOUND if the group is out of scope or the student is not enrolled.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           }
         }
       }
@@ -531,19 +1395,64 @@
             "description": "Assigned; reports slots used."
           },
           "400": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "401": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "403": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "404": {
-            "description": "Error envelope (TD-3.8). NOT_FOUND for an out-of-scope group, or a user who does not hold the teacher role."
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an out-of-scope group, or a user who does not hold the teacher role.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "409": {
-            "description": "Error envelope (TD-3.8). DUPLICATE if already assigned, or STATE_CONFLICT with `details.reason = \"INSTRUCTOR_SLOTS_FULL\"`."
+            "description": "Error envelope (TD-3.8). DUPLICATE if already assigned, or STATE_CONFLICT with `details.reason = \"INSTRUCTOR_SLOTS_FULL\"`.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           }
         }
       }
@@ -557,13 +1466,44 @@
             "description": "Removed."
           },
           "401": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "403": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "404": {
-            "description": "Error envelope (TD-3.8). NOT_FOUND if the group is out of scope or the teacher is not assigned."
+            "description": "Error envelope (TD-3.8). NOT_FOUND if the group is out of scope or the teacher is not assigned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           }
         }
       }
@@ -577,13 +1517,44 @@
             "description": "Effective state per consent type; null where no record exists."
           },
           "401": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "403": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "404": {
-            "description": "Error envelope (TD-3.8). NOT_FOUND for a student out of scope or nonexistent."
+            "description": "Error envelope (TD-3.8). NOT_FOUND for a student out of scope or nonexistent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           }
         }
       },
@@ -595,19 +1566,64 @@
             "description": "Recorded; reports how many groups were queued for re-evaluation."
           },
           "400": {
-            "description": "Error envelope (TD-3.8). VALIDATION_FAILED."
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "401": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "403": {
-            "description": "Error envelope (TD-3.8). FORBIDDEN (TD-12 freshness or TD-2 role)."
+            "description": "Error envelope (TD-3.8). FORBIDDEN (TD-12 freshness or TD-2 role).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "404": {
-            "description": "Error envelope (TD-3.8). NOT_FOUND for a student out of scope or nonexistent."
+            "description": "Error envelope (TD-3.8). NOT_FOUND for a student out of scope or nonexistent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "503": {
-            "description": "Error envelope (TD-3.8). consent text version not configured (§2.3)."
+            "description": "Error envelope (TD-3.8). consent text version not configured (§2.3).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           }
         }
       }
@@ -621,13 +1637,44 @@
             "description": "The profile; fields are null when no record exists yet."
           },
           "401": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "403": {
-            "description": "Error envelope (TD-3.8). FORBIDDEN when the caller is no longer Active or holds none of the three roles (TD-12)."
+            "description": "Error envelope (TD-3.8). FORBIDDEN when the caller is no longer Active or holds none of the three roles (TD-12).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "404": {
-            "description": "Error envelope (TD-3.8). NOT_FOUND for a student out of scope OR nonexistent — deliberately indistinguishable."
+            "description": "Error envelope (TD-3.8). NOT_FOUND for a student out of scope OR nonexistent — deliberately indistinguishable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           }
         }
       },
@@ -639,16 +1686,54 @@
             "description": "The stored profile."
           },
           "400": {
-            "description": "Error envelope (TD-3.8). VALIDATION_FAILED against the §7 column limits."
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED against the §7 column limits.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "401": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "403": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "404": {
-            "description": "Error envelope (TD-3.8). NOT_FOUND for a student out of scope or nonexistent."
+            "description": "Error envelope (TD-3.8). NOT_FOUND for a student out of scope or nonexistent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           }
         }
       }
@@ -662,13 +1747,44 @@
             "description": "Page of users in the TD-10 envelope."
           },
           "400": {
-            "description": "Error envelope (TD-3.8). VALIDATION_FAILED on a bad filter or a query shorter than 2 characters."
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED on a bad filter or a query shorter than 2 characters.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "401": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "403": {
-            "description": "Error envelope (TD-3.8). FORBIDDEN (TD-12 freshness or TD-2 role)."
+            "description": "Error envelope (TD-3.8). FORBIDDEN (TD-12 freshness or TD-2 role).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           }
         }
       },
@@ -680,19 +1796,64 @@
             "description": "Account created and claimable; not yet bound to any identity."
           },
           "400": {
-            "description": "Error envelope (TD-3.8). VALIDATION_FAILED on a missing name or malformed email."
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED on a missing name or malformed email.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "401": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "403": {
-            "description": "Error envelope (TD-3.8). FORBIDDEN (TD-12 freshness, TD-2 role, or an Admin attempting to create an Admin)."
+            "description": "Error envelope (TD-3.8). FORBIDDEN (TD-12 freshness, TD-2 role, or an Admin attempting to create an Admin).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "404": {
-            "description": "Error envelope (TD-3.8). NOT_FOUND when the named branch scope does not exist."
+            "description": "Error envelope (TD-3.8). NOT_FOUND when the named branch scope does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "409": {
-            "description": "Error envelope (TD-3.8). DUPLICATE when that email may already claim an account."
+            "description": "Error envelope (TD-3.8). DUPLICATE when that email may already claim an account.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           }
         }
       }
@@ -706,19 +1867,64 @@
             "description": "Pending link created; awaits an approval decision."
           },
           "400": {
-            "description": "Error envelope (TD-3.8). VALIDATION_FAILED for a bad id pair, or a user named as their own parent."
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED for a bad id pair, or a user named as their own parent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "401": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "403": {
-            "description": "Error envelope (TD-3.8). FORBIDDEN (TD-12 freshness or TD-2 role)."
+            "description": "Error envelope (TD-3.8). FORBIDDEN (TD-12 freshness or TD-2 role).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "404": {
-            "description": "Error envelope (TD-3.8). NOT_FOUND when either party does not exist or is soft-deleted."
+            "description": "Error envelope (TD-3.8). NOT_FOUND when either party does not exist or is soft-deleted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "409": {
-            "description": "Error envelope (TD-3.8). DUPLICATE when a live link already exists — never FAMILY_LINK_PENDING, whose TD-3.8 definition is restricted to own-resource contexts."
+            "description": "Error envelope (TD-3.8). DUPLICATE when a live link already exists — never FAMILY_LINK_PENDING, whose TD-3.8 definition is restricted to own-resource contexts.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           }
         }
       }
@@ -732,19 +1938,64 @@
             "description": "Revoked; the parent loses access to that child immediately."
           },
           "400": {
-            "description": "Error envelope (TD-3.8). VALIDATION_FAILED when the reason is missing or too long."
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED when the reason is missing or too long.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "401": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "403": {
-            "description": "Error envelope (TD-3.8). FORBIDDEN (TD-12 freshness or TD-2 role)."
+            "description": "Error envelope (TD-3.8). FORBIDDEN (TD-12 freshness or TD-2 role).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "404": {
-            "description": "Error envelope (TD-3.8). NOT_FOUND for an unknown or already-revoked link."
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an unknown or already-revoked link.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "409": {
-            "description": "Error envelope (TD-3.8). STATE_CONFLICT when the link is not Approved — pending and rejected links are decided through the approval queue."
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT when the link is not Approved — pending and rejected links are decided through the approval queue.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           }
         }
       }
@@ -758,10 +2009,34 @@
             "description": "Branch list."
           },
           "401": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "403": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           }
         }
       },
@@ -773,10 +2048,34 @@
             "description": "Created."
           },
           "400": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "403": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           }
         }
       }
@@ -790,10 +2089,34 @@
             "description": "Updated."
           },
           "404": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "409": {
-            "description": "Error envelope (TD-3.8). VERSION_CONFLICT."
+            "description": "Error envelope (TD-3.8). VERSION_CONFLICT.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           }
         }
       },
@@ -805,10 +2128,34 @@
             "description": "Deleted."
           },
           "404": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "409": {
-            "description": "Error envelope (TD-3.8). STATE_CONFLICT when referenced."
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT when referenced.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           }
         }
       }
@@ -822,7 +2169,24 @@
             "description": "Room list."
           },
           "404": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           }
         }
       },
@@ -834,10 +2198,34 @@
             "description": "Created."
           },
           "400": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "404": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           }
         }
       }
@@ -851,10 +2239,34 @@
             "description": "Updated."
           },
           "404": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "409": {
-            "description": "Error envelope (TD-3.8). VERSION_CONFLICT."
+            "description": "Error envelope (TD-3.8). VERSION_CONFLICT.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           }
         }
       },
@@ -866,10 +2278,34 @@
             "description": "Deleted."
           },
           "404": {
-            "description": "Error envelope (TD-3.8)."
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "409": {
-            "description": "Error envelope (TD-3.8). STATE_CONFLICT when referenced."
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT when referenced.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           }
         }
       }
@@ -888,8 +2324,25 @@
           "200": {
             "description": "All components healthy."
           },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
           "503": {
-            "description": "At least one component is down."
+            "description": "At least one component is down.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           }
         }
       }

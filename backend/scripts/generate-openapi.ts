@@ -45,19 +45,53 @@ const SYNTHETIC_CONFIG: AppConfig = {
 interface Operation {
   summary: string;
   description: string;
-  responses: Record<string, { description: string }>;
+  responses: Record<string, unknown>;
 }
+
+/**
+ * The TD-3.8 codes this implementation can actually emit. A code appears here
+ * only once something throws it — the SRS catalogue is wider because it also
+ * covers later milestones (`WEIGHT_SUM_EXCEEDED`, `RATE_LIMITED`, …).
+ */
+const ERROR_CODES = [
+  'VALIDATION_FAILED',
+  'AUTH_REQUIRED',
+  'FORBIDDEN',
+  'NOT_FOUND',
+  'STATE_CONFLICT',
+  'VERSION_CONFLICT',
+  'DUPLICATE',
+  'CONSENT_REQUIRED',
+  'CAPACITY_FULL',
+  'SERVICE_UNAVAILABLE',
+  'INTERNAL',
+];
 
 const ENVELOPE = 'Error envelope (TD-3.8).';
 
 function op(summary: string, description: string, responses: Record<string, string>): Operation {
-  return {
-    summary,
-    description,
-    responses: Object.fromEntries(
-      Object.entries(responses).map(([status, text]) => [status, { description: text }]),
-    ),
-  };
+  const declared = Object.entries(responses).map(([status, text]) => [
+    status,
+    Number(status) >= 400
+      ? {
+          description: text,
+          content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } },
+        }
+      : { description: text },
+  ]);
+
+  // Every endpoint can return 500 — the error middleware is the last handler on
+  // every route. Documenting it once here rather than per operation keeps it
+  // from being forgotten on the endpoint where it eventually matters.
+  declared.push([
+    '500',
+    {
+      description: `${ENVELOPE} INTERNAL — unexpected server fault; details are never leaked to the client.`,
+      content: { 'application/json': { schema: { $ref: '#/components/schemas/ErrorEnvelope' } } },
+    },
+  ]);
+
+  return { summary, description, responses: Object.fromEntries(declared) };
 }
 
 const document = {
@@ -70,6 +104,48 @@ const document = {
       'contract (§3.1); this document must conform to it and is never hand-edited.',
   },
   servers: [{ url: '/api/v1', description: 'Same-origin API path (§3.1)' }],
+  components: {
+    schemas: {
+      // TD-3.8: one envelope for every non-2xx response, on every endpoint.
+      // Described once here rather than restated per operation — the prose in
+      // each response says which `code` to expect; this says what the body is.
+      ErrorEnvelope: {
+        type: 'object',
+        required: ['error'],
+        properties: {
+          error: {
+            type: 'object',
+            required: ['code', 'message_key', 'message', 'details', 'request_id'],
+            properties: {
+              code: {
+                type: 'string',
+                description:
+                  'The canonical application error code (TD-3.8). Extensible only by SRS revision.',
+                enum: ERROR_CODES,
+              },
+              message_key: { type: 'string', description: 'i18n key; the client renders this.' },
+              message: {
+                type: 'string',
+                description: 'Localised fallback text (Arabic at launch, §6).',
+              },
+              details: {
+                type: 'object',
+                additionalProperties: true,
+                description:
+                  'Structured context for codes that carry it — e.g. `reason: ROOM_TIME_OVERLAP` ' +
+                  'with `conflicting_group_id`, `capacity` on CAPACITY_FULL, or `conflicting_month` ' +
+                  'on a Hijri ordering refusal. Empty object when there is nothing to add.',
+              },
+              request_id: {
+                type: 'string',
+                description: 'Correlates the response with the server log line.',
+              },
+            },
+          },
+        },
+      },
+    },
+  },
   paths: {
     '/auth/google': {
       get: op(

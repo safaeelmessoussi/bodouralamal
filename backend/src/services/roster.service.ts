@@ -34,14 +34,6 @@ function assertCanManage(actor: Actor): void {
   }
 }
 
-function assertInScope(actor: Actor, branchId: string): void {
-  if (isSuperAdmin(actor)) return;
-  if (!scope.canActOnBranch(actor.roleScopes, MANAGING_ROLE, branchId)) {
-    // §20 rule 17: out of scope is 404, never 403.
-    throw new AppError('NOT_FOUND', 'no such group');
-  }
-}
-
 export async function listRoster(
   prisma: PrismaClient,
   actor: Actor,
@@ -50,7 +42,7 @@ export async function listRoster(
   assertCanManage(actor);
   const group = await prisma.group.findFirst({ where: { id: groupId, deletedAt: null } });
   if (!group) throw new AppError('NOT_FOUND', 'no such group');
-  assertInScope(actor, group.branchId);
+  scope.assertCanActOnBranch(actor.roleScopes, MANAGING_ROLE, group.branchId, 'no such group');
 
   const rows = await prisma.studentGroup.findMany({
     where: { groupId, deletedAt: null, student: { deletedAt: null } },
@@ -75,7 +67,7 @@ export async function enrolStudent(
   return prisma.$transaction(async (tx) => {
     const group = await tx.group.findFirst({ where: { id: groupId, deletedAt: null } });
     if (!group) throw new AppError('NOT_FOUND', 'no such group');
-    assertInScope(actor, group.branchId);
+    scope.assertCanActOnBranch(actor.roleScopes, MANAGING_ROLE, group.branchId, 'no such group');
 
     const student = await tx.user.findFirst({
       where: { id: studentId, deletedAt: null },
@@ -144,7 +136,7 @@ export async function unenrolStudent(
   await prisma.$transaction(async (tx) => {
     const group = await tx.group.findFirst({ where: { id: groupId, deletedAt: null } });
     if (!group) throw new AppError('NOT_FOUND', 'no such group');
-    assertInScope(actor, group.branchId);
+    scope.assertCanActOnBranch(actor.roleScopes, MANAGING_ROLE, group.branchId, 'no such group');
 
     const row = await tx.studentGroup.findFirst({
       where: { groupId, studentId, deletedAt: null },

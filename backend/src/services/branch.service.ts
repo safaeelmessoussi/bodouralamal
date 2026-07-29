@@ -3,6 +3,7 @@ import * as scope from '../policies/branch-scope.js';
 import { type RoleScope } from '../policies/branch-scope.js';
 import { AppError } from '../lib/errors.js';
 import * as audit from '../repositories/audit.repository.js';
+import * as trash from '../repositories/trash.repository.js';
 import { assertNoBlockingReferences, updateWithVersion } from '../repositories/optimistic-lock.js';
 
 /**
@@ -72,15 +73,6 @@ function assertMaySetDisplayOrder(actor: Actor, data: { displayOrder?: number | 
   }
 }
 
-/** Admins are scoped to their assigned branches; Super Admins are unscoped. */
-function assertInScope(actor: Actor, branchId: string): void {
-  if (isSuperAdmin(actor)) return;
-  if (!scope.canActOnBranch(actor.roleScopes, MANAGING_ROLE, branchId)) {
-    // §20 rule 17: out-of-scope is 404, never 403 — no existence leaks.
-    throw new AppError('NOT_FOUND', 'branch out of scope');
-  }
-}
-
 /**
  * §2.2/TD-10 ordering: `display_order ASC NULLS LAST`, then `name` — which is
  * correct Arabic order automatically because the column is natively collated
@@ -134,7 +126,7 @@ export async function updateBranch(
   data: { name?: string; operationalStartDate?: Date | null; displayOrder?: number | null },
 ): Promise<Branch> {
   assertCanWriteReferenceData(actor);
-  assertInScope(actor, id);
+  scope.assertCanActOnBranch(actor.roleScopes, MANAGING_ROLE, id);
   assertMaySetDisplayOrder(actor, data);
 
   // TD-15.1: conditional UPDATE on `version`; a stale version is a coded 409,
@@ -161,7 +153,7 @@ export async function deleteBranch(
   id: string,
 ): Promise<void> {
   assertCanWriteReferenceData(actor);
-  assertInScope(actor, id);
+  scope.assertCanActOnBranch(actor.roleScopes, MANAGING_ROLE, id);
 
   await prisma.$transaction(async (tx) => {
     // §16.2 sanctioned raw-SQL exception (a): SELECT … FOR UPDATE row lock.
@@ -184,15 +176,11 @@ export async function deleteBranch(
       where: { id },
       data: { deletedAt: new Date(), deletedById: actor.userId },
     });
-    await tx.trash.create({
-      data: {
-        targetEntity: 'Branch',
-        targetId: id,
-        snapshot: JSON.parse(JSON.stringify(branch)) as object,
-        deletedById: actor.userId,
-        // BR-15: the 90-day permanent-delete window.
-        purgeAfter: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
-      },
+    await trash.snapshot(tx, {
+      targetEntity: 'Branch',
+      targetId: id,
+      snapshot: JSON.parse(JSON.stringify(branch)) as object,
+      deletedById: actor.userId,
     });
     await audit.write(tx, {
       actorUserId: actor.userId,
@@ -212,7 +200,7 @@ export async function listRooms(
   branchId: string,
 ): Promise<Room[]> {
   assertCanReadReferenceData(actor);
-  assertInScope(actor, branchId);
+  scope.assertCanActOnBranch(actor.roleScopes, MANAGING_ROLE, branchId);
   return prisma.room.findMany({
     where: { branchId, deletedAt: null },
     orderBy: [{ name: 'asc' }, { id: 'asc' }],
@@ -226,7 +214,7 @@ export async function createRoom(
   data: { name: string },
 ): Promise<Room> {
   assertCanWriteReferenceData(actor);
-  assertInScope(actor, branchId);
+  scope.assertCanActOnBranch(actor.roleScopes, MANAGING_ROLE, branchId);
 
   return prisma.$transaction(async (tx) => {
     const branch = await tx.branch.findFirst({ where: { id: branchId, deletedAt: null } });
@@ -254,7 +242,7 @@ export async function updateRoom(
   assertCanWriteReferenceData(actor);
   const room = await prisma.room.findFirst({ where: { id, deletedAt: null } });
   if (!room) throw new AppError('NOT_FOUND', 'room not found');
-  assertInScope(actor, room.branchId);
+  scope.assertCanActOnBranch(actor.roleScopes, MANAGING_ROLE, room.branchId);
 
   return updateWithVersion<Room>({
     delegate: prisma.room,
@@ -274,7 +262,7 @@ export async function deleteRoom(prisma: PrismaClient, actor: Actor, id: string)
 
     const room = await tx.room.findFirst({ where: { id, deletedAt: null } });
     if (!room) throw new AppError('NOT_FOUND', 'room not found');
-    assertInScope(actor, room.branchId);
+    scope.assertCanActOnBranch(actor.roleScopes, MANAGING_ROLE, room.branchId);
 
     const groups = await tx.group.count({ where: { roomId: id, deletedAt: null } });
     await assertNoBlockingReferences([{ label: 'groups', count: groups }]);
@@ -283,14 +271,11 @@ export async function deleteRoom(prisma: PrismaClient, actor: Actor, id: string)
       where: { id },
       data: { deletedAt: new Date(), deletedById: actor.userId },
     });
-    await tx.trash.create({
-      data: {
-        targetEntity: 'Room',
-        targetId: id,
-        snapshot: JSON.parse(JSON.stringify(room)) as object,
-        deletedById: actor.userId,
-        purgeAfter: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
-      },
+    await trash.snapshot(tx, {
+      targetEntity: 'Room',
+      targetId: id,
+      snapshot: JSON.parse(JSON.stringify(room)) as object,
+      deletedById: actor.userId,
     });
     await audit.write(tx, {
       actorUserId: actor.userId,

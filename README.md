@@ -103,22 +103,29 @@ screen.
 
 ### What runs today
 
-**Backend endpoints** (22 implemented; the full contract is in [`docs/openapi.json`](docs/openapi.json)):
+**Backend endpoints** (45 operations across 33 paths; the full contract, including the TD-3.8 error
+envelope schema, is in [`docs/openapi.json`](docs/openapi.json)):
 
 - `GET /healthz` — component health for database, storage, and job queue
 - `GET /auth/google`, `GET /auth/google/callback`, `POST /auth/refresh`, `POST /auth/logout`, `GET /me`
 - `POST /registrations` — unified parent + child registration in one transaction
 - `GET /admin/approvals`, `POST /admin/approvals/{id}/approve|reject`
 - `POST /family-links`, `DELETE /admin/family-links/{id}`
-- `GET /admin/users`, `POST /admin/users`
+- `GET`/`POST`/`PATCH /admin/users` — user management and staff pre-provisioning
+- `GET`/`PUT /students/{id}/social-profile`, `GET`/`POST /students/{id}/consents`
 - Branch and room CRUD under `/admin/branches` and `/admin/rooms`
+- `GET`/`POST`/`PATCH`/`DELETE /admin/groups` — timetable, room/time conflict detection, capacity
+- `GET`/`POST`/`DELETE /admin/groups/{id}/roster` and `.../instructors` — enrolment and co-teaching
+- `POST`/`PATCH`/`DELETE /events`, `GET`/`POST /admin/branches/{id}/event-backfill`
+- `GET /calendar` — **the one public endpoint**: anonymous callers get the public tier
+- `GET`/`PUT`/`POST /admin/hijri-calendar/...` — recording the Ministry's official Hijri announcements
 
 **Frontend:** a public shell only — landing page, login, the OAuth error states, and the account
 status screens. **There are no authenticated screens yet**, so the endpoints above currently have no
 UI driving them.
 
-**Not started:** scheduling and the dual Gregorian/Hijri calendar, Quran progress tracking, exams and
-grading, and content/consent/storage workflows.
+**Not started:** Quran progress tracking (M4), exams and grading (M5), and content/consent/storage
+workflows (M6). Scheduling, the calendar and the Hijri overlay are complete on the backend.
 
 ### Live pre-MVP site
 
@@ -198,7 +205,7 @@ because the properties it checks — transaction atomicity, constraint enforceme
 signatures surviving the proxy — do not exist in a mock. It runs serially, since the suites share one
 database.
 
-Current totals: **49 unit tests and 159 integration tests**.
+Current totals: **89 unit tests and 460 integration tests**.
 
 ---
 

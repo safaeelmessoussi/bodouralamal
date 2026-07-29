@@ -3,6 +3,7 @@ import { AppError } from '../lib/errors.js';
 import * as scope from '../policies/branch-scope.js';
 import type { RoleScope } from '../policies/branch-scope.js';
 import * as audit from '../repositories/audit.repository.js';
+import * as trash from '../repositories/trash.repository.js';
 import { updateWithVersion } from '../repositories/optimistic-lock.js';
 
 /**
@@ -34,14 +35,6 @@ const isAdmin = (actor: Actor) => scope.hasRole(actor.roleScopes, MANAGING_ROLE)
 
 function assertCanManage(actor: Actor): void {
   if (!isAdmin(actor)) throw new AppError('FORBIDDEN', 'group management requires admin');
-}
-
-function assertInScope(actor: Actor, branchId: string): void {
-  if (isSuperAdmin(actor)) return;
-  if (!scope.canActOnBranch(actor.roleScopes, MANAGING_ROLE, branchId)) {
-    // §20 rule 17: out of scope is 404, never 403 — no existence leaks.
-    throw new AppError('NOT_FOUND', 'branch out of scope');
-  }
 }
 
 export interface GroupInput {
@@ -170,7 +163,7 @@ export async function createGroup(
   input: GroupInput,
 ): Promise<Group> {
   assertCanManage(actor);
-  assertInScope(actor, input.branchId);
+  scope.assertCanActOnBranch(actor.roleScopes, MANAGING_ROLE, input.branchId);
   assertValidSlot(input);
 
   return prisma.$transaction(async (tx) => {
@@ -213,7 +206,7 @@ export async function updateGroup(
   return prisma.$transaction(async (tx) => {
     const existing = await tx.group.findFirst({ where: { id, deletedAt: null } });
     if (!existing) throw new AppError('NOT_FOUND', 'no such group');
-    assertInScope(actor, existing.branchId);
+    scope.assertCanActOnBranch(actor.roleScopes, MANAGING_ROLE, existing.branchId);
 
     const merged = {
       levelId: data.levelId ?? existing.levelId,
@@ -226,7 +219,7 @@ export async function updateGroup(
     };
     // Moving a group into another branch requires scope over the destination
     // too, or an Admin could push a group outside their own reach.
-    if (merged.branchId !== existing.branchId) assertInScope(actor, merged.branchId);
+    if (merged.branchId !== existing.branchId) scope.assertCanActOnBranch(actor.roleScopes, MANAGING_ROLE, merged.branchId);
     assertValidSlot(merged);
     await assertReferencesValid(tx, merged);
     await assertNoRoomConflict(tx, merged, id);
@@ -258,7 +251,7 @@ export async function deleteGroup(prisma: PrismaClient, actor: Actor, id: string
   await prisma.$transaction(async (tx) => {
     const group = await tx.group.findFirst({ where: { id, deletedAt: null } });
     if (!group) throw new AppError('NOT_FOUND', 'no such group');
-    assertInScope(actor, group.branchId);
+    scope.assertCanActOnBranch(actor.roleScopes, MANAGING_ROLE, group.branchId);
 
     // TD-5: deletion is blocked while students are enrolled, matching the
     // Branch/Room precedent — un-enrolment is a deliberate roster action, not a
@@ -272,15 +265,19 @@ export async function deleteGroup(prisma: PrismaClient, actor: Actor, id: string
       where: { id },
       data: { deletedAt: new Date(), deletedById: actor.userId },
     });
-    await tx.trash.create({
-      data: {
-        targetEntity: 'Group',
-        targetId: id,
-        snapshot: JSON.parse(JSON.stringify({ ...group, startTime: group.startTime.toISOString(), endTime: group.endTime.toISOString() })) as object,
-        deletedById: actor.userId,
-        // BR-15: the 90-day permanent-delete window.
-        purgeAfter: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
-      },
+    await trash.snapshot(tx, {
+      targetEntity: 'Group',
+      targetId: id,
+      // The times are `time` columns; serialising them explicitly keeps the
+      // wall-clock value readable in the snapshot (TD-11).
+      snapshot: JSON.parse(
+        JSON.stringify({
+          ...group,
+          startTime: group.startTime.toISOString(),
+          endTime: group.endTime.toISOString(),
+        }),
+      ) as object,
+      deletedById: actor.userId,
     });
     await audit.write(tx, {
       actorUserId: actor.userId,
@@ -313,7 +310,7 @@ export async function assignTeacher(
   return prisma.$transaction(async (tx) => {
     const group = await tx.group.findFirst({ where: { id: groupId, deletedAt: null } });
     if (!group) throw new AppError('NOT_FOUND', 'no such group');
-    assertInScope(actor, group.branchId);
+    scope.assertCanActOnBranch(actor.roleScopes, MANAGING_ROLE, group.branchId);
 
     // The person must actually hold the teacher role: assigning someone who
     // does not would grant §4.2 teaching reach to an account that TD-2 never
@@ -372,7 +369,7 @@ export async function unassignTeacher(
   await prisma.$transaction(async (tx) => {
     const group = await tx.group.findFirst({ where: { id: groupId, deletedAt: null } });
     if (!group) throw new AppError('NOT_FOUND', 'no such group');
-    assertInScope(actor, group.branchId);
+    scope.assertCanActOnBranch(actor.roleScopes, MANAGING_ROLE, group.branchId);
 
     const row = await tx.groupTeacher.findFirst({ where: { groupId, teacherId, deletedAt: null } });
     if (!row) throw new AppError('NOT_FOUND', 'teacher is not assigned to this group');

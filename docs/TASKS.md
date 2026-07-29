@@ -1,4 +1,10 @@
 # Tasks — بذور الأمل Platform
+
+> **Backend Release-Candidate status (2026-07-29, SRS Revision 33).** M0–M3 are **complete on the backend**:
+> every TD-3 endpoint for those milestones is implemented, documented and router-reconciled, and both the
+> §18 *Registration, Approvals & Family* and *Scheduling & Calendar* checklists are green. 89 unit + 460
+> integration tests, six CI guards, zero contract drift. The only M0–M3 item still open is **frontend**
+> (`ChildContextSwitcher`, owned by v0). M4–M8 below are future milestones and are genuinely unstarted.
 **Granular implementation checklist. Mutable — agents tick items (`[x]`) as work completes and may split items into sub-items, but never add tasks for post-MVP features (SRS §10.1) and never contradict the SRS. Milestone order: `docs/IMPLEMENTATION_PLAN.md`. Completion log: `docs/CHANGES.log`. SRS references in parentheses are the authority for each item.**
 
 **Status notation.** `[x]` complete · `[ ]` not started · `[~]` **partial — and a partial item always names WHICH dimension is done**, because "partial" alone hides whether the remaining risk is unwritten code or merely an unbuilt screen. Dimensions used:
@@ -273,7 +279,7 @@
 - [ ] Grade + User optimistic versioning incl. recalc-job participation (TD-15)
 - [ ] Postponement check: no template tables/UI/recalc anywhere (§10.1)
 - [ ] Pass/fail override endpoint + audit (TD-8)
-- [ ] LevelSurah/LevelSubject auto-draft components incl. Women's dual generation (BR-9, §4.6)
+- [ ] LevelSurah/LevelSubject auto-draft components incl. the Adult-stage dual generation (BR-9, §4.6)
 - [ ] §18 Exams & Grading checklist green (incl. both race tests)
 
 ## M6 — Content, Consent & Storage

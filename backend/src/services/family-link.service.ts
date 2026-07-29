@@ -2,6 +2,7 @@ import type { PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
 import { assertFreshActive } from '../policies/freshness.policy.js';
 import * as audit from '../repositories/audit.repository.js';
+import * as trash from '../repositories/trash.repository.js';
 
 /**
  * FamilyLink lifecycle beyond approval (SRS §4.3, Revision 16).
@@ -141,25 +142,21 @@ export async function revokeLink(
       where: { id: link.id },
       data: { deletedAt: new Date(), deletedById: actor.userId },
     });
-    await tx.trash.create({
-      data: {
-        targetEntity: 'FamilyLink',
-        targetId: link.id,
-        snapshot: JSON.parse(
-          JSON.stringify({
-            id: link.id,
-            parentId: link.parentId,
-            studentId: link.studentId,
-            status: link.status,
-            decidedAt: link.decidedAt,
-            decidedById: link.decidedById,
-            createdAt: link.createdAt,
-          }),
-        ) as object,
-        deletedById: actor.userId,
-        // BR-15: the 90-day permanent-delete window.
-        purgeAfter: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
-      },
+    await trash.snapshot(tx, {
+      targetEntity: 'FamilyLink',
+      targetId: link.id,
+      snapshot: JSON.parse(
+        JSON.stringify({
+          id: link.id,
+          parentId: link.parentId,
+          studentId: link.studentId,
+          status: link.status,
+          decidedAt: link.decidedAt,
+          decidedById: link.decidedById,
+          createdAt: link.createdAt,
+        }),
+      ) as object,
+      deletedById: actor.userId,
     });
     await audit.write(tx, {
       actorUserId: actor.userId,

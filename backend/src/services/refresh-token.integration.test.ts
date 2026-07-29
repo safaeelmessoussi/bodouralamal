@@ -219,7 +219,12 @@ describe('§18 token lifecycle acceptance criteria', () => {
     });
 
     const rows = await prisma.refreshToken.findMany({ where: { userId } });
+    // `[].every()` is true, so without this the assertion would pass if the rows
+    // had been deleted outright — the one outcome T9 must distinguish from
+    // revocation, since a deleted row proves nothing about revocation semantics.
+    expect(rows.length).toBeGreaterThan(0);
     expect(rows.every((r) => r.revokedReason === RefreshRevokedReason.user_deleted)).toBe(true);
+    expect(rows.every((r) => r.revokedAt !== null)).toBe(true);
   });
 
   it('T10 — an expired token is refused, and purge collects it; a purged token is refused identically', async () => {
