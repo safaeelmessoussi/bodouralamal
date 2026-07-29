@@ -21,3 +21,18 @@ export function t(path: string, locale: Locale = 'ar'): string {
 }
 
 export type { Catalog };
+
+/**
+ * List lookup — month and weekday names are ordered data, not sentences, so
+ * they live in the catalogue as arrays and are read through here rather than by
+ * building a key per index.
+ */
+export function tList(path: string, locale: Locale = 'ar'): string[] {
+  const parts = path.split('.');
+  let node: unknown = catalogs[locale];
+  for (const part of parts) {
+    if (typeof node !== 'object' || node === null || !(part in node)) return [];
+    node = (node as Record<string, unknown>)[part];
+  }
+  return Array.isArray(node) ? (node as string[]) : [];
+}

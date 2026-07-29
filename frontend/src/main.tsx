@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { PendingGuard } from './components/pending-guard.js';
 import { ActiveChildProvider } from './contexts/active-child.js';
 import { SessionProvider } from './contexts/session.js';
+import { CalendarPage } from './pages/calendar.js';
 import { Landing } from './pages/landing.js';
 import { AccountDeactivated, ContentUnavailable, Login, NotBuiltYet } from './pages/public.js';
 import './styles.css';
@@ -30,10 +31,10 @@ function App(): React.ReactNode {
       return <Login />;
     case '/content-unavailable':
       return <ContentUnavailable />;
-    // Routes the header already links to (§14.1) whose pages are later tasks.
-    // They render an explicit §14.4 state rather than a blank screen, so a
-    // visitor who follows the link is told where they are.
     case '/calendar':
+      return <CalendarPage />;
+    // §14.1 defines this route; its page is a later task, so it renders an
+    // explicit §14.4 state rather than a blank screen.
     case '/resources':
       return <NotBuiltYet />;
     case '/pending-approval':
