@@ -41,6 +41,40 @@ Contributing to the platform.
 `CHANGES.log` · SRS revised only if a normative requirement changed (Document Owner's call).
 See the [Definition of Done](documentation-policy.md#definition-of-done).
 
+## Reporting completion
+
+When work is finished, report it in **these six sections, in this order**:
+
+| Section | Contains |
+|---|---|
+| **1. User-visible changes** | What changed, in terms a non-developer understands |
+| **2. Engineering highlights** | The decisions and trade-offs that mattered |
+| **3. Documentation updates** | Exactly which documents changed, and **why** |
+| **4. Additional defects discovered** | Unrelated defects found and fixed along the way |
+| **5. Verification** | Tests, guards, builds, accessibility, API checks — what was actually run |
+| **6. Remaining work** | Anything intentionally left for later |
+
+**Use all six headings even when a section is short.** Write *"None"* rather than omitting
+one, so a missing section never reads as an oversight.
+
+**Keep section 1 free of identifiers and jargon** — no `§`, `BR-x` or `TD-x`. Those belong in
+sections 2 and 3, where the reader is looking for them.
+
+### Why the structure is fixed
+
+The Document Owner reads reports to make decisions, so the answers to *"what changed for the
+people using this"*, *"what did it cost"* and *"what is still open"* should always be in the
+same place rather than distributed through prose at the author's discretion.
+
+Two sections exist because of things this project has learned:
+
+- **Section 4** exists because incidental knowledge and incidental fixes are treated as
+  [technical debt to be paid immediately](documentation-policy.md#undocumented-knowledge-is-technical-debt).
+  A defect fixed in passing must be *surfaced*, not buried in a diff where only a reviewer
+  reading every line would find it.
+- **Section 6** exists so deferred work is **stated rather than assumed**. Scaling work down
+  is the Document Owner's call, and they can only make it if they know what was left.
+
 ## The one habit worth copying
 
 **Prove the guard, do not trust it.**

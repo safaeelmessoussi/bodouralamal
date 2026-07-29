@@ -277,6 +277,10 @@ Quality checks on the documentation half:
 **Reporting "done" with the documentation outstanding is reporting done falsely.** The
 implementation is the visible half; the documentation is what makes it survivable.
 
+And when you do report it, use the six fixed sections in
+[Reporting completion](README.md#reporting-completion) — section 3 is *Documentation updates*,
+which is where this page's work becomes visible to the reader rather than implied.
+
 ## Enforcement
 
 | Check | What it does |
