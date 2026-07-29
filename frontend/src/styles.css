@@ -25,45 +25,142 @@
  * of overrides rather than a rewrite.
  */
 
+/* ═══════════════════════════════════════════════════════════════════════════
+ * DESIGN TOKENS
+ *
+ * Three layers, and components may only ever touch the third.
+ *
+ *   1. PRIMITIVES  — the association's actual colours. Named for what they
+ *                    ARE (`--brand-green-700`). Nothing outside layer 2 reads
+ *                    them, so rebranding is an edit to the mappings below and
+ *                    to nothing else.
+ *   2. SEMANTIC    — named for what they MEAN (`--color-primary`,
+ *                    `--color-text-muted`). This is the only vocabulary a
+ *                    component knows. A rule that says `--brand-green-700` has
+ *                    hardcoded a decision that belongs here.
+ *   3. SCALES      — spacing, radius, elevation, motion, type.
+ *
+ * THEMING. The platform is light-only by decision, so there is no
+ * `prefers-color-scheme` branch and no `data-theme` override; `color-scheme:
+ * light` additionally keeps NATIVE controls light on a dark OS. A dark theme
+ * would be one block re-pointing the layer-2 mappings — layer 3 and every
+ * component stay untouched. That is the whole point of the split.
+ *
+ * SPACING, HONESTLY. The scale below is the 0.25rem rhythm this design already
+ * follows at its common sizes, and every value that lands on it is tokenised.
+ * A number of one-off values (0.15, 0.35, 0.65, 1.35rem …) are deliberately
+ * left literal: snapping them to the nearest step would move pixels, and this
+ * refactor is required to change nothing visually. They are listed in the
+ * ledger as a follow-up for when visual change is permitted.
+ * ═══════════════════════════════════════════════════════════════════════════ */
+
 :root {
   color-scheme: light;
 
-  --brand-900: #073826;
-  --brand-700: #0b4a33;
-  --brand-500: #146b4a;
-  --brand-100: #e6f0ea;
-  /* Brass is used for section eyebrows and step numbers — real text, so it has
-     to clear 4.5:1 on BOTH `--surface` and `--ground`. The lighter tone this
-     replaced measured 4.49:1 on white and 4.17:1 on the ground: a near miss
-     that is still a fail, and only measuring catches it. */
-  --brass: #8f6720;
+  /* ── 1. PRIMITIVES ─────────────────────────────────────────────────────── */
 
-  --ink: #14201b;
-  --ink-soft: #35433d;
-  /* Darkened from #5b6862: secondary text has to stay legible on `--surface`
-     as well as on `--ground`, and the lighter tone was marginal on white. */
-  --muted: #52605a;
-  --rule: #e3e8e4;
-  --surface: #ffffff;
-  --surface-raised: #ffffff;
-  --ground: #f5f7f5;
-  --danger: #a81f18;
-  --danger-soft: #fdeeed;
+  /* Moroccan zellij green — the association's identity. */
+  --brand-green-900: #073826;
+  --brand-green-700: #0b4a33;
+  --brand-green-500: #146b4a;
+  --brand-green-100: #e6f0ea;
 
-  --space: 1rem;
-  --radius: 10px;
-  --radius-sm: 6px;
-  --shadow: 0 1px 2px rgb(7 56 38 / 6%), 0 8px 24px -12px rgb(7 56 38 / 18%);
+  /* Brass, the single accent. Dark enough to carry text at 4.5:1 on both the
+     surface and the background — it is used for eyebrows and step numbers. */
+  --brand-gold: #8f6720;
+
+  /* Neutrals, biased warm-green so nothing reads as unconsidered grey. */
+  --neutral-0: #ffffff;
+  --neutral-50: #f5f7f5;
+  --neutral-200: #e3e8e4;
+  --neutral-600: #52605a;
+  --neutral-700: #35433d;
+  --neutral-900: #14201b;
+
+  --red-50: #fdeeed;
+  --red-600: #a81f18;
+
+  /* ── 2. SEMANTIC ───────────────────────────────────────────────────────── */
+
+  --color-primary: var(--brand-green-700);
+  --color-primary-hover: var(--brand-green-900);
+  /* The full-strength brand ground, for inverse-themed bands like the hero. */
+  --color-primary-strong: var(--brand-green-900);
+  --color-primary-emphasis: var(--brand-green-500);
+  --color-primary-soft: var(--brand-green-100);
+  --color-accent: var(--brand-gold);
+
+  --color-background: var(--neutral-50);
+  --color-surface: var(--neutral-0);
+  --color-surface-raised: var(--neutral-0);
+
+  --color-border: var(--neutral-200);
+
+  --color-text: var(--neutral-900);
+  --color-text-secondary: var(--neutral-700);
+  --color-text-muted: var(--neutral-600);
+  --color-text-inverse: var(--neutral-0);
+
+  --color-danger: var(--red-600);
+  --color-danger-soft: var(--red-50);
+
+  /* Inverse surfaces (the hero band): fixed light values, because they sit on
+     the brand ground rather than on a themed surface. */
+  --color-on-primary: #f4f7f4;
+  --color-on-primary-secondary: #d5e2da;
+  --color-on-primary-muted: #b9ccc0;
+  --color-on-primary-accent: #e3c98d;
+  --color-on-primary-border: rgb(255 255 255 / 35%);
+  --color-on-primary-overlay: rgb(255 255 255 / 8%);
+  --color-on-primary-panel: rgb(255 255 255 / 6%);
+  --color-on-primary-panel-border: rgb(255 255 255 / 14%);
+  --color-on-primary-motif: rgb(255 255 255 / 5%);
+  --color-on-primary-motif-soft: rgb(255 255 255 / 4%);
+
+  /* ── 3. SCALES ─────────────────────────────────────────────────────────── */
+
+  /* Spacing — 0.25rem rhythm. */
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.25rem;
+  --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-10: 2.5rem;
+  --space-12: 3rem;
+  --space-16: 4rem;
+
+  --radius-xs: 3px;
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-full: 50%;
+
+  /* Elevation. Only `md` is consumed today; the scale exists so the next
+     raised surface picks a step instead of inventing a shadow. */
+  --shadow-sm: 0 1px 2px rgb(7 56 38 / 6%);
+  --shadow-md: 0 1px 2px rgb(7 56 38 / 6%), 0 8px 24px -12px rgb(7 56 38 / 18%);
+  --shadow-lg: 0 2px 4px rgb(7 56 38 / 8%), 0 16px 40px -16px rgb(7 56 38 / 24%);
+
+  /* Motion. One duration, so nothing in the interface moves at a rate nobody
+     chose; `prefers-reduced-motion` collapses it at the foot of this file. */
+  --transition-fast: 0.15s ease;
+
+  /* Typography — minor-third scale, clamped so 360 px never overflows. */
+  --font-size-xs: clamp(0.82rem, 0.8rem + 0.1vw, 0.88rem);
+  --font-size-sm: clamp(1rem, 0.97rem + 0.15vw, 1.06rem);
+  --font-size-md: clamp(1.2rem, 1.12rem + 0.4vw, 1.4rem);
+  --font-size-lg: clamp(1.45rem, 1.3rem + 0.8vw, 1.9rem);
+  --font-size-xl: clamp(1.8rem, 1.5rem + 1.5vw, 2.8rem);
+  --font-size-2xl: clamp(2.1rem, 1.6rem + 2.6vw, 3.6rem);
+  --font-family-base: 'Noto Naskh Arabic', 'Segoe UI', system-ui, -apple-system, 'Tahoma', sans-serif;
+  --line-height-base: 1.75;
+  --line-height-tight: 1.25;
+
+  /* Layout constants. */
   --measure: 64ch;
-  --header-h: 4.25rem;
-
-  /* Minor-third scale, clamped so 360 px never overflows. */
-  --step--1: clamp(0.82rem, 0.8rem + 0.1vw, 0.88rem);
-  --step-0: clamp(1rem, 0.97rem + 0.15vw, 1.06rem);
-  --step-1: clamp(1.2rem, 1.12rem + 0.4vw, 1.4rem);
-  --step-2: clamp(1.45rem, 1.3rem + 0.8vw, 1.9rem);
-  --step-3: clamp(1.8rem, 1.5rem + 1.5vw, 2.8rem);
-  --step-4: clamp(2.1rem, 1.6rem + 2.6vw, 3.6rem);
+  --header-height: 4.25rem;
 }
 
 *,
@@ -78,18 +175,18 @@ html {
 
 body {
   margin: 0;
-  background: var(--ground);
-  color: var(--ink);
-  font-family: 'Noto Naskh Arabic', 'Segoe UI', system-ui, -apple-system, 'Tahoma', sans-serif;
-  font-size: var(--step-0);
-  line-height: 1.75;
+  background: var(--color-background);
+  color: var(--color-text);
+  font-family: var(--font-family-base);
+  font-size: var(--font-size-sm);
+  line-height: var(--line-height-base);
   -webkit-font-smoothing: antialiased;
 }
 
 h1,
 h2,
 h3 {
-  line-height: 1.25;
+  line-height: var(--line-height-tight);
   text-wrap: balance;
   margin: 0;
   font-weight: 700;
@@ -111,9 +208,9 @@ img {
 }
 
 :focus-visible {
-  outline: 3px solid var(--brass);
+  outline: 3px solid var(--color-accent);
   outline-offset: 3px;
-  border-radius: 3px;
+  border-radius: var(--radius-xs);
 }
 
 /* ── Layout primitives ───────────────────────────────────────────────────── */
@@ -134,8 +231,8 @@ img {
   padding-block: clamp(3rem, 8vw, 6rem);
 }
 .section--tint {
-  background: var(--surface);
-  border-block: 1px solid var(--rule);
+  background: var(--color-surface);
+  border-block: 1px solid var(--color-border);
 }
 
 .section__head {
@@ -145,25 +242,25 @@ img {
 
 .eyebrow {
   display: inline-block;
-  font-size: var(--step--1);
+  font-size: var(--font-size-xs);
   font-weight: 700;
   letter-spacing: 0.08em;
-  color: var(--brass);
-  margin-block-end: 0.5rem;
+  color: var(--color-accent);
+  margin-block-end: var(--space-2);
 }
 
 .section__title {
-  font-size: var(--step-2);
+  font-size: var(--font-size-lg);
 }
 
 .lede {
-  color: var(--ink-soft);
-  font-size: var(--step-1);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-md);
   line-height: 1.7;
 }
 
 .muted {
-  color: var(--muted);
+  color: var(--color-text-muted);
 }
 
 /* ── Buttons ─────────────────────────────────────────────────────────────── */
@@ -171,37 +268,37 @@ img {
 .btn {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--space-2);
   padding: 0.7rem 1.35rem;
   border: 1px solid transparent;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: transparent;
-  color: var(--ink);
+  color: var(--color-text);
   font: inherit;
   font-weight: 600;
   text-decoration: none;
   cursor: pointer;
-  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+  transition: background-color var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
 }
 .btn--primary {
-  background: var(--brand-700);
-  color: #fff;
+  background: var(--color-primary);
+  color: var(--color-text-inverse);
 }
 .btn--primary:hover {
-  background: var(--brand-900);
+  background: var(--color-primary-hover);
 }
 .btn--secondary {
-  border-color: var(--rule);
-  background: var(--surface);
-  color: var(--ink);
+  border-color: var(--color-border);
+  background: var(--color-surface);
+  color: var(--color-text);
 }
 .btn--secondary:hover {
-  border-color: var(--brand-500);
-  color: var(--brand-700);
+  border-color: var(--color-primary-emphasis);
+  color: var(--color-primary);
 }
 .btn--ghost:hover {
-  background: var(--brand-100);
-  color: var(--brand-700);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
 }
 .btn--block {
   width: 100%;
@@ -215,15 +312,15 @@ img {
 
 .skip-link {
   position: absolute;
-  inset-inline-start: 1rem;
+  inset-inline-start: var(--space-4);
   inset-block-start: -4rem;
   z-index: 100;
-  padding: 0.6rem 1rem;
-  background: var(--brand-700);
-  color: #fff;
-  border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+  padding: 0.6rem var(--space-4);
+  background: var(--color-primary);
+  color: var(--color-text-inverse);
+  border-radius: 0 0 var(--radius-md) var(--radius-md);
   text-decoration: none;
-  transition: inset-block-start 0.15s ease;
+  transition: inset-block-start var(--transition-fast);
 }
 .skip-link:focus {
   inset-block-start: 0;
@@ -233,16 +330,16 @@ img {
   position: sticky;
   inset-block-start: 0;
   z-index: 50;
-  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  background: color-mix(in srgb, var(--color-surface) 92%, transparent);
   backdrop-filter: blur(8px);
-  border-block-end: 1px solid var(--rule);
+  border-block-end: 1px solid var(--color-border);
 }
 
 .app-header__bar {
-  min-height: var(--header-h);
+  min-height: var(--header-height);
   display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: var(--space-4);
 }
 
 .logo-link {
@@ -270,12 +367,12 @@ img {
 
 .app-header__nav {
   /* Sits beside the logo; the actions block below takes the free space. */
-  margin-inline-start: 1.5rem;
+  margin-inline-start: var(--space-6);
 }
 .app-header__actions {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--space-2);
   flex: none;
   /* Pushed to the inline END — the far LEFT of the bar in RTL. */
   margin-inline-start: auto;
@@ -284,7 +381,7 @@ img {
 .nav-menu {
   display: flex;
   align-items: center;
-  gap: 0.25rem;
+  gap: var(--space-1);
   list-style: none;
   margin: 0;
   padding: 0;
@@ -292,20 +389,20 @@ img {
 
 .nav-item {
   display: block;
-  padding: 0.5rem 0.85rem;
-  border-radius: var(--radius-sm);
+  padding: var(--space-2) 0.85rem;
+  border-radius: var(--radius-md);
   text-decoration: none;
-  color: var(--ink-soft);
+  color: var(--color-text-secondary);
   font-weight: 600;
   white-space: nowrap;
 }
 .nav-item:hover {
-  background: var(--brand-100);
-  color: var(--brand-700);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
 }
 .nav-item[aria-current='page'] {
-  color: var(--brand-700);
-  background: var(--brand-100);
+  color: var(--color-primary);
+  background: var(--color-primary-soft);
 }
 
 /*
@@ -329,10 +426,10 @@ img {
   justify-content: center;
   width: 2.75rem;
   height: 2.75rem;
-  border: 1px solid var(--rule);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  color: var(--ink);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
   cursor: pointer;
 }
 
@@ -360,13 +457,13 @@ img {
 /* ── Mobile menu ─────────────────────────────────────────────────────────── */
 
 .mobile-menu {
-  border-block-start: 1px solid var(--rule);
-  background: var(--surface);
-  padding-block: 1rem;
+  border-block-start: 1px solid var(--color-border);
+  background: var(--color-surface);
+  padding-block: var(--space-4);
 }
 .mobile-menu__list {
   list-style: none;
-  margin: 0 0 1rem;
+  margin: 0 0 var(--space-4);
   padding: 0;
   display: grid;
   gap: 0.15rem;
@@ -378,8 +475,8 @@ img {
 .mobile-menu__actions {
   display: grid;
   gap: 0.6rem;
-  padding-block-start: 1rem;
-  border-block-start: 1px solid var(--rule);
+  padding-block-start: var(--space-4);
+  border-block-start: 1px solid var(--color-border);
 }
 
 /* ── Menus (user, role, child) ───────────────────────────────────────────── */
@@ -390,19 +487,19 @@ img {
 .menu__trigger {
   display: inline-flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--space-2);
   padding: 0.45rem 0.7rem;
-  border: 1px solid var(--rule);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  color: var(--ink);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
   font: inherit;
   font-weight: 600;
   cursor: pointer;
   max-width: 14rem;
 }
 .menu__trigger:hover {
-  border-color: var(--brand-500);
+  border-color: var(--color-primary-emphasis);
 }
 .menu__label {
   overflow: hidden;
@@ -415,48 +512,48 @@ img {
   inset-inline-end: 0;
   min-width: 14rem;
   padding: 0.4rem;
-  background: var(--surface-raised);
-  border: 1px solid var(--rule);
-  border-radius: var(--radius);
-  box-shadow: var(--shadow);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
   z-index: 60;
 }
 .menu__group-label {
   padding: 0.4rem 0.6rem;
-  font-size: var(--step--1);
-  color: var(--muted);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
   font-weight: 700;
 }
 .menu__option {
   display: flex;
   align-items: center;
-  gap: 0.5rem;
+  gap: var(--space-2);
   width: 100%;
   padding: 0.55rem 0.6rem;
   border: 0;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   background: transparent;
-  color: var(--ink);
+  color: var(--color-text);
   font: inherit;
   text-align: start;
   cursor: pointer;
 }
 .menu__option:hover {
-  background: var(--brand-100);
-  color: var(--brand-700);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
 }
 .menu__option[aria-checked='true'] {
   font-weight: 700;
-  color: var(--brand-700);
+  color: var(--color-primary);
 }
 .menu__check {
   margin-inline-start: auto;
-  color: var(--brand-500);
+  color: var(--color-primary-emphasis);
 }
 .menu__sep {
   height: 1px;
   margin: 0.35rem 0.4rem;
-  background: var(--rule);
+  background: var(--color-border);
 }
 
 /* Inside the mobile sheet the menus render inline rather than as popovers. */
@@ -478,8 +575,8 @@ img {
 .hero {
   position: relative;
   overflow: hidden;
-  background: var(--brand-900);
-  color: #f4f7f4;
+  background: var(--color-primary-strong);
+  color: var(--color-on-primary);
   padding-block: clamp(3.5rem, 11vw, 7.5rem);
 }
 
@@ -495,16 +592,16 @@ img {
   background-image:
     conic-gradient(
       from 22.5deg at 50% 50%,
-      rgb(255 255 255 / 5%) 0 25%,
+      var(--color-on-primary-motif) 0 25%,
       transparent 0 50%,
-      rgb(255 255 255 / 5%) 0 75%,
+      var(--color-on-primary-motif) 0 75%,
       transparent 0
     ),
     conic-gradient(
       from 0deg at 50% 50%,
-      rgb(255 255 255 / 4%) 0 25%,
+      var(--color-on-primary-motif-soft) 0 25%,
       transparent 0 50%,
-      rgb(255 255 255 / 4%) 0 75%,
+      var(--color-on-primary-motif-soft) 0 75%,
       transparent 0
     );
   background-size: 88px 88px, 88px 88px;
@@ -515,7 +612,7 @@ img {
   content: '';
   position: absolute;
   inset: 0;
-  background: radial-gradient(120% 90% at 78% 30%, transparent 20%, var(--brand-900) 78%);
+  background: radial-gradient(120% 90% at 78% 30%, transparent 20%, var(--color-primary-strong) 78%);
   pointer-events: none;
 }
 
@@ -533,37 +630,37 @@ img {
 }
 
 .hero__eyebrow {
-  color: #e3c98d;
+  color: var(--color-on-primary-accent);
 }
 .hero__title {
-  font-size: var(--step-4);
-  margin-block-end: 1rem;
+  font-size: var(--font-size-2xl);
+  margin-block-end: var(--space-4);
 }
 .hero__lede {
-  color: #d5e2da;
-  font-size: var(--step-1);
+  color: var(--color-on-primary-secondary);
+  font-size: var(--font-size-md);
   max-width: 46ch;
 }
 .hero__actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.75rem;
-  margin-block-start: 2rem;
+  gap: var(--space-3);
+  margin-block-start: var(--space-8);
 }
 .hero .btn--secondary {
   background: transparent;
-  border-color: rgb(255 255 255 / 35%);
-  color: #fff;
+  border-color: var(--color-on-primary-border);
+  color: var(--color-text-inverse);
 }
 .hero .btn--secondary:hover {
-  border-color: #fff;
-  background: rgb(255 255 255 / 8%);
-  color: #fff;
+  border-color: var(--color-text-inverse);
+  background: var(--color-on-primary-overlay);
+  color: var(--color-text-inverse);
 }
 .hero__note {
-  margin-block-start: 1.25rem;
-  font-size: var(--step--1);
-  color: #b9ccc0;
+  margin-block-start: var(--space-5);
+  font-size: var(--font-size-xs);
+  color: var(--color-on-primary-muted);
   max-width: 46ch;
 }
 
@@ -572,9 +669,9 @@ img {
   display: grid;
   place-items: center;
   padding: clamp(1.5rem, 4vw, 2.5rem);
-  background: rgb(255 255 255 / 6%);
-  border: 1px solid rgb(255 255 255 / 14%);
-  border-radius: 50%;
+  background: var(--color-on-primary-panel);
+  border: 1px solid var(--color-on-primary-panel-border);
+  border-radius: var(--radius-full);
   aspect-ratio: 1;
   width: min(20rem, 62vw);
 }
@@ -586,7 +683,7 @@ img {
 
 .grid {
   display: grid;
-  gap: 1.25rem;
+  gap: var(--space-5);
 }
 @media (min-width: 44rem) {
   .grid--3 {
@@ -599,9 +696,9 @@ img {
 
 .card {
   padding: clamp(1.25rem, 3vw, 1.75rem);
-  background: var(--surface-raised);
-  border: 1px solid var(--rule);
-  border-radius: var(--radius);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
@@ -611,19 +708,19 @@ img {
   place-items: center;
   width: 2.75rem;
   height: 2.75rem;
-  border-radius: var(--radius-sm);
-  background: var(--brand-100);
-  color: var(--brand-700);
+  border-radius: var(--radius-md);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
   margin-block-end: 0.35rem;
 }
 .card__title {
-  font-size: var(--step-1);
+  font-size: var(--font-size-md);
 }
 .card__meta {
   margin-block-start: auto;
   padding-block-start: 0.6rem;
-  font-size: var(--step--1);
-  color: var(--muted);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
 }
 
 /* Numbered because the enrolment path genuinely is a sequence (§4.1b). */
@@ -632,7 +729,7 @@ img {
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 1.25rem;
+  gap: var(--space-5);
   counter-reset: step;
 }
 @media (min-width: 48rem) {
@@ -642,30 +739,30 @@ img {
 }
 .step {
   counter-increment: step;
-  padding-block-start: 1rem;
-  border-block-start: 3px solid var(--brass);
+  padding-block-start: var(--space-4);
+  border-block-start: 3px solid var(--color-accent);
 }
 .step::before {
   content: counter(step);
   display: block;
-  font-size: var(--step--1);
+  font-size: var(--font-size-xs);
   font-weight: 700;
-  color: var(--brass);
+  color: var(--color-accent);
   margin-block-end: 0.35rem;
 }
 .step__title {
-  font-size: var(--step-1);
+  font-size: var(--font-size-md);
   margin-block-end: 0.35rem;
 }
 
 .callout {
   padding: clamp(1.5rem, 4vw, 2.5rem);
-  background: var(--brand-100);
-  border: 1px solid color-mix(in srgb, var(--brand-500) 25%, transparent);
-  border-radius: var(--radius);
+  background: var(--color-primary-soft);
+  border: 1px solid color-mix(in srgb, var(--color-primary-emphasis) 25%, transparent);
+  border-radius: var(--radius-lg);
   text-align: center;
   display: grid;
-  gap: 1rem;
+  gap: var(--space-4);
   justify-items: center;
 }
 .callout p {
@@ -675,16 +772,16 @@ img {
 /* ── Footer ──────────────────────────────────────────────────────────────── */
 
 .site-footer {
-  background: var(--surface);
-  border-block-start: 1px solid var(--rule);
-  padding-block: 2.5rem;
-  font-size: var(--step--1);
-  color: var(--muted);
+  background: var(--color-surface);
+  border-block-start: 1px solid var(--color-border);
+  padding-block: var(--space-10);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
 }
 .site-footer__row {
   display: flex;
   flex-wrap: wrap;
-  gap: 1rem 2rem;
+  gap: var(--space-4) var(--space-8);
   align-items: center;
   justify-content: space-between;
 }
@@ -706,36 +803,36 @@ img {
   align-items: center;
 }
 .error-banner {
-  border: 1px solid var(--danger);
+  border: 1px solid var(--color-danger);
   border-inline-start-width: 5px;
-  background: var(--danger-soft);
-  color: var(--danger);
-  padding: 0.75rem 1rem;
-  border-radius: var(--radius-sm);
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
   text-align: start;
 }
 .state {
-  padding: var(--space) 0;
-  color: var(--muted);
+  padding: var(--space-4) 0;
+  color: var(--color-text-muted);
 }
 .request-id {
   font-size: 0.85rem;
-  color: var(--muted);
+  color: var(--color-text-muted);
 }
 .button {
   display: inline-block;
-  padding: 0.65rem 1.25rem;
-  border: 1px solid var(--brand-700);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  color: var(--brand-700);
+  padding: 0.65rem var(--space-5);
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-primary);
   font: inherit;
   text-decoration: none;
   cursor: pointer;
 }
 .button.primary {
-  background: var(--brand-700);
-  color: #fff;
+  background: var(--color-primary);
+  color: var(--color-text-inverse);
 }
 .logo {
   display: block;
@@ -743,14 +840,14 @@ img {
   max-width: 100%;
 }
 .logo-large {
-  margin: 0 auto var(--space);
+  margin: 0 auto var(--space-4);
 }
 
 .skeleton {
   height: 1.1rem;
   margin-bottom: 0.6rem;
-  border-radius: 3px;
-  background: linear-gradient(90deg, var(--rule), var(--ground), var(--rule));
+  border-radius: var(--radius-xs);
+  background: linear-gradient(90deg, var(--color-border), var(--color-background), var(--color-border));
   background-size: 200% 100%;
   animation: shimmer 1.4s linear infinite;
 }
@@ -790,7 +887,7 @@ img {
 /* ── Branch cards (§5.1, Revision 35) ────────────────────────────────────── */
 
 .branch-card__address {
-  color: var(--ink-soft);
+  color: var(--color-text-secondary);
 }
 .branch-card__contact {
   display: flex;
@@ -798,7 +895,7 @@ img {
   gap: 0.15rem;
 }
 .branch-card__contact a {
-  color: var(--brand-700);
+  color: var(--color-primary);
   text-decoration: none;
   width: fit-content;
 }
@@ -813,8 +910,8 @@ img {
 .branch-card__hours {
   white-space: pre-line;
   padding-block-start: 0.4rem;
-  border-block-start: 1px solid var(--rule);
-  color: var(--ink-soft);
+  border-block-start: 1px solid var(--color-border);
+  color: var(--color-text-secondary);
 }
 .branch-card__action {
   margin-block-start: auto;
@@ -831,20 +928,20 @@ img {
 /* ── Calendar (§4.4, §5.1) ───────────────────────────────────────────────── */
 
 .cal-page__empty {
-  padding-block-start: 1rem;
+  padding-block-start: var(--space-4);
 }
 
 .cal-toolbar {
   display: flex;
   flex-wrap: wrap;
-  gap: 1rem;
+  gap: var(--space-4);
   align-items: end;
   justify-content: space-between;
-  padding: 1rem;
-  background: var(--surface-raised);
-  border: 1px solid var(--rule);
-  border-radius: var(--radius);
-  margin-block-end: 1.5rem;
+  padding: var(--space-4);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  margin-block-end: var(--space-6);
 }
 
 .branch-selector {
@@ -854,16 +951,16 @@ img {
   min-width: 13rem;
 }
 .branch-selector__label {
-  font-size: var(--step--1);
+  font-size: var(--font-size-xs);
   font-weight: 700;
-  color: var(--muted);
+  color: var(--color-text-muted);
 }
 .branch-selector__control {
   padding: 0.6rem 0.7rem;
-  border: 1px solid var(--rule);
-  border-radius: var(--radius-sm);
-  background: var(--surface);
-  color: var(--ink);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
   font: inherit;
 }
 
@@ -876,7 +973,7 @@ img {
   min-width: 9rem;
   text-align: center;
   font-weight: 700;
-  font-size: var(--step-1);
+  font-size: var(--font-size-md);
 }
 /* The chevrons are not mirrored in markup — `dir="rtl"` already reverses the
    buttons, so "previous" lands where an Arabic reader expects it. */
@@ -887,7 +984,7 @@ img {
 /* Grid beside panel on wide screens; panel below on narrow. */
 .cal-layout {
   display: grid;
-  gap: 1.5rem;
+  gap: var(--space-6);
 }
 @media (min-width: 60rem) {
   .cal-layout {
@@ -900,33 +997,33 @@ img {
   width: 100%;
   border-collapse: collapse;
   table-layout: fixed;
-  background: var(--surface-raised);
-  border: 1px solid var(--rule);
-  border-radius: var(--radius);
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
   overflow: hidden;
 }
 .cal-grid__weekday {
   padding: 0.6rem 0.35rem;
-  font-size: var(--step--1);
+  font-size: var(--font-size-xs);
   font-weight: 700;
-  color: var(--muted);
-  background: var(--ground);
-  border-block-end: 1px solid var(--rule);
+  color: var(--color-text-muted);
+  background: var(--color-background);
+  border-block-end: 1px solid var(--color-border);
 }
 .cal-cell {
-  border: 1px solid var(--rule);
+  border: 1px solid var(--color-border);
   padding: 0;
   vertical-align: top;
   height: 6.5rem;
 }
 .cal-cell--blank {
-  background: color-mix(in srgb, var(--ground) 60%, transparent);
+  background: color-mix(in srgb, var(--color-background) 60%, transparent);
 }
 
 .cal-day {
   display: flex;
   flex-direction: column;
-  gap: 0.25rem;
+  gap: var(--space-1);
   width: 100%;
   height: 100%;
   padding: 0.4rem;
@@ -938,7 +1035,7 @@ img {
   cursor: pointer;
 }
 .cal-day:hover {
-  background: var(--brand-100);
+  background: var(--color-primary-soft);
 }
 .cal-day__number {
   font-weight: 700;
@@ -949,14 +1046,14 @@ img {
   place-items: center;
   width: 1.9rem;
   height: 1.9rem;
-  border-radius: 50%;
-  background: var(--brand-700);
-  color: #fff;
+  border-radius: var(--radius-full);
+  background: var(--color-primary);
+  color: var(--color-text-inverse);
 }
 .cal-day.is-selected {
-  outline: 2px solid var(--brass);
+  outline: 2px solid var(--color-accent);
   outline-offset: -2px;
-  background: color-mix(in srgb, var(--brand-100) 70%, transparent);
+  background: color-mix(in srgb, var(--color-primary-soft) 70%, transparent);
 }
 .cal-day__events {
   display: flex;
@@ -965,8 +1062,8 @@ img {
   overflow: hidden;
 }
 .cal-day__more {
-  font-size: var(--step--1);
-  color: var(--muted);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
 }
 
 .event-chip {
@@ -974,19 +1071,19 @@ img {
   align-items: baseline;
   gap: 0.35rem;
   padding: 0.15rem 0.35rem;
-  border-radius: 4px;
-  font-size: var(--step--1);
+  border-radius: var(--radius-sm);
+  font-size: var(--font-size-xs);
   line-height: 1.45;
   /* A group session is the routine timetable; an event is the exception layer
      over it (§4.4) — they read differently on purpose. */
-  background: var(--brand-100);
-  color: var(--brand-700);
-  border-inline-start: 3px solid var(--brand-500);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  border-inline-start: 3px solid var(--color-primary-emphasis);
 }
 .event-chip--event {
-  background: color-mix(in srgb, var(--brass) 14%, transparent);
-  color: var(--brass);
-  border-inline-start-color: var(--brass);
+  background: color-mix(in srgb, var(--color-accent) 14%, transparent);
+  color: var(--color-accent);
+  border-inline-start-color: var(--color-accent);
 }
 .event-chip__time {
   font-variant-numeric: tabular-nums;
@@ -1001,19 +1098,19 @@ img {
 
 .cal-sidebar {
   display: grid;
-  gap: 1.25rem;
+  gap: var(--space-5);
 }
 .cal-panel__date {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.5rem;
+  gap: var(--space-2);
   align-items: baseline;
   font-weight: 700;
 }
 .cal-panel__hijri {
-  font-size: var(--step--1);
+  font-size: var(--font-size-xs);
   font-weight: 400;
-  color: var(--muted);
+  color: var(--color-text-muted);
   font-variant-numeric: tabular-nums;
 }
 .cal-panel__list {
@@ -1021,7 +1118,7 @@ img {
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 0.5rem;
+  gap: var(--space-2);
 }
 .cal-panel__list li {
   display: flex;
@@ -1032,9 +1129,9 @@ img {
 .cal-upcoming__date {
   flex: none;
   min-width: 5rem;
-  font-size: var(--step--1);
+  font-size: var(--font-size-xs);
   font-weight: 700;
-  color: var(--muted);
+  color: var(--color-text-muted);
 }
 
 /* On a phone the fixed cell height wastes the screen; let the rows shrink. */

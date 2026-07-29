@@ -29,6 +29,8 @@ jobs:
         run: bash scripts/ci/check-prisma-mass-write.sh
       - name: Header navigation exclusivity (burger vs horizontal nav)
         run: bash scripts/ci/check-header-nav-exclusive.sh
+      - name: Design-token discipline (components use semantic tokens only)
+        run: bash scripts/ci/check-design-tokens.sh
 
   contract:
     name: API contract — regenerate and verify no drift

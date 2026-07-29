@@ -41,6 +41,18 @@ Three companion documents are mutable working artifacts that never override the 
 
 ---
 
+### Design tokens
+
+The stylesheet is layered — **primitives → semantic → scales** — and components
+consume **only** the semantic layer. `--color-primary`, never `--brand-green-700`;
+`--space-4`, never `1rem`. Rebranding is therefore an edit to the mappings in
+[`frontend/src/styles.css`](frontend/src/styles.css) and to nothing else.
+
+The architecture is documented **once**, at the top of that stylesheet, where it
+cannot drift from the code it describes. `scripts/ci/check-design-tokens.sh`
+enforces the boundary: a raw colour or a reach past the semantic layer fails the
+build.
+
 ## Architecture
 
 A single-tenant application, deliberately without a tenancy layer (SRS Revision 11).
