@@ -299,13 +299,16 @@ img {
 }
 
 .app-header__nav {
-  margin-inline-start: auto;
+  /* Sits beside the logo; the actions block below takes the free space. */
+  margin-inline-start: 1.5rem;
 }
 .app-header__actions {
   display: flex;
   align-items: center;
   gap: 0.5rem;
   flex: none;
+  /* Pushed to the inline END — the far LEFT of the bar in RTL. */
+  margin-inline-start: auto;
 }
 
 .nav-menu {
@@ -335,12 +338,18 @@ img {
   background: var(--brand-100);
 }
 
-/* Desktop nav and the burger swap at one breakpoint, so they can never both show. */
+/*
+ * The burger is a fallback for widths where the horizontal navigation can no
+ * longer fit, and nothing more. They swap at one breakpoint so both can never
+ * show at once, and the breakpoint is set at the width the full bar — logo,
+ * four links and the sign-in button — actually needs, rather than at a round
+ * number that would hide a navigation which fits perfectly well.
+ */
 .app-header__nav,
 .app-header__actions--desktop {
   display: none;
 }
-@media (min-width: 60rem) {
+@media (min-width: 48rem) {
   .app-header__nav,
   .app-header__actions--desktop {
     display: flex;
@@ -351,6 +360,7 @@ img {
 }
 
 .app-header__burger {
+  /* Same slot the sign-in button occupies on wide screens: the far left. */
   margin-inline-start: auto;
   display: inline-flex;
   align-items: center;

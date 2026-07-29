@@ -79,36 +79,6 @@ export function Landing(): ReactNode {
             <Step title={t('landing.step3Title')} body={t('landing.step3Body')} />
           </ol>
         </Section>
-
-        <Section
-          id="values"
-          eyebrow={t('landing.valuesEyebrow')}
-          title={t('landing.valuesTitle')}
-        >
-          <div className="grid grid--3">
-            <Card title={t('landing.valueTrustTitle')} body={t('landing.valueTrustBody')} />
-            <Card title={t('landing.valueFollowTitle')} body={t('landing.valueFollowBody')} />
-            <Card
-              icon="signal"
-              title={t('landing.valueAccessTitle')}
-              body={t('landing.valueAccessBody')}
-            />
-          </div>
-        </Section>
-
-        <section className="section" aria-labelledby="join-title">
-          <Container narrow>
-            <div className="callout">
-              <h2 id="join-title" className="section__title">
-                {t('landing.ctaTitle')}
-              </h2>
-              <p>{t('landing.ctaBody')}</p>
-              <ButtonLink href="/api/v1/auth/google" variant="primary">
-                {t('landing.ctaRegister')}
-              </ButtonLink>
-            </div>
-          </Container>
-        </section>
       </main>
       <SiteFooter />
     </>
@@ -126,7 +96,6 @@ function Hero(): ReactNode {
       <Container>
         <div className="hero__inner">
           <div>
-            <span className="eyebrow hero__eyebrow">{t('landing.heroEyebrow')}</span>
             <h1 id="hero-title" className="hero__title">
               {t('landing.heroTitle')}
             </h1>
@@ -139,7 +108,6 @@ function Hero(): ReactNode {
                 {t('landing.ctaExplore')}
               </ButtonLink>
             </div>
-            <p className="hero__note">{t('landing.heroNote')}</p>
           </div>
 
           {/* Decorative: the association name is already the page heading, so
