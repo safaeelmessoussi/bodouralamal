@@ -1,7 +1,7 @@
 # Software Requirements Specification
 ## بذور الأمل — Institute Management Platform
 
-**Status:** Final MVP Blueprint (Revision 36.2 — public display identity is a platform-wide invariant), **immutable source of truth** — changed only by an explicit Document Owner revision, never by an implementing agent
+**Status:** Final MVP Blueprint (Revision 37 — documentation maintenance is binding; §16.3 stops carrying verbatim copies), **immutable source of truth** — changed only by an explicit Document Owner revision, never by an implementing agent
 **Revision date:** 2026-07-26
 **Canonical location:** `docs/SRS.md` in the project repository
 **Document Owner:** [assign]
@@ -18,11 +18,21 @@ This is a standalone, self-contained specification. It does not reference extern
 * **§13 — Technical Design Constraints (TD-x):** state machines, permission matrix, API contract, transaction boundaries, cascade rules, database constraints, job catalog, audit coverage, validation limits, pagination/search, time policy, auth/session policy, configuration, observability.
 * **§14 — UI/UX Standards:** sitemap/navigation map, screen CRUD standards, shared component registry, UI state standard, toast rules, file preview behavior.
 * **§15 — Seed Data Specification** (production seed vs development fixtures).
-* **§16 — Project Structure, Coding Conventions & Agent Workspace Files.**
+* **§16 — Project Structure, Coding Conventions, Agent Workspace Files & Documentation Maintenance** (§16.4 is binding — Revision 37).
 * **§17 — End-to-End User Journeys.**
 * **§18 — Module Acceptance Checklists.**
 * **§19 — Environments, Deployment Pipeline & Testing Strategy.**
 * **§20 — AI Implementation Rules:** hard guardrails for any autonomous coding agent. §20 closes the document deliberately: it is the last thing an agent reads before writing code.
+
+**Revision 37 (Document Owner decision — documentation maintenance is binding, and §16.3 stops carrying verbatim copies, 2026-07-29):** the project documentation was reorganised into a hierarchy under `docs/` (indexed by `docs/README.md`), with a byte-exact pre-restructure snapshot retained under `docs/archive/`. That work established a working rule the Document Owner has adopted as **binding**, and it exposed a drift this revision closes.
+
+**(1) Documentation maintenance becomes a normative obligation — new §16.4.** *A feature is not complete until the documentation describing it is updated, in the same commit as the change.* Previously the only documentation obligation was the `CHANGES.log` ledger row (§16.3), which records **what was done** but not **how the system now works** — so the explanatory documentation could rot while every gate stayed green. Documentation drift is now a **defect**, stated once in §16.4 and cross-referenced everywhere else. §16.4 also fixes the **precedence** question the new hierarchy raises: this SRS remains normative and says what the system *must* do; the `docs/` handbook is explanatory and says *why, how and where*, and it **cites this document rather than restating it**. A handbook page that contradicts the SRS is a defect in the page.
+
+**(2) §16.3 no longer reproduces `CLAUDE.md` and `AGENTS.md` verbatim.** It carried a **full copy** of each file's text. Those copies existed to bootstrap the files at M0, and once the files were committed the copies became exactly the hazard this document has been bitten by repeatedly — **a requirement with two homes drifts, and the copy that drifts still passes every check.** They had already drifted: the live files gained the §16.4 obligation while §16.3 still showed the earlier text. §16.3 now states, normatively, **what each file must contain**; the files themselves carry the wording. This is the same correction Revision 33 item (4) made for TD-15's version list and Revision 36.2 made for the display-identity rule — **a cross-reference, never a second copy.**
+
+**Nothing is weakened by this.** The SRS still pins every requirement those files must state, and §20 rule 20 already makes them derived artifacts that never override this document. What changes is that their *prose* has one home instead of two. The `CHANGES.log` initial-state template is **retained** in §16.3, because unlike the other two it is a genuine one-time bootstrap artifact and no live file can drift from it.
+
+**Recorded for the next reader:** the general lesson is now stated three times in this document's history (Revisions 33, 36.2, 37) and it is the same lesson each time. When an audit finds one requirement in two places, the fix is to delete a copy and link to the survivor — not to synchronise them.
 
 **Revision 36.2 (Document Owner decision — public display identity is an invariant, not an endpoint detail, 2026-07-29):** Revision 36.1 introduced the rule while describing one payload, which left it looking like a property of the calendar. It is not. It is a **platform-wide invariant** and is now stated as one, beside the §7 Attribution invariant it most resembles: **wherever a person's identity is exposed on any public-facing surface — the calendar, event details, educational content, announcements, certificates, and every public surface not yet built — the backend resolves the display identity, and clients render what they are given.**
 
@@ -141,7 +151,7 @@ Where §4 (functional) and §12–§20 (rules/constraints) describe the same beh
 
 MVP authentication is Google OAuth only (§3.1, §4.1), with local username/password auth in the post-MVP roadmap (§10.1). The risk this creates for low-digital-literacy beneficiaries is deliberately recorded in §11 (Risk R-1) — do not remove that risk entry while it remains unmitigated.
 
-**For AI coding agents:** do not re-read this entire document on every task. Read `docs/CHANGES.log` for current status, then only the sections relevant to the task at hand (§16.3). This document is the source of truth; `CLAUDE.md` / `AGENTS.md` are pointers to it, never overrides of it.
+**For AI coding agents:** do not re-read this entire document on every task. Read `docs/CHANGES.log` for current status, then only the sections relevant to the task at hand (§16.3). This document is the source of truth; `CLAUDE.md` / `AGENTS.md` and the explanatory handbook under `docs/` are pointers to it, never overrides of it. **Documentation is part of Done — see §16.4**, which is the single statement of that obligation.
 
 ---
 
@@ -1425,7 +1435,7 @@ Two seed tiers. **Production seed** runs on every fresh deployment (idempotent �
 
 ---
 
-## 16. Project Structure, Coding Conventions & Agent Workspace Files
+## 16. Project Structure, Coding Conventions, Agent Workspace Files & Documentation Maintenance
 
 ### 16.1 Repository Layout (monorepo)
 ```
@@ -1460,7 +1470,18 @@ Two seed tiers. **Production seed** runs on every fresh deployment (idempotent �
   TASKS.md                  granular implementation checklist, updated by agents as work progresses (mutable; never overrides the SRS)
   CHANGES.log               append-only task ledger (§16.3, File 3)
   openapi.json              exported API contract
+  README.md                 index of the explanatory handbook below (§16.4)
+  overview/                 handbook — product, roles, processes, journeys, scope, glossary
+  architecture/             handbook — system, backend, frontend, API, database, identity,
+                            security, storage, jobs, calendar, design system, i18n, performance
+  operations/               handbook — environments, config, deployment, observability,
+                            resilience, runbooks
+  development/              handbook — getting started, conventions, testing, CI/CD,
+                            documentation policy
+  reference/                handbook — BR index, TD index, endpoints, error codes, decision log
+  archive/<date>/           frozen, checksummed documentation snapshots — never updated (§16.4)
 ```
+The handbook directories are **explanatory and derived** (§16.4): they cite this document and never override it.
 
 ### 16.2 Coding Conventions (binding)
 * TypeScript strict mode everywhere; no `any` in service/repository layers.
@@ -1479,51 +1500,30 @@ Two seed tiers. **Production seed** runs on every fresh deployment (idempotent �
 
 Three files keep coding agents effective without re-reading this entire SRS on every task, and two mutable companion documents (`docs/IMPLEMENTATION_PLAN.md`, `docs/TASKS.md`) carry the working build order and checklist. **Precedence rule: all of these are pointers and process aids — none of them ever overrides the SRS.** The SRS is immutable to agents: if an agent believes the SRS is wrong, it stops and reports to the Document Owner; it never edits `docs/SRS.md`. If an agent file or companion document and the SRS conflict, the SRS wins and the conflict is reported (§20 rule 20). Agents keep `TASKS.md` checkboxes and the `CHANGES.log` ledger current as work progresses; `IMPLEMENTATION_PLAN.md` changes only when the Document Owner re-sequences milestones.
 
-**File 1 — `/CLAUDE.md` (Claude Code CLI instructions):**
-```markdown
-# Claude Code Instructions
+**This section states what each agent file must contain; it does not reproduce them (Revision 37).** Earlier revisions carried a full verbatim copy of `/CLAUDE.md` and `/AGENTS.md` here. Those copies existed to bootstrap the files at M0, and once the files were committed they became a **second home for one requirement** — the hazard this document has been bitten by repeatedly (TD-15's version list, BR-15's purge window, TD-10's pagination, the Revision 36.2 display-identity rule). They had already drifted. The live files are now the canonical wording; the requirements below are normative, and a file missing one is non-compliant.
 
-## Project Context
-You are working on the بذور الأمل Platform.
-- Framework: React (frontend) & Express with Prisma (backend).
-- Database: PostgreSQL.
-- Storage: MinIO.
-- Source of truth: `docs/SRS.md`. This file never overrides it.
+**File 1 — `/CLAUDE.md` (Claude Code CLI instructions).** Must state, at minimum:
+* the **project context** — React frontend, Express + Prisma backend, PostgreSQL, MinIO — and that **`docs/SRS.md` is the source of truth which this file never overrides**;
+* **read `docs/CHANGES.log` and `docs/TASKS.md` before starting** a task;
+* **never read `docs/SRS.md` in full** unless explicitly asked — consult only the section(s) being implemented, which is what the §/BR-x/TD-x cross-referencing exists for;
+* **`docs/SRS.md` is immutable to the agent**: never edit it; if it appears wrong, **stop and report to the Document Owner**;
+* **§20 is the binding guardrail set — read it once per session**;
+* build order comes from `docs/IMPLEMENTATION_PLAN.md`; tick items in `docs/TASKS.md` as work completes;
+* write **explicit transactional queries in services** and **do not bypass repositories** (§16.2);
+* **commits are atomic**, and completed sub-tasks are pushed to `develop`;
+* **record what was built in `docs/CHANGES.log`** immediately on completion;
+* **if the SRS is silent, or two sections conflict — stop and ask, and report the conflict** (§20 rule 20);
+* **the §16.4 documentation obligation**, including that documentation is updated in the **same commit** and that drift is a defect.
 
-## Execution Guardrails
-- Always read `docs/CHANGES.log` and `docs/TASKS.md` to see the latest progress and
-  the current checklist before starting a task.
-- NEVER read `docs/SRS.md` fully unless explicitly asked. Refer only to the
-  section(s) you are implementing (the SRS is cross-referenced by §/BR-x/TD-x
-  identifiers for exactly this purpose).
-- `docs/SRS.md` is IMMUTABLE to you. Never edit it. If you believe it is wrong,
-  stop and report to the Document Owner.
-- The binding AI guardrails are `docs/SRS.md` §20 — read §20 once per session.
-- Build order comes from `docs/IMPLEMENTATION_PLAN.md`; tick off items in
-  `docs/TASKS.md` as you complete them.
-- Write explicit transactional queries in services; do not bypass repositories.
-- Keep commits atomic. Push any completed sub-task to the `develop` branch.
-- Document what you built in `docs/CHANGES.log` immediately after completing a task.
-- If the SRS is silent or two sections conflict: stop and ask; report the conflict.
-```
+**File 2 — `/AGENTS.md` (Codex / Cursor / Blackbox instructions).** A shorter file for agents that do not read `CLAUDE.md` automatically. Must state, at minimum:
+* **read `docs/CHANGES.log`** to establish what the prior session completed;
+* **follow `/CLAUDE.md`**, and that **neither file overrides `docs/SRS.md`**;
+* PostgreSQL-specific CHECK constraints and ICU collations are **hand-written in migration SQL**, never in `schema.prisma`, and **`prisma db push` is never run** (TD-6a);
+* backend routes use the **TD-3.8 unified error envelope**;
+* **append output to `docs/CHANGES.log`**;
+* **the §16.4 documentation obligation**.
 
-**File 2 — `/AGENTS.md` (Codex / Cursor / Blackbox instructions):**
-```markdown
-# AI Agent Instructions (Codex/Cursor/Blackbox)
-
-- Read `docs/CHANGES.log` to understand what was completed in the prior session.
-- Follow the guidelines in `/CLAUDE.md` (repository root). The source of truth is
-  `docs/SRS.md`; neither this file nor CLAUDE.md overrides it.
-- When writing database schema changes, remember PostgreSQL-specific CHECK
-  constraints and ICU collations are hand-written in `backend/prisma/migrations/`
-  SQL files (SRS TD-6a). Do not try to write them in `schema.prisma`.
-  Never run `prisma db push`.
-- When modifying backend routes, always use the unified error response format
-  defined in `docs/SRS.md` under section TD-3.8.
-- Log your output directly into the next empty row of `docs/CHANGES.log`.
-```
-
-**File 3 — `/docs/CHANGES.log` (append-only task ledger, initial state):**
+**File 3 — `/docs/CHANGES.log` (append-only task ledger, initial state).** Reproduced below because, unlike the two above, this is a genuine **one-time bootstrap artifact** — the live ledger grows past it by design, so no drift is possible:
 ```markdown
 # Project Changes Ledger
 
@@ -1539,6 +1539,37 @@ You are working on the بذور الأمل Platform.
 ```
 
 Ledger rules: append-only (matching the AuditLog philosophy); every completed sub-task adds exactly one row; the Active Status block is the only mutable region and always reflects reality before a session ends.
+
+### 16.4 Documentation Maintenance (binding — Revision 37)
+
+**A feature is not complete until the documentation describing it is updated, in the same commit as the change. Documentation drift is a defect, not a follow-up task.**
+
+This is stated **here and nowhere else**; every other section that touches documentation cross-references it.
+
+**Why the ledger was not sufficient.** §16.3's `CHANGES.log` row records **what was done**; it does not record **how the system now works**. Without this obligation the explanatory documentation could rot while every gate stayed green — and the cost falls on whoever reads a stale page months later and believes it.
+
+**Why the same commit.** A follow-up commit that never lands is the normal outcome. Beyond that: the rationale for a decision — and the alternatives rejected — is in the implementer's head at the time of the change and nowhere else afterwards; and a documentation diff reviewed **beside** its code diff gets read against reality, whereas one reviewed alone gets skimmed.
+
+**Precedence (normative).** The documentation set has exactly two tiers:
+
+| | This document (`docs/SRS.md`) | The handbook (the rest of `docs/`) |
+|---|---|---|
+| Answers | **what the system must do** | why it is built this way, and how it fits together |
+| Authority | **normative** | explanatory |
+| Changed by | a numbered Document Owner revision | any contributor, in the same commit as the change |
+| On conflict | **wins** | the page is the defect and is corrected |
+
+The handbook is indexed by `docs/README.md`. It is a **derived working artifact** in the same sense as `TASKS.md` and `CHANGES.log` (§16.3, §20 rule 20): agents maintain it freely, and it **never overrides this document**.
+
+**One source of truth per concept (normative).** The handbook **cites this document rather than restating it**, and no concept has two authoritative homes anywhere in the documentation set. Where an audit finds one requirement stated twice, **the fix is to delete a copy and cross-reference the survivor — never to synchronise them.** This document has been bitten by duplication in TD-15's version list, BR-15's purge window, TD-10's pagination rule, and the Revision 36.2 display-identity rule; in every instance the copy that drifted continued to pass its own checks, which is what makes the divergence invisible until something breaks.
+
+**Documentation quality bar.** The handbook explains the system, not the code: **why a thing exists, why this design was chosen, what was rejected and why, how the parts interact, the constraints, the security and performance implications, the extension points, and the known trade-offs.** The standard to write to is that an experienced engineer who has never seen this repository could **rebuild the platform from the documentation alone** — this document plus the handbook, which is why the handbook may cite freely and must never duplicate.
+
+**Status honesty (normative).** Where a subsystem is specified but not yet built, the page describing it **says so, where it is described.** Documentation that describes an unbuilt feature in the present tense is worse than none, because it costs the reader an hour before they discover it.
+
+**Enforcement.** Link integrity is mechanically checkable and is therefore mechanically checked: a CI guard (§19.2) fails the build on a broken relative link or a missing anchor target across the documentation set. **Accuracy is not mechanically checkable** — it is a review obligation, and the reviewer checks the documentation diff against the code diff.
+
+**Archived snapshots.** A dated, byte-exact snapshot of the documentation may be retained under `docs/archive/` — as one was at Revision 37 — with checksums, so that a claim of *"nothing was lost"* is verifiable rather than asserted. **A snapshot is a frozen historical record: it is never updated, it is never a second source of truth, and where it disagrees with the live documentation the live documentation is correct.**
 
 ---
 
@@ -1705,7 +1736,7 @@ Rollback: `docker compose down` + restore latest `pg_dump` via the documented re
 | API | Every TD-3 endpoint against the OpenAPI contract; **permission-matrix tests generated from TD-2** (every action × every role, expecting ✔/403/404); **child-context header tests** (approved/pending/absent/foreign link); error envelope conformance | Supertest | per-PR |
 | E2E | Every §17 journey (J1–J8), RTL rendering, §14.4 states (incl. empty states), upload retry | Playwright | pre-merge to main |
 | Coverage | **≥ 80% on /services and /policies**; no coverage gate on generated/boilerplate code | c8 | CI |
-| CI checks | migration history contains the TD-6a hand-written SQL; `prisma db push` appears nowhere; no `.env` committed; OpenAPI doc up to date; fixtures guarded by env check | custom scripts | CI |
+| CI checks | migration history contains the TD-6a hand-written SQL; `prisma db push` appears nowhere; no `.env` committed; OpenAPI doc up to date; fixtures guarded by env check; **documentation link integrity — a broken relative link or missing anchor target fails the build (§16.4, Revision 37)** | custom scripts | CI |
 
 Mandatory named regression tests (the traps this document exists to prevent): Ramadan DST wall-clock stability · consent revocation ripple through to bucket migration · teacher Global-scope rejection · re-upload cache-key immutability · Pending-session data-access denial across all endpoints (server) + Pending route-guard redirect (client) · **X-Active-Child-ID verification on every student-context endpoint incl. the Student-role bypass and the foreign-parent 404** · **Quran log deletion synchronously un-completing a level** · **onboarding-token replay → 409** · **presigned PUT/GET signature round-trip through the Nginx /storage proxy** · **case-variant Google email resolves to one identity** · **stale-version edit → 409 VERSION_CONFLICT (two-admin Group edit)** · **concurrent roster adds at capacity − 1 admit exactly one (FOR UPDATE)** · **double-approval of one registration: first wins, second 409** · **MinIO-down: content 503s while scheduling/grading endpoints stay fully functional** · **worker-down: enqueues succeed and jobs drain on restart** · **body-email substitution against a valid onboarding token is ignored (registration binds the token identity)** · **suspended Teacher denied presigned mint within the unexpired-token window** · **StudentSurahProgress self-heal repairs a deliberately stale cache row** · **first draft save initializes absent-zero rows for the full roster** · **concurrent teacher-score vs admin-override on one Grade → second writer gets VERSION_CONFLICT** · **per-user upload quota: the 31st initiation within one hour is refused with `429 RATE_LIMITED` in the TD-3.8 envelope, and two concurrent initiations at the limit boundary admit exactly one (TD-4.12 row lock)** (Revision 14) · **replayed rotated refresh token outside the grace window revokes the entire session and is refused (§18 T5)** · **suspension revokes live refresh tokens inside its own transaction, so the next refresh is refused immediately (§18 T8)** · **concurrent two-tab refresh rotates exactly once and logs nobody out (§18 T12)** (Revision 16).
 
@@ -1738,4 +1769,4 @@ Any AI or human implementer working from this document operates under these non-
 20. Never resolve an ambiguity or SRS conflict silently, and **never edit `docs/SRS.md`** — it is immutable to implementing agents; only the Document Owner revises it. If two sections disagree, §12 Business Rules win **and the conflict must be reported to the Document Owner**; if the SRS is silent on a needed decision, stop and ask — do not invent. `CLAUDE.md`, `AGENTS.md`, `docs/IMPLEMENTATION_PLAN.md`, and `docs/TASKS.md` are process aids and derived working artifacts — they never override this document.
 21. **Never resolve a public display identity in a client.** Wherever a person's name is shown on a public surface, render the `display_name` the API returns and nothing else — never `public_display_name || full_name`, never a conditional, never both fields fetched so the client can choose. The backend is the single source of truth for which name a person agreed to publish (§7, Public display identity invariant). This is not a formatting preference: the wrong branch publishes a legal name where a kunya was chosen, and the interface gives the person affected no sign that it happened.
 
-**Always do the following:** enforce permissions server-side per TD-2 on every endpoint, including the per-request child-context verification; use the TD-4 transaction boundaries verbatim (including same-transaction pg-boss enqueue and the synchronous Quran recalculation); validate all TD-9 limits server-side through the shared Zod schemas (§16.2); follow the §16 structure and conventions; read `docs/CHANGES.log` before starting and append to it after finishing every task (§16.3); implement the §17 journeys end-to-end and prove them with the §19.2 test gates; check off §18 before declaring any module complete; keep the OpenAPI doc, the TD-3 registry, and the implementation in lockstep; and treat this document — Business Rules foremost — as the sole source of truth.
+**Always do the following:** enforce permissions server-side per TD-2 on every endpoint, including the per-request child-context verification; use the TD-4 transaction boundaries verbatim (including same-transaction pg-boss enqueue and the synchronous Quran recalculation); validate all TD-9 limits server-side through the shared Zod schemas (§16.2); follow the §16 structure and conventions; read `docs/CHANGES.log` before starting and append to it after finishing every task (§16.3); **update the documentation affected by the change in the same commit as the change — a feature is not complete without it (§16.4)**; implement the §17 journeys end-to-end and prove them with the §19.2 test gates; check off §18 before declaring any module complete; keep the OpenAPI doc, the TD-3 registry, and the implementation in lockstep; and treat this document — Business Rules foremost — as the sole source of truth.

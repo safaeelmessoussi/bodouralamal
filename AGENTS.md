@@ -10,9 +10,9 @@
 - When modifying backend routes, always use the unified error response format
   defined in `docs/SRS.md` under section TD-3.8.
 - Log your output directly into the next empty row of `docs/CHANGES.log`.
-- **Documentation is part of Done.** Update the affected pages in `docs/`
-  (indexed by `docs/README.md`) in the **same commit** as the code change;
-  documentation drift is a defect. The rules — which page to update for which
-  change, and the one-source-of-truth requirement — are in
+- **Documentation is part of Done (SRS §16.4 — binding).** Update the affected
+  pages in `docs/` (indexed by `docs/README.md`) in the **same commit** as the
+  code change; documentation drift is a defect. The handbook cites the SRS and
+  never restates it. Which page to update for which change is in
   `docs/development/documentation-policy.md`. Verify with
   `bash scripts/ci/check-doc-links.sh`.

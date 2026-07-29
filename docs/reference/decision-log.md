@@ -2,7 +2,7 @@
 
 # Decision log
 
-Thirty-six numbered specification revisions. Each records a decision, **and what was
+Thirty-seven numbered specification revisions. Each records a decision, **and what was
 rejected** — which is usually the more valuable half.
 
 > Authoritative text: SRS §0, where each revision is stated in full with its reasoning. This
@@ -26,15 +26,17 @@ If you read only six, read these.
 | **21** | **What the route registry *is*** | Resolved a contradiction that had blocked every CRUD screen |
 | **34** | **Invalid credentials on a public endpoint are anonymous** | A public endpoint must **never** return `401` |
 | **36.2** | **Public display identity is a platform-wide invariant** | The backend decides which name is published; clients render it verbatim |
+| **37** | **Documentation maintenance is binding** | A feature is not done until its documentation is; and the SRS stopped carrying verbatim copies of files that had already drifted from it |
 
 ---
 
 ## All revisions
 
-### Recent — public surfaces and the calendar
+### Recent — documentation, public surfaces, and the calendar
 
 | # | Date | Decision |
 |---|---|---|
+| **37** | 2026-07-29 | **Documentation maintenance is binding (new §16.4), and §16.3 stops carrying verbatim copies.** *A feature is not complete until the documentation describing it is updated, in the same commit* — the ledger row recorded **what was done** but never **how the system now works**, so explanatory documentation could rot while every gate stayed green. Also fixed the **precedence** question the new hierarchy raised: the SRS is normative and says what MUST; the handbook is explanatory, cites rather than restates, and is a derived artifact. **The second half is a duplication removal:** §16.3 had carried a full verbatim copy of `CLAUDE.md` and `AGENTS.md`. Useful to bootstrap them at M0, those copies became a second home for one requirement — **and had already drifted.** §16.3 now states normatively *what each file must contain*; the files carry the wording. The `CHANGES.log` template is **retained**, because it is a genuine one-time artifact no live file can drift from |
 | **36.2** | 2026-07-29 | **Public display identity is an invariant, not an endpoint detail.** Generalised from one payload to *every* public surface, stated **once** in the data model with everything else cross-referencing it. Added guardrail rule 21 |
 | **36.1** | 2026-07-29 | **`public_display_name` on the person.** Lets an instructor appear publicly as a kunya while the platform keeps her legal name. Resolved **in the backend only**; the frontend implements no fallback. Placed on the person rather than a teacher profile — it is a person-level publication choice |
 | **36** | 2026-07-29 | **One bootstrap document for the calendar screen**, rejecting four independent endpoints: round trips are the scarce resource, one cache policy beats four, and the grouping is a real concept. Bounded by an explicit rule — **reference data only, never operational data**. Occurrences became self-sufficient, avoiding an N+1 on a public screen |
@@ -89,9 +91,11 @@ If you read only six, read these.
 
 Reading the log as a whole, five habits recur — and they are the project's actual method.
 
-**Duplication always drifts.** Revisions 33 and 36.2 both fix it, and 33 names it as *the*
-general hazard. Every instance was found by audit, never by a failing test, because **the copy
-that drifts still passes its own tests.**
+**Duplication always drifts.** Revisions 33, 36.2 and 37 all fix an instance of it, and 33
+names it as *the* general hazard. Every instance was found by audit, never by a failing test,
+because **the copy that drifts still passes its own tests.** By Revision 37 the document is
+correcting duplication it introduced in itself — the verbatim agent-file copies — which is
+the clearest possible demonstration that the rule applies to the specification too.
 
 **Verification over assertion.** Revision 17 exists because a claim was required to be
 *verified rather than asserted* — and verification found it true in principle but not

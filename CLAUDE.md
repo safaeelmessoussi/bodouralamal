@@ -23,11 +23,13 @@ You are working on the بذور الأمل Platform.
 - Document what you built in `docs/CHANGES.log` immediately after completing a task.
 - If the SRS is silent or two sections conflict: stop and ask; report the conflict.
 
-## Documentation is part of Done
+## Documentation is part of Done (SRS §16.4 — binding)
 - **A feature is not complete until its documentation is updated — in the same
-  commit.** Documentation drift is a defect, not a follow-up task.
+  commit.** Documentation drift is a defect, not a follow-up task. The rule is
+  normative in `docs/SRS.md` §16.4; this bullet is a pointer to it.
 - The handbook lives in `docs/` and is indexed by `docs/README.md`. It is
-  **mutable by you**, unlike `docs/SRS.md`.
+  **mutable by you**, unlike `docs/SRS.md`, and it **cites the SRS rather than
+  restating it** (§16.4).
 - Which page to update for which kind of change is listed in
   `docs/development/documentation-policy.md` — read it once per session, as you
   do §20.

@@ -12,7 +12,7 @@ text lives.
 | [Technical design constraints](technical-design.md) | TD-1 … TD-16 — state machines, contracts, transactions |
 | [API endpoints](api-endpoints.md) | Every route, its audience, and its status |
 | [Error codes](error-codes.md) | The canonical catalogue, with client guidance |
-| [Decision log](decision-log.md) | All 36 specification revisions |
+| [Decision log](decision-log.md) | All 37 specification revisions |
 
 ## How to use these
 

@@ -5,7 +5,11 @@
 **Documentation is part of the implementation. A feature is not Done until its documentation
 is updated — in the same commit.**
 
-This page is the binding working agreement. Read it before your first pull request.
+Read this before your first pull request.
+
+> **The obligation is normative, and it lives in the specification — SRS §16.4** (Revision
+> 37). This page is the working guide to satisfying it: which page to update for which
+> change, and how to write it. Where the two differ, §16.4 wins and this page is the defect.
 
 ---
 
@@ -15,6 +19,9 @@ This page is the binding working agreement. Read it before your first pull reque
 >
 > When a code change makes documentation inaccurate, the documentation is updated **in the
 > same commit**. Never in a follow-up, never in a ticket, never "when things calm down".
+
+§16.4 states it once; every other place that mentions it — `CLAUDE.md`, `AGENTS.md`, §20's
+"always" list, and this page — **cites** it.
 
 A follow-up commit that never lands is the normal outcome, and the cost is not evenly
 distributed: the person who pays is the one who reads the stale page six months later and
@@ -74,6 +81,8 @@ dangerous rather than merely untidy — the divergence is invisible until someth
 
 [`SRS.md`](../SRS.md) is **normative and immutable to contributors and agents.** It changes
 only through a numbered revision approved by the Document Owner.
+
+The two tiers, and which wins, are defined normatively in **§16.4**.
 
 | Situation | What to do |
 |---|---|
@@ -156,9 +165,10 @@ Before opening a pull request:
 
 | Check | What it does |
 |---|---|
-| `scripts/ci/check-doc-links.sh` | **Fails the build** on a broken relative link or a missing anchor target |
+| `scripts/ci/check-doc-links.sh` | **Fails the build** on a broken relative link or a missing anchor target. Listed in the specification's CI gates (§19.2) |
 | Code review | The reviewer checks the documentation diff against the code diff |
-| The specification's own guardrails | Reading the ledger before starting and appending after finishing is already binding |
+| SRS §16.4 | The obligation itself is normative — not a team convention that can lapse |
+| SRS §20 | The "always" list now includes updating documentation in the same commit |
 
 Link integrity is automatable and therefore automated. **Accuracy is not**, which is what
 review is for.
