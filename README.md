@@ -1,312 +1,221 @@
 # منصة بذور الأمل — Bodour Al-Amal Platform
 
-Management platform for the learning institute run by **جمعية بذور الأمل** (Bodour Al-Amal), a
-Moroccan educational association based in Marrakesh. The institute offers Quran memorization,
-Islamic studies, and adult literacy to women, teens, and children.
+A management platform for the learning institute run by **جمعية بذور الأمل**, a Moroccan
+educational and charitable association in **Marrakesh**.
 
-The association currently runs on paper and spreadsheets. This platform replaces manual scheduling,
-account approvals, and grade tracking for its first live branch cohort. The interface is
-**Arabic-only and RTL-first**; it is sized for roughly 900 users at launch against a 5,000-user
-design ceiling, deployed to a single Moroccan VPS.
+The institute teaches **Quran memorization**, **Islamic studies**, and **adult literacy** to
+women, teenagers, and children. It has been running on paper registers and spreadsheets. This
+platform replaces the parts that cost the most and break the most often: **scheduling**,
+**account approvals**, and **grade tracking**.
 
-> **Status: under active development.** A pre-MVP site is publicly live at
-> **[bodouralamal.com](https://bodouralamal.com)**. Milestones M0 and M1 are essentially complete and
-> M2 is in progress; M3–M8 have not been started. See [Current state](#current-state) for exactly
-> what runs, and [Live pre-MVP site](#live-pre-mvp-site) for what is deployed.
+The interface is **Arabic-only and right-to-left**. It is sized for roughly **900 users at
+launch** against a 5,000-user ceiling, and runs on a **single Moroccan server** — because
+Moroccan law requires the data to stay in the country.
+
+> **Status: under active development.** A pre-MVP site is live at
+> **[bodouralamal.com](https://bodouralamal.com)** — the public pages only. Milestones M0–M3
+> are complete on the backend; M4–M8 have not started.
+> See **[Scope and roadmap](docs/overview/scope-and-roadmap.md)** for exactly what runs.
 
 ---
 
-## The specification is the source of truth
+## Why it exists
 
-This repository is built **specification-first**. [`docs/SRS.md`](docs/SRS.md) is the authoritative
-requirements document; the code conforms to it, not the other way around.
+Three things break repeatedly when an institute this size runs on paper:
 
-- The SRS is **immutable to contributors and agents.** It changes only through a numbered revision
-  approved by the Document Owner. It is currently at **Revision 24**.
-- Every section is cross-referenced by stable identifiers — `§4.3` for sections, `BR-x` for business
-  rules, `TD-x` for technical-design constraints. Code comments and commit messages cite them, so
-  any behaviour can be traced to the clause that requires it.
-- Where the SRS is silent or self-contradictory, the rule is to **stop and escalate**, not to invent
-  behaviour. Resolved ambiguities become revision entries in §0 of the SRS.
+| | Today | What goes wrong |
+|---|---|---|
+| **Scheduling** | A weekly timetable maintained by hand | Rooms get double-booked; a change reaches people by word of mouth, or not at all |
+| **Approvals** | Registration on paper, decided in person | No record of who approved what, or when |
+| **Grades** | Per-teacher spreadsheets | Memorization coverage is recomputed by hand and gets it wrong; a correction does not propagate |
 
-Three companion documents are mutable working artifacts that never override the SRS:
+## Who uses it
 
-| File | Purpose |
+| | |
 |---|---|
-| [`docs/IMPLEMENTATION_PLAN.md`](docs/IMPLEMENTATION_PLAN.md) | Milestone build order |
-| [`docs/TASKS.md`](docs/TASKS.md) | Granular checklist; the fastest way to see what is done |
-| [`docs/CHANGES.log`](docs/CHANGES.log) | Append-only record of what was built, and why |
+| **Staff** | A system owner, branch coordinators, and the مؤطِّرات (instructors) who teach and mark |
+| **Adult learners** | Their own accounts |
+| **Teenagers and children** | **No accounts of their own** — reached through a parent's account |
+| **Parents** | See their linked children's schedules, progress, and grades |
+| **The public** | The branch directory, the calendar, and public resources are open to anyone |
 
-`docs/openapi.json` is **generated**, never hand-edited — see [API contract](#api-contract).
+→ [Users and roles](docs/overview/users-and-roles.md)
 
----
+## What it does
 
-### Design tokens
+**Registration and approval** — someone signs up, and a staff member approves them before
+they see anything. A parent registering a child creates the parent, the child, and the link
+between them in one indivisible step.
 
-The stylesheet is layered — **primitives → semantic → scales** — and components
-consume **only** the semantic layer. `--color-primary`, never `--brand-green-700`;
-`--space-4`, never `1rem`. Rebranding is therefore an edit to the mappings in
-[`frontend/src/styles.css`](frontend/src/styles.css) and to nothing else.
+**Scheduling** — a *group* is a cohort with a fixed weekly time, room, and instructor.
+Enrolling in a group is what gives a student their timetable. One-off events — holidays,
+exams, ceremonies — layer on top.
 
-Styles live in [`frontend/src/styles/`](frontend/src/styles/) — `tokens/`,
-`base/`, `components/` — assembled by `src/styles.css`, whose **import order is
-the cascade**: every rule has single-class specificity, so which declaration
-wins is decided by which file loads last.
+**A dual calendar** — Gregorian and Hijri side by side. The Hijri dates **reproduce the
+official announcements of the Ministry of Habous and Islamic Affairs**, recorded month by
+month. The platform computes nothing, and a month the Ministry has not yet announced simply
+carries no Hijri label.
 
-The architecture is documented **once**, at the top of that index, where it
-cannot drift from the code it describes. `scripts/ci/check-design-tokens.sh`
-enforces the boundary — a raw colour, a reach past the semantic layer, or a
-stylesheet nobody imports fails the build.
+**Quran memorization tracking** — teachers log the ayah ranges a student has memorized, and
+coverage is the mathematical union of those ranges, so logging the same passage twice never
+inflates progress. A correction takes effect immediately.
 
-**Verifying a styling refactor changed nothing:** `scripts/dev/css-resolve.py`
-resolves every `var()` to literals and reports one line per declaration, which
-catches changed *values*; comparing the built `dist/assets/*.css` before and
-after catches changed *order*. Both are needed — the first cannot see a rule
-moving past another.
+**Exams and grading** — an online exam builder with auto-marked multiple choice and
+teacher-marked free text. Nothing is visible to students until a teacher publishes it.
 
-## Architecture
+**Teaching materials** — files and audio recordings, in three visibility tiers.
 
-A single-tenant application, deliberately without a tenancy layer (SRS Revision 11).
+**Consent, taken seriously** — parental consent for publishing a child's voice is a *record*,
+not a checkbox. If even one student in a group has not consented, **every recording for that
+group is automatically private** — and stays that way, re-checked whenever anyone joins,
+leaves, or changes their mind.
+
+→ [Business processes](docs/overview/business-processes.md) ·
+[User journeys](docs/overview/user-journeys.md)
+
+## What shaped it
+
+Four constraints explain almost every decision in this codebase.
+
+**Moroccan law.** Personal data must stay on Moroccan infrastructure. No AWS, no Google
+Cloud, no managed database — everything runs in containers on a Moroccan server, with backups
+to a second Moroccan location.
+
+**Unreliable connections.** Users are on mobile networks that drop. Pages are small, no web
+font is loaded, and the calendar makes two requests rather than five.
+
+**Low digital literacy.** Many beneficiaries are *in an adult literacy programme*. Sign-in is
+Google-only for now, which is a real and recorded problem — some people the association
+serves do not have a smartphone or an email address. Staff help create accounts, and
+username-and-password sign-in is the first thing being added after launch.
+
+**Most records are about children.** Safeguarding is not a feature; it is a property the
+whole system has to hold. Access to a child's record is re-verified on *every single
+request*, and a response never reveals whether a particular child exists.
+
+→ [Purpose and context](docs/overview/purpose-and-context.md)
+
+## How it is built
 
 ```
-                    ┌──────────────────── Nginx (same origin) ─────────────────────┐
-   browser  ──TLS──▶│  /            → static client bundle                          │
-                    │  /api/v1/     → api        (Node + Express)                   │
-                    │  /storage/    → minio      (SigV4 presigned PUT/GET)          │
-                    └──────────────────────────────────────────────────────────────┘
-                                          │                    │
-                                    ┌─────▼─────┐        ┌─────▼─────┐
-                                    │ PostgreSQL│        │   MinIO   │
-                                    │  (+pg-boss│        │ public /  │
-                                    │   queue)  │        │ private   │
-                                    └───────────┘        └───────────┘
+                      ┌──────────── Nginx — one domain, one certificate ────────────┐
+   browser  ──TLS──▶  │  /            the Arabic web client                         │
+                      │  /api/v1/     the API        (Node + Express)               │
+                      │  /storage/    files          (MinIO)                        │
+                      └────────────────────────────────────────────────────────────┘
+                                     │                        │
+                              ┌──────▼──────┐          ┌──────▼──────┐
+                              │ PostgreSQL  │          │    MinIO    │
+                              │ + job queue │          │   files     │
+                              └─────────────┘          └─────────────┘
 ```
 
-Everything is served from **one origin**, so the client never makes a cross-origin request and no
-CORS allow-listing exists anywhere, in any environment.
+One server, one domain, five containers. Everything is served from a **single origin**, which
+is what keeps sessions secure without any cross-origin configuration anywhere.
 
-**Layering is enforced** (SRS §16.2): controllers hold HTTP concerns only, services own business
-logic and transaction boundaries, and repositories are the sole data-access layer. Raw SQL in
-application code is restricted to row locks and same-transaction job inserts.
-
-### Authentication and authorization
-
-- **Google OAuth is the only identity provider.** No passwords exist anywhere in the system.
-- Access tokens are carried **only** in the `Authorization` header, never in a cookie, which makes
-  ordinary API mutations structurally immune to CSRF. `POST /auth/refresh` is the single
-  cookie-authenticated route and requires a custom header plus an `Origin` match.
-- Refresh tokens are stored **hashed, never raw**, and rotate on every use, with reuse outside a
-  short grace window revoking the entire session chain.
-- **Authorization is branch-scoped, and that is the sole axis** (§4.2). A user may hold the same
-  role several times, each assignment scoped to one branch, several, or all of them. Scope resolves
-  **per role** — a Teacher in Casablanca who is also an Admin in Marrakesh does not thereby
-  administer Casablanca. Teachers derive teaching access exclusively through group assignment.
-- High-risk endpoints **re-read the caller from the database on every request** rather than trusting
-  an unexpired token, so suspending an account or revoking a role takes effect immediately.
-- **Authentication failure has exactly one rule per mount** (SRS Revision 34). Protected endpoints
-  (`authenticate`) answer `401` to any credential that is missing or fails verification. Public
-  endpoints (`optionalAuthenticate`, currently `GET /calendar`) **never return `401`**: an invalid,
-  malformed or expired credential is *ignored* and the request proceeds as anonymous, because a
-  credential that fails verification carries no identity to act on — and the landing page renders
-  the public calendar for visitors who have none.
-- Access to a minor's data flows through an approved family link, verified per request via the
-  `X-Active-Child-ID` header against **both** the authenticated parent and the child. Every failure
-  mode returns an indistinguishable `404`, so responses cannot be used to probe which children exist.
-
----
-
-## Current state
-
-Accurate as of Revision 24. Counts are items in [`docs/TASKS.md`](docs/TASKS.md).
-
-| Milestone | Status |
+| | |
 |---|---|
-| **M0 — Bootstrap** | Complete (5/5) |
-| **M1 — Infrastructure & Platform Core** | 29 done, 3 partial, 2 open |
-| **M2 — Registration, Approvals, Family** | 4 done, 5 partial, 5 open |
-| **M3–M8** | Not started |
+| **Client** | React 19, Vite 8 — Arabic, right-to-left, mobile-first |
+| **API** | Node.js 24, Express 5, Prisma 7, TypeScript strict |
+| **Database** | PostgreSQL 18 — which also holds the job queue |
+| **Files** | MinIO, self-hosted |
+| **Edge** | Nginx, Let's Encrypt |
 
-"Partial" items name which dimension is finished — backend, tests, security verification, or
-frontend — because *partial* alone hides whether the remaining risk is unwritten code or an unbuilt
-screen.
+→ [System overview](docs/architecture/system-overview.md)
 
-### What runs today
+## The specification comes first
 
-**Backend endpoints** (45 operations across 33 paths; the full contract, including the TD-3.8 error
-envelope schema, is in [`docs/openapi.json`](docs/openapi.json)):
+This repository is built **specification-first**. [`docs/SRS.md`](docs/SRS.md) is the
+authoritative requirements document — currently at **Revision 36.2** — and the code conforms
+to it, not the other way around.
 
-- `GET /healthz` — component health for database, storage, and job queue
-- `GET /auth/google`, `GET /auth/google/callback`, `POST /auth/refresh`, `POST /auth/logout`, `GET /me`
-- `POST /registrations` — unified parent + child registration in one transaction
-- `GET /admin/approvals`, `POST /admin/approvals/{id}/approve|reject`
-- `POST /family-links`, `DELETE /admin/family-links/{id}`
-- `GET`/`POST`/`PATCH /admin/users` — user management and staff pre-provisioning
-- `GET`/`PUT /students/{id}/social-profile`, `GET`/`POST /students/{id}/consents`
-- Branch and room CRUD under `/admin/branches` and `/admin/rooms`
-- `GET`/`POST`/`PATCH`/`DELETE /admin/groups` — timetable, room/time conflict detection, capacity
-- `GET`/`POST`/`DELETE /admin/groups/{id}/roster` and `.../instructors` — enrolment and co-teaching
-- `POST`/`PATCH`/`DELETE /events`, `GET`/`POST /admin/branches/{id}/event-backfill`
-- `GET /calendar` — **the one public endpoint**: anonymous callers get the public tier
-- `GET`/`PUT`/`POST /admin/hijri-calendar/...` — recording the Ministry's official Hijri announcements
+- It is **immutable** to contributors and to AI agents. It changes only through a numbered
+  revision approved by the Document Owner.
+- Every section is cross-referenced by stable identifiers, so any behaviour traces back to
+  the clause that requires it.
+- Where it is silent or self-contradictory, the rule is to **stop and ask** — never to invent
+  behaviour.
 
-**Frontend:** a public shell only — landing page, login, the OAuth error states, and the account
-status screens. **There are no authenticated screens yet**, so the endpoints above currently have no
-UI driving them.
-
-**Not started:** Quran progress tracking (M4), exams and grading (M5), and content/consent/storage
-workflows (M6). Scheduling, the calendar and the Hijri overlay are complete on the backend.
-
-### Live pre-MVP site
-
-A **pre-MVP** site is publicly live at **[bodouralamal.com](https://bodouralamal.com)** — an Arabic,
-RTL single-page client served over HTTPS.
-
-It is a **front-end deployment only.** The platform API described above is not served there: every
-path, including `/api/v1/healthz`, returns the same client shell. Nothing on the live site is backed
-by the endpoints listed above, and no beneficiary data is held there.
-
-The full stack — API, PostgreSQL, MinIO, and the job queue — currently runs only in local
-development. Production deployment of the platform itself follows SRS §19.1 and lands with the
-milestones above.
+That last rule is why [the decision log](docs/reference/decision-log.md) reads as a history of
+arguments rather than a changelog: thirty-six revisions, each recording a decision **and what
+was rejected**.
 
 ---
 
-## Getting started
+## Documentation
 
-### Prerequisites
+**Everything is in [`docs/`](docs/README.md), organised so you can stop at the depth you
+need.**
 
-- Docker with Compose v2
-- Node.js **24.11.0** (pinned in `.nvmrc`) — needed only to run tests and tooling on the host
-- Google OAuth client credentials
+| | |
+|---|---|
+| **[Overview](docs/overview/README.md)** | The platform in business terms — no technical knowledge needed |
+| **[Architecture](docs/architecture/README.md)** | How the system is built, and why |
+| **[Operations](docs/operations/README.md)** | Running, deploying, and recovering it |
+| **[Development](docs/development/README.md)** | Contributing |
+| **[Reference](docs/reference/README.md)** | Business rules, technical constraints, endpoints, error codes, decisions |
 
-### Run the stack
+**Start here:**
+
+- New to the project? [Purpose and context](docs/overview/purpose-and-context.md) — 10 minutes
+- New engineer? [Architecture](docs/architecture/README.md) — the one-hour tour
+- About to contribute? [Getting started](docs/development/getting-started.md)
+
+> **Documentation is part of the implementation here.** A feature is not done until its
+> documentation is updated, in the same commit —
+> [the policy](docs/development/documentation-policy.md).
+
+---
+
+## Running it locally
 
 ```bash
 git clone <repository-url> && cd bodouralamal
 
-cp .env.example .env          # application config; every Required value must be filled
-cp infra.env.example infra.env # container bootstrap credentials (Postgres password)
+cp .env.example .env             # fill every Required value
+cp infra.env.example infra.env   # the database password
 
 docker compose up -d db minio
 docker compose run --rm api npx prisma migrate deploy
 docker compose run --rm api npm run seed:production
 docker compose up -d
 
-curl http://localhost/healthz   # expect 200 with all components green
+curl http://localhost/healthz    # expect 200, all components green
 ```
 
-The Super Admin then performs their first Google login, which binds the identity to the
-pre-provisioned account.
+Full instructions, including test fixtures and troubleshooting:
+**[Getting started](docs/development/getting-started.md)**.
 
-> **Deploying to the production VPS differs in one step:** images are **built in CI and pulled**,
-> never built on the server. The frontend build peaks near 2 GB, which would exhaust a 4 GB box
-> already running PostgreSQL, MinIO, and Node. The full pipeline is SRS §19.1.
+## Tests
 
-The first deployment also needs `SUPER_ADMIN_EMAIL` set: the seed grants that Google address the
-Super Admin role, and the account binds to the identity on its first login. It is a **bootstrap-only
-value** — once an active Super Administrator exists it is ignored permanently and may be removed,
-after which administrators are managed entirely through the application.
+**102 backend unit · 473 integration · 48 frontend**, plus **ten CI guards**.
 
-Boot validation fails fast and by name on any missing required variable, so a misconfigured
-deployment stops immediately rather than failing later inside a request.
+Integration tests run against a **real** PostgreSQL, MinIO, and Nginx rather than mocks —
+because the properties they check (transaction atomicity, constraint enforcement, signed URLs
+surviving the proxy) **do not exist in a mock**.
 
-### Development
-
-Local development publishes database and storage ports to loopback through an explicit overlay,
-which is opt-in so that the production compose command can never pick it up by accident:
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
-```
-
-```bash
-# Backend (run from backend/)
-npm run lint • npm run typecheck • npm test        # unit tests, no stack required
-npm run seed:fixtures                              # development fixtures; refuses to run in production
-npm run openapi:generate                           # regenerate the API contract
-
-# Integration tests — from the repository root, with the stack up
-bash scripts/dev/test-integration.sh
-```
-
-The integration suite runs against a **real** PostgreSQL, MinIO, and Nginx rather than mocks,
-because the properties it checks — transaction atomicity, constraint enforcement, presigned-URL
-signatures surviving the proxy — do not exist in a mock. It runs serially, since the suites share one
-database.
-
-Current totals: **97 unit tests and 473 integration tests**.
-
----
-
-## API contract
-
-`docs/openapi.json` is generated from the implementation and is **never hand-edited**. CI enforces
-this in both directions:
-
-1. It regenerates the document and fails if the committed copy differs.
-2. Generation walks the **live Express router** and fails on any operation that is documented but not
-   served, or served but not documented.
-3. A conformance check compares the result against the SRS endpoint registry, failing on any endpoint
-   that contradicts the SRS or is implemented without documentation.
-
-Rule 2 exists because it was needed: a route was once added to both the registry and the contract
-while never being mounted, and every gate passed while the endpoint returned `404`.
-
-Endpoints documented in the SRS but not yet built report as `PENDING` until their milestone lands.
-
----
+→ [Testing](docs/development/testing.md) · [CI/CD](docs/development/ci-cd.md)
 
 ## Repository layout
 
 ```
-backend/
-  prisma/           schema, migrations (including hand-written SQL), seeds
-  src/
-    controllers/    HTTP layer only — no business logic
-    services/       business logic, transaction boundaries, state machines
-    repositories/   all database access; the single mandated data-access layer
-    policies/       permission and scope checks
-    validators/     Zod schemas mirroring the SRS validation limits
-    middleware/     auth, child context, request id, error envelope
-    jobs/           pg-boss handlers
-    lib/            storage, OAuth, tokens, config, search normalization
-frontend/src/       React client — i18n, contexts, components, pages
-nginx/              same-origin routing, TLS, rate limits, storage proxy
-scripts/ci/         guard scripts run by CI
-docs/               SRS and companion documents
+backend/    API, database schema, migrations, seeds
+frontend/   the React client
+nginx/      routing, TLS, rate limits
+scripts/    CI guards and development tools
+docs/       the specification, and all documentation
 ```
-
-## Conventions
-
-- **Migrations are forward-only** and generated with `--create-only` so constraints can be written by
-  hand. `prisma db push` is banned and CI enforces it; direct renames are prohibited.
-- **Soft deletes** everywhere, with a snapshot written for restoration.
-- **Every mutation of consequence writes an audit row**, and who/when/why must be reconstructable
-  from the audit trail alone.
-- **Arabic text is natively collated** (`ar-x-icu`) in the database, and search runs against indexed
-  normalized shadow columns that fold Arabic diacritics, alef variants, and French accents.
-- **Every user-facing string is an i18n key.** No hardcoded UI text.
-- Commits are small and atomic, cite the SRS clause they implement, and land on `develop`.
-
-## Technology
-
-| | |
-|---|---|
-| Runtime | Node.js 24.11.0, TypeScript 6.0.3 |
-| Backend | Express 5.2.1, Prisma 7.9.0 (`@prisma/adapter-pg`), Zod 4.4.3, pg-boss 12.26.2 |
-| Frontend | React 19.2.8, Vite 8.1.5 |
-| Data & storage | PostgreSQL 18.4, MinIO |
-| Edge | Nginx stable-alpine, Certbot |
-| Testing | Vitest 4.1.10 |
-
-Dependency majors and minors are locked; during active development only patch-level updates are
-permitted, each in its own commit with a stated reason and a full CI run.
 
 ## Contributing
 
-Read [`CLAUDE.md`](CLAUDE.md) or [`AGENTS.md`](AGENTS.md) first — they carry the binding working
-agreement for this repository, including the SRS guardrails in §20.
+Read [`CLAUDE.md`](CLAUDE.md) or [`AGENTS.md`](AGENTS.md) first — they carry the binding
+working agreement, including the guardrails in SRS §20.
 
-The short version: consult only the SRS sections you are implementing, never edit the SRS, tick
-`docs/TASKS.md` as work completes, record what you built in `docs/CHANGES.log`, and **stop and ask
-when the specification is silent or two clauses conflict** rather than guessing.
+The short version: consult only the specification sections you are implementing, **never edit
+the specification**, keep the checklist and the ledger current, **update the documentation in
+the same commit**, and **stop and ask when the specification is silent or two clauses
+conflict** rather than guessing.
+
+---
+
+*جمعية بذور الأمل — مراكش، المغرب*

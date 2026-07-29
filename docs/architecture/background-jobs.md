@@ -1,0 +1,137 @@
+[Documentation](../README.md) › [Architecture](README.md) › **Background jobs**
+
+# Background jobs
+
+**pg-boss** — a Postgres-backed job queue running inside the API container.
+
+## Why not Redis
+
+Two reasons, and the second is the interesting one.
+
+**Container budget.** On a 4 GB VPS already running PostgreSQL, MinIO, Node, and Nginx, a
+Redis container is a real cost in memory and in operational surface — another thing to
+back up, monitor, and secure.
+
+**Transactional enqueue.** Because the queue *is* a Postgres table, a job can be enqueued
+**inside the same transaction as the mutation that triggers it**. With an external broker
+that is impossible: you either commit the mutation and hope the enqueue lands, or enqueue
+first and hope the commit does. Both are broken states, and both are common bugs.
+
+## Transactional enqueue
+
+> Wherever a mutation triggers a job, the enqueue is **a database insert through the same
+> transaction client**. A committed mutation with a lost job, and a job for an uncommitted
+> mutation, are **both prohibited states**.
+
+Which means:
+
+```ts
+// ✅  the insert joins the transaction
+await prisma.$transaction(async (tx) => {
+  await rosterRepo.enrol(tx, …);
+  await jobsRepo.enqueue(tx, 'consent.reevaluate', { group_id });
+});
+
+// ❌  boss.send() uses its own connection and sits OUTSIDE the transaction
+await prisma.$transaction(async (tx) => {
+  await rosterRepo.enrol(tx, …);
+});
+await boss.send('consent.reevaluate', { group_id });   // prohibited here
+```
+
+Job rows are inserted through a dedicated `JobsRepository` using pg-boss's documented job
+table format. This is **one of only two places raw SQL is permitted** in application code —
+the other being `SELECT … FOR UPDATE` row locks.
+
+`boss.send()` is not banned outright; it is banned **for job-triggering mutations**, which
+is where the atomicity matters.
+
+## The catalog
+
+Every job retries with exponential backoff, five attempts maximum, then dead-letters with an
+Admin-visible failure. Singleton keys prevent duplicate concurrent runs.
+
+| Job | Trigger | Idempotency |
+|---|---|---|
+| `consent.reevaluate` | Roster change · consent change · upload | Singleton per group; **full recompute**, so re-running is harmless |
+| `content.bucket-migrate` | Visibility change · consent forcing | Copy–verify–delete; skipped if already in the target bucket |
+| `backup.replicate` | Nightly cron | `pg_dump` + `restic` push to the second Moroccan location. Failure raises a **critical** Admin-visible alert |
+| `content.quarantine-purge` | Daily cron | Permanently removes storage objects past the 90-day trash window |
+| `upload.gc` | Daily cron | Deletes initiated-but-never-completed uploads **strictly older than 48 h** — never younger, or a slow upload in progress would be reaped |
+| `token.purge` | Daily cron | Removes consumed onboarding tokens past their horizon **and refresh tokens past expiry**, so a table gaining a row per refresh does not grow unbounded |
+| `ratelimit.purge` | Daily cron | Removes counters for elapsed windows. **Housekeeping only** — the quota decision is synchronous and never depends on this job |
+| `audit.purge` | Daily cron | The single sanctioned deletion path for audit rows. See below |
+
+Post-MVP additions (`import.csv`, `export.csv`, `grade.recalculate`) join with their
+features.
+
+### `consent.reevaluate` — full recompute, deliberately
+
+It recomputes the group's entire consent state rather than applying a delta. That makes it
+**idempotent**, safe to run twice, and safe to run after a missed event — properties worth
+far more here than the efficiency a delta would buy on groups of a few dozen students.
+
+### `audit.purge` — the one that needed three attempts
+
+Retention deletes audit rows matching **BOTH** an **enumerated action-type allowlist** **AND**
+the 12-month age horizon:
+
+```
+auth.login · auth.login_denied · auth.identity_bound
+auth.refresh · auth.logout · auth.token_revoked
+```
+
+Extending that list requires a specification revision.
+
+**Age-only deletion is prohibited. So is prefix matching.** An earlier version selected
+`auth.*` rows older than the horizon; the Document Owner required an explicit allowlist
+rather than age alone, and review found that **a glob is not an allowlist** — `auth.*` would
+silently sweep in any future action beginning with `auth.` (post-MVP local authentication
+adds several) without anyone having decided it was purgeable.
+
+Every other action type — including the indefinitely-retained security events
+`consent_gate.override`, `grade.passfail_override`, `settings.change`, and
+`trash.manual_restore` — must survive the job untouched, and **a test asserts exactly that
+rather than trusting the query.**
+
+This job is also what makes the storage projection real rather than aspirational. Access
+tokens live one hour, so every active session writes a refresh audit row roughly hourly:
+roughly **800–900k authentication rows a year** at launch scale. Those rows are **bounded
+rather than cumulative** precisely because this job collects them. Without it, per-refresh
+auditing grows without limit.
+
+## Why some things are deliberately *not* jobs
+
+**Quran coverage recalculation is synchronous.** Creating, editing, or deleting a log
+recomputes that Surah's coverage **in the same request**, and the guardrails forbid moving
+it into a job.
+
+The reason is correctness, not responsiveness: coverage drives level completion. A deferred
+recalculation leaves a window in which a student appears to have completed a level they have
+not, and a teacher correcting a mis-logged range would not see the correction.
+
+**Per-user quota enforcement is synchronous.** A job queue is asynchronous; a quota decision
+must be synchronous and transactional with the request it gates. Routing it through pg-boss
+is explicitly prohibited.
+
+## What is prohibited as a substitute
+
+> Never replace these with in-memory queues, `setImmediate`, unawaited promises, or ad-hoc
+> timers. **Job state must survive container restarts.**
+
+Nor in-process mutexes or advisory-lock improvisations for concurrency control — pg-boss
+singleton keys are the mechanism for background work.
+
+## When the workers are down
+
+Because enqueues are database inserts inside application transactions, they **keep
+succeeding** while workers are down. Jobs are **delayed, never lost**, and drain on restart.
+
+A queue-lag alarm past ten minutes surfaces on the Admin dashboard.
+
+> [Resilience](../operations/resilience.md#degraded-operation)
+
+---
+
+**Next:** [Calendar and Hijri](calendar-and-hijri.md) · **Related:**
+[Backend](backend.md#transactions), [Storage](storage.md#consent-gating)

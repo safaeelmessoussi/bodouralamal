@@ -1,0 +1,227 @@
+[Documentation](../README.md) › [Architecture](README.md) › **API**
+
+# API
+
+A REST API under `/api/v1`, **on the same origin as the client**. JSON in, JSON out, bearer
+authentication unless a route is explicitly public. Plural nouns, kebab-case paths.
+
+Current surface: **47 operations across 35 paths**. Full inventory:
+[API endpoints](../reference/api-endpoints.md).
+
+## The contract is generated, and it is governed
+
+[`docs/openapi.json`](../openapi.json) is an **artifact of the implementation**. It is never
+hand-edited — not even to make a check pass.
+
+CI enforces this in **both** directions, which is the part that matters:
+
+1. **Regenerate and diff.** CI regenerates the document from the implementation and fails if
+   the committed copy differs. Without this step the gate below would be validating a file a
+   human could edit — exactly what the specification forbids. This is what makes the file
+   generated *in fact*, not merely by intention.
+2. **Walk the live router.** Generation traverses the actual Express router and fails on any
+   operation that is documented but not served, or served but not documented.
+3. **Conformance against the specification.** A third check compares the result to the
+   endpoint registry and fails on an endpoint that contradicts the specification, or is
+   implemented without documentation, or appears in the contract undocumented.
+
+**Rule 2 exists because it was needed.** A route was once added to both the registry and the
+contract while never being mounted — every gate passed while the endpoint returned `404`.
+
+**Documented-but-unimplemented endpoints report `PENDING`** until their milestone lands.
+They are a work-in-progress signal, not invented endpoints, and must not fail the build: a
+gate that is red from M1 to M6 is a gate nobody reads. The final release checklist flips
+`PENDING` to fatal.
+
+### What "spec-first" means in practice
+
+The registry in the specification is **the normative registry for currently documented
+milestones** — a seed, not the finished catalogue of every endpoint the product will ever
+have. Later milestones add endpoints through **subsequent specification revisions**, so the
+surface still grows spec-first without rewriting the registry before every CRUD screen.
+
+That reading was itself a decision (Revision 21), taken to resolve a contradiction that had
+blocked every CRUD screen: one section called the registry canonical and exhaustive, while
+the registry's own preamble called itself a seed of representative operations. Under the
+strict reading, the branch and room CRUD that three other sections required would have been
+*invented* endpoints.
+
+## Conventions
+
+| | |
+|---|---|
+| **Prefix** | `/api/v1`, same origin as the client — mandatory for cookie delivery |
+| **Naming** | Plural nouns, kebab-case paths, `snake_case` JSON fields |
+| **Auth** | `Authorization: Bearer <access token>`. **Never a cookie**, except the one refresh route |
+| **Child context** | `X-Active-Child-ID` header on child-scoped requests |
+| **Errors** | One envelope, always ([below](#the-error-envelope)) |
+| **Lists** | Paginated, always ([below](#pagination)) |
+| **Caching** | Off by default; one endpoint opts in ([below](#caching)) |
+
+## The error envelope
+
+Every non-2xx response, without exception:
+
+```json
+{
+  "error": {
+    "code": "CAPACITY_FULL",
+    "message_key": "errors.roster.capacity",
+    "message": "…localized fallback…",
+    "details": { },
+    "request_id": "b3f1…"
+  }
+}
+```
+
+| Status | Means |
+|---|---|
+| `400` | Validation failure, including a missing child header from a parent-only caller |
+| `401` | Unauthenticated |
+| `403` | Forbidden — permission violation, consent gate, global-scope violation |
+| `404` | Not found **or out of scope — never distinguished** |
+| `409` | State or constraint conflict |
+| `413` | Payload too large |
+| `429` | Rate limited |
+| `503` | A required external dependency is down |
+| `500` | Anything else — **no stack traces, no SQL, no internal paths, ever** |
+
+The `code` values form a **closed catalogue** extensible only by specification revision, so
+clients can switch on them safely. User-facing text resolves through the `message_key`,
+Arabic primary.
+
+> [Error codes](../reference/error-codes.md) — the full catalogue with client guidance.
+
+### The `404`-for-out-of-scope rule
+
+This is not tidiness. `403` tells the caller *the thing exists and you may not see it*,
+which is precisely the fact that must not leak about a minor's record, an unapproved family
+link, or another branch's data.
+
+> [`§20 rule 17`] · [Security](security.md#no-existence-leaks)
+
+## Pagination
+
+Every list endpoint: `?page=1&page_size=25`, **default 25, maximum 100**.
+
+```json
+{ "data": [ … ], "meta": { "page": 2, "page_size": 25, "total": 137 } }
+```
+
+All sorts carry a deterministic tiebreaker (`id`) so pages stay stable. Structural entities
+sort by `display_order ASC NULLS LAST`, then `name` — which is correct Arabic order
+automatically, because the column is natively collated.
+
+**Exactly one exemption exists**, and it is narrow by construction: a **composite document**
+is not a list endpoint. `GET /calendar/bootstrap` returns one object whose contained lists
+are bounded by the domain — three categories, ~21 levels, ≤10 branches, ≤366 days — rather
+than by a page size. Paginating any of them would be meaningless, because a caller cannot
+use half a filter.
+
+An endpoint returning an unbounded collection is a list and is paginated, whatever its
+shape.
+
+> Implementation: `backend/src/lib/pagination.ts` ·
+> [Backend](backend.md#pagination-lives-in-one-module)
+
+## Authentication semantics, decided once
+
+Two middlewares, one rule each — stated project-wide rather than per endpoint, because
+deciding it per endpoint is how the copies diverge.
+
+| Mount | Missing credential | **Invalid / expired credential** | Valid, non-active account |
+|---|---|---|---|
+| `authenticate()` — protected | `401` | `401` | `403` |
+| `optionalAuthenticate()` — public | anonymous | **anonymous — ignored, never an error** | passed through with status |
+
+**A public endpoint must never return `401`, and its contract entry must not document one.**
+
+This was reversed from the original implementation (Revision 34). The public calendar
+renders on the landing page. Refusing a request because it happened to carry a stale token
+means a returning visitor — whose token expired while the tab sat open — gets an error on a
+page with no login requirement at all, and a client treating `401` as *redirect to login*
+would **login-wall a public page**.
+
+The former justification, that a silent downgrade hides an expired session, does not
+survive scrutiny: the client learns its session state from the refresh endpoint and `GET
+/me`, which exist for exactly that purpose, and never from a public read.
+
+## Caching
+
+Almost everything is uncached. One endpoint opts in, and the split is deliberate:
+
+| Endpoint | Policy | Why |
+|---|---|---|
+| `GET /calendar/bootstrap` | `Cache-Control: public, max-age=300` + strong `ETag` | Reference data. A Super Admin recording a Hijri month is not a change a visitor must see within seconds |
+| `GET /calendar` | **Uncached** | An event edit *is* a change a visitor must see immediately |
+
+Reference data and event data have different rates of change, and that difference is the
+seam the split follows. Writing one cache policy over one composite document is also
+materially safer than keeping four independent policies consistent.
+
+## Designing an endpoint: the bootstrap as a worked example
+
+The calendar screen needs four things beyond its events: the Hijri mapping for every
+displayed day, the month metadata for the dual title, and the category, level, and branch
+lists for its filters. The obvious shape is four endpoints. **That was rejected**, and the
+reasoning generalises.
+
+**Why one composite document:**
+
+- **Round trips are the scarce resource here.** Users are on unreliable mobile connections;
+  four sequential reference reads before the grid draws its first cell is four chances to
+  stall, on the screen a visitor is most likely to open.
+- **One cache policy instead of four.**
+- **The grouping is a real concept, not a bundle.** *"What the calendar screen must know
+  before it can draw"* is nameable and stable.
+
+**The objection, and the limit that answers it.** A screen-shaped endpoint couples the API
+to one UI, normally an anti-pattern. Two things make it correct here: the registry is
+*already* screen-oriented throughout, so this is consistent rather than a departure; and the
+endpoint is bounded by an explicit rule —
+
+> **The bootstrap carries reference data required to render the calendar chrome, and never
+> operational data.** Events, enrolments, progress, and grades are not admissible, whatever
+> a future screen would find convenient.
+
+Without that limit a bootstrap becomes a dumping ground, which is the failure mode being
+guarded against.
+
+**A second decision in the same design:** occurrences were made **self-sufficient** —
+carrying description, recurrence, branch and room names, category, level, and instructors —
+so opening an event costs **no further request**. The alternative was an N+1 on a public
+screen.
+
+## Public endpoints
+
+Three routes are anonymous, and each was a deliberate decision about what may be public:
+
+| Route | Exposes | Decision recorded |
+|---|---|---|
+| `GET /calendar` | Public-tier occurrences | The visibility tier decides what a caller receives |
+| `GET /calendar/bootstrap` | Reference data for the calendar chrome | Bounded by the rule above |
+| `GET /branches` | Name, address, phone, email, opening hours, map link | Revision 35 |
+
+`GET /branches` illustrates the house style for public surfaces. It is **a dedicated route,
+not the admin route with permissions relaxed**, and it returns an **allowlist** — never
+`version`, `operational_start_date`, timestamps, or deletion columns.
+
+> An endpoint's audience is part of its contract, and one endpoint serving two audiences has
+> to get the difference right on **every future change**. A public endpoint that returns
+> "everything except what we remembered to strip" is one careless `select` away from
+> leaking.
+
+There is also a self-maintaining CI sweep that derives its route list **from the generated
+contract** and asserts each route's public/authenticated classification. It has already
+caught three newly added public routes that needed classifying.
+
+## Background jobs over HTTP
+
+Any endpoint that enqueues a job returns `202 Accepted` with a job id. `GET /jobs/{id}`
+reports `created | active | completed | failed` with progress or error.
+
+---
+
+**Next:** [Identity and access](identity-and-access.md) · **Related:**
+[API endpoints](../reference/api-endpoints.md), [Error codes](../reference/error-codes.md),
+[CI/CD](../development/ci-cd.md)

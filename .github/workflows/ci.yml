@@ -33,6 +33,12 @@ jobs:
         run: bash scripts/ci/check-design-tokens.sh
       - name: Public display identity resolved server-side (§7, §20 rule 21)
         run: bash scripts/ci/check-display-identity.sh
+      # The documentation hierarchy is built on cross-references rather than
+      # duplication, so a broken link degrades "single source of truth" into
+      # "the truth is somewhere". Link integrity is mechanically checkable and
+      # is therefore mechanically checked; accuracy is what review is for.
+      - name: Documentation link integrity
+        run: bash scripts/ci/check-doc-links.sh
 
   contract:
     name: API contract — regenerate and verify no drift

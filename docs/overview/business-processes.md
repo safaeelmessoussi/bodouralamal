@@ -1,0 +1,332 @@
+[Documentation](../README.md) › [Overview](README.md) › **Business processes**
+
+# Business processes
+
+How the institute's work actually happens in the platform. Each process below names the
+rules that govern it and links to the technical detail.
+
+---
+
+## 1. Registration and approval
+
+**Nobody gets access without a human deciding.** That is
+[`BR-4`](../reference/business-rules.md#br-4), and everything here serves it.
+
+### The flow is OAuth-first
+
+The registration form is **never shown before Google authentication succeeds**. The
+verified email arrives first, so an account can never be created against an address nobody
+proved they own — and the email field on the form is pre-filled and read-only.
+
+```
+Visitor → "Continue with Google" → Google verifies email
+   │
+   ├─ Known identity          → sign in, route by account status
+   ├─ Pre-provisioned email   → bind the identity, then route by status
+   └─ Nobody we know          → registration form → Pending
+```
+
+### Three ways a person enters the system
+
+| Path | Who initiates | Result |
+|---|---|---|
+| **Adult self-registration** | An adult learner | One `Pending` account |
+| **Unified parent + child** | A parent with no account | Parent account **and** child record **and** the link between them — created in **one transaction**, never one without the other |
+| **Staff pre-provisioning** | Staff, in person | An account carrying the beneficiary's Google address, which binds when that person first logs in |
+
+The unified registration is atomic by rule, not by luck: parent, child, family link,
+consent records, the parent's identity, and the single-use token record all commit
+together or none of them do. A test **kills the process mid-transaction** and asserts that
+nothing partial persists.
+
+### Registration never places anyone
+
+An applicant does **not** choose a branch, room, level, or group. Registration creates a
+*pending applicant*; placement is an administrative action taken after approval
+(Revision 29).
+
+This has a consequence the specification records rather than hides: because an applicant
+carries no branch, a branch-scoped Admin does not see them in the user list. The
+**approval queue is deliberately unscoped**, and is the permanent path by which a branch
+Admin meets new applicants — by design, not a gap.
+
+### Approval
+
+An Admin reviews the queue and approves or rejects with a reason. Approving a parent+child
+bundle activates the parent, the child, and the link **atomically**, and writes an audit
+row. Rejection is **terminal** — a rejected applicant cannot re-register themselves; that
+requires staff action.
+
+> SRS §4.1, §4.1b · TD-4.1, TD-4.2 · [Identity and access](../architecture/identity-and-access.md)
+
+---
+
+## 2. Consent
+
+Consent is a **versioned record**, never a checkbox column
+([`BR-1`](../reference/business-rules.md#br-1), and rule 2 of the AI guardrails).
+
+Every registration captures a general data-processing consent. Registrations for teens and
+children additionally capture an **explicit, separate parental media release**: *"I consent
+to my child's voice/recordings being published on public class content."*
+
+Each decision is stored with who granted it, when, by what method (online form or recorded
+by staff in person), and **the exact version of the consent text agreed to**. Revocation is
+a new state change with its own actor and timestamp — history is never overwritten.
+
+**Absence of a record means no consent.** Never assumed, never inferred, never defaulted
+true.
+
+### The group consent gate
+
+This is where consent becomes structural rather than administrative.
+
+> If a Group has **even one** enrolled student without effective media consent, **every
+> session recording for that Group is forced private.**
+> — [`BR-2`](../reference/business-rules.md#br-2)
+
+Crucially, this is **not a check performed at upload time**. It is a continuously
+maintained invariant, re-evaluated automatically whenever any of three things happen:
+
+1. a student joins or leaves any group,
+2. a consent is granted or revoked for an enrolled student,
+3. a recording is uploaded.
+
+A recording published while everyone consented **flips to private** when a non-consenting
+student later enrols, or when a parent revokes. The object physically migrates between
+storage buckets; anyone following an old public link lands on a friendly explanation page,
+never a raw storage error.
+
+**Only an Admin can lift a consent-forced private state, and only with a written
+justification** that is recorded in the audit log. A teacher can never do it
+([`BR-3`](../reference/business-rules.md#br-3)).
+
+One edge case is worth stating because it looks like a bug: a group with **zero** enrolled
+students has no non-consenting student, so the gate does not engage and uploads take the
+category default. The first enrolment of a non-consenting student triggers re-evaluation
+and forces the flip.
+
+> SRS §4.1a, §4.9 · [Storage](../architecture/storage.md#consent-gating) ·
+> [Background jobs](../architecture/background-jobs.md)
+
+---
+
+## 3. Scheduling
+
+**Scheduling is group-driven, not event-driven** — the inverse of most calendar systems,
+and the source of a lot of the design.
+
+A **Group** is the scheduling unit. It carries its own fixed weekly slot: day of week,
+start and end time, room, branch, and capacity. A student enrolling in a group thereby
+acquires that standing weekly class time. **There is no per-session object.** Nothing is
+generated week by week.
+
+**Events are the exception layer** on top: holidays, one-off activities, exams, makeup
+sessions, ceremonies — anything that is not "this group's normal weekly slot". An event may
+apply to several branches, categories, levels, or groups at once, and those relationships
+are **written explicitly at creation time** rather than evaluated as wildcards at read
+time.
+
+Recurrence supports none, daily, weekly, **biweekly-alternating** ("week on, week off"),
+and yearly. The alternating pattern is modelled and tested explicitly because it is the one
+that naive implementations get wrong.
+
+### Two rules that look small and are not
+
+**Times are wall-clock, never UTC instants.** Morocco observes UTC+1 but **suspends DST
+during Ramadan every year**. A weekly class stored as a UTC instant would silently shift by
+an hour, twice a year, for every group in the system. A class at 17:00 is at 17:00 on the
+wall clock, always.
+
+**Branches have an operational start date.** Calendar grids scoped to a branch grey out
+every date before it. When a branch activates, an Admin performs a **manual backfill** to
+attach the applicable global and recurring events — or knowingly skips it. The gap is never
+silently auto-filled and never silently ignored.
+
+> [`BR-17`](../reference/business-rules.md#br-17) · SRS §4.4, TD-11 ·
+> [Calendar and Hijri](../architecture/calendar-and-hijri.md)
+
+---
+
+## 4. The Hijri calendar
+
+The platform displays Hijri dates alongside Gregorian ones. How it obtains them is a
+genuine architectural decision, and one of the more instructive stories in this project.
+
+**Morocco fixes each Hijri month by local moon sighting**, announced by the **Ministry of
+Habous and Islamic Affairs** on the evening of the 29th. It regularly differs from Umm
+al-Qura and from every calendar library's algorithm.
+
+The platform therefore **computes nothing**. It reproduces the Ministry's official
+announcements, recorded month by month by a Super Admin. An earlier design used a library
+algorithm with a globally adjustable ±2-day offset; Revision 31 removed it, because an
+offset can only approximate a sighting-based calendar and it approximates it *uniformly*,
+while the actual divergence varies month to month.
+
+Three consequences follow, all deliberate:
+
+- **A month that has not been recorded and published carries no Hijri label at all.** Where
+  the official answer is genuinely not yet known, the platform says nothing rather than
+  guessing.
+- **This is recurring administrative work** — roughly one recording per month, plus any
+  correction the Ministry issues.
+- **The Super Admin records, and does not decide.** The vocabulary is enforced across the
+  specification, the API, the interface, and the code: *record official month start*,
+  *publish official month*, *official Ministry announcement*. The words *choose*, *define*,
+  and *set* are prohibited, because language that reads as a choice invites treating the
+  value as editorial judgement — and the platform's entire claim is that it reproduces an
+  external authority.
+
+**There is no importer.** An investigation is recorded in the specification: the Ministry
+publishes prose news announcements with no API, no feed, and no dataset, and because months
+are fixed by observation a year cannot be published in advance. A shipped import endpoint
+could only ever answer *not configured* — a promise the system cannot keep, which invites
+clients to build against it. Adding one later needs no redesign: a single write path and a
+provenance column already exist for exactly that.
+
+> SRS §4.4, §5.7 · Revisions 31, 32 ·
+> [Calendar and Hijri](../architecture/calendar-and-hijri.md#the-hijri-overlay)
+
+---
+
+## 5. Quran memorization tracking
+
+A teacher logs what a student has memorized as **ayah ranges** — Surah 2, ayahs 10 to 20 —
+tagged as new memorization or revision.
+
+Coverage is the **mathematical union** of those ranges, per Surah:
+
+```
+Logged:  [10–20]   [10–30]   [30–123]
+Merged:  [10–123]  →  114 ayahs  →  114 / total_ayahs of that Surah
+```
+
+Overlapping logs must never inflate progress
+([`BR-13`](../reference/business-rules.md#br-13)). Logging the same range twice changes
+nothing.
+
+**Corrections propagate immediately.** Creating, editing, *or deleting* a log recomputes
+that Surah's coverage **synchronously, in the same request**, and returns the fresh value.
+Never a background job.
+
+The reason is not responsiveness — it is correctness. Coverage drives **level completion**
+([`BR-11`](../reference/business-rules.md#br-11)). A teacher correcting a mis-logged range
+must see the corrected percentage immediately, and a stale figure after a deletion could
+wrongly signal that a student has completed a level.
+
+There is a read cache for speed, but it is **self-healing and never authoritative**: every
+consumer compares the cached row against the latest log and repairs it in place on
+mismatch, so a crash between the write and the cache update cannot produce a wrong number.
+
+> SRS §4.5 · [Backend](../architecture/backend.md)
+
+---
+
+## 6. Exams and grading
+
+**Exams are independent of calendar bounds.** Each carries a date, a level, and optionally
+a subject or Surah. *Rounds* (roughly semesters) are optional sorting labels, not
+restrictions.
+
+The exam builder supports multiple-choice questions (auto-graded) and free-text answers
+(marked by a teacher). Every question carries an **immutable UUID**, and submissions
+reference those UUIDs rather than array positions — so reordering a question cannot silently
+re-attach an answer to the wrong one.
+
+### Scoring is integer-only
+
+All scores — question maxima, auto-scores, subjective marks, final totals — are stored as
+**integer basis points** of the exam total (0–10,000). No floating-point number appears
+anywhere in scoring storage or arithmetic. Division rounds half-up **exactly once**, at
+final persistence. The association's /20 scale is a *display* conversion applied at render
+time.
+
+### Draft until published
+
+Nothing is visible to students or parents until an explicit publish action
+([`BR-8`](../reference/business-rules.md#br-8)).
+
+**Absent means zero, flagged as absent** ([`BR-7`](../reference/business-rules.md#br-7)) —
+and those rows are created the moment a teacher **first saves a draft**, so intermediate
+averages on a teacher's dashboard already include absentees rather than being inflated by
+their omission. The row stays replaceable for a late entry or a makeup.
+
+Teachers and Admins can override pass/fail per student, with actor and reason recorded.
+**A manual override always wins** and is never clobbered by recalculation
+([`BR-12`](../reference/business-rules.md#br-12)).
+
+### What is deliberately absent
+
+The **weighted grading-template engine** — which would compute round averages from
+basis-point weights — is postponed. MVP grades are **per-exam and informational**; no
+averages are displayed anywhere.
+
+This is a coherent state of the model rather than a hack: every exam already defaults to
+0 bp, so "no templates exist" simply means all grades are informational entries. The
+instruction attached is emphatic: **do not hardcode an interim average formula**, because
+an interim formula is a second grading engine that would have to be torn out.
+
+> SRS §4.6 · [`BR-6`](../reference/business-rules.md#br-6)…[`BR-12`](../reference/business-rules.md#br-12)
+
+---
+
+## 7. Educational content
+
+Teachers and Admins attach files — PDFs, images, slides, audio recordings — to a level, and
+optionally to a calendar event, for pre-class preparation or post-class follow-up.
+
+**Three visibility tiers**, stored as an enum and never a boolean:
+
+| Tier | Who sees it | Where the file lives |
+|---|---|---|
+| **Public** | Everyone, including anonymous visitors | Public bucket, stable URL |
+| **Private** | Logged-in students and parents in the target level or group | Private bucket, short-lived signed URL after a permission check |
+| **Hidden** | Staff only | Private bucket |
+
+Changing tier **physically moves the object between buckets**. A stale public link then
+lands on a friendly page explaining that access changed — never a raw storage error.
+
+**Global scope is a privilege.** Content with no branch appears across every branch. Only
+Admins and Super Admins may assign it; teachers are locked to their own branches, and an
+attempt to publish platform-wide is refused
+([`BR-20`](../reference/business-rules.md#br-20)).
+
+Teachers record on their phone's own voice recorder and upload the file. The in-app
+recorder is postponed — it was the most cross-browser-fragile piece of the build, and the
+upload pipeline already accepts everything phones produce.
+
+> SRS §4.9 · [Storage](../architecture/storage.md)
+
+---
+
+## 8. Accountability
+
+Two separate mechanisms, often confused, both present:
+
+| | **Audit log** | **Trash** |
+|---|---|---|
+| For | Accountability — who did what, when, why | Restoration — putting a record back |
+| Content | Actor, timestamp, action, target, detail | A full JSON snapshot of the deleted row |
+| Deletable? | Only by one sanctioned job, on an enumerated allowlist | Purged after 90 days |
+
+**Nothing is destroyed silently** ([`BR-15`](../reference/business-rules.md#br-15)). Every
+deletion is soft, snapshotted, and attributable. Hard deletion happens only through the
+90-day quarantine purge.
+
+The audit coverage grid is a **minimum** — adding coverage is allowed, removing it is not.
+It includes things that are not obviously "changes": viewing a child's case file is
+audited, because in a safeguarding context *who looked* is as important as *who edited*.
+
+Restoring a soft-deleted record in the MVP runs through a **locked CLI script**, not raw
+SQL in a database session. The reason is stated bluntly in the specification: a raw session
+enforces nothing, and accountability would depend on developer goodwill. The script wraps
+the snapshot restore, the reinstatement of cascaded relationship rows, and the audit row in
+a single transaction — because a user restored without their links and roles is a
+half-restored, silently broken account.
+
+> SRS §4.10, TD-8 · [Runbooks](../operations/runbooks.md)
+
+---
+
+**Next:** [User journeys](user-journeys.md) · **Related:**
+[Business rules](../reference/business-rules.md), [Architecture](../architecture/README.md)
