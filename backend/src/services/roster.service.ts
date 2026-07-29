@@ -1,6 +1,7 @@
 import type { PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
 import * as scope from '../policies/branch-scope.js';
+import { page, pageWindow, type Page, type PageParams } from '../lib/pagination.js';
 import * as audit from '../repositories/audit.repository.js';
 import { enqueue, JOB_QUEUES } from '../repositories/jobs.repository.js';
 import type { Actor } from './group.service.js';
@@ -38,18 +39,31 @@ export async function listRoster(
   prisma: PrismaClient,
   actor: Actor,
   groupId: string,
-): Promise<{ studentId: string; nameArabic: string }[]> {
+  params: PageParams = {},
+): Promise<Page<{ studentId: string; nameArabic: string }>> {
   assertCanManage(actor);
   const group = await prisma.group.findFirst({ where: { id: groupId, deletedAt: null } });
   if (!group) throw new AppError('NOT_FOUND', 'no such group');
   scope.assertCanActOnBranch(actor.roleScopes, MANAGING_ROLE, group.branchId, 'no such group');
 
-  const rows = await prisma.studentGroup.findMany({
-    where: { groupId, deletedAt: null, student: { deletedAt: null } },
-    select: { student: { select: { id: true, nameArabic: true } } },
-    orderBy: { student: { nameArabic: 'asc' } },
-  });
-  return rows.map((r) => ({ studentId: r.student.id, nameArabic: r.student.nameArabic }));
+  const where = { groupId, deletedAt: null, student: { deletedAt: null } };
+  const window = pageWindow(params);
+  const [rows, total] = await Promise.all([
+    prisma.studentGroup.findMany({
+      where,
+      select: { student: { select: { id: true, nameArabic: true } } },
+      // TD-10: `id` keeps paging stable when two students share a name.
+      orderBy: [{ student: { nameArabic: 'asc' } }, { studentId: 'asc' }],
+      skip: window.skip,
+      take: window.take,
+    }),
+    prisma.studentGroup.count({ where }),
+  ]);
+  return page(
+    rows.map((r) => ({ studentId: r.student.id, nameArabic: r.student.nameArabic })),
+    window,
+    total,
+  );
 }
 
 /**

@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express';
+import { pageParamsFrom } from '../lib/pagination.js';
 import { z } from 'zod';
 
 import type { PrismaClient } from '../generated/prisma/client.js';
@@ -94,7 +95,8 @@ function groupId(req: Request): string {
 
 export function list(prisma: PrismaClient) {
   return async (req: Request, res: Response): Promise<void> => {
-    res.json({ data: (await listGroups(prisma, actorOf(req))).map(view) });
+    const result = await listGroups(prisma, actorOf(req), pageParamsFrom(req.query));
+    res.json({ data: result.data.map(view), meta: result.meta });
   };
 }
 
@@ -158,8 +160,11 @@ function memberId(req: Request, key: 'id' | 'studentId' | 'teacherId'): string {
 
 export function roster(prisma: PrismaClient) {
   return async (req: Request, res: Response): Promise<void> => {
-    const rows = await listRoster(prisma, actorOf(req), groupId(req));
-    res.json({ data: rows.map((r) => ({ student_id: r.studentId, name_arabic: r.nameArabic })) });
+    const result = await listRoster(prisma, actorOf(req), groupId(req), pageParamsFrom(req.query));
+    res.json({
+      data: result.data.map((r) => ({ student_id: r.studentId, name_arabic: r.nameArabic })),
+      meta: result.meta,
+    });
   };
 }
 

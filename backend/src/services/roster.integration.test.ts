@@ -220,7 +220,7 @@ describe('§5.6 / TD-4.6 — enrolment and capacity', () => {
 
     const result = await enrolStudent(prisma, superAdmin(), groupId, student);
     expect(result.enrolled).toBe(1);
-    expect((await listRoster(prisma, superAdmin(), groupId)).map((r) => r.studentId)).toEqual([
+    expect(((await listRoster(prisma, superAdmin(), groupId))).data.map((r) => r.studentId)).toEqual([
       student,
     ]);
   });

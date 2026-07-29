@@ -1,5 +1,6 @@
 import type { PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
+import { pageWindow, type Page } from '../lib/pagination.js';
 import { assertFreshActive } from '../policies/freshness.policy.js';
 import * as audit from '../repositories/audit.repository.js';
 
@@ -31,18 +32,6 @@ export interface ApprovalItem {
   bundle: { childCount: number; linkCount: number };
 }
 
-export interface Page<T> {
-  data: T[];
-  meta: { page: number; page_size: number; total: number };
-}
-
-/** TD-10: default 25, max 100, deterministic tiebreaker on id. */
-function pagination(page = 1, pageSize = 25): { skip: number; take: number; page: number; pageSize: number } {
-  const size = Math.min(Math.max(pageSize, 1), 100);
-  const current = Math.max(page, 1);
-  return { skip: (current - 1) * size, take: size, page: current, pageSize: size };
-}
-
 export async function listApprovals(
   prisma: PrismaClient,
   actorUserId: string,
@@ -52,7 +41,7 @@ export async function listApprovals(
   // caller's live status rather than trusting the token.
   await assertFreshActive(prisma, actorUserId, APPROVER_ROLES);
 
-  const { skip, take, page, pageSize } = pagination(options.page, options.pageSize);
+  const { skip, take, page, pageSize } = pageWindow({ page: options.page, pageSize: options.pageSize });
   const type = options.type;
 
   const items: ApprovalItem[] = [];

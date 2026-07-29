@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express';
+import { pageParamsFrom } from '../lib/pagination.js';
 import { z } from 'zod';
 
 import type { PrismaClient } from '../generated/prisma/client.js';
@@ -169,9 +170,10 @@ export function remove(prisma: PrismaClient) {
 /** `GET /admin/branches/{id}/event-backfill` — §4.4 "listing applicable events". */
 export function listBackfill(prisma: PrismaClient) {
   return async (req: Request, res: Response): Promise<void> => {
-    const events = await backfillCandidates(prisma, actorOf(req), pathId(req));
+    const result = await backfillCandidates(prisma, actorOf(req), pathId(req), pageParamsFrom(req.query));
     res.json({
-      data: events.map((e) => ({
+      meta: result.meta,
+      data: result.data.map((e) => ({
         id: e.id,
         title: e.title,
         start_date: e.startDate.toISOString().slice(0, 10),

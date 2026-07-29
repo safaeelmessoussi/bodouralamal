@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express';
+import { pageParamsFrom } from '../lib/pagination.js';
 
 import type { PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
@@ -35,7 +36,7 @@ const id = (req: Request, key: string): string =>
 
 export function listBranches(prisma: PrismaClient) {
   return async (req: Request, res: Response): Promise<void> => {
-    res.json({ data: await branches.listBranches(prisma, requireActor(req)) });
+    res.json(await branches.listBranches(prisma, requireActor(req), pageParamsFrom(req.query)));
   };
 }
 
@@ -80,7 +81,9 @@ export function deleteBranch(prisma: PrismaClient) {
 
 export function listRooms(prisma: PrismaClient) {
   return async (req: Request, res: Response): Promise<void> => {
-    res.json({ data: await branches.listRooms(prisma, requireActor(req), id(req, 'id')) });
+    res.json(
+      await branches.listRooms(prisma, requireActor(req), id(req, 'id'), pageParamsFrom(req.query)),
+    );
   };
 }
 

@@ -2,6 +2,7 @@ import type { Branch, PrismaClient, Room } from '../generated/prisma/client.js';
 import * as scope from '../policies/branch-scope.js';
 import { type RoleScope } from '../policies/branch-scope.js';
 import { AppError } from '../lib/errors.js';
+import { page, pageWindow, type Page, type PageParams } from '../lib/pagination.js';
 import * as audit from '../repositories/audit.repository.js';
 import * as trash from '../repositories/trash.repository.js';
 import { assertNoBlockingReferences, updateWithVersion } from '../repositories/optimistic-lock.js';
@@ -78,15 +79,29 @@ function assertMaySetDisplayOrder(actor: Actor, data: { displayOrder?: number | 
  * correct Arabic order automatically because the column is natively collated
  * `ar-x-icu` (TD-6a). Never add a per-query COLLATE; fix the column instead.
  */
-export async function listBranches(prisma: PrismaClient, actor: Actor): Promise<Branch[]> {
+export async function listBranches(
+  prisma: PrismaClient,
+  actor: Actor,
+  params: PageParams = {},
+): Promise<Page<Branch>> {
   assertCanReadReferenceData(actor);
-  return prisma.branch.findMany({
-    where: {
-      deletedAt: null,
-      ...scope.branchFilter(actor.roleScopes, [MANAGING_ROLE]),
-    },
-    orderBy: [{ displayOrder: { sort: 'asc', nulls: 'last' } }, { name: 'asc' }, { id: 'asc' }],
-  });
+  const where = {
+    deletedAt: null,
+    ...scope.branchFilter(actor.roleScopes, [MANAGING_ROLE]),
+  };
+  const window = pageWindow(params);
+  const [rows, total] = await Promise.all([
+    prisma.branch.findMany({
+      where,
+      // TD-10: `display_order ASC NULLS LAST`, then `name` (correct Arabic order
+      // via the native collation), then `id` as the stable tiebreaker.
+      orderBy: [{ displayOrder: { sort: 'asc', nulls: 'last' } }, { name: 'asc' }, { id: 'asc' }],
+      skip: window.skip,
+      take: window.take,
+    }),
+    prisma.branch.count({ where }),
+  ]);
+  return page(rows, window, total);
 }
 
 export async function createBranch(
@@ -198,13 +213,22 @@ export async function listRooms(
   prisma: PrismaClient,
   actor: Actor,
   branchId: string,
-): Promise<Room[]> {
+  params: PageParams = {},
+): Promise<Page<Room>> {
   assertCanReadReferenceData(actor);
   scope.assertCanActOnBranch(actor.roleScopes, MANAGING_ROLE, branchId);
-  return prisma.room.findMany({
-    where: { branchId, deletedAt: null },
-    orderBy: [{ name: 'asc' }, { id: 'asc' }],
-  });
+  const where = { branchId, deletedAt: null };
+  const window = pageWindow(params);
+  const [rows, total] = await Promise.all([
+    prisma.room.findMany({
+      where,
+      orderBy: [{ name: 'asc' }, { id: 'asc' }],
+      skip: window.skip,
+      take: window.take,
+    }),
+    prisma.room.count({ where }),
+  ]);
+  return page(rows, window, total);
 }
 
 export async function createRoom(

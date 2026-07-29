@@ -2,6 +2,7 @@ import type { Group, Prisma, PrismaClient } from '../generated/prisma/client.js'
 import { AppError } from '../lib/errors.js';
 import * as scope from '../policies/branch-scope.js';
 import type { RoleScope } from '../policies/branch-scope.js';
+import { page, pageWindow, type Page, type PageParams } from '../lib/pagination.js';
 import * as audit from '../repositories/audit.repository.js';
 import * as trash from '../repositories/trash.repository.js';
 import { updateWithVersion } from '../repositories/optimistic-lock.js';
@@ -144,17 +145,29 @@ function assertValidSlot(input: { startTime: Date; endTime: Date; maxStudents: n
   }
 }
 
-export async function listGroups(prisma: PrismaClient, actor: Actor): Promise<Group[]> {
+export async function listGroups(
+  prisma: PrismaClient,
+  actor: Actor,
+  params: PageParams = {},
+): Promise<Page<Group>> {
   assertCanManage(actor);
   // `branchFilter` is Branch-keyed (`id`); a Group keys its branch as `branchId`.
   const reachable = scope.reachableBranches(actor.roleScopes, [MANAGING_ROLE]);
-  return prisma.group.findMany({
-    where: {
-      deletedAt: null,
-      ...(reachable === null ? {} : { branchId: { in: reachable } }),
-    },
-    orderBy: [{ dayOfWeek: 'asc' }, { startTime: 'asc' }, { name: 'asc' }, { id: 'asc' }],
-  });
+  const where = {
+    deletedAt: null,
+    ...(reachable === null ? {} : { branchId: { in: reachable } }),
+  };
+  const window = pageWindow(params);
+  const [rows, total] = await Promise.all([
+    prisma.group.findMany({
+      where,
+      orderBy: [{ dayOfWeek: 'asc' }, { startTime: 'asc' }, { name: 'asc' }, { id: 'asc' }],
+      skip: window.skip,
+      take: window.take,
+    }),
+    prisma.group.count({ where }),
+  ]);
+  return page(rows, window, total);
 }
 
 export async function createGroup(

@@ -2,6 +2,7 @@ import type { Event, Prisma, PrismaClient } from '../generated/prisma/client.js'
 import { AppError } from '../lib/errors.js';
 import * as scope from '../policies/branch-scope.js';
 import { teacherGroupIds } from '../policies/teacher-scope.js';
+import { page, pageWindow, type Page, type PageParams } from '../lib/pagination.js';
 import * as audit from '../repositories/audit.repository.js';
 import { updateWithVersion } from '../repositories/optimistic-lock.js';
 import type { Actor } from './group.service.js';
@@ -396,7 +397,8 @@ export async function backfillCandidates(
   prisma: PrismaClient,
   actor: Actor,
   branchId: string,
-): Promise<Event[]> {
+  params: PageParams = {},
+): Promise<Page<Event>> {
   if (!isAdmin(actor)) throw new AppError('FORBIDDEN', 'backfill requires admin');
   if (!isSuperAdmin(actor) && !scope.canActOnBranch(actor.roleScopes, MANAGING_ROLE, branchId)) {
     throw new AppError('NOT_FOUND', 'branch out of scope');
@@ -404,14 +406,22 @@ export async function backfillCandidates(
 
   // Events that reach at least one other branch but not this one — i.e. those a
   // late-opening branch missed at creation time.
-  return prisma.event.findMany({
-    where: {
-      deletedAt: null,
-      branchScopes: { none: { branchId } },
-      NOT: { branchScopes: { none: {} } },
-    },
-    orderBy: [{ startDate: 'asc' }, { id: 'asc' }],
-  });
+  const where = {
+    deletedAt: null,
+    branchScopes: { none: { branchId } },
+    NOT: { branchScopes: { none: {} } },
+  };
+  const window = pageWindow(params);
+  const [rows, total] = await Promise.all([
+    prisma.event.findMany({
+      where,
+      orderBy: [{ startDate: 'asc' }, { id: 'asc' }],
+      skip: window.skip,
+      take: window.take,
+    }),
+    prisma.event.count({ where }),
+  ]);
+  return page(rows, window, total);
 }
 
 /** Attaches a branch to an event that missed it (§4.4 manual backfill). */

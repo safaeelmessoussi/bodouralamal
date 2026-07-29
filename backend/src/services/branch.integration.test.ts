@@ -164,7 +164,7 @@ describe('TD-2 R26 — READING reference data stays with Admins, branch-scoped',
     const marrakesh = await seedBranch('مراكش');
     const casablanca = await seedBranch('الدار البيضاء');
 
-    const visible = await listBranches(prisma, scopedAdmin([marrakesh]));
+    const visible = (await listBranches(prisma, scopedAdmin([marrakesh]))).data;
     const ids = visible.map((b) => b.id);
     expect(ids).toContain(marrakesh);
     expect(ids).not.toContain(casablanca);
@@ -176,7 +176,7 @@ describe('TD-2 R26 — READING reference data stays with Admins, branch-scoped',
 
     // This is the access Group management depends on: an Admin must be able to
     // pick a Room even though only a Super Admin may create one.
-    const rooms = await listRooms(prisma, scopedAdmin([branchId]), branchId);
+    const rooms = (await listRooms(prisma, scopedAdmin([branchId]), branchId)).data;
     expect(rooms).toHaveLength(1);
   });
 
@@ -193,14 +193,14 @@ describe('TD-2 R26 — READING reference data stays with Admins, branch-scoped',
   it('an all-branches Admin reads every branch', async () => {
     await seedBranch('مراكش');
     await seedBranch('الدار البيضاء');
-    const visible = await listBranches(prisma, allBranchAdmin());
+    const visible = (await listBranches(prisma, allBranchAdmin())).data;
     expect(visible.filter((b) => b.name.startsWith(TAG))).toHaveLength(2);
   });
 
   it('a Super Admin reads every branch', async () => {
     await seedBranch('مراكش');
     await seedBranch('الدار البيضاء');
-    const visible = await listBranches(prisma, superAdmin());
+    const visible = (await listBranches(prisma, superAdmin())).data;
     expect(visible.filter((b) => b.name.startsWith(TAG))).toHaveLength(2);
   });
 

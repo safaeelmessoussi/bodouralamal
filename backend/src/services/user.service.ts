@@ -1,5 +1,6 @@
 import type { PrismaClient } from '../generated/prisma/client.js';
 import { AppError, uniqueViolationFields } from '../lib/errors.js';
+import { pageWindow, type Page } from '../lib/pagination.js';
 import { MIN_QUERY_LENGTH, normalizePhone, normalizeSearchText } from '../lib/search-normalize.js';
 import { branchesForRole } from '../policies/branch-scope.js';
 import { assertFreshActive } from '../policies/freshness.policy.js';
@@ -172,18 +173,7 @@ export interface UserListItem {
   roles: { role: string; branchId: string | null; branchName: string | null }[];
 }
 
-export interface Page<T> {
-  data: T[];
-  meta: { page: number; page_size: number; total: number };
-}
-
 /** TD-10: default 25, max 100. */
-function pagination(page = 1, pageSize = 25) {
-  const size = Math.min(Math.max(pageSize, 1), 100);
-  const current = Math.max(page, 1);
-  return { skip: (current - 1) * size, take: size, page: current, pageSize: size };
-}
-
 export async function listUsers(
   prisma: PrismaClient,
   actorUserId: string,
@@ -193,7 +183,7 @@ export async function listUsers(
   // caller's status and role are re-read from live rows on every request.
   const actor = await assertFreshActive(prisma, actorUserId, USER_ADMIN_ROLES);
 
-  const { skip, take, page, pageSize } = pagination(filters.page, filters.pageSize);
+  const { skip, take, page, pageSize } = pageWindow({ page: filters.page, pageSize: filters.pageSize });
 
   const where: Record<string, unknown> = { deletedAt: null };
 

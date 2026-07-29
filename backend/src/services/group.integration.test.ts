@@ -359,7 +359,7 @@ describe('TD-2 / Revision 26 — who may manage groups', () => {
     const ours = await createGroup(prisma, superAdmin(), input({ branchId: mine }));
     const notOurs = await createGroup(prisma, superAdmin(), input({ branchId: theirs }));
 
-    const visible = (await listGroups(prisma, admin([mine]))).map((g) => g.id);
+    const visible = ((await listGroups(prisma, admin([mine]))).data).map((g) => g.id);
     expect(visible).toContain(ours.id);
     expect(visible).not.toContain(notOurs.id);
   });

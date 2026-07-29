@@ -868,7 +868,7 @@
     "/admin/branches/{id}/event-backfill": {
       "get": {
         "summary": "List backfill candidates for a branch",
-        "description": "§4.4: the events a late-opening branch missed — those reaching some other branch but not this one. Listing is deliberately separate from attaching, because the gap must be neither silently auto-filled nor silently ignored: an Admin sees the candidates and chooses.",
+        "description": "§4.4: the events a late-opening branch missed — those reaching some other branch but not this one. Listing is deliberately separate from attaching, because the gap must be neither silently auto-filled nor silently ignored: an Admin sees the candidates and chooses. **Paginated (TD-10):** `?page=` (default 1) and `?page_size=` (default 25, **max 100** — a larger request is capped, not refused). Responds `{ data, meta: { page, page_size, total } }`; `total` is the unpaginated count, so a client can compute page count. Ordering carries an `id` tiebreaker, which is what keeps paging stable across requests.",
         "responses": {
           "200": {
             "description": "Candidate events."
@@ -978,7 +978,7 @@
     "/admin/groups": {
       "get": {
         "summary": "List groups",
-        "description": "Operational data (Revision 26): Admins see groups in their own branches, Super Admins all. Ordered by day then start time.",
+        "description": "Operational data (Revision 26): Admins see groups in their own branches, Super Admins all. Ordered by day then start time. **Paginated (TD-10):** `?page=` (default 1) and `?page_size=` (default 25, **max 100** — a larger request is capped, not refused). Responds `{ data, meta: { page, page_size, total } }`; `total` is the unpaginated count, so a client can compute page count. Ordering carries an `id` tiebreaker, which is what keeps paging stable across requests.",
         "responses": {
           "200": {
             "description": "Groups, with `start_time`/`end_time` as local wall-clock `HH:MM` (TD-11)."
@@ -1218,7 +1218,7 @@
     "/admin/groups/{id}/roster": {
       "get": {
         "summary": "List a group's roster",
-        "description": "§5.6 Group Enrollment. Admin within branch scope or Super Admin (TD-2).",
+        "description": "§5.6 Group Enrollment. Admin within branch scope or Super Admin (TD-2). **Paginated (TD-10):** `?page=` (default 1) and `?page_size=` (default 25, **max 100** — a larger request is capped, not refused). Responds `{ data, meta: { page, page_size, total } }`; `total` is the unpaginated count, so a client can compute page count. Ordering carries an `id` tiebreaker, which is what keeps paging stable across requests.",
         "responses": {
           "200": {
             "description": "Enrolled students, ordered by Arabic name."
@@ -2003,7 +2003,7 @@
     "/admin/branches": {
       "get": {
         "summary": "List branches",
-        "description": "**Read access is retained for Admins** (branch-scoped) because operational work depends on it — a Group references a Branch, a Level and a Room (TD-2 Revision 26). Ordered by display_order ASC NULLS LAST then name (ar-x-icu collated, §2.2/TD-10). Super Admins see all.",
+        "description": "**Read access is retained for Admins** (branch-scoped) because operational work depends on it — a Group references a Branch, a Level and a Room (TD-2 Revision 26). Ordered by display_order ASC NULLS LAST then name (ar-x-icu collated, §2.2/TD-10). Super Admins see all. **Paginated (TD-10):** `?page=` (default 1) and `?page_size=` (default 25, **max 100** — a larger request is capped, not refused). Responds `{ data, meta: { page, page_size, total } }`; `total` is the unpaginated count, so a client can compute page count. Ordering carries an `id` tiebreaker, which is what keeps paging stable across requests.",
         "responses": {
           "200": {
             "description": "Branch list."
@@ -2163,7 +2163,7 @@
     "/admin/branches/{id}/rooms": {
       "get": {
         "summary": "List a branch's rooms",
-        "description": "**Read access retained for Admins**, scoped to branches they administer (TD-2 Revision 26) — an Admin must be able to pick a Room even though only a Super Admin may create one. Out-of-scope answers 404 (§20 rule 17).",
+        "description": "**Read access retained for Admins**, scoped to branches they administer (TD-2 Revision 26) — an Admin must be able to pick a Room even though only a Super Admin may create one. Out-of-scope answers 404 (§20 rule 17). **Paginated (TD-10):** `?page=` (default 1) and `?page_size=` (default 25, **max 100** — a larger request is capped, not refused). Responds `{ data, meta: { page, page_size, total } }`; `total` is the unpaginated count, so a client can compute page count. Ordering carries an `id` tiebreaker, which is what keeps paging stable across requests.",
         "responses": {
           "200": {
             "description": "Room list."

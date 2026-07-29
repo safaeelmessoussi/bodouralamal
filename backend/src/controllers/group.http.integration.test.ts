@@ -28,6 +28,7 @@ interface Body {
   start_time?: string;
   end_time?: string;
   enrolled?: number;
+  meta?: { page: number; page_size: number; total: number };
   capacity?: number;
   slots_used?: number;
 }
@@ -249,6 +250,62 @@ describe('/admin/groups/{id}/roster over HTTP', () => {
       student_id: await person('طالبة'),
     });
     expect(res.status).toBe(403);
+  });
+});
+
+describe('TD-10 — list endpoints are paginated over HTTP', () => {
+  it('GET /admin/groups returns the TD-10 envelope', async () => {
+    const branchId = await makeBranch();
+    await createGroupHttp(branchId);
+
+    const res = await call('GET', '/admin/groups', superToken);
+
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body.data)).toBe(true);
+    // The envelope is what the frontend will bind to; `total` is the
+    // unpaginated count, without which a client cannot compute page count.
+    expect(res.body.meta).toMatchObject({ page: 1, page_size: 25 });
+    expect(typeof res.body.meta!.total).toBe('number');
+  });
+
+  it('honours ?page and ?page_size, and caps the size at 100', async () => {
+    const branchId = await makeBranch();
+    await createGroupHttp(branchId, { name: `${TAG} أولى`, start_time: '08:00', end_time: '09:00' });
+    await createGroupHttp(branchId, { name: `${TAG} ثانية`, start_time: '11:00', end_time: '12:00' });
+
+    const first = await call('GET', '/admin/groups?page=1&page_size=1', superToken);
+    expect(first.body.data).toHaveLength(1);
+    expect(first.body.meta).toMatchObject({ page: 1, page_size: 1 });
+    expect(first.body.meta!.total).toBeGreaterThanOrEqual(2);
+
+    const second = await call('GET', '/admin/groups?page=2&page_size=1', superToken);
+    expect(second.body.data).toHaveLength(1);
+    // Different page, different row — the `id` tiebreaker makes this stable.
+    expect((second.body.data as { id: string }[])[0]!.id).not.toBe(
+      (first.body.data as { id: string }[])[0]!.id,
+    );
+
+    // TD-10 caps rather than refuses: a client bug must not become an outage.
+    const huge = await call('GET', '/admin/groups?page_size=5000', superToken);
+    expect(huge.status).toBe(200);
+    expect(huge.body.meta!.page_size).toBe(100);
+  });
+
+  it('a malformed page value falls back to the default instead of failing', async () => {
+    const res = await call('GET', '/admin/groups?page=abc&page_size=xyz', superToken);
+    expect(res.status).toBe(200);
+    expect(res.body.meta).toMatchObject({ page: 1, page_size: 25 });
+  });
+
+  it('the roster is paginated too', async () => {
+    const branchId = await makeBranch();
+    const group = await createGroupHttp(branchId);
+    await call('POST', `/admin/groups/${group.body.id}/roster`, superToken, {
+      student_id: await person('طالبة'),
+    });
+
+    const res = await call('GET', `/admin/groups/${group.body.id}/roster`, superToken);
+    expect(res.body.meta).toMatchObject({ page: 1, page_size: 25, total: 1 });
   });
 });
 

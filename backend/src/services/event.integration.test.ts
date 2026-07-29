@@ -375,7 +375,7 @@ describe('§4.4 — branch-activation backfill', () => {
     // The branch opens later, so it was deliberately excluded at creation.
     const late = await makeBranch('أكادير', day('2026-12-01'));
 
-    const candidates = await backfillCandidates(prisma, superAdmin(), late);
+    const candidates = (await backfillCandidates(prisma, superAdmin(), late)).data;
     expect(candidates.map((c) => c.id)).toContain(created.event.id);
 
     const attached = await backfillAttach(prisma, superAdmin(), late, [created.event.id]);
@@ -407,7 +407,7 @@ describe('§4.4 — branch-activation backfill', () => {
     const branchId = await makeBranch('مراكش');
     const created = await createEvent(prisma, superAdmin(), eventInput({ global: true }), TODAY);
 
-    const candidates = await backfillCandidates(prisma, superAdmin(), branchId);
+    const candidates = (await backfillCandidates(prisma, superAdmin(), branchId)).data;
     expect(candidates.map((c) => c.id)).not.toContain(created.event.id);
   });
 
