@@ -9,6 +9,7 @@ import {
   type Occurrence,
 } from '../adapters/calendar.js';
 import { CalendarGrid } from '../components/calendar/calendar-grid.js';
+import { CalendarNav } from '../components/calendar/calendar-nav.js';
 import { CalendarTitle } from '../components/calendar/calendar-title.js';
 import { CalendarToolbar } from '../components/calendar/calendar-toolbar.js';
 import { DayEventsDialog } from '../components/calendar/day-events-dialog.js';
@@ -155,6 +156,15 @@ export function CalendarPage(): ReactNode {
     return map;
   }, [bootstrap]);
 
+  /**
+   * Navigation changes the month and nothing else — **every active filter is
+   * preserved**, because the filters are independent state and nothing here
+   * touches them.
+   *
+   * `اليوم` returns to the current month, where today's cell is already marked.
+   * It deliberately does **not** open the day dialog: pressing a navigation
+   * button should move the view, not launch a modal over it.
+   */
   function goToMonth(next: Date): void {
     setMonth(startOfMonth(next));
     // A day dialog left open would describe a day the grid no longer shows.
@@ -178,13 +188,21 @@ export function CalendarPage(): ReactNode {
               nearly the full viewport width, which is the whole point of a
               timetable. `cal-page__inner` sets its own wider bound. */}
           <div className="cal-page__inner">
+            {/* The reading order the page is built around: what month am I
+                looking at → how do I move → what am I filtering → the grid. */}
             <div className="cal-page__head">
-              <h1 id="calendar-title" className="cal-page__title">
+              <h1 id="calendar-title" className="cal-page__eyebrow">
                 {t('calendar.title')}
               </h1>
               <CalendarTitle
                 gregorianMonths={bootstrap?.gregorian_months ?? []}
                 hijriMonths={bootstrap?.hijri.months ?? []}
+                month={month}
+              />
+              <CalendarNav
+                onPrevious={() => goToMonth(addMonths(month, -1))}
+                onToday={() => goToMonth(today)}
+                onNext={() => goToMonth(addMonths(month, 1))}
               />
             </div>
 
@@ -199,10 +217,6 @@ export function CalendarPage(): ReactNode {
               levelId={levelId}
               levelsBusy={bootstrapBusy}
               onLevelChange={setLevelId}
-              month={month}
-              onPrevious={() => goToMonth(addMonths(month, -1))}
-              onNext={() => goToMonth(addMonths(month, 1))}
-              onToday={() => goToMonth(today)}
             />
 
             {/* Announced politely so a keyboard user hears the month reload

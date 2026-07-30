@@ -25,15 +25,24 @@
   margin-inline: auto;
 }
 
+/* The page's reading order, top to bottom: what month → how to move → what to
+   filter → the grid. Generous vertical rhythm between the three, so each reads
+   as its own step rather than one dense control block. */
 .cal-page__head {
   display: grid;
   justify-items: center;
-  gap: var(--space-2);
+  gap: var(--space-4);
   text-align: center;
-  margin-block-end: var(--space-8);
+  margin-block-end: var(--space-10);
 }
-.cal-page__title {
-  font-size: var(--font-size-lg);
+/* The page label is an eyebrow, not the headline. The MONTH is what a visitor
+   came to read, so the dual title takes the visual weight and this recedes —
+   while remaining a real `<h1>`, because the page still needs a heading. */
+.cal-page__eyebrow {
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
 }
 
 /* ── The dual-calendar title ─────────────────────────────────────────────────
@@ -46,7 +55,8 @@
   justify-content: center;
   gap: var(--space-4);
   max-width: none;
-  font-size: var(--font-size-md);
+  /* The headline of the page — it is what a visitor came to read. */
+  font-size: var(--font-size-lg);
   font-weight: 700;
   font-variant-numeric: tabular-nums;
   line-height: var(--line-height-tight);
@@ -66,21 +76,34 @@
   background: var(--color-border);
 }
 
-/* ── Toolbar ─────────────────────────────────────────────────────────────── */
+/* ── Month navigation ────────────────────────────────────────────────────────
+   Three buttons, centred beneath the title. `اليوم` is the primary variant
+   because it is the action most often wanted and the only one not reversible by
+   pressing its opposite. */
+.cal-nav {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+}
+/* Prominent, as a primary navigation control should be: wider than a form
+   button and with a comfortable target on a phone. */
+.cal-nav .btn {
+  min-width: 7.5rem;
+  justify-content: center;
+  padding-block: 0.75rem;
+}
+
+/* ── Filters ─────────────────────────────────────────────────────────────── */
 
 .cal-toolbar {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-5) var(--space-8);
-  align-items: end;
-  justify-content: space-between;
-  margin-block-end: var(--space-6);
-}
-.cal-toolbar__filters {
-  display: flex;
-  flex-wrap: wrap;
   gap: var(--space-4);
   align-items: end;
+  justify-content: center;
+  margin-block-end: var(--space-8);
 }
 
 /* One filter shape for all three, so adding a fourth needs no new CSS. The
@@ -112,23 +135,6 @@
   background: var(--color-background);
   color: var(--color-text-muted);
   cursor: not-allowed;
-}
-
-.month-selector {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-.month-selector__label {
-  min-width: 9rem;
-  text-align: center;
-  font-weight: 700;
-  font-size: var(--font-size-sm);
-}
-/* The chevrons are not mirrored in markup — `dir="rtl"` already reverses the
-   buttons, so "previous" lands where an Arabic reader expects it. */
-.month-selector .btn {
-  padding: 0.55rem 0.7rem;
 }
 
 /* ── The grid ────────────────────────────────────────────────────────────── */
@@ -189,8 +195,19 @@ tr:last-child .cal-cell {
      a flex column instead of pushing the cell taller. */
   min-height: 0;
 }
+/* ORDER IS THE CASCADE HERE. These three selectors have identical specificity
+   (0,2,0), so the winner is whichever is declared last — which makes this order
+   load-bearing, not stylistic:
+     today    the weakest — a standing marker, overridable
+     hover    must beat it, or pointing at today gives no feedback
+     selected must beat both, or selecting today looks unselected
+   Reordering these three lines changes behaviour without touching a
+   declaration; the header burger taught this project that lesson once already. */
+.cal-day.is-today {
+  background: color-mix(in srgb, var(--color-primary-soft) 30%, transparent);
+}
 .cal-day:hover {
-  background: color-mix(in srgb, var(--color-primary-soft) 40%, transparent);
+  background: color-mix(in srgb, var(--color-primary-soft) 55%, transparent);
 }
 .cal-day.is-selected {
   /* An inset ring rather than an outline: it does not overlap the neighbouring
@@ -201,16 +218,26 @@ tr:last-child .cal-cell {
 
 /* ── The two day numbers ─────────────────────────────────────────────────────
    A fixed header row, deliberately OUTSIDE the scrolling list: a day with
-   twenty activities must still show its date. `flex: none` is what pins it. */
+   twenty activities must still show its date. `flex: none` is what pins it.
+   Both calendars read as first-class information — same row, same weight,
+   opposite ends, each in its own colour.
+
+   The dates are separated from the events by a hairline and by size, so the eye
+   reads NUMBERS FIRST and events second rather than meeting one undifferentiated
+   block. */
 .cal-day__select {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
-  gap: var(--space-2);
+  /* A real gap, not just `space-between`: on the narrowest cell two two-digit
+     numbers would otherwise sit shoulder to shoulder and read as one value. */
+  gap: var(--space-3);
   flex: none;
   width: 100%;
   padding: 0;
+  padding-block-end: var(--space-2);
   border: 0;
+  border-block-end: 1px solid var(--color-border);
   background: transparent;
   color: inherit;
   font: inherit;
@@ -227,28 +254,39 @@ tr:last-child .cal-cell {
 }
 .cal-day__hijri {
   font-weight: 700;
-  /* Smaller — the overlay is decorative (§4.4) and must not compete. */
-  font-size: var(--font-size-xs);
+  /* Slightly smaller — the overlay is decorative (§4.4) and must not compete
+     with the calendar the platform schedules in — but the same weight and the
+     same row, because it is still first-class information. */
+  font-size: var(--font-size-sm);
   line-height: 1;
   font-variant-numeric: tabular-nums;
   color: var(--color-hijri);
 }
-/* Reserves the slot so the Gregorian number does not drift left on days whose
-   Hijri month the Ministry has not announced (Revision 31). It renders NOTHING
-   — no dash, no placeholder, no computed guess. */
+/* Reserves the slot so the Gregorian number does not drift on days whose Hijri
+   month the Ministry has not announced (Revision 31). It renders NOTHING — no
+   dash, no placeholder, no computed guess. */
 .cal-day__hijri--absent {
-  min-width: 1ch;
+  min-width: 1.5ch;
 }
-/* Today: a filled disc on the Gregorian number, since that is the one a reader
-   looks for. */
+
+/* ── Today ───────────────────────────────────────────────────────────────────
+   REDESIGNED when the dates gained their own colours. The previous marker was a
+   filled green disc on the Gregorian number — which overwrote the orange that
+   now carries "this is the Gregorian calendar", so today's cell was the one
+   place the colour language broke.
+
+   Now: a ring in the number's OWN colour, plus a soft wash on the cell. The
+   familiar "today circle" convention is kept, the colour survives, and nothing
+   is filled — so it stays light even beside a busy day. */
 .cal-day.is-today .cal-day__gregorian {
   display: inline-grid;
   place-items: center;
-  width: 2.2rem;
-  height: 2.2rem;
+  min-width: 2.1rem;
+  height: 2.1rem;
   border-radius: var(--radius-full);
-  background: var(--color-primary);
-  color: var(--color-text-inverse);
+  /* `currentColor`, so the ring is the Gregorian orange by construction and
+     cannot drift from the numeral it encircles. */
+  box-shadow: inset 0 0 0 2px currentcolor;
 }
 
 /* ── Events inside a cell ────────────────────────────────────────────────────
@@ -267,9 +305,16 @@ tr:last-child .cal-cell {
   scrollbar-width: thin;
 }
 
-/* Compact and quiet: no border, no shadow. Colour alone separates a routine
-   group session from a one-off event (§4.4), which keeps several in one cell
-   readable rather than striped. */
+/* Compact and QUIET — deliberately subordinate to the dates above.
+ *
+ * The eye must read the day numbers first and the events second, so the chips
+ * give up every device that would compete: no border, no shadow, a smaller size,
+ * a lighter weight than the numerals, and a wash rather than a fill. Colour alone
+ * separates a routine group session from a one-off event (§4.4), which keeps
+ * several in one cell readable rather than striped.
+ *
+ * The washes were lifted OFF full strength for exactly this reason: at 80% the
+ * chips read as blocks of colour and pulled the eye before the dates did. */
 .event-chip {
   display: flex;
   align-items: baseline;
@@ -282,11 +327,11 @@ tr:last-child .cal-cell {
   font-size: var(--font-size-xs);
   line-height: 1.35;
   text-align: start;
-  background: color-mix(in srgb, var(--color-primary-soft) 80%, var(--color-surface));
+  background: color-mix(in srgb, var(--color-primary-soft) 55%, var(--color-surface));
   color: var(--color-primary);
 }
 .event-chip--event {
-  background: color-mix(in srgb, var(--color-accent) 15%, var(--color-surface));
+  background: color-mix(in srgb, var(--color-accent) 10%, var(--color-surface));
   color: var(--color-accent);
 }
 .event-chip--interactive {
@@ -299,10 +344,12 @@ tr:last-child .cal-cell {
 /* Title first and allowed to shrink; the time is short and never truncates.
    `min-width: 0` is what actually lets the ellipsis appear inside a flex
    ancestor — without it the text forces the cell wider instead. */
+/* 600, not 700: the day numerals are 700, and matching them would put the two
+   at the same level in the hierarchy. */
 .event-chip__title {
   flex: 1 1 auto;
   min-width: 0;
-  font-weight: 700;
+  font-weight: 600;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -444,24 +491,37 @@ tr:last-child .cal-cell {
   .cal-day__gregorian {
     font-size: var(--font-size-sm);
   }
+  .cal-day__hijri {
+    font-size: var(--font-size-xs);
+  }
+  .cal-day__select {
+    /* A tighter gap, but never zero: the two numbers must not touch. */
+    gap: var(--space-2);
+    padding-block-end: var(--space-1);
+  }
   .cal-day.is-today .cal-day__gregorian {
-    width: 1.9rem;
-    height: 1.9rem;
+    min-width: 1.8rem;
+    height: 1.8rem;
+  }
+  /* Full-width nav buttons stacked in a row of three: 360 px still fits them
+     side by side once the min-width is dropped, which keeps the three-way
+     relationship visible rather than turning it into a list. */
+  .cal-nav {
+    gap: var(--space-2);
+  }
+  .cal-nav .btn {
+    flex: 1 1 0;
+    min-width: 0;
+    padding-inline: var(--space-2);
   }
   .cal-toolbar {
-    flex-direction: column;
-    align-items: stretch;
-  }
-  .cal-toolbar__filters {
     display: grid;
     grid-template-columns: 1fr;
+    align-items: stretch;
   }
   .cal-filter,
   .branch-selector {
     min-width: 0;
-  }
-  .month-selector {
-    justify-content: space-between;
   }
   .cal-dayrow {
     flex-direction: column;

@@ -99,6 +99,13 @@ export const ar = {
     allLevels: 'كل المستويات',
     monthLabel: 'الشهر',
     today: 'اليوم',
+    // Short visible labels; the long forms below are the accessible names.
+    // Each long name CONTAINS its short label, which keeps voice control working
+    // (WCAG 2.5.3 Label in Name) — a user saying "السابق" still matches.
+    navPrevious: 'السابق',
+    navNext: 'التالي',
+    navLabel: 'تنقّل بين الأشهر',
+    filtersLabel: 'تصفية الجدول',
     previousMonth: 'الشهر السابق',
     nextMonth: 'الشهر التالي',
     dayDialogTitle: 'أنشطة اليوم',

@@ -274,6 +274,17 @@
   - ✓ **Accessible logo colours** — the raw logo orange/green measure 2.5:1 and 1.9:1 on white and **cannot carry text**, so each exists twice: the true value for marks, a darkened same-hue variant for text (4.71:1 and 4.91:1, measured and recorded beside the tokens)
   - ✓ Defect found and fixed while building — the shared `Dialog` hardcoded `aria-labelledby="dialog-title"`; harmless with one dialog, **two elements with one id** once the calendar had two, so a screen reader would announce the wrong title. Now `useId`
   - ✓ Tests — 63 frontend (was 48), covering the spanning-month title, the omitted Hijri side, the per-cell absence, and that the level select does no filtering
+- [x] Calendar navigation and visual hierarchy pass (§5.1, §14.4, §14.7)
+  - ✓ **Month selector removed**, replaced by three prominent buttons — **السابق · اليوم · التالي** — centred beneath the title. `اليوم` is the primary variant (the action most often wanted, and the only one not reversible by its opposite); it returns to the current month and deliberately does **not** open the day dialog
+  - ✓ **The month is named once.** The old selector carried its own copy of the Gregorian month beside the title's — two renderings of one fact; a test now asserts the nav contains no month name at all
+  - ✓ **Page reads as four steps** — eyebrow → dual title (the headline) → navigation → filters → grid, each its own centred block with generous rhythm. The `<h1>` became an eyebrow so the *month* takes the visual weight
+  - ✓ **Today redesigned.** The filled green disc **overwrote the Gregorian orange**, making today the one cell where the colour language broke. Now a ring in `currentcolor` plus a soft wash: the convention survives, the colour cannot drift from its numeral, and nothing is filled
+  - ✓ **Cascade order fixed** — `is-today` → `:hover` → `is-selected`, all `0,2,0`, so order *is* priority. As first written, today's wash silently overrode both hover and selection
+  - ✓ **Hierarchy: dates first, events second** — a hairline and padding separate the numbers row from the event list; chip washes lifted off full strength (80%→55%, 15%→10%) and chip titles dropped to 600 against the numerals' 700, so events no longer pull the eye before the dates
+  - ✓ **Both numbers are first-class** — same row, same weight, opposite ends, own colours, with a real gap so two two-digit numbers never touch
+  - ✓ **Accessibility regression avoided** — the deleted selector held the `aria-live` region announcing month changes; it moved to the title, and a test asserts it. The Gregorian side of the title also gained a fallback to the displayed month, so a failed chrome fetch cannot leave the page headless; **the Hijri side still has no fallback, by rule**
+  - ✓ Dead `.month-selector` CSS removed with its component; no stale references remain
+  - ✓ Tests — 72 frontend (was 63)
 - [x] §18 Scheduling & Calendar checklist green (incl. the Ramadan DST regression test)
   - ✓ group CRUD + half-open room/time conflict detection · co-teaching via `GroupTeacher` (two-slot cap) · all five recurrence types incl. biweekly-alternating · three visibility tiers per role · four-way scope joins written at creation · manual branch-activation backfill · the Hijri overlay from recorded official announcements
   - ✓ **§19.2 Ramadan DST regression** — a weekly 09:00 class expanded across both of Morocco's 2026 clock transitions reads 09:00–10:30 on every occurrence

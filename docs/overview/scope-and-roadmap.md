@@ -25,7 +25,7 @@
 screens, the public branch directory, and the **full dual calendar**. There are **no authenticated
 screens yet**, so the endpoints M1–M3 delivered currently have no interface driving them.
 
-Live counts: **102 backend unit · 483 integration · 63 frontend tests**, **47 API
+Live counts: **102 backend unit · 483 integration · 72 frontend tests**, **47 API
 operations across 35 paths**, **ten CI guards**.
 
 > Granular checklist: [`TASKS.md`](../TASKS.md) · Build order:

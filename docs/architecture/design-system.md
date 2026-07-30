@@ -37,6 +37,16 @@ Same hue family, so the identity survives; enough luminance to be readable, so t
 does. **Changing either value means re-measuring** — the numbers are the reason they are these
 values and not prettier ones, and they are recorded beside the tokens for exactly that reason.
 
+**A colour that carries meaning must not be overwritten by a state.** Today's cell originally
+marked itself with a *filled* green disc on the Gregorian number — which erased the orange that
+now says "this is the Gregorian calendar", making today's cell the one place the colour
+language broke. It was redesigned to a **ring in `currentcolor`** plus a soft cell wash: the
+familiar "today circle" convention survives, the number keeps its own colour by construction,
+and nothing is filled, so it stays light beside a busy day.
+
+`currentcolor` rather than a repeated token is the point — the ring **cannot** drift from the
+numeral it encircles.
+
 The semantic names say *what the colour means* — a date system — rather than naming a hue, so
 a rebrand moves them in one place. This is the same discipline the brass accent got: it was
 chosen dark enough to carry text at 4.5:1, not chosen and then tested.
@@ -117,6 +127,25 @@ the code it describes.
 The header burger was re-declared *after* the media query that hides it, at equal
 specificity — so it was visible at every width. `check-header-nav-exclusive.sh` exists
 because of it, and was proven by reintroducing the bug.
+
+### State layering: order encodes priority
+
+The calendar's day cell is the clearest example of the general pattern. Three states share
+identical `0,2,0` specificity, so **the winner is whichever is declared last** — which makes
+the order load-bearing rather than stylistic:
+
+```css
+.cal-day.is-today    { … }  /* weakest — a standing marker, overridable */
+.cal-day:hover       { … }  /* must beat it, or pointing at today gives no feedback */
+.cal-day.is-selected { … }  /* must beat both, or selecting today looks unselected */
+```
+
+**Write equal-specificity states in ascending order of priority, and say so in a comment.**
+Reordering those three lines changes behaviour without touching a declaration — and the bug
+above is what this project has to show for learning that the hard way.
+
+This was caught during review of the change that introduced it: `is-today` was appended at the
+end of the file, where it silently overrode both hover and selection.
 
 ### The near-miss during a refactor
 

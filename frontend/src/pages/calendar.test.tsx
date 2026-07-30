@@ -8,9 +8,10 @@ import { CategorySelector } from '../components/calendar/category-selector.js';
 import { DayEventsDialog } from '../components/calendar/day-events-dialog.js';
 import { EventChip } from '../components/calendar/event-chip.js';
 import { EventDetailsDialog } from '../components/calendar/event-details-dialog.js';
+import { CalendarNav } from '../components/calendar/calendar-nav.js';
 import { LevelSelector } from '../components/calendar/level-selector.js';
-import { MonthSelector } from '../components/calendar/month-selector.js';
 import type { HijriDay, Occurrence } from '../adapters/calendar.js';
+import { tList } from '../i18n/index.js';
 import { leadingBlanks, monthGrid, toIsoDate } from '../lib/dates.js';
 
 /**
@@ -211,16 +212,32 @@ describe('a day cell carries both calendars', () => {
 });
 
 describe('the dual-calendar title', () => {
+  const JUNE = new Date(2026, 5, 1);
+
   it('renders Gregorian then Hijri, so RTL puts Gregorian on the right', () => {
     const html = renderToStaticMarkup(
       <CalendarTitle
         gregorianMonths={[{ month: 7, month_ar: 'يوليوز', year: 2026 }]}
         hijriMonths={[{ hijri_month: 1, hijri_month_ar: 'محرم', hijri_year: 1448 }]}
+        month={JUNE}
       />,
     );
     expect(html.indexOf('cal-title__gregorian')).toBeLessThan(html.indexOf('cal-title__hijri'));
     expect(html).toContain('يوليوز 2026');
     expect(html).toContain('محرم 1448');
+  });
+
+  it('announces month changes, now that no control names the month', () => {
+    const html = renderToStaticMarkup(
+      <CalendarTitle
+        gregorianMonths={[{ month: 7, month_ar: 'يوليوز', year: 2026 }]}
+        hijriMonths={[]}
+        month={JUNE}
+      />,
+    );
+    // The removed month selector used to carry this; losing it would have made
+    // keyboard navigation silent.
+    expect(html).toContain('aria-live="polite"');
   });
 
   it('shows BOTH Hijri months when the Gregorian month spans two', () => {
@@ -231,6 +248,7 @@ describe('the dual-calendar title', () => {
           { hijri_month: 12, hijri_month_ar: 'ذو الحجة', hijri_year: 1448 },
           { hijri_month: 1, hijri_month_ar: 'محرم', hijri_year: 1448 },
         ]}
+        month={JUNE}
       />,
     );
     expect(html).toContain('ذو الحجة / محرم 1448');
@@ -244,6 +262,7 @@ describe('the dual-calendar title', () => {
           { month: 1, month_ar: 'يناير', year: 2027 },
         ]}
         hijriMonths={[]}
+        month={JUNE}
       />,
     );
     expect(html).toContain('دجنبر 2026 / يناير 2027');
@@ -254,11 +273,28 @@ describe('the dual-calendar title', () => {
       <CalendarTitle
         gregorianMonths={[{ month: 7, month_ar: 'يوليوز', year: 2026 }]}
         hijriMonths={[]}
+        month={JUNE}
       />,
     );
     expect(html).not.toContain('cal-title__hijri');
     // No orphaned divider either.
     expect(html).not.toContain('cal-title__divider');
+  });
+
+  it('falls back to the displayed month for the GREGORIAN side only', () => {
+    // The chrome fetch can fail; the page must not lose its own heading. The
+    // month on screen is client state, so naming it is not a computation.
+    const html = renderToStaticMarkup(
+      <CalendarTitle gregorianMonths={[]} hijriMonths={[]} month={JUNE} />,
+    );
+    expect(html).toContain('يونيو 2026');
+  });
+
+  it('has NO Hijri fallback — silence is the rule (Revision 31, §20 rule 14)', () => {
+    const html = renderToStaticMarkup(
+      <CalendarTitle gregorianMonths={[]} hijriMonths={[]} month={JUNE} />,
+    );
+    expect(html).not.toContain('cal-title__hijri');
   });
 });
 
@@ -376,21 +412,54 @@ describe('the day dialog', () => {
 });
 
 describe('month navigation', () => {
-  it('names the month and announces changes politely', () => {
-    const html = renderToStaticMarkup(
-      <MonthSelector
-        month={new Date(2026, 5, 1)}
-        onPrevious={() => undefined}
-        onNext={() => undefined}
-        onToday={() => undefined}
-      />,
-    );
-    expect(html).toContain('يونيو 2026');
-    expect(html).toContain('aria-live="polite"');
-    expect(html).toContain('اليوم');
-    // Icon-only controls need names.
+  const html = renderToStaticMarkup(
+    <CalendarNav
+      onPrevious={() => undefined}
+      onToday={() => undefined}
+      onNext={() => undefined}
+    />,
+  );
+
+  it('is exactly three buttons', () => {
+    expect(html.split('<button').length - 1).toBe(3);
+  });
+
+  it('shows the short labels the design calls for', () => {
+    expect(html).toContain('>السابق<');
+    expect(html).toContain('>اليوم<');
+    expect(html).toContain('>التالي<');
+  });
+
+  it('orders them previous · today · next in source, so RTL reads right to left', () => {
+    expect(html.indexOf('السابق')).toBeLessThan(html.indexOf('اليوم'));
+    expect(html.indexOf('اليوم')).toBeLessThan(html.indexOf('التالي'));
+  });
+
+  it('gives today the primary variant, so it is the prominent control', () => {
+    expect(html).toContain('btn--primary');
+    // The other two are secondary — one emphasis, not three.
+    expect(html.split('btn--secondary').length - 1).toBe(2);
+  });
+
+  it('carries accessible names that CONTAIN the visible label (WCAG 2.5.3)', () => {
+    // "previous" alone is ambiguous when announced out of context, but the long
+    // name must contain the short one or voice control breaks.
     expect(html).toContain('aria-label="الشهر السابق"');
     expect(html).toContain('aria-label="الشهر التالي"');
+    expect('الشهر السابق').toContain('السابق');
+    expect('الشهر التالي').toContain('التالي');
+  });
+
+  it('is a labelled navigation landmark', () => {
+    expect(html).toContain('<nav');
+    expect(html).toContain('aria-label="تنقّل بين الأشهر"');
+  });
+
+  it('does NOT name the month — that belongs to the title alone', () => {
+    // The removed month selector carried its own copy of the Gregorian month
+    // beside the title's; two renderings of one fact is the duplication this
+    // project removes rather than syncs.
+    for (const name of tList('calendar.months')) expect(html).not.toContain(name);
   });
 });
 

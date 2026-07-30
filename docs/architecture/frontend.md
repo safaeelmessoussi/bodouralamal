@@ -157,8 +157,49 @@ day's timetable.
 
 The most complete screen in the client, and the one whose decisions generalise furthest.
 
-Decomposed into atomic components — title, toolbar, month selector, three filter selects,
+Decomposed into atomic components — title, navigation, filter toolbar, three filter selects,
 grid, day cell, event chip, day dialog, details dialog — each with a single responsibility.
+
+### The page reads top to bottom as a sequence of questions
+
+```
+            الجدول الزمني            ← eyebrow: what page is this
+        يوليوز 2026 │ محرم 1448      ← the headline: WHICH MONTH
+     السابق      اليوم      التالي    ← how do I move
+      [branch]  [category]  [level]  ← what am I filtering
+   ┌───────────────────────────────┐
+   │            the grid           │
+```
+
+*Where am I → how do I move → what am I looking at → the thing itself.* Each step gets its
+own centred block and generous vertical rhythm, so they read as four steps rather than one
+dense control bar.
+
+**The `<h1>` is an eyebrow, not the headline.** A visitor came to read *which month*, so the
+dual title takes the visual weight and the page label recedes — while remaining a real
+heading, because the page still needs one.
+
+### Navigation: three buttons, and no month label
+
+`السابق · اليوم · التالي`. The month name appears **once**, in the title.
+
+The previous control was a month selector that carried *its own copy* of the Gregorian month
+beside the title's — two renderings of one fact, which is the duplication this project removes
+rather than syncs. A test asserts the nav contains **no** month name at all.
+
+**`اليوم` is the primary variant; the other two are secondary.** It is the action most often
+wanted and the only one not reversible by pressing its opposite, so it earns the single
+emphasis. It changes the month and deliberately does **not** open the day dialog — pressing a
+navigation button should move the view, not launch a modal over it.
+
+**Short labels, long accessible names.** Visible text is `السابق`; the accessible name is
+`الشهر السابق`, because "previous" alone is ambiguous when announced out of context. The long
+name **contains** the short one, which is what keeps voice control working (WCAG 2.5.3 *Label
+in Name*) — a user saying "السابق" still matches. A test asserts the containment rather than
+just the presence of both.
+
+**Navigation preserves every filter**, because the filters are state independent of the month
+and nothing in the handler touches them.
 
 ### Two requests, never a third
 
@@ -190,6 +231,30 @@ The rule appears three times on this screen, and it is the same rule each time:
   omitted entirely rather than rendered blank.
 - A field the backend did not send is **absent** from the details dialog. An empty row claims
   the value *is* blank, which is a different statement from *"not recorded"*.
+
+### The two title sides fail differently, on purpose
+
+The **Hijri side has no fallback** — that is the rule above.
+
+The **Gregorian side falls back** to the month the page is already displaying. The asymmetry
+is deliberate: the month on screen is *client state*, so a failed reference fetch must not
+cost the page its own heading, and a Gregorian month name is not a Hijri computation. It reads
+from the same i18n list the dialogs use, so the names still have one source.
+
+Removing the month selector made this necessary. Previously the label came from client state
+via that control and always rendered; with the title as the only label, an unqualified
+"render what the backend sent" would have left the page headless whenever the chrome request
+failed.
+
+### An accessibility regression the removal nearly caused
+
+The month selector held the `aria-live="polite"` region that announced month changes. Deleting
+it would have made navigation **silent** for keyboard and screen-reader users — the grid
+redraws with no spoken feedback.
+
+`aria-live` now sits on the **title**, which is the element that names the month. A test
+asserts it, because this is precisely the kind of behaviour that disappears in a refactor and
+nobody notices until someone who relies on it does.
 
 ### Two dialogs, and why
 
