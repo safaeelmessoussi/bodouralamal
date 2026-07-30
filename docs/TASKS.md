@@ -334,6 +334,13 @@
 - [ ] Admin-only consent-gate override with mandatory justification + audit (BR-3, TD-8)
 - [ ] Presigned GET mint with full permission + child-context check, 10 min TTL (TD-12)
 - [ ] Resources directory nesting: Category→Level→Year(current pinned)→Branch(Global top)→Subject (§5.2)
+  - ⚠ **Investigated 2026-07-30 and reported, not built.** Four hard blockers, all needing a Document Owner decision:
+    **(1) No content LISTING endpoint exists or is documented anywhere in the SRS.** TD-3.5 defines only `POST /uploads/initiate|/complete|/abort` and `GET /content/{id}/download-url`; there is no `GET` route that lists content. Building one is inventing an endpoint (§20 rule 16) and needs a revision (Revision 21: later milestones add endpoints through subsequent revisions).
+    **(2) `EducationalContent` has no uploader field**, so the requested *teacher display name* has no source. §7's field list does not define one either — this is a §7 change plus a forward-only migration.
+    **(3) The presigned GET mint is unimplemented** (PENDING, M6), so private content cannot be previewed or downloaded at all.
+    **(4) No content rows exist** and `/uploads/*` is unbuilt, so there is nothing to display.
+  - ⚠ Three points where the requested design and §5.2 differ, for the Owner to settle: §5.2 mandates a **Subject** tier and a **"Global / بدون فرع"** container at the top of the branch tier (the brief omits both), and pins the **current** academic year at top (the brief asks strict newest→oldest).
+  - ✓ **Previews need no architectural change** — §14.6 already specifies them (PDF inline, `<audio>`, image lightbox, office download-only) and public content sits behind stable same-origin URLs the CSP already allows. The one open question is that private content is served via 10-minute presigned URLs, so a long video can expire mid-playback.
 - [ ] upload.gc + content.quarantine-purge cron jobs (TD-7)
 - [ ] §18 Content, Consent & Storage checklist green
 
