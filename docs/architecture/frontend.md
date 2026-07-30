@@ -56,6 +56,30 @@ src/
 `adapters/` is the seam between the API's shape and the components' needs. It exists so a
 contract change lands in one file rather than across every component that reads a field.
 
+#### Mock adapters: building a screen before its endpoint exists
+
+A screen may be built against a **mock adapter** when its endpoints are not yet specified —
+that is what lets the interface, the states and the layout be finished and reviewed while the
+contract is still being decided, instead of the two waiting on each other.
+
+The convention that makes it safe:
+
+| Rule | Why |
+|---|---|
+| **The interface is production; only the implementation is mock** | Types are written as the API response they expect to parse, in `snake_case`. Swapping in real `api()` calls is a change to the adapter's exported functions and to nothing else |
+| **No component, page or test may touch the mock directly** | If they did, replacing it would mean touching all of them — which is the entire cost the seam exists to avoid |
+| **The file states, at the top, that it is temporary and why** | Including which endpoints are missing and what authorises them |
+| **Mock data is chosen to exercise the layout**, not to look plausible | One item of each kind, one empty group, one group with many — the states you need to see |
+| **Never document mock behaviour as production behaviour** | The handbook describes the interface and the states; the numbers live only in the mock file |
+
+`adapters/content.ts` is the worked example: the educational library is complete and
+reviewable, and **no content endpoint exists** — see
+[the gap analysis](../reference/api-endpoints.md#specified-not-yet-built).
+
+A mock adapter is **not** licence to invent a contract. It is a placeholder behind a seam,
+and the endpoints it anticipates still require a Document Owner revision before they are
+built (§20 rule 16).
+
 It carries one rule with security weight: **the frontend type for a calendar occurrence does
 not carry the raw name fields at all.** The backend resolves which name is public and sends
 `display_name`; the adapter's type has no other option to choose from.
@@ -292,6 +316,76 @@ event dialog would have announced the *day* dialog's title.
 Fixed with `useId`, which makes it structurally impossible rather than a rule to remember.
 The lesson generalises: **a hardcoded id in a reusable component is a latent collision**, and
 it stays invisible until the component is used twice on one page.
+
+## The educational library, as a second worked example
+
+`/resources` (§5.2, §4.9) — two views of a drilling folder system: a level index grouped by
+category, and one level's contents grouped **academic year → branch**.
+
+### Two views, one navigation node
+
+§14.1's sitemap defines exactly **one** resources node, and §5.2 describes it as a *drilling
+folder system* with a "Level List" and a "Level Resources View". Those two views are therefore
+one route with a **`?level=` parameter**, not a second path segment.
+
+The reasoning is worth reusing: **a new path segment would be a navigation node the sitemap
+does not list**, and inventing navigation outside §14.1 is prohibited (§20 rule 16). A query
+parameter keeps the view shareable and bookmarkable, and becomes a path the day the sitemap
+says so. The same question will arise for every drill-down screen still to be built.
+
+### Category order is editorial, not data
+
+Categories always render **الكبار → اليافعون → الطفل**. That is the association's own
+progression, and it is neither alphabetical nor `display_order` — so it is a constant in the
+page with unrecognised categories sorted **last rather than dropped**, because a category added
+later must still appear.
+
+### Academic years sort as strings, safely
+
+`YYYY-YYYY` is constrained by TD-6, so `2026-2027 > 2025-2026` lexicographically *and*
+chronologically. Newest-first therefore needs no date parsing.
+
+> **A divergence, reported rather than resolved:** §5.2 pins the `is_current` year at top,
+> while this sorts strictly newest-first. They coincide for every ordinary year and differ only
+> if a future year is recorded ahead of the current one. §5.2 also specifies a **Subject** tier
+> beneath Branch, which is rendered here as a **badge on the card** rather than a fourth
+> grouping level — see [the gap analysis](../reference/api-endpoints.md#specified-not-yet-built).
+
+### Filtering locally is right here and would be wrong on the calendar
+
+The content filters narrow **the response the page already holds**. The calendar's
+category→level dependency instead re-requests, because §4.4 requires *that* narrowing to happen
+server-side — the level list is reference data the server owns.
+
+The distinction is the object being filtered: **filtering a list you were handed as reference
+data is forbidden; filtering your own already-fetched result set is not.** Every filter option
+is also derived from the content actually present, so a control can never offer a year, branch
+or type that yields nothing.
+
+### The preview architecture
+
+One viewer implements the whole §14.6 table, so preview behaviour is defined once:
+
+| Kind | Behaviour |
+|---|---|
+| PDF | Inline `<iframe>` + download |
+| Video / Audio | Native `<video>` / `<audio controls>` + download |
+| Image | Shown full-width + download |
+| Office document | **Download only** — no in-browser rendering in the MVP |
+
+**Native elements, not a player library.** A `<video>` gives keyboard control, captions and
+picture-in-picture for free, and the CSP admits no external script host anyway — the same call
+the `<select>` and the native `<dialog>` got.
+
+**The URL is fetched when the dialog opens, never with the list.** Private content is reachable
+only through a short-lived presigned GET minted after a server-side permission check (§3.1,
+TD-12). A ten-minute URL attached to every card would be expired before most were clicked, and
+would mint permission checks for content nobody opened.
+
+> **A consequence, not a bug:** a long recording can outlive its URL — a 40-minute video opened
+> at minute nine of its URL's life will stall. The viewer offers a retry that re-mints. Whether
+> the client should refresh pre-emptively is a Document Owner decision, not an implementation
+> detail.
 
 ## Toasts
 

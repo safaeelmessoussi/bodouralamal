@@ -124,6 +124,33 @@ milestone lands. **They are a work-in-progress signal, not invented endpoints.**
 **Post-MVP, deliberately absent:** grading-template routes, multipart upload endpoints, CSV
 import/export, the Hijri importer.
 
+### Not specified at all — the educational library's gap
+
+The `/resources` library (§5.2) is **built and reviewable** against a mock adapter, and cannot
+be wired because **no endpoint exists to wire it to**. This is a genuine specification gap
+rather than an unimplemented milestone item: TD-3.5 defines the three upload routes and
+`GET /content/{id}/download-url`, and **no route anywhere in the SRS lists content.**
+
+| Needed | For | Status |
+|---|---|---|
+| A **level index** with per-level content and year counts | Page 1's cards. One request, not one per level — otherwise an N+1 on a public page | **Not specified.** Needs a revision |
+| A **level content read**, grouped year → branch | Page 2's whole hierarchy | **Not specified.** Needs a revision |
+| `GET /content/{id}/download-url` | Every preview and download | **Specified (TD-3.5), unimplemented** — M6 |
+| An **uploader** on `EducationalContent` | The teacher display name the cards show | **Not in §7's field list.** Needs a revision plus a forward-only migration |
+
+**Two constraints any listing endpoint must satisfy**, recorded because they are easy to miss
+and impossible to add safely later:
+
+- **Visibility is resolved server-side from the live actor**, exactly as `GET /calendar` does
+  (§4.4) — an anonymous visitor receives the public tier only, and no query parameter may widen
+  it.
+- **`consent_forced_private` recordings never appear on a public surface** (BR-2). That is a
+  filter no client may be trusted to apply.
+
+**Two divergences from §5.2** for the Document Owner to settle: §5.2 specifies a **Subject**
+tier beneath Branch (rendered as a card badge instead) and pins the **`is_current`** academic
+year at top (the page sorts strictly newest-first).
+
 ---
 
 ## Conventions at a glance

@@ -81,4 +81,9 @@
 
 @import './styles/components/branch-card.css';
 @import './styles/components/calendar.css';
+/* After calendar.css deliberately: the content library REUSES `.cal-toolbar` and
+ * `.cal-filter` so the platform has one filter appearance, and adds
+ * `.cal-filter--search` on top of them. Loading it first would put the variant
+ * before the base it varies. */
+@import './styles/components/content.css';
 @import './styles/components/dialog.css';

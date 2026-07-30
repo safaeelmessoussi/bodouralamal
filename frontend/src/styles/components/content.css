@@ -1,0 +1,348 @@
+/* Part of the design system — see `src/styles.css` for the layering. */
+
+/* ── Educational content library (§5.2, §4.9) ─────────────────────────────────
+ *
+ * The same visual language as the landing page and the calendar: ruled
+ * separators rather than boxes, generous whitespace, one hairline border, no
+ * shadows. Nothing here introduces a second design language — the filter row
+ * deliberately reuses `.cal-toolbar` / `.cal-filter` so the platform has one
+ * filter appearance, and the section rhythm reuses `.section` / `.container`.
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+.content-page__head {
+  display: grid;
+  gap: var(--space-3);
+  justify-items: start;
+  margin-block-end: var(--space-10);
+}
+.content-page__title {
+  font-size: var(--font-size-lg);
+}
+/* A quiet back affordance above the heading — the drill-down's only way out, so
+   it is always present on a level view and never on the index. */
+.content-page__back {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  color: var(--color-text-muted);
+  text-decoration: none;
+}
+.content-page__back:hover {
+  color: var(--color-primary);
+}
+/* `dir="rtl"` already reverses the row, so the chevron points back without being
+   mirrored in markup — the same call the calendar's month controls made. */
+.content-page__back svg {
+  transform: rotate(90deg);
+}
+
+/* ── Category groups (page 1) ────────────────────────────────────────────── */
+
+.content-group + .content-group {
+  margin-block-start: var(--space-12);
+}
+/* Ruled, not boxed: the category is a divider in a document, not a card. */
+.content-group__title {
+  font-size: var(--font-size-md);
+  padding-block-end: var(--space-3);
+  margin-block-end: var(--space-5);
+  border-block-end: 1px solid var(--color-border);
+}
+
+.level-grid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-4);
+  /* Auto-fill rather than fixed breakpoints: the cards are content-sized, so the
+     grid decides how many fit instead of a media query guessing. */
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 17rem), 1fr));
+}
+
+.level-card {
+  display: grid;
+  gap: var(--space-2);
+  align-content: start;
+  height: 100%;
+  padding: var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-raised);
+  color: inherit;
+  text-decoration: none;
+  transition:
+    border-color var(--transition-fast),
+    background-color var(--transition-fast);
+}
+.level-card:hover {
+  border-color: var(--color-primary-emphasis);
+  background: color-mix(in srgb, var(--color-primary-soft) 35%, var(--color-surface-raised));
+}
+.level-card__icon {
+  display: inline-grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: var(--radius-md);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+.level-card__title {
+  font-size: var(--font-size-md);
+  font-weight: 700;
+  line-height: var(--line-height-tight);
+}
+.level-card__description {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+}
+/* The counts are why the card exists — a visitor wants to know how much is there
+   before committing to a page load — so they sit at the foot, on their own rule. */
+.level-card__counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  margin-block-start: var(--space-2);
+  padding-block-start: var(--space-3);
+  border-block-start: 1px solid var(--color-border);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+.level-card__count strong {
+  color: var(--color-primary);
+  font-variant-numeric: tabular-nums;
+}
+.level-card--skeleton {
+  gap: var(--space-3);
+  pointer-events: none;
+}
+
+/* ── Year → branch → items (page 2) ─────────────────────────────────────── */
+
+.content-year + .content-year {
+  margin-block-start: var(--space-12);
+}
+.content-year__title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--font-size-md);
+  font-variant-numeric: tabular-nums;
+  padding-block-end: var(--space-3);
+  border-block-end: 1px solid var(--color-border);
+}
+.content-year__badge {
+  padding: 0.15rem var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+}
+
+.content-branch {
+  margin-block-start: var(--space-6);
+}
+/* A third level of heading needs to read as subordinate without another rule —
+   size and colour do that, so the year keeps the only line in this block. */
+.content-branch__title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+  margin-block-end: var(--space-3);
+}
+
+.content-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+
+/* ── One item ────────────────────────────────────────────────────────────── */
+
+.content-card {
+  display: flex;
+  align-items: start;
+  gap: var(--space-4);
+  width: 100%;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+  transition:
+    border-color var(--transition-fast),
+    background-color var(--transition-fast);
+}
+.content-card:hover {
+  border-color: var(--color-primary-emphasis);
+  background: color-mix(in srgb, var(--color-primary-soft) 28%, var(--color-surface-raised));
+}
+.content-card__wrap {
+  display: block;
+}
+/* The type tint is the only colour coding, and it is deliberately faint: the
+   TITLE is what a reader scans, and a saturated block would take that job. The
+   icon is also NOT the sole carrier of the type — the label beside it says it in
+   words, so colour and shape never carry meaning alone. */
+.content-card__icon {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: var(--radius-md);
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+.content-card--video .content-card__icon,
+.content-card--audio .content-card__icon {
+  background: color-mix(in srgb, var(--color-accent) 14%, var(--color-surface));
+  color: var(--color-accent);
+}
+.content-card--document .content-card__icon {
+  background: var(--color-background);
+  color: var(--color-text-muted);
+}
+
+.content-card__body {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+.content-card__title {
+  font-weight: 700;
+}
+.content-card__description {
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  /* Two lines at most: the card is the compact view and the dialog is the
+     complete one, exactly as the calendar's cell and day dialog divide. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
+}
+.content-card__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-3);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.content-card__kind {
+  font-weight: 700;
+}
+.content-card__teacher {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--font-size-xs);
+  color: var(--color-text-secondary);
+}
+.content-card--skeleton {
+  display: grid;
+  gap: var(--space-2);
+  pointer-events: none;
+}
+
+/* A search box needs more room than a select, and it is the first control a
+   visitor reaches for. */
+.cal-filter--search {
+  min-width: 16rem;
+  flex: 1 1 16rem;
+}
+
+/* ── The preview dialog ──────────────────────────────────────────────────── */
+
+.preview {
+  display: grid;
+  gap: var(--space-4);
+}
+.preview__description {
+  max-width: none;
+  color: var(--color-text-secondary);
+}
+/* A fixed aspect ratio so the dialog does not jump between the skeleton, the
+   media and the placeholder — the stage reserves its space up front. */
+.preview__stage {
+  display: grid;
+  place-items: center;
+  min-height: 14rem;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-background);
+}
+.preview__placeholder {
+  max-width: 34ch;
+  text-align: center;
+  color: var(--color-text-muted);
+}
+.preview__pdf {
+  width: 100%;
+  height: min(70vh, 34rem);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+}
+.preview__video {
+  width: 100%;
+  max-height: min(70vh, 34rem);
+  border-radius: var(--radius-sm);
+  /* The letterbox behind a video that does not fill the stage. The brand ground
+     rather than black, so an unfilled frame still reads as part of the platform. */
+  background: var(--color-primary-strong);
+}
+.preview__audio {
+  width: 100%;
+}
+.preview__image {
+  max-width: 100%;
+  max-height: min(70vh, 34rem);
+  border-radius: var(--radius-sm);
+}
+.preview__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  justify-content: end;
+}
+
+/* ── Narrow screens ─────────────────────────────────────────────────────── */
+
+@media (max-width: 44rem) {
+  .content-card {
+    padding: var(--space-3);
+    gap: var(--space-3);
+  }
+  .content-card__icon {
+    width: 2.1rem;
+    height: 2.1rem;
+  }
+  .level-card {
+    padding: var(--space-4);
+  }
+  .cal-filter--search {
+    min-width: 0;
+  }
+  .preview__actions {
+    justify-content: stretch;
+  }
+  .preview__actions .btn {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+}

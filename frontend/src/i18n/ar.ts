@@ -204,9 +204,51 @@ export const ar = {
     notBuiltBody: 'نعمل حالياً على إعداد هذا القسم، وسيكون متاحاً قريباً بإذن الله.',
   },
   content: {
+    // The /content-unavailable page (§3.1) — a stale public link to content
+    // whose visibility changed.
     unavailableTitle: 'تغيّرت صلاحية الوصول إلى هذا المحتوى',
     unavailableBody:
       'تغيّرت صلاحية الوصول إلى هذا المحتوى — يرجى تسجيل الدخول أو التواصل مع إدارة الفرع.',
+
+    // The educational library (§5.2, §4.9).
+
+    title: 'المحتوى التعليمي',
+    lede: 'اختر المستوى الدراسي للوصول إلى المحتوى.',
+    backToLibrary: 'كل المستويات',
+    globalScope: 'بدون فرع',
+    currentYear: 'السنة الحالية',
+    openItem: 'عرض المحتوى',
+    download: 'تنزيل الملف',
+    // Presentation classes, not file extensions (§14.6): the label tells a reader
+    // what will happen when they open the item.
+    kind: {
+      pdf: 'ملف PDF',
+      video: 'فيديو',
+      audio: 'تسجيل صوتي',
+      image: 'صورة',
+      document: 'مستند',
+    },
+    // Binary units as Arabic words, so a size does not force a direction
+    // override inside RTL text.
+    sizeUnits: ['بايت', 'كيلوبايت', 'ميغابايت', 'غيغابايت'],
+    countItems: { one: 'مادة', two: 'مادتان', many: 'مواد' },
+    countYears: { one: 'سنة دراسية', two: 'سنتان دراسيتان', many: 'سنوات دراسية' },
+    filtersLabel: 'تصفية المحتوى',
+    searchLabel: 'البحث',
+    searchPlaceholder: 'ابحث في العناوين…',
+    yearLabel: 'السنة الدراسية',
+    allYears: 'كل السنوات',
+    branchLabel: 'الفرع',
+    allBranches: 'كل الفروع',
+    typeLabel: 'النوع',
+    allTypes: 'كل الأنواع',
+    previewTitle: 'معاينة المحتوى',
+    previewError: 'تعذّر تحميل المعاينة.',
+    // Deliberately distinct from an error: nothing is wrong, the file simply
+    // cannot be served yet.
+    previewUnavailable: 'المعاينة غير متاحة بعد لهذا الملف.',
+    previewDownloadOnly: 'هذا النوع من الملفات يُنزَّل ولا يُعرض داخل المنصة.',
+    previewUnsupported: 'متصفحك لا يدعم تشغيل هذا الملف — يمكنك تنزيله.',
   },
 } as const;
 

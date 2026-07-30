@@ -6,7 +6,8 @@ import { ActiveChildProvider } from './contexts/active-child.js';
 import { SessionProvider } from './contexts/session.js';
 import { CalendarPage } from './pages/calendar.js';
 import { Landing } from './pages/landing.js';
-import { AccountDeactivated, ContentUnavailable, Login, NotBuiltYet } from './pages/public.js';
+import { AccountDeactivated, ContentUnavailable, Login } from './pages/public.js';
+import { ResourcesPage } from './pages/resources.js';
 import './styles.css';
 
 /**
@@ -33,10 +34,11 @@ function App(): React.ReactNode {
       return <ContentUnavailable />;
     case '/calendar':
       return <CalendarPage />;
-    // §14.1 defines this route; its page is a later task, so it renders an
-    // explicit §14.4 state rather than a blank screen.
+    // §14.1's single resources node. Both §5.2 views live here — the level list,
+    // and one level's contents behind `?level=` — because a second path segment
+    // would be a navigation node §14.1 does not list (§20 rule 16).
     case '/resources':
-      return <NotBuiltYet />;
+      return <ResourcesPage />;
     case '/pending-approval':
       // Rendered by the guard, which owns the Pending decision.
       return <PendingGuard>{null}</PendingGuard>;
