@@ -49,8 +49,9 @@ async function clear(): Promise<void> {
  * — that depends on the next sighting — so day 30 is only certain once the
  * following month is also recorded.
  *
- * Years 1461–1462 are used so these rows cannot collide with the development
- * fixtures' real announcements (1447–1448) or with any other suite.
+ * Years 1461–1462 are reserved for this suite so its rows cannot collide with the
+ * real announcements the calendar suites own (1447–1448), with the Hijri-calendar
+ * suites (1590–1591), or with anything a developer has recorded locally.
  */
 async function recordConsecutiveMonths(): Promise<void> {
   await prisma.hijriMonthStart.createMany({
@@ -102,6 +103,20 @@ afterAll(async () => {
 });
 
 const RANGE = 'from=2026-07-01&to=2026-07-31';
+
+/**
+ * The Gregorian window belonging to the Hijri years this suite reserves
+ * (1461–1462, cleared in `beforeEach`).
+ *
+ * **Every assertion about Hijri presence or absence uses this range, never
+ * `RANGE`.** `clear()` can only guarantee emptiness for years this suite owns, so
+ * an absence asserted over 2026 is really an assertion about the whole database —
+ * it passes when nothing is recorded and fails as soon as a real month is,
+ * whether by a developer, a fixture or another suite. Reserving a window is what
+ * makes both directions self-contained.
+ */
+const RESERVED_RANGE = 'from=2039-07-01&to=2039-07-31';
+
 const mineLevels = (b: Body) => (b.data?.levels ?? []).filter((l) => l.name.startsWith(TAG));
 
 describe('GET /calendar/bootstrap — public', () => {
@@ -121,7 +136,14 @@ describe('GET /calendar/bootstrap — public', () => {
   });
 
   it('omits Hijri values for a month the Ministry has not announced (Revision 31)', async () => {
-    const res = await call(`/calendar/bootstrap?${RANGE}`);
+    // Asserted over RESERVED_RANGE, not the 2026 range the other tests use.
+    //
+    // This test asserts an ABSENCE, so it is only meaningful if it controls the
+    // data — and `clear()` can only guarantee emptiness for the years this suite
+    // owns. Run against 2026 it passed on an empty database and failed the
+    // moment anyone recorded a real month, which is exactly the false negative a
+    // reserved window prevents.
+    const res = await call(`/calendar/bootstrap?${RESERVED_RANGE}`);
     const days = res.body.data!.hijri.days;
     expect(days).toHaveLength(31);
     // Silence, not a computed guess (§20 rule 14).
@@ -135,7 +157,7 @@ describe('GET /calendar/bootstrap — public', () => {
     // something is. Without this half, an overlay that never rendered at all
     // would pass the suite.
     await recordConsecutiveMonths();
-    const res = await call('/calendar/bootstrap?from=2039-07-01&to=2039-07-31');
+    const res = await call(`/calendar/bootstrap?${RESERVED_RANGE}`);
 
     const days = res.body.data!.hijri.days;
     expect(days).toHaveLength(31);
@@ -150,7 +172,7 @@ describe('GET /calendar/bootstrap — public', () => {
     // This is what the dual title renders, and it is why the client needs no
     // month-transition logic of its own.
     await recordConsecutiveMonths();
-    const res = await call('/calendar/bootstrap?from=2039-07-01&to=2039-07-31');
+    const res = await call(`/calendar/bootstrap?${RESERVED_RANGE}`);
     expect(res.body.data!.hijri.months).toEqual([
       { hijri_month: 12, hijri_month_ar: 'ذو الحجة', hijri_year: 1461 },
       { hijri_month: 1, hijri_month_ar: 'محرم', hijri_year: 1462 },
@@ -170,7 +192,7 @@ describe('GET /calendar/bootstrap — public', () => {
         source: 'manual',
       },
     });
-    const res = await call('/calendar/bootstrap?from=2039-07-01&to=2039-07-31');
+    const res = await call(`/calendar/bootstrap?${RESERVED_RANGE}`);
     const days = res.body.data!.hijri.days;
     // Days 1–29 certain; the 30th needs the next sighting.
     expect(days[28]!.hijri_day).toBe(29);
@@ -187,7 +209,7 @@ describe('GET /calendar/bootstrap — public', () => {
         source: 'manual',
       },
     });
-    const res = await call('/calendar/bootstrap?from=2039-07-01&to=2039-07-31');
+    const res = await call(`/calendar/bootstrap?${RESERVED_RANGE}`);
     expect(res.body.data!.hijri.days.every((d) => d.hijri_day === null)).toBe(true);
     expect(res.body.data!.hijri.months).toEqual([]);
   });

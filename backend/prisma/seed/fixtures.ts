@@ -379,57 +379,42 @@ async function main(): Promise<void> {
   }
   console.log('  exams: 1 (stable question UUIDs; no grading templates — post-MVP §10.1)');
 
-  // --- Official Hijri month starts (Revisions 31–32).
+  // --- Official Hijri month starts: DELIBERATELY NOT SEEDED (Revisions 31–32).
   //
-  // WHY THESE ARE HERE. The calendar's Hijri overlay reads `HijriMonthStart` and
-  // nothing else; a month the Ministry of Habous has not announced renders NO
-  // overlay, by rule (§4.4, §20 rule 14). With the table empty — which is how a
-  // fresh database starts — the whole overlay is invisible, and a developer
-  // cannot tell a correctly-silent calendar from a broken one.
+  // The overlay reads `HijriMonthStart` and nothing else, so an empty table means
+  // the calendar shows no Hijri dates at all. That is correct by rule (§4.4,
+  // §20 rule 14) but indistinguishable on screen from a broken feature, so it is
+  // worth saying why these fixtures do not fill it.
   //
-  // WHY ONLY TWO. These are the only two announcements this project has on
-  // record: SRS Revision 31 states **1 Muharram 1448 = Wednesday 17 June 2026**
-  // (contrasting the Ministry with Umm al-Qura's 16 June), and the calendar HTTP
-  // suite uses **1 Dhu al-Hijja 1447 = 18 May 2026** as the officially announced
-  // Moroccan date. Both are real; everything after them would be INVENTED, and
-  // fabricating an official religious calendar is precisely what Revisions 31–32
-  // exist to prevent. A made-up month start would look authoritative and be
-  // wrong — the worst possible failure for this feature.
+  // TWO REASONS, and the second is the decisive one.
   //
-  // WHAT THAT MEANS ON SCREEN. Consecutive recorded months resolve completely,
-  // so 18 May – 16 June 2026 is fully labelled. Muharram 1448 resolves for its
-  // certain 29 days (17 June – 15 July). **From 16 July 2026 the overlay is
-  // silent** until Safar 1448 is recorded, because knowing when a month began
-  // says nothing about when it ends — that depends on the next sighting. That
-  // boundary is correct behaviour, not a gap in these fixtures.
+  // 1. Only two real announcements are on record anywhere in this project —
+  //    1 Dhu al-Hijja 1447 = 18 May 2026 and 1 Muharram 1448 = 17 June 2026
+  //    (SRS Revision 31). Seeding anything beyond them would mean INVENTING an
+  //    official religious calendar, which is precisely what Revisions 31–32
+  //    exist to prevent: a fabricated month start looks authoritative and is
+  //    wrong, the worst possible failure for this feature.
   //
-  // Production is unaffected: §15.1 seeds no Hijri data, and real months are
-  // recorded by a Super Admin from the Ministry's announcements (§2.3, §5.7).
-  const officialMonthStarts = [
-    { hijriYear: 1447, hijriMonth: 12, gregorianStartDate: '2026-05-18' },
-    { hijriYear: 1448, hijriMonth: 1, gregorianStartDate: '2026-06-17' },
-  ];
-  for (const month of officialMonthStarts) {
-    await prisma.hijriMonthStart.upsert({
-      where: {
-        hijriYear_hijriMonth: { hijriYear: month.hijriYear, hijriMonth: month.hijriMonth },
-      },
-      update: {},
-      create: {
-        hijriYear: month.hijriYear,
-        hijriMonth: month.hijriMonth,
-        gregorianStartDate: new Date(`${month.gregorianStartDate}T00:00:00.000Z`),
-        // Only PUBLISHED months render anywhere (Revision 31), so a draft here
-        // would leave the overlay just as invisible as an empty table.
-        status: 'published',
-        // `manual` is the provenance for a transcribed announcement; an importer
-        // would write its own identifier (Revision 32).
-        source: 'manual',
-      },
-    });
-  }
+  // 2. THE INTEGRATION SUITES OWN THOSE TWO YEARS, and they have the stronger
+  //    claim. `calendar.integration.test.ts` asserts that 16 June 2026 still
+  //    reads 1447-12-30 — Umm al-Qura puts 1 Muharram 1448 there, Morocco
+  //    announced the 17th — and that test is the guard that catches an algorithm
+  //    creeping back in. It therefore MUST use the real values. Because
+  //    (hijri_year, hijri_month) is unique (TD-6), a fixture row for 1447/12
+  //    would collide with the row that test creates, and the suite's cleanup
+  //    would silently delete the fixture. A fix that degrades invisibly the
+  //    first time someone runs the tests is worse than no fix.
+  //
+  // TO SEE THE OVERLAY LOCALLY, record months through the API — the runbook has
+  // the exact calls (docs/operations/runbooks.md, "Recording an official Hijri
+  // month"). Record TWO CONSECUTIVE months: one alone resolves only its certain
+  // 29 days, because knowing when a month began says nothing about when it
+  // ended.
   console.log(
-    `  hijri months: ${officialMonthStarts.length} recorded official starts (Revisions 31–32) — published; the overlay is silent past 15 July 2026 until Safar 1448 is announced`,
+    '  hijri months: none — by design (Revisions 31–32). The integration suites own\n' +
+      '                 1447–1448, and inventing later months is prohibited. To see the\n' +
+      '                 overlay locally, record two consecutive months via the API:\n' +
+      '                 see docs/operations/runbooks.md → "Recording an official Hijri month"',
   );
 
   console.log('\nFixtures complete.');

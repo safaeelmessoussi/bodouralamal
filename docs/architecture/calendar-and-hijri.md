@@ -174,11 +174,25 @@ So a partly-labelled month on screen — the first half filled, the second blank
 resolver working correctly**, not a gap. It means the following month has not been announced
 yet.
 
-**Development fixtures carry the two announcements this project has on record** — 1 Dhu
-al-Hijja 1447 = 18 May 2026 and 1 Muharram 1448 = 17 June 2026 — so the overlay is
-demonstrably alive locally. Everything beyond them would be **invented**, and fabricating an
-official religious calendar is exactly what these revisions exist to prevent: a made-up month
-start would look authoritative and be wrong.
+**The development fixtures deliberately seed nothing here**, and the reason is worth knowing
+because it is not obvious.
+
+Only two real announcements exist anywhere in this project: 1 Dhu al-Hijja 1447 = 18 May 2026
+and 1 Muharram 1448 = 17 June 2026 (recorded in Revision 31). Seeding beyond them would mean
+**inventing** an official religious calendar — a fabricated month start looks authoritative
+and is wrong, which is the worst possible failure for this feature.
+
+And **the integration suites own those two years, with the stronger claim.**
+`calendar.integration.test.ts` asserts that 16 June 2026 still reads `1447-12-30` — Umm
+al-Qura puts 1 Muharram 1448 there, Morocco announced the 17th — and that test is the guard
+that catches an algorithm creeping back in. It must use the real values. Since
+`(hijri_year, hijri_month)` is unique, a fixture row for 1447/12 collides with the row that
+test creates, and the suite's cleanup deletes it. **A fixture that vanishes the first time
+someone runs the tests is worse than no fixture**, because the disappearance is silent.
+
+> **To see the overlay locally, record two consecutive months through the API** — the exact
+> calls are in [Recording an official Hijri month](../operations/runbooks.md#recording-an-official-hijri-month).
+> Two, not one: a single month resolves only its certain 29 days.
 
 > **There is currently no interface for recording a month.** The Super Admin
 > *Hijri Calendar Management* screen (§5.7) is not built; the four endpoints exist, so the
