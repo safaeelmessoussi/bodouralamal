@@ -40,6 +40,37 @@ let categoryB = '';
 async function clear(): Promise<void> {
   await prisma.level.deleteMany({ where: { name: { startsWith: TAG } } });
   await prisma.category.deleteMany({ where: { name: { startsWith: TAG } } });
+  await prisma.hijriMonthStart.deleteMany({ where: { hijriYear: { in: [1461, 1462] } } });
+}
+
+/**
+ * Records two CONSECUTIVE official month starts, which is what makes a whole
+ * month resolvable: knowing when a month began says nothing about when it ended
+ * — that depends on the next sighting — so day 30 is only certain once the
+ * following month is also recorded.
+ *
+ * Years 1461–1462 are used so these rows cannot collide with the development
+ * fixtures' real announcements (1447–1448) or with any other suite.
+ */
+async function recordConsecutiveMonths(): Promise<void> {
+  await prisma.hijriMonthStart.createMany({
+    data: [
+      {
+        hijriYear: 1461,
+        hijriMonth: 12,
+        gregorianStartDate: new Date('2039-07-01T00:00:00.000Z'),
+        status: 'published',
+        source: 'manual',
+      },
+      {
+        hijriYear: 1462,
+        hijriMonth: 1,
+        gregorianStartDate: new Date('2039-07-31T00:00:00.000Z'),
+        status: 'published',
+        source: 'manual',
+      },
+    ],
+  });
 }
 
 beforeAll(async () => {
@@ -95,6 +126,69 @@ describe('GET /calendar/bootstrap — public', () => {
     expect(days).toHaveLength(31);
     // Silence, not a computed guess (§20 rule 14).
     expect(days.every((d) => d.hijri_day === null)).toBe(true);
+    expect(res.body.data!.hijri.months).toEqual([]);
+  });
+
+  it('DOES carry Hijri values once official months are recorded and published', async () => {
+    // The counterpart to the test above, and the one that matters: silence when
+    // nothing is recorded is only correct if values actually appear when
+    // something is. Without this half, an overlay that never rendered at all
+    // would pass the suite.
+    await recordConsecutiveMonths();
+    const res = await call('/calendar/bootstrap?from=2039-07-01&to=2039-07-31');
+
+    const days = res.body.data!.hijri.days;
+    expect(days).toHaveLength(31);
+    // Every day of July 2039 resolves, because the two recorded months are
+    // consecutive and bracket it.
+    expect(days.every((d) => d.hijri_day !== null)).toBe(true);
+    expect(days[0]!.hijri_day).toBe(1);
+    expect(days[30]!.hijri_day).toBe(1);
+  });
+
+  it('reports BOTH Hijri months when the Gregorian month spans two', async () => {
+    // This is what the dual title renders, and it is why the client needs no
+    // month-transition logic of its own.
+    await recordConsecutiveMonths();
+    const res = await call('/calendar/bootstrap?from=2039-07-01&to=2039-07-31');
+    expect(res.body.data!.hijri.months).toEqual([
+      { hijri_month: 12, hijri_month_ar: 'ذو الحجة', hijri_year: 1461 },
+      { hijri_month: 1, hijri_month_ar: 'محرم', hijri_year: 1462 },
+    ]);
+  });
+
+  it('falls silent past the 29-day floor when the NEXT month is unrecorded', async () => {
+    // The boundary that explains a partly-labelled month on screen: a month is
+    // resolvable for its certain 29 days, then stops until the following
+    // announcement arrives. Correct behaviour, not a gap.
+    await prisma.hijriMonthStart.create({
+      data: {
+        hijriYear: 1461,
+        hijriMonth: 12,
+        gregorianStartDate: new Date('2039-07-01T00:00:00.000Z'),
+        status: 'published',
+        source: 'manual',
+      },
+    });
+    const res = await call('/calendar/bootstrap?from=2039-07-01&to=2039-07-31');
+    const days = res.body.data!.hijri.days;
+    // Days 1–29 certain; the 30th needs the next sighting.
+    expect(days[28]!.hijri_day).toBe(29);
+    expect(days[29]!.hijri_day).toBeNull();
+  });
+
+  it('ignores a DRAFT month — only published months render anywhere', async () => {
+    await prisma.hijriMonthStart.create({
+      data: {
+        hijriYear: 1461,
+        hijriMonth: 12,
+        gregorianStartDate: new Date('2039-07-01T00:00:00.000Z'),
+        status: 'draft',
+        source: 'manual',
+      },
+    });
+    const res = await call('/calendar/bootstrap?from=2039-07-01&to=2039-07-31');
+    expect(res.body.data!.hijri.days.every((d) => d.hijri_day === null)).toBe(true);
     expect(res.body.data!.hijri.months).toEqual([]);
   });
 

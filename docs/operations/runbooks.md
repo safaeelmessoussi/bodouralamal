@@ -91,6 +91,23 @@ detail carry the *why*.
 
 Recurring administrative work — roughly monthly, after the Ministry announces the sighting.
 
+> **The screen is not built yet.** The four endpoints exist and are Super-Admin-only, so until
+> `/superadmin/hijri-calendar` ships the only way to record an announcement is an authenticated
+> API call:
+>
+> ```
+> PUT /api/v1/admin/hijri-calendar/{hijriYear}/{hijriMonth}
+>     { "gregorian_start_date": "YYYY-MM-DD" }          ← the announced date
+> POST /api/v1/admin/hijri-calendar/{hijriYear}/publish  ← nothing renders until this
+> ```
+>
+> **Record two consecutive months wherever possible.** A month whose successor is unrecorded
+> resolves for only its certain 29 days, so the tail of the Gregorian month falls silent —
+> correct behaviour that reads as a bug. See
+> [Calendar and Hijri](../architecture/calendar-and-hijri.md#the-overlay-is-invisible-until-someone-records-a-month--including-in-development).
+
+Once the screen exists:
+
 1. The Super Admin opens **Hijri Calendar Management** and selects the Hijri year.
 2. For the announced month, records **the Gregorian date on which the Ministry announced that
    month began**.

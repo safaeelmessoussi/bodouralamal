@@ -13,29 +13,39 @@ A pure mid-grey reads as unchosen. The neutrals here have a slight hue bias towa
 accent, which is the difference between a palette that was picked and one that was
 inherited.
 
-### The logo's two colours, and why each exists twice
+### The brand colours, and a contrast decision recorded rather than hidden
 
-Sampled from the logo itself: the arch and wordmark are **orange `#e89018`**, the seedling
-mark a fresh yellow-green **`#a8c838`**. The dual calendar uses them to tell the two date
-systems apart — orange is Gregorian, green is Hijri, in the title and in every day cell, so
-a reader learns the pairing once.
+The association's two official values: **orange `#f39200`** and **green `#8dc63f`**. The dual
+calendar uses them to tell the two date systems apart — orange is Gregorian, green is Hijri,
+in the title and in every day cell, so a reader learns the pairing once.
 
-**Neither can carry text.** On the white calendar surface the orange measures **2.5:1** and
-the green **1.9:1**, far below the 4.5:1 body-text floor — and the day numbers are small text
-on white.
+**Both fall below the contrast floors, and are used anyway — by decision.**
 
-So each colour exists twice: the **true logo value** for fills and marks, and a **darkened
-same-hue variant** for text.
+| Token | Value | Contrast on white | WCAG |
+|---|---|---|---|
+| `--color-gregorian` | `#f39200` | **2.35:1** | below 4.5:1 body text **and** 3:1 large text |
+| `--color-hijri` | `#8dc63f` | **2.02:1** | below both |
+| `--color-gregorian-ink` | `#a86206` | 4.71:1 | passes body text |
+| `--color-hijri-ink` | `#64791a` | 4.91:1 | passes body text |
 
-| Token | Value | Contrast on white |
-|---|---|---|
-| `--color-gregorian` | `#a86206` | **4.71:1** |
-| `--color-hijri` | `#64791a` | **4.91:1** |
-| `--color-gregorian-mark`, `--color-hijri-mark` | the raw logo values | fills only |
+The Document Owner decided to use the brand values on the calendar: the day numbers are
+**decorative labels inside a calendar rather than body text**, and matching the association's
+visual identity takes priority on this surface.
 
-Same hue family, so the identity survives; enough luminance to be readable, so the screen
-does. **Changing either value means re-measuring** — the numbers are the reason they are these
-values and not prettier ones, and they are recorded beside the tokens for exactly that reason.
+**One property makes that defensible, and it is worth knowing before reusing these tokens:**
+the numbers are **not the only way the date is conveyed**. Every day cell is a `<button>`
+whose accessible name carries the full ISO date, so a screen-reader user receives the date
+regardless of the rendered colour. The residual risk falls on **low-vision sighted** users,
+and it is accepted knowingly rather than overlooked.
+
+**The `-ink` variants remain, and are the correct choice anywhere these hues must carry text
+a reader depends on** — a form label, an error, a data value with no other representation.
+Which pair applies is a **decision, not a detail**: do not silently swap one for the other,
+in either direction. If a new surface needs the brand hue on text that has no alternative
+representation, raise it rather than resolving it in CSS.
+
+**Changing any of the four values means re-measuring.** The ratios are recorded beside the
+tokens because they are the reason those values are what they are.
 
 **A colour that carries meaning must not be overwritten by a state.** Today's cell originally
 marked itself with a *filled* green disc on the Gregorian number — which erased the orange that

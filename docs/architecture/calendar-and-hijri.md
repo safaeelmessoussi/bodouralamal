@@ -152,6 +152,39 @@ Super Admin records the Ministry's announcement
                      against this one table
 ```
 
+### The overlay is invisible until someone records a month — including in development
+
+This is the single most common source of *"the Hijri dates are broken"*, and they are not.
+
+`HijriMonthStart` starts **empty**. The production seed deliberately puts nothing in it
+(§15.1), so a fresh deployment renders **no Hijri values at all** until a Super Admin records
+the Ministry's announcements. That is correct by rule and indistinguishable, on screen, from a
+broken feature.
+
+Two further boundaries follow from the resolver, and both look like bugs until you know them:
+
+| Situation | What renders | Why |
+|---|---|---|
+| Nothing recorded | Nothing | Silence over guessing |
+| A month recorded but **`draft`** | Nothing | Only published months render anywhere |
+| A month recorded, the **next one not** | Its first **29** days only | Knowing when a month *began* says nothing about when it *ended* — that depends on the next sighting. Day 30 is only certain once the following month is recorded |
+| Two **consecutive** months recorded | The earlier one, complete | The later start is what proves the month ran 29 or 30 days |
+
+So a partly-labelled month on screen — the first half filled, the second blank — is **the
+resolver working correctly**, not a gap. It means the following month has not been announced
+yet.
+
+**Development fixtures carry the two announcements this project has on record** — 1 Dhu
+al-Hijja 1447 = 18 May 2026 and 1 Muharram 1448 = 17 June 2026 — so the overlay is
+demonstrably alive locally. Everything beyond them would be **invented**, and fabricating an
+official religious calendar is exactly what these revisions exist to prevent: a made-up month
+start would look authoritative and be wrong.
+
+> **There is currently no interface for recording a month.** The Super Admin
+> *Hijri Calendar Management* screen (§5.7) is not built; the four endpoints exist, so the
+> only way to record an announcement today is an authenticated API call. Until that screen
+> ships, keeping the overlay current is a task nobody can perform through the product.
+
 ### Three consequences, all deliberate
 
 **A month that has not been recorded and published carries no Hijri label at all.** Not a

@@ -28,13 +28,20 @@
   --color-danger-soft: var(--red-50);
 
   /* The two date systems, named for what they MEAN rather than for a hue, so a
-     rebrand moves them here and nowhere else. `-ink` is the readable variant
-     used for text; the plain value is for fills and marks (see the contrast
-     note in `primitives.css` — the logo colours cannot carry text). */
-  --color-gregorian: var(--brand-logo-orange-ink);
-  --color-gregorian-mark: var(--brand-logo-orange);
-  --color-hijri: var(--brand-logo-green-ink);
-  --color-hijri-mark: var(--brand-logo-green);
+     rebrand moves them here and nowhere else.
+
+     These map to the OFFICIAL BRAND VALUES (Document Owner decision): the
+     calendar's day numbers and dual title are decorative labels that must match
+     the association's identity. The measured contrast and why it is accepted are
+     recorded in `primitives.css`.
+
+     `-ink` is the accessible alternative, for any future surface where these
+     hues must carry text a reader depends on. Which pair applies is a decision,
+     not a detail — do not swap one for the other silently. */
+  --color-gregorian: var(--brand-logo-orange);
+  --color-gregorian-ink: var(--brand-logo-orange-ink);
+  --color-hijri: var(--brand-logo-green);
+  --color-hijri-ink: var(--brand-logo-green-ink);
 
   /* The scrim behind a modal — the brand ground at partial opacity, so it
      reads as the platform dimming rather than a generic black wash. */

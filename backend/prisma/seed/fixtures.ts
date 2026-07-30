@@ -379,6 +379,59 @@ async function main(): Promise<void> {
   }
   console.log('  exams: 1 (stable question UUIDs; no grading templates — post-MVP §10.1)');
 
+  // --- Official Hijri month starts (Revisions 31–32).
+  //
+  // WHY THESE ARE HERE. The calendar's Hijri overlay reads `HijriMonthStart` and
+  // nothing else; a month the Ministry of Habous has not announced renders NO
+  // overlay, by rule (§4.4, §20 rule 14). With the table empty — which is how a
+  // fresh database starts — the whole overlay is invisible, and a developer
+  // cannot tell a correctly-silent calendar from a broken one.
+  //
+  // WHY ONLY TWO. These are the only two announcements this project has on
+  // record: SRS Revision 31 states **1 Muharram 1448 = Wednesday 17 June 2026**
+  // (contrasting the Ministry with Umm al-Qura's 16 June), and the calendar HTTP
+  // suite uses **1 Dhu al-Hijja 1447 = 18 May 2026** as the officially announced
+  // Moroccan date. Both are real; everything after them would be INVENTED, and
+  // fabricating an official religious calendar is precisely what Revisions 31–32
+  // exist to prevent. A made-up month start would look authoritative and be
+  // wrong — the worst possible failure for this feature.
+  //
+  // WHAT THAT MEANS ON SCREEN. Consecutive recorded months resolve completely,
+  // so 18 May – 16 June 2026 is fully labelled. Muharram 1448 resolves for its
+  // certain 29 days (17 June – 15 July). **From 16 July 2026 the overlay is
+  // silent** until Safar 1448 is recorded, because knowing when a month began
+  // says nothing about when it ends — that depends on the next sighting. That
+  // boundary is correct behaviour, not a gap in these fixtures.
+  //
+  // Production is unaffected: §15.1 seeds no Hijri data, and real months are
+  // recorded by a Super Admin from the Ministry's announcements (§2.3, §5.7).
+  const officialMonthStarts = [
+    { hijriYear: 1447, hijriMonth: 12, gregorianStartDate: '2026-05-18' },
+    { hijriYear: 1448, hijriMonth: 1, gregorianStartDate: '2026-06-17' },
+  ];
+  for (const month of officialMonthStarts) {
+    await prisma.hijriMonthStart.upsert({
+      where: {
+        hijriYear_hijriMonth: { hijriYear: month.hijriYear, hijriMonth: month.hijriMonth },
+      },
+      update: {},
+      create: {
+        hijriYear: month.hijriYear,
+        hijriMonth: month.hijriMonth,
+        gregorianStartDate: new Date(`${month.gregorianStartDate}T00:00:00.000Z`),
+        // Only PUBLISHED months render anywhere (Revision 31), so a draft here
+        // would leave the overlay just as invisible as an empty table.
+        status: 'published',
+        // `manual` is the provenance for a transcribed announcement; an importer
+        // would write its own identifier (Revision 32).
+        source: 'manual',
+      },
+    });
+  }
+  console.log(
+    `  hijri months: ${officialMonthStarts.length} recorded official starts (Revisions 31–32) — published; the overlay is silent past 15 July 2026 until Safar 1448 is announced`,
+  );
+
   console.log('\nFixtures complete.');
 }
 
