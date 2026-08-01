@@ -45,12 +45,25 @@ import { ApiError } from '../../lib/api.js';
  *
  * ── ONE §14.2 FILTER IS NOT BUILT, DELIBERATELY ──────────────────────────────
  * §14.2's Approvals row lists filters **"Type, Branch"**. The Type filter is
- * here. **Branch is not, because an approval item has no branch to filter by:**
- * Revision 29 decided that "registration creates a pending applicant only" and
- * records no branch, and Revision 25 states the queue "is a separate surface and
- * is **not** scoped by this rule". A branch filter would therefore need a value
- * that does not exist — inventing one is exactly what §20 rule 20 forbids.
- * Reported to the Document Owner rather than resolved here.
+ * here; **Branch is not.** An end-to-end investigation of the registration
+ * workflow established that the value is not collected-and-lost — it is never
+ * collected, and the API boundary actively *refuses* it (`registrationSchema`
+ * is `.strict()`, so a `branch_id` is rejected rather than dropped).
+ *
+ * That is the intended workflow, not an omission: §4.1 is normative —
+ * *"Registration never places a beneficiary… Applicants **never** select
+ * Branch, Room, Level or Group during self-registration"* — and §5.5's field
+ * list and §5.7's flow agree, placing assignment after approval.
+ *
+ * **The decisive point is not the missing data but what filtering would do.** A
+ * student can reach a branch through an enrolment, so the filter could work for
+ * *family-link* items; a registration item's people are pending and by
+ * construction not yet enrolled, so it could never work for those. Filtering by
+ * branch would therefore **hide every registration item** — precisely the
+ * population Revision 29 says this unscoped queue exists to put in front of a
+ * branch Admin, *"by design, not a gap awaiting a fix"*.
+ *
+ * Reported to the Document Owner rather than resolved here (§20 rule 20).
  * ─────────────────────────────────────────────────────────────────────────────
  */
 export function ApprovalsPage(): ReactNode {
