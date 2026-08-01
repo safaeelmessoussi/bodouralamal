@@ -398,10 +398,29 @@ the framework every later module configures (constitution §0.1, *build systems,
 | Field primitives | Label association, error wiring, required marking, hints |
 | `ConfirmDialog` | Every destructive action, plus TD-8's mandatory justification |
 | `Pagination` | TD-10's envelope, stepped the same way everywhere |
+| `Badge` | A status label — state in words, never colour alone |
+| `ApprovalCard` | §14.3's bundle-aware queue item: who is in the bundle, and what approving it changes |
 
 **There is no `BranchTable` and there never will be** (§2.1). The next module passes different
 columns and actions; if it ever needs to *edit* `DataTable` rather than configure it, the
 component is drawn wrongly and that is the signal to redraw it (§2.3).
+
+### The second module tested the claim
+
+The approval queue (`/admin/approvals`) was built next, and `DataTable` and the field
+primitives took it **as configuration** — different columns, different actions, no edit.
+
+Two components were **improved rather than forked**, which is the §2.5 path when a shared
+component *almost* fits:
+
+- **`ConfirmDialog` gained configurable reason bounds.** It had hard-coded TD-9's
+  consent-override floor of 10 characters, but a §5.6 rejection is 1–500. A client refusing
+  what the server accepts is a bug in the client (§1.1), so the bounds became parameters with
+  the consent values as defaults — no existing caller changed behaviour.
+- **`Badge` was extracted** from the inline `className="badge badge--warn"` the Hijri screen had
+  been carrying. Extracted on the second use, not the third (§2.7).
+
+Neither was a `RejectDialog` or an `ApprovalBadge`. That distinction is the whole framework.
 
 ### What the table refuses to do
 

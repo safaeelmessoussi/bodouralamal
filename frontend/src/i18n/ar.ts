@@ -108,6 +108,7 @@ export const ar = {
     // the only correct response — never a silent overwrite.
     conflict: 'عدّل مستخدم آخر هذا السجل أثناء عملك. تم تحديث البيانات — يرجى المراجعة وإعادة المحاولة.',
     reasonHint: 'يُسجَّل هذا التبرير في سجل المراجعة (10 أحرف على الأقل).',
+    reasonTooLong: 'التبرير طويل جداً ({max} حرف كحد أقصى).',
     pagination: 'تصفّح النتائج',
     previous: 'السابق',
     next: 'التالي',
@@ -281,6 +282,46 @@ export const ar = {
       deleteBody: 'سيتم حذف «{name}». يمكن استرجاعه خلال 90 يوماً.',
       // TD-5: deletion is prohibited while rooms or groups reference the branch.
       deleteBlocked: 'لا يمكن حذف هذا المقر لأن قاعات أو حلقات ما زالت مرتبطة به.',
+    },
+    // §5.6 / §14.2 — طلبات الانضمام. The queue is deliberately unscoped by
+    // branch (Revision 29), so the lede says who it covers rather than implying
+    // a scope the data does not carry.
+    approvals: {
+      lede: 'طلبات التسجيل الجديدة وطلبات ربط الأبناء، في انتظار القرار.',
+      tableCaption: 'طلبات الانضمام في انتظار القرار',
+      colApplicants: 'المعنيّون بالطلب',
+      colType: 'نوع الطلب',
+      colBundle: 'ما سيتغيّر عند الموافقة',
+      colSubmitted: 'تاريخ الإرسال',
+      filterType: 'نوع الطلب',
+      filterAll: 'كل الأنواع',
+      typeRegistration: 'تسجيل جديد',
+      typeLink: 'ربط ابن',
+      role: {
+        applicant: 'مقدّم الطلب',
+        child: 'الابن/الابنة',
+        parent: 'ولي الأمر',
+      },
+      // Stated in records, not adjectives: an administrator approving a bundle
+      // is approving people, and needs to know how many.
+      bundleChildren: '{n} ابن/ابنة',
+      bundleLinks: '{n} رابط أسري',
+      bundleJoin: ' و',
+      bundleSolo: 'مقدّم الطلب وحده',
+      approve: 'موافقة',
+      reject: 'رفض',
+      approveTitle: 'الموافقة على الطلب',
+      approveBody: 'سيتم تفعيل الحسابات التالية دفعة واحدة: {names}.',
+      rejectTitle: 'رفض الطلب',
+      rejectBody: 'سيتم رفض طلب: {names}.',
+      // §5.6: a rejection requires a reason; the server refuses without one and
+      // TD-8 writes it to the audit log.
+      reasonLabel: 'سبب الرفض',
+      reasonHint: 'يُسجَّل السبب في سجل المراجعة (500 حرف كحد أقصى).',
+      approved: 'تمت الموافقة — تم تفعيل {n} سجل.',
+      rejected: 'تم الرفض — تم تحديث {n} سجل.',
+      alreadyDecided: 'تم البتّ في هذا الطلب من قِبل مشرف آخر. حُدِّثت القائمة.',
+      decisionFailed: 'تعذّر تنفيذ القرار. يرجى المحاولة من جديد.',
     },
     hijri: {
       title: 'التقويم الهجري',

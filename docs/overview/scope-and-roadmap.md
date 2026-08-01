@@ -25,7 +25,7 @@
 screens, the public branch directory, the **full dual calendar**, and the **educational library** (built against a mock adapter — no content endpoint exists yet). There are **no authenticated
 screens yet**, so the endpoints M1–M3 delivered currently have no interface driving them.
 
-Live counts: **102 backend unit · 498 integration · 125 frontend tests**, **47 API
+Live counts: **102 backend unit · 498 integration · 135 frontend tests**, **47 API
 operations across 35 paths**, **ten CI guards**.
 
 > Granular checklist: [`TASKS.md`](../TASKS.md) · Build order:

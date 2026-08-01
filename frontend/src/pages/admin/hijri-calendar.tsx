@@ -9,6 +9,7 @@ import {
 } from '../../adapters/hijri-calendar.js';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
 import { ErrorState } from '../../components/states.js';
+import { Badge } from '../../components/ui/badge.js';
 import { Button } from '../../components/ui/button.js';
 import { useSession } from '../../contexts/session.js';
 import { t } from '../../i18n/index.js';
@@ -239,16 +240,16 @@ function StatusBadge({
   isLastRecorded: boolean;
 }): ReactNode {
   if (month.gregorian_start_date === null) {
-    return <span className="badge">{t('admin.hijri.notRecorded')}</span>;
+    return <Badge>{t('admin.hijri.notRecorded')}</Badge>;
   }
   return (
     <>
-      <span className={month.status === 'published' ? 'badge badge--ok' : 'badge badge--warn'}>
+      <Badge tone={month.status === 'published' ? 'ok' : 'warn'}>
         {t(month.status === 'published' ? 'admin.hijri.statusPublished' : 'admin.hijri.statusDraft')}
-      </span>
+      </Badge>
       {/* The boundary that explains a half-labelled month on the public
           calendar, surfaced where it can be acted on. */}
-      {isLastRecorded ? <span className="badge">{t('admin.hijri.tailBadge')}</span> : null}
+      {isLastRecorded ? <Badge>{t('admin.hijri.tailBadge')}</Badge> : null}
     </>
   );
 }

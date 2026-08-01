@@ -221,3 +221,26 @@
     justify-content: start;
   }
 }
+
+/* ── The approval queue's bundle cell (§14.2, §14.3 `ApprovalCard`) ───────── */
+
+/* A bundle is a LIST of people, so it is marked up as one — a registration can
+   carry a parent and a child, and approving it activates both (TD-4.2). Run
+   together in a paragraph they would read as one person with a long name. */
+.approval__people {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.approval__name {
+  font-weight: 600;
+}
+/* The role is context, not identity — quieter than the name, but present in
+   words rather than encoded in position. */
+.approval__role {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
