@@ -256,7 +256,7 @@ true is a bug with a longer fuse than most.
 ## The documentation half of Done
 
 > **The full Definition of Done lives in
-> [Engineering principles § 9](engineering-principles.md#9-definition-of-done)** — it covers
+> [Engineering principles § 9](engineering-constitution.md#9-definition-of-done)** — it covers
 > implementation, reuse, tests, tokens, accessibility and record-keeping, of which
 > documentation is one part. It moved there when it outgrew this page: a definition of *done*
 > that lives inside a *documentation* policy is filed under one of its own clauses.

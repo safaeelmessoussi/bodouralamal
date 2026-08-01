@@ -28,7 +28,7 @@ You are working on the بذور الأمل Platform.
   commit.** Documentation drift is a defect, not a follow-up task. The rule is
   normative in `docs/SRS.md` §16.4; this bullet is a pointer to it.
 - **Before writing any production code, read
-  `docs/development/engineering-principles.md`** and audit the requested feature
+  `docs/development/engineering-constitution.md`** and audit the requested feature
   against every principle. During implementation, continuously look for
   opportunities to extract reusable components, services, hooks, utilities and
   API clients. **Never duplicate an existing solution if it can be generalised.**

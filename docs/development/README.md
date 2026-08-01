@@ -8,14 +8,14 @@ Contributing to the platform.
 
 | | |
 |---|---|
-| [**Engineering principles**](engineering-principles.md) | **The laws every implementation must satisfy — required reading before any production code** |
+| [**Engineering constitution**](engineering-constitution.md) | **The laws every implementation must satisfy — required reading before any production code** |
 | [Getting started](getting-started.md) | From clone to a running stack |
 | [Conventions](conventions.md) | Layering, naming, TypeScript, commits, version policy |
 | [Testing](testing.md) | Four layers, what each is for, how to run them |
 | [CI/CD](ci-cd.md) | Every gate, what it catches, and why it was added |
 | [Documentation policy](documentation-policy.md) | Documentation as part of Done — the workflow and the per-change routing |
 
-**Principles or conventions?** [Engineering principles](engineering-principles.md) states
+**Constitution or conventions?** [The constitution](engineering-constitution.md) states
 *what must be true of any implementation* — the generic-first law, atomic composition, the
 reuse audit, the Definition of Done. [Conventions](conventions.md) states *how this codebase
 writes things down* — layering, naming, commits, the version policy. The first is why; the
@@ -46,7 +46,7 @@ second is how.
 
 **Done is defined once**, and it covers implementation, reuse, tests, design tokens,
 accessibility, responsiveness and record-keeping — not only "the code works".
-See the [Definition of Done](engineering-principles.md#9-definition-of-done).
+See the [Definition of Done](engineering-constitution.md#9-definition-of-done).
 
 ## Reporting completion
 

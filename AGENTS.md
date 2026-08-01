@@ -11,7 +11,7 @@
   defined in `docs/SRS.md` under section TD-3.8.
 - Log your output directly into the next empty row of `docs/CHANGES.log`.
 - **Before writing any production code, read
-  `docs/development/engineering-principles.md`** and audit the feature against
+  `docs/development/engineering-constitution.md`** and audit the feature against
   every principle — generic-first components, atomic composition, tokens only,
   no business logic in a client. Never duplicate a solution that can be
   generalised. Verify compliance before declaring the feature complete, and
