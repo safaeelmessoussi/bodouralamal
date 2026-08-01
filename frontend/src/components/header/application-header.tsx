@@ -75,7 +75,7 @@ export function ApplicationHeader(): ReactNode {
                 <>
                   {navigation.hasMultipleRoles ? <RoleSwitcher roles={roles} /> : null}
                   {navigation.hasLinkedChildren ? <ChildContextSwitcher /> : null}
-                  <DashboardButton />
+                  <DashboardButton roles={roles} />
                   <UserMenu onSignOut={signOut} />
                 </>
               ) : (

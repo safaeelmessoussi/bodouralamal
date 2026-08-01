@@ -27,7 +27,8 @@ Two consequences visible in the code:
 
 - **Routing is a path switch**, not a router. The sitemap is a short fixed list, and a
   router joins the stack when nested authenticated layouts arrive — as an approved
-  dependency, not a drive-by addition.
+  dependency, not a drive-by addition. The *decision* lives in `lib/route.ts` as a pure
+  function; `main.tsx` only maps a decision to a component ([why](#the-router-must-never-return-nothing)).
 - **The dialog is built on native `<dialog>`.** `showModal()` gives a focus trap, Escape
   handling, page inertness, and top-layer stacking for free — all the things a modal library
   is usually imported for.
@@ -147,6 +148,47 @@ invented section.
 
 **No "log out everywhere" node exists, and none may be added.** The revoke-all capability is
 internal, used by suspension and deletion.
+
+### The router must never return nothing
+
+`/dashboard` rendered a **blank white page**, and it was reachable in one click by every
+signed-in user.
+
+Two mistakes met:
+
+1. **The header's Dashboard button linked to `/dashboard`** — a path §14.1 does not define.
+   The sitemap lists *role-specific homes*: `/dashboard/student`, `/dashboard/parent`,
+   `/teacher`, `/admin`. §4.1b step 4a calls the post-login landing a "role-based dashboard
+   redirect" for the same reason: which home you get depends on who you are.
+2. **The path switch's `default` branch returned `null`.** React renders nothing, and the
+   browser shows an empty document — which §14.4 forbids outright ("never a blank page,
+   never a crash"). Any typo'd URL did the same; the button just guaranteed someone found it.
+
+A third, quieter problem sat behind them: `AdminRouter`'s `AdminNotFound` was **unreachable**.
+`main.tsx` only reaches it when `isAdminPath(path)` is true, and `isAdminPath` *is*
+`moduleForPath(path) !== null` — so the null check inside could never fire. The application
+had a not-found page that no path could reach, and no not-found page for the paths that
+needed one.
+
+**The fix makes the invariant checkable rather than trusting a switch statement.** The routing
+decision is now `resolveRoute(path)` in `lib/route.ts`, a pure function returning a closed
+`Route` union, and the test asserts every path — including `/dashboard`, `/nonsense`,
+`/admin-not-really` and `''` — resolves to *something*. Reintroducing the `null` fallback fails
+six tests.
+
+Two states, deliberately distinct:
+
+| | Means | Rendered as |
+|---|---|---|
+| `not-found` | §14.1 does not define this path | `NotFound`, with a way home |
+| `screen-pending` | §14.1 *does* define it; no milestone has built it | `ScreenPending`, naming why |
+
+Collapsing them would tell a teacher their home is *gone* when it is merely unbuilt — the same
+distinction the back office already draws with `ModulePending`.
+
+`roleHomePath(roles)` resolves the button's target, most-privileged role first, and returns
+`null` for an account with no role so the button is **hidden** rather than pointing nowhere
+(§14.4 Revision 16 puts that account on the no-permission state).
 
 ### A cascade bug worth remembering
 

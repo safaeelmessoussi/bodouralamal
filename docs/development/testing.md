@@ -14,7 +14,7 @@ Four layers, each testing something the others structurally cannot.
 **Coverage: ≥ 80 % on services and policies.** No coverage gate on generated or boilerplate
 code — a coverage number that counts generated clients measures nothing.
 
-Current totals: **102 backend unit · 508 integration · 147 frontend**.
+Current totals: **102 backend unit · 508 integration · 185 frontend**.
 
 ## Running them
 
@@ -63,6 +63,8 @@ Applied consistently, this is why the suite catches things review does not:
 - A **suspended teacher denied a presigned mint** within the unexpired-token window
 - A **deliberately stalled cache row** repaired by the read-side guard
 - **Two concurrent enrolments at capacity − 1** admitting exactly one
+- **Every path resolves to a page** — the assertion that would have caught `/dashboard`
+  rendering a blank white document
 
 ## Assert the exact key set, not the presence of the fields you wanted
 

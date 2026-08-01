@@ -96,3 +96,52 @@ export function NotBuiltYet(): ReactNode {
     </>
   );
 }
+
+/**
+ * The catch-all for a path the sitemap does not define (§14.4).
+ *
+ * **This page exists because of a P0 regression.** The router's `default`
+ * branch used to render `null` for any unmatched path, so a typo'd URL — and,
+ * far worse, the header's own Dashboard button, which pointed at a `/dashboard`
+ * node §14.1 does not define — produced a **blank white page**. §14.4 is
+ * explicit that a page is never blank and never a crash; a fallback that
+ * renders nothing satisfies neither.
+ *
+ * It offers the way back rather than only stating the problem, because the
+ * reader arrived here by following something that looked like a link.
+ */
+export function NotFound(): ReactNode {
+  return (
+    <main className="auth-page" role="alert">
+      <Logo showText={false} />
+      <h1>{t('states.notFoundTitle')}</h1>
+      <p>{t('states.notFoundBody')}</p>
+      <a className="button primary" href="/">
+        {t('nav.home')}
+      </a>
+    </main>
+  );
+}
+
+/**
+ * A §14.1 node whose screen belongs to a later milestone.
+ *
+ * Distinct from `NotFound` on purpose: "this does not exist" and "this is not
+ * built yet" are different facts, and the second is the honest answer for a
+ * teacher or parent home the sitemap defines but no milestone has delivered.
+ * The back office says the same thing through `ModulePending` — naming what is
+ * missing beats "coming soon", which tells nobody whether the wait is a day or
+ * a milestone.
+ */
+export function ScreenPending(): ReactNode {
+  return (
+    <main className="auth-page" role="status">
+      <Logo showText={false} />
+      <h1>{t('states.pendingScreenTitle')}</h1>
+      <p>{t('states.pendingScreenBody')}</p>
+      <a className="button secondary" href="/">
+        {t('nav.home')}
+      </a>
+    </main>
+  );
+}

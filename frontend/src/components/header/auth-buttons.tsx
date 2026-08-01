@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 
 import { t } from '../../i18n/index.js';
+import { roleHomePath } from '../../lib/role-home.js';
 import { Button, ButtonLink } from '../ui/button.js';
 
 /**
@@ -20,10 +21,30 @@ export function SignInButton({ block = false }: { block?: boolean }): ReactNode 
   );
 }
 
-/** Shown only to an authenticated caller — see `useNavigation`. */
-export function DashboardButton({ block = false }: { block?: boolean }): ReactNode {
+/**
+ * Shown only to an authenticated caller — see `useNavigation`.
+ *
+ * **The link resolves the caller's role home** (§14.1, §4.1b step 4a). It used
+ * to be a literal `/dashboard`, which the sitemap does not define and the
+ * router did not serve, so pressing it produced a **blank white page** for
+ * every signed-in user.
+ *
+ * A caller with no role that has a home renders **nothing at all** rather than
+ * a disabled control or a link to nowhere: §14.4 Revision 16 says that account
+ * belongs on the no-permission state, and offering a button that cannot work
+ * teaches the reader less than not offering it.
+ */
+export function DashboardButton({
+  roles,
+  block = false,
+}: {
+  roles: readonly string[];
+  block?: boolean;
+}): ReactNode {
+  const href = roleHomePath(roles);
+  if (!href) return null;
   return (
-    <ButtonLink href="/dashboard" variant="secondary" block={block}>
+    <ButtonLink href={href} variant="secondary" block={block}>
       {t('nav.dashboard')}
     </ButtonLink>
   );

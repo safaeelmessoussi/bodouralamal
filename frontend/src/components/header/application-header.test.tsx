@@ -69,9 +69,14 @@ describe('authenticated user', () => {
     expect(html).toContain('المحتوى التعليمي');
   });
 
-  it('sees Dashboard, as an account control', () => {
+  it('sees Dashboard, as an account control, pointing at the ROLE home', () => {
     expect(html).toContain('لوحة التحكم');
-    expect(html).toContain('/dashboard');
+    // The P0 regression: this used to be a literal `/dashboard`, which §14.1
+    // does not define and the router did not serve — so pressing it rendered a
+    // blank white page. Asserting the resolved path is what pins the fix; a
+    // `toContain('/dashboard')` check passes either way, because
+    // `/dashboard/student` contains it.
+    expect(html).toContain('href="/dashboard/student"');
   });
 
   it('does NOT see Sign in', () => {
@@ -85,6 +90,19 @@ describe('authenticated user', () => {
 
   it('shows Dashboard exactly once, not as both a link and a button', () => {
     expect(html.split('/dashboard').length - 1).toBe(1);
+  });
+
+  it('sends a staff caller to the back office instead', () => {
+    const staff = render('authenticated', person({ roles: ['admin'] }));
+    expect(staff).toContain('href="/admin"');
+    expect(staff).not.toContain('/dashboard');
+  });
+
+  it('HIDES the button for an Active account with no role, rather than linking nowhere', () => {
+    // §14.4 Revision 16: that account belongs on the no-permission state. A
+    // button that cannot work teaches the reader less than no button.
+    const roleless = render('authenticated', person({ roles: [] }));
+    expect(roleless).not.toContain('لوحة التحكم');
   });
 });
 

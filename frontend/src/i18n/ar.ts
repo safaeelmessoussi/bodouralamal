@@ -410,6 +410,13 @@ export const ar = {
     },
   },
   states: {
+    // §14.4 — a path the sitemap does not define. Never a blank page.
+    notFoundTitle: 'الصفحة غير موجودة',
+    notFoundBody: 'لا يوجد شيء على هذا العنوان. ربما تغيّر الرابط أو كُتب خطأً.',
+    // Distinct from "not found": the section EXISTS in the sitemap, it is not
+    // built yet — and saying which is more useful than saying neither.
+    pendingScreenTitle: 'هذا القسم قيد الإعداد',
+    pendingScreenBody: 'لم تُبنَ واجهة هذا القسم بعد. ستكون متاحة في مرحلة لاحقة.',
     // §14.4 — every page implements all of these. Forgetting empty states is
     // named there as the most common failure mode.
     loading: 'جارٍ التحميل…',
