@@ -86,4 +86,8 @@
  * `.cal-filter--search` on top of them. Loading it first would put the variant
  * before the base it varies. */
 @import './styles/components/content.css';
+/* After calendar.css and content.css: the back office REUSES `.cal-filter` for
+ * its controls and `.level-grid`/`.level-card` for its launcher, so it must load
+ * after the rules it builds on. */
+@import './styles/components/admin.css';
 @import './styles/components/dialog.css';

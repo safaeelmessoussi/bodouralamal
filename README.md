@@ -188,7 +188,7 @@ Full instructions, including test fixtures and troubleshooting:
 
 ## Tests
 
-**102 backend unit · 487 integration · 91 frontend**, plus **ten CI guards**.
+**102 backend unit · 487 integration · 106 frontend**, plus **ten CI guards**.
 
 Integration tests run against a **real** PostgreSQL, MinIO, and Nginx rather than mocks —
 because the properties they check (transaction atomicity, constraint enforcement, signed URLs

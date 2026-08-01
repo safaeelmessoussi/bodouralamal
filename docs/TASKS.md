@@ -114,6 +114,16 @@
   - ✓ Tests — 2 regression tests; the strictness guard is mutation-tested
   - ✓ Architecture — reference data stays behind its own APIs under the R26 permission split; assignment is an administrative action after approval
 
+- [~] Back-office shell: §14.1 navigation, routing and role gating (§14.1, §14.2, TD-2)
+  - ✓ **Module registry** (`lib/admin-modules.ts`) holds §14.1's hierarchy as data; the sidebar, the router and the role guard all read that one list, so a menu entry without a route, a route without a permission, or a module visible to an excluded role are impossible by construction. A test asserts the registry's paths against §14.1
+  - ✓ **AdminLayout** — generated sidebar with §14.1's group order, `aria-current` on the open module, the §14.4 no-permission state for a module the session may not open, and the whole back office mounted **inside `PendingGuard`** (a sidebar is exactly the "empty skeleton layout" that guard prevents)
+  - ✓ **Blocked modules render a NAMED reason**, in the page and as a sidebar badge — not "coming soon", which tells nobody whether the wait is a day or a milestone
+  - ✓ **Path resolution** is longest-match and separator-aware, so a module owns its internal views (`/admin/groups/{id}/roster`) without registering each as a navigation node §14.1 does not list
+  - ✓ Dashboard is a **launcher, not a statistics screen** — §5.6's counts have no endpoint, and inventing a number would be worse than omitting one
+  - ✓ Tests — 15 registry tests (106 frontend total)
+  - △ **6 of 11 modules ready** (dashboard, groups, users, approvals, calendar, branches, Hijri calendar); **5 blocked** on endpoints that do not exist: levels, taxonomy, content (M6), settings
+  - △ Module screens themselves land one by one; only Hijri Calendar Management is implemented so far
+
 ## M2 — Registration, Approvals, Family
 - [x] Unified parent+child registration transaction (TD-4.1) + adult path
   - ✓ Backend — `POST /registrations`; replay guard consumed FIRST so the `jti` is authoritative; both paths in one transaction
@@ -261,7 +271,7 @@
   - ✓ Tests — 21 unit + 22 integration/HTTP; **twelve mutations caught**, two of which exposed real defects
   - ✓ §18 check green — the overlay reproduces the Ministry's recorded announcements, and an unpublished or unrecorded month renders nothing
   - ✓ **Public frontend — the dual calendar at `/calendar` is built** (see the item below); the Hijri side renders recorded official data only and nothing when a month is unrecorded
-  - △ Frontend — the Super Admin `/superadmin/hijri-calendar` **recording** screen (the public read surface is done)
+  - ✓ **Super Admin `/superadmin/hijri-calendar` recording screen is built** — the twelve months of a chosen year, a date input per month, TD-15 optimistic locking with a named conflict message on a stale version, publish-the-year, and two warnings a reader must not have to discover: **drafts render nowhere until published**, and **the last recorded month resolves only 29 days until its successor is recorded**. Revision 32's vocabulary is enforced in every label — *record* / *official announcement*, never *choose* / *define* / *set*. This closes the gap reported on 2026-07-30: the recurring §2.3 task is now performable through the product rather than only by API call
   - ⚠ For the Document Owner — a **recurring monthly** owner task exists (§2.3): each month must be recorded and published after the Ministry announces it, or dates in it carry no Hijri label. The task is transcription, not judgement
 - [x] Public calendar page `/calendar` — the dual-calendar screen (§5.1, §4.4, TD-3.4, TD-3.10)
   - ✓ **Dual-calendar title** — Gregorian right in logo orange, Hijri left in logo green, both bold, spanning months rendered as `ذو الحجة / محرم 1448`. The client performs **no** month arithmetic and **no** Hijri computation: it renders `gregorian_months` and `hijri.months` exactly as the bootstrap assembled them (§20 rule 14)

@@ -4,6 +4,8 @@ import { createRoot } from 'react-dom/client';
 import { PendingGuard } from './components/pending-guard.js';
 import { ActiveChildProvider } from './contexts/active-child.js';
 import { SessionProvider } from './contexts/session.js';
+import { isAdminPath } from './lib/admin-modules.js';
+import { AdminRouter } from './pages/admin/index.js';
 import { CalendarPage } from './pages/calendar.js';
 import { Landing } from './pages/landing.js';
 import { AccountDeactivated, ContentUnavailable, Login } from './pages/public.js';
@@ -45,8 +47,20 @@ function App(): React.ReactNode {
     case '/account-deactivated':
       return <AccountDeactivated />;
     default:
-      // Authenticated areas mount here from M2, all behind the guard so a
-      // Pending user never sees an application shell (§14.4).
+      // The back office. Resolved by the module registry rather than enumerated
+      // here, so a route cannot exist without a navigation entry and a
+      // permission — they are one list (`lib/admin-modules.ts`).
+      //
+      // Inside `PendingGuard`, so a Pending user never glimpses the application
+      // shell (§14.4, Revision 8) — the sidebar and headings are exactly the
+      // "empty skeleton layout" that guard exists to prevent.
+      if (isAdminPath(path)) {
+        return (
+          <PendingGuard>
+            <AdminRouter />
+          </PendingGuard>
+        );
+      }
       return <PendingGuard>{null}</PendingGuard>;
   }
 }

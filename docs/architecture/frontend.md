@@ -387,6 +387,57 @@ would mint permission checks for content nobody opened.
 > the client should refresh pre-emptively is a Document Owner decision, not an implementation
 > detail.
 
+## The back office: one registry drives nav, routing and permissions
+
+`lib/admin-modules.ts` holds §14.1's back-office hierarchy **as data**. The sidebar, the
+router and the role guard all read that one list.
+
+§14.1 is emphatic — *"implement exactly this navigation hierarchy, no invented sections, no
+reshuffling"* — and holding it as data is what makes that **checkable rather than reviewed by
+eye**. Three failures become impossible by construction:
+
+- a menu entry with no route,
+- a route with no permission,
+- a module visible to a role TD-2 excludes.
+
+Adding a module is **one entry**. A test asserts the registry's paths against §14.1's list, so
+inventing a route fails the build rather than passing review.
+
+### `status` is part of the contract
+
+A module whose endpoints do not exist renders a **named** "not built" state saying *what* is
+missing — not "coming soon", which tells nobody whether the wait is a day or a milestone. The
+same badge appears in the sidebar, so a reader deciding where to click learns before the click
+rather than after.
+
+This is also the honest signal about where the back office stands: **six of eleven modules are
+ready; five are blocked on endpoints that do not exist.**
+
+### Path resolution: longest match, separator-aware
+
+`/admin/groups/{id}/roster` resolves to the groups module. A module owns its internal views
+**without registering each as a navigation node §14.1 does not list** — the same reasoning
+that put the library's level view behind `?level=`.
+
+Matching requires an exact hit or a `/` separator, so `/admin/groupsomething` does not resolve
+to `/admin/groups`. A bare `startsWith` would.
+
+### Role gating is a UX layer, and says so
+
+The layout renders the §14.4 no-permission state for a module the session's roles do not
+admit. **The server enforces TD-2 on every endpoint regardless** — the URL prefix is not the
+permission boundary, which is why the routes stay under `/admin/*` even where only a Super
+Admin may write (Revision 26).
+
+The whole back office mounts **inside `PendingGuard`**: a sidebar and headings are exactly the
+"empty skeleton layout" that guard exists to prevent a Pending user from glimpsing.
+
+### The dashboard is a launcher, not a statistics screen
+
+§5.6 asks for pending-approval counts and overview stats. **No endpoint serves them**, and
+inventing a number would be worse than omitting one — so it lists the modules the session may
+open, with blocked ones marked, and becomes a dashboard when there is something true to count.
+
 ## Toasts
 
 | Kind | Treatment |

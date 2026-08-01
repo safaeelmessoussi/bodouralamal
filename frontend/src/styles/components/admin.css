@@ -1,0 +1,223 @@
+/* Part of the design system — see `src/styles.css` for the layering. */
+
+/* ── Back office (§14.1, §14.2) ───────────────────────────────────────────────
+ *
+ * The same visual language as the public surfaces: ruled separators, one
+ * hairline, no shadows, generous whitespace. The back office is a denser
+ * information surface than a landing page, so the RHYTHM tightens — but nothing
+ * here introduces a second design language, and the filter controls are the
+ * calendar's `.cal-filter` unchanged.
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+.admin {
+  display: grid;
+  gap: var(--space-8);
+  width: min(100% - var(--space-8), 96rem);
+  margin-inline: auto;
+  padding-block: var(--space-8);
+  align-items: start;
+}
+@media (width >= 60rem) {
+  .admin {
+    /* The sidebar is a fixed reading width; the module takes the rest. */
+    grid-template-columns: 16rem 1fr;
+  }
+}
+
+/* ── Sidebar ─────────────────────────────────────────────────────────────── */
+
+.admin-nav {
+  display: grid;
+  gap: var(--space-6);
+  align-content: start;
+}
+@media (width >= 60rem) {
+  .admin-nav {
+    position: sticky;
+    /* Clears the sticky application header. */
+    inset-block-start: calc(var(--header-height) + var(--space-4));
+  }
+}
+.admin-nav__group-title {
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--color-text-muted);
+  margin-block-end: var(--space-2);
+}
+.admin-nav__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.15rem;
+}
+.admin-nav__item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  color: var(--color-text-secondary);
+  font-weight: 600;
+  text-decoration: none;
+}
+.admin-nav__item:hover {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+/* The current page, marked by the same attribute the header navigation uses —
+   one convention for "you are here" across the platform. */
+.admin-nav__item[aria-current='page'] {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+/* Marked in the MENU as well as on the page: a reader deciding where to click
+   deserves to know before the click, not after. */
+.admin-nav__badge {
+  flex: none;
+  padding: 0.1rem var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--color-background);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+}
+
+/* ── Module surface ──────────────────────────────────────────────────────── */
+
+.admin__main {
+  min-width: 0;
+}
+.admin__head {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  align-items: end;
+  justify-content: space-between;
+  padding-block-end: var(--space-4);
+  margin-block-end: var(--space-6);
+  border-block-end: 1px solid var(--color-border);
+}
+.admin__title {
+  font-size: var(--font-size-lg);
+}
+.admin__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.admin-panel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  align-items: end;
+  margin-block-end: var(--space-5);
+}
+.admin-panel__hint {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  max-width: 52ch;
+}
+
+/* A status line, not a toast: these messages report the result of an action the
+   reader just took on this page, and should stay until the next one. */
+.admin-notice {
+  max-width: none;
+  padding: var(--space-3) var(--space-4);
+  margin-block-end: var(--space-4);
+  border-inline-start: 3px solid var(--color-primary-emphasis);
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-primary-soft) 55%, var(--color-surface));
+  color: var(--color-text);
+}
+.admin-notice--warn {
+  border-inline-start-color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 12%, var(--color-surface));
+}
+
+/* ── Tables (§14.2's list/management standard) ───────────────────────────── */
+
+.admin-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  background: var(--color-surface-raised);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.admin-table th,
+.admin-table td {
+  padding: var(--space-3) var(--space-4);
+  text-align: start;
+  vertical-align: middle;
+  /* Ruled rows rather than boxed cells — the same choice the calendar grid made,
+     and what lets the eye scan a column. */
+  border-block-end: 1px solid var(--color-border);
+}
+.admin-table thead th {
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  color: var(--color-text-muted);
+  background: var(--color-background);
+}
+.admin-table tbody tr:last-child th,
+.admin-table tbody tr:last-child td {
+  border-block-end: 0;
+}
+.admin-table__rowhead {
+  font-weight: 700;
+  white-space: nowrap;
+}
+/* The month number beside its name: an ordinal a reader can count on without
+   competing with the name. */
+.admin-table__ordinal {
+  margin-inline-start: var(--space-2);
+  font-size: var(--font-size-xs);
+  font-weight: 400;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+.admin-table__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  justify-content: end;
+}
+
+/* State in WORDS, not colour alone — it has to survive a monochrome screen. */
+.badge {
+  padding: 0.1rem var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--color-background);
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  white-space: nowrap;
+}
+.badge--ok {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+.badge--warn {
+  background: color-mix(in srgb, var(--color-accent) 16%, var(--color-surface));
+  color: var(--color-accent);
+}
+
+@media (max-width: 44rem) {
+  .admin {
+    width: min(100% - var(--space-4), 96rem);
+    gap: var(--space-6);
+  }
+  .admin-table th,
+  .admin-table td {
+    padding: var(--space-2) var(--space-3);
+  }
+  .admin-table__actions {
+    justify-content: start;
+  }
+}

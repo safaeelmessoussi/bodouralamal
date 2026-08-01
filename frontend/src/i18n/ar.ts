@@ -189,6 +189,73 @@ export const ar = {
     errorAccountDeactivated: 'الحساب غير مُفعّل — يرجى التواصل مع إدارة الفرع.',
     retry: 'إعادة المحاولة',
   },
+  admin: {
+    soon: 'قريباً',
+    soonLong: 'قيد الإعداد — لم تُبنَ واجهات هذا القسم بعد.',
+    pendingTitle: 'هذا القسم قيد الإعداد.',
+    notFound: 'صفحة غير موجودة',
+    notFoundBody: 'لا يوجد قسم بهذا العنوان.',
+    nav: {
+      label: 'أقسام الإدارة',
+      dashboard: 'لوحة التحكم',
+      groups: 'الحلقات',
+      levels: 'المستويات',
+      taxonomy: 'الفئات والمواد',
+      users: 'المستخدمون',
+      approvals: 'طلبات الانضمام',
+      calendar: 'الجدول والأنشطة',
+      content: 'مكتبة المحتوى',
+      branches: 'الفروع والقاعات',
+      hijri: 'التقويم الهجري',
+      settings: 'إعدادات المنصة',
+    },
+    // §14.1's groups, rendered in its order.
+    section: {
+      academic: 'الشؤون التعليمية',
+      people: 'الأشخاص',
+      calendar: 'الجدول',
+      content: 'المحتوى',
+      administration: 'الإدارة',
+    },
+    // Each names WHAT is missing — "coming soon" tells nobody whether the wait
+    // is a day or a milestone.
+    blocked: {
+      levels: 'يتطلب هذا القسم واجهات برمجية لإدارة المستويات، وهي غير متوفرة بعد.',
+      taxonomy: 'يتطلب هذا القسم واجهات برمجية لإدارة الفئات والمواد، وهي غير متوفرة بعد.',
+      content: 'يتطلب هذا القسم واجهات رفع المحتوى وعرضه (المرحلة السادسة)، وهي غير متوفرة بعد.',
+      settings: 'يتطلب هذا القسم واجهات برمجية لإعدادات المنصة، وهي غير متوفرة بعد.',
+    },
+    dashboard: {
+      title: 'لوحة التحكم',
+      lede: 'أقسام الإدارة المتاحة لحسابك.',
+    },
+    hijri: {
+      title: 'التقويم الهجري',
+      // Revision 32: the vocabulary is binding. RECORD the Ministry's official
+      // announcement — never choose, define or set it.
+      lede: 'تسجيل بدايات الأشهر الهجرية كما أعلنتها وزارة الأوقاف والشؤون الإسلامية.',
+      yearLabel: 'السنة الهجرية',
+      yearHint: 'من 1300 إلى 1600.',
+      tableCaption: 'أشهر السنة الهجرية وتواريخ بدايتها الميلادية',
+      colMonth: 'الشهر',
+      colStart: 'تاريخ البداية الميلادي',
+      colStatus: 'الحالة',
+      record: 'تسجيل',
+      recorded: 'تم تسجيل بداية الشهر.',
+      publish: 'نشر أشهر السنة',
+      published: 'تم نشر الأشهر',
+      publishFailed: 'تعذّر النشر — قد لا توجد أشهر في وضع المسودة.',
+      conflict: 'عدّل مشرف آخر هذا الشهر أثناء عملك. تم تحديث البيانات — يرجى المراجعة وإعادة التسجيل.',
+      notRecorded: 'لم يُسجَّل',
+      statusDraft: 'مسودة',
+      statusPublished: 'منشور',
+      draftWarning: 'توجد أشهر في وضع المسودة لا تظهر في المنصة حتى تُنشر.',
+      tailBadge: 'آخر شهر مسجَّل',
+      // The boundary that explains a half-labelled month on the public calendar.
+      tailWarning:
+        'الشهر الأخير المسجَّل يظهر 29 يوماً فقط حتى يُسجَّل الشهر الذي يليه — فمعرفة بداية الشهر لا تحدد نهايته.',
+    },
+  },
   states: {
     // §14.4 — every page implements all of these. Forgetting empty states is
     // named there as the most common failure mode.
