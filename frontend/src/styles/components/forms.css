@@ -182,3 +182,45 @@
     justify-content: center;
   }
 }
+
+/* ── The registration form (§5.5) ─────────────────────────────────────────── */
+
+.register-form {
+  display: grid;
+  gap: var(--space-6);
+  max-width: 44rem;
+  margin-block-start: var(--space-6);
+}
+/* A real <fieldset>/<legend>: the groups are semantic, so a screen reader
+   announces "child" before the child's fields rather than leaving the second
+   "full name" ambiguous. */
+.register-form__group {
+  display: grid;
+  gap: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-5);
+  margin: 0;
+}
+.register-form__group > legend {
+  padding-inline: var(--space-2);
+  font-weight: 700;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}
+.register-form__actions {
+  display: flex;
+  justify-content: start;
+}
+/* The checkbox keeps its label on one line with the box, unlike the stacked
+   field primitives — an agreement reads as a sentence, not as a form field. */
+.check {
+  display: flex;
+  align-items: start;
+  gap: var(--space-2);
+  cursor: pointer;
+}
+.check input {
+  margin-block-start: 0.25rem;
+  flex-shrink: 0;
+}

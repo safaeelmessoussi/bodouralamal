@@ -6,11 +6,10 @@ import { api } from '../lib/api.js';
  * Types are exactly the endpoint's contract DTO (§16.2, Revision 38), so a
  * field the API stops sending is a type error here rather than an empty cell.
  *
- * **The queue is deliberately unscoped** (Revision 29). A self-registered
- * applicant carries no branch — registration records person fields and consents
- * only — so this queue is *the permanent path* by which a branch Admin meets
- * applicants, "by design, not a gap awaiting a fix". That is also why there is
- * no branch parameter below; see the note in `pages/admin/approvals.tsx`.
+ * **`branch_id` filters; it does not scope** (§14.2, Revision 39). It narrows
+ * what a reader chose to look at and never limits what they may see — the queue
+ * stays deliberately unscoped (Revisions 25, 29) precisely so a branch Admin can
+ * find an applicant whose chosen branch is **wrong**, or absent, and correct it.
  */
 
 export type ApprovalType = 'registration' | 'family-link';
@@ -30,6 +29,13 @@ export interface Approval {
   submitted_at: string;
   /** What approving this will actually change (§14.2 "Bundle contents"). */
   bundle: { child_count: number; link_count: number };
+  /**
+   * §14.2 column: Branch requested (Revision 39) — **what the applicant asked
+   * for**, never where they will be placed. `null` on a family-link item, which
+   * carries no branch, and `null` on an account registered before R39, where it
+   * means *not stated* rather than *no branch*.
+   */
+  branch: { id: string; name: string } | null;
 }
 
 export interface Page<T> {
@@ -44,10 +50,11 @@ export interface DecisionResult {
 
 export async function listApprovals(
   token: string | null,
-  options: { page?: number; type?: ApprovalType } = {},
+  options: { page?: number; type?: ApprovalType; branchId?: string } = {},
 ): Promise<Page<Approval>> {
   const params = new URLSearchParams({ page: String(options.page ?? 1), page_size: '25' });
   if (options.type) params.set('type', options.type);
+  if (options.branchId) params.set('branch_id', options.branchId);
   return api<Page<Approval>>(`/admin/approvals?${params.toString()}`, { token });
 }
 

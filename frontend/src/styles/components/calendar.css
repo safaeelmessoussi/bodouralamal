@@ -106,24 +106,28 @@
   margin-block-end: var(--space-8);
 }
 
-/* One filter shape for all three, so adding a fourth needs no new CSS. The
-   branch selector keeps its own class names for the landing page, which uses
-   it outside this toolbar. */
-.cal-filter,
-.branch-selector {
+/* One filter shape, so adding another needs no new CSS.
+
+   The calendar's three selectors are now the shared `SelectField` (Revision
+   39), which brings its own `.field` classes — identical padding, border and
+   label typography, so the only thing left to say here is the toolbar's width
+   floor. `.cal-filter` remains for the Hijri and content screens, which still
+   build their own controls. */
+.cal-toolbar .field {
+  min-width: 11rem;
+}
+.cal-filter {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
   min-width: 11rem;
 }
-.cal-filter__label,
-.branch-selector__label {
+.cal-filter__label {
   font-size: var(--font-size-xs);
   font-weight: 700;
   color: var(--color-text-muted);
 }
-.cal-filter__control,
-.branch-selector__control {
+.cal-filter__control {
   padding: 0.6rem 0.7rem;
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
@@ -520,7 +524,7 @@ tr:last-child .cal-cell {
     align-items: stretch;
   }
   .cal-filter,
-  .branch-selector {
+  .cal-toolbar .field {
     min-width: 0;
   }
   .cal-dayrow {

@@ -254,10 +254,45 @@ SQL, and flags every `DROP`/`RENAME` for human review with its contract-phase ju
 20260729045400_r35_branch_public_field_checks
 20260729060000_r36_1_display_name_not_blank
 20260729150624_r36_1_public_display_name
+20260801194116_r39_user_intended_branch
 ```
 
 Note the pattern: schema changes and their hand-written constraints are **separate
 migrations**, and revision-driven changes carry the revision number in the name.
+
+### Filename order is apply order — and it bit us
+
+Look at the two `r36_1` entries. The **constraint** is `…060000`; the migration that **adds the
+column it constrains** is `…150624`, nine hours later. Prisma applies migrations in **filename
+order**, so on a clean database the CHECK ran first and failed:
+
+```
+ERROR: column "public_display_name" does not exist   (SQLSTATE 42703)
+```
+
+**Every existing database was fine**, because the two were applied in the order they were
+*authored* and `_prisma_migrations` recorded both as done. The break was therefore invisible to
+every developer and to CI, and would have surfaced **exactly once**: at the first production
+deployment, where [§19.1 step 5](../operations/deployment.md) runs `prisma migrate deploy` against an empty
+database. It was found in Revision 39 only because Prisma's shadow-database replay refused to
+create the *next* migration.
+
+**The repair was to make both migrations idempotent and order-independent — not to renumber
+one.** A directory name is recorded in `_prisma_migrations`, so renaming it orphans the row on
+every database that has already applied it. Instead the constraint migration now creates the
+column `IF NOT EXISTS` before constraining it, and the column migration is `IF NOT EXISTS` too,
+so either order produces the same schema.
+
+Editing an applied migration changes its checksum, which Prisma refuses. Because nothing is in
+production yet, the two recorded checksums were re-computed in place (`sha256` of the file, the
+same value Prisma stores) rather than resetting a developer database. **A future occurrence
+would not have that luxury** — which is the argument for the guard below.
+
+**The rule:** a migration must be **runnable on an empty database, in filename order, with no
+predecessor it does not name in its own filename**. When a constraint and its column are split
+across two migrations, the constraint's timestamp must be the later one. `check-migrations.sh`
+verifies presence; ordering is verified by the only test that actually proves it — running
+`migrate deploy` against a freshly created database, which is now part of the release check.
 
 ## Soft delete and cascade
 

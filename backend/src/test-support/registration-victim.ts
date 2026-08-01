@@ -27,7 +27,12 @@ import type { RegistrationInput } from '../validators/registration.validators.js
 const tag = process.argv[2];
 const email = process.argv[3];
 const subject = process.argv[4];
-if (!tag || !email || !subject) throw new Error('usage: registration-victim <tag> <email> <subject>');
+/** §4.1 Revision 39 — the applicant's chosen branch, passed in by the parent
+ *  test so this process creates no reference data of its own. */
+const branchId = process.argv[5];
+if (!tag || !email || !subject || !branchId) {
+  throw new Error('usage: registration-victim <tag> <email> <subject> <branchId>');
+}
 
 const config = loadConfig();
 const base = createPrismaClient(config.DATABASE_URL, 1);
@@ -56,6 +61,7 @@ const input: RegistrationInput = {
   kind: 'parent_child',
   parent: { name_arabic: `${tag} والدة`, phone: '+212 600 000 009', sex: 'female' },
   child: { name_arabic: `${tag} طفلة`, sex: 'female' },
+  branch_id: branchId,
   consents: { data_processing: true, media_release: true },
 };
 

@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import type { PublicBranch } from '../../adapters/branches.js';
 import type { CategoryRef, LevelRef } from '../../adapters/calendar.js';
 import { t } from '../../i18n/index.js';
-import { BranchSelector } from './branch-selector.js';
+import { BranchSelector } from '../ui/branch-selector.js';
 import { CategorySelector } from './category-selector.js';
 import { LevelSelector } from './level-selector.js';
 

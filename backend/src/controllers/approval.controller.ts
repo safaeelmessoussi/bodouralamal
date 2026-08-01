@@ -11,6 +11,8 @@ import { decide, listApprovals, type ApprovalType } from '../services/approval.s
 const decisionSchema = z.object({ reason: z.string().trim().max(500).optional() });
 const listSchema = z.object({
   type: z.enum(['registration', 'family-link']).optional(),
+  /** §14.2 / Revision 39 — a filter, never a scope (see the service). */
+  branch_id: z.uuid().optional(),
   page: z.coerce.number().int().min(1).optional(),
   page_size: z.coerce.number().int().min(1).max(100).optional(),
 });
@@ -22,6 +24,7 @@ export function list(prisma: PrismaClient) {
     if (!parsed.success) throw new AppError('VALIDATION_FAILED', 'bad query');
     const result = await listApprovals(prisma, requireActor(req).userId, {
       ...(parsed.data.type ? { type: parsed.data.type as ApprovalType } : {}),
+      ...(parsed.data.branch_id ? { branchId: parsed.data.branch_id } : {}),
       ...(parsed.data.page ? { page: parsed.data.page } : {}),
       ...(parsed.data.page_size ? { pageSize: parsed.data.page_size } : {}),
     });

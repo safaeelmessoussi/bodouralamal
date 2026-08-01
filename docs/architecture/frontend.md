@@ -400,6 +400,7 @@ the framework every later module configures (constitution §0.1, *build systems,
 | `Pagination` | TD-10's envelope, stepped the same way everywhere |
 | `Badge` | A status label — state in words, never colour alone |
 | `ApprovalCard` | §14.3's bundle-aware queue item: who is in the bundle, and what approving it changes |
+| `BranchSelector` | §14.3's branch picker — one component, filtering *and* required-choice modes |
 
 **There is no `BranchTable` and there never will be** (§2.1). The next module passes different
 columns and actions; if it ever needs to *edit* `DataTable` rather than configure it, the
@@ -421,6 +422,28 @@ component *almost* fits:
   been carrying. Extracted on the second use, not the third (§2.7).
 
 Neither was a `RejectDialog` or an `ApprovalBadge`. That distinction is the whole framework.
+
+### The registration form found three selectors that were one
+
+Revision 39 gave the registration form a required Branch choice, and the calendar already had
+a `BranchSelector`. Copying it would have been the obvious move; it was also the wrong one,
+because that component had three defects the shared registry exists to prevent:
+
+1. **A hardcoded `id="branch-filter"`** — two on one page produce duplicate ids and a label
+   pointing at the wrong control. The same literal-id bug as `Dialog`, and its two calendar
+   siblings (`CategorySelector`, `LevelSelector`) had it too.
+2. **Its own markup and `.branch-selector` styles**, so it inherited none of `field.tsx`'s
+   error wiring, hint association or required marking.
+3. **An always-present "all branches" option** — right for a filter, wrong for a required
+   choice. Registration must not let someone submit *"all branches"* as their branch.
+
+All three selectors are now thin configurations of `SelectField`, ids come from `useId`, and
+`BranchSelector` carries an `allowAll` variant rather than having a `RequiredBranchSelector`
+grown beside it (§2.5). `SelectField` gained a `busy` prop so the Level selector's
+"options are loading" state stayed a primitive's concern rather than a caller's.
+
+**Three consumers, one component**: the calendar filter, the approvals filter, the registration
+choice.
 
 ### What the table refuses to do
 

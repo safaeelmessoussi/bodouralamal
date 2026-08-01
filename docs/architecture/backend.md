@@ -138,6 +138,22 @@ refreshing".
 
 **Concurrency conflicts are never surfaced as 500s.** They are expected, coded outcomes.
 
+> **A status check is not a lock.** The approval queue implemented first-wins by reading the
+> row `WHERE account_status = 'pending'` and then updating it. Under `READ COMMITTED` that does
+> not hold: two transactions both read `pending` — neither sees the other's uncommitted write —
+> so both proceeded and **both succeeded**, writing two `user.approve` audit rows for one
+> decision. The test caught it roughly **one run in five** and had been passing on timing luck
+> since the queue was written; an unrelated fixture change in Revision 39 shifted the timing
+> enough to surface it.
+>
+> The fix is the `SELECT … FOR UPDATE` the other services already use: the second caller blocks,
+> then re-reads the **committed** status and takes the `STATE_CONFLICT` path that was always
+> intended. Verified by running the concurrency test **10/10**, where it had been ~4/5.
+>
+> The general rule: **first-wins needs a lock or a conditional update, never a read followed by
+> a write.** If a guard's correctness depends on which transaction happens to read first, it is
+> not a guard.
+
 ## Error handling
 
 Errors are thrown as **typed domain errors** and mapped centrally to the single response

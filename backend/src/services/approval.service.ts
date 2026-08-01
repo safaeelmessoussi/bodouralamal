@@ -30,12 +30,20 @@ export interface ApprovalItem {
   submittedAt: Date;
   /** §14.2 column: Bundle contents — what approving this will actually change. */
   bundle: { childCount: number; linkCount: number };
+  /**
+   * §14.2 column: Branch requested (Revision 39) — **what the applicant asked
+   * for**, not where they will be placed. `null` on a family-link item, which
+   * carries no branch at all: that request concerns an existing child whose
+   * placement already lives in their Group, and resolving it through that
+   * enrolment would make one filter mean two different things.
+   */
+  branch: { id: string; name: string } | null;
 }
 
 export async function listApprovals(
   prisma: PrismaClient,
   actorUserId: string,
-  options: { type?: ApprovalType; page?: number; pageSize?: number } = {},
+  options: { type?: ApprovalType; branchId?: string; page?: number; pageSize?: number } = {},
 ): Promise<Page<ApprovalItem>> {
   // TD-12: approvals are a high-risk surface, so even listing re-asserts the
   // caller's live status rather than trusting the token.
@@ -43,6 +51,13 @@ export async function listApprovals(
 
   const { skip, take, page, pageSize } = pageWindow({ page: options.page, pageSize: options.pageSize });
   const type = options.type;
+  // Revision 39 — a FILTER, never a scope. It narrows what this reader chose to
+  // look at; it does not limit what they are permitted to see. The queue stays
+  // deliberately unscoped (Revisions 25, 29) precisely so a branch Admin can
+  // find an applicant whose chosen branch is WRONG, or absent, and fix it.
+  // A family-link item has no branch, so any branch filter excludes the whole
+  // type rather than matching some of it.
+  const branchId = options.branchId;
 
   const items: ApprovalItem[] = [];
   let total = 0;
@@ -55,12 +70,19 @@ export async function listApprovals(
       accountStatus: 'pending' as const,
       deletedAt: null,
       childLinks: { none: {} },
+      // Applied to the COUNT as well as the page, so `meta.total` describes the
+      // filtered set. A total that ignored the filter would tell the client to
+      // render pages that are empty.
+      ...(branchId ? { intendedBranchId: branchId } : {}),
     };
     total += await prisma.user.count({ where });
     const applicants = await prisma.user.findMany({
       where,
       include: {
         parentLinks: { where: { deletedAt: null }, include: { student: true } },
+        // Only what the DTO publishes (§16.2): the branch's id and name, never
+        // the whole row.
+        intendedBranch: { select: { id: true, name: true } },
       },
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
       skip,
@@ -81,11 +103,19 @@ export async function listApprovals(
         ],
         submittedAt: applicant.createdAt,
         bundle: { childCount: pendingLinks.length, linkCount: pendingLinks.length },
+        branch: applicant.intendedBranch
+          ? { id: applicant.intendedBranch.id, name: applicant.intendedBranch.name }
+          : null,
       });
     }
   }
 
-  if (!type || type === 'family-link') {
+  // A branch filter excludes this type WHOLESALE rather than matching none of
+  // it: a link request carries no branch (Revision 39), so asking for "branch X"
+  // is asking for something a family-link item can never be. Skipping the query
+  // keeps `meta.total` honest — counting rows that can never match would report
+  // results the caller cannot see.
+  if ((!type || type === 'family-link') && !branchId) {
     // Standalone link requests: the parent already has an account (§4.3), so
     // only the link itself is pending.
     const where = { status: 'pending' as const, deletedAt: null, parent: { accountStatus: 'active' as const } };
@@ -107,6 +137,10 @@ export async function listApprovals(
         ],
         submittedAt: link.createdAt,
         bundle: { childCount: 0, linkCount: 1 },
+        // A link request concerns an existing child whose placement already
+        // lives in their Group. Resolving a branch through that enrolment would
+        // make one filter mean two different things depending on the row.
+        branch: null,
       });
     }
   }
@@ -143,6 +177,24 @@ export async function decide(
 
   return prisma.$transaction(async (tx) => {
     // ── Registration bundle?
+    //
+    // TD-15.3 first-wins REQUIRES a row lock, and the status check alone does
+    // not provide one. Under READ COMMITTED two concurrent approvals both read
+    // the row as `pending` — neither sees the other's uncommitted write — so
+    // both proceeded to update and BOTH succeeded, activating once but writing
+    // two `user.approve` audit rows for one decision.
+    //
+    // The existing test caught this roughly one run in five and had been
+    // passing on timing luck since the queue was written; a fixture change in
+    // Revision 39 shifted the timing enough to surface it. Locking the row
+    // first makes the second caller block here and then re-read the COMMITTED
+    // status, so it finds nothing pending and takes the STATE_CONFLICT path
+    // that was always intended.
+    //
+    // §16.2 sanctioned raw-SQL exception (a): SELECT … FOR UPDATE row lock —
+    // the same pattern branch, room, group and roster already use.
+    await tx.$queryRaw`SELECT id FROM "user" WHERE id = ${id}::uuid FOR UPDATE`;
+
     const applicant = await tx.user.findFirst({
       where: { id, accountStatus: 'pending', deletedAt: null, childLinks: { none: {} } },
       include: { parentLinks: { where: { deletedAt: null, status: 'pending' } } },
@@ -191,6 +243,11 @@ export async function decide(
     }
 
     // ── Standalone family link?
+    // Same lock, same reason (TD-15.3): two admins deciding one link must not
+    // both succeed. The id spaces are distinct tables, so this locks nothing
+    // when the id was a user.
+    await tx.$queryRaw`SELECT id FROM "family_link" WHERE id = ${id}::uuid FOR UPDATE`;
+
     const link = await tx.familyLink.findFirst({
       where: { id, status: 'pending', deletedAt: null },
     });

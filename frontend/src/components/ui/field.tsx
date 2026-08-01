@@ -177,8 +177,18 @@ export function NumberField({
 
 export function SelectField({
   options,
+  busy = false,
   ...props
-}: BaseProps & { options: { value: string; label: string }[] }): ReactNode {
+}: BaseProps & {
+  options: { value: string; label: string }[];
+  /**
+   * The options are still loading — as when the calendar's Level list is being
+   * re-fetched for a newly chosen Category. Marked `aria-busy` and disabled
+   * rather than hidden, so the row does not reflow and the wait is announced
+   * instead of merely visible.
+   */
+  busy?: boolean;
+}): ReactNode {
   return (
     <FieldShell {...props}>
       {({ id, describedBy }) => (
@@ -187,7 +197,8 @@ export function SelectField({
           className="field__control"
           value={props.value}
           required={props.required ?? false}
-          disabled={props.disabled ?? false}
+          disabled={busy || (props.disabled ?? false)}
+          aria-busy={busy || undefined}
           aria-invalid={props.error ? true : undefined}
           aria-describedby={describedBy}
           onChange={(e) => props.onChange(e.target.value)}

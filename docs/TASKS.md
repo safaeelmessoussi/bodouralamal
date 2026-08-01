@@ -137,12 +137,14 @@
   - ✓ **Module 2 — Branches (`/admin/branches`)**: list, create, edit, delete, search, TD-10 pagination. **Writing is Super Admin only** (R26) and the controls are hidden for an Admin, who reads this screen because Group management depends on it — the server enforces the matrix regardless. TD-15 optimistic locking with a named conflict message that reloads rather than overwriting; TD-5's "deletion prohibited while rooms or groups reference it" surfaced as its own reason rather than a generic failure
   - ✓ ~~**Finding — `GET /admin/branches` returns raw Prisma rows**~~ **RESOLVED by SRS Revision 38**: the endpoint now returns an explicit contract DTO and the adapter lost its wire types and its date converter. *Adapters adapt contracts to UI models; they do not repair inconsistent contracts* — the repair had left the contract wrong for the next client and hidden that it was wrong from everyone
   - ✓ **Module 3 — Approvals (`/admin/approvals`, طلبات الانضمام)**: both item types, server-side Type filter, TD-10 pagination, approve (atomic, no reason) and reject (reason required, TD-9 500). Reports `records_updated` — what actually changed, not what was requested; a 404/409 reads as *someone else decided first* and reloads. **Configuration of the framework, not a new one** — `DataTable` and the field primitives were unedited
-  - ⚠ **§14.2 lists a "Branch" filter this queue cannot have** — an approval item carries no branch (Revisions 25 and 29), so the filter has no data source. Type is built, Branch is not, and the conflict is **reported to the Document Owner** rather than resolved by inventing a value (§20 rule 20). See `CHANGES.log` → OPEN SRS CONFLICT
+  - ✓ ~~**§14.2 lists a "Branch" filter this queue cannot have**~~ **RESOLVED by SRS Revision 39**: the Owner corrected the specification, not the screen — §14.2 recorded the real intake and R29 had not. Registration now captures the applicant's chosen branch, the queue shows it, and the filter is built. **It filters, never scopes** — visibility stays unscoped so a branch Admin can still find and correct an applicant whose chosen branch is wrong
   - △ Remaining modules land one by one: groups, calendar/events, users
 
 ## M2 — Registration, Approvals, Family
 - [x] Unified parent+child registration transaction (TD-4.1) + adult path
   - ✓ Backend — `POST /registrations`; replay guard consumed FIRST so the `jti` is authoritative; both paths in one transaction
+  - ✓ Backend — **`branch_id` required and persisted as `User.intended_branch_id`** (Revision 39): validated inside the transaction against a live branch, refused for a soft-deleted one, accepted for a not-yet-opened one, written on the applicant only. Level/Room/Group still rejected outright
+  - ✓ Frontend — the §5.5 form: adult **or** parent+child, required Branch selector, consent checkbox, three-state media release for a minor. Built entirely from the shared field primitives; `/register` no longer a placeholder
   - ✓ Tests — 11 integration tests incl. the §18 mid-transaction atomicity check and concurrent submission of one token
   - ✓ Security — schema **rejects** `email`/`provider_subject_id` outright (§20 rule 9); replay → `STATE_CONFLICT`; fails closed with no consent text version
   - △ Frontend integration (M2) — the unified registration form
@@ -172,7 +174,7 @@
   - ✓ Security — TD-2 admin/super-admin only; a *validly signed* token claiming `admin` for a non-admin user is refused; suspension and role revocation take effect on the next request; first-wins on concurrent decisions (TD-15.3) with 409, never a 500; rejection requires a reason within TD-9's 500 chars
   - ✓ Security — all five guards mutation-tested (freshness status check, freshness role check, bundle exclusion, child activation, mandatory reason); every mutant is caught
   - ✓ Frontend — the §5.6 queue screen with §14.2's columns (Applicant(s), Type, Bundle contents, Submitted) and both row actions; `ApprovalCard` renders the bundle. Verified live against a seeded parent+child bundle: `records_updated: 2` on approval, 409 on a second decision, `VALIDATION_FAILED` on a reason-less reject
-  - ⚠ §14.2's **Branch** filter is not built — no approval item carries a branch (Revisions 25/29). Reported, not invented
+  - ✓ §14.2's **Branch** filter built (Revision 39) — the queue carries `branch { id, name } | null` and `?branch_id=` narrows it, with `meta.total` following the filter and family-link items excluded wholesale since they carry no branch
 - [x] FamilyLink lifecycle (TD-1); unique partial index enforced
   - ✓ Index — `family_link_student_parent_active_key` on (`student_id`, `parent_id`) `WHERE deleted_at IS NULL`, so a revoked link never blocks a fresh one
   - ✓ Lifecycle — pending → approved → revoked with TD-4.8 soft-delete, Trash snapshot and audit; a pending link cannot be revoked (it is decided in the approval queue); revoking twice is `NOT_FOUND` and writes exactly one audit row

@@ -123,6 +123,25 @@ export async function register(
 
       const applicantData = input.kind === 'adult' ? input.applicant : input.parent;
 
+      // §4.1 / Revision 39: the chosen branch must be REAL and not closed.
+      //
+      // Checked inside the transaction rather than before it, so a branch
+      // soft-deleted between the check and the write cannot slip through — the
+      // FK alone would not catch that, because a soft delete leaves the row.
+      //
+      // A branch whose `operational_start_date` has not yet occurred IS
+      // selectable, deliberately: §4.4 excludes such a branch from the
+      // calendar, but an association must be able to take registrations for a
+      // premises before it opens — which is the entire point of recording an
+      // opening date.
+      const branch = await tx.branch.findFirst({
+        where: { id: input.branch_id, deletedAt: null },
+        select: { id: true },
+      });
+      if (!branch) {
+        throw new AppError('VALIDATION_FAILED', 'branch_id does not name a live branch (§4.1)');
+      }
+
       // Every new registration enters Pending (§4.1); no role is granted until
       // an Admin approves (TD-4.2).
       const applicant: User = await tx.user.create({
@@ -135,6 +154,11 @@ export async function register(
           // §4.1b step 5, Revision 27: written HERE, in the same transaction
           // that creates the person — the registration precedes the User.
           sex: applicantData.sex,
+          // Revision 39 — what the applicant ASKED FOR, not where they end up.
+          // On the applicant only: the parent chose one branch for the family,
+          // and copying it onto the child would be a second value to keep in
+          // step. The child's branch, once they have one, is their Group's.
+          intendedBranchId: input.branch_id,
           accountStatus: 'pending',
         },
       });

@@ -74,7 +74,7 @@ bash scripts/dev/test-integration.sh
 for g in scripts/ci/check-*.sh; do bash "$g" || echo "FAILED: $g"; done
 ```
 
-Current totals: **102 backend unit · 498 integration · 135 frontend**.
+Current totals: **102 backend unit · 508 integration · 147 frontend**.
 
 ## Your first change, end to end
 

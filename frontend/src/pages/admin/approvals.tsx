@@ -8,7 +8,9 @@ import {
   type ApprovalType,
   DECISION_REASON_MAX,
 } from '../../adapters/approvals.js';
+import { fetchBranches, type PublicBranch } from '../../adapters/branches.js';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
+import { BranchSelector } from '../../components/ui/branch-selector.js';
 import {
   ApplicantList,
   ApprovalTypeBadge,
@@ -43,28 +45,17 @@ import { ApiError } from '../../lib/api.js';
  * log. Both are destructive of an expectation, so both confirm — but only one
  * asks you to explain yourself.
  *
- * ── ONE §14.2 FILTER IS NOT BUILT, DELIBERATELY ──────────────────────────────
- * §14.2's Approvals row lists filters **"Type, Branch"**. The Type filter is
- * here; **Branch is not.** An end-to-end investigation of the registration
- * workflow established that the value is not collected-and-lost — it is never
- * collected, and the API boundary actively *refuses* it (`registrationSchema`
- * is `.strict()`, so a `branch_id` is rejected rather than dropped).
+ * **Both §14.2 filters are here (Revision 39).** `Type` and `Branch`. The
+ * Branch filter became implementable when registration started capturing the
+ * applicant's chosen branch — before R39 it had no data behind it at all, which
+ * an end-to-end trace established and the Document Owner resolved by correcting
+ * the workflow rather than the screen.
  *
- * That is the intended workflow, not an omission: §4.1 is normative —
- * *"Registration never places a beneficiary… Applicants **never** select
- * Branch, Room, Level or Group during self-registration"* — and §5.5's field
- * list and §5.7's flow agree, placing assignment after approval.
- *
- * **The decisive point is not the missing data but what filtering would do.** A
- * student can reach a branch through an enrolment, so the filter could work for
- * *family-link* items; a registration item's people are pending and by
- * construction not yet enrolled, so it could never work for those. Filtering by
- * branch would therefore **hide every registration item** — precisely the
- * population Revision 29 says this unscoped queue exists to put in front of a
- * branch Admin, *"by design, not a gap awaiting a fix"*.
- *
- * Reported to the Document Owner rather than resolved here (§20 rule 20).
- * ─────────────────────────────────────────────────────────────────────────────
+ * **Branch FILTERS; it does not scope.** Visibility stays deliberately unscoped
+ * (Revisions 25, 29, both retained), because a branch Admin must still be able
+ * to see an applicant whose chosen branch is *wrong* — or absent — in order to
+ * correct it. A family-link item carries no branch, so choosing one excludes
+ * that type wholesale rather than matching none of it.
  */
 export function ApprovalsPage(): ReactNode {
   const { accessToken } = useSession();
@@ -74,6 +65,8 @@ export function ApprovalsPage(): ReactNode {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [typeFilter, setTypeFilter] = useState<'' | ApprovalType>('');
+  const [branchFilter, setBranchFilter] = useState<string | null>(null);
+  const [branches, setBranches] = useState<PublicBranch[]>([]);
   const [deciding, setDeciding] = useState<{ row: Approval; approve: boolean } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -87,6 +80,7 @@ export function ApprovalsPage(): ReactNode {
       const result = await listApprovals(accessToken, {
         page,
         ...(typeFilter ? { type: typeFilter } : {}),
+        ...(branchFilter ? { branchId: branchFilter } : {}),
       });
       setRows(result.data);
       setTotal(result.meta.total);
@@ -94,11 +88,25 @@ export function ApprovalsPage(): ReactNode {
     } catch {
       setStatus('error');
     }
-  }, [accessToken, page, typeFilter]);
+  }, [accessToken, page, typeFilter, branchFilter]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  // The same public endpoint the registration form and the landing page use —
+  // one source for the branch list, so a new branch appears everywhere at once.
+  useEffect(() => {
+    void (async () => {
+      try {
+        setBranches(await fetchBranches());
+      } catch {
+        // A filter that cannot load is not worth failing the page over: the
+        // queue itself is the point, and it renders unfiltered.
+        setBranches([]);
+      }
+    })();
+  }, []);
 
   const columns: Column<Approval>[] = [
     {
@@ -116,6 +124,15 @@ export function ApprovalsPage(): ReactNode {
       header: t('admin.approvals.colBundle'),
       secondary: true,
       cell: (r) => <BundleSummary bundle={r.bundle} />,
+    },
+    {
+      key: 'branch',
+      header: t('admin.approvals.colBranch'),
+      secondary: true,
+      // `null` is not "no branch" — it is *not stated*: a family-link item never
+      // had one, and an account registered before R39 was never asked.
+      cell: (r) =>
+        r.branch ? r.branch.name : <span className="muted">{t('admin.approvals.branchNone')}</span>,
     },
     {
       key: 'submitted',
@@ -186,27 +203,40 @@ export function ApprovalsPage(): ReactNode {
         status={status}
         actions={actions}
         onRetry={() => void load()}
-        filtered={typeFilter !== ''}
+        filtered={typeFilter !== '' || branchFilter !== null}
         onClearFilters={() => {
           setTypeFilter('');
+          setBranchFilter(null);
           setPage(1);
         }}
         toolbar={
-          <SelectField
-            label={t('admin.approvals.filterType')}
-            value={typeFilter}
-            placeholder={t('admin.approvals.filterAll')}
-            options={[
-              { value: 'registration', label: t('admin.approvals.typeRegistration') },
-              { value: 'family-link', label: t('admin.approvals.typeLink') },
-            ]}
-            onChange={(value) => {
-              setTypeFilter(value as '' | ApprovalType);
-              // A filter change with the page left at 3 shows an empty table on
-              // a queue that has matches.
-              setPage(1);
-            }}
-          />
+          <>
+            <SelectField
+              label={t('admin.approvals.filterType')}
+              value={typeFilter}
+              placeholder={t('admin.approvals.filterAll')}
+              options={[
+                { value: 'registration', label: t('admin.approvals.typeRegistration') },
+                { value: 'family-link', label: t('admin.approvals.typeLink') },
+              ]}
+              onChange={(value) => {
+                setTypeFilter(value as '' | ApprovalType);
+                // A filter change with the page left at 3 shows an empty table on
+                // a queue that has matches.
+                setPage(1);
+              }}
+            />
+            <BranchSelector
+              branches={branches}
+              value={branchFilter}
+              label={t('admin.approvals.filterBranch')}
+              emptyLabel={t('admin.approvals.filterAllBranches')}
+              onChange={(value) => {
+                setBranchFilter(value);
+                setPage(1);
+              }}
+            />
+          </>
         }
         pagination={{ page, pageSize: 25, total, onPage: setPage }}
       />

@@ -6,7 +6,7 @@ GitHub Actions, four parallel jobs, on every push to `develop`/`main` and on eve
 request.
 
 ```
-guards      ten guard scripts — the SRS rules that are mechanically checkable
+guards      twelve guard scripts — the SRS rules that are mechanically checkable
 contract    regenerate the OpenAPI document, fail on drift, check conformance
 backend     lint · typecheck · test
 frontend    lint · typecheck · test
@@ -29,6 +29,7 @@ Each exists because something went wrong, or would plausibly go wrong silently. 
 | `check-display-identity.sh` | Raw name fields reaching the frontend · an inline display-name fallback · a controller exposing both inputs outside the one admissible staff screen |
 | `check-openapi-td3.sh` | An endpoint that contradicts the specification, is implemented undocumented, or is documented but absent from the router |
 | `check-doc-links.sh` | A broken relative link or missing anchor in the documentation (SRS §16.4, listed in §19.2) |
+| `check-migration-order.sh` | A migration referencing a column that a **later-named** migration adds — fine on every existing database, fatal on an empty one, so it would surface exactly once: at the first production deploy (TD-6a) |
 | `check-contract-dto.sh` | A controller handing a service result straight to `res.json` · a spread inside `dto.ts` that turns an allow-list back into "everything" (SRS §16.2, Revision 38) |
 
 Run them all locally:
@@ -155,9 +156,9 @@ mutation-testing false negatives had the same shape
 
 ## Why guards rather than review notes
 
-A review note is followed until the reviewer is on holiday. Nine of the twenty-one binding
+A review note is followed until the reviewer is on holiday. Many of the binding
 guardrails are mechanically checkable, so they are mechanically checked — and the reviewer's
-attention goes to the twelve that are not.
+attention goes to the ones that are not.
 
 ---
 

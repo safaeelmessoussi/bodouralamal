@@ -205,6 +205,26 @@ model User {
   sex        Sex?    @map("sex")
   notes      String? @db.VarChar(2000)
 
+  /// Revision 39 — THE BRANCH THE APPLICANT ASKED FOR at registration.
+  ///
+  /// Deliberately NOT the answer to "which branch is this person in": that
+  /// answer is their Group, through `StudentGroup → Group.branchId`, because an
+  /// administrator may place an approved applicant at a different branch when
+  /// the requested one is full or unsuitable. Naming this `branchId` would have
+  /// made two different facts share one name and created a second source of
+  /// truth for placement (§16.4).
+  ///
+  /// Nullable with NO backfill possible — accounts predating R39 have no such
+  /// value and nobody knows what those applicants would have chosen, so null
+  /// means *not stated*, never *no branch*. Required in the public
+  /// self-service payload (§4.1b step 5); optional for staff-assisted
+  /// registration (§4.1).
+  ///
+  /// `Restrict`, like every other reference to a Branch (TD-5): a branch with
+  /// registrations pointing at it cannot be deleted out from under them.
+  intendedBranchId String? @map("intended_branch_id") @db.Uuid
+  intendedBranch   Branch? @relation("UserIntendedBranch", fields: [intendedBranchId], references: [id], onDelete: Restrict)
+
   /// The email authorized to claim this account BEFORE any external identity
   /// exists (§7, Revision 15). Staff set it when pre-provisioning; it is the
   /// only way an unbound account can be found by email, because `UserIdentity`
@@ -377,6 +397,9 @@ model Branch {
   branchRoles UserBranchRole[]
   content     EducationalContent[]
   eventScopes EventBranch[]
+  /// Revision 39 — applicants who REQUESTED this branch at registration. Not
+  /// the people placed here; that is `groups → StudentGroup`.
+  intendedBy  User[]               @relation("UserIntendedBranch")
 
   @@index([displayOrder])
   @@map("branch")

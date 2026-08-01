@@ -25,6 +25,12 @@ jobs:
         run: bash scripts/ci/check-migrations.sh
       - name: DROP/RENAME migration lint (TD-6b)
         run: bash scripts/ci/check-migration-drop-rename.sh
+      # Prisma applies migrations in FILENAME order. A migration referencing a
+      # column added by a later-named one works on every existing database and
+      # fails on an empty one — i.e. exactly once, at the first production
+      # deploy. See docs/architecture/database.md.
+      - name: Migration ordering (TD-6a)
+        run: bash scripts/ci/check-migration-order.sh
       - name: Prisma mass-write filter guard
         run: bash scripts/ci/check-prisma-mass-write.sh
       - name: Header navigation exclusivity (burger vs horizontal nav)

@@ -8,6 +8,7 @@ import { isAdminPath } from './lib/admin-modules.js';
 import { AdminRouter } from './pages/admin/index.js';
 import { CalendarPage } from './pages/calendar.js';
 import { Landing } from './pages/landing.js';
+import { Register } from './pages/register.js';
 import { AccountDeactivated, ContentUnavailable, Login } from './pages/public.js';
 import { ResourcesPage } from './pages/resources.js';
 import './styles.css';
@@ -29,9 +30,8 @@ function App(): React.ReactNode {
     case '/login':
       return <Login />;
     case '/register':
-      // §4.1b step 4c lands here with the onboarding token in the fragment; the
-      // unified registration form itself is M2.
-      return <Login />;
+      // §4.1b step 4c lands here with the onboarding token in the fragment.
+      return <Register />;
     case '/content-unavailable':
       return <ContentUnavailable />;
     case '/calendar':

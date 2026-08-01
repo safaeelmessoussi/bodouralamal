@@ -37,7 +37,10 @@ async function makeAdmin(role = 'admin'): Promise<string> {
   return user.id;
 }
 
-async function submitBundle(): Promise<{ parentId: string; childId: string }> {
+/** §4.1 Revision 39 — an applicant chooses a branch, so the fixture supplies
+ *  one. Overridable, because a filter test needs items in *different* branches
+ *  to prove it narrows rather than merely returning everything. */
+async function submitBundle(intoBranchId?: string): Promise<{ parentId: string; childId: string }> {
   const { token } = issueOnboardingToken(identity(), KEY);
   const result = await register(
     prisma,
@@ -46,6 +49,7 @@ async function submitBundle(): Promise<{ parentId: string; childId: string }> {
       kind: 'parent_child',
       parent: { name_arabic: `${TAG} والدة`, sex: 'female' as const },
       child: { name_arabic: `${TAG} طفلة`, sex: 'female' as const },
+      branch_id: intoBranchId ?? branchId,
       consents: { data_processing: true, media_release: true },
     },
     KEY,
@@ -66,7 +70,15 @@ async function clear(): Promise<void> {
   await prisma.userBranchRole.deleteMany({ where: { userId: { in: ids } } });
   await prisma.user.deleteMany({ where: { id: { in: ids } } });
   await prisma.consumedToken.deleteMany({ where: { purpose: 'onboarding' } });
+  // After the users: `intended_branch_id` is ON DELETE RESTRICT, so a branch
+  // still referenced refuses to go.
+  await prisma.branch.deleteMany({ where: { name: { startsWith: TAG } } });
 }
+
+/** Two branches, because a filter that is never given something to exclude has
+ *  not been tested (§4.1, Revision 39). */
+let branchId = '';
+let otherBranchId = '';
 
 beforeEach(async () => {
   await clear();
@@ -75,6 +87,8 @@ beforeEach(async () => {
     update: { value: 'appr-test-v1' },
     create: { key: CONSENT_TEXT_VERSION_KEY, value: 'appr-test-v1' },
   });
+  branchId = (await prisma.branch.create({ data: { name: `${TAG} مقر أ` } })).id;
+  otherBranchId = (await prisma.branch.create({ data: { name: `${TAG} مقر ب` } })).id;
 });
 
 afterAll(async () => {
@@ -152,6 +166,37 @@ describe('§5.6 / TD-4.2 approval queue', () => {
     await expect(decide(prisma, admin, parentId, { approve: true })).rejects.toMatchObject({
       code: 'STATE_CONFLICT',
     });
+  });
+
+  it('§14.2 R39: branch_id narrows the queue, and meta.total follows the filter', async () => {
+    const admin = await makeAdmin();
+    const here = await submitBundle(branchId);
+    const elsewhere = await submitBundle(otherBranchId);
+
+    const filtered = await listApprovals(prisma, admin, { branchId });
+    const ids = filtered.data.map((i) => i.id);
+    expect(ids).toContain(here.parentId);
+    expect(ids).not.toContain(elsewhere.parentId);
+    // A total that ignored the filter would tell a client to render empty pages.
+    expect(filtered.meta.total).toBe(ids.length);
+
+    // And the item carries WHICH branch was asked for, not merely that one was.
+    const item = filtered.data.find((i) => i.id === here.parentId)!;
+    expect(item.branch?.id).toBe(branchId);
+  });
+
+  it('R39: the branch is a REQUEST — approving it grants no placement', async () => {
+    const admin = await makeAdmin();
+    const { parentId } = await submitBundle(branchId);
+    await decide(prisma, admin, parentId, { approve: true });
+
+    // The applicant is active and still has no role assignment and no
+    // enrolment: placement remains an administrative action after approval.
+    expect((await prisma.user.findUnique({ where: { id: parentId } }))?.accountStatus).toBe('active');
+    expect(await prisma.userBranchRole.count({ where: { userId: parentId } })).toBe(0);
+    expect(await prisma.studentGroup.count({ where: { studentId: parentId } })).toBe(0);
+    // The request itself survives approval — it is the record of what was asked.
+    expect((await prisma.user.findUnique({ where: { id: parentId } }))?.intendedBranchId).toBe(branchId);
   });
 
   it('TD-15.3: two admins approving concurrently activate exactly once', async () => {

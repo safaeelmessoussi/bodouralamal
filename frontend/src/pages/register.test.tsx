@@ -1,0 +1,148 @@
+import { renderToStaticMarkup } from 'react-dom/server';
+import { describe, expect, it } from 'vitest';
+
+import { BranchSelector } from '../components/ui/branch-selector.js';
+import type { PublicBranch } from '../adapters/branches.js';
+import { validate } from './register.js';
+
+/**
+ * Registration form rules (§4.1, §4.1b step 5, Revision 39).
+ *
+ * `validate` is exported and tested directly rather than driven through the
+ * DOM: it *is* the rule, and a test that clicked its way to the same conclusion
+ * would be slower and would fail for reasons unrelated to the rule.
+ */
+
+const person = { nameArabic: 'خديجة', nameFrench: '', nickname: '', phone: '', notes: '', sex: 'female' as const };
+const base = {
+  kind: 'adult' as const,
+  applicant: person,
+  child: person,
+  branchId: 'b1',
+  dataProcessing: true,
+  mediaRelease: '' as const,
+};
+
+describe('§4.1 Revision 39 — the branch is a required choice', () => {
+  it('refuses a submission with no branch chosen', () => {
+    // A default would place someone at a branch nobody picked, which is the
+    // one outcome worse than making them choose.
+    expect(validate({ ...base, branchId: null })).toHaveProperty('branch');
+  });
+
+  it('accepts once a branch is chosen', () => {
+    expect(validate(base)).toEqual({});
+  });
+});
+
+describe('consent rules (§4.1, BR-1)', () => {
+  it('refuses without data-processing consent', () => {
+    // Not a warning: there is no lawful basis to create the record at all.
+    expect(validate({ ...base, dataProcessing: false })).toHaveProperty('dataProcessing');
+  });
+
+  it('requires a media-release DECISION for a minor, and accepts "no"', () => {
+    const parentChild = { ...base, kind: 'parent_child' as const };
+    // Unanswered is refused…
+    expect(validate(parentChild)).toHaveProperty('mediaRelease');
+    // …but declining is a valid, recorded answer. BR-1 reads an absent record
+    // as refusal, so "no" and "unanswered" must not collapse into each other.
+    expect(validate({ ...parentChild, mediaRelease: 'no' })).toEqual({});
+    expect(validate({ ...parentChild, mediaRelease: 'yes' })).toEqual({});
+  });
+
+  it('asks nothing about media release on the adult path', () => {
+    expect(validate(base)).not.toHaveProperty('mediaRelease');
+  });
+});
+
+describe('person rules mirror TD-9', () => {
+  it('requires an Arabic name and a sex for every person created', () => {
+    const blank = { ...person, nameArabic: '  ', sex: '' as const };
+    const errors = validate({ ...base, applicant: blank });
+    expect(errors).toHaveProperty('applicant.nameArabic');
+    expect(errors).toHaveProperty('applicant.sex');
+  });
+
+  it('validates the CHILD too, not only the applicant', () => {
+    // The parent+child path creates two people, and a form that checked only
+    // the first would send an invalid child to be rejected by the server.
+    const errors = validate({
+      ...base,
+      kind: 'parent_child',
+      mediaRelease: 'no',
+      child: { ...person, nameArabic: '' },
+    });
+    expect(errors).toHaveProperty('child.nameArabic');
+  });
+
+  it('accepts an empty optional phone but refuses a malformed one', () => {
+    expect(validate({ ...base, applicant: { ...person, phone: '' } })).toEqual({});
+    expect(validate({ ...base, applicant: { ...person, phone: 'abc' } })).toHaveProperty(
+      'applicant.phone',
+    );
+    expect(validate({ ...base, applicant: { ...person, phone: '+212 600 000 001' } })).toEqual({});
+  });
+});
+
+describe('BranchSelector — one component, two modes (§14.3)', () => {
+  const branches: PublicBranch[] = [
+    {
+      id: 'b1',
+      name: 'مقر أمرشيش',
+      address: null,
+      phone: null,
+      email: null,
+      opening_hours_ar: null,
+      google_maps_url: null,
+      display_order: 1,
+    },
+  ];
+
+  it('offers "all branches" when filtering', () => {
+    const html = renderToStaticMarkup(
+      <BranchSelector branches={branches} value={null} onChange={() => undefined} />,
+    );
+    expect(html).toContain('كل الفروع');
+    expect(html).not.toContain('required');
+  });
+
+  it('does NOT offer "all" when a choice is required', () => {
+    // Registration must not let someone submit "all branches" as their branch.
+    const html = renderToStaticMarkup(
+      <BranchSelector
+        branches={branches}
+        value={null}
+        onChange={() => undefined}
+        allowAll={false}
+        emptyLabel="اختر المقر…"
+        required
+      />,
+    );
+    expect(html).not.toContain('كل الفروع');
+    expect(html).toContain('required');
+  });
+
+  it('generates its id instead of hardcoding one, so two cannot collide', () => {
+    // The defect this component shipped with as a calendar widget: a literal
+    // id="branch-filter" meant two on a page produced duplicate ids and a label
+    // pointing at the wrong control.
+    const html = renderToStaticMarkup(
+      <>
+        <BranchSelector branches={branches} value={null} onChange={() => undefined} />
+        <BranchSelector branches={branches} value={null} onChange={() => undefined} />
+      </>,
+    );
+    const ids = [...html.matchAll(/for="([^"]+)"/g)].map((m) => m[1]);
+    expect(ids).toHaveLength(2);
+    expect(ids[0]).not.toBe(ids[1]);
+    expect(html).not.toContain('id="branch-filter"');
+  });
+
+  it('renders branch names from the adapter, never a literal list', () => {
+    const html = renderToStaticMarkup(
+      <BranchSelector branches={branches} value="b1" onChange={() => undefined} />,
+    );
+    expect(html).toContain('مقر أمرشيش');
+  });
+});

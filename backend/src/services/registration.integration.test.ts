@@ -27,10 +27,14 @@ function identity() {
   return { email: `reg-${Date.now()}-${counter}@example.com`, providerSubjectId: `sub-${Date.now()}-${counter}` };
 }
 
+/** The branch this suite's applicants choose (§4.1, Revision 39). */
+let branchId = '';
+
 const parentChild = (): RegistrationInput => ({
   kind: 'parent_child',
   parent: { name_arabic: `${TAG} والدة`, phone: '+212 600 000 001', sex: 'female' as const },
   child: { name_arabic: `${TAG} طفلة`, sex: 'female' as const },
+  branch_id: branchId,
   consents: { data_processing: true, media_release: true },
 });
 
@@ -46,6 +50,10 @@ async function clear(): Promise<void> {
   await prisma.userIdentity.deleteMany({ where: { userId: { in: ids } } });
   await prisma.user.deleteMany({ where: { id: { in: ids } } });
   await prisma.consumedToken.deleteMany({ where: { purpose: 'onboarding' } });
+  // After the users, never before: `intended_branch_id` is ON DELETE RESTRICT,
+  // so a branch still referenced by a registration refuses to go — which is the
+  // guarantee, working.
+  await prisma.branch.deleteMany({ where: { name: { startsWith: TAG } } });
 }
 
 beforeEach(async () => {
@@ -55,6 +63,7 @@ beforeEach(async () => {
     update: { value: TEXT_VERSION },
     create: { key: CONSENT_TEXT_VERSION_KEY, value: TEXT_VERSION },
   });
+  branchId = (await prisma.branch.create({ data: { name: `${TAG} مقر` } })).id;
 });
 
 const countTagged = () => prisma.user.count({ where: { nameArabic: { startsWith: TAG } } });
@@ -75,41 +84,136 @@ afterAll(async () => {
 });
 
 
-describe('§4.1 Revision 29 — registration never places a beneficiary', () => {
-  it('the schema REJECTS placement fields outright', () => {
-    // Not merely ignored: `.strict()` refuses them, so a client cannot believe a
-    // placement was recorded. Registration creates a pending applicant only —
-    // assignment is an administrative action after approval.
-    for (const field of ['branch_id', 'room_id', 'level_id', 'group_id', 'category_id']) {
+describe('§4.1 Revision 39 — the applicant chooses a Branch, and only a Branch', () => {
+  it('still REJECTS every other placement field outright', () => {
+    // R39 narrowed R29's prohibition by exactly one field. Level, Room and Group
+    // remain administrative decisions after approval, and `.strict()` refuses
+    // them rather than ignoring them — a silently dropped `level_id` would let a
+    // client believe a placement was recorded.
+    for (const field of ['room_id', 'level_id', 'group_id', 'category_id']) {
       const parsed = registrationSchema.safeParse({
         kind: 'adult',
         applicant: { name_arabic: 'خديجة', sex: 'female', [field]: 'anything' },
+        branch_id: '00000000-0000-4000-8000-000000000000',
         consents: { data_processing: true },
       });
       expect(parsed.success, `${field} must be rejected`).toBe(false);
     }
   });
 
-  it('a registered applicant holds NO branch assignment', async () => {
+  it('REQUIRES branch_id on the public self-service path', () => {
+    // The applicant is present to choose, so a submission without a choice is
+    // refused rather than defaulted. A default would silently put someone at a
+    // branch nobody picked.
+    const parsed = registrationSchema.safeParse({
+      kind: 'adult',
+      applicant: { name_arabic: 'خديجة', sex: 'female' },
+      consents: { data_processing: true },
+    });
+    expect(parsed.success).toBe(false);
+  });
+
+  it('persists the chosen branch as a REQUEST, granting no placement', async () => {
     const { token } = issueOnboardingToken(identity(), KEY);
     const result = await register(
       prisma,
       token,
       {
         kind: 'adult',
-        applicant: { name_arabic: `${TAG} بلا تعيين`, sex: 'female' },
+        applicant: { name_arabic: `${TAG} مختارة`, sex: 'female' },
+        branch_id: branchId,
         consents: { data_processing: true },
       },
       KEY,
     );
 
-    // The consequence R29 records: an applicant carries no branch, so a
-    // branch-scoped Admin never sees them in the §14.2 list — the approval
-    // queue is the permanent path by which they are encountered.
-    expect(
-      await prisma.userBranchRole.count({ where: { userId: result.applicantId } }),
-    ).toBe(0);
+    const applicant = await prisma.user.findUnique({ where: { id: result.applicantId } });
+    expect(applicant?.intendedBranchId).toBe(branchId);
+
+    // The distinction R39 turns on: what was ASKED FOR is recorded; where the
+    // person ENDS UP is still nothing, because placement follows approval. A
+    // role assignment and an enrolment are both absent.
+    expect(await prisma.userBranchRole.count({ where: { userId: result.applicantId } })).toBe(0);
     expect(await prisma.studentGroup.count({ where: { studentId: result.applicantId } })).toBe(0);
+  });
+
+  it('records the branch on the APPLICANT only, never copied onto the child', async () => {
+    // One decision, one row. Copying it onto the child would be a second value
+    // to keep in step, and the child's branch — once they have one — is their
+    // Group's.
+    const { token } = issueOnboardingToken(identity(), KEY);
+    const result = await register(prisma, token, parentChild(), KEY);
+
+    const parent = await prisma.user.findUnique({ where: { id: result.applicantId } });
+    const child = await prisma.user.findUnique({ where: { id: result.childId! } });
+    expect(parent?.intendedBranchId).toBe(branchId);
+    expect(child?.intendedBranchId).toBeNull();
+  });
+
+  it('REFUSES a branch that does not exist', async () => {
+    const { token } = issueOnboardingToken(identity(), KEY);
+    await expect(
+      register(
+        prisma,
+        token,
+        {
+          kind: 'adult',
+          applicant: { name_arabic: `${TAG} وهمية`, sex: 'female' },
+          branch_id: '00000000-0000-4000-8000-000000000000',
+          consents: { data_processing: true },
+        },
+        KEY,
+      ),
+    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+  });
+
+  it('REFUSES a soft-deleted branch — a closed premises takes no registrations', async () => {
+    // The foreign key alone would NOT catch this: a soft delete leaves the row
+    // in place, so liveness has to be checked explicitly (R35 refuses to
+    // advertise a closed branch for the same reason).
+    const closed = await prisma.branch.create({
+      data: { name: `${TAG} مغلق`, deletedAt: new Date() },
+    });
+    const { token } = issueOnboardingToken(identity(), KEY);
+    await expect(
+      register(
+        prisma,
+        token,
+        {
+          kind: 'adult',
+          applicant: { name_arabic: `${TAG} مرفوضة`, sex: 'female' },
+          branch_id: closed.id,
+          consents: { data_processing: true },
+        },
+        KEY,
+      ),
+    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+  });
+
+  it('ACCEPTS a branch that has not opened yet', async () => {
+    // §4.4 keeps such a branch out of the CALENDAR; it must not keep it out of
+    // registration, or an association could never enrol anyone for a premises
+    // before opening day.
+    const future = await prisma.branch.create({
+      data: {
+        name: `${TAG} قادم`,
+        operationalStartDate: new Date(Date.UTC(2099, 0, 1)),
+      },
+    });
+    const { token } = issueOnboardingToken(identity(), KEY);
+    const result = await register(
+      prisma,
+      token,
+      {
+        kind: 'adult',
+        applicant: { name_arabic: `${TAG} مبكرة`, sex: 'female' },
+        branch_id: future.id,
+        consents: { data_processing: true },
+      },
+      KEY,
+    );
+    const applicant = await prisma.user.findUnique({ where: { id: result.applicantId } });
+    expect(applicant?.intendedBranchId).toBe(future.id);
   });
 });
 
@@ -123,6 +227,7 @@ describe('§4.1b step 5 Revision 27 — registration captures sex before the Use
         kind: 'parent_child',
         parent: { name_arabic: `${TAG} والدة`, sex: 'female' },
         child: { name_arabic: `${TAG} ابن`, sex: 'male' },
+        branch_id: branchId,
         consents: { data_processing: true, media_release: true },
       },
       KEY,
@@ -143,6 +248,7 @@ describe('§4.1b step 5 Revision 27 — registration captures sex before the Use
       {
         kind: 'adult',
         applicant: { name_arabic: `${TAG} راشدة`, sex: 'female' },
+        branch_id: branchId,
         consents: { data_processing: true },
       },
       KEY,
@@ -175,6 +281,7 @@ describe('§4.1b step 5 Revision 27 — registration captures sex before the Use
       const parsed = registrationSchema.safeParse({
         kind: 'adult',
         applicant: { name_arabic: 'خديجة', sex },
+        branch_id: '00000000-0000-4000-8000-000000000000',
         consents: { data_processing: true },
       });
       expect(parsed.success).toBe(true);
@@ -307,7 +414,7 @@ describe('§4.1b step 5 / TD-4.1 unified registration', () => {
     const id = identity();
     const victim = fileURLToPath(new URL('../test-support/registration-victim.ts', import.meta.url));
 
-    const child = spawn('npx', ['tsx', victim, TAG, id.email, id.providerSubjectId], {
+    const child = spawn('npx', ['tsx', victim, TAG, id.email, id.providerSubjectId, branchId], {
       cwd: fileURLToPath(new URL('../..', import.meta.url)),
       env: process.env,
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -429,6 +536,7 @@ describe('§4.1b step 5 / TD-4.1 unified registration', () => {
       {
         kind: 'adult',
         applicant: { name_arabic: `${TAG} خديجة`, sex: 'female' as const },
+        branch_id: branchId,
         consents: { data_processing: true },
       },
       KEY,

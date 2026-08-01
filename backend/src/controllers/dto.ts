@@ -121,6 +121,13 @@ export interface ApprovalDto {
   submitted_at: string;
   /** §14.2 column: Bundle contents — what approving this will actually change. */
   bundle: { child_count: number; link_count: number };
+  /**
+   * §14.2 column: Branch requested (Revision 39) — **what the applicant asked
+   * for**, never where they will be placed. `null` on a family-link item, and
+   * `null` on any account registered before R39, where it means *not stated*
+   * rather than *no branch*.
+   */
+  branch: { id: string; name: string } | null;
 }
 
 /**
@@ -140,6 +147,7 @@ export function approvalDto(row: {
   applicants: { id: string; nameArabic: string; role: 'applicant' | 'child' | 'parent' }[];
   submittedAt: Date;
   bundle: { childCount: number; linkCount: number };
+  branch: { id: string; name: string } | null;
 }): ApprovalDto {
   return {
     id: row.id,
@@ -147,5 +155,8 @@ export function approvalDto(row: {
     applicants: row.applicants.map((a) => ({ id: a.id, name: a.nameArabic, role: a.role })),
     submitted_at: row.submittedAt.toISOString(),
     bundle: { child_count: row.bundle.childCount, link_count: row.bundle.linkCount },
+    // Field by field, never a spread — the branch is projected to exactly the
+    // two fields the screen renders (§16.2).
+    branch: row.branch ? { id: row.branch.id, name: row.branch.name } : null,
   };
 }

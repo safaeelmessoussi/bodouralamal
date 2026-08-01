@@ -44,10 +44,11 @@ const personCore = z.object({
   sex: z.enum(['female', 'male']),
 })
   // `.strict()` for the same reason §20 rule 9 refuses identity fields: an
-  // unknown key must be REFUSED, not silently stripped. Revision 29 forbids
-  // applicants selecting a Branch, Room, Level or Group — and a payload that
-  // quietly drops `branch_id` would let a client believe a placement was
-  // recorded when registration creates a pending applicant only.
+  // unknown key must be REFUSED, not silently stripped. Revision 39 lets an
+  // applicant choose a **Branch** and nothing else organisational — a payload
+  // carrying `level_id`, `room_id` or `group_id` is rejected here rather than
+  // quietly dropped, because silently ignoring it would let a client believe a
+  // placement was recorded when placement happens after approval (§4.1).
   .strict();
 
 /**
@@ -64,11 +65,32 @@ const consents = z.object({
   media_release: z.boolean().optional(),
 });
 
+/**
+ * The branch the applicant chooses (§4.1, Revision 39).
+ *
+ * **Top-level, not part of `personCore`, and that placement is the design.**
+ * One registration expresses one choice: on the parent+child path the parent
+ * picks a branch for the family, and it is recorded on the applicant row alone.
+ * Putting it inside `personCore` would have produced a parent branch and a
+ * child branch — two values to keep in step, for one decision.
+ *
+ * **Required on this public self-service path**, because the applicant is
+ * present to choose. Staff-assisted registration (§4.1) is a different surface
+ * and may leave it unset, where a null means *not stated*, never *no branch*.
+ *
+ * Existence and liveness are **not** checked here: a `uuid()` that names no
+ * branch, or a soft-deleted one, is a `VALIDATION_FAILED` raised by the service
+ * where the database is in reach. Zod validates shape; the service validates
+ * truth.
+ */
+const branchId = z.uuid();
+
 /** Adult self-registration — Women's track (§4.1). No child, no media release. */
 export const adultRegistrationSchema = z
   .object({
     kind: z.literal('adult'),
     applicant: personCore,
+    branch_id: branchId,
     consents,
   })
   .strict();
@@ -79,6 +101,7 @@ export const parentChildRegistrationSchema = z
     kind: z.literal('parent_child'),
     parent: personCore,
     child: personCore,
+    branch_id: branchId,
     consents,
   })
   .strict();

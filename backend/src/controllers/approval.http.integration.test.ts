@@ -51,7 +51,7 @@ async function makeStaff(role: string): Promise<string> {
 }
 
 let counter = 0;
-async function submitBundle(): Promise<{ parentId: string; childId: string }> {
+async function submitBundle(intoBranchId?: string): Promise<{ parentId: string; childId: string }> {
   counter += 1;
   const stamp = `${Date.now()}-${counter}`;
   const { token } = issueOnboardingToken(
@@ -65,6 +65,7 @@ async function submitBundle(): Promise<{ parentId: string; childId: string }> {
       kind: 'parent_child',
       parent: { name_arabic: `${TAG} والدة`, sex: 'female' as const },
       child: { name_arabic: `${TAG} طفلة`, sex: 'female' as const },
+      branch_id: intoBranchId ?? branchId,
       consents: { data_processing: true, media_release: true },
     },
     config.ONBOARDING_TOKEN_KEY,
@@ -89,10 +90,16 @@ async function clear(): Promise<void> {
   await prisma.userBranchRole.deleteMany({ where: { userId: { in: ids } } });
   await prisma.user.deleteMany({ where: { id: { in: ids } } });
   await prisma.consumedToken.deleteMany({ where: { purpose: 'onboarding' } });
+  // After the users: `intended_branch_id` is ON DELETE RESTRICT.
+  await prisma.branch.deleteMany({ where: { name: { startsWith: TAG } } });
 }
 
 let adminId: string;
 let teacherId: string;
+/** Two branches — a filter never given something to exclude has not been
+ *  tested (§4.1/§14.2, Revision 39). */
+let branchId = '';
+let otherBranchId = '';
 let admin: string;
 let teacher: string;
 
@@ -112,6 +119,8 @@ beforeAll(async () => {
     update: { value: 'http-appr-v1' },
     create: { key: CONSENT_TEXT_VERSION_KEY, value: 'http-appr-v1' },
   });
+  branchId = (await prisma.branch.create({ data: { name: `${TAG} مقر أ` } })).id;
+  otherBranchId = (await prisma.branch.create({ data: { name: `${TAG} مقر ب` } })).id;
   adminId = await makeStaff('admin');
   teacherId = await makeStaff('teacher');
   admin = bearer(adminId, ['admin']);
@@ -145,13 +154,51 @@ describe('GET /api/v1/admin/approvals', () => {
     const item = (res.body.data as Record<string, unknown>[]).find((i) => i.id === parentId)!;
 
     expect(Object.keys(item).sort()).toEqual(
-      ['applicants', 'bundle', 'id', 'submitted_at', 'type'],
+      ['applicants', 'branch', 'bundle', 'id', 'submitted_at', 'type'],
     );
+    // R39: what the applicant ASKED FOR, projected to exactly two fields.
+    expect(Object.keys(item.branch as object).sort()).toEqual(['id', 'name']);
     expect(Object.keys(item.bundle as object).sort()).toEqual(['child_count', 'link_count']);
     const applicant = (item.applicants as Record<string, unknown>[])[0]!;
     expect(Object.keys(applicant).sort()).toEqual(['id', 'name', 'role']);
     // `submitted_at` is an instant, correctly — a submission is a moment.
     expect(item.submitted_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
+
+  it('§14.2 R39: branch_id NARROWS the queue rather than returning everything', async () => {
+    // The test a filter actually needs: something it must exclude. One item in
+    // each branch, then assert each filter returns its own and not the other.
+    const here = await submitBundle(branchId);
+    const elsewhere = await submitBundle(otherBranchId);
+
+    const mine = await call('GET', `/admin/approvals?branch_id=${branchId}`, admin);
+    const ids = (mine.body.data as { id: string }[]).map((i) => i.id);
+    expect(ids).toContain(here.parentId);
+    expect(ids).not.toContain(elsewhere.parentId);
+
+    // `meta.total` must describe the FILTERED set, or the client renders pages
+    // that are empty.
+    expect(mine.body.meta?.page_size).toBe(25);
+    const all = await call('GET', '/admin/approvals', admin);
+    expect((all.body.data as { id: string }[]).map((i) => i.id)).toEqual(
+      expect.arrayContaining([here.parentId, elsewhere.parentId]),
+    );
+  });
+
+  it('R39: a branch filter excludes family-link items WHOLESALE', async () => {
+    // A link request carries no branch, so asking for "branch X" asks for
+    // something it can never be. Excluding the type keeps `meta.total` honest.
+    const res = await call('GET', `/admin/approvals?branch_id=${branchId}`, admin);
+    const types = new Set((res.body.data as { type: string }[]).map((i) => i.type));
+    expect(types.has('family-link')).toBe(false);
+  });
+
+  it('R39: an unknown branch_id is a 400, not a silent empty list', async () => {
+    // A malformed filter that returns nothing looks identical to a branch with
+    // no applicants — the admin would conclude the queue is clear.
+    const res = await call('GET', '/admin/approvals?branch_id=not-a-uuid', admin);
+    expect(res.status).toBe(400);
+    expect(res.body.error?.code).toBe('VALIDATION_FAILED');
   });
 
   it('refuses an anonymous caller with the TD-3.8 envelope', async () => {

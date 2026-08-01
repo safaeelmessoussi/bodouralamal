@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 
 import type { LevelRef } from '../../adapters/calendar.js';
 import { t } from '../../i18n/index.js';
+import { SelectField } from '../ui/field.js';
 
 /**
  * Level filter, **dependent on the selected category**.
@@ -32,26 +33,17 @@ export function LevelSelector({
   busy: boolean;
   onChange: (levelId: string | null) => void;
 }): ReactNode {
+  // Built on the shared `SelectField` (Revision 39) — generated id, and `busy`
+  // is the primitive's own concern now rather than this file's.
   return (
-    <div className="cal-filter">
-      <label className="cal-filter__label" htmlFor="level-filter">
-        {t('calendar.levelLabel')}
-      </label>
-      <select
-        id="level-filter"
-        className="cal-filter__control"
-        value={value ?? ''}
-        disabled={busy || levels.length === 0}
-        aria-busy={busy}
-        onChange={(event) => onChange(event.target.value === '' ? null : event.target.value)}
-      >
-        <option value="">{t('calendar.allLevels')}</option>
-        {levels.map((level) => (
-          <option key={level.id} value={level.id}>
-            {level.name}
-          </option>
-        ))}
-      </select>
-    </div>
+    <SelectField
+      label={t('calendar.levelLabel')}
+      value={value ?? ''}
+      onChange={(next) => onChange(next === '' ? null : next)}
+      placeholder={t('calendar.allLevels')}
+      options={levels.map((level) => ({ value: level.id, label: level.name }))}
+      busy={busy}
+      disabled={levels.length === 0}
+    />
   );
 }

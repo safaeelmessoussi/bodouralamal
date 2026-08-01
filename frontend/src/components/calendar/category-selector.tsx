@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 
 import type { CategoryRef } from '../../adapters/calendar.js';
 import { t } from '../../i18n/index.js';
+import { SelectField } from '../ui/field.js';
 
 /**
  * Category filter — the three educational stages (الكبار / اليافعون / الطفل).
@@ -25,24 +26,16 @@ export function CategorySelector({
   value: string | null;
   onChange: (categoryId: string | null) => void;
 }): ReactNode {
+  // Built on the shared `SelectField` (Revision 39): the id is generated with
+  // `useId` rather than hardcoded, so two instances on one page cannot collide
+  // — the defect this file shipped with, alongside its two siblings.
   return (
-    <div className="cal-filter">
-      <label className="cal-filter__label" htmlFor="category-filter">
-        {t('calendar.categoryLabel')}
-      </label>
-      <select
-        id="category-filter"
-        className="cal-filter__control"
-        value={value ?? ''}
-        onChange={(event) => onChange(event.target.value === '' ? null : event.target.value)}
-      >
-        <option value="">{t('calendar.allCategories')}</option>
-        {categories.map((category) => (
-          <option key={category.id} value={category.id}>
-            {category.name}
-          </option>
-        ))}
-      </select>
-    </div>
+    <SelectField
+      label={t('calendar.categoryLabel')}
+      value={value ?? ''}
+      onChange={(next) => onChange(next === '' ? null : next)}
+      placeholder={t('calendar.allCategories')}
+      options={categories.map((category) => ({ value: category.id, label: category.name }))}
+    />
   );
 }
