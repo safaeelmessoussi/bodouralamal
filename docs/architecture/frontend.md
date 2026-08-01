@@ -435,17 +435,33 @@ The branch form checks TD-9's limits for immediate feedback. That is **not** red
 server's checks and does not replace them (§1.1): one is responsiveness, the other is
 correctness. A client skipping a check the server enforces is a bug in the client.
 
-### Where the adapter earns its keep
+### What an adapter is for, and what it is not for
 
-`GET /admin/branches` returns **raw Prisma rows**: row fields in `camelCase` while `meta` is
-`snake_case`, `operationalStartDate` as an *instant* where TD-11 says a branch's operational
+`GET /admin/branches` used to return **raw Prisma rows**: row fields in `camelCase` while `meta`
+was `snake_case`, `operationalStartDate` as an *instant* where TD-11 says a branch's operational
 start is a **date**, and four internal columns (`createdAt`, `updatedAt`, `deletedAt`,
-`deletedById`) that no screen has any use for.
+`deletedById`) that no screen had any use for.
 
-The adapter absorbs all of it — wire types describe what the endpoint really sends, exported
-types are what components consume, and the date is truncated at the seam so that mistake cannot
-reach a screen. **The inconsistency is reported rather than silently normalised away**: changing
-a live endpoint's response shape is a contract change and the Document Owner's call.
+`adapters/branches-admin.ts` absorbed all of it behind a parallel set of wire types and a
+truncating date converter. That was the wrong repair, and the Document Owner rejected it:
+
+> Do not keep an inconsistent API and compensate in the frontend adapter. The backend contract
+> is the source of truth.
+
+**SRS Revision 38 fixed the endpoint.** Every response is now an explicit contract DTO — see
+[api.md](api.md#the-contract-is-an-interface-not-a-serialisation) — and the adapter collapsed to
+typed calls with no mapping at all.
+
+The distinction is worth keeping, because both things look like "adapter work" from inside the
+adapter:
+
+| | |
+|---|---|
+| **Adapting** | Turning a contract into what the UI needs — paging arguments, a `Page<T>` wrapper, an endpoint the screen shouldn't know the URL of. Legitimate; that is the seam's job. |
+| **Repairing** | Normalising a shape the backend got wrong. Illegitimate — it leaves the contract broken for the next client, and hides *that* it is broken from everyone, because the one place the symptom was visible now silently handles it. |
+
+A repair is a defect report, not a code change. When you find one: stop, report it, and fix the
+contract.
 
 ## The back office: one registry drives nav, routing and permissions
 

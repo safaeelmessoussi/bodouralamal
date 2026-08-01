@@ -5,6 +5,7 @@ import type { PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
 import { requireActor } from '../middleware/authenticate.js';
 import * as branches from '../services/branch.service.js';
+import { branchDto, pageOf, roomDto } from './dto.js';
 import {
   createBranchSchema,
   createRoomSchema,
@@ -18,6 +19,12 @@ import {
  *
  * Controllers validate with Zod, call **one** service method, and map the
  * result — no business logic here (§16.2).
+ *
+ * **Every response goes through a DTO** (§16.2, Revision 38). These endpoints
+ * used to return raw Prisma rows: `camelCase` fields beside a `snake_case`
+ * envelope, an instant where TD-11 defines a date, and four internal columns
+ * nobody asked for. The projection in `dto.ts` is where the contract is chosen
+ * deliberately rather than inherited from the schema.
  */
 
 /** Zod failures become `400 VALIDATION_FAILED` in the envelope, never a 500. */
@@ -36,7 +43,8 @@ const id = (req: Request, key: string): string =>
 
 export function listBranches(prisma: PrismaClient) {
   return async (req: Request, res: Response): Promise<void> => {
-    res.json(await branches.listBranches(prisma, requireActor(req), pageParamsFrom(req.query)));
+    const result = await branches.listBranches(prisma, requireActor(req), pageParamsFrom(req.query));
+    res.json(pageOf(result, branchDto));
   };
 }
 
@@ -60,7 +68,7 @@ export function createBranch(prisma: PrismaClient) {
       ...(body.opening_hours_ar !== undefined ? { openingHoursAr: body.opening_hours_ar } : {}),
       ...(body.google_maps_url !== undefined ? { googleMapsUrl: body.google_maps_url } : {}),
     });
-    res.status(201).json(branch);
+    res.status(201).json(branchDto(branch));
   };
 }
 
@@ -80,7 +88,7 @@ export function updateBranch(prisma: PrismaClient) {
       ...(body.opening_hours_ar !== undefined ? { openingHoursAr: body.opening_hours_ar } : {}),
       ...(body.google_maps_url !== undefined ? { googleMapsUrl: body.google_maps_url } : {}),
     });
-    res.json(branch);
+    res.json(branchDto(branch));
   };
 }
 
@@ -93,9 +101,13 @@ export function deleteBranch(prisma: PrismaClient) {
 
 export function listRooms(prisma: PrismaClient) {
   return async (req: Request, res: Response): Promise<void> => {
-    res.json(
-      await branches.listRooms(prisma, requireActor(req), id(req, 'id'), pageParamsFrom(req.query)),
+    const result = await branches.listRooms(
+      prisma,
+      requireActor(req),
+      id(req, 'id'),
+      pageParamsFrom(req.query),
     );
+    res.json(pageOf(result, roomDto));
   };
 }
 
@@ -103,7 +115,7 @@ export function createRoom(prisma: PrismaClient) {
   return async (req: Request, res: Response): Promise<void> => {
     const body = parse(createRoomSchema, req.body);
     const room = await branches.createRoom(prisma, requireActor(req), id(req, 'id'), body);
-    res.status(201).json(room);
+    res.status(201).json(roomDto(room));
   };
 }
 
@@ -113,7 +125,7 @@ export function updateRoom(prisma: PrismaClient) {
     const room = await branches.updateRoom(prisma, requireActor(req), id(req, 'id'), body.version, {
       ...(body.name !== undefined ? { name: body.name } : {}),
     });
-    res.json(room);
+    res.json(roomDto(room));
   };
 }
 

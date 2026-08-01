@@ -249,7 +249,7 @@
     "/admin/approvals": {
       "get": {
         "summary": "Approval queue",
-        "description": "Admin or Super Admin only (TD-2), re-asserted against live rows per request because approvals are a TD-12 high-risk surface. Two item types share the queue: `registration` (a pending applicant together with any pending child and link that arrived as one §4.1 bundle) and `family-link` (a standalone §4.3 \"Link a Child\" request). A pending child is never listed separately — it appears inside its parent's bundle so the family is approved once. Paginated per TD-10 (default 25, max 100), oldest first.",
+        "description": "Admin or Super Admin only (TD-2), re-asserted against live rows per request because approvals are a TD-12 high-risk surface. Two item types share the queue: `registration` (a pending applicant together with any pending child and link that arrived as one §4.1 bundle) and `family-link` (a standalone §4.3 \"Link a Child\" request). A pending child is never listed separately — it appears inside its parent's bundle so the family is approved once. Paginated per TD-10 (default 25, max 100), oldest first. **Explicit contract DTO (§16.2, Revision 38):** an item is `id`, `type`, `applicants: [{ id, name, role }]`, `submitted_at` and `bundle: { child_count, link_count }`. This queue never returned an ORM entity — it returned a hand-built shape in `camelCase`, which Revision 38 corrected in the same pass, because a contract that is *mostly* consistent is the harder kind to remember. `submitted_at` is an **instant**, correctly: a submission is a moment, not a calendar date. `name` rather than `name_arabic` because the field is *the name to display*, and this staff-facing queue shows legal names — the §7 public display-identity invariant governs **public** surfaces, where a kunya may stand in; here it would be wrong.",
         "responses": {
           "200": {
             "description": "Queue page; each item carries its applicants and what approving it will change."
@@ -2055,7 +2055,7 @@
     "/admin/branches": {
       "get": {
         "summary": "List branches",
-        "description": "**Read access is retained for Admins** (branch-scoped) because operational work depends on it — a Group references a Branch, a Level and a Room (TD-2 Revision 26). Ordered by display_order ASC NULLS LAST then name (ar-x-icu collated, §2.2/TD-10). Super Admins see all. **Paginated (TD-10):** `?page=` (default 1) and `?page_size=` (default 25, **max 100** — a larger request is capped, not refused). Responds `{ data, meta: { page, page_size, total } }`; `total` is the unpaginated count, so a client can compute page count. Ordering carries an `id` tiebreaker, which is what keeps paging stable across requests.",
+        "description": "**Read access is retained for Admins** (branch-scoped) because operational work depends on it — a Group references a Branch, a Level and a Room (TD-2 Revision 26). Ordered by display_order ASC NULLS LAST then name (ar-x-icu collated, §2.2/TD-10). Super Admins see all. **Paginated (TD-10):** `?page=` (default 1) and `?page_size=` (default 25, **max 100** — a larger request is capped, not refused). Responds `{ data, meta: { page, page_size, total } }`; `total` is the unpaginated count, so a client can compute page count. Ordering carries an `id` tiebreaker, which is what keeps paging stable across requests. **Explicit contract DTO (§16.2, Revision 38):** every branch response — here, `POST` and `PATCH` alike — returns exactly `id`, `name`, `operational_start_date`, `display_order`, `address`, `phone`, `email`, `opening_hours_ar`, `google_maps_url` and `version`, in `snake_case`, built by an allow-list projection. `operational_start_date` is a **TD-11 calendar date (`YYYY-MM-DD`)**, never an instant — an instant invites a timezone conversion in a client. `created_at`, `updated_at`, `deleted_at` and `deleted_by` are **not** exposed: they are operational metadata no screen consumes. Until Revision 38 this endpoint returned the Prisma row itself, which is how a `camelCase` shape and four internal columns came to sit inside a `snake_case` envelope; a column added to `Branch` now joins the model and not this response.",
         "responses": {
           "200": {
             "description": "Branch list."
@@ -2094,7 +2094,7 @@
       },
       "post": {
         "summary": "Create a branch",
-        "description": "**Super Admin only** — Branches are reference/configuration data (TD-2 Revision 26). This also removes an incoherence: branch creation cannot be scope-checked, since no branch exists yet to check against, so an Admin previously created a branch they could not then see.",
+        "description": "**Super Admin only** — Branches are reference/configuration data (TD-2 Revision 26). This also removes an incoherence: branch creation cannot be scope-checked, since no branch exists yet to check against, so an Admin previously created a branch they could not then see. Returns the same branch DTO as `GET` (§16.2, Revision 38).",
         "responses": {
           "201": {
             "description": "Created."
@@ -2135,7 +2135,7 @@
     "/admin/branches/{id}": {
       "patch": {
         "summary": "Update a branch",
-        "description": "**Super Admin only** (reference data, TD-2 Revision 26); `operational_start_date` and `display_order` included, since activating a branch is an organisational decision. Optimistic locking on `version` (TD-15): a stale version returns 409 VERSION_CONFLICT rather than overwriting silently.",
+        "description": "**Super Admin only** (reference data, TD-2 Revision 26); `operational_start_date` and `display_order` included, since activating a branch is an organisational decision. Optimistic locking on `version` (TD-15): a stale version returns 409 VERSION_CONFLICT rather than overwriting silently. Returns the same branch DTO as `GET`, carrying the **incremented** `version` for the client to send on the next edit (§16.2, Revision 38).",
         "responses": {
           "200": {
             "description": "Updated."
@@ -2215,7 +2215,7 @@
     "/admin/branches/{id}/rooms": {
       "get": {
         "summary": "List a branch's rooms",
-        "description": "**Read access retained for Admins**, scoped to branches they administer (TD-2 Revision 26) — an Admin must be able to pick a Room even though only a Super Admin may create one. Out-of-scope answers 404 (§20 rule 17). **Paginated (TD-10):** `?page=` (default 1) and `?page_size=` (default 25, **max 100** — a larger request is capped, not refused). Responds `{ data, meta: { page, page_size, total } }`; `total` is the unpaginated count, so a client can compute page count. Ordering carries an `id` tiebreaker, which is what keeps paging stable across requests.",
+        "description": "**Read access retained for Admins**, scoped to branches they administer (TD-2 Revision 26) — an Admin must be able to pick a Room even though only a Super Admin may create one. Out-of-scope answers 404 (§20 rule 17). **Paginated (TD-10):** `?page=` (default 1) and `?page_size=` (default 25, **max 100** — a larger request is capped, not refused). Responds `{ data, meta: { page, page_size, total } }`; `total` is the unpaginated count, so a client can compute page count. Ordering carries an `id` tiebreaker, which is what keeps paging stable across requests. **Explicit contract DTO (§16.2, Revision 38):** a room is exactly `id`, `name`, `branch_id` and `version`, in `snake_case`, by allow-list projection — the same shape from `GET`, `POST` and `PATCH`.",
         "responses": {
           "200": {
             "description": "Room list."

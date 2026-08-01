@@ -57,6 +57,39 @@ strict reading, the branch and room CRUD that three other sections required woul
 | **Errors** | One envelope, always ([below](#the-error-envelope)) |
 | **Lists** | Paginated, always ([below](#pagination)) |
 | **Caching** | Off by default; one endpoint opts in ([below](#caching)) |
+| **Response bodies** | An explicit contract DTO, never an ORM entity ([below](#the-contract-is-an-interface-not-a-serialisation)) |
+
+## The contract is an interface, not a serialisation
+
+SRS §16.2 (Revision 38), binding:
+
+> No endpoint may expose ORM entities directly. Every endpoint must expose an explicit contract
+> DTO. The API contract is an intentional interface, never an accidental serialization of
+> database models.
+
+Every response is built **field by field** in [`controllers/dto.ts`](../../backend/src/controllers/dto.ts)
+— an allow-list projection, never a spread of a row.
+
+Three consequences, all of which the branch endpoint got wrong before Revision 38:
+
+1. **A column added to a model never reaches a response by default.** It reaches one when
+   somebody adds it to a DTO, deliberately. Revision 35 established this for the public branch
+   directory — *"an endpoint that returns everything except what we remembered to strip is one
+   careless `select` away from leaking"* — and Revision 38 generalised it to every endpoint.
+   A staff endpoint leaking `deleted_by` is not a privacy breach, but it is still a contract
+   nobody designed.
+2. **`snake_case`, everywhere.** One wire convention, not one per endpoint.
+3. **A TD-11 calendar date serialises as `YYYY-MM-DD`**, never as an instant. An instant invites
+   a timezone conversion in a client, which is the exact class of bug TD-11 exists to prevent —
+   a branch opening on 1 March reading as 28 February one timezone west.
+
+**Why it needed a rule.** Nothing was *wrong* with the code that returned `res.json(branch)`;
+the problem was that nobody had chosen the shape at all, and a client then depended on it. The
+drift is silent by nature: a service test asserts the decision and never the wire, so every test
+stayed green for months. Two mechanisms close that gap — `scripts/ci/check-contract-dto.sh`
+fails a build where a controller hands a service result straight to `res.json`, and the HTTP
+suites assert the **exact key set** of each response, so a field arriving that nobody chose is a
+test failure rather than a surprise.
 
 ## The error envelope
 

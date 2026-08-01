@@ -29,6 +29,7 @@ Each exists because something went wrong, or would plausibly go wrong silently. 
 | `check-display-identity.sh` | Raw name fields reaching the frontend · an inline display-name fallback · a controller exposing both inputs outside the one admissible staff screen |
 | `check-openapi-td3.sh` | An endpoint that contradicts the specification, is implemented undocumented, or is documented but absent from the router |
 | `check-doc-links.sh` | A broken relative link or missing anchor in the documentation (SRS §16.4, listed in §19.2) |
+| `check-contract-dto.sh` | A controller handing a service result straight to `res.json` · a spread inside `dto.ts` that turns an allow-list back into "everything" (SRS §16.2, Revision 38) |
 
 Run them all locally:
 

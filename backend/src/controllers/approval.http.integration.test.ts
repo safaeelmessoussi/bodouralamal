@@ -136,6 +136,24 @@ describe('GET /api/v1/admin/approvals', () => {
     expect((res.body.data as { id: string }[]).some((i) => i.id === parentId)).toBe(true);
   });
 
+  it('§16.2: an item is the contract DTO — snake_case, and exactly these keys', async () => {
+    // Asserting the EXACT key set, not just the presence of the ones we want,
+    // is the point: the failure this guards against is a field arriving that
+    // nobody chose. A `toContain`-style check passes happily through that.
+    const { parentId } = await submitBundle();
+    const res = await call('GET', '/admin/approvals', admin);
+    const item = (res.body.data as Record<string, unknown>[]).find((i) => i.id === parentId)!;
+
+    expect(Object.keys(item).sort()).toEqual(
+      ['applicants', 'bundle', 'id', 'submitted_at', 'type'],
+    );
+    expect(Object.keys(item.bundle as object).sort()).toEqual(['child_count', 'link_count']);
+    const applicant = (item.applicants as Record<string, unknown>[])[0]!;
+    expect(Object.keys(applicant).sort()).toEqual(['id', 'name', 'role']);
+    // `submitted_at` is an instant, correctly — a submission is a moment.
+    expect(item.submitted_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+  });
+
   it('refuses an anonymous caller with the TD-3.8 envelope', async () => {
     const res = await call('GET', '/admin/approvals');
     expect(res.status).toBe(401);

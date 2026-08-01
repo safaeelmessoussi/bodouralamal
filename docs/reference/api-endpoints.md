@@ -6,6 +6,8 @@
 
 > Exact schemas: [`openapi.json`](../openapi.json) — **generated, never hand-edited.**
 > Conventions and governance: [API](../architecture/api.md).
+> Every response is an explicit contract DTO, never an ORM entity
+> ([why](../architecture/api.md#the-contract-is-an-interface-not-a-serialisation)).
 
 **Audience:** 🌐 public/anonymous · 🔒 authenticated · 👤 Super Admin only (enforced in the
 service, not by the URL prefix).

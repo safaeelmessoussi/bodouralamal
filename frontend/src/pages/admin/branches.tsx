@@ -96,8 +96,8 @@ export function BranchesPage(): ReactNode {
       header: t('admin.branches.colStart'),
       secondary: true,
       cell: (r) =>
-        r.operationalStartDate ? (
-          <time dateTime={r.operationalStartDate}>{r.operationalStartDate}</time>
+        r.operational_start_date ? (
+          <time dateTime={r.operational_start_date}>{r.operational_start_date}</time>
         ) : (
           <span className="muted">{t('common.notSet')}</span>
         ),
@@ -107,7 +107,7 @@ export function BranchesPage(): ReactNode {
       header: t('admin.branches.colOrder'),
       numeric: true,
       secondary: true,
-      cell: (r) => (r.displayOrder ?? '—') as ReactNode,
+      cell: (r) => (r.display_order ?? '—') as ReactNode,
     },
   ];
 
@@ -253,10 +253,10 @@ function BranchFormDialog({
     address: branch?.address ?? '',
     phone: branch?.phone ?? '',
     email: branch?.email ?? '',
-    openingHours: branch?.openingHoursAr ?? '',
-    mapsUrl: branch?.googleMapsUrl ?? '',
-    start: branch?.operationalStartDate ?? '',
-    order: branch?.displayOrder !== null && branch?.displayOrder !== undefined ? String(branch.displayOrder) : '',
+    openingHours: branch?.opening_hours_ar ?? '',
+    mapsUrl: branch?.google_maps_url ?? '',
+    start: branch?.operational_start_date ?? '',
+    order: branch?.display_order !== null && branch?.display_order !== undefined ? String(branch.display_order) : '',
   });
   const [touched, setTouched] = useState(false);
 

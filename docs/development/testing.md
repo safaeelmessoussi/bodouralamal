@@ -14,7 +14,7 @@ Four layers, each testing something the others structurally cannot.
 **Coverage: ≥ 80 % on services and policies.** No coverage gate on generated or boilerplate
 code — a coverage number that counts generated clients measures nothing.
 
-Current totals: **102 backend unit · 487 integration · 125 frontend**.
+Current totals: **102 backend unit · 498 integration · 125 frontend**.
 
 ## Running them
 
@@ -63,6 +63,28 @@ Applied consistently, this is why the suite catches things review does not:
 - A **suspended teacher denied a presigned mint** within the unexpired-token window
 - A **deliberately stalled cache row** repaired by the read-side guard
 - **Two concurrent enrolments at capacity − 1** admitting exactly one
+
+## Assert the exact key set, not the presence of the fields you wanted
+
+A wire-shape test asserts the **complete** set of keys in a response:
+
+```ts
+expect(Object.keys(res.body).sort()).toEqual(BRANCH_KEYS);
+```
+
+Not `toHaveProperty('name')` for each field you expect. The failure being guarded is a field
+**arriving** that nobody chose — and a presence check passes straight through that, cheerfully,
+forever.
+
+This is the lesson of Revision 38. `GET /admin/branches` returned raw Prisma rows for months:
+four internal columns, `camelCase` names, an instant where TD-11 defines a date. **Every test
+stayed green**, because a service test asserts the *decision* and never the *wire*, and the
+endpoint had no HTTP-level test at all. Nothing in the suite could have noticed, because
+nothing in the suite was looking at the response as a *shape*.
+
+So: an endpoint whose contract matters gets a test that would fail if the contract grew. The
+counterpart in CI is [`check-contract-dto.sh`](ci-cd.md#the-guards) — the guard makes the
+projection exist, the test makes it *correct*.
 
 ## The named regression tests
 

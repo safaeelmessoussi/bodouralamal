@@ -33,6 +33,11 @@ jobs:
         run: bash scripts/ci/check-design-tokens.sh
       - name: Public display identity resolved server-side (§7, §20 rule 21)
         run: bash scripts/ci/check-display-identity.sh
+      # A response shape nobody chose is still a contract once a client depends
+      # on it, and the drift is silent: adding a column to a model changes the
+      # API without changing a test.
+      - name: Contract DTOs — no ORM entity on the wire (§16.2, Revision 38)
+        run: bash scripts/ci/check-contract-dto.sh
       # The documentation hierarchy is built on cross-references rather than
       # duplication, so a broken link degrades "single source of truth" into
       # "the truth is somewhere". Link integrity is mechanically checkable and

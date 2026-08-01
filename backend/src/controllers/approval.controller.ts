@@ -4,6 +4,7 @@ import { z } from 'zod';
 import type { PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
 import { requireActor } from '../middleware/authenticate.js';
+import { approvalDto, pageOf } from './dto.js';
 import { decide, listApprovals, type ApprovalType } from '../services/approval.service.js';
 
 /** TD-9: reasons max 500 chars. */
@@ -24,7 +25,7 @@ export function list(prisma: PrismaClient) {
       ...(parsed.data.page ? { page: parsed.data.page } : {}),
       ...(parsed.data.page_size ? { pageSize: parsed.data.page_size } : {}),
     });
-    res.json(result);
+    res.json(pageOf(result, approvalDto));
   };
 }
 

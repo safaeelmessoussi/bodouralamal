@@ -377,7 +377,18 @@ constants are shared with the client (§16.2, TD-9).
 TD-4's boundaries are implemented verbatim, including same-transaction job enqueue; TD-1's
 transitions happen only through service methods that validate them.
 
-### 6.4 ✳️ Reuse the mechanism, not the shape — an exception, recorded
+### 6.4 ⚖️ The response is an interface, not a serialisation
+
+No endpoint exposes an ORM entity. Every response is an explicit contract DTO built by an
+**allow-list projection**, so a column added to a model never reaches a client by accident
+(§16.2 Revision 38, [api.md](../architecture/api.md#the-contract-is-an-interface-not-a-serialisation)).
+🤖 `check-contract-dto.sh`
+
+The same rule bounds what an **adapter** may do on the other side: adapters adapt contracts to
+UI models, they never repair a contract the backend got wrong. A repair there is a defect
+report, not a code change (§4).
+
+### 6.5 ✳️ Reuse the mechanism, not the shape — an exception, recorded
 
 **Generic CRUD services are *not* adopted**, and this is a deliberate exception to §2.1.
 
@@ -477,7 +488,7 @@ because a duplicate endpoint outlives every screen that called it.
 - [ ] **These principles verified**, with any intentional exception reported and justified
 
 > **Reporting done with any of these outstanding is reporting done falsely.** Where an
-> exception is deliberate — as §6.4 is — it is stated in the completion report with its
+> exception is deliberate — as §6.5 is — it is stated in the completion report with its
 > reason, not left to be discovered.
 
 Report using the [six-section structure](README.md#reporting-completion).
@@ -494,7 +505,7 @@ obstacle to route around.
 3. **State the conflict**, propose the resolution, and — if it needs a specification change —
    **stop and ask** (§20 rule 20).
 
-§6.4 is the worked example: a proposed principle was examined, found to conflict with TD-1 and
+§6.5 is the worked example: a proposed principle was examined, found to conflict with TD-1 and
 TD-4, and **recorded as a reasoned exception** rather than adopted because it sounded right.
 
 ---
