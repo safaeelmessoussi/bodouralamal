@@ -114,6 +114,12 @@
   - ✓ Tests — 2 regression tests; the strictness guard is mutation-tested
   - ✓ Architecture — reference data stays behind its own APIs under the R26 permission split; assignment is an administrative action after approval
 
+- [ ] Shared component registry: the pieces §14.3 lists that do not exist yet (§14.3, §14.2)
+  - △ **`DataTable`** — one generic table configured by columns, actions, sorting, filters and the §14.4 states, which **every** CRUD screen then uses (§14.2's one layout). Arrives with the **first CRUD module**, not before: building it with no consumer would be the "abstraction with no implementation" Revision 32 rejects, and the second consumer is what proves the API
+  - △ **Form field components** — text, textarea, select, autocomplete, date, file, checkbox, radio group, each owning its own label association, error rendering, required marking and focus. **§14.3's registry does not currently list any form primitives**, which is a real gap: a hand-rolled `<input>` is one missing `for` attribute away from an unlabelled control. Arrives with the first form
+  - △ **`Search`**, **`ConfirmDialog`**, **`PaginatedTable`** states, `StudentSelector`, `GroupSelector`/`LevelSelector`/`BranchSelector`, `VisibilityBadge`, `ConsentStatusBadge`, `ApprovalCard`, `JobStatusIndicator` — the rest of §14.3, each arriving with its first consumer
+  - ✓ Already built and shared: `Button` (variants), `Dialog` (+ `wide`), `Icon`, `Container`/`Section`, `Card`, the §14.4 `states.tsx` set, `BranchSelector` (calendar), `ContentPreviewDialog`
+  - ⚠ Governed by [engineering-principles §2](development/engineering-principles.md): **one component per concept, never one per entity** — no `StudentTable`/`TeacherTable`; extract on the **second** use, never the third; never modify a copy
 - [~] Back-office shell: §14.1 navigation, routing and role gating (§14.1, §14.2, TD-2)
   - ✓ **Module registry** (`lib/admin-modules.ts`) holds §14.1's hierarchy as data; the sidebar, the router and the role guard all read that one list, so a menu entry without a route, a route without a permission, or a module visible to an excluded role are impossible by construction. A test asserts the registry's paths against §14.1
   - ✓ **AdminLayout** — generated sidebar with §14.1's group order, `aria-current` on the open module, the §14.4 no-permission state for a module the session may not open, and the whole back office mounted **inside `PendingGuard`** (a sidebar is exactly the "empty skeleton layout" that guard prevents)

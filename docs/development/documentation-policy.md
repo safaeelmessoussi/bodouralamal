@@ -253,26 +253,25 @@ Which means a documentation change is reviewed like code: a second home for a co
 defect, a broken cross-reference fails the build, and a page describing something that is not
 true is a bug with a longer fuse than most.
 
-## Definition of Done
+## The documentation half of Done
 
-A task is complete when **all six** are true. Not five.
+> **The full Definition of Done lives in
+> [Engineering principles § 9](engineering-principles.md#9-definition-of-done)** — it covers
+> implementation, reuse, tests, tokens, accessibility and record-keeping, of which
+> documentation is one part. It moved there when it outgrew this page: a definition of *done*
+> that lives inside a *documentation* policy is filed under one of its own clauses.
 
-- [ ] **Implementation** complete
-- [ ] **Tests** passing
-- [ ] **Documentation** updated — every document the change made inaccurate, in this commit
-- [ ] **Cross-references** verified (`bash scripts/ci/check-doc-links.sh`)
-- [ ] [**`CHANGES.log`**](../CHANGES.log) updated, and [`TASKS.md`](../TASKS.md) ticked
-- [ ] **SRS** revised **only if a normative requirement changed** — and only by the Document
-      Owner, which means: if one did, you **stopped and reported** rather than editing
+The documentation-specific checks it refers back to:
 
-Quality checks on the documentation half:
-
+- [ ] Every document my change made inaccurate is updated **in this commit**
 - [ ] I stated **why**, not only what — including anything I rejected
 - [ ] I did not restate a rule that already lives somewhere; I linked to it
 - [ ] I did not create a second home for an existing concept
 - [ ] Anything specified-but-unbuilt says so
 - [ ] I asked what else the task taught, and wrote down anything a future maintainer would
       want ([above](#think-past-the-change-in-front-of-you))
+- [ ] Cross-references verified (`bash scripts/ci/check-doc-links.sh`)
+- [ ] [`CHANGES.log`](../CHANGES.log) updated; [`TASKS.md`](../TASKS.md) ticked
 
 **Reporting "done" with the documentation outstanding is reporting done falsely.** The
 implementation is the visible half; the documentation is what makes it survivable.

@@ -27,6 +27,13 @@ You are working on the بذور الأمل Platform.
 - **A feature is not complete until its documentation is updated — in the same
   commit.** Documentation drift is a defect, not a follow-up task. The rule is
   normative in `docs/SRS.md` §16.4; this bullet is a pointer to it.
+- **Before writing any production code, read
+  `docs/development/engineering-principles.md`** and audit the requested feature
+  against every principle. During implementation, continuously look for
+  opportunities to extract reusable components, services, hooks, utilities and
+  API clients. **Never duplicate an existing solution if it can be generalised.**
+  Before declaring the feature complete, verify compliance with every principle
+  and **report any intentional exception with its justification**.
 - **Before implementing anything, read the relevant project documentation and
   decide which documents the task affects** (mandatory per SRS §16.3, Revision
   37.1). This is the step that finds the decision already recorded, the concept's

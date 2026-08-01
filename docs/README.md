@@ -49,7 +49,8 @@ divergence stays invisible until something breaks. One statement, many reference
 
 6. [Getting started](development/getting-started.md) — running the stack locally
 7. [Conventions](development/conventions.md) — the rules code review will hold you to
-8. [Documentation policy](development/documentation-policy.md) — **why this directory is part of the definition of Done**
+8. [Engineering principles](development/engineering-principles.md) — **the laws every implementation must satisfy**
+9. [Documentation policy](development/documentation-policy.md) — why this directory is part of the definition of Done
 
 ### Everything else — in the sections below.
 
@@ -105,7 +106,8 @@ The technical core. Written for an engineer who has never seen the repository.
 | [Conventions](development/conventions.md) | Layering, naming, TypeScript, commits |
 | [Testing](development/testing.md) | The four layers, what each is for, and how to run them |
 | [CI/CD](development/ci-cd.md) | Every gate, what it catches, and why it was added |
-| [Documentation policy](development/documentation-policy.md) | Documentation as part of Done — **read before your first PR** |
+| [**Engineering principles**](development/engineering-principles.md) | **The laws every implementation must satisfy — required reading** |
+| [Documentation policy](development/documentation-policy.md) | Documentation as part of Done — the workflow and per-change routing |
 
 ### [Reference](reference/README.md) — lookup tables
 | | |
