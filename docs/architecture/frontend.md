@@ -387,6 +387,66 @@ would mint permission checks for content nobody opened.
 > the client should refresh pre-emptively is a Document Owner decision, not an implementation
 > detail.
 
+## The CRUD framework
+
+Branches was the first CRUD module, and the deliverable was **not a branches screen** — it was
+the framework every later module configures (constitution §0.1, *build systems, not pages*).
+
+| Capability | What it owns |
+|---|---|
+| `DataTable` | §14.2's list standard and all of §14.4's states, once |
+| Field primitives | Label association, error wiring, required marking, hints |
+| `ConfirmDialog` | Every destructive action, plus TD-8's mandatory justification |
+| `Pagination` | TD-10's envelope, stepped the same way everywhere |
+
+**There is no `BranchTable` and there never will be** (§2.1). The next module passes different
+columns and actions; if it ever needs to *edit* `DataTable` rather than configure it, the
+component is drawn wrongly and that is the signal to redraw it (§2.3).
+
+### What the table refuses to do
+
+It does not fetch, does not sort server data, and does not know what a Branch is (§3.2). The
+page owns the data and the decisions.
+
+Three behaviours are worth knowing because they are easy to get wrong and impossible to see
+once wrong:
+
+- **The first column is a `<th scope="row">`.** Without it a screen reader announces "3" with
+  no idea which branch it belongs to.
+- **Empty and no-results are different states.** Only one of them offers a way out.
+- **A row action that does not apply is hidden, not disabled** — a permanently dead control
+  teaches nothing.
+
+### Field primitives close a real gap
+
+§14.3's registry listed selectors and a file uploader but **no form primitives at all**. That
+mattered: a hand-rolled `<input>` is one missing `for` attribute away from an unlabelled
+control, and nobody notices until someone using a screen reader does.
+
+Each field generates its own id with `useId`, so two instances on one page cannot collide —
+**the exact bug the shared `Dialog` shipped with**, prevented here by construction rather than
+by remembering. Errors are wired through `aria-describedby` and `role="alert"` so they are
+*announced*, not merely displayed; hints go in `aria-describedby` too, because a limit a reader
+learns by tripping over it was stated too late.
+
+### Mirrored validation is courtesy; the server is the rule
+
+The branch form checks TD-9's limits for immediate feedback. That is **not** redundant with the
+server's checks and does not replace them (§1.1): one is responsiveness, the other is
+correctness. A client skipping a check the server enforces is a bug in the client.
+
+### Where the adapter earns its keep
+
+`GET /admin/branches` returns **raw Prisma rows**: row fields in `camelCase` while `meta` is
+`snake_case`, `operationalStartDate` as an *instant* where TD-11 says a branch's operational
+start is a **date**, and four internal columns (`createdAt`, `updatedAt`, `deletedAt`,
+`deletedById`) that no screen has any use for.
+
+The adapter absorbs all of it — wire types describe what the endpoint really sends, exported
+types are what components consume, and the date is truncated at the seam so that mistake cannot
+reach a screen. **The inconsistency is reported rather than silently normalised away**: changing
+a live endpoint's response shape is a contract change and the Document Owner's call.
+
 ## The back office: one registry drives nav, routing and permissions
 
 `lib/admin-modules.ts` holds §14.1's back-office hierarchy **as data**. The sidebar, the

@@ -5,6 +5,7 @@ import { Icon } from '../../components/ui/icon.js';
 import { useSession } from '../../contexts/session.js';
 import { t } from '../../i18n/index.js';
 import { moduleForPath, visibleModules, type AdminModule } from '../../lib/admin-modules.js';
+import { BranchesPage } from './branches.js';
 import { HijriCalendarPage } from './hijri-calendar.js';
 
 /**
@@ -26,6 +27,8 @@ export function AdminRouter(): ReactNode {
   switch (module.path) {
     case '/admin':
       return <AdminDashboard />;
+    case '/admin/branches':
+      return <BranchesPage />;
     case '/superadmin/hijri-calendar':
       return <HijriCalendarPage />;
     default:

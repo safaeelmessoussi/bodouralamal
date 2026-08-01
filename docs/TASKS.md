@@ -114,9 +114,12 @@
   - ✓ Tests — 2 regression tests; the strictness guard is mutation-tested
   - ✓ Architecture — reference data stays behind its own APIs under the R26 permission split; assignment is an administrative action after approval
 
-- [ ] Shared component registry: the pieces §14.3 lists that do not exist yet (§14.3, §14.2)
-  - △ **`DataTable`** — one generic table configured by columns, actions, sorting, filters and the §14.4 states, which **every** CRUD screen then uses (§14.2's one layout). Arrives with the **first CRUD module**, not before: building it with no consumer would be the "abstraction with no implementation" Revision 32 rejects, and the second consumer is what proves the API
-  - △ **Form field components** — text, textarea, select, autocomplete, date, file, checkbox, radio group, each owning its own label association, error rendering, required marking and focus. **§14.3's registry does not currently list any form primitives**, which is a real gap: a hand-rolled `<input>` is one missing `for` attribute away from an unlabelled control. Arrives with the first form
+- [~] Shared component registry: the pieces §14.3 lists that do not exist yet (§14.3, §14.2)
+  - ✓ **`DataTable` built** with the first CRUD module (Branches) — columns, row actions, all §14.4 states, TD-10 pagination, wide-table scrolling. **Everything is configuration**: adding an entity means passing different columns, never editing the component. First column is a `<th scope="row">`; empty and no-results are distinct; an inapplicable row action is hidden rather than disabled
+  - ✓ **Form field primitives built** — `TextField`, `TextArea`, `DateField`, `NumberField`, `SelectField`, `SearchInput`. Each owns label association (`useId`, so two instances cannot collide — the bug `Dialog` shipped with), `aria-describedby` error and hint wiring, `role="alert"`, and visible **plus** programmatic required marking
+  - ✓ **`ConfirmDialog` built**, with TD-8's mandatory justification built in so the field cannot be forgotten on the screen that needs it, and TD-9's 10-character floor enforced in one place
+  - ✓ **`danger` added as a Button VARIANT**, not a second component (§2.5)
+  - △ Still to come, each with its first consumer: autocomplete, file upload, checkbox, radio group, `StudentSelector`, `GroupSelector`/`LevelSelector`, `VisibilityBadge`, `ConsentStatusBadge`, `ApprovalCard`, `JobStatusIndicator`
   - △ **`Search`**, **`ConfirmDialog`**, **`PaginatedTable`** states, `StudentSelector`, `GroupSelector`/`LevelSelector`/`BranchSelector`, `VisibilityBadge`, `ConsentStatusBadge`, `ApprovalCard`, `JobStatusIndicator` — the rest of §14.3, each arriving with its first consumer
   - ✓ Already built and shared: `Button` (variants), `Dialog` (+ `wide`), `Icon`, `Container`/`Section`, `Card`, the §14.4 `states.tsx` set, `BranchSelector` (calendar), `ContentPreviewDialog`
   - ⚠ Governed by [engineering-constitution §2](development/engineering-constitution.md): **one component per concept, never one per entity** — no `StudentTable`/`TeacherTable`; extract on the **second** use, never the third; never modify a copy
@@ -128,7 +131,9 @@
   - ✓ Dashboard is a **launcher, not a statistics screen** — §5.6's counts have no endpoint, and inventing a number would be worse than omitting one
   - ✓ Tests — 15 registry tests (106 frontend total)
   - △ **6 of 11 modules ready** (dashboard, groups, users, approvals, calendar, branches, Hijri calendar); **5 blocked** on endpoints that do not exist: levels, taxonomy, content (M6), settings
-  - △ Module screens themselves land one by one; only Hijri Calendar Management is implemented so far
+  - ✓ **Module 2 — Branches (`/admin/branches`)**: list, create, edit, delete, search, TD-10 pagination. **Writing is Super Admin only** (R26) and the controls are hidden for an Admin, who reads this screen because Group management depends on it — the server enforces the matrix regardless. TD-15 optimistic locking with a named conflict message that reloads rather than overwriting; TD-5's "deletion prohibited while rooms or groups reference it" surfaced as its own reason rather than a generic failure
+  - ⚠ **Finding — `GET /admin/branches` returns raw Prisma rows**: row fields in `camelCase` while `meta` is `snake_case`, `operationalStartDate` as an instant where TD-11 says a branch's operational start is a **date**, and four internal columns (`createdAt`, `updatedAt`, `deletedAt`, `deletedById`). Every other endpoint returns an explicit `snake_case` projection — the public `GET /branches` being the same entity in the other convention. Absorbed by the adapter and **reported**, because changing a live endpoint's response shape is a contract change
+  - △ Remaining modules land one by one: approvals, groups, calendar/events, users
 
 ## M2 — Registration, Approvals, Family
 - [x] Unified parent+child registration transaction (TD-4.1) + adult path

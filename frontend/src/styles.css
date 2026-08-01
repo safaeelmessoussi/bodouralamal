@@ -90,4 +90,7 @@
  * its controls and `.level-grid`/`.level-card` for its launcher, so it must load
  * after the rules it builds on. */
 @import './styles/components/admin.css';
+/* After admin.css: the CRUD framework extends `.admin-table` with its numeric
+ * and secondary-column modifiers, and adds the `danger` button variant. */
+@import './styles/components/forms.css';
 @import './styles/components/dialog.css';

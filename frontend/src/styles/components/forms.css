@@ -1,0 +1,184 @@
+/* Part of the design system — see `src/styles.css` for the layering. */
+
+/* ── Form fields and the CRUD framework ───────────────────────────────────────
+ *
+ * Styles for the platform's form primitives, generic table, confirmation dialog
+ * and pagination. These are **capabilities, not one screen's widgets**
+ * (constitution §0.1), so every CRUD screen inherits this appearance and none
+ * restyles it — which is what makes §2.2's *every CRUD feels identical* true in
+ * fact rather than by intention.
+ * ─────────────────────────────────────────────────────────────────────────── */
+
+/* ── Fields ──────────────────────────────────────────────────────────────── */
+
+.field {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+.field__label {
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  color: var(--color-text-muted);
+}
+/* Marked visually AND programmatically — the asterisk is aria-hidden and the
+   control carries `required`, so neither channel is the only one. */
+.field__required {
+  margin-inline-start: 0.15rem;
+  color: var(--color-danger);
+}
+.field__control {
+  width: 100%;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  color: var(--color-text);
+  font: inherit;
+}
+.field__control:disabled {
+  background: var(--color-background);
+  color: var(--color-text-muted);
+  cursor: not-allowed;
+}
+.field__control--area {
+  resize: vertical;
+  /* Opening hours are multiline free text displayed verbatim (§7), so the
+     control has to look like somewhere multiline text belongs. */
+  line-height: 1.6;
+}
+.field--invalid .field__control {
+  border-color: var(--color-danger);
+}
+.field__hint {
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+  max-width: 52ch;
+}
+.field__error {
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  color: var(--color-danger);
+}
+.field--search {
+  min-width: 15rem;
+  flex: 1 1 15rem;
+}
+
+/* ── Forms ───────────────────────────────────────────────────────────────── */
+
+.form {
+  display: grid;
+  gap: var(--space-4);
+}
+/* Two fields side by side where they are genuinely a pair — phone and email,
+   start date and order. Collapses on a phone. */
+.form__row {
+  display: grid;
+  gap: var(--space-4);
+}
+@media (width >= 40rem) {
+  .form__row {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+.form__actions,
+.confirm__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  justify-content: end;
+  padding-block-start: var(--space-2);
+}
+.confirm {
+  display: grid;
+  gap: var(--space-4);
+}
+.confirm__body {
+  max-width: none;
+}
+
+/* ── The generic table ───────────────────────────────────────────────────── */
+
+.datatable {
+  display: grid;
+  gap: var(--space-4);
+}
+.datatable__toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  align-items: end;
+}
+/* Wide tables scroll in their own container, so the page body never scrolls
+   sideways. */
+.datatable__scroll {
+  overflow-x: auto;
+}
+.datatable__skeleton {
+  display: grid;
+  gap: var(--space-2);
+}
+.datatable__skeleton-row {
+  display: grid;
+  grid-auto-flow: column;
+  grid-auto-columns: 1fr;
+  gap: var(--space-4);
+}
+
+.admin-table .is-numeric {
+  text-align: end;
+  font-variant-numeric: tabular-nums;
+}
+.admin-table__actions-head {
+  width: 1%;
+}
+
+/* Destructive row actions read apart without shouting — the confirmation is
+   where the weight belongs, not the trigger. */
+.btn--ghost.is-danger:hover,
+.btn--danger {
+  background: var(--color-danger-soft);
+  color: var(--color-danger);
+}
+.btn--danger:hover {
+  background: var(--color-danger);
+  color: var(--color-text-inverse);
+}
+
+/* ── Pagination ──────────────────────────────────────────────────────────── */
+
+.pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+}
+.pagination__status {
+  min-width: 9rem;
+  text-align: center;
+  font-size: var(--font-size-xs);
+  font-weight: 700;
+  color: var(--color-text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 44rem) {
+  /* Context columns give way first; the identity column never does. */
+  .admin-table .is-secondary {
+    display: none;
+  }
+  .field--search {
+    min-width: 0;
+  }
+  .form__actions,
+  .confirm__actions {
+    justify-content: stretch;
+  }
+  .form__actions .btn,
+  .confirm__actions .btn {
+    flex: 1 1 auto;
+    justify-content: center;
+  }
+}

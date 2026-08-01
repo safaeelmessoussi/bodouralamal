@@ -87,6 +87,31 @@ export const ar = {
   },
   common: {
     close: 'إغلاق',
+    // Shared across every CRUD screen, so the platform says the same thing in
+    // the same place everywhere (constitution §2.2).
+    save: 'حفظ',
+    cancel: 'إلغاء',
+    confirm: 'تأكيد',
+    edit: 'تعديل',
+    delete: 'حذف',
+    actions: 'إجراءات',
+    search: 'بحث',
+    searchPlaceholder: 'ابحث…',
+    notSet: 'غير محدَّد',
+    required: 'هذا الحقل مطلوب.',
+    saved: 'تم الحفظ.',
+    created: 'تمت الإضافة.',
+    deleted: 'تم الحذف.',
+    saveFailed: 'تعذّر الحفظ.',
+    deleteFailed: 'تعذّر الحذف.',
+    // TD-15: a stale version means someone else edited the row. Reloading is
+    // the only correct response — never a silent overwrite.
+    conflict: 'عدّل مستخدم آخر هذا السجل أثناء عملك. تم تحديث البيانات — يرجى المراجعة وإعادة المحاولة.',
+    reasonHint: 'يُسجَّل هذا التبرير في سجل المراجعة (10 أحرف على الأقل).',
+    pagination: 'تصفّح النتائج',
+    previous: 'السابق',
+    next: 'التالي',
+    pageOf: 'صفحة {page} من {pages}',
   },
   calendar: {
     title: 'الجدول الزمني',
@@ -228,6 +253,34 @@ export const ar = {
     dashboard: {
       title: 'لوحة التحكم',
       lede: 'أقسام الإدارة المتاحة لحسابك.',
+    },
+    branches: {
+      lede: 'مقرات الجمعية وقاعاتها. البيانات المرجعية يحرّرها المشرف العام فقط.',
+      create: 'إضافة مقر',
+      editTitle: 'تعديل المقر',
+      tableCaption: 'قائمة مقرات الجمعية',
+      searchPlaceholder: 'ابحث بالاسم أو العنوان أو الهاتف…',
+      colName: 'اسم المقر',
+      colAddress: 'العنوان',
+      colStart: 'تاريخ بدء العمل',
+      colOrder: 'ترتيب العرض',
+      phone: 'الهاتف',
+      email: 'البريد الإلكتروني',
+      openingHours: 'أوقات العمل',
+      mapsUrl: 'رابط الخريطة',
+      addressHint: '5 أحرف على الأقل. يظهر هذا العنوان للزوار في الصفحة الرئيسية.',
+      // §7: free text, displayed verbatim and NEVER parsed — the hint says so,
+      // because the next reader will otherwise expect a weekday grid.
+      openingHoursHint: 'نص حر بعدة أسطر، يُعرض كما هو ولا يُحلَّل. عدّله عند رمضان أو الأسابيع الاستثنائية.',
+      mapsUrlHint: 'رابط كامل يبدأ بـ https://',
+      urlHttps: 'يجب أن يبدأ الرابط بـ https://',
+      addressShort: 'العنوان قصير جداً (5 أحرف على الأقل).',
+      startHint: 'قبل هذا التاريخ لا تظهر أنشطة المقر في الجدول.',
+      orderHint: 'رقم اختياري يحدّد ترتيب الظهور. الأصغر أولاً.',
+      deleteTitle: 'حذف المقر',
+      deleteBody: 'سيتم حذف «{name}». يمكن استرجاعه خلال 90 يوماً.',
+      // TD-5: deletion is prohibited while rooms or groups reference the branch.
+      deleteBlocked: 'لا يمكن حذف هذا المقر لأن قاعات أو حلقات ما زالت مرتبطة به.',
     },
     hijri: {
       title: 'التقويم الهجري',

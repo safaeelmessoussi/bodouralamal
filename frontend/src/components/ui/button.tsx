@@ -11,7 +11,12 @@ import { Icon, type IconName } from './icon.js';
  * navigation dressed as a button breaks middle-click, "open in new tab" and the
  * screen-reader role — the element has to match the action.
  */
-type Variant = 'primary' | 'secondary' | 'ghost';
+/**
+ * `danger` is a **variant, not a second component** (constitution §2.5). Every
+ * destructive action in the platform renders through it, so "this one is
+ * irreversible" looks the same everywhere.
+ */
+type Variant = 'primary' | 'secondary' | 'ghost' | 'danger';
 
 interface CommonProps {
   children: ReactNode;
