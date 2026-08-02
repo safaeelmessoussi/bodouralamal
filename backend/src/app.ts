@@ -2,6 +2,7 @@ import express, { type Express, type Request, type Response } from 'express';
 
 import * as auth from './controllers/auth.controller.js';
 import * as approvals from './controllers/approval.controller.js';
+import * as settings from './controllers/setting.controller.js';
 import * as familyLinks from './controllers/family-link.controller.js';
 import * as consents from './controllers/consent.controller.js';
 import * as calendar from './controllers/calendar.controller.js';
@@ -110,6 +111,11 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
   guarded.use(authenticate(config));
   // Approvals (§5.6, TD-3.2). TD-12 marks these high-risk, so the service
   // re-asserts the caller's live status against the database per request.
+  // Platform settings (TD-3.11, §5.6, Revision 42). Super Admin only, asserted
+  // in the service against live rows — the `/admin/` prefix is not the boundary.
+  guarded.get('/admin/settings', settings.list(prisma));
+  guarded.put('/admin/settings/:key', settings.update(prisma));
+
   guarded.get('/admin/approvals', approvals.list(prisma));
   guarded.post('/admin/approvals/:id/approve', approvals.approve(prisma));
   guarded.post('/admin/approvals/:id/reject', approvals.reject(prisma));

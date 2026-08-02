@@ -23,7 +23,7 @@ import { z } from 'zod';
  * submitted `name_arabic` into a refusal rather than a silently ignored field.
  */
 const namePart = z.string().trim().min(1).max(60);
-const nameFrench = z.string().trim().max(120);
+
 const nickname = z.string().trim().max(60);
 /** TD-9: 5–20 chars, digits/`+`/spaces only; non-unique (families share phones). */
 const phone = z
@@ -47,7 +47,10 @@ const notes = z.string().trim().max(2000);
 const personCore = z.object({
   first_name_arabic: namePart,
   last_name_arabic: namePart,
-  name_french: nameFrench.optional(),
+  // Revision 41 — optional as a PAIR. `.refine` below rejects exactly one,
+  // because half a name is not a name and would store an unrenderable value.
+  first_name_french: namePart.optional(),
+  last_name_french: namePart.optional(),
   nickname: nickname.optional(),
   phone: phone.optional(),
   notes: notes.optional(),
@@ -59,7 +62,16 @@ const personCore = z.object({
   // carrying `level_id`, `room_id` or `group_id` is rejected here rather than
   // quietly dropped, because silently ignoring it would let a client believe a
   // placement was recorded when placement happens after approval (§4.1).
-  .strict();
+  .strict()
+  .refine(
+    (p) => (p.first_name_french === undefined) === (p.last_name_french === undefined),
+    {
+      // Named on the field rather than the object, so the form can mark the
+      // control the applicant needs to fix (§14.4).
+      path: ['last_name_french'],
+      message: 'both French name parts are required together, or neither (Revision 41)',
+    },
+  );
 
 /**
  * Consent decisions (§4.1, §4.1a). Every form carries the generic

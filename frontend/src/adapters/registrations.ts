@@ -27,7 +27,9 @@ export interface PersonInput {
   first_name_arabic: string;
   /** الاسم العائلي (Revision 40). */
   last_name_arabic: string;
-  name_french?: string;
+  /** Revision 41 — optional as a PAIR: both or neither. */
+  first_name_french?: string;
+  last_name_french?: string;
   nickname?: string;
   phone?: string;
   notes?: string;

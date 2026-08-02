@@ -64,6 +64,15 @@ function composeArabicName(first: string, last: string): string {
   return `${first} ${last}`;
 }
 
+/**
+ * Composes `name_french` from its parts (§7, Revision 41), or `null` when the
+ * applicant gave neither — the pair is optional, and an empty string would be a
+ * third state meaning the same thing as absent.
+ */
+function composeFrenchName(first?: string, last?: string): string | null {
+  return first && last ? `${first} ${last}` : null;
+}
+
 export interface RegistrationResult {
   applicantId: string;
   childId: string | null;
@@ -182,7 +191,12 @@ export async function register(
             applicantData.first_name_arabic,
             applicantData.last_name_arabic,
           ),
-          nameFrench: applicantData.name_french ?? null,
+          firstNameFrench: applicantData.first_name_french ?? null,
+          lastNameFrench: applicantData.last_name_french ?? null,
+          nameFrench: composeFrenchName(
+            applicantData.first_name_french,
+            applicantData.last_name_french,
+          ),
           nickname: applicantData.nickname ?? null,
           phone: applicantData.phone ?? null,
           notes: applicantData.notes ?? null,
@@ -228,7 +242,12 @@ export async function register(
               input.child.first_name_arabic,
               input.child.last_name_arabic,
             ),
-            nameFrench: input.child.name_french ?? null,
+            firstNameFrench: input.child.first_name_french ?? null,
+            lastNameFrench: input.child.last_name_french ?? null,
+            nameFrench: composeFrenchName(
+              input.child.first_name_french,
+              input.child.last_name_french,
+            ),
             nickname: input.child.nickname ?? null,
             phone: input.child.phone ?? null,
             notes: input.child.notes ?? null,

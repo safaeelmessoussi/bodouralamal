@@ -16,7 +16,8 @@ import { validate } from './register.js';
 const person = {
   firstNameArabic: 'خديجة',
   lastNameArabic: 'بنعلي',
-  nameFrench: '',
+  firstNameFrench: '',
+  lastNameFrench: '',
   nickname: '',
   phone: '',
   notes: '',
@@ -90,6 +91,22 @@ describe('person rules mirror TD-9', () => {
       child: { ...person, firstNameArabic: '' },
     });
     expect(errors).toHaveProperty('child.firstNameArabic');
+  });
+
+  it('R41: French parts are optional, but as a PAIR — half a name is not a name', () => {
+    expect(validate({ ...base, applicant: { ...person } })).toEqual({});
+    expect(
+      validate({ ...base, applicant: { ...person, firstNameFrench: 'Khadija' } }),
+    ).toHaveProperty('applicant.lastNameFrench');
+    expect(
+      validate({ ...base, applicant: { ...person, lastNameFrench: 'Benali' } }),
+    ).toHaveProperty('applicant.firstNameFrench');
+    expect(
+      validate({
+        ...base,
+        applicant: { ...person, firstNameFrench: 'Khadija', lastNameFrench: 'Benali' },
+      }),
+    ).toEqual({});
   });
 
   it('accepts an empty optional phone but refuses a malformed one', () => {

@@ -1,7 +1,7 @@
 # Software Requirements Specification
 ## بذور الأمل — Institute Management Platform
 
-**Status:** Final MVP Blueprint (Revision 40 — Arabic personal and family names are captured separately; `name_arabic` becomes the server-composed display name), **immutable source of truth** — changed only by an explicit Document Owner revision, never by an implementing agent
+**Status:** Final MVP Blueprint (Revision 42 — the French name is split like the Arabic one, and Platform Settings gains a Super-Admin-only, audited `SystemSetting` API), **immutable source of truth** — changed only by an explicit Document Owner revision, never by an implementing agent
 **Revision date:** 2026-08-02
 **Canonical location:** `docs/SRS.md` in the project repository
 **Document Owner:** [assign]
@@ -23,6 +23,26 @@ This is a standalone, self-contained specification. It does not reference extern
 * **§18 — Module Acceptance Checklists.**
 * **§19 — Environments, Deployment Pipeline & Testing Strategy.**
 * **§20 — AI Implementation Rules:** hard guardrails for any autonomous coding agent. §20 closes the document deliberately: it is the last thing an agent reads before writing code.
+
+**Revision 42 (Document Owner decision — Platform Settings becomes a real, audited surface, 2026-08-02):** closes a gap that made the platform undeployable. `legal.consent_text_version` is **required** before any registration can be accepted (§4.1a), §15.1 deliberately does not seed it (§2.3 makes versioning the Arabic text an owner compliance task), and the screen meant to carry it — **System Settings (`/superadmin/settings`, §5.6)** — had **no API behind it in TD-3**. The value could therefore be set by nothing in the product: not by an operator, not by an administrator, not by the seed. A first deployment would have refused every registration with no in-product remedy, and the interim answer — a development fixture — is **not** an acceptable production mechanism.
+
+**(1) Two endpoints join TD-3.11.** `GET /admin/settings` and `PUT /admin/settings/{key}`. **Super Admin only**, asserted against live rows per request (TD-12) — §5.6 places System Settings under Super Admin, and a consent text version decides what every future applicant is recorded as having agreed to.
+
+**(2) The writable surface is an explicit allow-list, not "any key".** A `SystemSetting` row can hold a category default visibility, a grading scale, or a legal text version, and those have different audiences and different consequences. Only keys named in the allow-list may be written through this API; anything else is `NOT_FOUND`, so a typo creates nothing and an unlisted key cannot be reached. **`legal.consent_text_version` is the first entry**; the rest join as their screens do.
+
+**(3) A value is validated per key and may never be empty.** For `legal.consent_text_version`: a non-empty string after trimming, 1–100 characters. Blank, whitespace-only and non-string values are refused with `VALIDATION_FAILED` — a blank version would reproduce the original failure while *looking* configured, which is worse than being unset.
+
+**(4) Every write is audited (TD-8), carrying the OLD and NEW value.** `setting.update`, target `SystemSetting`, keyed by the setting. The previous value is part of the record because the question a compliance reviewer asks is *"what did this person agree to, and when did that text change"* — an audit row saying only the new value cannot answer it.
+
+**(5) Changing the setting affects FUTURE registrations only, and this is normative.** Existing `ConsentRecord` rows keep the `consent_text_version` captured at the moment of agreement; the setting is read **at registration time** and copied onto the record. **A settings change never rewrites a stored consent.** §4.1a's requirement that each record carry the exact text agreed to is precisely what forbids it: retroactively restamping consents would assert that people agreed to text they never saw.
+
+**(6) TD-15 optimistic locking.** `SystemSetting` already carries `version`; a stale write is `409 VERSION_CONFLICT` rather than a silent overwrite of another Super Admin's change.
+
+**Consequence:** the development fixture that seeded this value is no longer the mechanism — it remains only a convenience for local work, and a production deployment sets the value through the screen like any other configuration.
+
+**Revision 41 (Document Owner decision — the French name is split like the Arabic one, 2026-08-02):** Revision 40 split the Arabic name into **الاسم الشخصي** and **الاسم العائلي** and explicitly left the French name as a single optional field, noting that splitting it would be a separate revision. This is that revision: **`first_name_french` and `last_name_french` replace `name_french`**, for one reason — a person has one name, and recording half of it as two fields and half as one is an inconsistency every screen and every export would have to reason about.
+
+The design mirrors Revision 40 exactly, deliberately, so there is one rule rather than two: the **parts are collected**, `name_french` is **retained and server-composed** as `"{first} {last}"`, a client never composes it (§1.1), and the parts are **nullable with no backfill** — splitting an existing French name on whitespace would be the same guess Revision 40 refused to make for Arabic. **The French name remains entirely optional**, unlike the Arabic one: an applicant may give both parts or neither, and giving exactly one is a validation failure, because half a name is not a name.
 
 **Revision 40 (Document Owner decision — the Arabic name is captured as personal + family name, 2026-08-02):** the registration form asked for a single *"full name in Arabic"* while presenting the person's name as one opaque string. The association records people the way Moroccan administrative practice does — **الاسم الشخصي** (personal name) and **الاسم العائلي** (family name) — and a single field cannot be sorted, searched or addressed by either half without guessing where one ends.
 
@@ -613,7 +633,7 @@ The registration/login entry is **OAuth-first**: the registration form is never 
 * *(Revision 12)* The `/admin/audit` **browsing page is post-MVP (§10.1)** — writing the TD-8 audit rows remains fully mandatory in MVP; reads happen via a documented SQL runbook until the page ships. (Trash restoration UI and CSV import/export pages: also post-MVP, §4.10.)
 
 ### 5.7 Super Admin Only
-* **System Settings (`/superadmin/settings`)** — branding assets, legal/consent text versions, `display_order` management, `AcademicYear` management (incl. `is_current`).
+* **System Settings (`/superadmin/settings`)** — branding assets, legal/consent text versions, `display_order` management, `AcademicYear` management (incl. `is_current`). **First iteration (Revision 42) carries `legal.consent_text_version`**: it is displayed, editable by Super Admin only, validated non-empty, audited with its previous value, and **affects future registrations only** — stored consents keep the version captured when they were given (§4.1a). Without it no registration can be accepted at all, so it is the first entry rather than a later one.
 * **Hijri Calendar Management (`/superadmin/hijri-calendar`)** — *(Revision 31; refined by Revision 32)* the surface on which a Super Admin **records the official announcements** of the Ministry of Habous and Islamic Affairs. A **year selector**; the **twelve Hijri months** of the selected year, each with the **Gregorian date on which the Ministry announced that month began**; and the actions **Record official month start**, **Save**, **Publish official month**, and **View history**. Only **published** months are rendered anywhere in the platform, so a year can be recorded progressively and reviewed before it becomes visible. **The Super Admin is not deciding when a month starts — the Ministry decides, and this screen records what it announced.** The screen's language must reflect that (Revision 32): *record*, *official announcement*, never *choose*, *define* or *set*. **Importing is not an MVP feature** (Revision 32, §10.1): no official machine-readable source exists to import from.
 
 ### 5.8 Key Navigation Flows
@@ -646,6 +666,7 @@ The registration/login entry is **OAuth-first**: the registration form is never 
 * **User** — core identity; `account_status` (pending/active/rejected/suspended, lifecycle TD-1) separate from branch `user_status` (active/left/paused).
   * **`sex` (`female | male`, nullable) — Revision 27.** The person-side half of `Level.gender_restriction`: without it the restriction is unenforceable, because nothing can compare a person against a `girls_only` Level. **Captured at registration for every person the transaction creates** (§4.1b step 5) — the registration exists *before* the User does, so sex arrives in the payload and is written in the same TD-4.1 transaction rather than patched on afterwards. Nullable so that accounts predating this revision, and staff for whom it is irrelevant, need no backfill; enrolment enforcement treats a null as *not eligible* for a restricted Level rather than as a wildcard. Minor students are `User` rows with **no identity records** (login-less), accessed via approved `FamilyLink` context only (`X-Active-Child-ID`, §4.3).
   * **`first_name_arabic` / `last_name_arabic` (nullable) — Revision 40.** **الاسم الشخصي** and **الاسم العائلي**, captured for every person the registration transaction creates (§4.1b step 5) and written in that same transaction, never patched on afterwards. **Required in the public self-service payload; optional for staff-assisted registration**, where staff may hold only a full name. TD-9: 1–60 characters each, so the composed name cannot exceed `name_arabic`'s 120. **Nullable with no backfill**, because splitting an existing full name on whitespace would be a *guess* — Moroccan names routinely carry compound personal names and multi-word family names, and a split would silently mis-file people. A null means *recorded before the parts were collected*.
+  * **`first_name_french` / `last_name_french` (nullable) — Revision 41.** The French name, split exactly as the Arabic one is, because recording half a person's name as two fields and half as one is an inconsistency every screen and export would have to reason about. **`name_french` is likewise retained and server-composed.** The pair is **entirely optional**, unlike the Arabic one: both parts or neither, and supplying exactly one is a `VALIDATION_FAILED` — half a name is not a name. Nullable with no backfill, for the same reason as Revision 40: splitting an existing value on whitespace would be a guess.
   * **`name_arabic` — retained, and SERVER-COMPOSED from the two parts (Revision 40).** It is never asked for and never composed by a client (§1.1: two clients would disagree about order and separator, and the wrong answer is a person's name rendered backwards). The server writes `"{first} {last}"` in the same transaction as its inputs. It remains what every existing consumer reads — TD-10's normalized search columns, the `ar-x-icu` ordering BR-19 requires, the public display-identity fallback below, and the §14.2 approval queue — and is a derived column of exactly the same kind as `name_arabic_normalized`. **It is a defect for the three to disagree.** Rows predating Revision 40 have no parts, and `name_arabic` is authoritative for them.
   * **`intended_branch_id` (FK → Branch, nullable) — Revision 39.** **The branch the applicant asked for at registration**, and deliberately *not* the answer to *"which branch is this person in"*. That answer is the person's **Group** (`StudentGroup → Group.branch_id`), because an administrator may place an approved applicant at a different branch when the requested one is full or unsuitable. Naming this column `branch_id` would have made two different facts share one name and created a **second source of truth** for placement — the exact failure §16.4 exists to prevent. **Nullable, with no backfill possible:** accounts predating this revision have no such value, and nobody knows what those applicants would have chosen, so a null means *not stated* and never *no branch*. **Required in the public self-service registration payload** (§4.1b step 5) and **optional for staff-assisted registration** (§4.1). Validated against a **live, non-soft-deleted** `Branch`; a branch whose `operational_start_date` has not yet occurred is nonetheless selectable, since registrations must be possible for a premises before it opens. `ON DELETE RESTRICT`, like every other reference to a Branch (TD-5): a branch with registrations pointing at it cannot be deleted out from under them.
   * **`public_display_name` (nullable) — Revision 36.1.** An optional name the person chooses to publish, letting a مؤطِّرة appear publicly as a kunya while the platform keeps her legal name for the records that need it. Distinct from `nickname`, which is an internal search convenience (TD-10); this is a publication choice. **How it is used on public surfaces is the Public display identity invariant (below) — the single statement of that rule.**
@@ -1024,6 +1045,18 @@ This is deliberately **not** `GET /admin/branches` with the permission relaxed: 
 endpoint's audience is part of its contract, and one endpoint serving two
 audiences has to get the difference right on every future change.
 
+**3.11 Platform settings (Revision 42)**
+```
+GET  /admin/settings                (Super Admin only) → the writable settings, current values + version
+PUT  /admin/settings/{key}          (Super Admin only) → body: { value, version }
+                                    key must be on the writable allow-list, else 404
+                                    value validated per key; never empty
+                                    TD-15 optimistic locking → 409 VERSION_CONFLICT
+                                    audited as `setting.update` with OLD and NEW value (TD-8)
+                                    affects FUTURE reads only — stored ConsentRecords keep
+                                    the version captured at the moment of agreement (§4.1a)
+```
+
 **3.8 Standard error contract (all endpoints)**
 
 Every non-2xx response uses one envelope:
@@ -1185,6 +1218,7 @@ Every action below writes an `AuditLog` row (actor, timestamp, action_type, targ
 | `auth.logout` *(Revision 16)* | session id revoked (TD-4.14) |
 | `auth.token_revoked` *(Revision 16; detail tightened in Revision 17)* | reason (`suspension` \| `user_deleted` \| `reuse_detected`), **the list of affected `session_id`s**, and their count (TD-4.15). A count alone cannot attribute a *specific* session when several are revoked at once, which would break the §7 attribution invariant — so the ids are recorded, not just the total. A `reuse_detected` row is a **security event**: it means a rotated token was replayed outside the grace window |
 | `user.approve` / `user.reject` / `user.suspend` / `user.delete` | reason where applicable |
+| `setting.update` *(Revision 42)* | setting key, **previous value AND new value** — a row carrying only the new value cannot answer *"what text was in force when this person consented"*, which is the question a compliance review actually asks |
 | `familylink.approve` / `familylink.reject` | link parties, reason |
 | `familylink.revoke` *(Revision 16)* | link parties, actor, reason — the soft-delete of an approved link (§4.3) |
 | `socialprofile.view` *(Revision 28)* | student reference, actor role — viewing a safeguarding record is itself a security-sensitive act, so the trail answers *who looked at this child's case file* |

@@ -147,7 +147,9 @@
   - ✓ Frontend — the §5.5 form: adult **or** parent+child, **الاسم الشخصي + الاسم العائلي (R40)**, required Branch selector, consent with a Law 09-08 explanation in the shared Dialog, three-state media release for a minor. Built entirely from the shared field primitives; `/register` no longer a placeholder
   - ✓ Backend — **R40 name parts stored and `name_arabic` composed server-side**; a client-supplied `name_arabic` is rejected, not ignored (§1.1)
   - ✓ Tests — **`registration.http.integration.test.ts` added (11 tests)**. There had been NO HTTP-level test for registration, which is how a 503 reached a browser as "try again later"
-  - ⚠ **`legal.consent_text_version` has no production mechanism.** §15.1 does not seed it (§2.3 owner task) and `/superadmin/settings` (§5.6) is unbuilt, so on a real deployment nothing can set a value registration requires. Dev fixtures seed `dev-unapproved-v1`; **production still needs the settings screen or an owner-run step**
+  - ✓ ~~**`legal.consent_text_version` has no production mechanism**~~ **RESOLVED by SRS Revision 42**: Platform Settings (`/superadmin/settings`) now carries it — Super Admin only, validated non-empty, audited with its previous value, TD-15 locked, and affecting future registrations only. **No manual deployment step and no development seed is required in production**; the fixture remains a local convenience only
+  - ✓ Frontend — **الاسم الشخصي/العائلي in Arabic AND French (R40, R41)**, both server-composed; French optional as a pair
+  - ✓ UX — validation failures name the field: the server's `path` per issue is mapped onto the form's controls, and an issue the form cannot place is surfaced verbatim rather than dropped
   - ✓ Tests — 11 integration tests incl. the §18 mid-transaction atomicity check and concurrent submission of one token
   - ✓ Security — schema **rejects** `email`/`provider_subject_id` outright (§20 rule 9); replay → `STATE_CONFLICT`; fails closed with no consent text version
   - △ Frontend integration (M2) — the unified registration form

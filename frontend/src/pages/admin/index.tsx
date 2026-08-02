@@ -8,6 +8,7 @@ import { moduleForPath, visibleModules, type AdminModule } from '../../lib/admin
 import { ApprovalsPage } from './approvals.js';
 import { BranchesPage } from './branches.js';
 import { HijriCalendarPage } from './hijri-calendar.js';
+import { SettingsPage } from './settings.js';
 
 /**
  * Back-office routing and the module screens that are not yet implemented.
@@ -34,6 +35,8 @@ export function AdminRouter(): ReactNode {
       return <ApprovalsPage />;
     case '/superadmin/hijri-calendar':
       return <HijriCalendarPage />;
+    case '/superadmin/settings':
+      return <SettingsPage />;
     default:
       // Everything §14.1 lists but the backend cannot yet serve. The layout,
       // navigation, role gate and heading are real; only the content is pending.

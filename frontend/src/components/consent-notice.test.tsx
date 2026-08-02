@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
 import { ApiError } from '../lib/api.js';
-import { explainFailure } from '../pages/register.js';
+import { explainFailure, mapServerIssues } from '../pages/register.js';
 import { ConsentNotice } from './consent-notice.js';
 
 /**
@@ -109,5 +109,81 @@ describe('explainFailure — never "try again" for a cause that is known', () =>
 
   it('falls back for a non-API error rather than throwing', () => {
     expect(explainFailure(new Error('boom'))).toContain('يرجى المحاولة بعد قليل');
+  });
+});
+
+describe('mapServerIssues — the user learns WHICH field, not "review the fields"', () => {
+  const withIssues = (issues: { path: string; message: string }[]) =>
+    new ApiError(400, {
+      code: 'VALIDATION_FAILED',
+      message_key: 'k',
+      message: 'm',
+      details: { issues },
+      request_id: 'r1',
+    });
+
+  it('marks the exact field the server named', () => {
+    // THE REGRESSION. The backend had always sent `path` per failure; the form
+    // threw it away and rendered one sentence, so a rejected submission said
+    // "review the fields" without saying which.
+    const { fields } = mapServerIssues(
+      withIssues([{ path: 'applicant.first_name_arabic', message: 'Required' }]),
+    );
+    expect(fields).toHaveProperty('applicant.firstNameArabic');
+  });
+
+  it('maps the server\'s "parent" onto the form\'s "applicant"', () => {
+    // The parent+child payload calls the first person `parent`; this form calls
+    // the same person `applicant`. Without the translation the error would be
+    // computed and then attached to nothing.
+    const { fields } = mapServerIssues(
+      withIssues([{ path: 'parent.last_name_arabic', message: 'Required' }]),
+    );
+    expect(fields).toHaveProperty('applicant.lastNameArabic');
+  });
+
+  it('marks the child separately from the applicant', () => {
+    const { fields } = mapServerIssues(
+      withIssues([{ path: 'child.first_name_arabic', message: 'Required' }]),
+    );
+    expect(fields).toHaveProperty('child.firstNameArabic');
+    expect(fields).not.toHaveProperty('applicant.firstNameArabic');
+  });
+
+  it('maps the R41 half-a-French-name refusal onto the missing half', () => {
+    const { fields } = mapServerIssues(
+      withIssues([
+        { path: 'applicant.last_name_french', message: 'both French name parts are required' },
+      ]),
+    );
+    expect(fields).toHaveProperty('applicant.lastNameFrench');
+  });
+
+  it('maps branch and consent failures to their controls', () => {
+    const { fields } = mapServerIssues(
+      withIssues([
+        { path: 'branch_id', message: 'Required' },
+        { path: 'consents.data_processing', message: 'Required' },
+      ]),
+    );
+    expect(fields).toHaveProperty('branch');
+    expect(fields).toHaveProperty('dataProcessing');
+  });
+
+  it('SURFACES an issue it cannot place rather than dropping it', () => {
+    // An `Unrecognized key` is exactly the signal that a stale client is
+    // talking to a newer server — the shape of the very bug being fixed. A
+    // message nobody anticipated is the one most worth showing.
+    const { fields, unmapped } = mapServerIssues(
+      withIssues([{ path: 'applicant', message: 'Unrecognized key: "name_arabic"' }]),
+    );
+    expect(Object.keys(fields)).toHaveLength(0);
+    expect(unmapped).toHaveLength(1);
+    expect(unmapped[0]).toContain('name_arabic');
+  });
+
+  it('returns nothing for an error carrying no issues', () => {
+    expect(mapServerIssues(new ApiError(500)).fields).toEqual({});
+    expect(mapServerIssues(new Error('boom')).unmapped).toEqual([]);
   });
 });

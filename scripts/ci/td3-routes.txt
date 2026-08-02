@@ -38,6 +38,8 @@ GET /me                                       # TD-3.1, TD-1
 
 # ── Registration & approvals (TD-3.2)
 POST /registrations                           # TD-3.2, §4.1b step 5
+GET /admin/settings                           # TD-3.11, §5.6 (R42) — Super Admin only
+PUT /admin/settings/{key}                     # TD-3.11 (R42) — allow-listed keys, audited
 GET /admin/approvals                          # TD-3.2, §5.6
 POST /admin/approvals/{id}/approve            # TD-3.2, TD-4.2
 POST /admin/approvals/{id}/reject             # TD-3.2, §5.6

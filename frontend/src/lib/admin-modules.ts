@@ -151,8 +151,9 @@ export const ADMIN_MODULES: readonly AdminModule[] = [
     labelKey: 'admin.nav.settings',
     section: 'administration',
     roles: SUPER_ONLY,
-    status: 'blocked',
-    blockedReasonKey: 'admin.blocked.settings',
+    // Revision 42 — first iteration carries `legal.consent_text_version`,
+    // without which no registration can be accepted at all.
+    status: 'ready',
   },
 ];
 

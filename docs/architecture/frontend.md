@@ -104,6 +104,29 @@ server would ignore it anyway.
 The error class deliberately carries only the status. The response body is **not** parsed
 there, because only the screen rendering an error knows which of its fields it needs.
 
+## Validation errors name the field
+
+The backend has always sent `details.issues` with an exact `path` per failure —
+`applicant.first_name_arabic`, `child.last_name_french`, `branch_id`. The
+registration form threw all of it away and rendered one sentence, so a rejected
+submission said *"review the fields"* without saying which, and an applicant had
+to guess.
+
+`mapServerIssues` now translates each `path` onto the form's own field keys and
+marks the control. Three details are deliberate:
+
+- **The `path` is used, not the message text.** Zod's message is English prose
+  written for a developer (*"Invalid input: expected string, received
+  undefined"*); showing it to an Arabic-speaking applicant would be worse than
+  showing nothing. A known path becomes our own Arabic message on the right
+  field.
+- **The server's `parent` maps onto the form's `applicant`** — the same person
+  under two names. Without the translation the error would be computed and
+  attached to nothing.
+- **An issue the form cannot place is surfaced verbatim, never dropped.** An
+  `Unrecognized key` is precisely the signal that a stale client is talking to a
+  newer server, which is the failure that produced this section.
+
 ## Mandatory UI states
 
 Every page and every data-bearing component implements all of:
@@ -148,6 +171,31 @@ invented section.
 
 **No "log out everywhere" node exists, and none may be added.** The revoke-all capability is
 internal, used by suspension and deletion.
+
+### A deploy that never reaches the browser
+
+`index.html` was served with **no `Cache-Control` header at all**. Browsers then
+apply *heuristic* caching, so a returning visitor kept executing the previous
+bundle — and because Vite emits content-hashed filenames, the stale shell also
+pointed at the stale JS, which the browser likewise held. **The entire old
+application ran from cache, with no error anywhere.**
+
+It produced a genuinely confusing failure: a registration form rendering last
+week's fields, posting last week's payload, refused by a server that had
+correctly moved on. Both halves looked like application bugs and neither was —
+the shipped code was right and simply was not running.
+
+The pairing that fixes it:
+
+| Path | `Cache-Control` | Why |
+|---|---|---|
+| `index.html`, and every SPA route | `no-cache` | *Revalidate before reuse* — not "do not store". The ETag makes it a `304` in the common case, so the cost is one conditional request and the guarantee is that a deploy takes effect immediately |
+| `/assets/*` | `public, max-age=31536000, immutable` | The filename changes whenever the bytes do, so the response never needs revalidating |
+
+**The rule: a content-hashed asset may be cached forever; the document that
+names it may not be cached at all.** Getting that backwards is indistinguishable
+from a code bug, because the code is correct — it simply is not the code that is
+running.
 
 ### The router must never return nothing
 

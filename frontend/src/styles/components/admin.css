@@ -244,3 +244,26 @@
   color: var(--color-text-muted);
   white-space: nowrap;
 }
+
+/* ── Platform settings (§5.6, Revision 42) ────────────────────────────────── */
+
+.settings-list {
+  display: grid;
+  gap: var(--space-6);
+  max-width: 48rem;
+}
+.settings-item {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-5);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+.settings-item__meta {
+  margin: 0;
+  font-size: var(--font-size-xs);
+}
+.settings-item__actions {
+  display: flex;
+  justify-content: start;
+}

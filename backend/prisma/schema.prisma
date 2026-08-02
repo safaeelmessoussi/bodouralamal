@@ -205,7 +205,16 @@ model User {
   firstNameArabic String? @map("first_name_arabic") @db.VarChar(60)
   lastNameArabic  String? @map("last_name_arabic") @db.VarChar(60)
 
+  /// Revision 41 — server-composed from the French parts, exactly as
+  /// `nameArabic` is from the Arabic ones. Retained for the same reason:
+  /// consumers want the whole name, and a client must not decide its order.
   nameFrench String? @map("name_french") @db.VarChar(120)
+
+  /// Revision 41 — the French name split like the Arabic one. ENTIRELY
+  /// OPTIONAL: both parts or neither. Supplying exactly one is a validation
+  /// failure, because half a name is not a name.
+  firstNameFrench String? @map("first_name_french") @db.VarChar(60)
+  lastNameFrench  String? @map("last_name_french") @db.VarChar(60)
   nickname   String? @db.VarChar(60)
 
   /// Revision 36.1 — the name shown on every PUBLIC surface when set;

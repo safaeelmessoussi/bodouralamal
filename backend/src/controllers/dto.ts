@@ -160,3 +160,35 @@ export function approvalDto(row: {
     branch: row.branch ? { id: row.branch.id, name: row.branch.name } : null,
   };
 }
+
+/* ── Platform setting (§5.6, TD-3.11, Revision 42) ───────────────────────── */
+
+export interface SettingDto {
+  key: string;
+  /** An i18n KEY, not copy: which settings are writable is a server decision,
+   *  and a client holding its own labels would drift from the allow-list. */
+  label_key: string;
+  hint_key: string;
+  /** `null` when never configured — deliberately distinct from an empty string,
+   *  which the write path refuses. For the consent version, null is the state
+   *  in which no registration can be accepted at all (§4.1a). */
+  value: string | null;
+  /** TD-15: sent back on save; a stale one is a `409`. */
+  version: number;
+}
+
+export function settingDto(row: {
+  key: string;
+  label_key: string;
+  hint_key: string;
+  value: string | null;
+  version: number;
+}): SettingDto {
+  return {
+    key: row.key,
+    label_key: row.label_key,
+    hint_key: row.hint_key,
+    value: row.value,
+    version: row.version,
+  };
+}

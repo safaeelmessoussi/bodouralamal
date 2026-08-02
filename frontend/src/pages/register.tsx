@@ -62,6 +62,7 @@ export function Register(): ReactNode {
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
   const [failureId, setFailureId] = useState<string | null>(null);
+  const [serverErrors, setServerErrors] = useState<ServerErrors>({ fields: {}, unmapped: [] });
   const [done, setDone] = useState(false);
 
   useEffect(() => {
@@ -90,8 +91,12 @@ export function Register(): ReactNode {
     void loadBranches();
   }, [loadBranches]);
 
-  const errors = validate({ kind, applicant, child, branchId, dataProcessing, mediaRelease });
-  const valid = Object.keys(errors).length === 0;
+  const localErrors = validate({ kind, applicant, child, branchId, dataProcessing, mediaRelease });
+  const valid = Object.keys(localErrors).length === 0;
+  // The server's verdict wins where the two disagree: it is the authority
+  // (§1.1), and a field the client thought fine but the server refused must
+  // still be marked.
+  const errors = { ...localErrors, ...serverErrors.fields };
 
   async function submit(): Promise<void> {
     setTouched(true);
@@ -99,10 +104,14 @@ export function Register(): ReactNode {
     setBusy(true);
     setFailure(null);
     setFailureId(null);
+    setServerErrors({ fields: {}, unmapped: [] });
     try {
       await submitRegistration(buildPayload({ kind, applicant, child, branchId: branchId!, mediaRelease }), token);
       setDone(true);
     } catch (error) {
+      // Field-level first: the server said WHICH field, and the whole point is
+      // that the applicant should not have to guess.
+      setServerErrors(mapServerIssues(error));
       setFailure(explainFailure(error));
       // §14.4 wants the request id shown discreetly: it is what turns a user's
       // "it did not work" into a line an operator can find in the log.
@@ -239,10 +248,23 @@ export function Register(): ReactNode {
             </fieldset>
 
             {failure ? (
-              <p className="field__error" role="alert">
-                {failure}
-                {failureId ? <span className="field__requestid"> ({failureId})</span> : null}
-              </p>
+              <div role="alert">
+                <p className="field__error">
+                  {failure}
+                  {failureId ? <span className="field__requestid"> ({failureId})</span> : null}
+                </p>
+                {/* Issues this form could not place on a field. Shown verbatim
+                    rather than dropped: an unanticipated message is precisely
+                    the one worth reading, and dropping it is how a stale client
+                    talking to a newer server looked like "review the fields". */}
+                {serverErrors.unmapped.length > 0 ? (
+                  <ul className="field__error">
+                    {serverErrors.unmapped.map((issue) => (
+                      <li key={issue}>{issue}</li>
+                    ))}
+                  </ul>
+                ) : null}
+              </div>
             ) : null}
 
             <div className="register-form__actions">
@@ -262,7 +284,8 @@ export function Register(): ReactNode {
 interface PersonForm {
   firstNameArabic: string;
   lastNameArabic: string;
-  nameFrench: string;
+  firstNameFrench: string;
+  lastNameFrench: string;
   nickname: string;
   phone: string;
   notes: string;
@@ -272,7 +295,8 @@ interface PersonForm {
 const emptyPerson: PersonForm = {
   firstNameArabic: '',
   lastNameArabic: '',
-  nameFrench: '',
+  firstNameFrench: '',
+  lastNameFrench: '',
   nickname: '',
   phone: '',
   notes: '',
@@ -328,10 +352,19 @@ function PersonFields({
         required
         error={errors[`${prefix}.sex`] ?? null}
       />
+      {/* Revision 41 — split like the Arabic pair, so a person's name is not
+          half two fields and half one. Optional as a PAIR: both or neither. */}
       <TextField
-        label={t('register.nameFrench')}
-        value={value.nameFrench}
-        onChange={(next) => set({ nameFrench: next })}
+        label={t('register.firstNameFrench')}
+        value={value.firstNameFrench}
+        onChange={(next) => set({ firstNameFrench: next })}
+        error={errors[`${prefix}.firstNameFrench`] ?? null}
+      />
+      <TextField
+        label={t('register.lastNameFrench')}
+        value={value.lastNameFrench}
+        onChange={(next) => set({ lastNameFrench: next })}
+        error={errors[`${prefix}.lastNameFrench`] ?? null}
       />
       <TextField
         label={t('register.nickname')}
@@ -358,6 +391,82 @@ function PersonFields({
 }
 
 /* ── Turning a failure into something the reader can act on ───────────────── */
+
+/**
+ * Maps the server's Zod issue paths onto this form's field keys.
+ *
+ * **The backend has always sent `details.issues` with an exact `path` per
+ * failure** — `applicant.first_name_arabic`, `child.last_name_french`,
+ * `branch_id`. The form threw all of it away and rendered one sentence, so a
+ * rejected submission said *"review the fields"* without saying which, and an
+ * applicant had to guess.
+ *
+ * The **path** is used rather than the message text: it is machine-readable and
+ * stable, whereas Zod's message is English prose written for a developer
+ * ("Invalid input: expected string, received undefined"). Showing that to an
+ * Arabic-speaking applicant would be worse than showing nothing. So a known
+ * path becomes our own Arabic message on the right field; an *unknown* path
+ * keeps the server's own text, because swallowing a message we failed to
+ * anticipate is how this defect happened in the first place.
+ */
+const SERVER_FIELD_PATHS: Record<string, string> = {
+  first_name_arabic: 'firstNameArabic',
+  last_name_arabic: 'lastNameArabic',
+  first_name_french: 'firstNameFrench',
+  last_name_french: 'lastNameFrench',
+  nickname: 'nickname',
+  phone: 'phone',
+  notes: 'notes',
+  sex: 'sex',
+};
+
+export interface ServerErrors {
+  /** Keyed exactly like `validate`'s output, so the two merge. */
+  fields: Record<string, string>;
+  /** Issues whose path this form does not recognise — surfaced, never dropped. */
+  unmapped: string[];
+}
+
+export function mapServerIssues(error: unknown): ServerErrors {
+  const empty: ServerErrors = { fields: {}, unmapped: [] };
+  if (!(error instanceof ApiError)) return empty;
+
+  const raw = error.details['issues'];
+  if (!Array.isArray(raw)) return empty;
+
+  const fields: Record<string, string> = {};
+  const unmapped: string[] = [];
+
+  for (const issue of raw as { path?: unknown; message?: unknown }[]) {
+    const path = typeof issue.path === 'string' ? issue.path : '';
+    const message = typeof issue.message === 'string' ? issue.message : '';
+
+    // `applicant.first_name_arabic` → person `applicant`, field `first_name_arabic`.
+    const [head, tail] = path.includes('.') ? path.split('.', 2) : ['', path];
+    const person = head === 'parent' ? 'applicant' : head; // the form calls the parent "applicant"
+
+    if (tail && SERVER_FIELD_PATHS[tail] && (person === 'applicant' || person === 'child')) {
+      fields[`${person}.${SERVER_FIELD_PATHS[tail]}`] = t('register.errServerField');
+      continue;
+    }
+    if (path === 'branch_id') {
+      fields['branch'] = t('register.errBranch');
+      continue;
+    }
+    if (path.startsWith('consents')) {
+      fields['dataProcessing'] = t('register.errConsent');
+      continue;
+    }
+    // Anything this form has not anticipated — including an `Unrecognized key`
+    // for a field it should not have sent at all, which is exactly the signal
+    // that a stale client is talking to a newer server.
+    if (message) unmapped.push(`${path ? `${path}: ` : ''}${message}`);
+  }
+
+  return { fields, unmapped };
+}
+
+
 
 /**
  * §14.4: an error states what went wrong and, where the cause is known, what to
@@ -431,6 +540,17 @@ export function validate(state: FormState): Record<string, string> {
       else if (raw.length > LIMITS.namePart) errors[`${prefix}.${part}`] = t('register.errTooLong');
     }
     if (p.sex === '') errors[`${prefix}.sex`] = t('register.errRequired');
+    // R41: both French parts or neither. Half a name is not a name, and the
+    // server refuses it — so the form says which half is missing rather than
+    // letting the applicant discover it on submit.
+    const fr = p.firstNameFrench.trim();
+    const lr = p.lastNameFrench.trim();
+    if (fr !== '' && lr === '') errors[`${prefix}.lastNameFrench`] = t('register.errFrenchPair');
+    if (lr !== '' && fr === '') errors[`${prefix}.firstNameFrench`] = t('register.errFrenchPair');
+    for (const [part, raw] of [['firstNameFrench', fr], ['lastNameFrench', lr]] as const) {
+      if (raw.length > LIMITS.namePart) errors[`${prefix}.${part}`] = t('register.errTooLong');
+    }
+
     const phone = p.phone.trim();
     if (phone !== '' && (!PHONE_PATTERN.test(phone) || phone.length < LIMITS.phoneMin || phone.length > LIMITS.phoneMax))
       errors[`${prefix}.phone`] = t('register.errPhone');
@@ -469,7 +589,12 @@ function buildPayload(state: {
     sex: p.sex as 'female' | 'male',
     // Optional fields are OMITTED rather than sent empty: the server's schema
     // caps their length, and an empty string is a value where absence is meant.
-    ...(p.nameFrench.trim() ? { name_french: p.nameFrench.trim() } : {}),
+    ...(p.firstNameFrench.trim() && p.lastNameFrench.trim()
+      ? {
+          first_name_french: p.firstNameFrench.trim(),
+          last_name_french: p.lastNameFrench.trim(),
+        }
+      : {}),
     ...(p.nickname.trim() ? { nickname: p.nickname.trim() } : {}),
     ...(p.phone.trim() ? { phone: p.phone.trim() } : {}),
     ...(p.notes.trim() ? { notes: p.notes.trim() } : {}),

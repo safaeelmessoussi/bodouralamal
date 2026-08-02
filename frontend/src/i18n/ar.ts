@@ -234,7 +234,10 @@ export const ar = {
     // Revision 40 — matching how Moroccan administrative records read.
     firstNameArabic: 'الاسم الشخصي',
     lastNameArabic: 'الاسم العائلي',
-    nameFrench: 'الاسم بالفرنسية (اختياري)',
+    // Revision 41 — split like the Arabic pair. Optional, but as a pair.
+    firstNameFrench: 'الاسم الشخصي بالفرنسية (اختياري)',
+    lastNameFrench: 'الاسم العائلي بالفرنسية (اختياري)',
+    errFrenchPair: 'يرجى إدخال الاسمين معاً بالفرنسية، أو تركهما فارغين.',
     nickname: 'الكنية (اختياري)',
     nicknameHint: 'تُستعمل داخلياً للبحث فقط.',
     phone: 'رقم الهاتف (اختياري)',
@@ -289,6 +292,9 @@ export const ar = {
     noTokenBody: 'يبدأ التسجيل بالدخول عبر Google. يرجى البدء من جديد.',
     startOver: 'المتابعة عبر Google',
     errRequired: 'هذا الحقل مطلوب.',
+    // Marked from the server's own verdict — it named this field, so the
+    // applicant is told which one rather than "review the fields".
+    errServerField: 'راجع هذا الحقل — لم يقبله الخادم.',
     errTooLong: 'النص طويل جداً.',
     errPhone: 'رقم غير صالح — أرقام وعلامة + والمسافات فقط.',
     errBranch: 'يرجى اختيار المقر.',
@@ -338,7 +344,6 @@ export const ar = {
       levels: 'يتطلب هذا القسم واجهات برمجية لإدارة المستويات، وهي غير متوفرة بعد.',
       taxonomy: 'يتطلب هذا القسم واجهات برمجية لإدارة الفئات والمواد، وهي غير متوفرة بعد.',
       content: 'يتطلب هذا القسم واجهات رفع المحتوى وعرضه (المرحلة السادسة)، وهي غير متوفرة بعد.',
-      settings: 'يتطلب هذا القسم واجهات برمجية لإعدادات المنصة، وهي غير متوفرة بعد.',
     },
     dashboard: {
       title: 'لوحة التحكم',
@@ -416,6 +421,20 @@ export const ar = {
       rejected: 'تم الرفض — تم تحديث {n} سجل.',
       alreadyDecided: 'تم البتّ في هذا الطلب من قِبل مشرف آخر. حُدِّثت القائمة.',
       decisionFailed: 'تعذّر تنفيذ القرار. يرجى المحاولة من جديد.',
+    },
+    // §5.6 / Revision 42 — Platform Settings, first iteration.
+    settings: {
+      lede: 'إعدادات المنصة. يحرّرها المشرف العام وحده، ويُسجَّل كل تغيير في سجل المراجعة.',
+      consentVersionLabel: 'نسخة نص الموافقة القانوني',
+      // States the consequence, because an administrator editing this needs to
+      // know that stored consents keep the version they were given under.
+      consentVersionHint:
+        'المعرّف المسجَّل مع كل موافقة جديدة (مثال: 2026-08-v1). تغييره يسري على التسجيلات اللاحقة فقط — الموافقات المحفوظة تحتفظ بالنسخة التي وُقّعت عليها. لا يمكن استقبال أي طلب تسجيل قبل ضبط هذه القيمة.',
+      notConfigured: 'غير مضبوط — التسجيل متوقف',
+      current: 'القيمة الحالية: {value}',
+      saved: 'تم حفظ الإعداد وتسجيله في سجل المراجعة.',
+      errEmpty: 'لا يمكن ترك القيمة فارغة.',
+      errRejected: 'لم يقبل الخادم هذه القيمة. يرجى مراجعتها.',
     },
     hijri: {
       title: 'التقويم الهجري',

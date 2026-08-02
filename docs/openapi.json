@@ -246,6 +246,118 @@
         }
       }
     },
+    "/admin/settings": {
+      "get": {
+        "summary": "Platform settings",
+        "description": "**Super Admin only** (§5.6, TD-3.11, Revision 42), asserted against live rows per request (TD-12). Returns the **writable** settings and their current values — an explicit server-side allow-list, not every `SystemSetting`: the table also holds category default visibilities and the grading scale, which have different audiences and consequences. Each row carries `key`, `label_key`, `hint_key`, `value` and `version`. `value` is `null` when the setting has **never been configured**, which is deliberately distinct from an empty string (refused on write): for `legal.consent_text_version` a null is the state in which **no registration can be accepted at all** (§4.1a), so the screen can call it out rather than showing a blank box. Labels arrive as **i18n keys chosen by the server**, so a client cannot hold its own list and drift out of step with the allow-list.",
+        "responses": {
+          "200": {
+            "description": "The writable settings, configured or not."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN for anyone but a Super Admin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/settings/{key}": {
+      "put": {
+        "summary": "Update a platform setting",
+        "description": "**Super Admin only** (§5.6, TD-3.11, Revision 42). Body: `{ value, version }`. **This endpoint exists because the platform was otherwise undeployable:** `legal.consent_text_version` is required before any registration is accepted (§4.1a), §15.1 deliberately does not seed it (§2.3 makes versioning the Arabic consent text an owner compliance task), and no API previously existed to set it — so a first deployment refused every applicant with no in-product remedy. **The key must be on the writable allow-list**, otherwise `404` (§20 rule 17: never a 403, which would confirm the key exists elsewhere). **The value is validated per key and may never be empty** — for the consent version, a non-blank string of 1–100 characters after trimming, because a blank version would *look* configured while reproducing the exact failure the setting prevents. **TD-15 optimistic locking:** a stale `version` is `409 VERSION_CONFLICT` rather than a silent overwrite of another Super Admin's change. **Audited as `setting.update` carrying the OLD and NEW value** (TD-8) — a row holding only the new value cannot answer *\"what text was in force when this person consented\"*, which is the question a compliance review asks. **A change affects FUTURE registrations only:** registration copies the version onto each `ConsentRecord` at the moment of agreement, and nothing here rewrites a stored consent, because §4.1a's requirement that each record carry the exact text agreed to is precisely what forbids restamping.",
+        "responses": {
+          "200": {
+            "description": "Saved; returns the setting with its incremented version."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — empty, over-long, or wrong-typed value.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN for anyone but a Super Admin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for a key that is not writable through this API.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). VERSION_CONFLICT.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/admin/approvals": {
       "get": {
         "summary": "Approval queue",
