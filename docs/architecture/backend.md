@@ -156,6 +156,26 @@ refreshing".
 
 ## Error handling
 
+> **An error the client cannot act on is a bug, even when the status is right.**
+>
+> `POST /registrations` returned `503 SERVICE_UNAVAILABLE` with an empty
+> `details` when `legal.consent_text_version` was unset. The status was correct —
+> §4.1a forbids writing a consent record whose text version is unknown, so
+> failing closed is the right behaviour. But an empty `details` made a permanent
+> configuration gap indistinguishable from a transient outage, so the form
+> rendered *"try again later"*: advice that could never work, because no amount
+> of waiting writes a missing `SystemSetting` row. It cost a P0 investigation.
+>
+> TD-3.8 defines `details` as *"structured context for codes that carry it"*, and
+> this is exactly such a code. It now reports
+> `{ reason: 'CONSENT_TEXT_VERSION_NOT_CONFIGURED', setting: 'legal.consent_text_version' }`.
+> A setting **key** is not a secret — it is already named in the SRS — and naming
+> it is the difference between an actionable message and a mystery.
+>
+> The rule: **when a failure has one known cause, say which.** Reserve the
+> generic message for causes that are genuinely unknown.
+
+
 Errors are thrown as **typed domain errors** and mapped centrally to the single response
 envelope. There is no scattering of `res.status(...)` through controllers.
 

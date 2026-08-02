@@ -144,7 +144,10 @@
 - [x] Unified parent+child registration transaction (TD-4.1) + adult path
   - ✓ Backend — `POST /registrations`; replay guard consumed FIRST so the `jti` is authoritative; both paths in one transaction
   - ✓ Backend — **`branch_id` required and persisted as `User.intended_branch_id`** (Revision 39): validated inside the transaction against a live branch, refused for a soft-deleted one, accepted for a not-yet-opened one, written on the applicant only. Level/Room/Group still rejected outright
-  - ✓ Frontend — the §5.5 form: adult **or** parent+child, required Branch selector, consent checkbox, three-state media release for a minor. Built entirely from the shared field primitives; `/register` no longer a placeholder
+  - ✓ Frontend — the §5.5 form: adult **or** parent+child, **الاسم الشخصي + الاسم العائلي (R40)**, required Branch selector, consent with a Law 09-08 explanation in the shared Dialog, three-state media release for a minor. Built entirely from the shared field primitives; `/register` no longer a placeholder
+  - ✓ Backend — **R40 name parts stored and `name_arabic` composed server-side**; a client-supplied `name_arabic` is rejected, not ignored (§1.1)
+  - ✓ Tests — **`registration.http.integration.test.ts` added (11 tests)**. There had been NO HTTP-level test for registration, which is how a 503 reached a browser as "try again later"
+  - ⚠ **`legal.consent_text_version` has no production mechanism.** §15.1 does not seed it (§2.3 owner task) and `/superadmin/settings` (§5.6) is unbuilt, so on a real deployment nothing can set a value registration requires. Dev fixtures seed `dev-unapproved-v1`; **production still needs the settings screen or an owner-run step**
   - ✓ Tests — 11 integration tests incl. the §18 mid-transaction atomicity check and concurrent submission of one token
   - ✓ Security — schema **rejects** `email`/`provider_subject_id` outright (§20 rule 9); replay → `STATE_CONFLICT`; fails closed with no consent text version
   - △ Frontend integration (M2) — the unified registration form

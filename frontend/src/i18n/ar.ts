@@ -231,7 +231,9 @@ export const ar = {
     you: 'بياناتك',
     parent: 'بيانات ولي الأمر',
     child: 'بيانات الابن/الابنة',
-    nameArabic: 'الاسم الكامل بالعربية',
+    // Revision 40 — matching how Moroccan administrative records read.
+    firstNameArabic: 'الاسم الشخصي',
+    lastNameArabic: 'الاسم العائلي',
     nameFrench: 'الاسم بالفرنسية (اختياري)',
     nickname: 'الكنية (اختياري)',
     nicknameHint: 'تُستعمل داخلياً للبحث فقط.',
@@ -247,7 +249,36 @@ export const ar = {
     branchEmpty: 'اختر المقر…',
     branchHint: 'المقر الذي ترغب في الالتحاق به. يحدّد المشرف الحلقة بعد الموافقة.',
     consentLegend: 'الموافقات',
-    consentDataProcessing: 'أوافق على معالجة البيانات الشخصية وفق القانون 09-08.',
+    // Split so the statute can be a real button inside the sentence, opening
+    // the explanation. A checkbox that names a law and explains nothing is one
+    // people tick without understanding — the opposite of informed consent.
+    consentDataProcessingPrefix: 'أوافق على معالجة بياناتي الشخصية وفق',
+    consentLawName: 'القانون 09-08',
+    consentDataProcessingSuffix: '.',
+    lawTitle: 'حماية بياناتك الشخصية — القانون 09-08',
+    lawIntro:
+      'القانون 09-08 هو القانون المغربي المتعلق بحماية الأشخاص الذاتيين تجاه معالجة المعطيات ذات الطابع الشخصي. هذا ملخّص بلغة مبسّطة لما نجمعه ولماذا.',
+    lawWhyTitle: 'لماذا نجمع هذه البيانات؟',
+    lawWhyBody:
+      'لتسجيلك في الحلقات ومتابعة تقدّمك الدراسي، وللتواصل معك بخصوص المواعيد والأنشطة. دون هذه البيانات لا يمكن للجمعية أن تفتح لك حساباً أو أن تسجّلك في حلقة.',
+    lawWhatTitle: 'ما الذي نحتفظ به؟',
+    lawWhat1: 'اسمك ورقم هاتفك وبريدك الإلكتروني.',
+    lawWhat2: 'المقر الذي اخترته، والحلقة التي تُسنَد إليك بعد الموافقة.',
+    lawWhat3: 'متابعة الحفظ والنتائج الخاصة بك.',
+    lawWhat4: 'قرارك بشأن الموافقات، وتاريخ تسجيله.',
+    lawWhoTitle: 'من يمكنه الاطّلاع عليها؟',
+    lawWhoBody:
+      'المؤطِّرات والمسؤولات في الجمعية، كلٌّ في حدود عملها فقط: المؤطِّرة ترى طالبات حلقتها، والمسؤولة ترى فرعها. لا تُنشر بياناتك ولا تُباع ولا تُشارَك مع أي جهة خارجية.',
+    lawUseTitle: 'هل تُستعمل لغرض آخر؟',
+    lawUseBody:
+      'لا. تُستعمل حصراً لتدبير شؤون الجمعية التعليمية. لا نستعملها للإشهار ولا نرسل بها رسائل تجارية.',
+    lawRightsTitle: 'ما هي حقوقك؟',
+    lawRightsBody: 'يمنحك القانون 09-08 حقوقاً يمكنك ممارستها في أي وقت:',
+    lawRight1: 'الاطّلاع على بياناتك المحفوظة لدينا.',
+    lawRight2: 'تصحيح أي معلومة خاطئة أو غير محدَّثة.',
+    lawRight3: 'الاعتراض على المعالجة أو طلب حذف بياناتك، في الحدود التي يسمح بها القانون.',
+    lawContact:
+      'لممارسة أيٍّ من هذه الحقوق، يكفي التواصل مع إدارة الجمعية في أحد مقراتها.',
     consentMedia: 'الموافقة على نشر الصوت/التسجيلات',
     consentMediaChoose: 'اختر قراراً…',
     consentMediaHint: 'قرارك مسجَّل في الحالتين — «لا» جواب صحيح ويُحفظ كما هو.',
@@ -268,6 +299,10 @@ export const ar = {
     tokenSpent: 'انتهت صلاحية جلسة التسجيل. يرجى البدء من جديد عبر Google.',
     rejected: 'تعذّر قبول البيانات. يرجى مراجعة الحقول والمحاولة من جديد.',
     failed: 'تعذّر إرسال الطلب حالياً. يرجى المحاولة بعد قليل.',
+    // A configuration gap, not an outage — waiting cannot fix it, so the
+    // message says what is missing and who can set it (§2.3 owner task).
+    consentVersionMissing:
+      'لا يمكن استقبال الطلبات بعد: لم تُسجَّل نسخة نص الموافقة القانوني (legal.consent_text_version). يرجى إبلاغ إدارة الجمعية لضبطها من إعدادات المنصة.',
   },
   admin: {
     soon: 'قريباً',

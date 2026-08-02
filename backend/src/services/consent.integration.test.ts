@@ -4,6 +4,11 @@ import { loadConfig } from '../lib/config.js';
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
 import { effectiveConsent, readConsent, recordStaffConsent } from './consent.service.js';
 import { CONSENT_TEXT_VERSION_KEY } from './registration.service.js';
+import {
+  captureConsentVersion,
+  restoreConsentVersion,
+  type SavedConsentVersion,
+} from '../test-support/consent-setting.js';
 
 /**
  * Staff-recorded consent — §4.1a, BR-1, TD-2, TD-7, TD-8, TD-12.
@@ -15,6 +20,14 @@ import { CONSENT_TEXT_VERSION_KEY } from './registration.service.js';
  */
 const config = loadConfig();
 const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);
+/**
+ * Restored in `afterAll` — a fixture must not leave the app unrunnable.
+ *
+ * Captured ONCE. A `beforeEach` capture would re-save whatever the previous
+ * test left behind, so by the end the suite would "restore" its own scratch
+ * value rather than the developer's.
+ */
+let savedConsentVersion: SavedConsentVersion | null = null;
 const TAG = '[consent-test]';
 
 let levelId: string;
@@ -97,6 +110,7 @@ async function clear(): Promise<void> {
 }
 
 beforeEach(async () => {
+  savedConsentVersion ??= await captureConsentVersion(prisma);
   await clear();
   const level = await prisma.level.findFirst({ select: { id: true } });
   levelId = level!.id;
@@ -109,7 +123,10 @@ beforeEach(async () => {
 
 afterAll(async () => {
   await clear();
-  await prisma.systemSetting.deleteMany({ where: { key: CONSENT_TEXT_VERSION_KEY } });
+  // Restore, never delete: deleting left the developer's database with no
+  // consent text version, and registration then failed closed for everyone
+  // who used the form after a test run (see test-support/consent-setting).
+  if (savedConsentVersion) await restoreConsentVersion(prisma, savedConsentVersion);
   await prisma.$disconnect();
 });
 

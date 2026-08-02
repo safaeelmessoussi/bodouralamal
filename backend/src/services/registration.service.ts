@@ -46,6 +46,24 @@ import type { RegistrationInput } from '../validators/registration.validators.js
  */
 export const CONSENT_TEXT_VERSION_KEY = 'legal.consent_text_version';
 
+
+/**
+ * Composes `name_arabic` from the two collected parts (§7, Revision 40).
+ *
+ * **The server does this, never a client** (§1.1). Two clients would disagree
+ * about order and separator, and the wrong answer is a person's name rendered
+ * backwards — a mistake nobody reviewing a list would spot, and one the person
+ * themselves would find insulting.
+ *
+ * A single space, personal name first, matching how Moroccan administrative
+ * records read. Both parts are already trimmed and non-empty by the time they
+ * reach here (Zod + a database CHECK), so the composition cannot produce a
+ * leading or trailing space.
+ */
+function composeArabicName(first: string, last: string): string {
+  return `${first} ${last}`;
+}
+
 export interface RegistrationResult {
   applicantId: string;
   childId: string | null;
@@ -63,9 +81,19 @@ export async function activeConsentTextVersion(
     // §4.1a requires the exact text version agreed to be stored on every
     // record. Without it we cannot honestly say what was consented to, so we
     // refuse rather than write an unattributable consent.
+    // The `details` are deliberately populated: TD-3.8 defines `details` as
+    // "structured context for codes that carry it", and this is the one 503 a
+    // client can do something about. A bare "service unavailable" sent an
+    // operator hunting through logs for a missing configuration row — the exact
+    // failure this project hit while trying to test registration end to end.
+    //
+    // Safe to expose: a SystemSetting KEY is not a secret, it is already named
+    // in the SRS, and naming it is the difference between an actionable message
+    // and a mystery.
     throw new AppError(
       'SERVICE_UNAVAILABLE',
       `${CONSENT_TEXT_VERSION_KEY} is not configured — see SRS §2.3 owner task`,
+      { reason: 'CONSENT_TEXT_VERSION_NOT_CONFIGURED', setting: CONSENT_TEXT_VERSION_KEY },
     );
   }
   return value;
@@ -146,7 +174,14 @@ export async function register(
       // an Admin approves (TD-4.2).
       const applicant: User = await tx.user.create({
         data: {
-          nameArabic: applicantData.name_arabic,
+          // Revision 40 — the parts are what was collected; the full name is
+          // composed here so search, ordering and display all read one value.
+          firstNameArabic: applicantData.first_name_arabic,
+          lastNameArabic: applicantData.last_name_arabic,
+          nameArabic: composeArabicName(
+            applicantData.first_name_arabic,
+            applicantData.last_name_arabic,
+          ),
           nameFrench: applicantData.name_french ?? null,
           nickname: applicantData.nickname ?? null,
           phone: applicantData.phone ?? null,
@@ -187,7 +222,12 @@ export async function register(
         // pre_provisioned_email (§4.3, BR-5).
         child = await tx.user.create({
           data: {
-            nameArabic: input.child.name_arabic,
+            firstNameArabic: input.child.first_name_arabic,
+            lastNameArabic: input.child.last_name_arabic,
+            nameArabic: composeArabicName(
+              input.child.first_name_arabic,
+              input.child.last_name_arabic,
+            ),
             nameFrench: input.child.name_french ?? null,
             nickname: input.child.nickname ?? null,
             phone: input.child.phone ?? null,

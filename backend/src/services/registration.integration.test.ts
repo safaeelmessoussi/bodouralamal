@@ -8,6 +8,11 @@ import { issueOnboardingToken } from '../lib/onboarding-token.js';
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
 import { registrationSchema } from '../validators/registration.validators.js';
 import { CONSENT_TEXT_VERSION_KEY, register } from './registration.service.js';
+import {
+  captureConsentVersion,
+  restoreConsentVersion,
+  type SavedConsentVersion,
+} from '../test-support/consent-setting.js';
 import type { RegistrationInput } from '../validators/registration.validators.js';
 
 /**
@@ -17,6 +22,14 @@ import type { RegistrationInput } from '../validators/registration.validators.js
  */
 const config = loadConfig();
 const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);
+/**
+ * Restored in `afterAll` — a fixture must not leave the app unrunnable.
+ *
+ * Captured ONCE. A `beforeEach` capture would re-save whatever the previous
+ * test left behind, so by the end the suite would "restore" its own scratch
+ * value rather than the developer's.
+ */
+let savedConsentVersion: SavedConsentVersion | null = null;
 const KEY = config.ONBOARDING_TOKEN_KEY;
 const TAG = '[reg-test]';
 const TEXT_VERSION = 'reg-test-v1';
@@ -32,8 +45,8 @@ let branchId = '';
 
 const parentChild = (): RegistrationInput => ({
   kind: 'parent_child',
-  parent: { name_arabic: `${TAG} والدة`, phone: '+212 600 000 001', sex: 'female' as const },
-  child: { name_arabic: `${TAG} طفلة`, sex: 'female' as const },
+  parent: { first_name_arabic: `${TAG}`, last_name_arabic: `والدة`, phone: '+212 600 000 001', sex: 'female' as const },
+  child: { first_name_arabic: `${TAG}`, last_name_arabic: `طفلة`, sex: 'female' as const },
   branch_id: branchId,
   consents: { data_processing: true, media_release: true },
 });
@@ -57,6 +70,7 @@ async function clear(): Promise<void> {
 }
 
 beforeEach(async () => {
+  savedConsentVersion ??= await captureConsentVersion(prisma);
   await clear();
   await prisma.systemSetting.upsert({
     where: { key: CONSENT_TEXT_VERSION_KEY },
@@ -79,10 +93,104 @@ async function waitFor(condition: () => Promise<boolean>, timeoutMs = 15_000): P
 
 afterAll(async () => {
   await clear();
-  await prisma.systemSetting.deleteMany({ where: { key: CONSENT_TEXT_VERSION_KEY } });
+  // Restore, never delete: deleting left the developer's database with no
+  // consent text version, and registration then failed closed for everyone
+  // who used the form after a test run (see test-support/consent-setting).
+  if (savedConsentVersion) await restoreConsentVersion(prisma, savedConsentVersion);
   await prisma.$disconnect();
 });
 
+
+describe('§7 Revision 40 — الاسم الشخصي / الاسم العائلي', () => {
+  it('stores both parts AND composes name_arabic from them', async () => {
+    const { token } = issueOnboardingToken(identity(), KEY);
+    const result = await register(
+      prisma,
+      token,
+      {
+        kind: 'adult',
+        applicant: { first_name_arabic: `${TAG} خديجة`, last_name_arabic: 'بنعلي', sex: 'female' },
+        branch_id: branchId,
+        consents: { data_processing: true },
+      },
+      KEY,
+    );
+
+    const user = await prisma.user.findUnique({ where: { id: result.applicantId } });
+    expect(user?.firstNameArabic).toBe(`${TAG} خديجة`);
+    expect(user?.lastNameArabic).toBe('بنعلي');
+    // Composed by the SERVER, personal name first, single space. A client doing
+    // this would make it the authority on how a person's name reads (§1.1) —
+    // and the wrong order is a mistake nobody reviewing a list would spot.
+    expect(user?.nameArabic).toBe(`${TAG} خديجة بنعلي`);
+  });
+
+  it('composes for the CHILD too, not only the applicant', async () => {
+    const { token } = issueOnboardingToken(identity(), KEY);
+    const result = await register(
+      prisma,
+      token,
+      {
+        kind: 'parent_child',
+        parent: { first_name_arabic: `${TAG} أمينة`, last_name_arabic: 'بنعلي', sex: 'female' },
+        child: { first_name_arabic: `${TAG} سارة`, last_name_arabic: 'بنعلي', sex: 'female' },
+        branch_id: branchId,
+        consents: { data_processing: true, media_release: false },
+      },
+      KEY,
+    );
+    const child = await prisma.user.findUnique({ where: { id: result.childId! } });
+    expect(child?.firstNameArabic).toBe(`${TAG} سارة`);
+    expect(child?.nameArabic).toBe(`${TAG} سارة بنعلي`);
+  });
+
+  it('REFUSES a composed name_arabic from the client', () => {
+    // `.strict()`: the client must not be the authority on how the name reads,
+    // so sending it is a refusal rather than a silently ignored field.
+    const parsed = registrationSchema.safeParse({
+      kind: 'adult',
+      applicant: {
+        first_name_arabic: 'خديجة',
+        last_name_arabic: 'بنعلي',
+        name_arabic: 'شيء آخر تماماً',
+        sex: 'female',
+      },
+      branch_id: '00000000-0000-4000-8000-000000000000',
+      consents: { data_processing: true },
+    });
+    expect(parsed.success).toBe(false);
+  });
+
+  it('REQUIRES both parts, and refuses a blank or over-long one (TD-9)', () => {
+    const base = {
+      kind: 'adult' as const,
+      branch_id: '00000000-0000-4000-8000-000000000000',
+      consents: { data_processing: true },
+    };
+    // Missing family name.
+    expect(
+      registrationSchema.safeParse({
+        ...base,
+        applicant: { first_name_arabic: 'خديجة', sex: 'female' },
+      }).success,
+    ).toBe(false);
+    // Whitespace only — trimmed to empty, which the DB CHECK also refuses.
+    expect(
+      registrationSchema.safeParse({
+        ...base,
+        applicant: { first_name_arabic: '   ', last_name_arabic: 'بنعلي', sex: 'female' },
+      }).success,
+    ).toBe(false);
+    // 61 characters: one past TD-9's per-part limit, which is what keeps the
+    // composed name inside `name_arabic`'s 120.
+    expect(
+      registrationSchema.safeParse({
+        ...base,
+        applicant: { first_name_arabic: 'أ'.repeat(61), last_name_arabic: 'بنعلي', sex: 'female' },
+      }).success,
+    ).toBe(false);
+  });
+});
 
 describe('§4.1 Revision 39 — the applicant chooses a Branch, and only a Branch', () => {
   it('still REJECTS every other placement field outright', () => {
@@ -93,7 +201,7 @@ describe('§4.1 Revision 39 — the applicant chooses a Branch, and only a Branc
     for (const field of ['room_id', 'level_id', 'group_id', 'category_id']) {
       const parsed = registrationSchema.safeParse({
         kind: 'adult',
-        applicant: { name_arabic: 'خديجة', sex: 'female', [field]: 'anything' },
+        applicant: { first_name_arabic: 'خديجة', last_name_arabic: 'الاختبارية', sex: 'female', [field]: 'anything' },
         branch_id: '00000000-0000-4000-8000-000000000000',
         consents: { data_processing: true },
       });
@@ -107,7 +215,7 @@ describe('§4.1 Revision 39 — the applicant chooses a Branch, and only a Branc
     // branch nobody picked.
     const parsed = registrationSchema.safeParse({
       kind: 'adult',
-      applicant: { name_arabic: 'خديجة', sex: 'female' },
+      applicant: { first_name_arabic: 'خديجة', last_name_arabic: 'الاختبارية', sex: 'female' },
       consents: { data_processing: true },
     });
     expect(parsed.success).toBe(false);
@@ -120,7 +228,7 @@ describe('§4.1 Revision 39 — the applicant chooses a Branch, and only a Branc
       token,
       {
         kind: 'adult',
-        applicant: { name_arabic: `${TAG} مختارة`, sex: 'female' },
+        applicant: { first_name_arabic: `${TAG}`, last_name_arabic: `مختارة`, sex: 'female' },
         branch_id: branchId,
         consents: { data_processing: true },
       },
@@ -158,7 +266,7 @@ describe('§4.1 Revision 39 — the applicant chooses a Branch, and only a Branc
         token,
         {
           kind: 'adult',
-          applicant: { name_arabic: `${TAG} وهمية`, sex: 'female' },
+          applicant: { first_name_arabic: `${TAG}`, last_name_arabic: `وهمية`, sex: 'female' },
           branch_id: '00000000-0000-4000-8000-000000000000',
           consents: { data_processing: true },
         },
@@ -181,7 +289,7 @@ describe('§4.1 Revision 39 — the applicant chooses a Branch, and only a Branc
         token,
         {
           kind: 'adult',
-          applicant: { name_arabic: `${TAG} مرفوضة`, sex: 'female' },
+          applicant: { first_name_arabic: `${TAG}`, last_name_arabic: `مرفوضة`, sex: 'female' },
           branch_id: closed.id,
           consents: { data_processing: true },
         },
@@ -206,7 +314,7 @@ describe('§4.1 Revision 39 — the applicant chooses a Branch, and only a Branc
       token,
       {
         kind: 'adult',
-        applicant: { name_arabic: `${TAG} مبكرة`, sex: 'female' },
+        applicant: { first_name_arabic: `${TAG}`, last_name_arabic: `مبكرة`, sex: 'female' },
         branch_id: future.id,
         consents: { data_processing: true },
       },
@@ -225,8 +333,8 @@ describe('§4.1b step 5 Revision 27 — registration captures sex before the Use
       token,
       {
         kind: 'parent_child',
-        parent: { name_arabic: `${TAG} والدة`, sex: 'female' },
-        child: { name_arabic: `${TAG} ابن`, sex: 'male' },
+        parent: { first_name_arabic: `${TAG}`, last_name_arabic: `والدة`, sex: 'female' },
+        child: { first_name_arabic: `${TAG}`, last_name_arabic: `ابن`, sex: 'male' },
         branch_id: branchId,
         consents: { data_processing: true, media_release: true },
       },
@@ -247,7 +355,7 @@ describe('§4.1b step 5 Revision 27 — registration captures sex before the Use
       token,
       {
         kind: 'adult',
-        applicant: { name_arabic: `${TAG} راشدة`, sex: 'female' },
+        applicant: { first_name_arabic: `${TAG}`, last_name_arabic: `راشدة`, sex: 'female' },
         branch_id: branchId,
         consents: { data_processing: true },
       },
@@ -261,7 +369,7 @@ describe('§4.1b step 5 Revision 27 — registration captures sex before the Use
     // the API boundary, so that is where this rule lives and is asserted.
     const parsed = registrationSchema.safeParse({
       kind: 'adult',
-      applicant: { name_arabic: 'خديجة' },
+      applicant: { first_name_arabic: 'خديجة', last_name_arabic: 'الاختبارية' },
       consents: { data_processing: true },
     });
     expect(parsed.success).toBe(false);
@@ -270,7 +378,7 @@ describe('§4.1b step 5 Revision 27 — registration captures sex before the Use
   it('the API boundary refuses an invalid sex value', () => {
     const parsed = registrationSchema.safeParse({
       kind: 'adult',
-      applicant: { name_arabic: 'خديجة', sex: 'other' },
+      applicant: { first_name_arabic: 'خديجة', last_name_arabic: 'الاختبارية', sex: 'other' },
       consents: { data_processing: true },
     });
     expect(parsed.success).toBe(false);
@@ -280,7 +388,7 @@ describe('§4.1b step 5 Revision 27 — registration captures sex before the Use
     for (const sex of ['female', 'male']) {
       const parsed = registrationSchema.safeParse({
         kind: 'adult',
-        applicant: { name_arabic: 'خديجة', sex },
+        applicant: { first_name_arabic: 'خديجة', last_name_arabic: 'الاختبارية', sex },
         branch_id: '00000000-0000-4000-8000-000000000000',
         consents: { data_processing: true },
       });
@@ -535,7 +643,7 @@ describe('§4.1b step 5 / TD-4.1 unified registration', () => {
       token,
       {
         kind: 'adult',
-        applicant: { name_arabic: `${TAG} خديجة`, sex: 'female' as const },
+        applicant: { first_name_arabic: `${TAG}`, last_name_arabic: `خديجة`, sex: 'female' as const },
         branch_id: branchId,
         consents: { data_processing: true },
       },
@@ -568,6 +676,16 @@ describe('§4.1b step 5 / TD-4.1 unified registration', () => {
     // cannot say what was agreed to, so we refuse rather than fabricate one.
     await expect(register(prisma, token, parentChild(), KEY)).rejects.toMatchObject({
       code: 'SERVICE_UNAVAILABLE',
+      // **The half this test used to miss.** Asserting only that it fails let
+      // the failure be indistinguishable from a transient outage, and the form
+      // duly told the applicant to "try again later" — advice that could never
+      // work, because no amount of waiting writes a missing configuration row.
+      // TD-3.8's `details` is what makes the cause actionable, so it is pinned
+      // here rather than left to chance.
+      details: {
+        reason: 'CONSENT_TEXT_VERSION_NOT_CONFIGURED',
+        setting: CONSENT_TEXT_VERSION_KEY,
+      },
     });
     expect(await prisma.user.count({ where: { nameArabic: { startsWith: TAG } } })).toBe(0);
   });

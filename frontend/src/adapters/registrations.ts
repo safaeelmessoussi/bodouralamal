@@ -10,6 +10,12 @@ import { api } from '../lib/api.js';
  * the shape here mirrors what the contract accepts, so a client that tried to
  * substitute an identity would not typecheck before it failed at the boundary.
  *
+ * **`name_arabic` is not in this payload and must not be.** Revision 40 has the
+ * client collect الاسم الشخصي and الاسم العائلي; the *server* composes the full
+ * name from them (§1.1), and `.strict()` rejects a client-supplied `name_arabic`
+ * rather than ignoring it — otherwise the client would be the authority on how
+ * a person's name reads.
+ *
  * **The applicant chooses a Branch and nothing else organisational (Revision
  * 39).** No Level, Room or Group — those are administrative decisions taken
  * after approval, and `.strict()` refuses them server-side rather than dropping
@@ -17,7 +23,10 @@ import { api } from '../lib/api.js';
  */
 
 export interface PersonInput {
-  name_arabic: string;
+  /** الاسم الشخصي (Revision 40). */
+  first_name_arabic: string;
+  /** الاسم العائلي (Revision 40). */
+  last_name_arabic: string;
   name_french?: string;
   nickname?: string;
   phone?: string;
@@ -69,7 +78,8 @@ export async function submitRegistration(
  *  correctness (§1.1) — these two are not redundant, and a client that skipped
  *  a check the server enforces would be the buggy one. */
 export const LIMITS = {
-  nameArabic: 120,
+  /** TD-9, Revision 40: each Arabic name part, so the composed name fits 120. */
+  namePart: 60,
   nameFrench: 120,
   nickname: 60,
   phoneMin: 5,

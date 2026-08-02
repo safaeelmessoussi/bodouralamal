@@ -14,7 +14,7 @@ Four layers, each testing something the others structurally cannot.
 **Coverage: ≥ 80 % on services and policies.** No coverage gate on generated or boilerplate
 code — a coverage number that counts generated clients measures nothing.
 
-Current totals: **102 backend unit · 508 integration · 185 frontend**.
+Current totals: **102 backend unit · 520 integration · 198 frontend**.
 
 ## Running them
 
@@ -87,6 +87,38 @@ nothing in the suite was looking at the response as a *shape*.
 So: an endpoint whose contract matters gets a test that would fail if the contract grew. The
 counterpart in CI is [`check-contract-dto.sh`](ci-cd.md#the-guards) — the guard makes the
 projection exist, the test makes it *correct*.
+
+## A fixture must not leave the application unrunnable
+
+Every suite touching registration upserted `legal.consent_text_version` in
+`beforeEach` and **deleted it in `afterAll`**. Running
+`npm run test:integration` therefore left the developer's database with no
+consent text version, and registration then failed closed with a `503` for
+everyone who used the form afterwards.
+
+The failure was doubly confusing: **the tests were green, the application was
+broken, and the tests were the reason.**
+
+Two lessons, both now enforced in code:
+
+- **"Clean up after yourself" means restore what was there, not delete what you
+  used.** `test-support/consent-setting.ts` captures the prior value once per
+  suite and puts it back — including *absent*, which is a real state the suites
+  deliberately exercise.
+- **Capture once, not per test.** A `beforeEach` capture would re-save whatever
+  the previous test left, so the suite would "restore" its own scratch value
+  rather than the developer's.
+
+## Assert that a failure is ACTIONABLE, not merely that it fails
+
+There *was* a test for the missing consent version. It asserted
+`code: 'SERVICE_UNAVAILABLE'` — and passed throughout, because the code was
+right. What it never asserted was that the failure told anyone what to do, so
+the empty `details` that made the form say *"try again later"* was invisible to
+it.
+
+A test that pins only the status pins half the contract. Where a failure carries
+a cause, assert the cause.
 
 ## The named regression tests
 

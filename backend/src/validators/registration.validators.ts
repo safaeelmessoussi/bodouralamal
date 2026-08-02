@@ -13,7 +13,16 @@ import { z } from 'zod';
  */
 
 /** TD-9 field limits — encoded here once and shared with the frontend. */
-const nameArabic = z.string().trim().min(1).max(120);
+/**
+ * الاسم الشخصي / الاسم العائلي (Revision 40) — 1–60 characters each, so the
+ * name the server composes cannot exceed `name_arabic`'s 120.
+ *
+ * **`name_arabic` is deliberately NOT accepted.** It is composed by the service
+ * from these two parts; taking it from the client would make the client the
+ * authority on how a person's name reads (§1.1), and `.strict()` below turns a
+ * submitted `name_arabic` into a refusal rather than a silently ignored field.
+ */
+const namePart = z.string().trim().min(1).max(60);
 const nameFrench = z.string().trim().max(120);
 const nickname = z.string().trim().max(60);
 /** TD-9: 5–20 chars, digits/`+`/spaces only; non-unique (families share phones). */
@@ -36,7 +45,8 @@ const notes = z.string().trim().max(2000);
  * treats a missing sex as *not eligible* rather than as a wildcard.
  */
 const personCore = z.object({
-  name_arabic: nameArabic,
+  first_name_arabic: namePart,
+  last_name_arabic: namePart,
   name_french: nameFrench.optional(),
   nickname: nickname.optional(),
   phone: phone.optional(),

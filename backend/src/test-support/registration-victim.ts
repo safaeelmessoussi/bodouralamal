@@ -59,8 +59,8 @@ const prisma = base.$extends({
 
 const input: RegistrationInput = {
   kind: 'parent_child',
-  parent: { name_arabic: `${tag} والدة`, phone: '+212 600 000 009', sex: 'female' },
-  child: { name_arabic: `${tag} طفلة`, sex: 'female' },
+  parent: { first_name_arabic: `${tag}`, last_name_arabic: `والدة`, phone: '+212 600 000 009', sex: 'female' },
+  child: { first_name_arabic: `${tag}`, last_name_arabic: `طفلة`, sex: 'female' },
   branch_id: branchId,
   consents: { data_processing: true, media_release: true },
 };

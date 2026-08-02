@@ -224,3 +224,24 @@
   margin-block-start: 0.25rem;
   flex-shrink: 0;
 }
+
+/* A statute reference inside a sentence: a real button, so it is focusable and
+   announced as a control, styled as the link it reads as. */
+.link-button {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--color-primary);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.link-button:hover {
+  color: var(--color-primary-emphasis);
+}
+/* The request id beside an error — present for support, never competing with
+   the message itself. */
+.field__requestid {
+  color: var(--color-text-muted);
+  font-size: var(--font-size-xs);
+}

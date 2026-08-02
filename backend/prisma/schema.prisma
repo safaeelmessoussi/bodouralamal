@@ -188,7 +188,23 @@ model User {
 
   // Person names. `nameArabic` is collated ar-x-icu by hand-written SQL
   // (TD-6a) so ordering is correct without per-query COLLATE (BR-19).
+  /// Revision 40 — SERVER-COMPOSED from `firstNameArabic` + `lastNameArabic`.
+  /// Never asked for and never composed by a client (§1.1): two clients would
+  /// disagree about order and separator, and the wrong answer is a person's
+  /// name rendered backwards. Remains what every consumer reads — TD-10 search,
+  /// `ar-x-icu` ordering (BR-19), the display-identity fallback, the §14.2
+  /// queue — and is a derived column of the same kind as the normalized shadow
+  /// columns below. It is a defect for them to disagree.
   nameArabic String  @map("name_arabic") @db.VarChar(120)
+
+  /// الاسم الشخصي / الاسم العائلي (Revision 40) — the COLLECTED facts, written
+  /// in the same transaction that creates the person. Nullable with no
+  /// backfill: splitting an existing full name on whitespace would be a guess,
+  /// and Moroccan names routinely carry compound personal names and multi-word
+  /// family names. Null means "recorded before the parts were collected".
+  firstNameArabic String? @map("first_name_arabic") @db.VarChar(60)
+  lastNameArabic  String? @map("last_name_arabic") @db.VarChar(60)
+
   nameFrench String? @map("name_french") @db.VarChar(120)
   nickname   String? @db.VarChar(60)
 

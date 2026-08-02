@@ -8,6 +8,7 @@ import {
   type PersonInput,
   type RegistrationInput,
 } from '../adapters/registrations.js';
+import { ConsentNotice } from '../components/consent-notice.js';
 import { ErrorState } from '../components/states.js';
 import { BranchSelector } from '../components/ui/branch-selector.js';
 import { Button } from '../components/ui/button.js';
@@ -60,6 +61,7 @@ export function Register(): ReactNode {
   const [touched, setTouched] = useState(false);
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
+  const [failureId, setFailureId] = useState<string | null>(null);
   const [done, setDone] = useState(false);
 
   useEffect(() => {
@@ -96,21 +98,15 @@ export function Register(): ReactNode {
     if (!valid || !token) return;
     setBusy(true);
     setFailure(null);
+    setFailureId(null);
     try {
       await submitRegistration(buildPayload({ kind, applicant, child, branchId: branchId!, mediaRelease }), token);
       setDone(true);
     } catch (error) {
-      // The token is single-use and short-lived (§4.1b): a replay or an expiry
-      // is not "try again", it is "start the sign-in again", and saying so is
-      // the difference between a fixable dead end and a mysterious one.
-      const status = error instanceof ApiError ? error.status : 0;
-      setFailure(
-        status === 409 || status === 401
-          ? t('register.tokenSpent')
-          : status === 400
-            ? t('register.rejected')
-            : t('register.failed'),
-      );
+      setFailure(explainFailure(error));
+      // §14.4 wants the request id shown discreetly: it is what turns a user's
+      // "it did not work" into a line an operator can find in the log.
+      setFailureId(error instanceof ApiError ? error.requestId : null);
     } finally {
       setBusy(false);
     }
@@ -212,20 +208,15 @@ export function Register(): ReactNode {
               {/* A checkbox, not a select: it is a single agreement, and §4.1
                   requires the decision be recorded as a ConsentRecord either
                   way — which is why the media release below is a THREE-state
-                  control rather than an unchecked box. */}
-              <label className="check">
-                <input
-                  type="checkbox"
-                  checked={dataProcessing}
-                  onChange={(event) => setDataProcessing(event.target.checked)}
-                />
-                <span>{t('register.consentDataProcessing')}</span>
-              </label>
-              {touched && errors['dataProcessing'] ? (
-                <p className="field__error" role="alert">
-                  {errors['dataProcessing']}
-                </p>
-              ) : null}
+                  control rather than an unchecked box.
+
+                  The statute is explained on demand rather than merely cited,
+                  because consent that is not informed is not consent. */}
+              <ConsentNotice
+                checked={dataProcessing}
+                onChange={setDataProcessing}
+                error={touched ? (errors['dataProcessing'] ?? null) : null}
+              />
 
               {kind === 'parent_child' ? (
                 <SelectField
@@ -250,6 +241,7 @@ export function Register(): ReactNode {
             {failure ? (
               <p className="field__error" role="alert">
                 {failure}
+                {failureId ? <span className="field__requestid"> ({failureId})</span> : null}
               </p>
             ) : null}
 
@@ -268,7 +260,8 @@ export function Register(): ReactNode {
 /* ── The person sub-form, used for applicant and child alike ──────────────── */
 
 interface PersonForm {
-  nameArabic: string;
+  firstNameArabic: string;
+  lastNameArabic: string;
   nameFrench: string;
   nickname: string;
   phone: string;
@@ -277,7 +270,8 @@ interface PersonForm {
 }
 
 const emptyPerson: PersonForm = {
-  nameArabic: '',
+  firstNameArabic: '',
+  lastNameArabic: '',
   nameFrench: '',
   nickname: '',
   phone: '',
@@ -305,12 +299,22 @@ function PersonFields({
 
   return (
     <>
+      {/* Revision 40 — الاسم الشخصي and الاسم العائلي, matching how Moroccan
+          administrative records read. Two shared `TextField`s, not a new
+          component: the concept is "a text field", and the form composes. */}
       <TextField
-        label={t('register.nameArabic')}
-        value={value.nameArabic}
-        onChange={(next) => set({ nameArabic: next })}
+        label={t('register.firstNameArabic')}
+        value={value.firstNameArabic}
+        onChange={(next) => set({ firstNameArabic: next })}
         required
-        error={errors[`${prefix}.nameArabic`] ?? null}
+        error={errors[`${prefix}.firstNameArabic`] ?? null}
+      />
+      <TextField
+        label={t('register.lastNameArabic')}
+        value={value.lastNameArabic}
+        onChange={(next) => set({ lastNameArabic: next })}
+        required
+        error={errors[`${prefix}.lastNameArabic`] ?? null}
       />
       <SelectField
         label={t('register.sex')}
@@ -353,6 +357,57 @@ function PersonFields({
   );
 }
 
+/* ── Turning a failure into something the reader can act on ───────────────── */
+
+/**
+ * §14.4: an error states what went wrong and, where the cause is known, what to
+ * do about it.
+ *
+ * **This function exists because of a P0.** Submitting returned *"try again
+ * later"* while the server was saying something precise and actionable —
+ * `SERVICE_UNAVAILABLE` with `details.reason = CONSENT_TEXT_VERSION_NOT_CONFIGURED`,
+ * meaning a `SystemSetting` row the platform requires had never been written.
+ * "Try again later" was not merely unhelpful, it was **wrong**: no amount of
+ * waiting would have fixed it, and it sent the reader away from the one action
+ * that would.
+ *
+ * The rule this encodes: **branch on the server's `code` and `details` first,
+ * and fall back to a generic message only when the cause is genuinely unknown.**
+ */
+export function explainFailure(error: unknown): string {
+  if (!(error instanceof ApiError)) return t('register.failed');
+
+  const reason = error.details['reason'];
+
+  // A configuration gap, not a transient outage. Naming it is what lets an
+  // operator fix it in one step instead of reading logs.
+  if (reason === 'CONSENT_TEXT_VERSION_NOT_CONFIGURED') {
+    return t('register.consentVersionMissing');
+  }
+
+  switch (error.code) {
+    case 'CONSENT_REQUIRED':
+      return t('register.errConsent');
+    case 'VALIDATION_FAILED':
+      return t('register.rejected');
+    // The onboarding token is single-use and short-lived (§4.1b). A replay or an
+    // expiry is not "try again" — it is "start the sign-in again", and saying so
+    // is the difference between a fixable dead end and a mysterious one.
+    case 'STATE_CONFLICT':
+    case 'DUPLICATE':
+    case 'AUTH_REQUIRED':
+      return t('register.tokenSpent');
+    default:
+      break;
+  }
+
+  // No envelope (a gateway error page, a dropped connection): fall back on the
+  // status, which is all there is.
+  if (error.status === 401 || error.status === 409) return t('register.tokenSpent');
+  if (error.status === 400) return t('register.rejected');
+  return t('register.failed');
+}
+
 /* ── Validation, mirroring TD-9 ───────────────────────────────────────────── */
 
 interface FormState {
@@ -368,9 +423,13 @@ export function validate(state: FormState): Record<string, string> {
   const errors: Record<string, string> = {};
 
   const person = (p: PersonForm, prefix: string) => {
-    if (p.nameArabic.trim() === '') errors[`${prefix}.nameArabic`] = t('register.errRequired');
-    else if (p.nameArabic.trim().length > LIMITS.nameArabic)
-      errors[`${prefix}.nameArabic`] = t('register.errTooLong');
+    // Both parts are required and each is capped separately (TD-9, R40) — the
+    // per-part limit is what keeps the composed name inside its column.
+    for (const part of ['firstNameArabic', 'lastNameArabic'] as const) {
+      const raw = p[part].trim();
+      if (raw === '') errors[`${prefix}.${part}`] = t('register.errRequired');
+      else if (raw.length > LIMITS.namePart) errors[`${prefix}.${part}`] = t('register.errTooLong');
+    }
     if (p.sex === '') errors[`${prefix}.sex`] = t('register.errRequired');
     const phone = p.phone.trim();
     if (phone !== '' && (!PHONE_PATTERN.test(phone) || phone.length < LIMITS.phoneMin || phone.length > LIMITS.phoneMax))
@@ -403,7 +462,10 @@ function buildPayload(state: {
   mediaRelease: '' | 'yes' | 'no';
 }): RegistrationInput {
   const person = (p: PersonForm): PersonInput => ({
-    name_arabic: p.nameArabic.trim(),
+    // The parts only — the server composes `name_arabic` (§1.1, R40), and
+    // sending it would be rejected rather than ignored.
+    first_name_arabic: p.firstNameArabic.trim(),
+    last_name_arabic: p.lastNameArabic.trim(),
     sex: p.sex as 'female' | 'male',
     // Optional fields are OMITTED rather than sent empty: the server's schema
     // caps their length, and an empty string is a value where absence is meant.

@@ -5,6 +5,11 @@ import { issueOnboardingToken } from '../lib/onboarding-token.js';
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
 import { decide, listApprovals } from './approval.service.js';
 import { CONSENT_TEXT_VERSION_KEY, register } from './registration.service.js';
+import {
+  captureConsentVersion,
+  restoreConsentVersion,
+  type SavedConsentVersion,
+} from '../test-support/consent-setting.js';
 
 /**
  * Approval queue (SRS §5.6, TD-4.2, TD-12, TD-15.3) against the real database.
@@ -13,6 +18,14 @@ import { CONSENT_TEXT_VERSION_KEY, register } from './registration.service.js';
  */
 const config = loadConfig();
 const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);
+/**
+ * Restored in `afterAll` — a fixture must not leave the app unrunnable.
+ *
+ * Captured ONCE. A `beforeEach` capture would re-save whatever the previous
+ * test left behind, so by the end the suite would "restore" its own scratch
+ * value rather than the developer's.
+ */
+let savedConsentVersion: SavedConsentVersion | null = null;
 const KEY = config.ONBOARDING_TOKEN_KEY;
 const TAG = '[appr-test]';
 
@@ -47,8 +60,8 @@ async function submitBundle(intoBranchId?: string): Promise<{ parentId: string; 
     token,
     {
       kind: 'parent_child',
-      parent: { name_arabic: `${TAG} والدة`, sex: 'female' as const },
-      child: { name_arabic: `${TAG} طفلة`, sex: 'female' as const },
+      parent: { first_name_arabic: `${TAG}`, last_name_arabic: `والدة`, sex: 'female' as const },
+      child: { first_name_arabic: `${TAG}`, last_name_arabic: `طفلة`, sex: 'female' as const },
       branch_id: intoBranchId ?? branchId,
       consents: { data_processing: true, media_release: true },
     },
@@ -81,6 +94,7 @@ let branchId = '';
 let otherBranchId = '';
 
 beforeEach(async () => {
+  savedConsentVersion ??= await captureConsentVersion(prisma);
   await clear();
   await prisma.systemSetting.upsert({
     where: { key: CONSENT_TEXT_VERSION_KEY },
@@ -93,7 +107,10 @@ beforeEach(async () => {
 
 afterAll(async () => {
   await clear();
-  await prisma.systemSetting.deleteMany({ where: { key: CONSENT_TEXT_VERSION_KEY } });
+  // Restore, never delete: deleting left the developer's database with no
+  // consent text version, and registration then failed closed for everyone
+  // who used the form after a test run (see test-support/consent-setting).
+  if (savedConsentVersion) await restoreConsentVersion(prisma, savedConsentVersion);
   await prisma.$disconnect();
 });
 

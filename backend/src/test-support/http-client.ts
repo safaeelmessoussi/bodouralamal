@@ -34,6 +34,12 @@ export interface CallOptions {
   body?: unknown;
   /** Set for tests that assert rate limiting itself, so the 429 is returned. */
   noRetryOn429?: boolean;
+  /**
+   * Extra request headers, for credentials this helper has no shorthand for —
+   * `X-Onboarding-Token` (§4.1b) and `X-Active-Child-ID` (§4.3). Applied after
+   * the built-ins so a test can override `content-type` deliberately.
+   */
+  headers?: Record<string, string>;
 }
 
 const MAX_ATTEMPTS = 6;
@@ -50,7 +56,7 @@ export async function httpCall<B = Record<string, unknown>>(
   path: string,
   options: CallOptions = {},
 ): Promise<HttpResponse<B>> {
-  const { token, body, noRetryOn429, rawAuthorization } = options;
+  const { token, body, noRetryOn429, rawAuthorization, headers } = options;
 
   for (let attempt = 1; ; attempt += 1) {
     const res = await fetch(`${base}${path}`, {
@@ -64,6 +70,7 @@ export async function httpCall<B = Record<string, unknown>>(
             ? { authorization: `Bearer ${token}` }
             : {}),
         ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
+        ...(headers ?? {}),
       },
       ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
       redirect: 'manual',

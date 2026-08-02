@@ -57,6 +57,39 @@ async function assertNonProduction(): Promise<void> {
   }
 }
 
+
+/**
+ * A **development** consent text version, so registration is testable.
+ *
+ * §4.1a requires every `ConsentRecord` to carry the exact text version agreed
+ * to, and registration **fails closed** without one — correctly, because
+ * recording that somebody agreed to text nobody has approved would be worse
+ * than refusing. §2.3 makes legally verifying and versioning the Arabic consent
+ * text an **owner compliance task**, and §15.1's normative seed list therefore
+ * does not include this key.
+ *
+ * That is right for production and left development with a registration flow
+ * that could never succeed: the value is meant to be entered through
+ * `/superadmin/settings` (§5.6), a screen no milestone has built, so **no path
+ * existed anywhere in the product to set it.**
+ *
+ * Seeding it *here* is the honest split. Fixtures are development-only and
+ * refuse to run under `NODE_ENV=production` (the Law 09-08 firewall above), so
+ * this cannot become a real consent version by accident — and the value says so
+ * in its own name.
+ *
+ * `update: {}` so re-running never clobbers a version an operator has set.
+ */
+async function seedDevConsentTextVersion(): Promise<void> {
+  const KEY = 'legal.consent_text_version';
+  const result = await prisma.systemSetting.upsert({
+    where: { key: KEY },
+    update: {},
+    create: { key: KEY, value: 'dev-unapproved-v1' },
+  });
+  console.log(`  consent text version: ${JSON.stringify(result.value)} (development only)`);
+}
+
 async function main(): Promise<void> {
   await assertNonProduction();
   console.log(`Development fixtures (§15.2) — NODE_ENV=${config.NODE_ENV}\n`);
@@ -73,6 +106,8 @@ async function main(): Promise<void> {
   if (!category || !academicYear || !teacherRole) {
     throw new Error('Run `npm run seed:production` first — fixtures build on the §15.1 seed.');
   }
+
+  await seedDevConsentTextVersion();
 
   const levels = await prisma.level.findMany({
     where: { categoryId: category.id, deletedAt: null },

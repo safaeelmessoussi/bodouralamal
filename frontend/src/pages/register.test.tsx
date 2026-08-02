@@ -13,7 +13,15 @@ import { validate } from './register.js';
  * would be slower and would fail for reasons unrelated to the rule.
  */
 
-const person = { nameArabic: 'خديجة', nameFrench: '', nickname: '', phone: '', notes: '', sex: 'female' as const };
+const person = {
+  firstNameArabic: 'خديجة',
+  lastNameArabic: 'بنعلي',
+  nameFrench: '',
+  nickname: '',
+  phone: '',
+  notes: '',
+  sex: 'female' as const,
+};
 const base = {
   kind: 'adult' as const,
   applicant: person,
@@ -57,11 +65,19 @@ describe('consent rules (§4.1, BR-1)', () => {
 });
 
 describe('person rules mirror TD-9', () => {
-  it('requires an Arabic name and a sex for every person created', () => {
-    const blank = { ...person, nameArabic: '  ', sex: '' as const };
+  it('requires BOTH Arabic name parts and a sex for every person created', () => {
+    // R40: الاسم الشخصي and الاسم العائلي are separate required fields, so a
+    // form that checked only one would send half a name to be refused.
+    const blank = { ...person, firstNameArabic: '  ', lastNameArabic: '', sex: '' as const };
     const errors = validate({ ...base, applicant: blank });
-    expect(errors).toHaveProperty('applicant.nameArabic');
+    expect(errors).toHaveProperty('applicant.firstNameArabic');
+    expect(errors).toHaveProperty('applicant.lastNameArabic');
     expect(errors).toHaveProperty('applicant.sex');
+  });
+
+  it('caps each part separately (TD-9), which is what keeps the composed name in range', () => {
+    const long = { ...person, lastNameArabic: 'ب'.repeat(61) };
+    expect(validate({ ...base, applicant: long })).toHaveProperty('applicant.lastNameArabic');
   });
 
   it('validates the CHILD too, not only the applicant', () => {
@@ -71,9 +87,9 @@ describe('person rules mirror TD-9', () => {
       ...base,
       kind: 'parent_child',
       mediaRelease: 'no',
-      child: { ...person, nameArabic: '' },
+      child: { ...person, firstNameArabic: '' },
     });
-    expect(errors).toHaveProperty('child.nameArabic');
+    expect(errors).toHaveProperty('child.firstNameArabic');
   });
 
   it('accepts an empty optional phone but refuses a malformed one', () => {
