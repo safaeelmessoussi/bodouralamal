@@ -81,6 +81,28 @@ Now `check-header-nav-exclusive.sh` asserts the two are mutually exclusive.
 
 A guard that only ever catches other people's mistakes is not being tested.
 
+### Rate limits are a classification problem, not a number problem
+
+`RATE_LIMITED` fired during ordinary manual testing. The instinct is to raise a
+limit; the cause was that **`/auth/refresh` sat in the login bucket**.
+
+The SPA calls refresh on every fresh page load — no in-memory token, so it tries
+the cookie. At the auth zone's 10 r/m with burst 5 that is **six page loads**
+before a 429, measured rather than assumed: six succeeded, the seventh was
+refused.
+
+**Neither TD-13 number changed.** `/auth/refresh` and `/auth/logout` were
+reclassified under the general-API limit TD-13 already states (120 r/m); the
+OAuth entry and callback keep 10 r/m. TD-13's tighter limit protects *credential
+guessing*, and neither of those two can be guessed — refresh presents a cookie
+the server issued and rotates, and TD-12's reuse detection revokes the whole
+session on replay, which is a far stronger control than a counter.
+
+Ruled out while diagnosing, each checked rather than assumed: React StrictMode's
+double effect invocation (the client's single-flight promise collapses it to one
+network call), duplicate submissions (the form disables its button in flight),
+and IP grouping (nginx is the edge, so `$binary_remote_addr` is the real client).
+
 ### The display-identity guard
 
 Proven by **planting an inline `?? nameArabic`** in the calendar service. Rejected with file

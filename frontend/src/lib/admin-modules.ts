@@ -18,9 +18,17 @@
  * Owner about where the back office actually stands.
  */
 export type ModuleStatus =
-  /** Endpoints exist and the screen is implemented. */
+  /**
+   * Endpoints exist **and the screen is implemented**.
+   *
+   * Both halves matter. Three modules carried `ready` while no screen existed,
+   * so the sidebar promised a working section and the page then said *"this
+   * section is being prepared"* — two different answers to one question. The
+   * test beside this file now asserts that every `ready` module has a route,
+   * so the registry cannot make a promise the router does not keep.
+   */
   | 'ready'
-  /** §14.1 lists the node; its endpoints do not exist yet. */
+  /** §14.1 lists the node; the screen or its endpoints do not exist yet. */
   | 'blocked';
 
 export interface AdminModule {
@@ -77,7 +85,8 @@ export const ADMIN_MODULES: readonly AdminModule[] = [
     labelKey: 'admin.nav.groups',
     section: 'academic',
     roles: STAFF,
-    status: 'ready',
+    status: 'blocked',
+    blockedReasonKey: 'admin.blocked.groups',
   },
   {
     path: '/admin/levels',
@@ -102,7 +111,8 @@ export const ADMIN_MODULES: readonly AdminModule[] = [
     labelKey: 'admin.nav.users',
     section: 'people',
     roles: STAFF,
-    status: 'ready',
+    status: 'blocked',
+    blockedReasonKey: 'admin.blocked.users',
   },
   {
     path: '/admin/approvals',
@@ -118,7 +128,8 @@ export const ADMIN_MODULES: readonly AdminModule[] = [
     labelKey: 'admin.nav.calendar',
     section: 'calendar',
     roles: STAFF,
-    status: 'ready',
+    status: 'blocked',
+    blockedReasonKey: 'admin.blocked.calendar',
   },
 
   // ── Content ───────────────────────────────────────────────────────────────

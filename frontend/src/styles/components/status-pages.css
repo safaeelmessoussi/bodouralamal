@@ -56,3 +56,12 @@
 .logo-large {
   margin: 0 auto var(--space-4);
 }
+
+/* Registration and status pages are reachable dead-ends without these — an
+   applicant who has just submitted must still be able to leave the page. */
+.auth-page__links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  justify-content: center;
+}

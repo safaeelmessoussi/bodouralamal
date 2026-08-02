@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 
 import type { PrismaClient } from '../generated/prisma/client.js';
 import { issueAccessToken } from '../lib/access-token.js';
+import { postLoginDestination } from '../lib/role-home.js';
 import { clearCookie, parseCookies, serializeCookie } from '../lib/cookies.js';
 import type { AppConfig } from '../lib/config.js';
 import { toRoleScopes } from '../policies/branch-scope.js';
@@ -178,7 +179,16 @@ export function oauthCallback(prisma: PrismaClient, config: AppConfig) {
 
     // A Pending user is hard-redirected to the status screen (TD-1); the access
     // token still exists so `GET /me` works, and nothing else will serve them.
-    const destination = route.kind === 'pending' ? '/pending-approval' : '/dashboard';
+    //
+    // Everyone else goes to their ROLE HOME (§4.1b step 4a's "role-based
+    // dashboard redirect", §14.1). This was a literal `/dashboard` — a node the
+    // sitemap does not define — so signing in as a Super Admin landed on a page
+    // that does not exist. One authoritative policy now lives in
+    // `lib/role-home.ts`, and it never names a path the client cannot serve.
+    const destination =
+      route.kind === 'pending'
+        ? '/pending-approval'
+        : postLoginDestination(route.account.roleScopes.map((scope) => scope.role));
     // The access token is delivered in the fragment so it never reaches a
     // server log or the Referer header; the client stores it in memory and
     // sends it as `Authorization: Bearer` thereafter (TD-12).

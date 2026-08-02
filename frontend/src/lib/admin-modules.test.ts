@@ -119,3 +119,23 @@ describe('path resolution', () => {
     expect(moduleForPath('/admin/groupsomething')?.path).not.toBe('/admin/groups');
   });
 });
+
+describe('the sidebar promises exactly what the router delivers', () => {
+  it('every `ready` module has a screen, and every screen is `ready`', async () => {
+    // The inconsistency this pins: `الحلقات`, `المستخدمون` and
+    // `الجدول والأنشطة` carried `ready` while no screen existed, so the sidebar
+    // showed them as available and the page then said "this section is being
+    // prepared". Two answers to one question, with nothing forcing agreement.
+    const { IMPLEMENTED_ADMIN_PATHS } = await import('../pages/admin/index.js');
+    const ready = ADMIN_MODULES.filter((m) => m.status === 'ready').map((m) => m.path).sort();
+    expect(ready).toEqual([...IMPLEMENTED_ADMIN_PATHS].sort());
+  });
+
+  it('every blocked module NAMES what is missing', () => {
+    // "Coming soon" tells nobody whether the wait is a day or a milestone, so
+    // a blocked module without a reason is itself a defect.
+    for (const module of ADMIN_MODULES.filter((m) => m.status === 'blocked')) {
+      expect(module.blockedReasonKey, `${module.path} must name its reason`).toBeTruthy();
+    }
+  });
+});

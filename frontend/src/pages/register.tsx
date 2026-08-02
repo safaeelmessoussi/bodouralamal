@@ -8,6 +8,8 @@ import {
   type PersonInput,
   type RegistrationInput,
 } from '../adapters/registrations.js';
+import { ApplicationHeader } from '../components/header/application-header.js';
+import { SiteFooter } from '../components/site-footer.js';
 import { ConsentNotice } from '../components/consent-notice.js';
 import { ErrorState } from '../components/states.js';
 import { BranchSelector } from '../components/ui/branch-selector.js';
@@ -126,30 +128,58 @@ export function Register(): ReactNode {
   if (done) {
     // §4.1: every registration enters Pending, and the applicant is told
     // exactly that — not "success", which would imply access they do not have.
+    // The header goes on this page too. It used to be a dead end: an applicant
+    // who had just submitted had no way back to the site at all — no home, no
+    // sign-in, nothing. Reusing the public header rather than inventing links
+    // means it carries whatever navigation the rest of the site carries.
     return (
-      <main className="auth-page" role="status">
-        <h1>{t('register.submittedTitle')}</h1>
-        <p>{t('register.submittedBody')}</p>
-      </main>
+      <>
+        <ApplicationHeader />
+        <main id="main" className="auth-page" role="status">
+          <h1>{t('register.submittedTitle')}</h1>
+          <p>{t('register.submittedBody')}</p>
+          <p className="muted">{t('register.submittedNext')}</p>
+          <div className="auth-page__links">
+            <a className="button primary" href="/">
+              {t('nav.home')}
+            </a>
+            <a className="button secondary" href="/login">
+              {t('nav.login')}
+            </a>
+          </div>
+        </main>
+        <SiteFooter />
+      </>
     );
   }
 
   if (!token) {
     return (
-      <main className="auth-page" role="status">
-        <h1>{t('register.noTokenTitle')}</h1>
-        <p>{t('register.noTokenBody')}</p>
-        <a className="button primary" href="/api/v1/auth/google">
-          {t('register.startOver')}
-        </a>
-      </main>
+      <>
+        <ApplicationHeader />
+        <main id="main" className="auth-page" role="status">
+          <h1>{t('register.noTokenTitle')}</h1>
+          <p>{t('register.noTokenBody')}</p>
+          <div className="auth-page__links">
+            <a className="button primary" href="/api/v1/auth/google">
+              {t('register.startOver')}
+            </a>
+            <a className="button secondary" href="/">
+              {t('nav.home')}
+            </a>
+          </div>
+        </main>
+        <SiteFooter />
+      </>
     );
   }
 
   return (
-    <main className="section">
-      <Container narrow>
-        <h1>{t('register.title')}</h1>
+    <>
+      <ApplicationHeader />
+      <main id="main" className="section">
+        <Container narrow>
+          <h1>{t('register.title')}</h1>
         <p className="lede">{t('register.lede')}</p>
 
         {branchesFailed ? (
@@ -273,9 +303,11 @@ export function Register(): ReactNode {
               </Button>
             </div>
           </form>
-        )}
-      </Container>
-    </main>
+          )}
+        </Container>
+      </main>
+      <SiteFooter />
+    </>
   );
 }
 

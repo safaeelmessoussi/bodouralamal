@@ -40,8 +40,18 @@ export interface HijriHistoryEntry {
   detail: Record<string, unknown>;
 }
 
-export async function fetchHijriYear(year: number): Promise<HijriYear> {
-  return api<HijriYear>(`/admin/hijri-calendar?year=${year}`);
+/**
+ * The year's twelve months, recorded or not.
+ *
+ * **Takes the token.** It shipped without one — the only function in this file
+ * that did — so every read answered `401` and the whole screen rendered its
+ * error state. The page was unusable from the day it was written: an
+ * administrator could never see a month, let alone record one.
+ *
+ * `/admin/*` is authenticated (TD-12); nothing about this endpoint is public.
+ */
+export async function fetchHijriYear(year: number, token: string | null): Promise<HijriYear> {
+  return api<HijriYear>(`/admin/hijri-calendar?year=${year}`, { token });
 }
 
 /**

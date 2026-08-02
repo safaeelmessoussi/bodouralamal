@@ -22,9 +22,35 @@ import { SettingsPage } from './settings.js';
  * what stops the same investigation being repeated, and it is the honest signal
  * about where the back office actually stands.
  */
+/**
+ * Every module path this router actually renders a screen for.
+ *
+ * Exported so a test can assert it matches the registry's `ready` set. That
+ * assertion is what keeps the sidebar's promise and the router's behaviour in
+ * step — three modules once carried `ready` with no screen, so the badge said
+ * available and the page said "being prepared".
+ */
+export const IMPLEMENTED_ADMIN_PATHS: readonly string[] = [
+  '/admin',
+  '/admin/branches',
+  '/admin/approvals',
+  '/superadmin/hijri-calendar',
+  '/superadmin/settings',
+];
+
 export function AdminRouter(): ReactNode {
   const module = moduleForPath(window.location.pathname);
   if (!module) return <AdminNotFound />;
+
+  // One decision, in one place: an unavailable module renders the SAME named
+  // state whether the reader arrived from the sidebar, a bookmark or a link.
+  if (module.status === 'blocked') {
+    return (
+      <AdminLayout title={t(module.labelKey)}>
+        <ModulePending module={module} />
+      </AdminLayout>
+    );
+  }
 
   switch (module.path) {
     case '/admin':
@@ -38,8 +64,10 @@ export function AdminRouter(): ReactNode {
     case '/superadmin/settings':
       return <SettingsPage />;
     default:
-      // Everything §14.1 lists but the backend cannot yet serve. The layout,
-      // navigation, role gate and heading are real; only the content is pending.
+      // A `ready` module with no case here is a REGISTRY DEFECT, not a normal
+      // state — the test on `IMPLEMENTED_ADMIN_PATHS` fails on it. Rendering
+      // the pending state is the safe landing while that is fixed; §14.4
+      // forbids the blank page regardless of whose mistake it was.
       return (
         <AdminLayout title={t(module.labelKey)}>
           <ModulePending module={module} />

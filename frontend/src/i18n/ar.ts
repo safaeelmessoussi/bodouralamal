@@ -288,6 +288,9 @@ export const ar = {
     submit: 'إرسال الطلب',
     submittedTitle: 'تم استلام طلبك',
     submittedBody: 'طلبك في انتظار موافقة المشرف. سنعلمك عند اتخاذ القرار.',
+    // A submitted applicant has an account in `Pending`; signing in shows the
+    // status screen (§2.1) rather than nothing, so the link is worth offering.
+    submittedNext: 'يمكنك متابعة حالة طلبك بتسجيل الدخول بنفس حساب Google.',
     noTokenTitle: 'لم تكتمل عملية تسجيل الدخول',
     noTokenBody: 'يبدأ التسجيل بالدخول عبر Google. يرجى البدء من جديد.',
     startOver: 'المتابعة عبر Google',
@@ -341,6 +344,9 @@ export const ar = {
     // Each names WHAT is missing — "coming soon" tells nobody whether the wait
     // is a day or a milestone.
     blocked: {
+      groups: 'يتطلب هذا القسم واجهات إدارة الحلقات وجداولها الأسبوعية، وهي غير متوفرة بعد.',
+      users: 'يتطلب هذا القسم واجهات إدارة المستخدمين والأدوار والنطاقات، وهي غير متوفرة بعد.',
+      calendar: 'يتطلب هذا القسم واجهات إدارة الأنشطة والمناسبات، وهي غير متوفرة بعد.',
       levels: 'يتطلب هذا القسم واجهات برمجية لإدارة المستويات، وهي غير متوفرة بعد.',
       taxonomy: 'يتطلب هذا القسم واجهات برمجية لإدارة الفئات والمواد، وهي غير متوفرة بعد.',
       content: 'يتطلب هذا القسم واجهات رفع المحتوى وعرضه (المرحلة السادسة)، وهي غير متوفرة بعد.',

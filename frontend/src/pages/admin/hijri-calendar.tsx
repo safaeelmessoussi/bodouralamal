@@ -54,13 +54,17 @@ export function HijriCalendarPage(): ReactNode {
   const load = useCallback(async () => {
     setState('loading');
     try {
-      const next = await fetchHijriYear(year);
+      const next = await fetchHijriYear(year, accessToken);
       setData(next);
       setState('ready');
     } catch {
       setState('error');
     }
-  }, [year]);
+    // `accessToken` belongs here. Without it the callback kept its identity
+    // when the session resolved, so the first attempt — made while the token
+    // was still null — was never retried and the screen stayed on its error
+    // state forever. Passing the token was necessary but not sufficient.
+  }, [year, accessToken]);
 
   useEffect(() => {
     void load();
