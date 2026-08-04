@@ -147,6 +147,17 @@ The [three earlier harness false negatives](README.md#the-one-habit-worth-copyin
 same lesson from before this policy existed. **A cheap measurement is not a context cost — it
 is the thing that stops a whole session being built on a false premise.**
 
+## Reporting is spent from the same budget
+
+A completion report consumes context exactly as implementation does, and an over-long one is
+paid for by every session that inherits it.
+
+**The six-section structure is normative** (SRS §16.3, Revision 37.2) and is not negotiable —
+two of its sections carry obligations the specification imposes elsewhere. **Its length is
+not normative**, and length is the whole cost. The compact discipline — bullets, no restated
+conventions, no narration of the diff, one word for an empty section — lives with the rest of
+the reporting guidance in [Reporting completion](README.md#write-them-compactly).
+
 ## Autonomy
 
 Selecting the strategy is part of the work. Continuously ask whether a different workflow

@@ -48,6 +48,13 @@ You are working on the بذور الأمل Platform.
   copied rule does. The mandatory pre-implementation documentation read below is
   **not** an exception — it is the highest-return read available; make it
   targeted, not thorough.
+- **The completion report is spent from the same budget.** The six sections are
+  normative (§16.3) and stay; their *length* is not. Bullets over paragraphs,
+  three to five per section, nothing that restates a settled convention or
+  narrates a diff the Document Owner can read, and one word for an empty
+  section. Write at length only for a decision a future maintainer needs — and
+  then write it into the documentation, not the report. See
+  `docs/development/README.md` under *Write them compactly*.
 - **At a slice boundary, if continuing would cost more than restarting warm:**
   finish the slice, write a handoff (branch + commit · what is done · next slice
   and its minimum files · settled conventions), and recommend `/compact`. Never

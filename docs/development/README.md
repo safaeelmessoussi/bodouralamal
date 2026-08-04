@@ -75,6 +75,35 @@ one, so a missing section never reads as an oversight.
 **Keep section 1 free of identifiers and jargon** — no `§`, `BR-x` or `TD-x`. Those belong in
 sections 2 and 3, where the reader is looking for them.
 
+### Write them compactly
+
+**A report is spent from the same context budget as the work**
+([why](engineering-efficiency.md)). The six sections are normative; their *length* is not,
+and length is where reports actually get expensive.
+
+- **Bullets, not paragraphs.** Three to five per section is a working target.
+- **Only what has future engineering value.** Assume the reader can inspect the commit —
+  do not narrate the diff.
+- **Never restate an established convention.** The DTO discipline, `parse.ts`, the guarded
+  router, `.strict()` writes, the R43.3 authority split and their like are settled; mention
+  one only when **this slice changed it**.
+- **Do not re-explain a decision already recorded** in `CHANGES.log` or the handbook. Link or
+  name it.
+- **An empty section is one word.** *"None"* — never a paragraph explaining what did not
+  happen.
+- **Section 6 leads with the single highest-value next target**, then lists anything else
+  still open. The lead is for direction; the remainder is the part that keeps a scope
+  reduction the Document Owner's decision (§16.3).
+- **Verification states what was run.** Name a *skipped* check only when the reason is
+  non-obvious — which, per the [efficiency
+  policy](engineering-efficiency.md#verification), is exactly when it must be named.
+
+**The two long-form exceptions.** Write at length when a slice produced a **design decision or
+constraint a future maintainer would need** — and then write it into the documentation, with
+the report merely pointing at it — or when something **unusual happened**: a conflict in the
+specification, a defect whose mechanism is not obvious from the fix, or a deliberate departure
+from a convention. Everything else is bullets.
+
 ### Why the structure is fixed
 
 The Document Owner reads reports to make decisions, so the answers to *"what changed for the
