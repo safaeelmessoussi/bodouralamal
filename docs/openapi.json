@@ -2181,6 +2181,177 @@
         }
       }
     },
+    "/admin/administrative-groups/{id}/roster": {
+      "get": {
+        "summary": "Read a group roster",
+        "description": "TD-3.12, §5.6 enrollment screen. Admin within branch scope, or Super Admin; a group outside scope answers `404`, never `403` (§20 rule 17). Soft-deleted students are excluded. Ordered by the natively `ar-x-icu` collated name (BR-19, §20 rule 13). **Paginated (TD-10).** Each entry is exactly `id`, `student_id`, `name`, `enrolled_at` — `id` is the **enrolment** id, which is what identifies the row, while `DELETE` addresses the student. `name` is the staff-facing legal name, as in the approval queue: the §7 public display-identity rule governs **public** surfaces, and a roster is not one. `enrolled_at` is an **instant**, correctly — an enrolment happens at a moment rather than on a calendar date.",
+        "responses": {
+          "200": {
+            "description": "Roster page in the TD-10 envelope."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an unknown group or one outside the caller's branch scope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Enrol a student into the group",
+        "description": "TD-3.12, §5.6. Body: `{ student_id }` — **strictly** that one key. **`level_id` is not accepted**: the service reads it from the group, because taking it from the caller would leave the composite FK as the only thing between a typo and a mis-filed student, surfacing as an opaque constraint error rather than a decision this service made. The response echoes `level_id` so the client learns which Level the student was thereby enrolled into. **`Level.gender_restriction` is enforced** (Revision 27) and a `null` `sex` is *not eligible* rather than a wildcard. **BR-21 — one group per Level — is refused with an explanation, not a raw constraint error:** enrolling into the same group again is `409 DUPLICATE`, and enrolling into a *different* group of a Level the student already belongs to is `409 STATE_CONFLICT` with `reason: ALREADY_ENROLLED_IN_LEVEL` naming `current_administrative_group_id`, which is exactly the information needed to decide whether to move them instead. **There is NO capacity check** (BR-23): none exists, `CAPACITY_FULL` is retired from the TD-3.8 catalogue, and the roster row lock went with the invariant it protected — a future capacity rule must bring the lock back rather than rely on a constraint alone. **Enqueues `consent.reevaluate` for each SESSION whose resolved audience now contains the student, in the same transaction** (§4.1a, TD-7, Revision 43): BR-2's subject is a session's audience, so the gate can never drift from the records.",
+        "responses": {
+          "201": {
+            "description": "Enrolled; returns the enrolment including the Level it resolved to."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a missing or malformed student_id, an unknown key, or a sex ineligible for the Level's restriction.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an unknown student, or a group unknown or outside scope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). DUPLICATE in this group; STATE_CONFLICT with reason ALREADY_ENROLLED_IN_LEVEL for another group of the same Level.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/administrative-groups/{id}/roster/{studentId}": {
+      "delete": {
+        "summary": "Un-enrol a student",
+        "description": "TD-3.12, TD-5 — a soft delete of **the enrolment row only**. **Grades, exam submissions and Quran logs are never touched:** they are the historical academic record and survive a student leaving, so a re-enrolled or transferred student rejoins a Level that still knows what they did. **Their Teaching Group seats for that Level ARE removed** (Revision 43) — a place in a subject split inside a Level the student has left is a roster entry for a class they no longer attend. Enqueues consent re-evaluation on the same transaction, since the student's session audience has changed.",
+        "responses": {
+          "204": {
+            "description": "Un-enrolled."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an unknown group, one outside scope, or a student not enrolled in it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/healthz": {
       "servers": [
         {

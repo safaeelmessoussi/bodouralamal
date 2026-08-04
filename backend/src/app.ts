@@ -157,6 +157,14 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
   guarded.post('/admin/administrative-groups', administrativeGroups.create(prisma));
   guarded.patch('/admin/administrative-groups/:id', administrativeGroups.update(prisma));
   guarded.delete('/admin/administrative-groups/:id', administrativeGroups.remove(prisma));
+  // The roster (§5.6). Enrolment reads the Level FROM the group and enqueues
+  // consent re-evaluation per session in the same transaction (§4.1a, TD-7).
+  guarded.get('/admin/administrative-groups/:id/roster', administrativeGroups.listRoster(prisma));
+  guarded.post('/admin/administrative-groups/:id/roster', administrativeGroups.enrol(prisma));
+  guarded.delete(
+    '/admin/administrative-groups/:id/roster/:studentId',
+    administrativeGroups.unenrol(prisma),
+  );
   api.use(guarded);
 
   app.use('/api/v1', api);

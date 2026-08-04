@@ -2,7 +2,7 @@
 
 # API endpoints
 
-**44 operations across 33 paths**, all under `/api/v1` except the health check.
+**47 operations across 35 paths**, all under `/api/v1` except the health check.
 The count comes from the generator, which reconciles against the live router — if this line
 disagrees with `openapi.json`, this line is the one that is wrong.
 
@@ -89,6 +89,8 @@ authenticates; it does not authorise.
 | | Path | Notes |
 |---|---|---|
 | `GET` `POST` | `/admin/administrative-groups` | `?level_id=` `?branch_id=` narrow **within** the caller's scope and can never reach outside it. A malformed filter is `400`, not an empty list |
+| `GET` `POST` | `/admin/administrative-groups/{id}/roster` | Enrolment reads the Level **from the group** and **enqueues consent re-evaluation** per session. **No capacity check exists** |
+| `DELETE` | `/admin/administrative-groups/{id}/roster/{studentId}` | Soft-deletes the enrolment **only** — grades, submissions and Quran logs survive. Subject-split seats for that Level go with it |
 | `PATCH` `DELETE` | `/admin/administrative-groups/{id}` | Only `name` and `display_order` are editable. Deletion is blocked by enrolments, by a schedule targeting the group, and by the **last group in a Level** — a Level created with one must never be emptied back to none |
 
 A group is exactly `id`, `name`, `level_id`, `branch_id`, `display_order`, `version`. The write
@@ -102,7 +104,7 @@ branch is this person at*, which `intended_branch_id` deliberately does not give
 Every service below is **built and tested**; the contract phase removed the old routes and these
 replace them one resource at a time.
 
-`/admin/administrative-groups/{id}/roster` · `/admin/levels/{levelId}/subjects/{subjectId}/teaching-groups` ·
+`/admin/levels/{levelId}/subjects/{subjectId}/teaching-groups` ·
 `/admin/teaching-groups/{id}` (+ `/members`) · `/admin/course-schedules` (+ `/conflicts`, `/roster`) ·
 `/sessions/{id}` (+ `/cancel`, `/restore`, `/content`) · `GET /library`
 

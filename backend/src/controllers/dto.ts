@@ -158,6 +158,67 @@ export function administrativeGroupDto(row: {
   };
 }
 
+/* ── Roster entry (§5.6 enrollment screen, Revision 43) ──────────────────── */
+
+export interface RosterEntryDto {
+  /** The **enrolment** id, not the student's — this is what `DELETE` targets. */
+  id: string;
+  student_id: string;
+  /**
+   * The staff-facing legal name, as in the approval queue. The §7 public
+   * display-identity rule governs **public** surfaces; a roster is neither, and
+   * a kunya here would be wrong.
+   */
+  name: string | null;
+  /** An instant, correctly — an enrolment happens at a moment (cf. TD-11). */
+  enrolled_at: string;
+}
+
+export function rosterEntryDto(row: {
+  id: string;
+  studentId: string;
+  nameArabic: string | null;
+  enrolledAt: Date;
+}): RosterEntryDto {
+  return {
+    id: row.id,
+    student_id: row.studentId,
+    name: row.nameArabic,
+    enrolled_at: row.enrolledAt.toISOString(),
+  };
+}
+
+/**
+ * The enrolment as written, returned from `POST`.
+ *
+ * `level_id` travels even though the caller never sent it: the service reads it
+ * **from the group** (never from the request), and echoing it is how the client
+ * learns which Level the student was thereby enrolled into.
+ */
+export interface EnrollmentDto {
+  id: string;
+  student_id: string;
+  level_id: string;
+  administrative_group_id: string;
+  enrolled_at: string;
+}
+
+export function enrollmentDto(row: {
+  id: string;
+  studentId: string;
+  levelId: string;
+  administrativeGroupId: string;
+  enrolledAt: Date;
+}): EnrollmentDto {
+  return {
+    id: row.id,
+    student_id: row.studentId,
+    level_id: row.levelId,
+    administrative_group_id: row.administrativeGroupId,
+    enrolled_at: row.enrolledAt.toISOString(),
+  };
+}
+
 /* ── Approval queue (§5.6, §14.2) ────────────────────────────────────────── */
 
 export interface ApprovalDto {

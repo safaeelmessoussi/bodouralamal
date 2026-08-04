@@ -54,3 +54,11 @@ export const listAdministrativeGroupsQuerySchema = z.object({
   level_id: uuid.optional(),
   branch_id: uuid.optional(),
 });
+
+/**
+ * Roster enrolment (TD-3.12). **`level_id` is deliberately not accepted** — the
+ * service reads it from the group, because taking it from the caller would make
+ * the composite FK the only thing standing between a typo and a mis-filed
+ * student, surfacing as an opaque constraint error rather than a decision.
+ */
+export const enrolStudentSchema = z.object({ student_id: uuid }).strict();

@@ -418,7 +418,11 @@
   - ✓ `level_id`/`branch_id` rejected on `PATCH`: moving a group between Levels or Branches is a re-creation, not an edit
   - ✓ Proven by mutation — dropping `.strict()` fails 2 tests; leaking `created_at` through the DTO fails the **build** (TS2353), which is the stronger guard
   - ✓ TD-9/TD-15 primitives extracted to `validators/common.ts` and the Zod-failure boundary to `controllers/parse.ts`, rather than copied a second time
-- [ ] TD-3.12 Administrative Group **roster** — `GET`/`POST /admin/administrative-groups/{id}/roster`, `DELETE .../roster/{studentId}`
+- [x] TD-3.12 Administrative Group **roster** — `GET`/`POST /admin/administrative-groups/{id}/roster`, `DELETE .../roster/{studentId}`
+  - ✓ `level_id` is **not accepted** on enrolment — read from the group, so the composite FK stays a backstop rather than the only thing between a typo and a mis-filed student
+  - ✓ BR-21 refused with an explanation, not a raw constraint error: same group is `DUPLICATE`, another group of the same Level is `ALREADY_ENROLLED_IN_LEVEL` **naming the group that holds them**
+  - ✓ `id` on a roster entry is the **enrolment** id, not the student's; un-enrolment leaves the tombstoned row and the academic record intact (TD-5)
+  - ✓ No capacity check anywhere (BR-23); 6 HTTP tests, 24 in the file
 - [ ] TD-3.12 **Teaching Groups** (incl. `unassigned[]`, BR-22) and their membership verbs
 - [ ] TD-3.12 **Course Schedules** (incl. `/conflicts` and `/roster`) and **Sessions** (override / cancel / restore / content)
 - [ ] TD-3.13 public library; `/calendar` filter set + `prefilled_filters`; `/calendar/sessions/{id}`

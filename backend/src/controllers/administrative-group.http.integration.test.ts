@@ -89,6 +89,9 @@ async function clear(): Promise<void> {
     await prisma.trash.deleteMany({ where: { targetId: { in: targetIds } } });
     await prisma.auditLog.deleteMany({ where: { targetId: { in: targetIds } } });
   }
+  await prisma.enrollment.deleteMany({
+    where: { administrativeGroupId: { in: groups.map((g) => g.id) } },
+  });
   await prisma.administrativeGroup.deleteMany({ where: { id: { in: groups.map((g) => g.id) } } });
   // RESTRICT against both Level and Branch (TD-5), so groups go first.
   await prisma.level.deleteMany({ where: { name: { startsWith: TAG } } });
@@ -462,5 +465,191 @@ describe('deletion is guarded (TD-5, §4.4b)', () => {
     expect(res.body.error?.details?.['reason']).toBe('ENROLMENTS_EXIST');
 
     await prisma.enrollment.deleteMany({ where: { studentId: student.id } });
+  });
+});
+
+/* ── Roster (TD-3.12, §5.6) ──────────────────────────────────────────────── */
+
+const ROSTER_KEYS = ['enrolled_at', 'id', 'name', 'student_id'];
+const ENROLMENT_KEYS = [
+  'administrative_group_id',
+  'enrolled_at',
+  'id',
+  'level_id',
+  'student_id',
+];
+
+async function makeStudent(label: string): Promise<string> {
+  const s = await prisma.user.create({
+    data: { nameArabic: `${TAG} ${label}`, accountStatus: 'active', sex: 'female' },
+  });
+  return s.id;
+}
+
+describe('the roster is a contract DTO too', () => {
+  it('POST returns the enrolment, echoing the Level it resolved to', async () => {
+    const group = await call('POST', '/admin/administrative-groups', superAdmin, {
+      name: `${TAG} روستر`,
+      level_id: levelId,
+      branch_id: branchA,
+    });
+    const student = await makeStudent('طالبة أ');
+
+    const res = await call(
+      'POST',
+      `/admin/administrative-groups/${group.body.id}/roster`,
+      superAdmin,
+      { student_id: student },
+    );
+    expect(res.status).toBe(201);
+    expect(Object.keys(res.body).sort()).toEqual(ENROLMENT_KEYS);
+    // The caller never sent it — the service read it from the group, and this is
+    // how the client learns which Level the student is now in.
+    expect(res.body.level_id).toBe(levelId);
+    expect(res.body.administrative_group_id).toBe(group.body.id);
+  });
+
+  it('GET returns the roster in the TD-10 envelope with exactly the documented keys', async () => {
+    const group = await call('POST', '/admin/administrative-groups', superAdmin, {
+      name: `${TAG} روستر قراءة`,
+      level_id: soloLevelId,
+      branch_id: branchA,
+    });
+    const student = await makeStudent('طالبة ب');
+    await call('POST', `/admin/administrative-groups/${group.body.id}/roster`, superAdmin, {
+      student_id: student,
+    });
+
+    const res = await call(
+      'GET',
+      `/admin/administrative-groups/${group.body.id}/roster`,
+      superAdmin,
+    );
+    expect(res.status).toBe(200);
+    expect(res.body.data).toHaveLength(1);
+    expect(Object.keys(res.body.data![0]!).sort()).toEqual(ROSTER_KEYS);
+    // `id` is the ENROLMENT id, not the student's — they must not be confused,
+    // since one is what DELETE addresses and the other is what it removes.
+    expect(res.body.data![0]!.id).not.toBe(student);
+    expect(res.body.data![0]!.student_id).toBe(student);
+  });
+
+  it('rejects level_id on enrolment rather than trusting the caller', async () => {
+    // Accepting it would leave the composite FK as the only thing between a typo
+    // and a mis-filed student — an opaque constraint error, not a decision.
+    const group = await call('POST', '/admin/administrative-groups', superAdmin, {
+      name: `${TAG} روستر صارم`,
+      level_id: levelId,
+      branch_id: branchA,
+    });
+    const res = await call(
+      'POST',
+      `/admin/administrative-groups/${group.body.id}/roster`,
+      superAdmin,
+      { student_id: await makeStudent('طالبة ج'), level_id: soloLevelId },
+    );
+    expect(res.status).toBe(400);
+    expect(res.body.error?.code).toBe('VALIDATION_FAILED');
+  });
+
+  it('BR-21: a second group in the SAME Level is refused, and says which group holds them', async () => {
+    const first = await call('POST', '/admin/administrative-groups', superAdmin, {
+      name: `${TAG} أولى`,
+      level_id: soloLevelId,
+      branch_id: branchA,
+    });
+    const second = await call('POST', '/admin/administrative-groups', superAdmin, {
+      name: `${TAG} ثانية`,
+      level_id: soloLevelId,
+      branch_id: branchA,
+    });
+    const student = await makeStudent('طالبة د');
+
+    expect(
+      (
+        await call('POST', `/admin/administrative-groups/${first.body.id}/roster`, superAdmin, {
+          student_id: student,
+        })
+      ).status,
+    ).toBe(201);
+
+    const same = await call(
+      'POST',
+      `/admin/administrative-groups/${first.body.id}/roster`,
+      superAdmin,
+      { student_id: student },
+    );
+    expect(same.status).toBe(409);
+    expect(same.body.error?.code).toBe('DUPLICATE');
+
+    const other = await call(
+      'POST',
+      `/admin/administrative-groups/${second.body.id}/roster`,
+      superAdmin,
+      { student_id: student },
+    );
+    expect(other.status).toBe(409);
+    expect(other.body.error?.code).toBe('STATE_CONFLICT');
+    expect(other.body.error?.details?.['reason']).toBe('ALREADY_ENROLLED_IN_LEVEL');
+    // The point of the explained refusal: this is what an administrator needs in
+    // order to decide whether to MOVE the student instead.
+    expect(other.body.error?.details?.['current_administrative_group_id']).toBe(first.body.id);
+  });
+
+  it('DELETE un-enrols and the student leaves the roster', async () => {
+    const group = await call('POST', '/admin/administrative-groups', superAdmin, {
+      name: `${TAG} للإخراج`,
+      level_id: levelId,
+      branch_id: branchA,
+    });
+    const student = await makeStudent('طالبة هـ');
+    await call('POST', `/admin/administrative-groups/${group.body.id}/roster`, superAdmin, {
+      student_id: student,
+    });
+
+    const res = await call(
+      'DELETE',
+      `/admin/administrative-groups/${group.body.id}/roster/${student}`,
+      superAdmin,
+    );
+    expect(res.status).toBe(204);
+
+    const after = await call(
+      'GET',
+      `/admin/administrative-groups/${group.body.id}/roster`,
+      superAdmin,
+    );
+    expect(after.body.data).toHaveLength(0);
+
+    // TD-5: the enrolment row survives with its tombstone — the academic record
+    // is never rewritten by a person leaving.
+    const row = await prisma.enrollment.findFirstOrThrow({
+      where: { studentId: student },
+      select: { deletedAt: true },
+    });
+    expect(row.deletedAt).not.toBeNull();
+  });
+
+  it('is guarded exactly like the group it belongs to', async () => {
+    const inB = await call('POST', '/admin/administrative-groups', superAdmin, {
+      name: `${TAG} روستر ب`,
+      level_id: levelId,
+      branch_id: branchB,
+    });
+
+    // Out of scope answers 404, never 403 — a 403 confirms the group exists.
+    const scoped = await call(
+      'GET',
+      `/admin/administrative-groups/${inB.body.id}/roster`,
+      scopedAdmin,
+    );
+    expect(scoped.status).toBe(404);
+
+    const asTeacher = await call(
+      'GET',
+      `/admin/administrative-groups/${inB.body.id}/roster`,
+      teacherToken,
+    );
+    expect(asTeacher.status).toBe(403);
   });
 });

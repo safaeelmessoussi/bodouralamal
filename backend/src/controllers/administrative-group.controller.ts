@@ -4,10 +4,12 @@ import type { PrismaClient } from '../generated/prisma/client.js';
 import { pageParamsFrom } from '../lib/pagination.js';
 import { requireActor } from '../middleware/authenticate.js';
 import * as groups from '../services/administrative-group.service.js';
-import { administrativeGroupDto, pageOf } from './dto.js';
+import * as enrolments from '../services/enrollment.service.js';
+import { administrativeGroupDto, enrollmentDto, pageOf, rosterEntryDto } from './dto.js';
 import { idParam, parse } from './parse.js';
 import {
   createAdministrativeGroupSchema,
+  enrolStudentSchema,
   listAdministrativeGroupsQuerySchema,
   updateAdministrativeGroupSchema,
 } from '../validators/administrative-group.validators.js';
@@ -72,6 +74,45 @@ export function update(prisma: PrismaClient) {
 export function remove(prisma: PrismaClient) {
   return async (req: Request, res: Response): Promise<void> => {
     await groups.deleteAdministrativeGroup(prisma, requireActor(req), idParam(req, 'id'));
+    res.status(204).end();
+  };
+}
+
+/* ── Roster (TD-3.12, §5.6 enrollment screen) ────────────────────────────── */
+
+export function listRoster(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const result = await enrolments.listGroupRoster(
+      prisma,
+      requireActor(req),
+      idParam(req, 'id'),
+      pageParamsFrom(req.query),
+    );
+    res.json(pageOf(result, rosterEntryDto));
+  };
+}
+
+export function enrol(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const body = parse(enrolStudentSchema, req.body ?? {});
+    const row = await enrolments.enrolStudent(
+      prisma,
+      requireActor(req),
+      idParam(req, 'id'),
+      body.student_id,
+    );
+    res.status(201).json(enrollmentDto(row));
+  };
+}
+
+export function unenrol(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    await enrolments.unenrolStudent(
+      prisma,
+      requireActor(req),
+      idParam(req, 'id'),
+      idParam(req, 'studentId'),
+    );
     res.status(204).end();
   };
 }
