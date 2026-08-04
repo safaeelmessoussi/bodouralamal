@@ -165,6 +165,46 @@ would produce more progress per unit of context; when one would, **switch and ex
 line**. Do not ask permission for a workflow change, and do not write a comparison of the
 options — the explanation exists so the reader can object, not so they can decide.
 
+## Process optimisation is subordinate to implementation
+
+Improving the process is valuable. **Implementation is the default activity**, and the process
+is improved *in service of it*, never instead of it.
+
+**Once a process improvement has been proposed and handed over for a decision, that work is
+complete.** Do not revisit, refine, defend or extend the same proposal unless:
+
+- the Document Owner explicitly asks;
+- **new evidence materially changes the recommendation** — not evidence that merely supports
+  it; the bar is *the recommendation would now be different*; or
+- implementation cannot proceed correctly without the decision.
+
+### Hand it off to a document, not to the next report
+
+This is the mechanism that makes the rule hold. A pending proposal lives in **its own
+document**, with `CHANGES.log` recording that it was raised. It does **not** live in the
+*Remaining work* section of every subsequent report — that is precisely how a settled handoff
+becomes a recurring topic, re-argued a little each time and paid for out of the
+implementation budget.
+
+**Record once. Then stop mentioning it.**
+
+### A pending proposal never blocks
+
+The rules in force stay in force while a proposal is pending. Waiting on a decision is not a
+reason to pause, to re-raise, or to work under the proposed rules early.
+
+### Why this needs saying
+
+**Process work is unbounded and feels productive.** There is always another refinement, it
+never fails a test, and it produces the appearance of progress without any. Implementation is
+bounded, verifiable, and the thing the platform is actually made of. Given a choice between
+polishing the process and shipping the next vertical slice, **the slice wins** — and process
+observations are **batched** until one is worth a moment of its own, rather than acted on the
+instant they occur.
+
+**This section governs itself.** The efficiency policy is a process document, so it is subject
+to its own rule: it is not to be continuously re-tuned.
+
 ## The context threshold
 
 Monitor context growth. When continuing in the current conversation has become materially

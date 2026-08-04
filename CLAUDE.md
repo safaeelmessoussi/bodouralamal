@@ -55,6 +55,15 @@ You are working on the بذور الأمل Platform.
   section. Write at length only for a decision a future maintainer needs — and
   then write it into the documentation, not the report. See
   `docs/development/README.md` under *Write them compactly*.
+- **Implementation is the default activity; process work is subordinate to it.**
+  Once a process improvement is proposed and handed over, that work is
+  **complete** — do not revisit, refine, defend or extend it unless the Owner
+  asks, new evidence would change the recommendation (not merely support it), or
+  implementation cannot proceed correctly without the decision. **Record it in
+  its own document and in `CHANGES.log`, then stop mentioning it** — a pending
+  proposal must never reappear under *Remaining work*, which is how a handoff
+  becomes a recurring topic paid for out of the implementation budget. Rules in
+  force stay in force while a proposal is pending; it blocks nothing.
 - **At a slice boundary, if continuing would cost more than restarting warm:**
   finish the slice, write a handoff (branch + commit · what is done · next slice
   and its minimum files · settled conventions), and recommend `/compact`. Never
