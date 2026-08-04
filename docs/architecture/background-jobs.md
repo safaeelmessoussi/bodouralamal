@@ -88,6 +88,12 @@ answer, so the rows exist.
    are equally bad answers to *"what did my edit just do"*.
 3. **Never regenerates the past.** Generation starts at today, so a schedule
    edited in November does not resurrect September.
+4. **Snapshots the teaching assignment** (Revision 43.4). Room and staff are
+   written onto each occurrence rather than re-derived at read time, so a class
+   that has already been taught keeps the people who actually taught it when the
+   schedule later changes hands. A schedule edit re-syncs only **future,
+   un-overridden** occurrences; re-aligning one that has already happened is a
+   separate, audited administrator action.
 
 **The horizon is the end of the current academic year**, extended by the nightly
 run. Bounded deliberately: an unbounded horizon would generate rows for a

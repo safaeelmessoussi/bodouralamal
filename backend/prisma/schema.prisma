@@ -332,7 +332,7 @@ model User {
   levelEnrollments   Enrollment[]
   teachingGroupSeats StudentTeachingGroup[]
   staffedSchedules   CourseScheduleStaff[]
-  taughtSessions     Session[]              @relation("SessionTeacher")
+  staffedSessions    SessionStaff[]         @relation("SessionStaffUser")
 
   parentLinks       FamilyLink[]            @relation("FamilyLinkParent")
   childLinks        FamilyLink[]            @relation("FamilyLinkChild")
@@ -1000,10 +1000,10 @@ model Session {
   startTime DateTime @map("start_time") @db.Time(0)
   endTime   DateTime @map("end_time") @db.Time(0)
 
-  roomId    String? @map("room_id") @db.Uuid
-  room      Room?   @relation(fields: [roomId], references: [id], onDelete: Restrict)
-  teacherId String? @map("teacher_id") @db.Uuid
-  teacher   User?   @relation("SessionTeacher", fields: [teacherId], references: [id], onDelete: Restrict)
+  /// Snapshot at materialization (Revision 43.4), not re-derived from the
+  /// schedule: a held session must stay historically correct.
+  roomId String? @map("room_id") @db.Uuid
+  room   Room?   @relation(fields: [roomId], references: [id], onDelete: Restrict)
 
   status SessionStatus @default(scheduled)
 
@@ -1023,15 +1023,53 @@ model Session {
   deletedById String?   @map("deleted_by") @db.Uuid
 
   linkedContent SessionContent[]
+  staff         SessionStaff[]
 
   // What makes `session.materialize` idempotent: a second run over the same
   // horizon creates no duplicate occurrence.
   @@unique([scheduleId, date])
-  // The two indexes that make conflict detection a lookup rather than a scan.
+  // What makes room conflict detection a lookup rather than a scan. The staff
+  // side is indexed on `SessionStaff` below.
   @@index([roomId, date])
-  @@index([teacherId, date])
   @@index([date, status])
   @@map("session")
+}
+
+/// §7 (Revision 43.4) — **the teaching assignment as it stood for ONE
+/// occurrence.**
+///
+/// Mirrors `CourseScheduleStaff` exactly, and replaces the single
+/// `Session.teacher_id`: the association co-teaches and classes have
+/// assistants, so one column could not hold the answer, and keeping both a
+/// column and a join would give *"who taught this"* two homes that drift.
+///
+/// **This is a snapshot, and that is the whole point.** Editing a schedule's
+/// staff in June must not re-attribute March's classes to someone who never
+/// taught them. Rows here are written by `session.materialize` for FUTURE
+/// occurrences and by a deliberate override; a past or `held` session's rows are
+/// never rewritten by a schedule edit (§4.4).
+///
+/// **Not in tension with §20 rule 22.** That rule bans snapshotting a session's
+/// *audience*, because enrolment changes must be reflected live. Staffing is the
+/// opposite kind of fact: what was arranged for this occurrence.
+model SessionStaff {
+  id        String  @id @default(uuid()) @db.Uuid
+  sessionId String  @map("session_id") @db.Uuid
+  session   Session @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  userId    String  @map("user_id") @db.Uuid
+  user      User    @relation("SessionStaffUser", fields: [userId], references: [id], onDelete: Restrict)
+
+  position ScheduleStaffPosition
+
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  deletedById String?   @map("deleted_by") @db.Uuid
+
+  @@unique([sessionId, userId])
+  // The teacher/assistant half of conflict detection: "is this person already
+  // committed on this date" must be a lookup.
+  @@index([userId, deletedAt])
+  @@map("session_staff")
 }
 
 /// §4.9 — a Session REFERENCES content; it never owns it.

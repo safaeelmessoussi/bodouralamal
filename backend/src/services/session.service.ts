@@ -1,4 +1,4 @@
-import type { PrismaClient, Session, SessionStatus } from '../generated/prisma/client.js';
+import type { Prisma, PrismaClient, Session, SessionStatus } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
 import { atMidnightUtc } from '../lib/recurrence.js';
 import * as scope from '../policies/branch-scope.js';
@@ -109,7 +109,9 @@ export interface SessionOverride {
   startTime?: Date;
   endTime?: Date;
   roomId?: string | null;
-  teacherId?: string | null;
+  /** The occurrence's own staffing (Revision 43.4). Supplying it REPLACES the
+   *  snapshot for this session; omitting it leaves the snapshot untouched. */
+  staff?: { userId: string; position: 'teacher' | 'assistant' }[];
   version: number;
 }
 
@@ -161,7 +163,6 @@ export async function overrideSession(
   track('start_time', session.startTime.toISOString(), data.startTime?.toISOString());
   track('end_time', session.endTime.toISOString(), data.endTime?.toISOString());
   track('room_id', session.roomId, data.roomId);
-  track('teacher_id', session.teacherId, data.teacherId);
 
   return prisma.$transaction(async (tx) => {
     const updated = await updateWithVersion<Session>({
@@ -174,10 +175,21 @@ export async function overrideSession(
         ...(data.startTime === undefined ? {} : { startTime: data.startTime }),
         ...(data.endTime === undefined ? {} : { endTime: data.endTime }),
         ...(data.roomId === undefined ? {} : { roomId: data.roomId }),
-        ...(data.teacherId === undefined ? {} : { teacherId: data.teacherId }),
         overridden: true,
       },
     });
+
+    if (data.staff !== undefined) {
+      const before = await tx.sessionStaff.findMany({
+        where: { sessionId, deletedAt: null },
+        select: { userId: true, position: true },
+      });
+      await replaceSessionStaff(tx, sessionId, data.staff);
+      changed['staff'] = {
+        from: before.map((b) => `${b.position}:${b.userId}`).sort().join(',') || null,
+        to: data.staff.map((b) => `${b.position}:${b.userId}`).sort().join(',') || null,
+      };
+    }
 
     await audit.write(tx, {
       actorUserId: actor.userId,
@@ -402,5 +414,129 @@ export async function unlinkContent(
       targetId: sessionId,
       detail: { educational_content_id: contentId },
     });
+  });
+}
+
+/**
+ * Replaces one occurrence's staffing snapshot.
+ *
+ * Shared by an explicit override and by regeneration below. Soft-deletes rather
+ * than removes a dropped name, so who was once assigned stays visible in the
+ * record — the same reasoning TD-5 applies everywhere else.
+ */
+async function replaceSessionStaff(
+  tx: Prisma.TransactionClient,
+  sessionId: string,
+  staff: { userId: string; position: 'teacher' | 'assistant' }[],
+): Promise<void> {
+  const keep = new Set(staff.map((s) => s.userId));
+  const existing = await tx.sessionStaff.findMany({
+    where: { sessionId },
+    select: { id: true, userId: true, deletedAt: true },
+  });
+
+  for (const row of existing) {
+    if (!keep.has(row.userId) && row.deletedAt === null) {
+      await tx.sessionStaff.update({ where: { id: row.id }, data: { deletedAt: new Date() } });
+    }
+  }
+  for (const s of staff) {
+    const found = existing.find((e) => e.userId === s.userId);
+    if (found) {
+      await tx.sessionStaff.update({
+        where: { id: found.id },
+        data: { position: s.position, deletedAt: null, deletedById: null },
+      });
+    } else {
+      await tx.sessionStaff.create({ data: { sessionId, userId: s.userId, position: s.position } });
+    }
+  }
+}
+
+/**
+ * **Explicitly re-aligns ONE past or held session with its schedule
+ * (Revision 43.4).**
+ *
+ * This is the only sanctioned path by which a Session that has already happened
+ * is brought back into line, and it exists precisely so that act is
+ * **deliberate and attributable** rather than a side effect of editing a
+ * schedule. §4.4: *"Bringing history back into line with a schedule is an
+ * explicit administrator action — never a side effect of an edit — and it is
+ * audited as such."*
+ *
+ * The audit row records **what it overwrote**, because after this runs the
+ * previous truth exists nowhere else.
+ *
+ * Admin-only: a teacher may edit the sessions they staff, but rewriting the
+ * record of a class that has already been taught is not a teaching action.
+ */
+export async function regenerateSession(
+  prisma: PrismaClient,
+  actor: Actor,
+  sessionId: string,
+  version: number,
+): Promise<Session> {
+  if (!isAdmin(actor)) {
+    throw new AppError('FORBIDDEN', 'regenerating a past session is an Admin action');
+  }
+  const session = await loadForWrite(prisma, actor, sessionId);
+
+  const schedule = await prisma.recurringCourseSchedule.findFirst({
+    where: { id: session.scheduleId, deletedAt: null },
+    select: {
+      startTime: true,
+      endTime: true,
+      roomId: true,
+      staff: { where: { deletedAt: null }, select: { userId: true, position: true } },
+    },
+  });
+  if (!schedule) throw new AppError('NOT_FOUND', 'the schedule no longer exists');
+
+  const before = await prisma.sessionStaff.findMany({
+    where: { sessionId, deletedAt: null },
+    select: { userId: true, position: true },
+  });
+
+  return prisma.$transaction(async (tx) => {
+    const updated = await updateWithVersion<Session>({
+      delegate: tx.session,
+      id: sessionId,
+      expectedVersion: version,
+      requireNotDeleted: true,
+      data: {
+        startTime: schedule.startTime,
+        endTime: schedule.endTime,
+        roomId: schedule.roomId,
+        // Regeneration re-aligns the occurrence with its schedule, so it is no
+        // longer a human's individual decision — clearing the flag is what
+        // makes that true rather than merely stated.
+        overridden: false,
+      },
+    });
+    await replaceSessionStaff(
+      tx,
+      sessionId,
+      schedule.staff.map((x) => ({ userId: x.userId, position: x.position })),
+    );
+
+    await audit.write(tx, {
+      actorUserId: actor.userId,
+      actionType: 'session.regenerate',
+      targetEntity: 'Session',
+      targetId: sessionId,
+      detail: {
+        date: session.date.toISOString().slice(0, 10),
+        status: session.status,
+        // What this overwrote. After this runs the previous truth exists
+        // nowhere else, which is the whole reason the action is audited.
+        overwrote: {
+          room_id: session.roomId,
+          start_time: session.startTime.toISOString(),
+          end_time: session.endTime.toISOString(),
+          staff: before.map((b) => `${b.position}:${b.userId}`).sort(),
+        },
+      },
+    });
+    return updated;
   });
 }

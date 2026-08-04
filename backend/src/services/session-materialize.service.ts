@@ -40,6 +40,8 @@ export interface MaterializableSchedule extends ScheduleRecurrence {
   endTime: Date;
   roomId: string | null;
   academicYearId: string;
+  /** Snapshot onto every future session this run touches (Revision 43.4). */
+  staff: { userId: string; position: 'teacher' | 'assistant' }[];
 }
 
 export interface MaterializeResult {
@@ -47,6 +49,11 @@ export interface MaterializeResult {
   created: number;
   /** Sessions that already existed and were left alone — the idempotency proof. */
   existing: number;
+  /** Future, un-overridden sessions brought back into line with the schedule
+   *  (Revision 43.4). Without this an edit changed nothing about the occurrences
+   *  that already existed, so §4.4's promise that it "rewrites future Sessions"
+   *  was not true. */
+  resynced: number;
   /** Sessions deliberately NOT touched because they carry a human decision or
    *  attached work. Surfaced, never silently skipped (§4.4). */
   protectedSessions: { id: string; date: Date; reason: string }[];
@@ -142,23 +149,45 @@ export async function materializeSchedule(
     // create" is what the administrator is told (§4.4). The unique index is
     // still the real idempotency guarantee; this loop is how the answer is
     // built.
-    await tx.session.create({
+    const row = await tx.session.create({
       data: {
         scheduleId: schedule.id,
         date,
         startTime: schedule.startTime,
         endTime: schedule.endTime,
+        // SNAPSHOT (Revision 43.4). Room and staff are written onto the
+        // occurrence, not re-derived from the schedule at read time, so a held
+        // session stays historically correct when the schedule later changes.
         roomId: schedule.roomId,
-        // `teacherId` is left null here on purpose. The schedule's staff live
-        // in `CourseScheduleStaff` and may change; copying one onto every
-        // session would snapshot an assignment that the staff table is the
-        // source of truth for. A session carries its own teacher only once a
-        // human sets one, which is exactly what `overridden` marks.
         status: 'scheduled',
         overridden: false,
       },
+      select: { id: true },
     });
+    await snapshotStaff(tx, row.id, schedule.staff);
     created += 1;
+  }
+
+  // Re-sync the occurrences that already exist and are still wanted (43.4).
+  // ONLY future, un-overridden, still-`scheduled` ones: a past or `held`
+  // session is history and keeps what it was materialized with, whatever the
+  // schedule now says (§4.4).
+  let resynced = 0;
+  for (const row of existingRows) {
+    const key = row.date.toISOString().slice(0, 10);
+    if (!dates.some((d) => d.toISOString().slice(0, 10) === key)) continue;
+    if (protectedIds.has(row.id)) continue;
+
+    await tx.session.update({
+      where: { id: row.id },
+      data: {
+        startTime: schedule.startTime,
+        endTime: schedule.endTime,
+        roomId: schedule.roomId,
+      },
+    });
+    await snapshotStaff(tx, row.id, schedule.staff);
+    resynced += 1;
   }
 
   const wanted = new Set(dates.map((d) => d.toISOString().slice(0, 10)));
@@ -178,6 +207,7 @@ export async function materializeSchedule(
   return {
     scheduleId: schedule.id,
     created,
+    resynced,
     existing: existingRows.length - orphaned.length,
     protectedSessions: [...protectedIds.entries()].map(([id, reason]) => ({
       id,
@@ -185,6 +215,46 @@ export async function materializeSchedule(
       reason,
     })),
   };
+}
+
+/**
+ * Writes one occurrence's staffing snapshot (Revision 43.4).
+ *
+ * Replaces whatever was there rather than merging: the snapshot states *the
+ * assignment as it stands for this session*, and a merge would accumulate
+ * everyone who was ever on it. Soft-deleted rather than hard-deleted, so a
+ * removed name stays visible in the record.
+ */
+async function snapshotStaff(
+  tx: Prisma.TransactionClient,
+  sessionId: string,
+  staff: { userId: string; position: 'teacher' | 'assistant' }[],
+): Promise<void> {
+  const keep = new Set(staff.map((s) => s.userId));
+  const existing = await tx.sessionStaff.findMany({
+    where: { sessionId },
+    select: { id: true, userId: true, deletedAt: true },
+  });
+
+  for (const row of existing) {
+    if (!keep.has(row.userId) && row.deletedAt === null) {
+      await tx.sessionStaff.update({ where: { id: row.id }, data: { deletedAt: new Date() } });
+    }
+  }
+
+  for (const s of staff) {
+    const found = existing.find((e) => e.userId === s.userId);
+    if (found) {
+      await tx.sessionStaff.update({
+        where: { id: found.id },
+        data: { position: s.position, deletedAt: null, deletedById: null },
+      });
+    } else {
+      await tx.sessionStaff.create({
+        data: { sessionId, userId: s.userId, position: s.position },
+      });
+    }
+  }
 }
 
 /** Loads a schedule in the shape materialization needs. */
@@ -205,6 +275,7 @@ export async function loadSchedule(
       dayOfMonth: true,
       monthOfYear: true,
       anchorDate: true,
+      staff: { where: { deletedAt: null }, select: { userId: true, position: true } },
     },
   });
   return s;

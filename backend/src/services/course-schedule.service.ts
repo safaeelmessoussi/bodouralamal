@@ -190,11 +190,12 @@ export async function findConflicts(
       ...(excludeScheduleId ? { scheduleId: { not: excludeScheduleId } } : {}),
       OR: [
         ...(candidate.roomId !== null ? [{ roomId: candidate.roomId }] : []),
+        // Revision 43.4: the occurrence's OWN staffing snapshot is the truth
+        // about who is committed on that date. Asking the schedule instead
+        // would miss a session whose staff were individually changed — exactly
+        // the case the snapshot exists for.
         ...(staffIds.length > 0
-          ? [
-              { teacherId: { in: staffIds } },
-              { schedule: { staff: { some: { userId: { in: staffIds }, deletedAt: null } } } },
-            ]
+          ? [{ staff: { some: { userId: { in: staffIds }, deletedAt: null } } }]
           : []),
       ],
     },
@@ -205,10 +206,7 @@ export async function findConflicts(
       roomId: true,
       startTime: true,
       endTime: true,
-      teacherId: true,
-      schedule: {
-        select: { staff: { where: { deletedAt: null }, select: { userId: true } } },
-      },
+      staff: { where: { deletedAt: null }, select: { userId: true } },
     },
   });
 
@@ -220,10 +218,7 @@ export async function findConflicts(
     if (candidate.roomId !== null && s.roomId === candidate.roomId) {
       out.push({ kind: 'room', date, sessionId: s.id, scheduleId: s.scheduleId, resourceId: candidate.roomId });
     }
-    const busy = new Set<string>([
-      ...(s.teacherId ? [s.teacherId] : []),
-      ...s.schedule.staff.map((t) => t.userId),
-    ]);
+    const busy = new Set<string>(s.staff.map((t) => t.userId));
     for (const userId of staffIds) {
       if (!busy.has(userId)) continue;
       out.push({
@@ -336,6 +331,10 @@ export async function createCourseSchedule(
     // without its sessions would be invisible on the calendar until a nightly
     // job noticed, and the conflict check just performed would have been
     // against a state that never existed.
+    //
+    // Ordering matters (Revision 43.4): the `CourseScheduleStaff` rows are
+    // written ABOVE, so `loadSchedule` sees them and every session materializes
+    // with its staffing snapshot already in place.
     const loaded = await loadSchedule(tx, schedule.id);
     if (!loaded) throw new AppError('INTERNAL', 'schedule vanished mid-transaction');
     const materialized = await materializeSchedule(tx, loaded, now, horizon);

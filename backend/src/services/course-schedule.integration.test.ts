@@ -19,6 +19,7 @@ import {
   linkContent,
   markHeld,
   overrideSession,
+  regenerateSession,
   restoreSession,
   unlinkContent,
 } from './session.service.js';
@@ -109,6 +110,9 @@ async function cleanup(): Promise<void> {
   const scheduleWhere = { schedule: { subject: tagged } };
 
   await prisma.sessionContent.deleteMany({ where: { session: scheduleWhere } });
+  // Revision 43.4: sessions carry their own staffing snapshot, RESTRICT against
+  // Session (TD-5), so it goes before them.
+  await prisma.sessionStaff.deleteMany({ where: { session: scheduleWhere } });
   await prisma.educationalContent.deleteMany({ where: { title: { startsWith: TAG } } });
   await prisma.session.deleteMany({ where: scheduleWhere });
   await prisma.courseScheduleStaff.deleteMany({ where: { schedule: { subject: tagged } } });
@@ -631,5 +635,251 @@ describe('deleting a schedule (TD-5)', () => {
     const survivor = await prisma.session.findUnique({ where: { id: first.id } });
     expect(survivor?.deletedAt).toBeNull();
     expect(survivor?.status).toBe('held');
+  });
+});
+
+describe('Revision 43.4 — a Session snapshots its teaching assignment', () => {
+  it('materializes each session WITH the schedule’s room and staff', async () => {
+    const teacher = await person('الأستاذة');
+    const helper = await person('المساعدة');
+    const { id } = await createCourseSchedule(
+      prisma,
+      superAdmin(),
+      baseInput({
+        staff: [
+          { userId: teacher, position: 'teacher' },
+          { userId: helper, position: 'assistant' },
+        ],
+      }),
+      NOW,
+    );
+
+    const s = await prisma.session.findFirstOrThrow({ where: { scheduleId: id } });
+    expect(s.roomId).toBe(roomA);
+    const staff = await prisma.sessionStaff.findMany({
+      where: { sessionId: s.id, deletedAt: null },
+      select: { userId: true, position: true },
+    });
+    expect(staff.map((x) => `${x.position}:${x.userId}`).sort()).toEqual(
+      [`teacher:${teacher}`, `assistant:${helper}`].sort(),
+    );
+  });
+
+  it('a HELD session keeps its original staffing when the schedule changes', async () => {
+    // The reason the snapshot exists. Re-deriving from the schedule would claim
+    // the new teacher taught a class they were never at.
+    const original = await person('الأستاذة الأولى');
+    const replacement = await person('الأستاذة الثانية');
+    const { id } = await createCourseSchedule(
+      prisma,
+      superAdmin(),
+      baseInput({ staff: [{ userId: original, position: 'teacher' }] }),
+      NOW,
+    );
+    const past = await prisma.session.findFirstOrThrow({
+      where: { scheduleId: id, date: day('2026-06-02') },
+    });
+    await markHeld(prisma, superAdmin(), past.id, past.version);
+
+    // The schedule changes hands entirely.
+    await prisma.courseScheduleStaff.updateMany({
+      where: { scheduleId: id },
+      data: { deletedAt: new Date() },
+    });
+    await prisma.courseScheduleStaff.create({
+      data: { scheduleId: id, userId: replacement, position: 'teacher' },
+    });
+    await updateCourseSchedule(prisma, superAdmin(), id, { startTime: at(16), version: 0 }, NOW);
+
+    const heldStaff = await prisma.sessionStaff.findMany({
+      where: { sessionId: past.id, deletedAt: null },
+      select: { userId: true },
+    });
+    expect(heldStaff.map((x) => x.userId)).toEqual([original]);
+    // …and its time is untouched too: history is history.
+    const stillHeld = await prisma.session.findUniqueOrThrow({ where: { id: past.id } });
+    expect(stillHeld.startTime.toISOString()).toBe(past.startTime.toISOString());
+  });
+
+  it('FUTURE un-overridden sessions ARE re-synced to the new schedule', async () => {
+    // The other half: the snapshot protects history, not the future. Without
+    // this, §4.4's promise that an edit "rewrites future Sessions" is false —
+    // and it WAS false before Revision 43.4.
+    const original = await person('الأستاذة الأولى');
+    const replacement = await person('الأستاذة الثانية');
+    const { id } = await createCourseSchedule(
+      prisma,
+      superAdmin(),
+      baseInput({ staff: [{ userId: original, position: 'teacher' }] }),
+      NOW,
+    );
+
+    await prisma.courseScheduleStaff.updateMany({
+      where: { scheduleId: id },
+      data: { deletedAt: new Date() },
+    });
+    await prisma.courseScheduleStaff.create({
+      data: { scheduleId: id, userId: replacement, position: 'teacher' },
+    });
+    const result = await updateCourseSchedule(
+      prisma,
+      superAdmin(),
+      id,
+      { startTime: at(16), roomId: roomB, version: 0 },
+      NOW,
+    );
+
+    expect(result.materialized.resynced).toBeGreaterThan(0);
+    const future = await prisma.session.findFirstOrThrow({
+      where: { scheduleId: id, date: day('2026-06-16') },
+      include: { staff: { where: { deletedAt: null }, select: { userId: true } } },
+    });
+    expect(future.roomId).toBe(roomB);
+    expect(future.startTime.toISOString()).toBe(at(16).toISOString());
+    expect(future.staff.map((x) => x.userId)).toEqual([replacement]);
+  });
+
+  it('an OVERRIDDEN future session is NOT re-synced', async () => {
+    const original = await person('الأستاذة الأولى');
+    const { id } = await createCourseSchedule(
+      prisma,
+      superAdmin(),
+      baseInput({ staff: [{ userId: original, position: 'teacher' }] }),
+      NOW,
+    );
+    const target = await prisma.session.findFirstOrThrow({
+      where: { scheduleId: id, date: day('2026-06-16') },
+    });
+    await overrideSession(prisma, superAdmin(), target.id, {
+      roomId: roomB,
+      version: target.version,
+    });
+
+    await updateCourseSchedule(prisma, superAdmin(), id, { roomId: roomA, version: 0 }, NOW);
+
+    const after = await prisma.session.findUniqueOrThrow({ where: { id: target.id } });
+    expect(after.roomId).toBe(roomB);
+  });
+
+  it('an override can replace the occurrence’s staff, and records old→new', async () => {
+    const original = await person('الأستاذة الأولى');
+    const cover = await person('الأستاذة البديلة');
+    const { id } = await createCourseSchedule(
+      prisma,
+      superAdmin(),
+      baseInput({ staff: [{ userId: original, position: 'teacher' }] }),
+      NOW,
+    );
+    const target = await prisma.session.findFirstOrThrow({
+      where: { scheduleId: id, date: day('2026-06-16') },
+    });
+
+    await overrideSession(prisma, superAdmin(), target.id, {
+      staff: [{ userId: cover, position: 'teacher' }],
+      version: target.version,
+    });
+
+    const staff = await prisma.sessionStaff.findMany({
+      where: { sessionId: target.id, deletedAt: null },
+      select: { userId: true },
+    });
+    expect(staff.map((x) => x.userId)).toEqual([cover]);
+
+    const row = await prisma.auditLog.findFirstOrThrow({
+      where: { actionType: 'session.override', targetId: target.id },
+    });
+    const changed = (row.detail as { changed?: Record<string, { from: string; to: string }> })
+      .changed;
+    expect(changed?.['staff']?.from).toContain(original);
+    expect(changed?.['staff']?.to).toContain(cover);
+  });
+
+  it('a person covering ONE session is detected as a conflict for that date', async () => {
+    // Conflict detection reads the session's own snapshot, so an individually
+    // assigned cover is visible to it. Asking the schedule would miss them.
+    const cover = await person('الأستاذة البديلة');
+    const { id } = await createCourseSchedule(prisma, superAdmin(), baseInput(), NOW);
+    const target = await prisma.session.findFirstOrThrow({
+      where: { scheduleId: id, date: day('2026-06-16') },
+    });
+    await overrideSession(prisma, superAdmin(), target.id, {
+      staff: [{ userId: cover, position: 'teacher' }],
+      version: target.version,
+    });
+
+    const err = await failure(() =>
+      createCourseSchedule(
+        prisma,
+        superAdmin(),
+        baseInput({
+          roomId: roomB,
+          weekdays: ['tuesday'],
+          staff: [{ userId: cover, position: 'teacher' }],
+        }),
+        NOW,
+      ),
+    );
+    expect(err.code).toBe('SCHEDULE_CONFLICT');
+    expect(
+      (err.details?.['conflicts'] as { date: string }[]).some((c) => c.date === '2026-06-16'),
+    ).toBe(true);
+  });
+
+  it('regenerate is the ONLY way to re-align history, and records what it overwrote', async () => {
+    const original = await person('الأستاذة الأولى');
+    const replacement = await person('الأستاذة الثانية');
+    const { id } = await createCourseSchedule(
+      prisma,
+      superAdmin(),
+      baseInput({ staff: [{ userId: original, position: 'teacher' }] }),
+      NOW,
+    );
+    const past = await prisma.session.findFirstOrThrow({
+      where: { scheduleId: id, date: day('2026-06-02') },
+    });
+    const held = await markHeld(prisma, superAdmin(), past.id, past.version);
+
+    await prisma.courseScheduleStaff.updateMany({
+      where: { scheduleId: id },
+      data: { deletedAt: new Date() },
+    });
+    await prisma.courseScheduleStaff.create({
+      data: { scheduleId: id, userId: replacement, position: 'teacher' },
+    });
+
+    await regenerateSession(prisma, superAdmin(), past.id, held.version);
+
+    const after = await prisma.sessionStaff.findMany({
+      where: { sessionId: past.id, deletedAt: null },
+      select: { userId: true },
+    });
+    expect(after.map((x) => x.userId)).toEqual([replacement]);
+
+    const row = await prisma.auditLog.findFirstOrThrow({
+      where: { actionType: 'session.regenerate', targetId: past.id },
+    });
+    const overwrote = (row.detail as { overwrote?: { staff?: string[] } }).overwrote;
+    // After this the previous truth exists nowhere else, which is why it is
+    // captured here.
+    expect(overwrote?.staff?.join(',')).toContain(original);
+  });
+
+  it('a teacher may not regenerate — rewriting a taught class is not a teaching action', async () => {
+    const { id } = await createCourseSchedule(prisma, superAdmin(), baseInput(), NOW);
+    const s = await prisma.session.findFirstOrThrow({ where: { scheduleId: id } });
+    const teacher = await person('الأستاذة');
+    await prisma.courseScheduleStaff.create({
+      data: { scheduleId: id, userId: teacher, position: 'teacher' },
+    });
+
+    const err = await failure(() =>
+      regenerateSession(
+        prisma,
+        { userId: teacher, roles: ['teacher'], roleScopes: [{ role: 'teacher', branches: null }] },
+        s.id,
+        s.version,
+      ),
+    );
+    expect(err.code).toBe('FORBIDDEN');
   });
 });
