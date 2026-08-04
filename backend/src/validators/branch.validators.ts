@@ -1,19 +1,15 @@
 import { z } from 'zod';
 
+import { displayOrder, entityName, uuid, version } from './common.js';
+
 /**
  * Zod schemas for the Branch/Room API boundary (§16.2 — Zod is the single place
  * TD-9 limits are encoded, and validation happens at every API boundary).
+ *
+ * `entityName`, `displayOrder` and `version` moved to `common.ts` when Revision
+ * 43 needed the same TD-9/TD-15 limits for the educational endpoints. They are
+ * imported rather than restated: a limit with two homes drifts.
  */
-
-/** TD-9: structural entity `name` max 120 chars, Arabic. */
-const entityName = z.string().trim().min(1).max(120);
-
-/** TD-6 CHECK: `display_order >= 0`. Rejected here too, so the caller gets a
- *  `400 VALIDATION_FAILED` rather than a constraint violation surfacing as 500. */
-const displayOrder = z.number().int().min(0).nullable();
-
-/** TD-15: every edit form loads the current `version` and sends it back. */
-const version = z.coerce.number().int().min(0);
 
 /*
  * TD-9 public branch fields (Revision 35). This is where "required" is
@@ -70,4 +66,4 @@ export const createRoomSchema = z.object({ name: entityName });
 
 export const updateRoomSchema = z.object({ version, name: entityName.optional() });
 
-export const uuidParam = z.uuid();
+export const uuidParam = uuid;

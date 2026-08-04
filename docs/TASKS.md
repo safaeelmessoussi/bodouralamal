@@ -406,7 +406,22 @@
 - [ ] Retire `CAPACITY_FULL` and the roster row-lock; `Room.capacity` informational (BR-23, TD-15.2)
 
 **API & screens**
-- [ ] TD-3.12 educational organisation & delivery endpoints; TD-3.13 public library; `/calendar` filter set + `prefilled_filters`; `/calendar/sessions/{id}`
+
+> The contract phase removed the nine `/admin/groups` routes and added none back, so
+> every service below was built, tested and **unreachable over HTTP**. TD-3.12 is
+> being mounted one resource at a time, each complete — controller, DTOs, routes,
+> OpenAPI, HTTP suite — before the next begins.
+
+- [x] TD-3.12 **Administrative Groups** — `GET`/`POST /admin/administrative-groups`, `PATCH`/`DELETE /admin/administrative-groups/{id}`
+  - ✓ Explicit DTO: exactly `id`, `name`, `level_id`, `branch_id`, `display_order`, `version`; 18 HTTP tests asserting the **exact key set**, not field presence
+  - ✓ The write boundary **refuses** `max_students`, `room_id`, `teacher_id` and a weekly slot rather than dropping them (§20 rule 22, BR-23) — a `201` after sending a capacity would claim a limit was recorded
+  - ✓ `level_id`/`branch_id` rejected on `PATCH`: moving a group between Levels or Branches is a re-creation, not an edit
+  - ✓ Proven by mutation — dropping `.strict()` fails 2 tests; leaking `created_at` through the DTO fails the **build** (TS2353), which is the stronger guard
+  - ✓ TD-9/TD-15 primitives extracted to `validators/common.ts` and the Zod-failure boundary to `controllers/parse.ts`, rather than copied a second time
+- [ ] TD-3.12 Administrative Group **roster** — `GET`/`POST /admin/administrative-groups/{id}/roster`, `DELETE .../roster/{studentId}`
+- [ ] TD-3.12 **Teaching Groups** (incl. `unassigned[]`, BR-22) and their membership verbs
+- [ ] TD-3.12 **Course Schedules** (incl. `/conflicts` and `/roster`) and **Sessions** (override / cancel / restore / content)
+- [ ] TD-3.13 public library; `/calendar` filter set + `prefilled_filters`; `/calendar/sessions/{id}`
 - [ ] `/admin/groups` (+ roster), `/admin/schedules`, `/admin/levels/{id}/subjects/{subjectId}`, `/teacher/schedules`, Session page (§14.1)
 - [ ] Public calendar and public Educational Library — **same filters, same items, ordering only** for signed-in users (§5.2)
 

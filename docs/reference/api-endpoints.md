@@ -2,7 +2,9 @@
 
 # API endpoints
 
-**47 operations across 35 paths**, all under `/api/v1` except the health check.
+**44 operations across 33 paths**, all under `/api/v1` except the health check.
+The count comes from the generator, which reconciles against the live router — if this line
+disagrees with `openapi.json`, this line is the one that is wrong.
 
 > Exact schemas: [`openapi.json`](../openapi.json) — **generated, never hand-edited.**
 > Conventions and governance: [API](../architecture/api.md).
@@ -74,18 +76,35 @@ they receive reference information through the operational APIs they are authori
 | `GET` `POST` | `/admin/branches/{id}/rooms` | 👤 write · 🔒 read |
 | `PATCH` `DELETE` | `/admin/rooms/{id}` | 👤 |
 
-## Groups and rosters
+## Educational organisation and delivery
 
-Operational — Admin-managed within branch scope.
+Revision 43 split the retired `Group` into an **organisational** unit and a **delivery** one, and
+this section follows that split — see [Scheduling](../overview/business-processes.md#3-scheduling)
+for why. Nothing here schedules anything: an Administrative Group has no room, no teacher and
+**no capacity**.
+
+Operational — Admin-managed within branch scope, asserted in the service. The `/admin/` prefix
+authenticates; it does not authorise.
 
 | | Path | Notes |
 |---|---|---|
-| `GET` `POST` | `/admin/groups` | Creation runs room/time conflict detection |
-| `PATCH` `DELETE` | `/admin/groups/{id}` | Deletion blocked while enrolments exist |
-| `GET` `POST` | `/admin/groups/{id}/roster` | Enrolment locks the group row for the capacity check and **enqueues consent re-evaluation** |
-| `DELETE` | `/admin/groups/{id}/roster/{studentId}` | Soft-deletes the enrolment **only** — academic records survive |
-| `POST` | `/admin/groups/{id}/instructors` | Co-teaching |
-| `DELETE` | `/admin/groups/{id}/instructors/{teacherId}` | |
+| `GET` `POST` | `/admin/administrative-groups` | `?level_id=` `?branch_id=` narrow **within** the caller's scope and can never reach outside it. A malformed filter is `400`, not an empty list |
+| `PATCH` `DELETE` | `/admin/administrative-groups/{id}` | Only `name` and `display_order` are editable. Deletion is blocked by enrolments, by a schedule targeting the group, and by the **last group in a Level** — a Level created with one must never be emptied back to none |
+
+A group is exactly `id`, `name`, `level_id`, `branch_id`, `display_order`, `version`. The write
+boundary **refuses** `max_students`, `room_id`, `teacher_id` and a weekly slot rather than
+dropping them: a `201` after sending a capacity would tell a client a limit had been recorded,
+and there is none to record. `branch_id` is load-bearing — it is the single answer to *which
+branch is this person at*, which `intended_branch_id` deliberately does not give.
+
+### Not yet mounted
+
+Every service below is **built and tested**; the contract phase removed the old routes and these
+replace them one resource at a time.
+
+`/admin/administrative-groups/{id}/roster` · `/admin/levels/{levelId}/subjects/{subjectId}/teaching-groups` ·
+`/admin/teaching-groups/{id}` (+ `/members`) · `/admin/course-schedules` (+ `/conflicts`, `/roster`) ·
+`/sessions/{id}` (+ `/cancel`, `/restore`, `/content`) · `GET /library`
 
 ## Events
 

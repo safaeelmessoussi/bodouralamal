@@ -2,16 +2,15 @@ import type { Request, Response } from 'express';
 import { pageParamsFrom } from '../lib/pagination.js';
 
 import type { PrismaClient } from '../generated/prisma/client.js';
-import { AppError } from '../lib/errors.js';
 import { requireActor } from '../middleware/authenticate.js';
 import * as branches from '../services/branch.service.js';
 import { branchDto, pageOf, roomDto } from './dto.js';
+import { idParam, parse } from './parse.js';
 import {
   createBranchSchema,
   createRoomSchema,
   updateBranchSchema,
   updateRoomSchema,
-  uuidParam,
 } from '../validators/branch.validators.js';
 
 /**
@@ -27,19 +26,9 @@ import {
  * deliberately rather than inherited from the schema.
  */
 
-/** Zod failures become `400 VALIDATION_FAILED` in the envelope, never a 500. */
-function parse<T>(schema: { safeParse: (v: unknown) => { success: boolean; data?: T; error?: unknown } }, value: unknown): T {
-  const result = schema.safeParse(value);
-  if (!result.success || result.data === undefined) {
-    throw new AppError('VALIDATION_FAILED', 'schema validation failed', {
-      issues: (result.error as { issues?: unknown })?.issues ?? [],
-    });
-  }
-  return result.data;
-}
-
-const id = (req: Request, key: string): string =>
-  parse<string>(uuidParam, req.params[key]);
+/** Zod failures become `400 VALIDATION_FAILED` in the envelope, never a 500 —
+ *  see `parse.ts`, which is now shared with the Revision 43 controllers. */
+const id = (req: Request, key: string): string => idParam(req, key);
 
 export function listBranches(prisma: PrismaClient) {
   return async (req: Request, res: Response): Promise<void> => {

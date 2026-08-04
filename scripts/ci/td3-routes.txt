@@ -44,15 +44,6 @@ GET /admin/approvals                          # TD-3.2, §5.6
 POST /admin/approvals/{id}/approve            # TD-3.2, TD-4.2
 POST /admin/approvals/{id}/reject             # TD-3.2, §5.6
 POST /family-links                            # TD-3.2, §4.3 Revision 23 (staff-mediated, existing child)
-GET /admin/groups                             # §5.6 Groups screen (operational, R26); §14.2
-POST /admin/groups                            # §4.4 "Group CRUD with conflict detection"; TD-15
-PATCH /admin/groups/{id}                      # §4.4; TD-15 optimistic locking
-DELETE /admin/groups/{id}                     # §4.4; guarded by TD-5 (enrolments block)
-GET /admin/groups/{id}/roster                 # §5.6 Group Enrollment screen
-POST /admin/groups/{id}/roster                # §5.6; enforces max_students (TD-4.6); enqueues consent.reevaluate (§4.1a)
-DELETE /admin/groups/{id}/roster/{studentId}  # §5.6; TD-5 soft-delete of the enrolment row only
-POST /admin/groups/{id}/instructors           # §4.4 co-teaching, two instructor slots
-DELETE /admin/groups/{id}/instructors/{teacherId} # §4.4; ends §4.2 teacher reach on the next request
 GET /students/{id}/consents                   # §4.1a, BR-1; TD-2 "Record staff-declared consent grants/revocations"
 POST /students/{id}/consents                  # §4.1a staff_recorded; TD-2, TD-8 consent.grant/revoke, TD-7 consent.reevaluate
 GET /students/{id}/social-profile              # §4.10, BR-16, TD-2 Revision 28; §19.2 "assigned-teacher-only, API test"
@@ -93,6 +84,40 @@ GET /admin/branches/{id}/rooms                # §5.6 "Branches & Rooms", §14.2
 POST /admin/branches/{id}/rooms               # §5.6; Super Admin only (reference data, TD-2 R26)
 PATCH /admin/rooms/{id}                       # §5.6; Super Admin only (TD-2 R26)
 DELETE /admin/rooms/{id}                      # §5.6; Super Admin only (TD-2 R26); guarded by TD-5
+
+# ── Educational organisation & delivery (TD-3.12, Revision 43)
+#    These REPLACE the nine /admin/groups routes of the retired model, which the
+#    Revision 43 contract phase removed from the router and which lingered here
+#    afterwards. A registry entry for a route the SRS no longer documents is the
+#    same defect in the other direction: it would have accepted an OpenAPI
+#    document advertising an endpoint that answers 404.
+GET /admin/administrative-groups              # TD-3.12, §4.4c; operational (Admin in branch scope, TD-2)
+POST /admin/administrative-groups             # TD-3.12, §4.4c; no capacity exists (BR-23)
+PATCH /admin/administrative-groups/{id}       # TD-3.12; TD-15 optimistic locking; Level/Branch not editable
+DELETE /admin/administrative-groups/{id}      # TD-3.12; TD-5, guarded by enrolments, schedules, and §4.4b last-group
+GET /admin/administrative-groups/{id}/roster  # TD-3.12, §5.6 enrollment screen
+POST /admin/administrative-groups/{id}/roster # TD-3.12; enqueues consent.reevaluate per session (§4.1a, TD-7)
+DELETE /admin/administrative-groups/{id}/roster/{studentId}  # TD-3.12; TD-5 soft-delete of the enrolment row only
+GET /admin/levels/{levelId}/subjects/{subjectId}/teaching-groups   # TD-3.12, §4.4c; carries unassigned[] (BR-22)
+POST /admin/levels/{levelId}/subjects/{subjectId}/teaching-groups  # TD-3.12, §4.4c; Super Admin (R43.3)
+PATCH /admin/teaching-groups/{id}             # TD-3.12; TD-15; Super Admin (R43.3)
+DELETE /admin/teaching-groups/{id}            # TD-3.12; Super Admin (R43.3)
+POST /admin/teaching-groups/{id}/members      # TD-3.12; at most one per (subject, level) — 409 (§4.4c)
+DELETE /admin/teaching-groups/{id}/members/{studentId}  # TD-3.12, §4.4c
+GET /admin/course-schedules                   # TD-3.12, §4.4 — the unit of delivery
+POST /admin/course-schedules                  # TD-3.12, §4.4; one teaching_mode, one target (§4.4c)
+PATCH /admin/course-schedules/{id}            # TD-3.12; TD-15; reports rewritten vs protected sessions (§4.4)
+DELETE /admin/course-schedules/{id}           # TD-3.12, §4.4; TD-5
+GET /admin/course-schedules/{id}/conflicts    # TD-3.12, §4.4 — computed against MATERIALIZED sessions
+GET /admin/course-schedules/{id}/roster       # TD-3.12, §4.4c — the resolved audience, never a snapshot
+PATCH /sessions/{id}                          # TD-3.12, §4.4; sets `overridden`; TD-2 limits a Teacher to sessions they staff
+POST /sessions/{id}/cancel                    # TD-3.12; TD-1 scheduled → cancelled; reason mandatory
+POST /sessions/{id}/restore                   # TD-3.12; TD-1 cancelled → scheduled, only before the date
+POST /sessions/{id}/content                   # TD-3.12, §4.9 SessionContent link
+DELETE /sessions/{id}/content/{contentId}     # TD-3.12; unlinks, NEVER deletes the file
+
+# ── Public Educational Library (TD-3.13, Revision 43)
+GET /library                                  # TD-3.13, §5.2; PUBLIC — authentication reorders, never hides
 
 # ── Storage (TD-3.5)
 POST /uploads/initiate                        # TD-3.5, §4.9

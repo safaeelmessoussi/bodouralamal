@@ -110,6 +110,54 @@ export function roomDto(row: {
   return { id: row.id, name: row.name, branch_id: row.branchId, version: row.version };
 }
 
+/* ── Administrative Group (§4.4c, Revision 43) ───────────────────────────── */
+
+export interface AdministrativeGroupDto {
+  id: string;
+  name: string;
+  /** The Level this group organises. Not editable — see the service. */
+  level_id: string;
+  /**
+   * **Load-bearing, not decorative** (§4.4c). This is the single answer to
+   * *"which branch is this person at"* — the answer `User.intended_branch_id`
+   * deliberately does not give, since that records only what an applicant asked
+   * for (§4.1, R39). A client resolving a student's branch reads it from here.
+   */
+  branch_id: string;
+  display_order: number | null;
+  /** TD-15: the client sends this back on edit; a stale one is a `409`. */
+  version: number;
+}
+
+/**
+ * Deliberately **absent**: every field the retired `Group` carried and §20 rule
+ * 22 forbids re-adding — `room_id`, `teacher_id`, `assistant_id`, the weekly
+ * schedule and **`max_students`**. They belong to delivery, and a DTO that
+ * offered them would invite a client to display an organisational unit as
+ * though it had a timetable. **No `capacity` exists anywhere** (BR-23): the
+ * column is gone, not merely unexposed.
+ *
+ * Also absent, as everywhere: `created_at`, `updated_at`, `deleted_at`,
+ * `deleted_by`.
+ */
+export function administrativeGroupDto(row: {
+  id: string;
+  name: string;
+  levelId: string;
+  branchId: string;
+  displayOrder: number | null;
+  version: number;
+}): AdministrativeGroupDto {
+  return {
+    id: row.id,
+    name: row.name,
+    level_id: row.levelId,
+    branch_id: row.branchId,
+    display_order: row.displayOrder,
+    version: row.version,
+  };
+}
+
 /* ── Approval queue (§5.6, §14.2) ────────────────────────────────────────── */
 
 export interface ApprovalDto {

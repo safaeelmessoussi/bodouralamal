@@ -13,6 +13,7 @@ import * as publicBranches from './controllers/public-branch.controller.js';
 import * as socialProfile from './controllers/social-profile.controller.js';
 import * as users from './controllers/user.controller.js';
 import * as branch from './controllers/branch.controller.js';
+import * as administrativeGroups from './controllers/administrative-group.controller.js';
 import { createRegistration } from './controllers/registration.controller.js';
 import { healthController } from './controllers/health.controller.js';
 import type { PrismaClient } from './generated/prisma/client.js';
@@ -147,6 +148,15 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
   guarded.post('/admin/branches/:id/rooms', branch.createRoom(prisma));
   guarded.patch('/admin/rooms/:id', branch.updateRoom(prisma));
   guarded.delete('/admin/rooms/:id', branch.deleteRoom(prisma));
+
+  // Administrative Groups (§4.4c, TD-3.12, Revision 43) — the permanent
+  // ORGANISATIONAL unit inside a Level. Operational data, so Admin within branch
+  // scope or Super Admin, asserted in the service (TD-2): the `/admin/` prefix
+  // authenticates, it does not authorise.
+  guarded.get('/admin/administrative-groups', administrativeGroups.list(prisma));
+  guarded.post('/admin/administrative-groups', administrativeGroups.create(prisma));
+  guarded.patch('/admin/administrative-groups/:id', administrativeGroups.update(prisma));
+  guarded.delete('/admin/administrative-groups/:id', administrativeGroups.remove(prisma));
   api.use(guarded);
 
   app.use('/api/v1', api);
