@@ -11,7 +11,13 @@ import {
   type Occurrence,
 } from './calendar.service.js';
 import { createEvent } from './event.service.js';
-import { assignTeacher, createGroup, type Actor } from './group.service.js';
+import {
+  clearTeachingContext,
+  createTeachingContext,
+  staff as staffSchedule,
+  type TeachingFixture,
+} from '../test-support/educational-fixture.js';
+import { createGroup, type Actor } from './group.service.js';
 
 /**
  * Calendar read — §4.4, TD-3.4, TD-11, §19.2.
@@ -26,6 +32,7 @@ const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);
 const TAG = '[calendar-test]';
 
 let levelId: string;
+let categoryId: string;
 let actorUserId: string;
 
 const day = (iso: string) => new Date(`${iso}T00:00:00.000Z`);
@@ -85,6 +92,26 @@ async function makeGroup(branchId: string, dayOfWeek = 'monday', hour = 9): Prom
   return g.id;
 }
 
+/**
+ * Revision 43: **event scoping** and **teacher reach** both moved to the new
+ * model — events scope to Administrative Groups (§7), and a teacher reaches one
+ * through a Course Schedule (§4.4c). `makeGroup` above still creates a retiring
+ * `Group`, because the calendar's *timetable* half has not been migrated yet;
+ * the two coexist during the expand phase by design.
+ */
+const contexts = new Map<string, TeachingFixture>();
+
+async function makeAdminGroup(branchId: string): Promise<string> {
+  const ctx = await createTeachingContext(
+    prisma,
+    `${TAG} ${Math.random().toString(36).slice(2, 7)}`,
+    branchId,
+    { levelId, categoryId },
+  );
+  contexts.set(ctx.administrativeGroupId, ctx);
+  return ctx.administrativeGroupId;
+}
+
 async function makeEvent(
   visibility: 'public' | 'private' | 'hidden',
   over: Record<string, unknown> = {},
@@ -124,6 +151,8 @@ async function clear(): Promise<void> {
   await prisma.groupTeacher.deleteMany({ where: { groupId: { in: groupIds } } });
   await prisma.studentGroup.deleteMany({ where: { groupId: { in: groupIds } } });
   await prisma.group.deleteMany({ where: { id: { in: groupIds } } });
+  await clearTeachingContext(prisma, TAG);
+  contexts.clear();
 
   const users = await prisma.user.findMany({
     where: { nameArabic: { startsWith: TAG } },
@@ -141,8 +170,9 @@ async function clear(): Promise<void> {
 
 beforeEach(async () => {
   await clear();
-  const level = await prisma.level.findFirst({ select: { id: true } });
-  levelId = level!.id;
+  const level = await prisma.level.findFirstOrThrow({ select: { id: true, categoryId: true } });
+  levelId = level.id;
+  categoryId = level.categoryId;
   actorUserId = await person('فاعلة');
 });
 
@@ -307,10 +337,10 @@ describe('§4.4 — three-tier visibility', () => {
 
   it('a TEACHER sees hidden events intersecting their groups, not others', async () => {
     const branchId = await makeBranch('مراكش');
-    const mine = await makeGroup(branchId);
-    const theirs = await makeGroup(branchId, 'tuesday');
+    const mine = await makeAdminGroup(branchId);
+    const theirs = await makeAdminGroup(branchId);
     const t = await teacherUser('معلمة');
-    await assignTeacher(prisma, superAdmin(), mine, t);
+    await staffSchedule(prisma, contexts.get(mine)!, t);
 
     await makeEvent('hidden', { groupIds: [mine] });
     const otherHidden = await prisma.event.findUnique({
@@ -325,9 +355,9 @@ describe('§4.4 — three-tier visibility', () => {
 
   it('a teacher sees a hidden event scoped to their group\'s LEVEL', async () => {
     const branchId = await makeBranch('مراكش');
-    const mine = await makeGroup(branchId);
+    const mine = await makeAdminGroup(branchId);
     const t = await teacherUser('معلمة');
-    await assignTeacher(prisma, superAdmin(), mine, t);
+    await staffSchedule(prisma, contexts.get(mine)!, t);
     await makeEvent('hidden', { levelIds: [levelId] });
 
     // §4.4: the group itself, its level, category, branch, or a global event.

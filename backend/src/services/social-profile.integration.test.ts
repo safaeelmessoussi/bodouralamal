@@ -2,6 +2,13 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { loadConfig } from '../lib/config.js';
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
+import {
+  clearTeachingContext,
+  createTeachingContext,
+  enrol as enrolStudent,
+  staff as staffSchedule,
+  type TeachingFixture,
+} from '../test-support/educational-fixture.js';
 import { readProfile, writeProfile } from './social-profile.service.js';
 
 /**
@@ -39,25 +46,26 @@ async function makeBranch(name: string): Promise<string> {
   return b.id;
 }
 
+/**
+ * Revision 43: a "group" for scope purposes is now an Administrative Group plus
+ * the Course Schedule that makes a teacher's reach expressible (§4.4c). The
+ * shared fixture builds both, so this suite states what it needs and not how
+ * the model is wired.
+ */
+const contexts = new Map<string, TeachingFixture>();
+
 async function makeGroup(branchId: string, name: string): Promise<string> {
-  const g = await prisma.group.create({
-    data: {
-      name: `${TAG} ${name}`,
-      levelId,
-      branchId,
-      dayOfWeek: 'monday',
-      startTime: new Date('1970-01-01T09:00:00Z'),
-      endTime: new Date('1970-01-01T10:30:00Z'),
-      maxStudents: 20,
-    },
-  });
-  return g.id;
+  const ctx = await createTeachingContext(prisma, `${TAG} ${name}`, branchId, { levelId });
+  contexts.set(ctx.administrativeGroupId, ctx);
+  return ctx.administrativeGroupId;
 }
 
+/** Staffs the group's schedule — the path by which a teacher reaches its
+ *  students now that `GroupTeacher` is retired (§4.4c). */
 const assign = (groupId: string, teacherId: string) =>
-  prisma.groupTeacher.create({ data: { groupId, teacherId } }).then((r) => r.id);
+  staffSchedule(prisma, contexts.get(groupId)!, teacherId);
 const enrol = (groupId: string, studentId: string) =>
-  prisma.studentGroup.create({ data: { groupId, studentId } }).then((r) => r.id);
+  enrolStudent(prisma, contexts.get(groupId)!, studentId);
 
 async function clear(): Promise<void> {
   const users = await prisma.user.findMany({
@@ -80,12 +88,10 @@ async function clear(): Promise<void> {
   await prisma.familyLink.deleteMany({
     where: { OR: [{ parentId: { in: ids } }, { studentId: { in: ids } }] },
   });
-  await prisma.studentGroup.deleteMany({
-    where: { OR: [{ studentId: { in: ids } }, { groupId: { in: groupIds } }] },
-  });
-  await prisma.groupTeacher.deleteMany({
-    where: { OR: [{ teacherId: { in: ids } }, { groupId: { in: groupIds } }] },
-  });
+  await prisma.enrollment.deleteMany({ where: { studentId: { in: ids } } });
+  await prisma.courseScheduleStaff.deleteMany({ where: { userId: { in: ids } } });
+  await clearTeachingContext(prisma, TAG);
+  contexts.clear();
   await prisma.group.deleteMany({ where: { id: { in: groupIds } } });
   await prisma.userBranchRole.deleteMany({ where: { userId: { in: ids } } });
   await prisma.user.deleteMany({ where: { id: { in: ids } } });
@@ -219,8 +225,10 @@ describe('BR-16 — who MUST NOT reach a case file', () => {
     const { groupId, teacher, student } = await scenario();
     await expect(readProfile(prisma, teacher, student)).resolves.toBeTruthy();
 
-    await prisma.groupTeacher.updateMany({
-      where: { groupId, teacherId: teacher },
+    // Revocation now means un-staffing the schedule (§4.4c) — the reach ends
+    // on the very next call, exactly as revoking a GroupTeacher row once did.
+    await prisma.courseScheduleStaff.updateMany({
+      where: { scheduleId: contexts.get(groupId)!.scheduleId, userId: teacher },
       data: { deletedAt: new Date() },
     });
 

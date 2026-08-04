@@ -1,6 +1,6 @@
 import type { PrismaClient, StudentSocialProfile } from '../generated/prisma/client.js';
 import { assertFreshActive } from '../policies/freshness.policy.js';
-import { assertCanAccessStudent } from '../policies/teacher-scope.js';
+import { assertCanAccessStudent } from '../policies/roster-resolution.js';
 import * as audit from '../repositories/audit.repository.js';
 
 /**

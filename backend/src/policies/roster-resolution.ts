@@ -1,4 +1,6 @@
 import type { Prisma, PrismaClient, TeachingMode } from '../generated/prisma/client.js';
+import { AppError } from '../lib/errors.js';
+import * as scope from './branch-scope.js';
 
 /**
  * **Roster resolution — the single definition of "which students is this for"
@@ -252,4 +254,166 @@ export async function staffsSession(
     select: { id: true },
   });
   return found !== null;
+}
+
+/**
+ * **A teacher's scope for Hidden-event visibility (§4.4, Revision 43).**
+ *
+ * §4.4: a Teacher sees Hidden events *"whose scope intersects their own teaching
+ * scope — an event scoped to one of their Administrative Groups, or to the
+ * level, category or branch of anything they teach, or a global event"*.
+ *
+ * Replaces `teacherGroupIds` + a `Group` lookup. Each dimension is derived from
+ * the schedules they staff (§4.4c), which is why this lives beside the rest of
+ * that derivation rather than in the calendar service:
+ *
+ * - **branches** — stated directly by `schedule.branch_id`.
+ * - **levels** — the target's level, whichever mode the schedule uses.
+ * - **administrative groups** — those they teach directly, **plus** the groups
+ *   the students of their Teaching Groups are organised into. A teacher of
+ *   Quran Group 2 must see an event scoped to those students' administrative
+ *   group; §4.4c's whole point is that the two groupings differ.
+ */
+export async function teacherEventScope(
+  prisma: PrismaClient,
+  teacherId: string,
+): Promise<{
+  branchIds: string[];
+  levelIds: string[];
+  categoryIds: string[];
+  administrativeGroupIds: string[];
+}> {
+  const schedules = await prisma.recurringCourseSchedule.findMany({
+    where: { deletedAt: null, staff: { some: { userId: teacherId, deletedAt: null } } },
+    select: {
+      branchId: true,
+      levelId: true,
+      administrativeGroupId: true,
+      teachingGroupId: true,
+      level: { select: { id: true, categoryId: true } },
+      administrativeGroup: { select: { levelId: true, level: { select: { categoryId: true } } } },
+      teachingGroup: { select: { levelId: true, level: { select: { categoryId: true } } } },
+    },
+  });
+
+  const branchIds = new Set<string>();
+  const levelIds = new Set<string>();
+  const categoryIds = new Set<string>();
+  const groupIds = new Set<string>();
+  const teachingGroupIds: string[] = [];
+
+  for (const s of schedules) {
+    branchIds.add(s.branchId);
+    if (s.administrativeGroupId) groupIds.add(s.administrativeGroupId);
+    if (s.teachingGroupId) teachingGroupIds.push(s.teachingGroupId);
+
+    const level = s.level ?? s.administrativeGroup?.level ?? s.teachingGroup?.level ?? null;
+    const levelId = s.levelId ?? s.administrativeGroup?.levelId ?? s.teachingGroup?.levelId ?? null;
+    if (levelId) levelIds.add(levelId);
+    if (level) categoryIds.add(level.categoryId);
+  }
+
+  // The administrative groups behind a subject-specific split. Without this a
+  // teacher of a Teaching Group would miss an event scoped to the very students
+  // they teach, because those students are organised elsewhere (§4.4c).
+  if (teachingGroupIds.length > 0) {
+    const seats = await prisma.studentTeachingGroup.findMany({
+      where: { teachingGroupId: { in: teachingGroupIds }, deletedAt: null },
+      select: {
+        student: {
+          select: {
+            levelEnrollments: {
+              where: { deletedAt: null },
+              select: { administrativeGroupId: true },
+            },
+          },
+        },
+      },
+    });
+    for (const seat of seats) {
+      for (const e of seat.student.levelEnrollments) groupIds.add(e.administrativeGroupId);
+    }
+  }
+
+  return {
+    branchIds: [...branchIds],
+    levelIds: [...levelIds],
+    categoryIds: [...categoryIds],
+    administrativeGroupIds: [...groupIds],
+  };
+}
+
+/**
+ * **Whether a teacher may act on this student (§4.4c, TD-2, BR-16).**
+ *
+ * Replaces `teachesStudent`, which resolved through `GroupTeacher`. One query
+ * via the composable predicate, so scope and subject are evaluated together and
+ * there is no window in which the staffing could change between them.
+ */
+export async function teachesStudent(
+  prisma: PrismaClient,
+  teacherId: string,
+  studentId: string,
+): Promise<boolean> {
+  const where = await studentsTaughtBy(prisma, teacherId);
+  const found = await prisma.user.findFirst({
+    where: { ...where, id: studentId },
+    select: { id: true },
+  });
+  return found !== null;
+}
+
+/** The caller as the freshness policy resolves them (§4.2 Revision 24). */
+export interface ScopedActor {
+  userId: string;
+  roleScopes: { role: string; branches: string[] | null }[];
+}
+
+/**
+ * Asserts the caller may act on a student's record (§4.10, BR-16, TD-2).
+ *
+ * Replaces `teacher-scope.assertCanAccessStudent`. Each role is resolved the way
+ * TD-2 qualifies it:
+ *
+ * - **Super Admin** — unscoped by role (§2.1).
+ * - **Admin** — constrained to their branch scope. **A student's branch is now
+ *   `Enrollment → AdministrativeGroup.branch_id`** (§4.4c), not the retired
+ *   `StudentGroup → Group`. An all-branches Admin reaches every student.
+ * - **Teacher** — only the students of the courses they staff.
+ *
+ * **Out of scope answers `404`, never `403`** (§20 rule 17), so a response can
+ * never be used to discover that a minor's record exists.
+ */
+export async function assertCanAccessStudent(
+  prisma: PrismaClient,
+  actor: ScopedActor,
+  studentId: string,
+): Promise<void> {
+  if (scope.isSuperAdmin(actor.roleScopes)) return;
+
+  if (scope.hasRole(actor.roleScopes, 'admin')) {
+    const managed = scope.branchesForRole(actor.roleScopes, 'admin');
+    if (managed === null) return; // all-branches Admin
+
+    const inScope = await prisma.enrollment.findFirst({
+      where: {
+        studentId,
+        deletedAt: null,
+        administrativeGroup: { deletedAt: null, branchId: { in: managed } },
+      },
+      select: { id: true },
+    });
+    if (inScope) return;
+    // Deliberately falls through: an Admin who also teaches may still reach the
+    // student through their own courses, checked below.
+  }
+
+  if (
+    scope.hasRole(actor.roleScopes, 'teacher') &&
+    (await teachesStudent(prisma, actor.userId, studentId))
+  ) {
+    return;
+  }
+
+  throw new AppError('NOT_FOUND', 'no such student in scope');
 }

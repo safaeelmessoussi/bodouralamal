@@ -1,6 +1,13 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { loadConfig } from '../lib/config.js';
+import {
+  clearTeachingContext,
+  createTeachingContext,
+  enrol as enrolStudent,
+  staff as staffSchedule,
+  type TeachingFixture,
+} from '../test-support/educational-fixture.js';
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
 import { effectiveConsent, readConsent, recordStaffConsent } from './consent.service.js';
 import { CONSENT_TEXT_VERSION_KEY } from './registration.service.js';
@@ -53,28 +60,55 @@ async function makeBranch(): Promise<string> {
   return b.id;
 }
 
+/** Revision 43: a group for scope purposes is an Administrative Group plus the
+ *  Course Schedule that gives it sessions and staff (§4.4c). */
+const contexts = new Map<string, TeachingFixture>();
+
 async function makeGroup(branchId: string, name: string): Promise<string> {
-  const g = await prisma.group.create({
-    data: {
-      name: `${TAG} ${name}`,
-      levelId,
-      branchId,
-      dayOfWeek: 'monday',
-      startTime: new Date('1970-01-01T09:00:00Z'),
-      endTime: new Date('1970-01-01T10:30:00Z'),
-      maxStudents: 20,
-    },
-  });
-  return g.id;
+  const ctx = await createTeachingContext(prisma, `${TAG} ${name}`, branchId, { levelId });
+  contexts.set(ctx.administrativeGroupId, ctx);
+  return ctx.administrativeGroupId;
+}
+
+/**
+ * A group in its **own** Level.
+ *
+ * BR-21 (Revision 43) allows a student exactly one Administrative Group per
+ * Level, so "a student in two groups" is only expressible across two Levels —
+ * which is the real association case anyway: someone enrolled in both Quran and
+ * literacy. The database refuses the old shape outright, which is how this
+ * surfaced.
+ */
+async function makeGroupInOwnLevel(branchId: string, name: string): Promise<string> {
+  // No `levelId`: the fixture creates its own Category and Level.
+  const ctx = await createTeachingContext(prisma, `${TAG} ${name}`, branchId);
+  contexts.set(ctx.administrativeGroupId, ctx);
+  return ctx.administrativeGroupId;
 }
 
 const enrol = (groupId: string, studentId: string) =>
-  prisma.studentGroup.create({ data: { groupId, studentId } });
+  enrolStudent(prisma, contexts.get(groupId)!, studentId);
 
+/**
+ * Jobs queued for a group's SESSIONS.
+ *
+ * Revision 43 changed the payload from `{ group_id }` to `{ session_id }`,
+ * because BR-2's subject is now a session's resolved audience. The test asks
+ * the same question — *"was the gate re-evaluated for this group?"* — through
+ * the group's own sessions.
+ */
 async function queuedFor(groupId: string): Promise<number> {
+  const ctx = contexts.get(groupId);
+  if (!ctx) return 0;
+  const sessions = await prisma.session.findMany({
+    where: { scheduleId: ctx.scheduleId },
+    select: { id: true },
+  });
+  if (sessions.length === 0) return 0;
   const rows = await prisma.$queryRaw<{ count: bigint }[]>`
     SELECT count(*)::bigint AS count FROM pgboss.job
-    WHERE name = 'consent.reevaluate' AND data->>'group_id' = ${groupId}
+    WHERE name = 'consent.reevaluate'
+      AND data->>'session_id' = ANY(${sessions.map((x) => x.id)}::text[])
   `;
   return Number(rows[0]?.count ?? 0);
 }
@@ -85,13 +119,12 @@ async function clear(): Promise<void> {
     select: { id: true },
   });
   const ids = users.map((u) => u.id);
-  const groups = await prisma.group.findMany({
-    where: { name: { startsWith: TAG } },
+  const sessions = await prisma.session.findMany({
+    where: { schedule: { subject: { name: { startsWith: TAG } } } },
     select: { id: true },
   });
-  const groupIds = groups.map((g) => g.id);
-  for (const g of groupIds) {
-    await prisma.$executeRaw`DELETE FROM pgboss.job WHERE name = 'consent.reevaluate' AND data->>'group_id' = ${g}`;
+  for (const s of sessions) {
+    await prisma.$executeRaw`DELETE FROM pgboss.job WHERE name = 'consent.reevaluate' AND data->>'session_id' = ${s.id}`;
   }
   await prisma.auditLog.deleteMany({
     where: { OR: [{ actorUserId: { in: ids } }, { targetId: { in: ids } }] },
@@ -99,11 +132,10 @@ async function clear(): Promise<void> {
   await prisma.consentRecord.deleteMany({
     where: { OR: [{ studentId: { in: ids } }, { grantedByUserId: { in: ids } }] },
   });
-  await prisma.studentGroup.deleteMany({
-    where: { OR: [{ studentId: { in: ids } }, { groupId: { in: groupIds } }] },
-  });
-  await prisma.groupTeacher.deleteMany({ where: { groupId: { in: groupIds } } });
-  await prisma.group.deleteMany({ where: { id: { in: groupIds } } });
+  await prisma.enrollment.deleteMany({ where: { studentId: { in: ids } } });
+  await prisma.courseScheduleStaff.deleteMany({ where: { userId: { in: ids } } });
+  await clearTeachingContext(prisma, TAG);
+  contexts.clear();
   await prisma.userBranchRole.deleteMany({ where: { userId: { in: ids } } });
   await prisma.user.deleteMany({ where: { id: { in: ids } } });
   await prisma.branch.deleteMany({ where: { name: { startsWith: TAG } } });
@@ -246,20 +278,22 @@ describe('§4.1a + TD-4 — the re-evaluation enqueue', () => {
       granted: true,
     });
 
-    expect(result.reevaluatedGroups).toEqual([groupId]);
+    // The payload names SESSIONS now, not groups (Revision 43, BR-2).
+    expect(result.reevaluatedSessions).toEqual([contexts.get(groupId)!.sessionId]);
     expect(await queuedFor(groupId)).toBeGreaterThan(0);
   });
 
   it('enqueues for EVERY group the student is enrolled in', async () => {
     const { admin, student, branchId } = await scenario();
-    const second = await makeGroup(branchId, 'مجموعة ثانية');
+    // A second LEVEL, not a second group in the same one — BR-21.
+    const second = await makeGroupInOwnLevel(branchId, 'مستوى ثانٍ');
     await enrol(second, student);
 
     const result = await recordStaffConsent(prisma, admin, student, {
       consentType: 'media_release',
       granted: false,
     });
-    expect(result.reevaluatedGroups).toHaveLength(2);
+    expect(result.reevaluatedSessions).toHaveLength(2);
     expect(await queuedFor(second)).toBeGreaterThan(0);
   });
 
@@ -276,7 +310,7 @@ describe('§4.1a + TD-4 — the re-evaluation enqueue', () => {
       consentType: 'media_release',
       granted: true,
     });
-    expect(result.reevaluatedGroups).toEqual([]);
+    expect(result.reevaluatedSessions).toEqual([]);
   });
 
   it('FINDING: a branch Admin cannot reach an UNPLACED student', async () => {
@@ -298,10 +332,10 @@ describe('§4.1a + TD-4 — the re-evaluation enqueue', () => {
     // no longer enrolled in is not affected by their consent decision, and a
     // soft-deleted group is not affected by anything.
     const { admin, student, groupId, branchId } = await scenario();
-    const left = await makeGroup(branchId, 'مجموعة سابقة');
-    const enrolment = await enrol(left, student);
-    await prisma.studentGroup.update({
-      where: { id: enrolment.id },
+    const left = await makeGroupInOwnLevel(branchId, 'مستوى سابق');
+    const enrolmentId = await enrol(left, student);
+    await prisma.enrollment.update({
+      where: { id: enrolmentId },
       data: { deletedAt: new Date() },
     });
 
@@ -310,7 +344,9 @@ describe('§4.1a + TD-4 — the re-evaluation enqueue', () => {
       granted: true,
     });
 
-    expect(result.reevaluatedGroups).toEqual([groupId]);
+    // Only the session of the group they are STILL in — named as a session id,
+    // which is the payload BR-2 now takes.
+    expect(result.reevaluatedSessions).toEqual([contexts.get(groupId)!.sessionId]);
     expect(await queuedFor(left)).toBe(0);
   });
 
@@ -334,7 +370,7 @@ describe('TD-2 / TD-12 — who may record', () => {
   it('a Teacher may NOT record a decision on a family\'s behalf', async () => {
     const { student, groupId } = await scenario();
     const teacher = await staff('معلمة', 'teacher', null);
-    await prisma.groupTeacher.create({ data: { groupId, teacherId: teacher } });
+    await staffSchedule(prisma, contexts.get(groupId)!, teacher);
 
     // TD-2 marks the row ⊘ for Teacher even though they may view the student.
     await expect(

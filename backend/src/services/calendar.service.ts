@@ -13,7 +13,7 @@ import { expandEvent, expandGroup } from '../lib/recurrence.js';
  */
 export { expandEvent, expandGroup };
 import type { RoleScope } from '../policies/branch-scope.js';
-import { teacherGroupIds } from '../policies/teacher-scope.js';
+import { teacherEventScope } from '../policies/roster-resolution.js';
 
 /**
  * Calendar read (SRS §4.4, TD-3.4, TD-11, §19.2).
@@ -185,28 +185,28 @@ async function visibilityFilter(
   }
 
   if (isTeacher(actor)) {
-    const groupIds = await teacherGroupIds(prisma, actor.userId);
-    const groups = await prisma.group.findMany({
-      where: { id: { in: groupIds } },
-      select: { id: true, branchId: true, levelId: true, level: { select: { categoryId: true } } },
-    });
-    const branchIds = [...new Set(groups.map((g) => g.branchId))];
-    const levelIds = [...new Set(groups.map((g) => g.levelId))];
-    const categoryIds = [...new Set(groups.map((g) => g.level.categoryId))];
+    // Revision 43: resolved from the courses they staff (§4.4c), which is the
+    // single definition of a teacher's reach. The retired path asked
+    // `GroupTeacher` and then read `Group` for its level and branch; a schedule
+    // states its branch directly, and the derivation lives with the rest of the
+    // rule rather than here.
+    const { branchIds, levelIds, categoryIds, administrativeGroupIds: groupIds } =
+      await teacherEventScope(prisma, actor.userId);
 
-    // §4.4: a Teacher sees Hidden events whose scope intersects their assigned
-    // groups — the group itself, its level, category or branch, or a global
-    // event — and never one belonging exclusively to groups they do not teach.
+    // §4.4: a Teacher sees Hidden events whose scope intersects their teaching
+    // scope — one of their Administrative Groups, or the level, category or
+    // branch of anything they teach, or a global event — and never one
+    // belonging exclusively to groups they do not teach.
     const intersects = {
       OR: [
-        { groupScopes: { some: { groupId: { in: groupIds } } } },
+        { administrativeGroupScopes: { some: { administrativeGroupId: { in: groupIds } } } },
         { levelScopes: { some: { levelId: { in: levelIds } } } },
         { categoryScopes: { some: { categoryId: { in: categoryIds } } } },
         { branchScopes: { some: { branchId: { in: branchIds } } } },
         // A global event reaches everyone with no scope rows to intersect.
         {
           AND: [
-            { groupScopes: { none: {} } },
+            { administrativeGroupScopes: { none: {} } },
             { levelScopes: { none: {} } },
             { categoryScopes: { none: {} } },
             { branchScopes: { none: {} } },
@@ -273,7 +273,11 @@ export async function readCalendar(
   if (query.categoryId) {
     scopeFilters.push({ categoryScopes: { some: { categoryId: query.categoryId } } });
   }
-  if (query.groupId) scopeFilters.push({ groupScopes: { some: { groupId: query.groupId } } });
+  if (query.groupId) {
+    scopeFilters.push({
+      administrativeGroupScopes: { some: { administrativeGroupId: query.groupId } },
+    });
+  }
 
   const events = await prisma.event.findMany({
     where: {

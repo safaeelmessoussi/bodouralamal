@@ -3,7 +3,13 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { loadConfig } from '../lib/config.js';
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
 import type { RoleScope } from '../policies/branch-scope.js';
-import { assignTeacher, createGroup, type Actor } from './group.service.js';
+import {
+  clearTeachingContext,
+  createTeachingContext,
+  staff as staffSchedule,
+  type TeachingFixture,
+} from '../test-support/educational-fixture.js';
+import { type Actor } from './group.service.js';
 import {
   backfillAttach,
   backfillCandidates,
@@ -62,18 +68,20 @@ async function makeBranch(name: string, openedOn = day('2026-01-01')): Promise<s
   return b.id;
 }
 
+/** Revision 43: events scope to **Administrative Groups** (§7), and a teacher
+ *  reaches one through a Course Schedule (§4.4c). The shared fixture builds
+ *  both. */
+const contexts = new Map<string, TeachingFixture>();
+
 async function makeGroup(branchId: string): Promise<string> {
-  const g = await createGroup(prisma, superAdmin(), {
-    name: `${TAG} مجموعة ${Math.random().toString(36).slice(2, 7)}`,
-    levelId,
+  const ctx = await createTeachingContext(
+    prisma,
+    `${TAG} ${Math.random().toString(36).slice(2, 7)}`,
     branchId,
-    roomId: null,
-    dayOfWeek: 'monday',
-    startTime: new Date(Date.UTC(1970, 0, 1, 9, 0)),
-    endTime: new Date(Date.UTC(1970, 0, 1, 10, 30)),
-    maxStudents: 20,
-  });
-  return g.id;
+    { levelId, categoryId },
+  );
+  contexts.set(ctx.administrativeGroupId, ctx);
+  return ctx.administrativeGroupId;
 }
 
 function eventInput(over: Partial<EventInput> = {}): EventInput {
@@ -95,7 +103,7 @@ async function clear(): Promise<void> {
   await prisma.eventBranch.deleteMany({ where: { eventId: { in: eventIds } } });
   await prisma.eventCategory.deleteMany({ where: { eventId: { in: eventIds } } });
   await prisma.eventLevel.deleteMany({ where: { eventId: { in: eventIds } } });
-  await prisma.eventGroup.deleteMany({ where: { eventId: { in: eventIds } } });
+  await prisma.eventAdministrativeGroup.deleteMany({ where: { eventId: { in: eventIds } } });
   await prisma.event.deleteMany({ where: { id: { in: eventIds } } });
 
   const groups = await prisma.group.findMany({
@@ -103,8 +111,8 @@ async function clear(): Promise<void> {
     select: { id: true },
   });
   const groupIds = groups.map((g) => g.id);
-  await prisma.groupTeacher.deleteMany({ where: { groupId: { in: groupIds } } });
-  await prisma.studentGroup.deleteMany({ where: { groupId: { in: groupIds } } });
+  await clearTeachingContext(prisma, TAG);
+  contexts.clear();
   await prisma.group.deleteMany({ where: { id: { in: groupIds } } });
 
   const users = await prisma.user.findMany({
@@ -175,7 +183,7 @@ describe('§4.4 — scope joins are materialised at creation', () => {
     expect(await prisma.eventBranch.count({ where: { eventId: id } })).toBe(1);
     expect(await prisma.eventCategory.count({ where: { eventId: id } })).toBe(1);
     expect(await prisma.eventLevel.count({ where: { eventId: id } })).toBe(1);
-    expect(await prisma.eventGroup.count({ where: { eventId: id } })).toBe(1);
+    expect(await prisma.eventAdministrativeGroup.count({ where: { eventId: id } })).toBe(1);
   });
 
   it('a not-yet-operational branch named explicitly is still excluded', async () => {
@@ -264,7 +272,7 @@ describe('TD-2 — who may schedule', () => {
     const branchId = await makeBranch('مراكش');
     const groupId = await makeGroup(branchId);
     const t = await teacherUser('معلمة');
-    await assignTeacher(prisma, superAdmin(), groupId, t);
+    await staffSchedule(prisma, contexts.get(groupId)!, t);
 
     const actor: Actor = { userId: t, roles: ['teacher'], roleScopes: [{ role: 'teacher', branches: null }] };
     const created = await createEvent(
@@ -280,7 +288,7 @@ describe('TD-2 — who may schedule', () => {
     const branchId = await makeBranch('مراكش');
     const groupId = await makeGroup(branchId);
     const t = await teacherUser('معلمة');
-    await assignTeacher(prisma, superAdmin(), groupId, t);
+    await staffSchedule(prisma, contexts.get(groupId)!, t);
     const actor: Actor = { userId: t, roles: ['teacher'], roleScopes: [{ role: 'teacher', branches: null }] };
 
     await expect(
@@ -298,7 +306,7 @@ describe('TD-2 — who may schedule', () => {
     const branchId = await makeBranch('مراكش');
     const groupId = await makeGroup(branchId);
     const t = await teacherUser('معلمة');
-    await assignTeacher(prisma, superAdmin(), groupId, t);
+    await staffSchedule(prisma, contexts.get(groupId)!, t);
     const actor: Actor = { userId: t, roles: ['teacher'], roleScopes: [{ role: 'teacher', branches: null }] };
 
     await expect(
@@ -317,7 +325,7 @@ describe('TD-2 — who may schedule', () => {
     const mine = await makeGroup(branchId);
     const theirs = await makeGroup(branchId);
     const t = await teacherUser('معلمة');
-    await assignTeacher(prisma, superAdmin(), mine, t);
+    await staffSchedule(prisma, contexts.get(mine)!, t);
     const actor: Actor = { userId: t, roles: ['teacher'], roleScopes: [{ role: 'teacher', branches: null }] };
 
     await expect(
@@ -549,7 +557,7 @@ describe('TD-15 / §4.4 — editing an event', () => {
     const ownGroup = await makeGroup(branchId);
     const otherGroup = await makeGroup(branchId);
     const t = await teacherUser('معلمة');
-    await assignTeacher(prisma, superAdmin(), ownGroup, t);
+    await staffSchedule(prisma, contexts.get(ownGroup)!, t);
 
     const own = await createEvent(
       prisma,
@@ -582,7 +590,7 @@ describe('TD-15 / §4.4 — editing an event', () => {
     const branchId = await makeBranch('مراكش');
     const groupId = await makeGroup(branchId);
     const t = await teacherUser('معلمة');
-    await assignTeacher(prisma, superAdmin(), groupId, t);
+    await staffSchedule(prisma, contexts.get(groupId)!, t);
 
     const { event } = await createEvent(
       prisma,
@@ -603,7 +611,7 @@ describe('TD-15 / §4.4 — editing an event', () => {
     const branchId = await makeBranch('مراكش');
     const groupId = await makeGroup(branchId);
     const t = await teacherUser('معلمة');
-    await assignTeacher(prisma, superAdmin(), groupId, t);
+    await staffSchedule(prisma, contexts.get(groupId)!, t);
     const { event } = await createEvent(
       prisma,
       teacherActor(t),

@@ -1,7 +1,7 @@
 import type { Event, Prisma, PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
 import * as scope from '../policies/branch-scope.js';
-import { teacherGroupIds } from '../policies/teacher-scope.js';
+import { teacherEventScope } from '../policies/roster-resolution.js';
 import { page, pageWindow, type Page, type PageParams } from '../lib/pagination.js';
 import * as audit from '../repositories/audit.repository.js';
 import { updateWithVersion } from '../repositories/optimistic-lock.js';
@@ -117,7 +117,12 @@ async function assertMayScope(
   if (!input.groupIds?.length) {
     throw new AppError('FORBIDDEN', 'a teacher must scope the event to their own groups');
   }
-  const own = new Set(await teacherGroupIds(tx as unknown as PrismaClient, actor.userId));
+  // Revision 43: "their own groups" now means the Administrative Groups their
+  // courses reach (§4.4c) — including the groups behind a Teaching Group they
+  // teach, since those students are organised elsewhere.
+  const own = new Set(
+    (await teacherEventScope(tx as unknown as PrismaClient, actor.userId)).administrativeGroupIds,
+  );
   const foreign = input.groupIds.filter((g) => !own.has(g));
   if (foreign.length > 0) {
     // §20 rule 17: naming a group they do not teach reveals nothing.
@@ -181,7 +186,12 @@ export async function createEvent(
       await tx.eventLevel.create({ data: { eventId: event.id, levelId } });
     }
     for (const groupId of groupIds) {
-      await tx.eventGroup.create({ data: { eventId: event.id, groupId } });
+      // Revision 43: events scope to **Administrative Groups** (§7) — the
+      // organisational unit — never to Teaching Groups, which are
+      // subject-specific. `EventGroup` is retired with the `Group` it pointed at.
+      await tx.eventAdministrativeGroup.create({
+        data: { eventId: event.id, administrativeGroupId: groupId },
+      });
     }
 
     await audit.write(tx, {
@@ -240,7 +250,10 @@ async function assertMayEdit(
     tx.eventBranch.findMany({ where: { eventId }, select: { branchId: true } }),
     tx.eventCategory.count({ where: { eventId } }),
     tx.eventLevel.count({ where: { eventId } }),
-    tx.eventGroup.findMany({ where: { eventId }, select: { groupId: true } }),
+    tx.eventAdministrativeGroup.findMany({
+      where: { eventId },
+      select: { administrativeGroupId: true },
+    }),
   ]);
 
   if (isAdmin(actor)) {
@@ -258,8 +271,12 @@ async function assertMayEdit(
   if (branches.length > 0 || categories > 0 || levels > 0 || groups.length === 0) {
     throw new AppError('NOT_FOUND', 'no such event');
   }
-  const own = new Set(await teacherGroupIds(tx as unknown as PrismaClient, actor.userId));
-  if (groups.some((g) => !own.has(g.groupId))) throw new AppError('NOT_FOUND', 'no such event');
+  const own = new Set(
+    (await teacherEventScope(tx as unknown as PrismaClient, actor.userId)).administrativeGroupIds,
+  );
+  if (groups.some((g) => !own.has(g.administrativeGroupId))) {
+    throw new AppError('NOT_FOUND', 'no such event');
+  }
 }
 
 /** The event's own attributes. Scope is deliberately absent — see `updateEvent`. */
@@ -369,7 +386,7 @@ export async function deleteEvent(
     await tx.eventBranch.deleteMany({ where: { eventId: id } });
     await tx.eventCategory.deleteMany({ where: { eventId: id } });
     await tx.eventLevel.deleteMany({ where: { eventId: id } });
-    await tx.eventGroup.deleteMany({ where: { eventId: id } });
+    await tx.eventAdministrativeGroup.deleteMany({ where: { eventId: id } });
 
     await tx.event.update({
       where: { id },

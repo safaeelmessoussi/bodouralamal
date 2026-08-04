@@ -2,9 +2,9 @@ import { ConsentMethod, ConsentType } from '../generated/prisma/enums.js';
 import type { PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
 import { assertFreshActive } from '../policies/freshness.policy.js';
-import { assertCanAccessStudent } from '../policies/teacher-scope.js';
+import { assertCanAccessStudent } from '../policies/roster-resolution.js';
 import * as audit from '../repositories/audit.repository.js';
-import { enqueueConsentReevaluation } from '../repositories/jobs.repository.js';
+import { enqueueConsentReevaluationForStudent } from './enrollment.service.js';
 import { activeConsentTextVersion } from './registration.service.js';
 
 /**
@@ -106,7 +106,7 @@ export async function recordStaffConsent(
   actorUserId: string,
   studentId: string,
   decision: ConsentDecision,
-): Promise<{ recordId: string; reevaluatedGroups: string[] }> {
+): Promise<{ recordId: string; reevaluatedSessions: string[] }> {
   const actor = await assertFreshActive(prisma, actorUserId, CONSENT_ROLES);
   await assertCanAccessStudent(prisma, actor, studentId);
 
@@ -138,10 +138,15 @@ export async function recordStaffConsent(
       select: { id: true },
     });
 
-    // §4.1a hard requirement: any ConsentRecord change re-evaluates the gate for
-    // every group the student is in — in THIS transaction (TD-4), so the job
-    // cannot outlive a rolled-back decision or be lost by a committed one.
-    const reevaluatedGroups = await enqueueConsentReevaluation(tx, studentId);
+    // §4.1a hard requirement: any ConsentRecord change re-evaluates the gate —
+    // in THIS transaction (TD-4), so the job cannot outlive a rolled-back
+    // decision or be lost by a committed one.
+    //
+    // Revision 43: the gate's subject is a SESSION's resolved audience (BR-2),
+    // not a group, so the payload is `{ session_id }`. With no schedules yet
+    // this enqueues nothing, exactly as a student in no group did before — a
+    // normal outcome, not a silent failure.
+    const reevaluatedSessions = await enqueueConsentReevaluationForStudent(tx, studentId);
 
     await audit.write(tx, {
       actorUserId: actor.userId,
@@ -156,11 +161,11 @@ export async function recordStaffConsent(
         method: ConsentMethod.staff_recorded,
         consent_text_version: textVersion,
         on_behalf_actor: actor.userId,
-        groups_reevaluated: reevaluatedGroups.length,
+        sessions_reevaluated: reevaluatedSessions.length,
         ...(decision.note ? { note: decision.note } : {}),
       },
     });
 
-    return { recordId: record.id, reevaluatedGroups };
+    return { recordId: record.id, reevaluatedSessions };
   });
 }

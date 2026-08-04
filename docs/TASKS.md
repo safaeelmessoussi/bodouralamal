@@ -367,7 +367,10 @@
 - [~] Teacher scope from `CourseScheduleStaff` (§4.4c, TD-2) — **replaces `teacher-scope.ts`'s `GroupTeacher` resolution**
   - ✓ Backend — `studentsTaughtBy`, `teacherBranchIds`, `staffsSession` in `roster-resolution.ts`; branch scope now **stated** by the schedule instead of inferred through two hops
   - ✓ Tests — assistants have identical reach; a teacher with no schedules reaches nobody; revoking a staffing ends reach on the next call
-  - △ **Consumers not yet migrated** — exam authoring, Quran logging and social-profile access still resolve through `teacher-scope.ts`. Both modules are live during the expand phase by design; cutting the consumers over is its own step, before the contract migration drops `GroupTeacher`
+  - ✓ **Consumers migrated** — `calendar`, `event`, `consent` and `social-profile` services all resolve through `roster-resolution.ts`; **no production code reads `GroupTeacher`**
+  - ✓ Event scoping moved with it (`EventAdministrativeGroup`), because the two id spaces could never have intersected
+  - ✓ `consent.service` now emits `{ session_id }`, so both producers agree before M6 writes the handler
+  - ✓ `test-support/educational-fixture.ts` — one fixture for the four suites that each need "a group, a student in it, and a teacher who reaches them"
 - [x] Teaching Groups + membership, and the **`unassigned` list** (BR-22)
   - ✓ R43.3 authority split: CRUD is Super Admin, membership is Admin scoped by the **student's** enrolment branch
   - ✓ `unassigned` returns `split: false` for an unsplit Subject — deliberately distinguishable from "everyone is assigned"

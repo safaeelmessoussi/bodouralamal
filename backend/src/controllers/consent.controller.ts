@@ -47,7 +47,9 @@ export function record(prisma: PrismaClient) {
     });
     res.status(201).json({
       id: result.recordId,
-      groups_reevaluated: result.reevaluatedGroups.length,
+      // Revision 43: the gate's subject is a session's resolved audience
+      // (BR-2), so this reports sessions rather than groups.
+      sessions_reevaluated: result.reevaluatedSessions.length,
     });
   };
 }
