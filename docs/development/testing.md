@@ -14,7 +14,7 @@ Four layers, each testing something the others structurally cannot.
 **Coverage: ≥ 80 % on services and policies.** No coverage gate on generated or boilerplate
 code — a coverage number that counts generated clients measures nothing.
 
-Current totals: **108 backend unit · 533 integration · 208 frontend**.
+Current totals: **108 backend unit · 551 integration · 219 frontend**.
 
 ## Running them
 
@@ -87,6 +87,25 @@ nothing in the suite was looking at the response as a *shape*.
 So: an endpoint whose contract matters gets a test that would fail if the contract grew. The
 counterpart in CI is [`check-contract-dto.sh`](ci-cd.md#the-guards) — the guard makes the
 projection exist, the test makes it *correct*.
+
+### The client half of the same guard
+
+A server-side key-set test catches the **API** drifting. It cannot catch the **client's
+declared type** drifting, because `api<T>()` is an unchecked cast — see
+[the adapter layer](../architecture/frontend.md#the-unchecked-cast-under-this-whole-layer).
+A wrong adapter type compiles, passes every test that builds fixtures from that same wrong
+type, and fails only in a browser.
+
+The client-side counterpart is a **fixture literal typed as the adapter's own interface**,
+written with the key set the server test pins:
+
+```ts
+const WIRE: HijriMonthRow = { hijri_month: 1, month_name_ar: 'محرم', /* …all six keys */ };
+```
+
+Rename a field in the adapter and the **typecheck** fails here. That is the check the cast
+cannot perform. `pages/admin/hijri-calendar.test.tsx` is the worked example — written after a
+type mismatch rendered a whole admin screen blank white with nothing red anywhere.
 
 ## A fixture must not leave the application unrunnable
 

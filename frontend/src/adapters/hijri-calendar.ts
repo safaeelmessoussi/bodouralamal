@@ -13,24 +13,55 @@ import { api } from '../lib/api.js';
  * Unlike the content adapter, this one is **real**: all four endpoints exist.
  */
 
+/**
+ * One row of `GET /admin/hijri-calendar?year=`.
+ *
+ * **These names are the CONTRACT's, not this file's invention.** The previous
+ * declaration named three fields that the API has never sent —
+ * `hijri_year`/`months`/`hijri_month_ar` against the real
+ * `year`/`data`/`month_name_ar` — so `data.months` was `undefined`, `.filter()`
+ * on it threw, React unmounted the tree and the page rendered **blank white**.
+ *
+ * `api<T>()` is an **unchecked cast**: the generic asserts a shape and nothing
+ * verifies it, so a wrong type here compiles perfectly and fails only in a
+ * browser. The backend contract is the source of truth (§16.2, R38), and the
+ * exact key set is now pinned by an HTTP test on the server side.
+ */
 export interface HijriMonthRow {
-  hijri_year: number;
   /** 1–12. */
   hijri_month: number;
-  hijri_month_ar: string;
+  month_name_ar: string;
   /** `YYYY-MM-DD`, or `null` for a month the Ministry has not announced yet. */
   gregorian_start_date: string | null;
   status: 'draft' | 'published' | null;
   /** TD-15 optimistic locking — send back what you loaded, or a concurrent
    *  correction is silently clobbered. `null` for a month with no row yet. */
   version: number | null;
+  /** How the row was recorded; `null` for a month with no row yet. */
+  source: string | null;
 }
 
 export interface HijriYear {
-  hijri_year: number;
+  year: number;
   /** Always twelve rows: a month with no announcement is a blank to fill, not a
    *  missing entry. */
-  months: HijriMonthRow[];
+  data: HijriMonthRow[];
+}
+
+/**
+ * What `PUT /admin/hijri-calendar/{year}/{month}` returns.
+ *
+ * **Deliberately a separate type**: the write response carries `hijri_year` and
+ * omits `month_name_ar`, so it is not the same shape as a list row. Declaring
+ * one type for both is what let the mismatch hide.
+ */
+export interface HijriMonthRecorded {
+  hijri_year: number;
+  hijri_month: number;
+  gregorian_start_date: string | null;
+  status: 'draft' | 'published' | null;
+  version: number | null;
+  source: string | null;
 }
 
 export interface HijriHistoryEntry {
@@ -70,8 +101,8 @@ export async function recordMonthStart(
   gregorianStartDate: string,
   version: number | null,
   token: string | null,
-): Promise<HijriMonthRow> {
-  return api<HijriMonthRow>(`/admin/hijri-calendar/${year}/${month}`, {
+): Promise<HijriMonthRecorded> {
+  return api<HijriMonthRecorded>(`/admin/hijri-calendar/${year}/${month}`, {
     method: 'PUT',
     token,
     body: {

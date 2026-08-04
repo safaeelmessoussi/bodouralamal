@@ -43,6 +43,34 @@ import { t } from '../../i18n/index.js';
  */
 const CURRENT_HIJRI_YEAR_GUESS = 1448;
 
+/**
+ * The two facts the screen derives from a year's rows.
+ *
+ * **Extracted so it can be tested against the real wire shape.** These three
+ * lines were inline, reading `data.months` — a field the API has never sent —
+ * and nothing could catch it: `api<T>()` is an unchecked cast, so the wrong
+ * type compiled, `.filter()` on `undefined` threw at render, React unmounted
+ * the tree, and the page rendered blank white. A pure function over the
+ * contract's own key set is testable; three expressions inside a component
+ * body are not.
+ */
+export function summariseYear(year: HijriYear | null): {
+  drafts: number;
+  recorded: HijriMonthRow[];
+  lastRecorded: HijriMonthRow | null;
+} {
+  const rows = year?.data ?? [];
+  const recorded = rows.filter((m) => m.gregorian_start_date !== null);
+  return {
+    drafts: rows.filter((m) => m.status === 'draft').length,
+    recorded,
+    // The last recorded month has no successor, so it resolves only its certain
+    // 29 days — the single most common cause of "the second half of the month
+    // has no Hijri dates" (§4.4, Revisions 31–32).
+    lastRecorded: recorded.length > 0 ? (recorded[recorded.length - 1] ?? null) : null,
+  };
+}
+
 export function HijriCalendarPage(): ReactNode {
   const { accessToken } = useSession();
   const [year, setYear] = useState(CURRENT_HIJRI_YEAR_GUESS);
@@ -99,10 +127,7 @@ export function HijriCalendarPage(): ReactNode {
     }
   }
 
-  const drafts = data?.months.filter((m) => m.status === 'draft').length ?? 0;
-  const recorded = data?.months.filter((m) => m.gregorian_start_date !== null) ?? [];
-  /** The last recorded month has no successor, so it resolves only 29 days. */
-  const lastRecorded = recorded.length > 0 ? recorded[recorded.length - 1] : null;
+  const { drafts, lastRecorded } = summariseYear(data);
 
   return (
     <AdminLayout
@@ -167,7 +192,7 @@ export function HijriCalendarPage(): ReactNode {
               </tr>
             </thead>
             <tbody>
-              {data.months.map((month) => (
+              {data.data.map((month) => (
                 <MonthRow
                   key={month.hijri_month}
                   month={month}
@@ -188,7 +213,7 @@ export function HijriCalendarPage(): ReactNode {
   );
 }
 
-function MonthRow({
+export function MonthRow({
   month,
   busy,
   isLastRecorded,
@@ -209,7 +234,7 @@ function MonthRow({
   return (
     <tr>
       <th scope="row" className="admin-table__rowhead">
-        {month.hijri_month_ar}
+        {month.month_name_ar}
         <span className="admin-table__ordinal">{month.hijri_month}</span>
       </th>
       <td>
@@ -217,7 +242,7 @@ function MonthRow({
           type="date"
           className="cal-filter__control"
           value={value}
-          aria-label={`${t('admin.hijri.colStart')} — ${month.hijri_month_ar}`}
+          aria-label={`${t('admin.hijri.colStart')} — ${month.month_name_ar}`}
           onChange={(e) => setValue(e.target.value)}
         />
       </td>

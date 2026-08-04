@@ -57,6 +57,37 @@ src/
 `adapters/` is the seam between the API's shape and the components' needs. It exists so a
 contract change lands in one file rather than across every component that reads a field.
 
+#### The unchecked cast under this whole layer
+
+`api<T>()` takes a type parameter and **nothing verifies it at runtime.** The generic
+*asserts* a shape; it does not parse one. An adapter type that names a field the API has
+never sent therefore:
+
+- **compiles perfectly** — TypeScript believes the assertion;
+- **passes every frontend test** that builds its own fixtures from that same wrong type;
+- **is invisible to `curl`** — the server's bytes were always correct;
+- and fails **only in a browser**, as `undefined` where an object was expected.
+
+That is not hypothetical. `adapters/hijri-calendar.ts` declared `hijri_year` / `months` /
+`hijri_month_ar` against a real `year` / `data` / `month_name_ar`. The page did
+`data?.months.filter(…)`; the `?.` guarded `data` being null but not `months` being
+`undefined`, `.filter()` threw, React unmounted the tree, and `/superadmin/hijri-calendar`
+rendered **blank white** with no error anywhere.
+
+**The two guards, and why one alone is not enough:**
+
+| Side | Guard | What it catches |
+|---|---|---|
+| **Server** | An HTTP test asserting the **exact key set** of the response — `expect(Object.keys(body).sort()).toEqual([…])` | The API drifting away from the contract. `toMatchObject` cannot do this: it checks a subset and is **blind to a field that is missing** |
+| **Client** | A fixture literal typed as the adapter's own interface, written with the key set the server test pins | The adapter's *type* drifting away from the contract — renaming a field breaks the **typecheck**, which is the check the cast cannot perform |
+
+`pages/admin/hijri-calendar.test.tsx` is the worked example of the client half. Both halves
+are cheap; neither substitutes for the other, because they fail on opposite drifts.
+
+A corollary worth stating: **do not declare one type for a read response and a write response
+that differ.** The Hijri write returns `hijri_year` and omits `month_name_ar`, so it has its
+own `HijriMonthRecorded`. Sharing one type across two shapes is what let the mismatch hide.
+
 #### Mock adapters: building a screen before its endpoint exists
 
 A screen may be built against a **mock adapter** when its endpoints are not yet specified —
