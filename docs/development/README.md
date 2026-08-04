@@ -14,12 +14,15 @@ Contributing to the platform.
 | [Testing](testing.md) | Four layers, what each is for, how to run them |
 | [CI/CD](ci-cd.md) | Every gate, what it catches, and why it was added |
 | [Documentation policy](documentation-policy.md) | Documentation as part of Done — the workflow and the per-change routing |
+| [Engineering efficiency](engineering-efficiency.md) | Progress per unit of context — slicing, verification proportionality, and the five things it may never economise on |
 
 **Constitution or conventions?** [The constitution](engineering-constitution.md) states
 *what must be true of any implementation* — the generic-first law, atomic composition, the
 reuse audit, the Definition of Done. [Conventions](conventions.md) states *how this codebase
 writes things down* — layering, naming, commits, the version policy. The first is why; the
-second is how.
+second is how. [Engineering efficiency](engineering-efficiency.md) is neither: it states *how
+to choose the work and the verification*, and is the only one of the three that constrains the
+process rather than the artefact.
 
 ## The working agreement, in short
 

@@ -51,6 +51,7 @@ divergence stays invisible until something breaks. One statement, many reference
 7. [Conventions](development/conventions.md) — the rules code review will hold you to
 8. [Engineering constitution](development/engineering-constitution.md) — **the laws every implementation must satisfy**
 9. [Documentation policy](development/documentation-policy.md) — why this directory is part of the definition of Done
+10. [Engineering efficiency](development/engineering-efficiency.md) — choosing the workflow, and the five things it may never economise on
 
 ### Everything else — in the sections below.
 
@@ -108,6 +109,7 @@ The technical core. Written for an engineer who has never seen the repository.
 | [CI/CD](development/ci-cd.md) | Every gate, what it catches, and why it was added |
 | [**Engineering constitution**](development/engineering-constitution.md) | **The laws every implementation must satisfy — required reading** |
 | [Documentation policy](development/documentation-policy.md) | Documentation as part of Done — the workflow and per-change routing |
+| [Engineering efficiency](development/engineering-efficiency.md) | Progress per unit of context — slicing, verification proportionality, and what efficiency may never buy |
 
 ### [Reference](reference/README.md) — lookup tables
 | | |

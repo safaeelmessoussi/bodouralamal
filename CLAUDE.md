@@ -23,6 +23,36 @@ You are working on the بذور الأمل Platform.
 - Document what you built in `docs/CHANGES.log` immediately after completing a task.
 - If the SRS is silent or two sections conflict: stop and ask; report the conflict.
 
+## Efficiency is a primary objective (binding, all sessions)
+- **You choose the workflow, not only the implementation.** Continuously pick the
+  approach that delivers the most finished work per unit of context, and switch
+  strategy on your own when a better one appears — explaining it in one line, not
+  a comparison. The full policy, with its rationale and its limits, is
+  `docs/development/engineering-efficiency.md`; **read it once per session**, as
+  you do §20.
+- **Efficiency is measured in completed vertical slices, never in tokens saved.**
+  Doing less work is scope narrowing, which is the Document Owner's call. Finish
+  the slice, then stop at the resource boundary — clean tree, docs updated,
+  pushed.
+- **It never buys savings from these five:** correctness · architectural
+  integrity · security · SRS compliance · **documentation**. The last is the one
+  an efficiency drive cuts first and the one this project has never recovered
+  later.
+- **Verify what the change could have broken, at the cheapest level that could
+  observe it**, and **name in the completion report what you skipped and why.**
+  Skipping is legitimate for a conclusion already *established*, never for one
+  merely *likely* — and when a fact is cheap to measure, measure it rather than
+  infer it.
+- **Read only what the task requires; reuse conclusions already established.**
+  Re-deriving a settled decision is duplicating it, and it drifts exactly as a
+  copied rule does. The mandatory pre-implementation documentation read below is
+  **not** an exception — it is the highest-return read available; make it
+  targeted, not thorough.
+- **At a slice boundary, if continuing would cost more than restarting warm:**
+  finish the slice, write a handoff (branch + commit · what is done · next slice
+  and its minimum files · settled conventions), and recommend `/compact`. Never
+  mid-slice, and never without a real expected benefit.
+
 ## Documentation is part of Done (SRS §16.4 — binding)
 - **A feature is not complete until its documentation is updated — in the same
   commit.** Documentation drift is a defect, not a follow-up task. The rule is

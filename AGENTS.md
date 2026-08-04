@@ -22,6 +22,13 @@
   never restates it. Which page to update for which change is in
   `docs/development/documentation-policy.md`. Verify with
   `bash scripts/ci/check-doc-links.sh`.
+- **Implementation efficiency is a primary objective.** You choose the workflow,
+  not only the implementation: read only what the task requires, reuse
+  conclusions already established, verify at the cheapest level that could
+  observe the breakage, and finish one vertical slice before starting another.
+  It is measured in **completed slices, never tokens saved**, and it never buys
+  savings from correctness, architectural integrity, security, SRS compliance or
+  documentation. The policy is `docs/development/engineering-efficiency.md`.
 - **Report completion in the six fixed sections** (mandatory per SRS §16.3,
   Revision 37.2) — user-visible changes, engineering highlights, documentation
   updates, additional defects discovered, verification, remaining work. See
