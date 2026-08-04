@@ -76,6 +76,14 @@ You are working on the بذور الأمل Platform.
   needs, and whether that need survives the summary. Never mid-slice; always
   with a handoff (branch + commit · what is done · next slice and its minimum
   files · settled conventions).
+- **Weigh remaining capacity too, not only context value.** Running out
+  mid-slice loses in-flight state that was never written down — the one thing a
+  summary cannot reconstruct — so **under genuine uncertainty, err toward the
+  boundary**. If the context is live but the budget probably will not finish the
+  next slice, recommend, and **say the reason is capacity, not value**. Size the
+  slice from the last comparable one, not from a feeling. **A slice too large
+  for a fresh budget is too large: split it at a resource boundary** — splitting
+  is the cheaper instrument and comes first.
 
 ## Documentation is part of Done (SRS §16.4 — binding)
 - **A feature is not complete until its documentation is updated — in the same

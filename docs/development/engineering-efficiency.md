@@ -233,6 +233,36 @@ recommendation turns on **live** context only:
   compresses that too, and the re-reads it forces are a real cost paid immediately, against a
   saving that is speculative.
 
+### Capacity, not only value
+
+Value is half the question. The other half is **whether the remaining budget can finish the
+next slice at all** — because the two failure modes are not symmetric:
+
+- Compacting one slice early costs a re-read or two.
+- **Running out mid-slice costs the in-flight state that was never written down** — the
+  half-formed decision, the reason the third attempt failed. That is the most expensive thing
+  in the conversation and the only thing a summary cannot reconstruct, and the policy forbids
+  compacting there precisely because of it.
+
+**So under genuine uncertainty, err toward the boundary.** The two questions compose:
+
+| | **Budget comfortably fits the slice** | **Budget probably will not** |
+|---|---|---|
+| **Context is live** | **Continue.** Say nothing. | **Recommend — and say the reason is capacity, not value**, so the loss is a known trade rather than a silent one |
+| **Context is spent** | **Continue.** Inert history is not a reason. | **Recommend.** The easy case |
+
+**Size the slice from the last comparable one**, not from a feeling: *this slice is ten
+operations against the last one's six, so roughly 1.5–2×*. That is an estimate with a basis;
+"it feels big" is not.
+
+**Corollary — a slice too large for a *fresh* budget is too large, full stop.** Split it at a
+resource boundary rather than starting work that will need compacting halfway through
+regardless. Splitting is the cheaper instrument, and it should be reached for first.
+
+**When capacity forces a compaction of live context**, the handoff carries the extra weight:
+name the concrete things that would otherwise be lost — file paths, the fixture pattern being
+copied, the decision just made — because that is exactly the material a summary flattens.
+
 ### Compaction is not free, so the default is not to recommend
 
 A compaction at the wrong moment costs a re-derivation of everything the summary drops, paid

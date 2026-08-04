@@ -430,7 +430,9 @@
   - ✓ `DELETE` answers `200 {released_students}`, not `204` — BR-22 forbids a silent release, and the count exists only at that moment
   - ✓ R43.3 authority split proven over HTTP: group CRUD `403` for a branch Admin, membership `201` for their own student, `404` (never `403`) for a student enrolled elsewhere
   - ✓ 21 HTTP tests; `pending-denial` rose 44 → 50 on its own from the generated document
-- [ ] TD-3.12 **Course Schedules** (incl. `/conflicts` and `/roster`) and **Sessions** (override / cancel / restore / content)
+- [ ] TD-3.12 **Course Schedules** (incl. `/conflicts` and `/roster`) — 6 operations
+- [ ] TD-3.12 **Sessions** (override / cancel / restore / content) — 4 operations
+  - Split from Course Schedules deliberately: ten operations in one slice does not fit a fresh context budget, and splitting at the resource boundary is cheaper than compacting halfway through ([why](development/engineering-efficiency.md#capacity-not-only-value))
 - [ ] TD-3.13 public library; `/calendar` filter set + `prefilled_filters`; `/calendar/sessions/{id}`
 - [ ] `/admin/groups` (+ roster), `/admin/schedules`, `/admin/levels/{id}/subjects/{subjectId}`, `/teacher/schedules`, Session page (§14.1)
 - [ ] Public calendar and public Educational Library — **same filters, same items, ordering only** for signed-in users (§5.2)
