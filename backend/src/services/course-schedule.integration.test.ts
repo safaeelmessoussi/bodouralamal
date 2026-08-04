@@ -19,7 +19,7 @@ import {
   linkContent,
   markHeld,
   overrideSession,
-  regenerateSession,
+  regenerateSessions,
   restoreSession,
   unlinkContent,
 } from './session.service.js';
@@ -847,7 +847,7 @@ describe('Revision 43.4 — a Session snapshots its teaching assignment', () => 
       data: { scheduleId: id, userId: replacement, position: 'teacher' },
     });
 
-    await regenerateSession(prisma, superAdmin(), past.id, held.version);
+    await regenerateSessions(prisma, superAdmin(), [past.id]);
 
     const after = await prisma.sessionStaff.findMany({
       where: { sessionId: past.id, deletedAt: null },
@@ -873,13 +873,178 @@ describe('Revision 43.4 — a Session snapshots its teaching assignment', () => 
     });
 
     const err = await failure(() =>
-      regenerateSession(
+      regenerateSessions(
         prisma,
         { userId: teacher, roles: ['teacher'], roleScopes: [{ role: 'teacher', branches: null }] },
-        s.id,
-        s.version,
+        [s.id],
       ),
     );
     expect(err.code).toBe('FORBIDDEN');
+  });
+});
+
+describe('Revision 43.5 — a Session carrying educational work is protected', () => {
+  /** Attaches a piece of educational content to a session — the one kind of
+   *  "work" that exists today. Attendance (§4.7) and notes (§10.1) join the
+   *  same predicate when they ship. */
+  async function attachWork(sessionId: string): Promise<string> {
+    const content = await prisma.educationalContent.create({
+      data: {
+        title: `${TAG} تسجيل`,
+        levelId,
+        academicYearId,
+        storageBucket: 'private',
+        storageKey: `${TAG}/w/${Date.now()}-${Math.random()}`,
+        originalFilename: 'lesson.mp3',
+        mimeType: 'audio/mpeg',
+        sizeBytes: BigInt(1024),
+      },
+    });
+    await linkContent(prisma, superAdmin(), sessionId, content.id);
+    return content.id;
+  }
+
+  it('a FUTURE session with work is protected — the rule is date-independent', async () => {
+    const { id } = await createCourseSchedule(prisma, superAdmin(), baseInput(), NOW);
+    // Well in the future, and NOT overridden: work alone must protect it.
+    const future = await prisma.session.findFirstOrThrow({
+      where: { scheduleId: id, date: day('2026-06-30') },
+    });
+    await attachWork(future.id);
+    expect(future.overridden).toBe(false);
+
+    const result = await updateCourseSchedule(
+      prisma,
+      superAdmin(),
+      id,
+      { weekdays: ['wednesday'], roomId: roomB, version: 0 },
+      NOW,
+    );
+
+    const after = await prisma.session.findUniqueOrThrow({ where: { id: future.id } });
+    expect(after.deletedAt).toBeNull();
+    // Neither deleted by the weekday change nor re-pointed by the room change.
+    expect(after.roomId).toBe(roomA);
+    expect(result.materialized.protectedSessions.map((p) => p.reason)).toContain('HAS_CONTENT');
+  });
+
+  it('a future session with work keeps its STAFF when the schedule changes hands', async () => {
+    const original = await person('الأستاذة الأولى');
+    const replacement = await person('الأستاذة الثانية');
+    const { id } = await createCourseSchedule(
+      prisma,
+      superAdmin(),
+      baseInput({ staff: [{ userId: original, position: 'teacher' }] }),
+      NOW,
+    );
+    const future = await prisma.session.findFirstOrThrow({
+      where: { scheduleId: id, date: day('2026-06-30') },
+    });
+    await attachWork(future.id);
+
+    await prisma.courseScheduleStaff.updateMany({
+      where: { scheduleId: id },
+      data: { deletedAt: new Date() },
+    });
+    await prisma.courseScheduleStaff.create({
+      data: { scheduleId: id, userId: replacement, position: 'teacher' },
+    });
+    await updateCourseSchedule(prisma, superAdmin(), id, { startTime: at(16), version: 0 }, NOW);
+
+    const staff = await prisma.sessionStaff.findMany({
+      where: { sessionId: future.id, deletedAt: null },
+      select: { userId: true },
+    });
+    expect(staff.map((x) => x.userId)).toEqual([original]);
+  });
+
+  it('DELETING the schedule also spares a future session carrying work', async () => {
+    // The path that used to re-implement the predicate inline. Before it was
+    // unified, attendance would have joined the protection for edits and not
+    // for deletes.
+    const { id } = await createCourseSchedule(prisma, superAdmin(), baseInput(), NOW);
+    const future = await prisma.session.findFirstOrThrow({
+      where: { scheduleId: id, date: day('2026-06-30') },
+    });
+    await attachWork(future.id);
+
+    await deleteCourseSchedule(prisma, superAdmin(), id, NOW);
+
+    expect((await prisma.session.findUniqueOrThrow({ where: { id: future.id } })).deletedAt).toBeNull();
+  });
+
+  it('regeneration requires the sessions to be NAMED — there is no blanket option', async () => {
+    const empty = await failure(() => regenerateSessions(prisma, superAdmin(), []));
+    expect(empty.code).toBe('VALIDATION_FAILED');
+    // An option that can be defaulted true is not a confirmation, so none exists.
+    expect(empty.details?.['reason']).toBe('NO_SESSIONS_NAMED');
+  });
+
+  it('naming a protected future session regenerates it, and records WHY it was protected', async () => {
+    const original = await person('الأستاذة الأولى');
+    const replacement = await person('الأستاذة الثانية');
+    const { id } = await createCourseSchedule(
+      prisma,
+      superAdmin(),
+      baseInput({ staff: [{ userId: original, position: 'teacher' }] }),
+      NOW,
+    );
+    const future = await prisma.session.findFirstOrThrow({
+      where: { scheduleId: id, date: day('2026-06-30') },
+    });
+    const contentId = await attachWork(future.id);
+
+    await prisma.courseScheduleStaff.updateMany({
+      where: { scheduleId: id },
+      data: { deletedAt: new Date() },
+    });
+    await prisma.courseScheduleStaff.create({
+      data: { scheduleId: id, userId: replacement, position: 'teacher' },
+    });
+    await updateCourseSchedule(prisma, superAdmin(), id, { roomId: roomB, version: 0 }, NOW);
+
+    await regenerateSessions(prisma, superAdmin(), [future.id]);
+
+    const after = await prisma.session.findUniqueOrThrow({ where: { id: future.id } });
+    expect(after.roomId).toBe(roomB);
+    const staff = await prisma.sessionStaff.findMany({
+      where: { sessionId: future.id, deletedAt: null },
+      select: { userId: true },
+    });
+    expect(staff.map((x) => x.userId)).toEqual([replacement]);
+
+    // The work itself SURVIVES: regeneration re-points the occurrence, it does
+    // not discard what someone attached to it.
+    expect(
+      await prisma.sessionContent.count({ where: { sessionId: future.id, deletedAt: null } }),
+    ).toBe(1);
+    expect(contentId).toBeTruthy();
+
+    const row = await prisma.auditLog.findFirstOrThrow({
+      where: { actionType: 'session.regenerate', targetId: future.id },
+    });
+    const detail = row.detail as { was_protected_for?: string; overwrote?: { staff?: string[] } };
+    expect(detail.was_protected_for).toBe('HAS_CONTENT');
+    expect(detail.overwrote?.staff?.join(',')).toContain(original);
+  });
+
+  it('regenerating several sessions at once still names each one', async () => {
+    const { id } = await createCourseSchedule(prisma, superAdmin(), baseInput(), NOW);
+    const a = await prisma.session.findFirstOrThrow({
+      where: { scheduleId: id, date: day('2026-06-16') },
+    });
+    const b = await prisma.session.findFirstOrThrow({
+      where: { scheduleId: id, date: day('2026-06-30') },
+    });
+    await attachWork(a.id);
+    await attachWork(b.id);
+
+    const result = await regenerateSessions(prisma, superAdmin(), [a.id, b.id]);
+    expect(result.regenerated.sort()).toEqual([a.id, b.id].sort());
+    expect(
+      await prisma.auditLog.count({
+        where: { actionType: 'session.regenerate', targetId: { in: [a.id, b.id] } },
+      }),
+    ).toBe(2);
   });
 });

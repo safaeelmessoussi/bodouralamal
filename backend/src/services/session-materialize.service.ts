@@ -86,10 +86,59 @@ export async function horizonFor(
 }
 
 /**
- * Which sessions must never be rewritten, and why.
+ * **THE protection predicate — one definition, every caller (§4.4, Revision
+ * 43.5).**
  *
- * Read as one query per protected kind rather than per session: at horizon
- * scale a per-row check would be an N+1 wearing a guard's clothing.
+ * A Session is protected from schedule-driven regeneration when it carries a
+ * human decision or **educational work**. §4.4 states this once and requires it
+ * to stay one predicate: *"as each kind of work ships it joins that predicate
+ * and every caller inherits the protection. A second copy of the test is how a
+ * future feature silently loses it."*
+ *
+ * **The protection is DATE-INDEPENDENT** (43.5). A recording attached to next
+ * Tuesday's class is exactly as much someone's labour as one attached to last
+ * Tuesday's, so a future session carrying work is as protected as a past one.
+ *
+ * **What counts, and where the rest will attach:**
+ *
+ * | Signal | Status |
+ * |---|---|
+ * | `overridden` — a human decided about this occurrence | built |
+ * | `status` is `held` or `cancelled` — it happened, or its absence is a record | built |
+ * | linked educational content — recordings, homework, materials (§4.9) | built |
+ * | attendance (§4.7) | **specified, deliberately unbuilt** — add its count here |
+ * | notes · announcements (§10.1) | **not yet specified as entities** — add here |
+ * | grades sat in this session | `Grade` has no session reference today; if one is added, add its count here |
+ *
+ * Adding a row to that table is the *whole* change needed to protect a new kind
+ * of work — which is the reason this is a table and not three `if`s scattered
+ * across three services.
+ */
+export const SELECT_FOR_PROTECTION = {
+  id: true,
+  date: true,
+  overridden: true,
+  status: true,
+  _count: { select: { linkedContent: { where: { deletedAt: null } } } },
+} as const;
+
+/** The reason one session is protected, or `null` if it may be regenerated. */
+export function protectionReason(session: {
+  overridden: boolean;
+  status: string;
+  _count: { linkedContent: number };
+}): string | null {
+  if (session.overridden) return 'OVERRIDDEN';
+  if (session.status !== 'scheduled') return `STATUS_${session.status.toUpperCase()}`;
+  if (session._count.linkedContent > 0) return 'HAS_CONTENT';
+  return null;
+}
+
+/**
+ * Protection reasons for a schedule's sessions from `from` onward.
+ *
+ * One query rather than one per session: at horizon scale a per-row check would
+ * be an N+1 wearing a guard's clothing.
  */
 async function protectedSessionIds(
   tx: Prisma.TransactionClient,
@@ -98,21 +147,13 @@ async function protectedSessionIds(
 ): Promise<Map<string, string>> {
   const sessions = await tx.session.findMany({
     where: { scheduleId, deletedAt: null, date: { gte: from } },
-    select: {
-      id: true,
-      date: true,
-      overridden: true,
-      status: true,
-      cancellationReason: true,
-      _count: { select: { linkedContent: { where: { deletedAt: null } } } },
-    },
+    select: SELECT_FOR_PROTECTION,
   });
 
   const reasons = new Map<string, string>();
   for (const s of sessions) {
-    if (s.overridden) reasons.set(s.id, 'OVERRIDDEN');
-    else if (s.status !== 'scheduled') reasons.set(s.id, `STATUS_${s.status.toUpperCase()}`);
-    else if (s._count.linkedContent > 0) reasons.set(s.id, 'HAS_CONTENT');
+    const reason = protectionReason(s);
+    if (reason !== null) reasons.set(s.id, reason);
   }
   return reasons;
 }

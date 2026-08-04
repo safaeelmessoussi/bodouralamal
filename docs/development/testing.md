@@ -14,7 +14,7 @@ Four layers, each testing something the others structurally cannot.
 **Coverage: ≥ 80 % on services and policies.** No coverage gate on generated or boilerplate
 code — a coverage number that counts generated clients measures nothing.
 
-Current totals: **133 backend unit · 632 integration · 219 frontend**.
+Current totals: **133 backend unit · 638 integration · 219 frontend**.
 
 ## Running them
 

@@ -83,9 +83,23 @@ answer, so the rows exist.
 1. **Idempotent** per `(schedule, date)`, enforced by a unique index. Re-running,
    retrying, or running twice concurrently creates nothing.
 2. **Never rewrites work.** A session someone has individually changed, or that
-   carries linked content, or that has been cancelled or held, is left exactly as
-   it is — **and reported back**, because a silent skip and a silent overwrite
-   are equally bad answers to *"what did my edit just do"*.
+   carries educational work — attendance, grades, recordings, notes, homework,
+   attached content — or that has been cancelled or held, is left exactly as it
+   is **and reported back**, because a silent skip and a silent overwrite are
+   equally bad answers to *"what did my edit just do"*. **The protection is
+   date-independent**: a recording attached to next Tuesday's class is as much
+   someone's labour as one attached to last Tuesday's.
+
+   **"Carries work" is one predicate with one definition**, shared by every
+   caller — materialization, schedule edits and schedule deletion all ask the
+   same function. As each kind of work ships it joins that predicate and every
+   caller inherits the protection. A second copy of the test is how a future
+   feature silently loses it, and the deletion path *did* carry one until it was
+   unified.
+
+   Overwriting a protected session is possible only by **naming it explicitly**.
+   There is no blanket "regenerate all" option and no flag on the edit: an option
+   that can be defaulted true is not a confirmation.
 3. **Never regenerates the past.** Generation starts at today, so a schedule
    edited in November does not resurrect September.
 4. **Snapshots the teaching assignment** (Revision 43.4). Room and staff are

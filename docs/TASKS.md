@@ -383,7 +383,8 @@
 - [x] `session.materialize` (TD-7): idempotent per `(schedule_id, date)`, academic-year horizon, nightly cron; **never rewrites an overridden session or one carrying work** (§20 rule 24)
   - ✓ Materializes **inside** the schedule-write transaction, so the calendar is never briefly empty
   - ✓ **Snapshots room + staff onto each occurrence (R43.4)**; re-syncs **future, un-overridden** sessions only, so a held class keeps the people who actually taught it
-  - ✓ `regenerateSession` is the explicit, Admin-only, audited path for re-aligning history
+  - ✓ **One shared protection predicate** (R43.5) — materialization, schedule edit and schedule delete all ask the same function; work-carrying sessions are protected **whatever their date**
+  - ✓ `regenerateSessions([ids])` is the explicit, Admin-only, audited path — sessions must be **named**, there is no blanket option, and regeneration never discards attached work
   - ✓ Reports what it left alone and why; proven by mutation — removing the protection fails 3 tests
   - ✓ **Recurrence expansion extracted to `lib/recurrence.ts`** and shared with `Event` rather than duplicated (§4.4); 25 unit tests incl. the alternating-week parity
 - [x] Session lifecycle (TD-1) + override/cancel/restore + `SessionContent` linking

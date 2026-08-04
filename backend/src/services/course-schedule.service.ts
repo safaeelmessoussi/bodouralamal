@@ -10,6 +10,8 @@ import {
   horizonFor,
   loadSchedule,
   materializeSchedule,
+  protectionReason,
+  SELECT_FOR_PROTECTION,
   type MaterializeResult,
 } from './session-materialize.service.js';
 
@@ -492,11 +494,16 @@ export async function deleteCourseSchedule(
   scope.assertCanActOnBranch(actor.roleScopes, MANAGING_ROLE, schedule.branchId, 'no such schedule');
 
   return prisma.$transaction(async (tx) => {
+    // The SAME predicate materialization uses (§4.4, Revision 43.5). This used
+    // to re-implement the test inline — `!overridden && linkedContent === 0` —
+    // which is exactly the second copy §4.4 forbids: attendance would have
+    // joined the protection in one place and not the other, and a delete would
+    // have quietly taken sessions a schedule edit refused to touch.
     const future = await tx.session.findMany({
-      where: { scheduleId: id, deletedAt: null, date: { gte: now }, status: 'scheduled' },
-      select: { id: true, overridden: true, _count: { select: { linkedContent: { where: { deletedAt: null } } } } },
+      where: { scheduleId: id, deletedAt: null, date: { gte: now } },
+      select: SELECT_FOR_PROTECTION,
     });
-    const removable = future.filter((s) => !s.overridden && s._count.linkedContent === 0);
+    const removable = future.filter((s) => protectionReason(s) === null);
 
     const stamp = new Date();
     await tx.session.updateMany({

@@ -5,6 +5,7 @@ import * as scope from '../policies/branch-scope.js';
 import { audienceSize, staffsSession } from '../policies/roster-resolution.js';
 import * as audit from '../repositories/audit.repository.js';
 import { updateWithVersion } from '../repositories/optimistic-lock.js';
+import { protectionReason } from './session-materialize.service.js';
 import type { Actor } from './branch.service.js';
 
 /**
@@ -454,31 +455,59 @@ async function replaceSessionStaff(
 }
 
 /**
- * **Explicitly re-aligns ONE past or held session with its schedule
- * (Revision 43.4).**
+ * **The one sanctioned path by which a PROTECTED Session is brought back into
+ * line with its schedule (§4.4, Revisions 43.4 / 43.5).**
  *
- * This is the only sanctioned path by which a Session that has already happened
- * is brought back into line, and it exists precisely so that act is
- * **deliberate and attributable** rather than a side effect of editing a
- * schedule. §4.4: *"Bringing history back into line with a schedule is an
- * explicit administrator action — never a side effect of an edit — and it is
- * audited as such."*
+ * A Session is protected when it has already happened **or when it carries
+ * educational work** — attendance, grades, recordings, notes, homework,
+ * attached content — and the protection is deliberately **date-independent**: a
+ * recording attached to next Tuesday's class is as much someone's labour as one
+ * attached to last Tuesday's.
  *
- * The audit row records **what it overwrote**, because after this runs the
- * previous truth exists nowhere else.
+ * **The caller must NAME the sessions.** There is no "regenerate everything"
+ * option and no flag on the schedule edit, by design: §4.4 requires *explicit*
+ * administrator confirmation, and **an option that can be defaulted true is not
+ * a confirmation**. The workflow is two steps on purpose — edit the schedule,
+ * read back which occurrences were left alone and why, then name the ones to
+ * overwrite.
  *
- * Admin-only: a teacher may edit the sessions they staff, but rewriting the
- * record of a class that has already been taught is not a teaching action.
+ * **Admin-only.** A teacher may edit the sessions they staff, but overwriting
+ * the record of a class that has already been taught, or discarding work
+ * someone attached to one, is not a teaching action.
+ *
+ * Each session is audited **with why it was protected and what was overwritten**,
+ * because after this runs the previous truth exists nowhere else.
  */
-export async function regenerateSession(
+export async function regenerateSessions(
+  prisma: PrismaClient,
+  actor: Actor,
+  sessionIds: string[],
+): Promise<{ regenerated: string[] }> {
+  if (!isAdmin(actor)) {
+    throw new AppError('FORBIDDEN', 'regenerating a protected session is an Admin action');
+  }
+  if (sessionIds.length === 0) {
+    throw new AppError('VALIDATION_FAILED', 'name the sessions to regenerate', {
+      reason: 'NO_SESSIONS_NAMED',
+    });
+  }
+
+  const done: string[] = [];
+  for (const sessionId of sessionIds) {
+    // Per session, not one transaction for the batch: each is a separate
+    // decision about a separate occurrence, and one failure must not silently
+    // undo the others the administrator confirmed.
+    await regenerateOne(prisma, actor, sessionId);
+    done.push(sessionId);
+  }
+  return { regenerated: done };
+}
+
+async function regenerateOne(
   prisma: PrismaClient,
   actor: Actor,
   sessionId: string,
-  version: number,
 ): Promise<Session> {
-  if (!isAdmin(actor)) {
-    throw new AppError('FORBIDDEN', 'regenerating a past session is an Admin action');
-  }
   const session = await loadForWrite(prisma, actor, sessionId);
 
   const schedule = await prisma.recurringCourseSchedule.findFirst({
@@ -492,24 +521,30 @@ export async function regenerateSession(
   });
   if (!schedule) throw new AppError('NOT_FOUND', 'the schedule no longer exists');
 
-  const before = await prisma.sessionStaff.findMany({
-    where: { sessionId, deletedAt: null },
-    select: { userId: true, position: true },
+  const [before, linked] = await Promise.all([
+    prisma.sessionStaff.findMany({
+      where: { sessionId, deletedAt: null },
+      select: { userId: true, position: true },
+    }),
+    prisma.sessionContent.count({ where: { sessionId, deletedAt: null } }),
+  ]);
+  const wasProtectedFor = protectionReason({
+    overridden: session.overridden,
+    status: session.status,
+    _count: { linkedContent: linked },
   });
 
   return prisma.$transaction(async (tx) => {
-    const updated = await updateWithVersion<Session>({
-      delegate: tx.session,
-      id: sessionId,
-      expectedVersion: version,
-      requireNotDeleted: true,
+    const updated = await tx.session.update({
+      where: { id: sessionId },
       data: {
         startTime: schedule.startTime,
         endTime: schedule.endTime,
         roomId: schedule.roomId,
-        // Regeneration re-aligns the occurrence with its schedule, so it is no
-        // longer a human's individual decision — clearing the flag is what
-        // makes that true rather than merely stated.
+        // Re-aligned with its schedule, so it is no longer a human's individual
+        // decision — clearing the flag is what makes that true rather than
+        // merely stated. Content links are NOT removed: regeneration re-points
+        // the occurrence, it does not discard the work attached to it.
         overridden: false,
       },
     });
@@ -527,6 +562,9 @@ export async function regenerateSession(
       detail: {
         date: session.date.toISOString().slice(0, 10),
         status: session.status,
+        // Why it was protected — the thing the administrator was asked to
+        // confirm they understood.
+        was_protected_for: wasProtectedFor,
         // What this overwrote. After this runs the previous truth exists
         // nowhere else, which is the whole reason the action is audited.
         overwrote: {
