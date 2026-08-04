@@ -32,13 +32,18 @@ The script wraps three things in **one transaction**:
 
 Deleting a user cascades: family links, group assignments, branch-role assignments, and
 identity deactivations. Restoring the user row alone produces **a half-restored, silently
-broken account** — a person who exists, can log in, and has no roles, no groups, and no
+broken account** — a person who exists, can log in, and has no roles, no enrolments, and no
 children.
 
 The runbook must explicitly capture and reinstate:
 
 - `FamilyLink`
-- `GroupTeacher`
+- `Enrollment` — **and with it the student's level membership**, which is stored nowhere
+  else (BR-21). A user restored without their enrolments has no level, no group and no
+  branch
+- `StudentTeachingGroup`
+- `CourseScheduleStaff` — a teacher restored without these staffs no courses, and any
+  schedule left with no `teacher` position must surface to Admins as unstaffed
 - `UserBranchRole`
 - `UserIdentity` deactivations
 

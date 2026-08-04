@@ -2,8 +2,8 @@
 
 # Business rules
 
-Twenty domain invariants, stated **without reference to any technology** — they must survive
-any future re-platforming intact.
+Twenty-three domain invariants, stated **without reference to any technology** — they must
+survive any future re-platforming intact.
 
 > **Precedence: where any other section conflicts with a business rule, the business rule
 > wins, and the conflict must be reported rather than silently resolved.**
@@ -25,12 +25,19 @@ missing row.
 → [Business processes](../overview/business-processes.md#2-consent)
 
 ### BR-2
-**Group consent gate.** If **any** currently-enrolled student in a group lacks effective
-media-release consent, **every session-recording resource of that group is non-public.** A
-continuously maintained invariant — re-evaluated on enrolment change, consent change, and
-upload — **not a point-in-time check.**
+**Session consent gate.** If **any** student in the audience a session resolves to lacks
+effective media-release consent, **every recording of that session is non-public.** The
+audience is the set of students the session is *for* — the whole level at that place, one
+organisational group, or one subject-specific group. A continuously maintained invariant —
+re-evaluated on enrolment change, split-group membership change, consent change, and upload
+— **not a point-in-time check.**
 
-*Enforced:* a job recomputes the whole group state and forces bucket migration.
+*Before SRS Revision 43* this rule named a "group"; once a session could be for a
+subject-specific split or an entire level, that word had no referent.
+
+*Enforced:* a job recomputes the whole session state and forces bucket migration. Content
+referenced by several sessions is gated by the **union** of their audiences — otherwise
+privacy would depend on which route a viewer took to the file.
 → [Storage](../architecture/storage.md#consent-gating)
 
 ### BR-3
@@ -141,10 +148,54 @@ actor and timestamp.
 *Note:* the restoration **interface** may be manual in early phases; **the snapshot and the
 window are non-negotiable.**
 
+---
+
+## Scheduling and organisation
+
 ### BR-17
-**Group-driven scheduling.** A student's weekly class time is implied by group enrolment;
-events are exceptions layered on top, **never the source of the routine schedule.** Week
-starts Monday.
+**Schedule-driven teaching; organisation is separate from delivery.** A student's class
+times come from the recurring course schedules that target them; those schedules produce
+dated occurrences, and an occurrence may be changed or cancelled **without changing the
+schedule it came from**. **The group a student is organised into is not the group they are
+taught in** — a subject may split its students differently, and one student may sit in
+several such splits at once, one per subject. Non-teaching activity is a separate layer and
+**never the source of the routine timetable.** Week starts Monday.
+
+*Before SRS Revision 43* this rule read *"a student's weekly class time is implied by group
+enrolment"*, which held only while one group could mean one timetable slot.
+
+### BR-21
+**One organisational group per level, and it is where the student's place is.** A student
+may be enrolled in several levels at once and belongs to **exactly one** organisational
+group in each. That group also states **which branch the student attends** — the branch an
+applicant *requested* at registration is a request and never the answer. A student's level
+membership is **never recorded separately** from their group membership; the two cannot be
+allowed to disagree.
+
+*Enforced:* a unique constraint on (student, level), made possible by a composite foreign
+key that forces the enrolment's level to agree with its group's. **The database refuses a
+disagreeing row** — this is not a service-layer check.
+
+### BR-22
+**A subject-specific split is optional, and an unplaced student is never silent.** A subject
+is taught to the whole level unless deliberately split; where it has been, each student
+holds **at most one** split-group for that subject in that level. A student enrolled in the
+level who has not been placed into any split-group for a split subject **must be surfaced as
+unplaced** — such a student has no classes for that subject, and the platform is required to
+say so rather than let the gap pass unnoticed.
+
+### BR-23
+**Room capacity informs, it never refuses.** The stated capacity of a room is displayed to
+help whoever is planning and **constrains nothing**. No enrolment, placement or scheduling
+action is refused on capacity grounds; the person assigning the room is responsible for its
+suitability.
+
+*Consequence:* there is no "group full" error and no capacity row-lock. **Re-introducing a
+capacity rule would require re-introducing the lock** that guarded it.
+
+---
+
+## Legal and localization
 
 ### BR-18
 **Data residency.** All real personal data, **including backups**, resides on Moroccan
@@ -168,7 +219,7 @@ to **correct Arabic alphabetical order — never codepoint order.**
 | | Rule | Domain |
 |---|---|---|
 | [BR-1](#br-1) | Consent default is no consent | Consent |
-| [BR-2](#br-2) | Group consent gate | Consent |
+| [BR-2](#br-2) | Session consent gate | Consent |
 | [BR-3](#br-3) | Override is Admin-only, justified | Consent |
 | [BR-4](#br-4) | Approval before access | Access |
 | [BR-5](#br-5) | Minors login-less, verified per action | Safeguarding |
@@ -183,10 +234,13 @@ to **correct Arabic alphabetical order — never codepoint order.**
 | [BR-14](#br-14) | Three visibility tiers | Content |
 | [BR-15](#br-15) | Nothing destroyed silently | Data |
 | [BR-16](#br-16) | Case-file data need-to-know | Safeguarding |
-| [BR-17](#br-17) | Group-driven scheduling | Scheduling |
+| [BR-17](#br-17) | Schedule-driven teaching | Scheduling |
 | [BR-18](#br-18) | Data residency | Legal |
 | [BR-19](#br-19) | Ordering is intentional | Localization |
 | [BR-20](#br-20) | Global reach is a privilege | Content |
+| [BR-21](#br-21) | One organisational group per level | Scheduling |
+| [BR-22](#br-22) | Split is optional; unplaced is never silent | Scheduling |
+| [BR-23](#br-23) | Room capacity informs, never refuses | Scheduling |
 
 ---
 

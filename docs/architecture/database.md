@@ -19,21 +19,29 @@ erDiagram
     Role ||--o{ UserBranchRole : ""
     Branch ||--o{ UserBranchRole : "scopes"
     Branch ||--o{ Room : ""
-    Branch ||--o{ Group : ""
+    Branch ||--o{ AdministrativeGroup : ""
+    Branch ||--o{ RecurringCourseSchedule : ""
     Category ||--o{ Level : ""
-    Level ||--o{ Group : ""
+    Level ||--o{ AdministrativeGroup : ""
+    Level ||--o{ TeachingGroup : ""
     Level ||--o{ LevelSubject : ""
     Level ||--o{ LevelSurah : ""
     Subject ||--o{ LevelSubject : ""
+    Subject ||--o{ TeachingGroup : ""
+    Subject ||--o{ RecurringCourseSchedule : ""
     QuranSurah ||--o{ LevelSurah : ""
     QuranSurah ||--o{ QuranProgressLog : ""
-    Room ||--o{ Group : ""
-    Group ||--o{ GroupTeacher : "co-teaching"
-    Group ||--o{ StudentGroup : "roster"
+    Room ||--o{ RecurringCourseSchedule : ""
+    AdministrativeGroup ||--o{ Enrollment : "roster"
+    TeachingGroup ||--o{ StudentTeachingGroup : "subject split"
+    RecurringCourseSchedule ||--o{ CourseScheduleStaff : "teacher + assistants"
+    RecurringCourseSchedule ||--o{ Session : "materialized"
+    Session ||--o{ SessionContent : "references"
+    EducationalContent ||--o{ SessionContent : ""
     Event ||--o{ EventBranch : ""
     Event ||--o{ EventCategory : ""
     Event ||--o{ EventLevel : ""
-    Event ||--o{ EventGroup : ""
+    Event ||--o{ EventAdministrativeGroup : ""
     Exam ||--o{ StudentExamSubmission : ""
     Exam ||--o{ Grade : ""
     User ||--o{ QuranProgressLog : "student"
@@ -147,13 +155,39 @@ the consent job's forced visibility changes.
 | `RateLimitCounter (user_id, bucket, window_start)` | What makes the increment safe under concurrency |
 | `User.pre_provisioned_email` among non-null | Two accounts must never claim one address, or a first login is ambiguous about which it binds |
 | `RefreshToken.token_hash` | Makes "presented token → exactly one row" a lookup, not a scan |
+| `Enrollment (student_id, level_id)` **where not deleted** | **Exactly one organisational group per enrolled level** (BR-21). Only expressible because `level_id` sits on the enrolment row — see below |
+| `AdministrativeGroup (id, level_id)` | Redundant against the primary key **on purpose**: PostgreSQL requires a unique constraint on the referenced pair before `Enrollment` can declare its composite foreign key |
+| `StudentTeachingGroup` — at most one per `(student, subject, level)` **where not deleted** | At most one split-group per subject (BR-22). `subject` and `level` come from the teaching group, so this is a **functional** index over the join, hand-written |
+| `Session (schedule_id, date)` | What makes `session.materialize` idempotent — a second run creates no duplicate occurrence |
+
+#### The composite foreign key on `Enrollment`
+
+`Enrollment` carries `level_id` **as well as** `administrative_group_id`, which looks like
+duplication and is not. A composite foreign key
+`(administrative_group_id, level_id) → AdministrativeGroup(id, level_id)` makes the database
+**refuse** a row whose level disagrees with its group's.
+
+That is the whole point. The invariant "exactly one group per enrolled level" spans two
+hops, and a plain unique index cannot express it. The alternatives were a trigger or a
+service-layer check — both of which can be bypassed and neither of which the database
+enforces. With the composite FK the redundant column is a *constraint*, not a copy, so
+there is no second source of truth to drift.
+
+**Never drop this FK to "simplify" the schema.** Removing it turns `Enrollment.level_id`
+into exactly the kind of copy that the platform has been burned by before.
 
 ### Checks
 
 - `QuranProgressLog`: `start_ayah >= 1 AND start_ayah <= end_ayah`. The upper bound against
   the Surah's total crosses tables, so it is a **trigger** plus a service check.
 - All stored scores: `>= 0 AND <= 10000`. **No float score column exists anywhere.**
-- `display_order >= 0`; `Group.max_students > 0`; `Group.start_time < end_time`.
+- `display_order >= 0`; `RecurringCourseSchedule.start_time < end_time`;
+  `Session.start_time < end_time`; `Room.capacity > 0` **when present — a shape check only,
+  because nothing compares a roster against it** (BR-23).
+- `RecurringCourseSchedule`: **exactly one target FK is non-null and it matches
+  `teaching_mode`.** A mode without its target, or a target without its mode, is a schedule
+  nothing can resolve a roster for. Also `recurrence <> 'none'` — a non-recurring occurrence
+  is an Event, not a schedule.
 - `AcademicYear.label` matches `^\d{4}-\d{4}$`.
 - `HijriMonthStart`: month 1–12; year 1300–1600 (brackets any date this platform will render
   while rejecting a mistyped Gregorian year); **two months of one year may not share a start

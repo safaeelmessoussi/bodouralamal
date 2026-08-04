@@ -234,6 +234,14 @@
   - ⓘ Seeding unchanged: §15.1 still prohibits production branch seeding; the **development fixtures** carry the two real premises
 
 ## M3 — Scheduling & Calendar
+> **⚠ SUPERSEDED IN PART BY SRS REVISION 43 (2026-08-04).** The Group-driven scheduling built and signed off
+> below is **retired**: `Group` becomes `AdministrativeGroup` (organisation only — no room, teacher, schedule or
+> capacity), delivery moves to `RecurringCourseSchedule → Session`, and `GroupTeacher` is replaced by
+> `CourseScheduleStaff`. **The ticks below stay ticked** — they record what was genuinely built and is now being
+> replaced, and rewriting them would erase the history that explains why M3b exists. Everything still in force
+> here is the **Event layer** (non-teaching activity, four-way scope joins, visibility tiers, branch-activation
+> backfill) and the **Hijri overlay**. New work: **M3b**.
+
 > **Carry-over from Revision 26 (recorded in the pre-M3 sweep):** Levels, Categories, Subjects, AcademicYear and
 > SystemSettings are **reference/configuration data — writes are Super Admin only, reads are Admin (branch-scoped)**.
 > None of them has an endpoint yet, so the rule is currently unenforced for want of a surface; it must be applied when
@@ -333,6 +341,38 @@
   - ✓ *operational-start-date gating* — **and a weak assertion was found and fixed while signing this off**: `[].every()` is true, so the boundary check would have passed had the filter removed everything. It now proves the after-side survives and that the pre-boundary event is specifically gone; mutation-tested by ignoring the floor
   - △ The *graying* itself is frontend; the backend returns nothing before the boundary
 
+## M3b — Educational Model (SRS Revision 43)
+
+> **Inserted before M4 by Document Owner decision.** M4 and M5 both resolve students through the group model;
+> building them against the retired `Group` would mean writing them twice. Nothing in M4+ starts until this is green.
+
+**Schema & migrations (expand → migrate → contract, TD-6b — three deployments, never one)**
+- [ ] *Expand:* `AdministrativeGroup` (+ the redundant `UNIQUE (id, level_id)` the composite FK needs), `TeachingGroup`, `StudentTeachingGroup`, `Enrollment`, `RecurringCourseSchedule`, `CourseScheduleStaff`, `Session`, `SessionContent`; `Room.capacity`; `EducationalContent.subject_id` required (§7)
+- [ ] Hand-written SQL (TD-6a): the **composite FK** `(administrative_group_id, level_id) → AdministrativeGroup(id, level_id)`, `UNIQUE (student_id, level_id)` partial, the **functional** at-most-one-per-(student, subject, level) index, the schedule mode/target CHECK, `UNIQUE (schedule_id, date)`, `ar-x-icu` on the new `name` columns
+- [ ] *Migrate:* backfill each existing `Group` into an `AdministrativeGroup` + one `RecurringCourseSchedule` carrying its slot; `StudentGroup` → `Enrollment`; `GroupTeacher` → `CourseScheduleStaff`; `EventGroup` → `EventAdministrativeGroup`; `Grade.group_id` → `administrative_group_id`
+- [ ] *Contract (separate, later migration):* drop `Group.day_of_week/start_time/end_time/room_id/max_students`, `EducationalContent.event_id`, and the retired tables — tagged with its contract-phase justification for `check-migration-drop-rename.sh`
+
+**Domain**
+- [ ] Level creation auto-creates المجموعة 1 in the same transaction (TD-4.6b, §4.4b)
+- [ ] Roster resolution — one implementation serving all three teaching modes (§4.4c); **Entire Level is branch-bound**
+- [ ] Teacher scope from `CourseScheduleStaff` — **replaces `policies/teacher-scope.ts`'s `GroupTeacher` resolution**, one module, every consumer migrated (TD-2, §4.4c)
+- [ ] Teaching Groups + membership, and the **`unassigned` list** (BR-22)
+- [ ] Course schedule CRUD with conflict detection **against materialized Sessions** — room, teacher **and assistant** — under the TD-4.6c row lock; `SCHEDULE_CONFLICT`
+- [ ] `session.materialize` (TD-7): idempotent per `(schedule_id, date)`, academic-year horizon, nightly cron; **never rewrites an overridden session or one carrying work** (§20 rule 24)
+- [ ] Session lifecycle (TD-1) + override/cancel/restore + `SessionContent` linking
+- [ ] Approval assigns Levels and one Administrative Group each, in the approval transaction (TD-4.2, §4.1)
+- [ ] Quran as a schedulable Subject **with the BR-9 carve-out** — a Quran `LevelSubject` generates no grading components (§4.4b)
+- [ ] Consent gate re-subjected to the session's resolved audience; `consent.reevaluate` payload `{ session_id }` (BR-2, TD-7)
+- [ ] Retire `CAPACITY_FULL` and the roster row-lock; `Room.capacity` informational (BR-23, TD-15.2)
+
+**API & screens**
+- [ ] TD-3.12 educational organisation & delivery endpoints; TD-3.13 public library; `/calendar` filter set + `prefilled_filters`; `/calendar/sessions/{id}`
+- [ ] `/admin/groups` (+ roster), `/admin/schedules`, `/admin/levels/{id}/subjects/{subjectId}`, `/teacher/schedules`, Session page (§14.1)
+- [ ] Public calendar and public Educational Library — **same filters, same items, ordering only** for signed-in users (§5.2)
+
+**Gates**
+- [ ] §18 *Educational Model* checklist green — including the §19.2 named regressions: composite-FK rejection **attempted directly in SQL**, weekly-vs-biweekly conflict on the alternating week, double-`materialize` idempotency, schedule edit sparing an overridden session, and anonymous-vs-authenticated parity on `/calendar` and `/library`
+
 ## M4 — Quran Progress
 - [ ] QuranProgressLog CRUD (teacher-scoped) with soft delete (TD-5)
 - [ ] Interval-merge union engine + percentage vs total_ayahs (BR-13)
@@ -349,7 +389,7 @@
 - [ ] Access policies single_submission / save_and_resume + submission lifecycle (TD-1)
 - [ ] All scores as integer bp (0–10,000), round-half-up once at persistence; no float score columns (§4.6, TD-6)
 - [ ] MCQ auto-grade → draft Grade; subjective grading flow; absent-zero rows initialized at first draft save (BR-7, §4.6)
-- [ ] Grade.group_id sitting provenance + aggregation scoped to active-template exams × currently-enrolled students (§4.6)
+- [ ] `Grade.administrative_group_id` sitting provenance (R43) + aggregation scoped to active-template exams × currently-enrolled students (§4.6)
 - [ ] Grade + User optimistic versioning incl. recalc-job participation (TD-15)
 - [ ] Postponement check: no template tables/UI/recalc anywhere (§10.1)
 - [ ] Pass/fail override endpoint + audit (TD-8)
@@ -364,7 +404,7 @@
 - [ ] FileUploader: progress, failure, clean retry (R-9) (§14.3)
 - [ ] Phone-recording upload guidance panel on /teacher/content (§4.9); cross-browser playback E2E for TD-9 containers (§14.7)
 - [ ] Visibility transitions + bucket-migrate job + `/content-unavailable` (§3.1, TD-4.9)
-- [ ] Consent re-evaluation engine wired to enrollment/consent/upload; consent_forced_private; empty-group → Category default (§4.1a, §4.9, BR-2)
+- [ ] Consent re-evaluation engine wired to enrollment/teaching-group membership/consent/upload; consent_forced_private; **empty resolved audience → Category default** (§4.1a, §4.9, BR-2 as restated by R43)
 - [ ] Admin-only consent-gate override with mandatory justification + audit (BR-3, TD-8)
 - [ ] Presigned GET mint with full permission + child-context check, 10 min TTL (TD-12)
 - [~] Resources directory nesting: Category→Level→Year(current pinned)→Branch(Global top)→Subject (§5.2)

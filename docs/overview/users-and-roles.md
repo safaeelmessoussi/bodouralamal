@@ -46,9 +46,10 @@ Fatima
 ```
 
 **A teacher's reach is narrower still.** Holding the Teacher role does not grant access to
-any group. Teaching access resolves **exclusively** through group assignment
-(`GroupTeacher`), so a teacher sees the students in the groups they actually teach and no
-others.
+anyone. Teaching access resolves **exclusively** through the course schedules a person
+staffs (`CourseScheduleStaff`), so a teacher sees the students of the courses they actually
+teach and no others — and their branch scope is stated directly on the schedule rather than
+inferred. The same table holds assistants, which is why there is no separate assistant role.
 
 **What is deliberately not a scope.** Category and Level scoping are *reserved for future
 revisions*, not forbidden — a category-wide administrator is anticipated. Functional

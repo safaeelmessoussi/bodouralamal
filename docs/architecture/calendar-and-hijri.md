@@ -5,35 +5,57 @@
 The calendar is the platform's most visible surface — it is on the landing page, open to
 anonymous visitors — and its two halves each contain a decision worth understanding.
 
-## Scheduling is group-driven
+## Scheduling is schedule-driven
 
-The inverse of most calendar systems, and the source of most of this design.
+Organisation and delivery are **separate**, and the calendar is where that separation
+becomes visible.
 
 ```
-Group  ──  the SCHEDULING UNIT
-           carries its own fixed weekly slot:
-           day_of_week · start_time · end_time · room · branch · max_students
+ORGANISATION  (who is grouped with whom)
+  AdministrativeGroup ── level + branch + name.  NO room, teacher, schedule or capacity.
+  TeachingGroup       ── subject + level.  Exists ONLY where a subject splits its students.
 
-Student enrols in a Group
-   └─ and thereby acquires that standing weekly class time
+DELIVERY  (what is taught, when, by whom, where)
+  RecurringCourseSchedule
+      subject · teaching_mode + ONE target · branch · room · teacher + assistants
+      start_time · end_time · recurrence
+      teaching_mode ∈ entire_level | administrative_group | teaching_group
 
-Event  ──  the EXCEPTION LAYER
-           holidays · one-off activities · exams · makeup sessions · ceremonies
-           anything that is NOT "this group's normal weekly slot"
+           │  session.materialize  (pg-boss, eager, to the academic-year horizon)
+           ▼
+  Session ── ONE DATED OCCURRENCE
+      carries its OWN date · time · room · teacher · status
+      defaulted from the schedule, individually overridable
+      notes · recordings · linked content · (later) attendance hang HERE
+
+NON-TEACHING  (everything that is not a class)
+  Event  ── holidays · ceremonies · exams · one-off activities
+            NEVER generates a Session
 ```
 
-**There is no per-session object.** Nothing is generated week by week, so nothing has to be
-regenerated when a group's time changes. A group's schedule *is* its columns.
+**Sessions are materialized eagerly, not computed on read**, and the reason is conflict
+detection. Comparing recurrence *rules* cannot see that a weekly and a biweekly-alternating
+Tuesday 15:00 collide only on alternate weeks. Comparing materialized rows can, so overlap
+checks on room, teacher **and assistant** are exact rather than approximate.
 
-The calendar renders a unified grid of both: expanded group occurrences and events, in one
-list.
+**A session edit is not a schedule edit.** Cancelling a class, moving it to another room, or
+adding a makeup are edits to a *session row*, which marks it `overridden`. The next schedule
+edit then leaves it alone — as it leaves alone any session carrying a note, a recording, a
+content link or a grade — and reports what it skipped. Silently discarding a human decision
+is the failure this rule exists to prevent.
 
-> [`BR-17`](../reference/business-rules.md#br-17) · SRS §4.4
+The calendar renders a unified grid of both sessions and events, in one list. **It is
+public**: anonymous visitors get the same filter set as signed-in users, who additionally
+get those filters *prefilled* from their profile. Identical filters never means identical
+results — every result set stays visibility-filtered.
+
+> [`BR-17`](../reference/business-rules.md#br-17) ·
+> [`BR-23`](../reference/business-rules.md#br-23) · SRS §4.4, §4.4c
 
 ## Wall-clock time, and the Ramadan trap
 
-**Group and event times are local Moroccan wall-clock values** — a `time` or `date` with an
-implicit timezone — **not UTC instants.** Persisted timestamps (`created_at`, audit rows,
+**Schedule, session and event times are local Moroccan wall-clock values** — a `time` or
+`date` with an implicit timezone — **not UTC instants.** Persisted timestamps (`created_at`, audit rows,
 job times) are UTC; scheduled times are not.
 
 The specification calls this out as *a known agent trap*, and it is worth the space:

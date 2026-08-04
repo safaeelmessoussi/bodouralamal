@@ -113,37 +113,71 @@ and forces the flip.
 
 ## 3. Scheduling
 
-**Scheduling is group-driven, not event-driven** — the inverse of most calendar systems,
-and the source of a lot of the design.
+**Organisation and delivery are separate, and that separation is the whole design**
+(SRS Revision 43). Until that revision one entity was a roster, a timetable slot, a room
+booking and a teacher assignment all at once, which is why a student could sit in only one
+slot per level and why a level could not teach two subjects at different times to
+differently-split students.
 
-A **Group** is the scheduling unit. It carries its own fixed weekly slot: day of week,
-start and end time, room, branch, and capacity. A student enrolling in a group thereby
-acquires that standing weekly class time. **There is no per-session object.** Nothing is
-generated week by week.
+**Administrative Group** — the permanent organisational unit inside a Level. It carries a
+level, a branch, and a name, and **nothing else**: no room, no teacher, no schedule, no
+capacity. It is the roster used for organisation, reporting, communication, the default
+timetable and (later) attendance. A student belongs to one or more Levels and to **exactly
+one Administrative Group in each**. That group is also the answer to *which branch is this
+person at* — the branch chosen at registration is a request, not a placement.
 
-**Events are the exception layer** on top: holidays, one-off activities, exams, makeup
-sessions, ceremonies — anything that is not "this group's normal weekly slot". An event may
-apply to several branches, categories, levels, or groups at once, and those relationships
-are **written explicitly at creation time** rather than evaluated as wildcards at read
-time.
+**Teaching Group** — a subject-specific split, belonging to a Subject and a Level. It
+exists **only** when a subject needs students divided differently from the administrative
+roster. Tafsir is often taught to the whole level while Quran runs in three parallel
+groups, and the splits are **independent between subjects**: one student may be in
+Administrative Group 1, Quran Group 2 and Tajweed Group 1 at once.
 
-Recurrence supports none, daily, weekly, **biweekly-alternating** ("week on, week off"),
-and yearly. The alternating pattern is modelled and tested explicitly because it is the one
-that naive implementations get wrong.
+**Recurring Course Schedule** — the unit of delivery. Subject, teaching mode, branch, room,
+teacher, assistants, times, recurrence. The **teaching mode** — entire level, one
+administrative group, or one teaching group — belongs here and nowhere else, because the
+same level teaches one subject whole and another split.
+
+**Session** — one dated occurrence, materialized ahead of time by a background job. Each
+session carries its own date, time, room and teacher, defaulted from its schedule and
+individually changeable, which is what makes a cancellation, a room change or a makeup
+class an *edit to a session* rather than a second scheduling mechanism. Notes, recordings,
+linked content and (later) attendance all hang here.
+
+**Events are the non-teaching layer**: holidays, ceremonies, exams, one-off activities. An
+event may apply to several branches, categories, levels, or administrative groups at once,
+and those relationships are **written explicitly at creation time** rather than evaluated
+as wildcards at read time. **Events never generate sessions**, and a class is never an
+event.
+
+Recurrence is **one shared vocabulary** used by both schedules and events — none, daily,
+weekly, multiple weekdays, **biweekly-alternating** ("week on, week off"), monthly, yearly
+— deliberately not modelled twice. The alternating pattern is modelled and tested
+explicitly because it is the one naive implementations get wrong, and because conflict
+detection has to see that a weekly and a biweekly class collide only on alternate weeks.
+That last point is why sessions are materialized eagerly rather than computed on read:
+overlap is checked against real rows, so the answer is exact.
 
 ### Two rules that look small and are not
 
 **Times are wall-clock, never UTC instants.** Morocco observes UTC+1 but **suspends DST
 during Ramadan every year**. A weekly class stored as a UTC instant would silently shift by
-an hour, twice a year, for every group in the system. A class at 17:00 is at 17:00 on the
+an hour, twice a year, for every class in the system. A class at 17:00 is at 17:00 on the
 wall clock, always.
+
+**Room capacity informs; it never refuses.** The number is shown to whoever is planning and
+constrains nothing — no enrolment, placement or scheduling action is blocked by it. The
+person assigning the room is responsible for its suitability, and administrative groups
+carry no capacity at all because they have no room.
 
 **Branches have an operational start date.** Calendar grids scoped to a branch grey out
 every date before it. When a branch activates, an Admin performs a **manual backfill** to
 attach the applicable global and recurring events — or knowingly skips it. The gap is never
 silently auto-filled and never silently ignored.
 
-> [`BR-17`](../reference/business-rules.md#br-17) · SRS §4.4, TD-11 ·
+> [`BR-17`](../reference/business-rules.md#br-17) ·
+> [`BR-21`](../reference/business-rules.md#br-21) ·
+> [`BR-22`](../reference/business-rules.md#br-22) ·
+> [`BR-23`](../reference/business-rules.md#br-23) · SRS §4.4, §4.4c, TD-11 ·
 > [Calendar and Hijri](../architecture/calendar-and-hijri.md)
 
 ---
