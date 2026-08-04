@@ -293,6 +293,21 @@ Empirically, four things — anything else is re-derivable:
 
 ---
 
+## This policy is frozen
+
+**Document Owner direction, 2026-08-05.** The policy is complete. Treat it like production
+code: **change it when experience shows it is missing something, never because it could be
+phrased better.**
+
+The bar for an edit is the same one a bug fix meets — **cite the incident.** A change names
+the failure encountered during implementation, what it cost, and why no existing clause
+covered it. A refinement that cannot name one is not a refinement; it is
+[process work displacing implementation](#process-optimisation-is-subordinate-to-implementation),
+which this document already forbids.
+
+Polishing this page is the single most seductive form of that displacement, because it *looks*
+like the policy is being taken seriously. It is not. **Shipping the next slice is.**
+
 ## Why this is written down
 
 Two reasons, both learned here.
