@@ -27,6 +27,10 @@ import type { Prisma } from '../generated/prisma/client.js';
 /** TD-7 job names. Kept here so the enqueue side cannot drift from the runner. */
 export const JOB_QUEUES = {
   consentReevaluate: 'consent.reevaluate',
+  /** TD-7, Revision 43. Singleton per schedule: several edits collapse into one
+   *  pending job, which is safe because materialization is a full idempotent
+   *  reconcile rather than a delta. */
+  sessionMaterialize: 'session.materialize',
 } as const;
 
 /**

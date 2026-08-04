@@ -1,0 +1,635 @@
+import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+
+import { loadConfig } from '../lib/config.js';
+import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
+import type { RoleScope } from '../policies/branch-scope.js';
+import type { Actor } from './branch.service.js';
+import { createAdministrativeGroup } from './administrative-group.service.js';
+import { createLevel } from './level.service.js';
+import {
+  createCourseSchedule,
+  deleteCourseSchedule,
+  previewConflicts,
+  updateCourseSchedule,
+  type CourseScheduleInput,
+} from './course-schedule.service.js';
+import { runMaterialization } from './session-materialize.service.js';
+import {
+  cancelSession,
+  linkContent,
+  markHeld,
+  overrideSession,
+  restoreSession,
+  unlinkContent,
+} from './session.service.js';
+
+/**
+ * Course schedules, materialization, and the session lifecycle — SRS §4.4,
+ * §4.4c, TD-1, TD-4.6c, TD-7, TD-15.2, BR-23, §20 rule 24.
+ *
+ * **The alternating-week conflict is the headline case** (§19.2 names it): a
+ * weekly and a biweekly-alternating class in one room collide **only on
+ * alternate weeks**, and comparing recurrence rules cannot see that. It is the
+ * stated justification for materializing eagerly, so it is tested against real
+ * session rows rather than against the expansion function.
+ */
+const config = loadConfig();
+const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);
+const TAG = '[schedule-test]';
+
+/** Fixed "today" so every horizon and every expected date is deterministic. */
+const NOW = new Date('2026-06-01T08:00:00.000Z');
+const at = (hh: number, mm = 0): Date => new Date(Date.UTC(1970, 0, 1, hh, mm, 0));
+const day = (iso: string): Date => new Date(`${iso}T00:00:00.000Z`);
+
+let categoryId: string;
+let actorUserId: string;
+let branchId: string;
+let otherBranchId: string;
+let levelId: string;
+let groupId: string;
+let roomA: string;
+let roomB: string;
+let subjectId: string;
+let academicYearId: string;
+
+const actorOf = (scopes: RoleScope[]): Actor => ({
+  userId: actorUserId,
+  roles: scopes.map((s) => s.role),
+  roleScopes: scopes,
+});
+const superAdmin = (): Actor => actorOf([{ role: 'super_admin', branches: null }]);
+const admin = (branches: string[]): Actor => actorOf([{ role: 'admin', branches }]);
+
+async function failure(
+  run: () => Promise<unknown>,
+): Promise<{ code?: string; details?: Record<string, unknown> }> {
+  try {
+    await run();
+    return {};
+  } catch (e) {
+    return e as { code?: string; details?: Record<string, unknown> };
+  }
+}
+
+async function person(label: string): Promise<string> {
+  const u = await prisma.user.create({
+    data: { nameArabic: `${TAG} ${label}`, accountStatus: 'active' },
+  });
+  return u.id;
+}
+
+const baseInput = (over: Partial<CourseScheduleInput> = {}): CourseScheduleInput => ({
+  subjectId,
+  teachingMode: 'administrative_group',
+  targetId: groupId,
+  branchId,
+  roomId: roomA,
+  startTime: at(15),
+  endTime: at(17),
+  recurrence: 'weekly',
+  weekdays: ['tuesday'],
+  academicYearId,
+  staff: [],
+  ...over,
+});
+
+const datesOf = async (scheduleId: string): Promise<string[]> =>
+  (
+    await prisma.session.findMany({
+      where: { scheduleId, deletedAt: null },
+      select: { date: true },
+      orderBy: { date: 'asc' },
+    })
+  ).map((s) => s.date.toISOString().slice(0, 10));
+
+async function cleanup(): Promise<void> {
+  const tagged = { name: { startsWith: TAG } };
+  const taggedPerson = { nameArabic: { startsWith: TAG } };
+  const scheduleWhere = { schedule: { subject: tagged } };
+
+  await prisma.sessionContent.deleteMany({ where: { session: scheduleWhere } });
+  await prisma.educationalContent.deleteMany({ where: { title: { startsWith: TAG } } });
+  await prisma.session.deleteMany({ where: scheduleWhere });
+  await prisma.courseScheduleStaff.deleteMany({ where: { schedule: { subject: tagged } } });
+  await prisma.recurringCourseSchedule.deleteMany({ where: { subject: tagged } });
+  await prisma.enrollment.deleteMany({ where: { student: taggedPerson } });
+  await prisma.teachingGroup.deleteMany({ where: { level: tagged } });
+  await prisma.administrativeGroup.deleteMany({ where: { level: tagged } });
+  await prisma.administrativeGroup.deleteMany({ where: { branch: tagged } });
+  await prisma.levelSubject.deleteMany({ where: { subject: tagged } });
+  await prisma.trash.deleteMany({ where: { deletedBy: taggedPerson } });
+  await prisma.auditLog.deleteMany({ where: { actor: taggedPerson } });
+  await prisma.user.deleteMany({ where: taggedPerson });
+  await prisma.subject.deleteMany({ where: tagged });
+  await prisma.level.deleteMany({ where: tagged });
+  await prisma.room.deleteMany({ where: tagged });
+  await prisma.branch.deleteMany({ where: tagged });
+  await prisma.category.deleteMany({ where: tagged });
+}
+
+beforeEach(async () => {
+  await cleanup();
+  actorUserId = await person('المسؤولة');
+  categoryId = (await prisma.category.create({ data: { name: `${TAG} الكبار` } })).id;
+  branchId = (
+    await prisma.branch.create({
+      data: { name: `${TAG} أمرشيش`, operationalStartDate: day('2026-01-01') },
+    })
+  ).id;
+  otherBranchId = (
+    await prisma.branch.create({
+      data: { name: `${TAG} تاركة`, operationalStartDate: day('2026-01-01') },
+    })
+  ).id;
+
+  const created = await createLevel(prisma, superAdmin(), {
+    name: `${TAG} المستوى 1`,
+    categoryId,
+    genderRestriction: 'any',
+    branchId,
+  });
+  levelId = created.level.id;
+  groupId = created.firstGroup.id;
+
+  roomA = (await prisma.room.create({ data: { name: `${TAG} قاعة أ`, branchId } })).id;
+  roomB = (await prisma.room.create({ data: { name: `${TAG} قاعة ب`, branchId } })).id;
+
+  subjectId = (await prisma.subject.create({ data: { name: `${TAG} القرآن` } })).id;
+  await prisma.levelSubject.create({ data: { levelId, subjectId } });
+
+  academicYearId = (await prisma.academicYear.findFirstOrThrow({ select: { id: true } })).id;
+});
+
+afterAll(async () => {
+  await cleanup();
+  await prisma.$disconnect();
+});
+
+describe('materialization (TD-7, §20 rule 24)', () => {
+  it('creates one session per occurrence, from today to the horizon', async () => {
+    const { id, materialized } = await createCourseSchedule(prisma, superAdmin(), baseInput(), NOW);
+    expect(materialized.created).toBeGreaterThan(0);
+
+    const dates = await datesOf(id);
+    // Every one is a Tuesday, and none is in the past.
+    expect(dates.every((d) => new Date(`${d}T00:00:00Z`).getUTCDay() === 2)).toBe(true);
+    expect(dates[0]).toBe('2026-06-02');
+    expect(dates.every((d) => d >= '2026-06-01')).toBe(true);
+  });
+
+  it('is IDEMPOTENT — a second run creates nothing', async () => {
+    const { id } = await createCourseSchedule(prisma, superAdmin(), baseInput(), NOW);
+    const before = await datesOf(id);
+
+    const [again] = await runMaterialization(prisma, { schedule_id: id }, NOW);
+
+    expect(again?.created).toBe(0);
+    expect(await datesOf(id)).toEqual(before);
+  });
+
+  it('never regenerates the past', async () => {
+    const { id } = await createCourseSchedule(prisma, superAdmin(), baseInput(), NOW);
+    // Run "later in the year": nothing before that day may appear, and the
+    // sessions already generated for June stay exactly as they are.
+    const later = new Date('2026-09-01T08:00:00.000Z');
+    await runMaterialization(prisma, { schedule_id: id }, later);
+
+    const dates = await datesOf(id);
+    expect(dates.filter((d) => d < '2026-06-01')).toEqual([]);
+    expect(dates).toContain('2026-06-02');
+  });
+});
+
+describe('a schedule edit never destroys work (§4.4, §20 rule 24)', () => {
+  it('leaves an OVERRIDDEN session alone and REPORTS it', async () => {
+    const { id } = await createCourseSchedule(prisma, superAdmin(), baseInput(), NOW);
+    const target = await prisma.session.findFirstOrThrow({
+      where: { scheduleId: id, date: day('2026-06-16') },
+    });
+    await overrideSession(prisma, superAdmin(), target.id, {
+      roomId: roomB,
+      version: target.version,
+    });
+
+    // Move the whole schedule to Wednesdays. Every un-overridden Tuesday goes;
+    // the one a human moved must not.
+    const result = await updateCourseSchedule(
+      prisma,
+      superAdmin(),
+      id,
+      { weekdays: ['wednesday'], version: 0 },
+      NOW,
+    );
+
+    const survivor = await prisma.session.findUnique({ where: { id: target.id } });
+    expect(survivor?.deletedAt).toBeNull();
+    expect(survivor?.roomId).toBe(roomB);
+    // Reported, not silently skipped — the administrator is told.
+    expect(result.materialized.protectedSessions.map((p) => p.reason)).toContain('OVERRIDDEN');
+  });
+
+  it('leaves a session carrying LINKED CONTENT alone', async () => {
+    const { id } = await createCourseSchedule(prisma, superAdmin(), baseInput(), NOW);
+    const target = await prisma.session.findFirstOrThrow({
+      where: { scheduleId: id, date: day('2026-06-23') },
+    });
+    const content = await prisma.educationalContent.create({
+      data: {
+        title: `${TAG} ملف`,
+        levelId,
+        academicYearId,
+        storageBucket: 'private',
+        storageKey: `${TAG}/k/${Date.now()}`,
+        originalFilename: 'x.pdf',
+        mimeType: 'application/pdf',
+        sizeBytes: BigInt(10),
+      },
+    });
+    await linkContent(prisma, superAdmin(), target.id, content.id);
+
+    const result = await updateCourseSchedule(
+      prisma,
+      superAdmin(),
+      id,
+      { weekdays: ['wednesday'], version: 0 },
+      NOW,
+    );
+
+    expect((await prisma.session.findUnique({ where: { id: target.id } }))?.deletedAt).toBeNull();
+    expect(result.materialized.protectedSessions.map((p) => p.reason)).toContain('HAS_CONTENT');
+  });
+
+  it('leaves a CANCELLED session alone — the cancellation is a record', async () => {
+    const { id } = await createCourseSchedule(prisma, superAdmin(), baseInput(), NOW);
+    const target = await prisma.session.findFirstOrThrow({
+      where: { scheduleId: id, date: day('2026-06-09') },
+    });
+    await cancelSession(prisma, superAdmin(), target.id, 'عطلة', target.version);
+
+    const result = await updateCourseSchedule(
+      prisma,
+      superAdmin(),
+      id,
+      { weekdays: ['wednesday'], version: 0 },
+      NOW,
+    );
+
+    const survivor = await prisma.session.findUnique({ where: { id: target.id } });
+    expect(survivor?.deletedAt).toBeNull();
+    expect(survivor?.status).toBe('cancelled');
+    expect(result.materialized.protectedSessions.map((p) => p.reason)).toContain(
+      'STATUS_CANCELLED',
+    );
+  });
+
+  it('DOES remove plain, untouched sessions the rule no longer produces', async () => {
+    // The other half of the guarantee: protection is for work, not for
+    // everything. A schedule moved to Wednesdays must stop claiming Tuesdays.
+    const { id } = await createCourseSchedule(prisma, superAdmin(), baseInput(), NOW);
+    await updateCourseSchedule(prisma, superAdmin(), id, { weekdays: ['wednesday'], version: 0 }, NOW);
+
+    const dates = await datesOf(id);
+    expect(dates.every((d) => new Date(`${d}T00:00:00Z`).getUTCDay() === 3)).toBe(true);
+  });
+});
+
+describe('conflict detection against MATERIALIZED sessions (§4.4, TD-4.6c)', () => {
+  it('refuses a second class in the same room at an overlapping time', async () => {
+    await createCourseSchedule(prisma, superAdmin(), baseInput(), NOW);
+
+    const err = await failure(() =>
+      createCourseSchedule(
+        prisma,
+        superAdmin(),
+        baseInput({ startTime: at(16), endTime: at(18) }),
+        NOW,
+      ),
+    );
+    expect(err.code).toBe('SCHEDULE_CONFLICT');
+    expect((err.details?.['conflicts'] as { kind: string }[])[0]?.kind).toBe('room');
+  });
+
+  it('allows a BACK-TO-BACK class in the same room — the boundary is not a clash', async () => {
+    await createCourseSchedule(prisma, superAdmin(), baseInput(), NOW);
+    // 15:00–17:00 then 17:00–19:00. Treating the touching boundary as a
+    // collision would make consecutive classes impossible.
+    await expect(
+      createCourseSchedule(
+        prisma,
+        superAdmin(),
+        baseInput({ startTime: at(17), endTime: at(19) }),
+        NOW,
+      ),
+    ).resolves.toBeTruthy();
+  });
+
+  it('allows the same room on a DIFFERENT weekday', async () => {
+    await createCourseSchedule(prisma, superAdmin(), baseInput(), NOW);
+    await expect(
+      createCourseSchedule(prisma, superAdmin(), baseInput({ weekdays: ['thursday'] }), NOW),
+    ).resolves.toBeTruthy();
+  });
+
+  it('THE headline case: a biweekly class collides with a weekly one only on its own weeks', async () => {
+    // A weekly Tuesday 15:00–17:00 in room A already exists.
+    await createCourseSchedule(prisma, superAdmin(), baseInput(), NOW);
+
+    // A biweekly-alternating Tuesday in the SAME room at the SAME time must be
+    // refused — it collides on the weeks it runs. Comparing recurrence rules
+    // could not tell this apart from the non-colliding case below.
+    const clashing = await failure(() =>
+      createCourseSchedule(
+        prisma,
+        superAdmin(),
+        baseInput({ recurrence: 'biweekly_alternating', anchorDate: day('2026-06-02') }),
+        NOW,
+      ),
+    );
+    expect(clashing.code).toBe('SCHEDULE_CONFLICT');
+  });
+
+  it('…and the OFF weeks are genuinely free once the weekly class is fortnightly too', async () => {
+    // Weekly → biweekly on the even weeks.
+    const { id } = await createCourseSchedule(
+      prisma,
+      superAdmin(),
+      baseInput({ recurrence: 'biweekly_alternating', anchorDate: day('2026-06-02') }),
+      NOW,
+    );
+    const first = await datesOf(id);
+    expect(first).toContain('2026-06-02');
+    expect(first).not.toContain('2026-06-09');
+
+    // The opposite fortnight in the same room at the same time is FREE, and
+    // this is the assertion rule-comparison could never make.
+    const { id: second } = await createCourseSchedule(
+      prisma,
+      superAdmin(),
+      baseInput({ recurrence: 'biweekly_alternating', anchorDate: day('2026-06-09') }),
+      NOW,
+    );
+    const offWeek = await datesOf(second);
+    expect(offWeek).toContain('2026-06-09');
+    expect(offWeek.filter((d) => first.includes(d))).toEqual([]);
+  });
+
+  it('detects a TEACHER double-booked in two different rooms', async () => {
+    const teacher = await person('الأستاذة');
+    await createCourseSchedule(
+      prisma,
+      superAdmin(),
+      baseInput({ staff: [{ userId: teacher, position: 'teacher' }] }),
+      NOW,
+    );
+
+    const err = await failure(() =>
+      createCourseSchedule(
+        prisma,
+        superAdmin(),
+        baseInput({ roomId: roomB, staff: [{ userId: teacher, position: 'teacher' }] }),
+        NOW,
+      ),
+    );
+    expect(err.code).toBe('SCHEDULE_CONFLICT');
+    expect((err.details?.['conflicts'] as { kind: string }[]).some((c) => c.kind === 'teacher')).toBe(
+      true,
+    );
+  });
+
+  it('detects an ASSISTANT double-booked, and reports them as an assistant', async () => {
+    const helper = await person('المساعدة');
+    await createCourseSchedule(
+      prisma,
+      superAdmin(),
+      baseInput({ staff: [{ userId: helper, position: 'assistant' }] }),
+      NOW,
+    );
+
+    const err = await failure(() =>
+      createCourseSchedule(
+        prisma,
+        superAdmin(),
+        baseInput({ roomId: roomB, staff: [{ userId: helper, position: 'assistant' }] }),
+        NOW,
+      ),
+    );
+    expect(err.code).toBe('SCHEDULE_CONFLICT');
+    // The kind matters: an administrator resolving the clash needs to know
+    // whether the person is the teacher or a helper.
+    expect(
+      (err.details?.['conflicts'] as { kind: string }[]).some((c) => c.kind === 'assistant'),
+    ).toBe(true);
+  });
+
+  it('a CANCELLED session frees its room', async () => {
+    const { id } = await createCourseSchedule(prisma, superAdmin(), baseInput(), NOW);
+    for (const s of await prisma.session.findMany({ where: { scheduleId: id } })) {
+      await cancelSession(prisma, superAdmin(), s.id, 'إلغاء', s.version);
+    }
+    // The row survives so the cancellation is visible, but it occupies nothing.
+    await expect(createCourseSchedule(prisma, superAdmin(), baseInput(), NOW)).resolves.toBeTruthy();
+  });
+
+  it('does not conflict with ITSELF on edit', async () => {
+    const { id } = await createCourseSchedule(prisma, superAdmin(), baseInput(), NOW);
+    await expect(
+      updateCourseSchedule(prisma, superAdmin(), id, { startTime: at(15, 30), version: 0 }, NOW),
+    ).resolves.toBeTruthy();
+    expect(await previewConflicts(prisma, superAdmin(), id, NOW)).toEqual([]);
+  });
+});
+
+describe('branch and target agreement (§4.4)', () => {
+  it('refuses a group at a different branch than the schedule', async () => {
+    const elsewhere = await createAdministrativeGroup(prisma, superAdmin(), {
+      name: `${TAG} مجموعة تاركة`,
+      levelId,
+      branchId: otherBranchId,
+    });
+    const err = await failure(() =>
+      createCourseSchedule(prisma, superAdmin(), baseInput({ targetId: elsewhere.id }), NOW),
+    );
+    expect(err.details?.['reason']).toBe('BRANCH_MISMATCH');
+  });
+
+  it('refuses a room at a different branch', async () => {
+    const elsewhere = await prisma.room.create({
+      data: { name: `${TAG} قاعة تاركة`, branchId: otherBranchId },
+    });
+    const err = await failure(() =>
+      createCourseSchedule(prisma, superAdmin(), baseInput({ roomId: elsewhere.id }), NOW),
+    );
+    expect(err.details?.['reason']).toBe('ROOM_BRANCH_MISMATCH');
+  });
+
+  it('an admin outside the branch is refused with 404, not 403', async () => {
+    const err = await failure(() =>
+      createCourseSchedule(prisma, admin([otherBranchId]), baseInput(), NOW),
+    );
+    expect(err.code).toBe('NOT_FOUND');
+  });
+
+  it('BR-23: a tiny room capacity refuses nothing', async () => {
+    await prisma.room.update({ where: { id: roomA }, data: { capacity: 1 } });
+    await expect(createCourseSchedule(prisma, superAdmin(), baseInput(), NOW)).resolves.toBeTruthy();
+  });
+});
+
+describe('session lifecycle (TD-1)', () => {
+  async function oneSession(): Promise<{ id: string; version: number }> {
+    const { id } = await createCourseSchedule(prisma, superAdmin(), baseInput(), NOW);
+    const s = await prisma.session.findFirstOrThrow({
+      where: { scheduleId: id, date: day('2026-06-16') },
+    });
+    return { id: s.id, version: s.version };
+  }
+
+  it('cancel requires a reason, and keeps the row', async () => {
+    const s = await oneSession();
+    const blank = await failure(() => cancelSession(prisma, superAdmin(), s.id, '   ', s.version));
+    expect(blank.details?.['reason']).toBe('CANCELLATION_REASON_REQUIRED');
+
+    const cancelled = await cancelSession(prisma, superAdmin(), s.id, 'عطلة رسمية', s.version);
+    expect(cancelled.status).toBe('cancelled');
+    expect(cancelled.cancellationReason).toBe('عطلة رسمية');
+  });
+
+  it('records the audience size on cancellation — unanswerable later', async () => {
+    const student = await person('طالبة');
+    await prisma.enrollment.create({
+      data: { studentId: student, administrativeGroupId: groupId, levelId },
+    });
+    const s = await oneSession();
+    await cancelSession(prisma, superAdmin(), s.id, 'عطلة', s.version);
+
+    const row = await prisma.auditLog.findFirstOrThrow({
+      where: { actionType: 'session.cancel', targetId: s.id },
+    });
+    expect((row.detail as { audience_size?: number }).audience_size).toBe(1);
+  });
+
+  it('restore reverses a cancellation before the date', async () => {
+    const s = await oneSession();
+    const cancelled = await cancelSession(prisma, superAdmin(), s.id, 'عطلة', s.version);
+    const restored = await restoreSession(prisma, superAdmin(), s.id, cancelled.version, NOW);
+    expect(restored.status).toBe('scheduled');
+    // The former reason survives: why a class was once cancelled is history.
+    expect(restored.cancellationReason).toBe('عطلة');
+  });
+
+  it('refuses to restore a session whose date has passed', async () => {
+    const s = await oneSession();
+    const cancelled = await cancelSession(prisma, superAdmin(), s.id, 'عطلة', s.version);
+    const later = new Date('2026-07-01T08:00:00.000Z');
+    const err = await failure(() =>
+      restoreSession(prisma, superAdmin(), s.id, cancelled.version, later),
+    );
+    expect(err.details?.['reason']).toBe('SESSION_IN_PAST');
+  });
+
+  it('held is terminal — every transition out of it is STATE_CONFLICT', async () => {
+    const s = await oneSession();
+    const held = await markHeld(prisma, superAdmin(), s.id, s.version);
+    expect(held.status).toBe('held');
+
+    const cancel = await failure(() =>
+      cancelSession(prisma, superAdmin(), s.id, 'متأخر', held.version),
+    );
+    expect(cancel.code).toBe('STATE_CONFLICT');
+    expect(cancel.details?.['reason']).toBe('INVALID_TRANSITION');
+
+    const reschedule = await failure(() =>
+      overrideSession(prisma, superAdmin(), s.id, { roomId: roomB, version: held.version }),
+    );
+    expect(reschedule.details?.['reason']).toBe('ALREADY_HELD');
+  });
+
+  it('an override marks the row and survives a later schedule edit', async () => {
+    const s = await oneSession();
+    const moved = await overrideSession(prisma, superAdmin(), s.id, {
+      startTime: at(9),
+      endTime: at(10),
+      version: s.version,
+    });
+    expect(moved.overridden).toBe(true);
+    // A field edit, NOT a transition (TD-1) — the status is untouched.
+    expect(moved.status).toBe('scheduled');
+  });
+
+  it('a stale version is a coded conflict, never a silent overwrite (TD-15)', async () => {
+    const s = await oneSession();
+    await overrideSession(prisma, superAdmin(), s.id, { roomId: roomB, version: s.version });
+    const stale = await failure(() =>
+      overrideSession(prisma, superAdmin(), s.id, { roomId: roomA, version: s.version }),
+    );
+    expect(stale.code).toBe('VERSION_CONFLICT');
+  });
+});
+
+describe('SessionContent — referenced, never owned (§4.9)', () => {
+  it('unlinking leaves the file itself untouched', async () => {
+    const { id } = await createCourseSchedule(prisma, superAdmin(), baseInput(), NOW);
+    const s = await prisma.session.findFirstOrThrow({ where: { scheduleId: id } });
+    const content = await prisma.educationalContent.create({
+      data: {
+        title: `${TAG} ملف`,
+        levelId,
+        academicYearId,
+        storageBucket: 'private',
+        storageKey: `${TAG}/k2/${Date.now()}`,
+        originalFilename: 'x.pdf',
+        mimeType: 'application/pdf',
+        sizeBytes: BigInt(10),
+      },
+    });
+
+    await linkContent(prisma, superAdmin(), s.id, content.id);
+    await unlinkContent(prisma, superAdmin(), s.id, content.id);
+
+    const still = await prisma.educationalContent.findUnique({ where: { id: content.id } });
+    expect(still?.deletedAt).toBeNull();
+  });
+
+  it('one content item may be referenced by several sessions', async () => {
+    const { id } = await createCourseSchedule(prisma, superAdmin(), baseInput(), NOW);
+    const sessions = await prisma.session.findMany({ where: { scheduleId: id }, take: 3 });
+    const content = await prisma.educationalContent.create({
+      data: {
+        title: `${TAG} ملف الفصل`,
+        levelId,
+        academicYearId,
+        storageBucket: 'private',
+        storageKey: `${TAG}/k3/${Date.now()}`,
+        originalFilename: 'semester.pdf',
+        mimeType: 'application/pdf',
+        sizeBytes: BigInt(10),
+      },
+    });
+
+    for (const s of sessions) await linkContent(prisma, superAdmin(), s.id, content.id);
+
+    expect(
+      await prisma.sessionContent.count({ where: { contentId: content.id, deletedAt: null } }),
+    ).toBe(sessions.length);
+  });
+});
+
+describe('deleting a schedule (TD-5)', () => {
+  it('removes future plain sessions and RETAINS held ones', async () => {
+    const { id } = await createCourseSchedule(prisma, superAdmin(), baseInput(), NOW);
+    const first = await prisma.session.findFirstOrThrow({
+      where: { scheduleId: id, date: day('2026-06-02') },
+    });
+    await markHeld(prisma, superAdmin(), first.id, first.version);
+
+    const result = await deleteCourseSchedule(prisma, superAdmin(), id, NOW);
+
+    expect(result.futureRemoved).toBeGreaterThan(0);
+    // A held session records what happened; discontinuing a schedule does not
+    // un-teach it.
+    const survivor = await prisma.session.findUnique({ where: { id: first.id } });
+    expect(survivor?.deletedAt).toBeNull();
+    expect(survivor?.status).toBe('held');
+  });
+});

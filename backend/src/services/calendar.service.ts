@@ -3,6 +3,15 @@ import { AppError } from '../lib/errors.js';
 import { publicDisplayName } from '../lib/display-name.js';
 import { baseHijri, sortMonthStarts, type MonthStart } from '../lib/hijri.js';
 import * as scope from '../policies/branch-scope.js';
+import { expandEvent, expandGroup } from '../lib/recurrence.js';
+
+/**
+ * Recurrence expansion moved to `lib/recurrence.ts` (Revision 43): §4.4 makes
+ * the recurrence vocabulary ONE shared value object used by both `Event` and
+ * `RecurringCourseSchedule`, so its arithmetic cannot live inside the calendar
+ * service. Re-exported here so existing callers and their tests are unaffected.
+ */
+export { expandEvent, expandGroup };
 import type { RoleScope } from '../policies/branch-scope.js';
 import { teacherGroupIds } from '../policies/teacher-scope.js';
 
@@ -124,90 +133,6 @@ const hhmm = (d: Date | null): string | null =>
 /** Whole days between two calendar dates — pure date arithmetic, no timezone. */
 const daysBetween = (a: Date, b: Date): number =>
   Math.round((b.getTime() - a.getTime()) / 86_400_000);
-
-const addDays = (d: Date, n: number): Date => new Date(d.getTime() + n * 86_400_000);
-
-/** §4.4: the week starts on Monday. `Date.getUTCDay()` is Sunday-based. */
-const DAY_INDEX: Record<string, number> = {
-  monday: 1,
-  tuesday: 2,
-  wednesday: 3,
-  thursday: 4,
-  friday: 5,
-  saturday: 6,
-  sunday: 0,
-};
-
-/**
- * Expands one event into the dates it occurs on within `[from, to]`.
- *
- * Every branch is integer day arithmetic on UTC-midnight dates. That is the
- * whole DST defence: no local-time conversion happens, so a clock shift cannot
- * move an occurrence to a different day or hour.
- */
-export function expandEvent(
-  event: {
-    startDate: Date;
-    endDate: Date | null;
-    recurrenceType: string;
-    recurrenceEndDate: Date | null;
-  },
-  from: Date,
-  to: Date,
-): Date[] {
-  const last = event.recurrenceEndDate && event.recurrenceEndDate < to ? event.recurrenceEndDate : to;
-  if (event.startDate > last) return [];
-
-  const out: Date[] = [];
-  const push = (d: Date): void => {
-    if (d >= from && d <= last) out.push(d);
-  };
-
-  switch (event.recurrenceType) {
-    case 'none': {
-      // A multi-day one-off occupies every day of its span.
-      const end = event.endDate ?? event.startDate;
-      for (let d = event.startDate; d <= end; d = addDays(d, 1)) push(d);
-      break;
-    }
-    case 'daily':
-      for (let d = event.startDate; d <= last; d = addDays(d, 1)) push(d);
-      break;
-    case 'weekly':
-      for (let d = event.startDate; d <= last; d = addDays(d, 7)) push(d);
-      break;
-    case 'biweekly_alternating':
-      // §4.4's "week on / week off": every fourteenth day from the start.
-      for (let d = event.startDate; d <= last; d = addDays(d, 14)) push(d);
-      break;
-    case 'yearly': {
-      const startYear = event.startDate.getUTCFullYear();
-      for (let year = startYear; ; year += 1) {
-        const d = new Date(
-          Date.UTC(year, event.startDate.getUTCMonth(), event.startDate.getUTCDate()),
-        );
-        if (d > last) break;
-        push(d);
-      }
-      break;
-    }
-    default:
-      break;
-  }
-  return out;
-}
-
-/** Expands a Group's fixed weekly slot across the range (§4.4). */
-export function expandGroup(dayOfWeek: string, from: Date, to: Date): Date[] {
-  const target = DAY_INDEX[dayOfWeek];
-  if (target === undefined) return [];
-
-  const out: Date[] = [];
-  for (let d = from; d <= to; d = addDays(d, 1)) {
-    if (d.getUTCDay() === target) out.push(d);
-  }
-  return out;
-}
 
 const isSuperAdmin = (a: CalendarActor | null) => a !== null && scope.isSuperAdmin(a.roleScopes);
 const isAdmin = (a: CalendarActor | null) =>

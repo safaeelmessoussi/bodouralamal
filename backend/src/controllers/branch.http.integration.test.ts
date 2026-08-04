@@ -75,6 +75,12 @@ let branchId: string;
 
 async function clear(): Promise<void> {
   await prisma.room.deleteMany({ where: { name: { startsWith: TAG } } });
+  // TD-4.6d (Revision 43.1): creating a Branch also backfills المجموعة 1 for
+  // every Level that has none, so a branch created here owns groups it never
+  // asked for. RESTRICT against Branch (TD-5), so they go first.
+  await prisma.administrativeGroup.deleteMany({
+    where: { branch: { name: { startsWith: TAG } } },
+  });
   await prisma.branch.deleteMany({ where: { name: { startsWith: TAG } } });
   const users = await prisma.user.findMany({
     where: { nameArabic: { startsWith: TAG } },

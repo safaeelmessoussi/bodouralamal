@@ -1,0 +1,406 @@
+import type { PrismaClient, Session, SessionStatus } from '../generated/prisma/client.js';
+import { AppError } from '../lib/errors.js';
+import { atMidnightUtc } from '../lib/recurrence.js';
+import * as scope from '../policies/branch-scope.js';
+import { audienceSize, staffsSession } from '../policies/roster-resolution.js';
+import * as audit from '../repositories/audit.repository.js';
+import { updateWithVersion } from '../repositories/optimistic-lock.js';
+import type { Actor } from './branch.service.js';
+
+/**
+ * Sessions — the materialized dated occurrence (SRS §4.4, TD-1, TD-8,
+ * Revision 43).
+ *
+ * **The distinction this file exists to hold: a reschedule is a FIELD EDIT, a
+ * cancellation is a TRANSITION** (TD-1). Moving a class to another room or hour
+ * sets the session's own values and marks it `overridden`; cancelling it moves
+ * `scheduled → cancelled` and keeps the row, carrying its reason, because *"a
+ * vanished class is indistinguishable from one that never existed"*.
+ *
+ * **`overridden` is what protects a human decision from the next schedule edit**
+ * (§20 rule 24). Setting it is therefore not bookkeeping — it is the entire
+ * mechanism by which `session.materialize` knows to leave a row alone.
+ *
+ * **TD-2:** Admins act within branch scope; a **Teacher may act only on sessions
+ * they staff** (§4.4c resolves that, and this file does not restate it).
+ */
+
+const MANAGING_ROLE = 'admin';
+
+const isSuperAdmin = (actor: Actor): boolean => scope.isSuperAdmin(actor.roleScopes);
+const isAdmin = (actor: Actor): boolean =>
+  scope.hasRole(actor.roleScopes, MANAGING_ROLE) || isSuperAdmin(actor);
+const isTeacher = (actor: Actor): boolean => scope.hasRole(actor.roleScopes, 'teacher');
+
+/**
+ * TD-1's exhaustive transition table. **Anything absent is prohibited and
+ * answers `STATE_CONFLICT`** (§20 rule 12) — the table is the specification, so
+ * it is written out rather than inferred from a chain of `if`s.
+ */
+const TRANSITIONS: Record<SessionStatus, SessionStatus[]> = {
+  scheduled: ['cancelled', 'held'],
+  cancelled: ['scheduled'],
+  held: [],
+};
+
+function assertTransition(from: SessionStatus, to: SessionStatus): void {
+  if (!TRANSITIONS[from].includes(to)) {
+    throw new AppError('STATE_CONFLICT', `a ${from} session cannot become ${to}`, {
+      reason: 'INVALID_TRANSITION',
+      from,
+      to,
+      allowed: TRANSITIONS[from],
+    });
+  }
+}
+
+/**
+ * Authorises an action on one session and returns what the caller needs.
+ *
+ * **Out-of-scope answers `404`, never `403`** (§20 rule 17): a `403` would
+ * confirm that a class exists at a branch — or in a course — the caller may not
+ * see.
+ */
+async function loadForWrite(
+  prisma: PrismaClient,
+  actor: Actor,
+  sessionId: string,
+): Promise<Session & { schedule: { branchId: string; teachingMode: string; levelId: string | null; administrativeGroupId: string | null; teachingGroupId: string | null } }> {
+  const session = await prisma.session.findFirst({
+    where: { id: sessionId, deletedAt: null },
+    include: {
+      schedule: {
+        select: {
+          branchId: true,
+          teachingMode: true,
+          levelId: true,
+          administrativeGroupId: true,
+          teachingGroupId: true,
+        },
+      },
+    },
+  });
+  if (!session) throw new AppError('NOT_FOUND', 'no such session');
+
+  if (isAdmin(actor)) {
+    scope.assertCanActOnBranch(
+      actor.roleScopes,
+      MANAGING_ROLE,
+      session.schedule.branchId,
+      'no such session',
+    );
+    return session;
+  }
+
+  if (isTeacher(actor)) {
+    // TD-2: "only sessions they staff". Co-teachers and assistants both count —
+    // §4.4c gives them one table and one rule.
+    if (!(await staffsSession(prisma, actor.userId, sessionId))) {
+      throw new AppError('NOT_FOUND', 'no such session');
+    }
+    return session;
+  }
+
+  throw new AppError('FORBIDDEN', 'session management requires admin or the teaching staff');
+}
+
+export interface SessionOverride {
+  date?: Date;
+  startTime?: Date;
+  endTime?: Date;
+  roomId?: string | null;
+  teacherId?: string | null;
+  version: number;
+}
+
+/**
+ * Reschedules, moves, or re-staffs one occurrence — **a field edit, not a
+ * transition** (TD-1).
+ *
+ * Always marks the row `overridden`, even when the new values happen to equal
+ * the schedule's: the flag records that **a human decided about this
+ * occurrence**, and that is what must survive the next schedule edit. Inferring
+ * it from "differs from the schedule" would silently un-protect a session whose
+ * schedule later moved to match it.
+ */
+export async function overrideSession(
+  prisma: PrismaClient,
+  actor: Actor,
+  sessionId: string,
+  data: SessionOverride,
+): Promise<Session> {
+  const session = await loadForWrite(prisma, actor, sessionId);
+
+  if (session.status === 'held') {
+    throw new AppError('STATE_CONFLICT', 'a held session cannot be rescheduled', {
+      reason: 'ALREADY_HELD',
+    });
+  }
+
+  if (data.roomId) {
+    const room = await prisma.room.findFirst({
+      where: { id: data.roomId, deletedAt: null },
+      select: { branchId: true },
+    });
+    if (!room) throw new AppError('NOT_FOUND', 'no such room');
+    if (room.branchId !== session.schedule.branchId) {
+      throw new AppError('VALIDATION_FAILED', 'room is at a different branch', {
+        reason: 'ROOM_BRANCH_MISMATCH',
+      });
+    }
+    // BR-23: capacity is not consulted here either.
+  }
+
+  // Plain strings so the payload is a valid JSON value for the audit column,
+  // and so a reviewer reading the row sees exactly what an operator saw.
+  const changed: Record<string, { from: string | null; to: string | null }> = {};
+  const track = (key: string, from: string | null, to: string | null | undefined): void => {
+    if (to !== undefined && from !== to) changed[key] = { from, to };
+  };
+  track('date', session.date.toISOString().slice(0, 10), data.date?.toISOString().slice(0, 10));
+  track('start_time', session.startTime.toISOString(), data.startTime?.toISOString());
+  track('end_time', session.endTime.toISOString(), data.endTime?.toISOString());
+  track('room_id', session.roomId, data.roomId);
+  track('teacher_id', session.teacherId, data.teacherId);
+
+  return prisma.$transaction(async (tx) => {
+    const updated = await updateWithVersion<Session>({
+      delegate: tx.session,
+      id: sessionId,
+      expectedVersion: data.version,
+      requireNotDeleted: true,
+      data: {
+        ...(data.date === undefined ? {} : { date: atMidnightUtc(data.date) }),
+        ...(data.startTime === undefined ? {} : { startTime: data.startTime }),
+        ...(data.endTime === undefined ? {} : { endTime: data.endTime }),
+        ...(data.roomId === undefined ? {} : { roomId: data.roomId }),
+        ...(data.teacherId === undefined ? {} : { teacherId: data.teacherId }),
+        overridden: true,
+      },
+    });
+
+    await audit.write(tx, {
+      actorUserId: actor.userId,
+      actionType: 'session.override',
+      targetEntity: 'Session',
+      targetId: sessionId,
+      // TD-8: the fields old→new, which is exactly the distinction that
+      // protects this row from the next materialization.
+      detail: { changed },
+    });
+    return updated;
+  });
+}
+
+/**
+ * Cancels one occurrence (TD-1 `scheduled → cancelled`).
+ *
+ * **The reason is mandatory** — enforced here *and* by
+ * `session_cancellation_reason_check`, because a cancelled class with no stated
+ * reason is indistinguishable from one cancelled by accident.
+ *
+ * The audit row records **how many students this affected**, resolved at the
+ * moment of the action (§4.4c). That number is unanswerable later once the
+ * roster has moved on, and a cancellation is the one calendar action
+ * beneficiaries actually notice.
+ */
+export async function cancelSession(
+  prisma: PrismaClient,
+  actor: Actor,
+  sessionId: string,
+  reason: string,
+  version: number,
+): Promise<Session> {
+  const session = await loadForWrite(prisma, actor, sessionId);
+  assertTransition(session.status, 'cancelled');
+
+  if (reason.trim() === '') {
+    throw new AppError('VALIDATION_FAILED', 'a cancellation must state a reason', {
+      reason: 'CANCELLATION_REASON_REQUIRED',
+    });
+  }
+
+  const affected = await audienceSize(prisma, {
+    teachingMode: session.schedule.teachingMode as never,
+    levelId: session.schedule.levelId,
+    administrativeGroupId: session.schedule.administrativeGroupId,
+    teachingGroupId: session.schedule.teachingGroupId,
+    branchId: session.schedule.branchId,
+  });
+
+  return prisma.$transaction(async (tx) => {
+    const updated = await updateWithVersion<Session>({
+      delegate: tx.session,
+      id: sessionId,
+      expectedVersion: version,
+      requireNotDeleted: true,
+      data: { status: 'cancelled', cancellationReason: reason.trim() },
+    });
+    await audit.write(tx, {
+      actorUserId: actor.userId,
+      actionType: 'session.cancel',
+      targetEntity: 'Session',
+      targetId: sessionId,
+      detail: {
+        reason: reason.trim(),
+        date: session.date.toISOString().slice(0, 10),
+        audience_size: affected,
+      },
+    });
+    return updated;
+  });
+}
+
+/**
+ * Reverses a cancellation (TD-1 `cancelled → scheduled`) — **only before the
+ * date**. Restoring a class that has already passed would put a session on the
+ * calendar claiming it happened, which nobody can act on and no attendance can
+ * ever be recorded against.
+ *
+ * The former reason is **kept**: why a class was once cancelled is history worth
+ * having, and the CHECK constraint deliberately does not demand it be cleared.
+ */
+export async function restoreSession(
+  prisma: PrismaClient,
+  actor: Actor,
+  sessionId: string,
+  version: number,
+  now: Date = new Date(),
+): Promise<Session> {
+  const session = await loadForWrite(prisma, actor, sessionId);
+  assertTransition(session.status, 'scheduled');
+
+  if (atMidnightUtc(session.date) < atMidnightUtc(now)) {
+    throw new AppError('STATE_CONFLICT', 'a past session cannot be restored', {
+      reason: 'SESSION_IN_PAST',
+      date: session.date.toISOString().slice(0, 10),
+    });
+  }
+
+  return prisma.$transaction(async (tx) => {
+    const updated = await updateWithVersion<Session>({
+      delegate: tx.session,
+      id: sessionId,
+      expectedVersion: version,
+      requireNotDeleted: true,
+      data: { status: 'scheduled' },
+    });
+    await audit.write(tx, {
+      actorUserId: actor.userId,
+      actionType: 'session.restore',
+      targetEntity: 'Session',
+      targetId: sessionId,
+      detail: { date: session.date.toISOString().slice(0, 10) },
+    });
+    return updated;
+  });
+}
+
+/** Marks an occurrence as having taken place (TD-1 `scheduled → held`).
+ *  Terminal — attendance attaches here when §4.7 ships. */
+export async function markHeld(
+  prisma: PrismaClient,
+  actor: Actor,
+  sessionId: string,
+  version: number,
+): Promise<Session> {
+  const session = await loadForWrite(prisma, actor, sessionId);
+  assertTransition(session.status, 'held');
+
+  return prisma.$transaction(async (tx) => {
+    const updated = await updateWithVersion<Session>({
+      delegate: tx.session,
+      id: sessionId,
+      expectedVersion: version,
+      requireNotDeleted: true,
+      data: { status: 'held' },
+    });
+    await audit.write(tx, {
+      actorUserId: actor.userId,
+      actionType: 'session.held',
+      targetEntity: 'Session',
+      targetId: sessionId,
+      detail: { date: session.date.toISOString().slice(0, 10) },
+    });
+    return updated;
+  });
+}
+
+/**
+ * Links existing Educational Content to a Session (§4.9).
+ *
+ * **A Session REFERENCES content; it never owns it.** One semester PDF is
+ * referenced by every session that uses it, and unlinking never deletes the
+ * file — which is why this is a join row rather than an FK on the content.
+ */
+export async function linkContent(
+  prisma: PrismaClient,
+  actor: Actor,
+  sessionId: string,
+  contentId: string,
+): Promise<{ id: string }> {
+  await loadForWrite(prisma, actor, sessionId);
+
+  const content = await prisma.educationalContent.findFirst({
+    where: { id: contentId, deletedAt: null },
+    select: { id: true },
+  });
+  if (!content) throw new AppError('NOT_FOUND', 'no such content');
+
+  return prisma.$transaction(async (tx) => {
+    const existing = await tx.sessionContent.findFirst({
+      where: { sessionId, contentId },
+      select: { id: true, deletedAt: true },
+    });
+    if (existing && existing.deletedAt === null) {
+      throw new AppError('DUPLICATE', 'content is already linked to this session');
+    }
+
+    const row = existing
+      ? await tx.sessionContent.update({
+          where: { id: existing.id },
+          data: { deletedAt: null, deletedById: null },
+          select: { id: true },
+        })
+      : await tx.sessionContent.create({ data: { sessionId, contentId }, select: { id: true } });
+
+    await audit.write(tx, {
+      actorUserId: actor.userId,
+      actionType: 'session.content_link',
+      targetEntity: 'Session',
+      targetId: sessionId,
+      detail: { educational_content_id: contentId },
+    });
+    return row;
+  });
+}
+
+/** Unlinks content from a session. **Never deletes the file** (§4.9). */
+export async function unlinkContent(
+  prisma: PrismaClient,
+  actor: Actor,
+  sessionId: string,
+  contentId: string,
+): Promise<void> {
+  await loadForWrite(prisma, actor, sessionId);
+
+  await prisma.$transaction(async (tx) => {
+    const row = await tx.sessionContent.findFirst({
+      where: { sessionId, contentId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!row) throw new AppError('NOT_FOUND', 'content is not linked to this session');
+
+    await tx.sessionContent.update({
+      where: { id: row.id },
+      data: { deletedAt: new Date(), deletedById: actor.userId },
+    });
+    await audit.write(tx, {
+      actorUserId: actor.userId,
+      actionType: 'session.content_unlink',
+      targetEntity: 'Session',
+      targetId: sessionId,
+      detail: { educational_content_id: contentId },
+    });
+  });
+}

@@ -376,9 +376,18 @@
   - ✓ `level_id` read from the group, never the caller; no capacity check anywhere (BR-23)
   - ✓ Gender restriction enforced, with a **null `sex` not eligible** rather than a wildcard (R27)
   - △ **Consent enqueue emits `{ session_id }` and currently finds no sessions** — schedules are a later M3b task. The retiring `roster.service.ts` still emits `{ group_id }`; both shapes sit in the queue during the expand phase, and `consent.reevaluate` has **no consumer until M6**
-- [ ] Course schedule CRUD with conflict detection **against materialized Sessions** — room, teacher **and assistant** — under the TD-4.6c row lock; `SCHEDULE_CONFLICT`
-- [ ] `session.materialize` (TD-7): idempotent per `(schedule_id, date)`, academic-year horizon, nightly cron; **never rewrites an overridden session or one carrying work** (§20 rule 24)
-- [ ] Session lifecycle (TD-1) + override/cancel/restore + `SessionContent` linking
+- [x] Course schedule CRUD with conflict detection **against materialized Sessions** — room, teacher **and assistant** — under the TD-4.6c row lock; `SCHEDULE_CONFLICT`
+  - ✓ Touching boundaries are **not** a conflict, so back-to-back classes stay legal; a **cancelled** session frees its room while keeping the row
+  - ✓ Branch agreement enforced for group targets and rooms; BR-23 confirmed — a capacity of 1 refuses nothing
+  - ✓ Proven by mutation: making the check ignore dates (rule-comparison behaviour) fails the alternating-week tests
+- [x] `session.materialize` (TD-7): idempotent per `(schedule_id, date)`, academic-year horizon, nightly cron; **never rewrites an overridden session or one carrying work** (§20 rule 24)
+  - ✓ Materializes **inside** the schedule-write transaction, so the calendar is never briefly empty
+  - ✓ Reports what it left alone and why; proven by mutation — removing the protection fails 3 tests
+  - ✓ **Recurrence expansion extracted to `lib/recurrence.ts`** and shared with `Event` rather than duplicated (§4.4); 25 unit tests incl. the alternating-week parity
+- [x] Session lifecycle (TD-1) + override/cancel/restore + `SessionContent` linking
+  - ✓ Transition table written verbatim; anything absent is `STATE_CONFLICT`. A reschedule is a **field edit**, not a transition
+  - ✓ Cancellation demands a reason and records the **audience size at that moment**; restore refused after the date
+  - ✓ Content is **referenced, never owned** — unlinking leaves the file untouched, and one item may be referenced by many sessions
 - [ ] Approval assigns Levels and one Administrative Group each, in the approval transaction (TD-4.2, §4.1)
 - [ ] Quran as a schedulable Subject **with the BR-9 carve-out** — a Quran `LevelSubject` generates no grading components (§4.4b)
 - [ ] Consent gate re-subjected to the session's resolved audience; `consent.reevaluate` payload `{ session_id }` (BR-2, TD-7)

@@ -14,7 +14,7 @@ Four layers, each testing something the others structurally cannot.
 **Coverage: ≥ 80 % on services and policies.** No coverage gate on generated or boilerplate
 code — a coverage number that counts generated clients measures nothing.
 
-Current totals: **108 backend unit · 551 integration · 219 frontend**.
+Current totals: **133 backend unit · 624 integration · 219 frontend**.
 
 ## Running them
 
@@ -106,6 +106,22 @@ const WIRE: HijriMonthRow = { hijri_month: 1, month_name_ar: 'محرم', /* …a
 Rename a field in the adapter and the **typecheck** fails here. That is the check the cast
 cannot perform. `pages/admin/hijri-calendar.test.tsx` is the worked example — written after a
 type mismatch rendered a whole admin screen blank white with nothing red anywhere.
+
+## Two environment traps the integration suite sets
+
+**Running the full suite repeatedly hits the real Nginx rate limits.** The stack
+under test is the production one, limits included, so a second or third full run
+inside the same minute can exhaust the auth zone and fail whichever
+`auth-refresh` assertions happen to land last. The signature is a **`429` where a
+`200` was expected, moving to a different test each run** — a genuine failure
+stays put. Confirm by running that one suite alone; if it passes, the code is
+fine and the window simply needs to elapse.
+
+**A queue must be registered before anything can be enqueued into it.**
+`pgboss.job` is partitioned by queue name, so adding a job to the TD-7 catalogue
+means the **worker process must restart** before any test can insert one — until
+then the insert fails with a foreign-key violation on `q_fkey`, which reads like
+a schema bug and is not one. Rebuild the API container after adding a queue.
 
 ## A fixture must not leave the application unrunnable
 

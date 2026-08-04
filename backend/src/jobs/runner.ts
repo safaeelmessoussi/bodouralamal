@@ -4,6 +4,7 @@ import type { PrismaClient } from '../generated/prisma/client.js';
 import type { AppConfig } from '../lib/config.js';
 import { purgeExpiredAuthRows } from '../repositories/audit.repository.js';
 import { deleteExpired as deleteExpiredRefreshTokens } from '../repositories/refresh-token.repository.js';
+import { runMaterialization } from '../services/session-materialize.service.js';
 
 /**
  * pg-boss bootstrap and job runner (SRS TD-7, §3.1, §20 rule 1).
@@ -34,6 +35,19 @@ export const QUEUES = {
    * drain on restart, exactly as TD-16 describes for a stopped worker.
    */
   consentReevaluate: 'consent.reevaluate',
+
+  /**
+   * `session.materialize` (TD-7, Revision 43) — turns a Recurring Course
+   * Schedule into dated `Session` rows over a rolling horizon.
+   *
+   * **Unlike `consent.reevaluate`, this one HAS a worker**, below: schedule
+   * writes materialize inside their own transaction (TD-4.6c) so the calendar is
+   * never briefly empty, and this job exists to **advance the horizon nightly**
+   * and to reconcile after an edit. It is a full idempotent reconcile keyed on
+   * `(schedule_id, date)`, so running it twice creates nothing and a retry is
+   * always safe.
+   */
+  sessionMaterialize: 'session.materialize',
 } as const;
 
 /** Daily, small hours local time. TZ is pinned to Africa/Casablanca (TD-11). */
@@ -111,6 +125,21 @@ export async function startJobRunner(
     log(QUEUES.auditPurge, { audit_rows: deleted });
   });
 
+  // TD-7: the nightly horizon extension. No payload — an empty `schedule_id`
+  // sweeps every active schedule, which is what "rolling horizon" means.
+  await boss.work(QUEUES.sessionMaterialize, async ([job]) => {
+    const payload = (job?.data ?? {}) as { schedule_id?: string };
+    const results = await runMaterialization(prisma, payload);
+    log(QUEUES.sessionMaterialize, {
+      schedules: results.length,
+      created: results.reduce((n, r) => n + r.created, 0),
+      // Reported, never silent: §4.4 makes "what did this leave alone" part of
+      // the behaviour rather than a detail.
+      left_alone: results.reduce((n, r) => n + r.protectedSessions.length, 0),
+    });
+  });
+
+  await boss.schedule(QUEUES.sessionMaterialize, DAILY_AT_0330);
   await boss.schedule(QUEUES.tokenPurge, DAILY_AT_0330);
   await boss.schedule(QUEUES.rateLimitPurge, DAILY_AT_0330);
   await boss.schedule(QUEUES.auditPurge, DAILY_AT_0330);

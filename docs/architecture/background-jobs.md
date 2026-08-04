@@ -53,7 +53,8 @@ Admin-visible failure. Singleton keys prevent duplicate concurrent runs.
 
 | Job | Trigger | Idempotency |
 |---|---|---|
-| `consent.reevaluate` | Roster change · consent change · upload | Singleton per group; **full recompute**, so re-running is harmless |
+| `consent.reevaluate` | Roster change · split-group membership change · consent change · upload | Singleton per session (Revision 43 — the gate's subject is a session's resolved audience, BR-2); **full recompute**, so re-running is harmless |
+| `session.materialize` | Course-schedule create or edit · **nightly cron** | Singleton per schedule. Turns a recurring schedule into dated occurrences over a rolling horizon. See below |
 | `content.bucket-migrate` | Visibility change · consent forcing | Copy–verify–delete; skipped if already in the target bucket |
 | `backup.replicate` | Nightly cron | `pg_dump` + `restic` push to the second Moroccan location. Failure raises a **critical** Admin-visible alert |
 | `content.quarantine-purge` | Daily cron | Permanently removes storage objects past the 90-day trash window |
@@ -64,6 +65,37 @@ Admin-visible failure. Singleton keys prevent duplicate concurrent runs.
 
 Post-MVP additions (`import.csv`, `export.csv`, `grade.recalculate`) join with their
 features.
+
+### `session.materialize` — eager, and the reason is correctness
+
+Sessions are generated ahead of time rather than computed when the calendar is
+read. That is not a caching decision:
+
+> Conflict detection runs against materialized sessions, not against recurrence
+> rules. Comparing rules cannot see that a weekly and a biweekly-alternating
+> Tuesday 15:00 collide **only on alternate weeks**.
+
+A lazily-derived calendar could not answer the one question scheduling has to
+answer, so the rows exist.
+
+**Three guarantees, each one a rule a later change could quietly break:**
+
+1. **Idempotent** per `(schedule, date)`, enforced by a unique index. Re-running,
+   retrying, or running twice concurrently creates nothing.
+2. **Never rewrites work.** A session someone has individually changed, or that
+   carries linked content, or that has been cancelled or held, is left exactly as
+   it is — **and reported back**, because a silent skip and a silent overwrite
+   are equally bad answers to *"what did my edit just do"*.
+3. **Never regenerates the past.** Generation starts at today, so a schedule
+   edited in November does not resurrect September.
+
+**The horizon is the end of the current academic year**, extended by the nightly
+run. Bounded deliberately: an unbounded horizon would generate rows for a
+schedule that may be discontinued next term.
+
+**Schedule writes materialize inside their own transaction**, so the calendar is
+never briefly empty and the conflict check just performed is not against a state
+that never existed. The job exists to advance the horizon and to reconcile.
 
 ### `consent.reevaluate` — full recompute, deliberately
 
