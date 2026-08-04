@@ -125,15 +125,54 @@ enum Visibility {
   @@map("visibility")
 }
 
-/// §4.4 — the biweekly-alternating pattern must be modeled explicitly.
+/// §4.4 — ONE shared recurrence vocabulary, used by both `Event` and
+/// `RecurringCourseSchedule` (Revision 43). Deliberately not modelled twice:
+/// the alternating-week arithmetic is exactly the code nobody wants written in
+/// two places. `none` is valid for an Event and PROHIBITED on a schedule (a
+/// non-recurring occurrence is an Event) — enforced by CHECK in SQL.
 enum RecurrenceType {
   none
   daily
   weekly
+  multiple_weekdays
   biweekly_alternating
+  monthly
   yearly
 
   @@map("recurrence_type")
+}
+
+/// §4.4c — which students a schedule's sessions are for. The mode lives on the
+/// SCHEDULE and nowhere else (§20 rule 22): the same Level teaches one Subject
+/// whole and another split, so it can be a property of neither Subject nor
+/// Level. Each mode has exactly one matching target FK, enforced by CHECK.
+enum TeachingMode {
+  entire_level
+  administrative_group
+  teaching_group
+
+  @@map("teaching_mode")
+}
+
+/// §4.4c — generalises the retired two-instructor-slot co-teaching rule rather
+/// than duplicating it, and gives assistants a home without inventing a Role
+/// (roles are seeded with no CRUD in the MVP, §7).
+enum ScheduleStaffPosition {
+  teacher
+  assistant
+
+  @@map("schedule_staff_position")
+}
+
+/// TD-1 Session lifecycle. Rescheduling and room changes are FIELD EDITS, not
+/// transitions — they set the session's own date/time/room/teacher and mark it
+/// `overridden`, which is what protects it from the next schedule edit (§4.4).
+enum SessionStatus {
+  scheduled
+  cancelled
+  held
+
+  @@map("session_status")
 }
 
 enum QuranLogCategory {
@@ -288,6 +327,13 @@ model User {
   socialProfile     StudentSocialProfile?
   enrollments       StudentGroup[]
   taughtGroups      GroupTeacher[]
+
+  // Revision 43 (expand phase) — see the educational-model block below.
+  levelEnrollments   Enrollment[]
+  teachingGroupSeats StudentTeachingGroup[]
+  staffedSchedules   CourseScheduleStaff[]
+  taughtSessions     Session[]              @relation("SessionTeacher")
+
   parentLinks       FamilyLink[]            @relation("FamilyLinkParent")
   childLinks        FamilyLink[]            @relation("FamilyLinkChild")
   quranLogs         QuranProgressLog[]      @relation("QuranLogStudent")
@@ -419,6 +465,10 @@ model Branch {
 
   rooms       Room[]
   groups      Group[]
+
+  // Revision 43 (expand phase) — see the educational-model block below.
+  administrativeGroups AdministrativeGroup[]
+  courseSchedules      RecurringCourseSchedule[]
   branchRoles UserBranchRole[]
   content     EducationalContent[]
   eventScopes EventBranch[]
@@ -436,6 +486,12 @@ model Room {
   branchId String @map("branch_id") @db.Uuid
   branch   Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
 
+  /// **INFORMATIONAL ONLY — nothing compares a roster against it** (BR-23,
+  /// §20 rule 22). Displayed to assist planning; no enrolment, placement or
+  /// scheduling action is refused on it. The SQL CHECK constrains the value's
+  /// shape (`> 0`) and nothing else.
+  capacity Int?
+
   version Int @default(0)
 
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -444,6 +500,10 @@ model Room {
   deletedById String?   @map("deleted_by") @db.Uuid
 
   groups Group[]
+
+  // Revision 43 (expand phase) — see the educational-model block below.
+  courseSchedules RecurringCourseSchedule[]
+  sessions        Session[]
 
   @@index([branchId])
   @@map("room")
@@ -503,6 +563,13 @@ model Level {
   groups      Group[]
   subjects    LevelSubject[]
   surahs      LevelSurah[]
+
+  // Revision 43 (expand phase) — see the educational-model block below.
+  administrativeGroups AdministrativeGroup[]
+  teachingGroups       TeachingGroup[]
+  enrollments          Enrollment[]
+  courseSchedules      RecurringCourseSchedule[]
+  teachingGroupSeats   StudentTeachingGroup[]
   exams       Exam[]
   content     EducationalContent[]
   eventScopes EventLevel[]
@@ -511,7 +578,10 @@ model Level {
   @@map("level")
 }
 
-/// Non-Quran curriculum items only — the Quran is never a Subject (§4.4b).
+/// Curriculum subject (§4.4b). Revision 43: this INCLUDES the Quran, **for
+/// scheduling only** — memorization is still tracked exclusively by the §4.5
+/// engine as Surah + ayah ranges (BR-13, §20 rule 23), and a Quran
+/// `LevelSubject` auto-creates NO grading components (BR-9 carve-out).
 model Subject {
   id           String @id @default(uuid()) @db.Uuid
   name         String @db.VarChar(120)
@@ -525,6 +595,11 @@ model Subject {
   deletedById String?   @map("deleted_by") @db.Uuid
 
   levels  LevelSubject[]
+
+  // Revision 43 (expand phase) — see the educational-model block below.
+  teachingGroups     TeachingGroup[]
+  courseSchedules    RecurringCourseSchedule[]
+  teachingGroupSeats StudentTeachingGroup[]
   exams   Exam[]
   content EducationalContent[]
 
@@ -643,6 +718,357 @@ model StudentGroup {
   @@index([groupId, deletedAt])
   @@index([studentId])
   @@map("student_group")
+}
+
+// ---------------------------------------------------------------------------
+// Revision 43 — educational model: ORGANISATION and DELIVERY
+//
+// EXPAND PHASE (TD-6b). These tables live ALONGSIDE `Group`, `GroupTeacher`,
+// `StudentGroup` and `EventGroup` until the migrate phase has backfilled them
+// and no released code reads the old ones. The contract migration that drops
+// the old structures is a SEPARATE, LATER migration — never the same one.
+// ---------------------------------------------------------------------------
+
+/// §4.4c — the permanent ORGANISATIONAL unit inside a Level.
+///
+/// Carries level + branch + name and NOTHING ELSE. No room, no teacher, no
+/// assistant, no schedule, **no capacity** — every one of those belongs to
+/// delivery, and re-adding any of them rebuilds the exact conflation Revision
+/// 43 removed (§20 rule 22).
+///
+/// **`branchId` stays here and is load-bearing.** It is the single answer to
+/// *"which branch is this person at"* — the answer `User.intended_branch_id`
+/// deliberately does NOT give, since that records only what an applicant asked
+/// for (§4.1). Staff branch scoping, the §4.9 Global-content rule, and the
+/// §5.2 library ordering all resolve through it.
+model AdministrativeGroup {
+  id       String @id @default(uuid()) @db.Uuid
+  /// Collated `ar-x-icu` in SQL (TD-6a) — BR-19 ordering is not a per-query concern.
+  name     String @db.VarChar(120)
+  levelId  String @map("level_id") @db.Uuid
+  level    Level  @relation(fields: [levelId], references: [id], onDelete: Restrict)
+  branchId String @map("branch_id") @db.Uuid
+  branch   Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
+
+  /// CHECK (>= 0) in SQL.
+  displayOrder Int? @map("display_order")
+
+  version Int @default(0)
+
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  deletedById String?   @map("deleted_by") @db.Uuid
+
+  enrollments Enrollment[]
+  schedules   RecurringCourseSchedule[]
+  grades      Grade[]
+  eventScopes EventAdministrativeGroup[]
+
+  // Redundant against the primary key ON PURPOSE: PostgreSQL requires a unique
+  // constraint on the referenced column pair before `Enrollment` can declare
+  // its composite FK `(administrative_group_id, level_id)`. That FK is what
+  // makes `Enrollment.level_id` a CONSTRAINT rather than a copy that drifts.
+  // Never remove it to "tidy up" (§20 rule 22).
+  @@unique([id, levelId], map: "administrative_group_id_level_id_key")
+  @@index([levelId, deletedAt])
+  @@index([branchId, deletedAt])
+  @@map("administrative_group")
+}
+
+/// §4.4c — a subject-specific split inside a Level.
+///
+/// Belongs to a Subject and a Level, **never to an AdministrativeGroup**, and
+/// exists ONLY where a Subject needs students divided differently from the
+/// administrative roster. A Subject with no rows here is taught to the entire
+/// Level; creating these is not a prerequisite for teaching.
+///
+/// Splits are INDEPENDENT BETWEEN SUBJECTS — one student may sit in
+/// Administrative Group 1, Quran Group 2 and Tajweed Group 1 at once. That
+/// independence comes from the per-(subject, level) uniqueness on the
+/// membership join below, not from anything here.
+model TeachingGroup {
+  id        String  @id @default(uuid()) @db.Uuid
+  /// Collated `ar-x-icu` in SQL (TD-6a).
+  name      String  @db.VarChar(120)
+  subjectId String  @map("subject_id") @db.Uuid
+  subject   Subject @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  levelId   String  @map("level_id") @db.Uuid
+  level     Level   @relation(fields: [levelId], references: [id], onDelete: Restrict)
+
+  displayOrder Int? @map("display_order")
+
+  version Int @default(0)
+
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  deletedById String?   @map("deleted_by") @db.Uuid
+
+  members   StudentTeachingGroup[]
+  schedules RecurringCourseSchedule[]
+
+  // Same technique as `AdministrativeGroup(id, level_id)`: the referenced pair
+  // a composite FK needs. `StudentTeachingGroup` carries subject+level and this
+  // is what forces them to agree with the group's own.
+  @@unique([id, subjectId, levelId], map: "teaching_group_id_subject_id_level_id_key")
+  @@index([subjectId, levelId, deletedAt])
+  @@map("teaching_group")
+}
+
+/// §4.4c — membership of a subject-specific split.
+///
+/// **At most one row per (student, subject, level)** among non-deleted rows —
+/// this is what makes the splits INDEPENDENT BETWEEN SUBJECTS: the uniqueness
+/// is per subject, so one student sits in Quran Group 2 and Tajweed Group 1 at
+/// once without either constraining the other.
+///
+/// `subjectId` and `levelId` are denormalized from the teaching group for
+/// exactly the reason `Enrollment.levelId` is: **a PostgreSQL unique index
+/// cannot join to another table**, so the constraint is inexpressible without
+/// them. The composite FK `(teaching_group_id, subject_id, level_id) →
+/// TeachingGroup(id, subject_id, level_id)` makes the database refuse a row
+/// whose pair disagrees with its group's, so these are CONSTRAINTS, not copies.
+///
+/// Membership is OPTIONAL: a student in a Level whose Subject is split but who
+/// holds no row here appears on that Subject's `unassigned` list (BR-22), never
+/// silently classless.
+model StudentTeachingGroup {
+  id              String        @id @default(uuid()) @db.Uuid
+  studentId       String        @map("student_id") @db.Uuid
+  student         User          @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  teachingGroupId String        @map("teaching_group_id") @db.Uuid
+  teachingGroup   TeachingGroup @relation(fields: [teachingGroupId], references: [id], onDelete: Restrict)
+
+  /// Kept honest by the composite FK — never written independently.
+  subjectId String  @map("subject_id") @db.Uuid
+  subject   Subject @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  levelId   String  @map("level_id") @db.Uuid
+  level     Level   @relation(fields: [levelId], references: [id], onDelete: Restrict)
+
+  addedAt     DateTime  @default(now()) @map("added_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  deletedById String?   @map("deleted_by") @db.Uuid
+
+  @@index([teachingGroupId, deletedAt])
+  @@index([studentId, deletedAt])
+  @@index([subjectId, levelId, deletedAt])
+  @@map("student_teaching_group")
+}
+
+/// §4.4c — a student's membership of a Level, through one Administrative Group.
+/// Replaces `StudentGroup`.
+///
+/// **`levelId` is denormalized DELIBERATELY and is not a second source of
+/// truth.** The composite FK `(administrative_group_id, level_id) →
+/// AdministrativeGroup(id, level_id)`, added in SQL, makes the database REFUSE
+/// a row whose level disagrees with its group's. That is what permits a real
+/// partial `UNIQUE (student_id, level_id)` — the only way to enforce "exactly
+/// one Administrative Group per enrolled Level" (BR-21) without a trigger.
+///
+/// Level membership is stored NOWHERE ELSE. The withdrawn `StudentLevel`
+/// proposal would have been the second source of truth this design avoids.
+model Enrollment {
+  id                    String              @id @default(uuid()) @db.Uuid
+  studentId             String              @map("student_id") @db.Uuid
+  student               User                @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  administrativeGroupId String              @map("administrative_group_id") @db.Uuid
+  administrativeGroup   AdministrativeGroup @relation(fields: [administrativeGroupId], references: [id], onDelete: Restrict)
+  /// Kept honest by the composite FK above — never written independently.
+  levelId               String              @map("level_id") @db.Uuid
+  level                 Level               @relation(fields: [levelId], references: [id], onDelete: Restrict)
+
+  enrolledAt  DateTime  @default(now()) @map("enrolled_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  deletedById String?   @map("deleted_by") @db.Uuid
+
+  // Uniqueness is scoped to non-deleted rows → partial index in SQL (TD-6).
+  @@index([administrativeGroupId, deletedAt])
+  @@index([levelId, deletedAt])
+  @@index([studentId, deletedAt])
+  @@map("enrollment")
+}
+
+/// §4.4 — the unit of DELIVERY. Materializes `Session` rows.
+///
+/// Exactly one target FK is non-null and matches `teachingMode`, enforced by
+/// CHECK in SQL. A schedule targets ONE entity: plural targeting buys nothing a
+/// second row does not, while forcing the roster query, the conflict check and
+/// the consent gate each to take a set where a single value suffices (§4.4c).
+model RecurringCourseSchedule {
+  id        String  @id @default(uuid()) @db.Uuid
+  subjectId String  @map("subject_id") @db.Uuid
+  subject   Subject @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+
+  teachingMode TeachingMode @map("teaching_mode")
+
+  /// Exactly ONE of the three is non-null, matching `teachingMode` (CHECK).
+  levelId               String?              @map("level_id") @db.Uuid
+  level                 Level?               @relation(fields: [levelId], references: [id], onDelete: Restrict)
+  administrativeGroupId String?              @map("administrative_group_id") @db.Uuid
+  administrativeGroup   AdministrativeGroup? @relation(fields: [administrativeGroupId], references: [id], onDelete: Restrict)
+  teachingGroupId       String?              @map("teaching_group_id") @db.Uuid
+  teachingGroup         TeachingGroup?       @relation(fields: [teachingGroupId], references: [id], onDelete: Restrict)
+
+  branchId String  @map("branch_id") @db.Uuid
+  branch   Branch  @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  roomId   String? @map("room_id") @db.Uuid
+  room     Room?   @relation(fields: [roomId], references: [id], onDelete: Restrict)
+
+  /// Local Moroccan wall-clock, never UTC instants — Ramadan DST suspension
+  /// would silently shift every class by an hour, twice a year (TD-11,
+  /// §20 rule 14).
+  startTime DateTime @map("start_time") @db.Time(0)
+  endTime   DateTime @map("end_time") @db.Time(0)
+
+  /// Shared vocabulary (§4.4). `none` is PROHIBITED here (CHECK) — a
+  /// non-recurring occurrence is an Event.
+  recurrence RecurrenceType
+
+  /// Used by weekly / multiple_weekdays / biweekly_alternating. One element for
+  /// `weekly`, several for `multiple_weekdays`.
+  weekdays DayOfWeek[] @map("weekdays")
+  /// Used by monthly / yearly.
+  dayOfMonth  Int? @map("day_of_month")
+  monthOfYear Int? @map("month_of_year")
+  /// The week `biweekly_alternating` counts from — without an anchor, "week on"
+  /// is undefined and the two halves of the alternation are indistinguishable.
+  anchorDate DateTime? @map("anchor_date") @db.Date
+
+  academicYearId String       @map("academic_year_id") @db.Uuid
+  academicYear   AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Restrict)
+
+  version Int @default(0)
+
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  deletedById String?   @map("deleted_by") @db.Uuid
+
+  staff    CourseScheduleStaff[]
+  sessions Session[]
+
+  @@index([branchId, deletedAt])
+  @@index([subjectId, deletedAt])
+  @@index([academicYearId, deletedAt])
+  @@map("recurring_course_schedule")
+}
+
+/// §4.4c — **the resolution table for ALL teacher scoping.** Replaces
+/// `GroupTeacher`.
+///
+/// A teacher's reach is the union of the resolved audiences of the schedules
+/// they staff, and `schedule.branch_id` states their branch scope DIRECTLY,
+/// where the retired path inferred it through two hops. The rule itself lives
+/// in §4.4c and in `policies/` — this model only holds the rows.
+model CourseScheduleStaff {
+  id         String                  @id @default(uuid()) @db.Uuid
+  scheduleId String                  @map("schedule_id") @db.Uuid
+  schedule   RecurringCourseSchedule @relation(fields: [scheduleId], references: [id], onDelete: Restrict)
+  userId     String                  @map("user_id") @db.Uuid
+  user       User                    @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  position ScheduleStaffPosition
+
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  deletedById String?   @map("deleted_by") @db.Uuid
+
+  @@unique([scheduleId, userId])
+  @@index([userId, deletedAt])
+  @@map("course_schedule_staff")
+}
+
+/// §4.4 — ONE materialized dated occurrence of a schedule.
+///
+/// Carries its OWN date, time, room and teacher, defaulted from the schedule
+/// and individually overridable. That is what makes a cancellation, a room
+/// change, a reschedule and a makeup class EDITS TO THIS ROW rather than a
+/// parallel Event mechanism.
+///
+/// **The audience is NOT stored here** (§20 rule 22). It resolves from the
+/// schedule's mode and target at read time; a snapshot would silently diverge
+/// from the group it came from, which is the failure Revision 43 exists to
+/// remove.
+model Session {
+  id         String                  @id @default(uuid()) @db.Uuid
+  scheduleId String                  @map("schedule_id") @db.Uuid
+  schedule   RecurringCourseSchedule @relation(fields: [scheduleId], references: [id], onDelete: Restrict)
+
+  /// A calendar date, never an instant (TD-11).
+  date      DateTime @db.Date
+  startTime DateTime @map("start_time") @db.Time(0)
+  endTime   DateTime @map("end_time") @db.Time(0)
+
+  roomId    String? @map("room_id") @db.Uuid
+  room      Room?   @relation(fields: [roomId], references: [id], onDelete: Restrict)
+  teacherId String? @map("teacher_id") @db.Uuid
+  teacher   User?   @relation("SessionTeacher", fields: [teacherId], references: [id], onDelete: Restrict)
+
+  status SessionStatus @default(scheduled)
+
+  /// Distinguishes a human's deliberate change from a `session.materialize`
+  /// default. This flag is what protects the row from the next schedule edit
+  /// (§20 rule 24) — an overridden session is never rewritten or deleted.
+  overridden Boolean @default(false)
+
+  /// Mandatory on cancel (TD-8 `session.cancel`).
+  cancellationReason String? @map("cancellation_reason") @db.VarChar(500)
+
+  version Int @default(0)
+
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  deletedById String?   @map("deleted_by") @db.Uuid
+
+  linkedContent SessionContent[]
+
+  // What makes `session.materialize` idempotent: a second run over the same
+  // horizon creates no duplicate occurrence.
+  @@unique([scheduleId, date])
+  // The two indexes that make conflict detection a lookup rather than a scan.
+  @@index([roomId, date])
+  @@index([teacherId, date])
+  @@index([date, status])
+  @@map("session")
+}
+
+/// §4.9 — a Session REFERENCES content; it never owns it.
+///
+/// One semester PDF is referenced by every session that uses it, and unlinking
+/// a session never deletes the file. Replaces the retired single
+/// `EducationalContent.event_id`, which could express only one relationship, in
+/// one direction, to the wrong entity.
+model SessionContent {
+  id        String             @id @default(uuid()) @db.Uuid
+  sessionId String             @map("session_id") @db.Uuid
+  session   Session            @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  contentId String             @map("educational_content_id") @db.Uuid
+  content   EducationalContent @relation(fields: [contentId], references: [id], onDelete: Restrict)
+
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  deletedById String?   @map("deleted_by") @db.Uuid
+
+  @@unique([sessionId, contentId])
+  @@index([contentId, deletedAt])
+  @@map("session_content")
+}
+
+/// Event scope join over organisational groups (Revision 43 — replaces
+/// `EventGroup`). Events scope to Administrative Groups, never to Teaching
+/// Groups: an event is not subject-specific.
+model EventAdministrativeGroup {
+  id                    String              @id @default(uuid()) @db.Uuid
+  eventId               String              @map("event_id") @db.Uuid
+  event                 Event               @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  administrativeGroupId String              @map("administrative_group_id") @db.Uuid
+  administrativeGroup   AdministrativeGroup @relation(fields: [administrativeGroupId], references: [id], onDelete: Restrict)
+
+  @@unique([eventId, administrativeGroupId])
+  @@index([administrativeGroupId])
+  @@map("event_administrative_group")
 }
 
 // ---------------------------------------------------------------------------
@@ -860,6 +1286,9 @@ model Event {
   groupScopes    EventGroup[]
   content        EducationalContent[]
 
+  // Revision 43 (expand phase) — see the educational-model block below.
+  administrativeGroupScopes EventAdministrativeGroup[]
+
   @@index([startDate, visibility])
   @@map("event")
 }
@@ -1067,9 +1496,18 @@ model Grade {
   studentId String @map("student_id") @db.Uuid
   student   User   @relation(fields: [studentId], references: [id], onDelete: Restrict)
 
-  /// Sitting provenance — the Group the student sat the exam in (§7).
+  /// Sitting provenance (§7). RETIRING — backfilled into
+  /// `administrativeGroupId` below by the Revision 43 migrate phase, dropped in
+  /// the contract migration.
   groupId String? @map("group_id") @db.Uuid
   group   Group?  @relation(fields: [groupId], references: [id], onDelete: Restrict)
+
+  /// Sitting provenance (Revision 43). The **Administrative Group** — the stable
+  /// organisational unit that exists for every student in every enrolled Level.
+  /// A Teaching Group exists only for split Subjects and would leave most
+  /// sittings without provenance.
+  administrativeGroupId String?              @map("administrative_group_id") @db.Uuid
+  administrativeGroup   AdministrativeGroup? @relation(fields: [administrativeGroupId], references: [id], onDelete: Restrict)
 
   /// Integer basis points of the exam total, 0–10,000 (CHECK in SQL).
   valueBp Int         @map("value_bp")
@@ -1113,6 +1551,9 @@ model AcademicYear {
 
   content EducationalContent[]
 
+  // Revision 43 (expand phase) — see the educational-model block below.
+  courseSchedules RecurringCourseSchedule[]
+
   @@map("academic_year")
 }
 
@@ -1136,9 +1577,15 @@ model EducationalContent {
   branchId String? @map("branch_id") @db.Uuid
   branch   Branch? @relation(fields: [branchId], references: [id], onDelete: Restrict)
 
+  /// Revision 43 makes this REQUIRED. Nullable here through the expand phase
+  /// only: existing rows have no subject, and a bare NOT NULL would fail on
+  /// them (TD-6b). The contract migration tightens it after the backfill.
   subjectId String?  @map("subject_id") @db.Uuid
   subject   Subject? @relation(fields: [subjectId], references: [id], onDelete: SetNull)
 
+  /// RETIRING (Revision 43) — it could express only one relationship, in one
+  /// direction, to the wrong entity. Sessions reference content through
+  /// `SessionContent`, many-to-many. Dropped in the contract migration.
   eventId String? @map("event_id") @db.Uuid
   event   Event?  @relation(fields: [eventId], references: [id], onDelete: SetNull)
 
@@ -1161,6 +1608,8 @@ model EducationalContent {
   updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
   deletedById String?   @map("deleted_by") @db.Uuid
+
+  sessionLinks SessionContent[]
 
   @@index([levelId, academicYearId, branchId])
   @@index([visibility])
