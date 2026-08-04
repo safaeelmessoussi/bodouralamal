@@ -68,6 +68,13 @@ async function clear(): Promise<void> {
   await prisma.trash.deleteMany({ where: { targetId: { in: roomIds } } });
   await prisma.auditLog.deleteMany({ where: { targetId: { in: roomIds } } });
   await prisma.room.deleteMany({ where: { id: { in: roomIds } } });
+  // TD-4.6d (Revision 43.1): `createBranch` now also backfills المجموعة 1 for
+  // every Level that has none, so a branch created here can own groups it never
+  // asked for. They are RESTRICT against Branch (TD-5), so they go first.
+  // Recorded rather than quietly added: this teardown predates the backfill,
+  // and the failure it caused is the honest signal that creating a Branch is no
+  // longer a single-row operation.
+  await prisma.administrativeGroup.deleteMany({ where: { branchId: { in: ids } } });
   await prisma.branch.deleteMany({ where: { id: { in: ids } } });
 
   const actors = await prisma.user.findMany({

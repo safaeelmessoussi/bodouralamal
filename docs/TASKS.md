@@ -356,15 +356,26 @@
 - [ ] *Contract (separate, later migration):* drop `Group.day_of_week/start_time/end_time/room_id/max_students`, `EducationalContent.event_id`, and the retired tables — tagged with its contract-phase justification for `check-migration-drop-rename.sh`
 
 **Domain**
-- [ ] Level creation **takes a required `branch_id` and** auto-creates المجموعة 1 at it, in the same transaction (TD-4.6b, §4.4b, R43.1) — the Branch is an input, **never a column on `Level`**
-- [ ] First-Branch bootstrap backfill: creating the deployment's first Branch creates المجموعة 1 for every Level that has none, atomically and idempotently (TD-4.6d, §15.1)
+- [x] Level creation **takes a required `branch_id` and** auto-creates المجموعة 1 at it, in the same transaction (TD-4.6b, §4.4b, R43.1) — the Branch is an input, **never a column on `Level`**
+  - ✓ `level.service.ts`; proven by mutation — removing the first-group creation fails **31** tests
+- [x] First-Branch bootstrap backfill: creating the deployment's first Branch creates المجموعة 1 for every Level that has none, atomically and idempotently (TD-4.6d, §15.1)
+  - ✓ Keyed on the **condition**, not on "is this the first branch" — idempotent by construction, and correct if the first branch is later soft-deleted
+  - ✓ Verified against the dev database's **21 seeded Levels**, which are the real bootstrap case; one audit row for the whole backfill
+  - ⚠ **`createBranch` is no longer a single-row operation.** The existing branch suite's teardown could not delete its own branches afterwards — fixed there, and recorded because any future caller inherits the same side effect
 - [x] Roster resolution — one implementation serving all three teaching modes (§4.4c); **Entire Level is branch-bound**
   - ✓ 17 integration tests; both claims mutation-proven (drop the branch bound → 2 fail; resolve a split to the administrative roster → 4 fail)
 - [~] Teacher scope from `CourseScheduleStaff` (§4.4c, TD-2) — **replaces `teacher-scope.ts`'s `GroupTeacher` resolution**
   - ✓ Backend — `studentsTaughtBy`, `teacherBranchIds`, `staffsSession` in `roster-resolution.ts`; branch scope now **stated** by the schedule instead of inferred through two hops
   - ✓ Tests — assistants have identical reach; a teacher with no schedules reaches nobody; revoking a staffing ends reach on the next call
   - △ **Consumers not yet migrated** — exam authoring, Quran logging and social-profile access still resolve through `teacher-scope.ts`. Both modules are live during the expand phase by design; cutting the consumers over is its own step, before the contract migration drops `GroupTeacher`
-- [ ] Teaching Groups + membership, and the **`unassigned` list** (BR-22)
+- [x] Teaching Groups + membership, and the **`unassigned` list** (BR-22)
+  - ✓ R43.3 authority split: CRUD is Super Admin, membership is Admin scoped by the **student's** enrolment branch
+  - ✓ `unassigned` returns `split: false` for an unsplit Subject — deliberately distinguishable from "everyone is assigned"
+  - ✓ Proven by mutation: making uniqueness per-Level instead of per-(Subject, Level) breaks independence between subjects
+- [x] Enrolment service — enrol · un-enrol · **move within a Level as one action** (§5.6) · roster · `levelsForStudent`
+  - ✓ `level_id` read from the group, never the caller; no capacity check anywhere (BR-23)
+  - ✓ Gender restriction enforced, with a **null `sex` not eligible** rather than a wildcard (R27)
+  - △ **Consent enqueue emits `{ session_id }` and currently finds no sessions** — schedules are a later M3b task. The retiring `roster.service.ts` still emits `{ group_id }`; both shapes sit in the queue during the expand phase, and `consent.reevaluate` has **no consumer until M6**
 - [ ] Course schedule CRUD with conflict detection **against materialized Sessions** — room, teacher **and assistant** — under the TD-4.6c row lock; `SCHEDULE_CONFLICT`
 - [ ] `session.materialize` (TD-7): idempotent per `(schedule_id, date)`, academic-year horizon, nightly cron; **never rewrites an overridden session or one carrying work** (§20 rule 24)
 - [ ] Session lifecycle (TD-1) + override/cancel/restore + `SessionContent` linking

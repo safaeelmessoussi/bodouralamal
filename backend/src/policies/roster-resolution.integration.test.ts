@@ -35,7 +35,6 @@ const TAG = '[roster-resolution-test]';
 
 let categoryId: string;
 let levelId: string;
-let otherLevelId: string;
 let amerchichId: string;
 let targaId: string;
 let groupAId: string;
@@ -117,11 +116,6 @@ beforeAll(async () => {
   levelId = (
     await prisma.level.create({
       data: { name: `${TAG} المستوى 1`, categoryId, genderRestriction: 'any' },
-    })
-  ).id;
-  otherLevelId = (
-    await prisma.level.create({
-      data: { name: `${TAG} المستوى 2`, categoryId, genderRestriction: 'any' },
     })
   ).id;
 
