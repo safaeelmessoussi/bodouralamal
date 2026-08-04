@@ -6,7 +6,7 @@ import * as audit from '../repositories/audit.repository.js';
 import * as trash from '../repositories/trash.repository.js';
 import { updateWithVersion } from '../repositories/optimistic-lock.js';
 import { FIRST_GROUP_NAME } from './level.service.js';
-import type { Actor } from './branch.service.js';
+import type { Actor } from '../policies/actor.js';
 
 /**
  * Administrative Groups — the permanent **organisational** unit inside a Level

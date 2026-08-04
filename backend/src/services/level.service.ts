@@ -2,7 +2,7 @@ import type { Level, PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
 import * as scope from '../policies/branch-scope.js';
 import * as audit from '../repositories/audit.repository.js';
-import type { Actor } from './branch.service.js';
+import type { Actor } from '../policies/actor.js';
 
 /**
  * Level creation — **TD-4.6b, SRS Revision 43.1.**

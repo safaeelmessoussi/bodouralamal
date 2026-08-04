@@ -65,7 +65,7 @@ async function clear(): Promise<void> {
   await prisma.eventBranch.deleteMany({ where: { eventId: { in: ids } } });
   await prisma.eventCategory.deleteMany({ where: { eventId: { in: ids } } });
   await prisma.eventLevel.deleteMany({ where: { eventId: { in: ids } } });
-  await prisma.eventGroup.deleteMany({ where: { eventId: { in: ids } } });
+  await prisma.eventAdministrativeGroup.deleteMany({ where: { eventId: { in: ids } } });
   await prisma.event.deleteMany({ where: { id: { in: ids } } });
 
   const users = await prisma.user.findMany({

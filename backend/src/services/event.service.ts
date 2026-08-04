@@ -5,7 +5,7 @@ import { teacherEventScope } from '../policies/roster-resolution.js';
 import { page, pageWindow, type Page, type PageParams } from '../lib/pagination.js';
 import * as audit from '../repositories/audit.repository.js';
 import { updateWithVersion } from '../repositories/optimistic-lock.js';
-import type { Actor } from './group.service.js';
+import type { Actor } from '../policies/actor.js';
 
 /**
  * Events — the exception/special-activity layer (SRS §4.4, §7, TD-2, TD-5, TD-11).

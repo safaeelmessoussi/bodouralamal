@@ -9,7 +9,7 @@ import {
   staff as staffSchedule,
   type TeachingFixture,
 } from '../test-support/educational-fixture.js';
-import { type Actor } from './group.service.js';
+import type { Actor } from '../policies/actor.js';
 import {
   backfillAttach,
   backfillCandidates,
@@ -106,14 +106,8 @@ async function clear(): Promise<void> {
   await prisma.eventAdministrativeGroup.deleteMany({ where: { eventId: { in: eventIds } } });
   await prisma.event.deleteMany({ where: { id: { in: eventIds } } });
 
-  const groups = await prisma.group.findMany({
-    where: { name: { startsWith: TAG } },
-    select: { id: true },
-  });
-  const groupIds = groups.map((g) => g.id);
   await clearTeachingContext(prisma, TAG);
   contexts.clear();
-  await prisma.group.deleteMany({ where: { id: { in: groupIds } } });
 
   const users = await prisma.user.findMany({
     where: { nameArabic: { startsWith: TAG } },
@@ -124,7 +118,6 @@ async function clear(): Promise<void> {
     where: { OR: [{ actorUserId: { in: userIds } }, { targetId: { in: eventIds } }] },
   });
   await prisma.trash.deleteMany({ where: { deletedById: { in: userIds } } });
-  await prisma.groupTeacher.deleteMany({ where: { teacherId: { in: userIds } } });
   await prisma.userBranchRole.deleteMany({ where: { userId: { in: userIds } } });
   await prisma.user.deleteMany({ where: { id: { in: userIds } } });
   await prisma.branch.deleteMany({ where: { name: { startsWith: TAG } } });
@@ -371,7 +364,7 @@ describe('TD-5 — deletion removes the scope joins', () => {
     // TD-5: the joins are the materialised reach of an event that no longer
     // applies, so they go rather than lingering as soft-deleted rows.
     expect(await prisma.eventBranch.count({ where: { eventId: id } })).toBe(0);
-    expect(await prisma.eventGroup.count({ where: { eventId: id } })).toBe(0);
+    expect(await prisma.eventAdministrativeGroup.count({ where: { eventId: id } })).toBe(0);
     expect(await prisma.eventLevel.count({ where: { eventId: id } })).toBe(0);
   });
 });

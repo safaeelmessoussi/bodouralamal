@@ -3,7 +3,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { loadConfig } from '../lib/config.js';
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
 import type { RoleScope } from '../policies/branch-scope.js';
-import type { Actor } from './branch.service.js';
+import type { Actor } from '../policies/actor.js';
 import { createAdministrativeGroup } from './administrative-group.service.js';
 import { createLevel } from './level.service.js';
 import {
@@ -242,6 +242,7 @@ describe('a schedule edit never destroys work (§4.4, §20 rule 24)', () => {
       data: {
         title: `${TAG} ملف`,
         levelId,
+        subjectId,
         academicYearId,
         storageBucket: 'private',
         storageKey: `${TAG}/k/${Date.now()}`,
@@ -577,6 +578,7 @@ describe('SessionContent — referenced, never owned (§4.9)', () => {
       data: {
         title: `${TAG} ملف`,
         levelId,
+        subjectId,
         academicYearId,
         storageBucket: 'private',
         storageKey: `${TAG}/k2/${Date.now()}`,
@@ -600,6 +602,7 @@ describe('SessionContent — referenced, never owned (§4.9)', () => {
       data: {
         title: `${TAG} ملف الفصل`,
         levelId,
+        subjectId,
         academicYearId,
         storageBucket: 'private',
         storageKey: `${TAG}/k3/${Date.now()}`,
@@ -890,6 +893,7 @@ describe('Revision 43.5 — a Session carrying educational work is protected', (
       data: {
         title: `${TAG} تسجيل`,
         levelId,
+        subjectId,
         academicYearId,
         storageBucket: 'private',
         storageKey: `${TAG}/w/${Date.now()}-${Math.random()}`,

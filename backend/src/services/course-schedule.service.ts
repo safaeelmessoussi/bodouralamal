@@ -5,7 +5,7 @@ import * as scope from '../policies/branch-scope.js';
 import * as audit from '../repositories/audit.repository.js';
 import { enqueue, JOB_QUEUES } from '../repositories/jobs.repository.js';
 import { updateWithVersion } from '../repositories/optimistic-lock.js';
-import type { Actor } from './branch.service.js';
+import type { Actor } from '../policies/actor.js';
 import {
   protectionReasons,
   SELECT_PROTECTABLE,

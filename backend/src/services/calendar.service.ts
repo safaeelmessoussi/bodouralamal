@@ -3,7 +3,7 @@ import { AppError } from '../lib/errors.js';
 import { publicDisplayName } from '../lib/display-name.js';
 import { baseHijri, sortMonthStarts, type MonthStart } from '../lib/hijri.js';
 import * as scope from '../policies/branch-scope.js';
-import { expandEvent, expandGroup } from '../lib/recurrence.js';
+import { expandEvent } from '../lib/recurrence.js';
 
 /**
  * Recurrence expansion moved to `lib/recurrence.ts` (Revision 43): §4.4 makes
@@ -11,7 +11,7 @@ import { expandEvent, expandGroup } from '../lib/recurrence.js';
  * `RecurringCourseSchedule`, so its arithmetic cannot live inside the calendar
  * service. Re-exported here so existing callers and their tests are unaffected.
  */
-export { expandEvent, expandGroup };
+export { expandEvent };
 import type { RoleScope } from '../policies/branch-scope.js';
 import { teacherEventScope } from '../policies/roster-resolution.js';
 
@@ -50,7 +50,7 @@ export interface CalendarQuery {
 }
 
 export interface Occurrence {
-  kind: 'group' | 'event';
+  kind: 'session' | 'event';
   id: string;
   title: string;
   /** Local calendar date, `YYYY-MM-DD` (TD-11) — never an instant. */
@@ -324,68 +324,109 @@ export async function readCalendar(
     }
   }
 
-  // ── The recurring Group timetable. Groups carry no visibility tier of their
-  // own, so an anonymous caller sees none of them: a timetable is not public.
-  if (actor !== null && actor.accountStatus === 'active') {
-    const groups = await prisma.group.findMany({
+  // ── Sessions: the materialized occurrences of a Recurring Course Schedule
+  // (§4.4, Revision 43). This replaced the retired `Group` weekly-slot
+  // expansion entirely.
+  //
+  // **Two consequences of the new model are visible right here:**
+  //
+  // 1. **No expansion happens.** A session IS a row with a date, so the
+  //    calendar reads rather than computes. That is the same property that
+  //    makes conflict detection exact (§4.4).
+  // 2. **The occurrence carries its OWN room and staff** (Revision 43.4), so a
+  //    class taught last March shows the person who actually taught it even
+  //    after the schedule changed hands. Reading the schedule's staff here
+  //    would have silently rewritten history on every calendar load.
+  //
+  // **Sessions are PUBLIC (§4.4, Revision 43)** — anonymous visitors browse the
+  // timetable. That reverses the retired rule, under which a Group timetable was
+  // visible only to signed-in users.
+  {
+    const sessions = await prisma.session.findMany({
       where: {
         deletedAt: null,
-        ...(query.branchId ? { branchId: query.branchId } : {}),
-        ...(query.levelId ? { levelId: query.levelId } : {}),
-        // A Group has no category of its own; it inherits it through its Level.
-        ...(query.categoryId ? { level: { categoryId: query.categoryId } } : {}),
-        ...(query.groupId ? { id: query.groupId } : {}),
-        // A Teacher sees their own groups; staff see their branch scope.
-        ...(isAdmin(actor)
-          ? (() => {
-              const reachable = scope.reachableBranches(actor.roleScopes, ['admin']);
-              return reachable === null ? {} : { branchId: { in: reachable } };
-            })()
-          : isTeacher(actor)
-            ? { teachers: { some: { teacherId: actor.userId, deletedAt: null } } }
+        date: { gte: from, lte: query.to },
+        schedule: {
+          deletedAt: null,
+          ...(query.branchId ? { branchId: query.branchId } : {}),
+          ...(query.levelId
+            ? {
+                OR: [
+                  { levelId: query.levelId },
+                  { administrativeGroup: { levelId: query.levelId } },
+                  { teachingGroup: { levelId: query.levelId } },
+                ],
+              }
             : {}),
+          ...(query.groupId ? { administrativeGroupId: query.groupId } : {}),
+        },
       },
       include: {
-        branch: { select: { name: true } },
         room: { select: { name: true } },
-        level: { select: { id: true, name: true, category: { select: { id: true, name: true } } } },
-        teachers: {
+        staff: {
           where: { deletedAt: null },
+          select: { user: { select: { id: true, nameArabic: true, publicDisplayName: true } } },
+        },
+        schedule: {
           select: {
-            teacher: { select: { id: true, nameArabic: true, publicDisplayName: true } },
+            branchId: true,
+            branch: { select: { name: true } },
+            subject: { select: { id: true, name: true } },
+            teachingMode: true,
+            level: { select: { id: true, name: true, category: { select: { id: true, name: true } } } },
+            administrativeGroup: {
+              select: {
+                name: true,
+                level: { select: { id: true, name: true, category: { select: { id: true, name: true } } } },
+              },
+            },
+            teachingGroup: {
+              select: {
+                name: true,
+                level: { select: { id: true, name: true, category: { select: { id: true, name: true } } } },
+              },
+            },
           },
         },
       },
     });
 
-    for (const group of groups) {
-      for (const date of expandGroup(group.dayOfWeek, from, query.to)) {
-        out.push({
-          kind: 'group',
-          id: group.id,
-          title: group.name,
-          date: iso(date),
-          startTime: hhmm(group.startTime),
-          endTime: hhmm(group.endTime),
-          visibility: null,
-          branchId: group.branchId,
-          // A Group is the routine timetable; its description and recurrence
-          // are the weekly slot itself, so neither field applies.
-          description: null,
-          recurrence: null,
-          branchName: group.branch.name,
-          roomName: group.room?.name ?? null,
-          categoryId: group.level.category.id,
-          categoryName: group.level.category.name,
-          levelId: group.level.id,
-          levelName: group.level.name,
-          instructors: group.teachers.map((assignment) => ({
-            id: assignment.teacher.id,
-            displayName: publicDisplayName(assignment.teacher),
-          })),
-          ...hijri(date, monthStarts),
-        });
-      }
+    for (const session of sessions) {
+      const sch = session.schedule;
+      const level = sch.level ?? sch.administrativeGroup?.level ?? sch.teachingGroup?.level ?? null;
+      // The category filter is applied here rather than in the query: a
+      // schedule reaches its level through one of three different relations
+      // depending on its teaching mode, and Prisma cannot express "whichever of
+      // these is non-null" as a single filter.
+      if (query.categoryId && level?.category.id !== query.categoryId) continue;
+
+      out.push({
+        kind: 'session',
+        id: session.id,
+        title: sch.subject.name,
+        date: iso(session.date),
+        startTime: hhmm(session.startTime),
+        endTime: hhmm(session.endTime),
+        visibility: null,
+        branchId: sch.branchId,
+        // The audience label, so the calendar can say WHO a class is for
+        // without a second request (§4.4c).
+        description:
+          sch.administrativeGroup?.name ?? sch.teachingGroup?.name ?? level?.name ?? null,
+        recurrence: null,
+        branchName: sch.branch.name,
+        roomName: session.room?.name ?? null,
+        categoryId: level?.category.id ?? null,
+        categoryName: level?.category.name ?? null,
+        levelId: level?.id ?? null,
+        levelName: level?.name ?? null,
+        // From the session's OWN snapshot, never the schedule's (Revision 43.4).
+        instructors: session.staff.map((assignment) => ({
+          id: assignment.user.id,
+          displayName: publicDisplayName(assignment.user),
+        })),
+        ...hijri(session.date, monthStarts),
+      });
     }
   }
 

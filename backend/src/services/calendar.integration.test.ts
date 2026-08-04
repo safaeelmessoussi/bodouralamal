@@ -5,7 +5,6 @@ import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
 import type { RoleScope } from '../policies/branch-scope.js';
 import {
   expandEvent,
-  expandGroup,
   readCalendar,
   type CalendarActor,
   type Occurrence,
@@ -14,10 +13,11 @@ import { createEvent } from './event.service.js';
 import {
   clearTeachingContext,
   createTeachingContext,
+  materializeRange,
   staff as staffSchedule,
   type TeachingFixture,
 } from '../test-support/educational-fixture.js';
-import { createGroup, type Actor } from './group.service.js';
+import type { Actor } from '../policies/actor.js';
 
 /**
  * Calendar read — §4.4, TD-3.4, TD-11, §19.2.
@@ -78,18 +78,26 @@ async function makeBranch(name: string, opened = '2020-01-01'): Promise<string> 
   return b.id;
 }
 
+/**
+ * A timetable entry, Revision 43 style: an Administrative Group, a Course
+ * Schedule on the given weekday and hour, and its materialized Sessions.
+ *
+ * The retired `Group` carried its weekly slot in columns and the calendar
+ * expanded them on read. A schedule now *materializes* dated occurrences, so a
+ * fixture must create them — which is also why the range is explicit here.
+ */
 async function makeGroup(branchId: string, dayOfWeek = 'monday', hour = 9): Promise<string> {
-  const g = await createGroup(prisma, superAdmin(), {
-    name: `${TAG} مجموعة ${Math.random().toString(36).slice(2, 7)}`,
-    levelId,
+  const ctx = await createTeachingContext(
+    prisma,
+    `${TAG} ${Math.random().toString(36).slice(2, 7)}`,
     branchId,
-    roomId: null,
-    dayOfWeek,
-    startTime: new Date(Date.UTC(1970, 0, 1, hour, 0)),
-    endTime: new Date(Date.UTC(1970, 0, 1, hour + 1, 30)),
-    maxStudents: 20,
-  });
-  return g.id;
+    { levelId, categoryId, weekday: dayOfWeek, hour },
+  );
+  contexts.set(ctx.administrativeGroupId, ctx);
+  // Wide enough to cover every range the suite reads, including the Feb–Apr
+  // window the Ramadan DST test needs.
+  await materializeRange(prisma, ctx, day('2026-01-01'), day('2026-12-31'));
+  return ctx.administrativeGroupId;
 }
 
 /**
@@ -140,17 +148,9 @@ async function clear(): Promise<void> {
   await prisma.eventBranch.deleteMany({ where: { eventId: { in: eventIds } } });
   await prisma.eventCategory.deleteMany({ where: { eventId: { in: eventIds } } });
   await prisma.eventLevel.deleteMany({ where: { eventId: { in: eventIds } } });
-  await prisma.eventGroup.deleteMany({ where: { eventId: { in: eventIds } } });
+  await prisma.eventAdministrativeGroup.deleteMany({ where: { eventId: { in: eventIds } } });
   await prisma.event.deleteMany({ where: { id: { in: eventIds } } });
 
-  const groups = await prisma.group.findMany({
-    where: { name: { startsWith: TAG } },
-    select: { id: true },
-  });
-  const groupIds = groups.map((g) => g.id);
-  await prisma.groupTeacher.deleteMany({ where: { groupId: { in: groupIds } } });
-  await prisma.studentGroup.deleteMany({ where: { groupId: { in: groupIds } } });
-  await prisma.group.deleteMany({ where: { id: { in: groupIds } } });
   await clearTeachingContext(prisma, TAG);
   contexts.clear();
 
@@ -162,7 +162,6 @@ async function clear(): Promise<void> {
   await prisma.auditLog.deleteMany({
     where: { OR: [{ actorUserId: { in: userIds } }, { targetId: { in: eventIds } }] },
   });
-  await prisma.groupTeacher.deleteMany({ where: { teacherId: { in: userIds } } });
   await prisma.userBranchRole.deleteMany({ where: { userId: { in: userIds } } });
   await prisma.user.deleteMany({ where: { id: { in: userIds } } });
   await prisma.branch.deleteMany({ where: { name: { startsWith: TAG } } });
@@ -204,7 +203,7 @@ describe('§19.2 — Ramadan DST wall-clock stability (TD-11)', () => {
       from: day('2026-02-01'),
       to: day('2026-04-05'),
     });
-    const classes = scoped(occurrences).filter((o) => o.kind === 'group');
+    const classes = scoped(occurrences).filter((o) => o.kind === 'session');
 
     expect(classes.length).toBeGreaterThan(6);
     // Every single occurrence, on both sides of both shifts, reads 09:00. This
@@ -285,15 +284,13 @@ describe('§4.4 — recurrence expansion', () => {
     expect(dates).toHaveLength(5);
   });
 
-  it('a group expands onto its own weekday only, Monday-based', () => {
-    const mondays = expandGroup('monday', day('2026-06-01'), day('2026-06-30'));
-    expect(mondays.map((d) => d.getUTCDay())).toEqual([1, 1, 1, 1, 1]);
-    expect(expandGroup('sunday', day('2026-06-01'), day('2026-06-30'))).toHaveLength(4);
-  });
+  // The retired `expandGroup` is gone with the `Group` it expanded. Schedule
+  // recurrence — including the alternating-week case — is unit-tested in
+  // `lib/recurrence.test.ts`, where it needs no database.
 });
 
 describe('§4.4 — three-tier visibility', () => {
-  it('an ANONYMOUS caller sees the public tier only, and no timetable', async () => {
+  it('an ANONYMOUS caller sees the public EVENT tier — and the timetable, which is public (R43)', async () => {
     const branchId = await makeBranch('مراكش');
     await makeGroup(branchId);
     await makeEvent('public', { branchIds: [branchId] });
@@ -302,9 +299,21 @@ describe('§4.4 — three-tier visibility', () => {
 
     const rows = await readCalendar(prisma, null, range);
 
-    expect(titles(rows)).toEqual([`${TAG} public`]);
-    // A group timetable is not public information.
-    expect(scoped(rows).some((r) => r.kind === 'group')).toBe(false);
+    // Events still obey the three tiers: only the public one appears. Filtered
+    // by KIND rather than by title prefix — a session's title is its subject
+    // name, which shares the fixture tag.
+    expect(
+      rows.filter((r) => r.kind === 'event' && r.title.startsWith(`${TAG} `)).map((r) => r.title),
+    ).toEqual([`${TAG} public`]);
+
+    // **This assertion is INVERTED from the retired model, deliberately.**
+    // §4.4 (Revision 43): "The calendar is PUBLIC. Anonymous visitors browse it
+    // without authenticating." A Group timetable used to be staff-only; a
+    // Session timetable is the association's public offering — the thing a
+    // prospective family looks at before enrolling. The visibility tiers still
+    // govern EVENTS, and a private session's recordings remain private (§4.9);
+    // what changed is that the existence of a class is no longer secret.
+    expect(scoped(rows).some((r) => r.kind === 'session')).toBe(true);
   });
 
   it('a PENDING account sees exactly what an anonymous visitor sees (TD-1)', async () => {
@@ -410,7 +419,7 @@ describe('§4.4 — operational boundary and range guards', () => {
     // `[].every()` is true, so the boundary assertion alone would pass if the
     // filter removed EVERYTHING. Prove the after-side survives first.
     expect(ours.length).toBeGreaterThan(0);
-    expect(ours.some((r) => r.kind === 'group')).toBe(true);
+    expect(ours.some((r) => r.kind === 'session')).toBe(true);
     // §4.4: no scheduling data or events before the branch opens.
     expect(ours.every((r) => r.date >= '2026-06-15')).toBe(true);
     // And the event deliberately placed before the boundary is genuinely gone,
@@ -435,7 +444,7 @@ describe('§4.4 — operational boundary and range guards', () => {
 
     const rows = await readCalendar(prisma, viewer(actorUserId, ['super_admin']), range);
     const ours = scoped(rows);
-    expect(ours.some((r) => r.kind === 'group')).toBe(true);
+    expect(ours.some((r) => r.kind === 'session')).toBe(true);
     expect(ours.some((r) => r.kind === 'event')).toBe(true);
 
     const dates = rows.map((r) => r.date);
@@ -535,7 +544,7 @@ describe('§4.4/§5.7 — the Hijri overlay from official recorded data (Revisio
         to: day('2026-06-30'),
       }),
     );
-    const session = rows.find((r) => r.kind === 'group');
+    const session = rows.find((r) => r.kind === 'session');
 
     expect(session!.hijriDate).toMatch(/^1448-01-\d{2}$/);
     expect(session!.hijriMonthArabic).toBe('محرم');

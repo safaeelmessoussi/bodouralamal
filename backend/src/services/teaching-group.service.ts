@@ -5,7 +5,7 @@ import * as audit from '../repositories/audit.repository.js';
 import * as trash from '../repositories/trash.repository.js';
 import { updateWithVersion } from '../repositories/optimistic-lock.js';
 import { enqueueConsentReevaluationForStudent } from './enrollment.service.js';
-import type { Actor } from './branch.service.js';
+import type { Actor } from '../policies/actor.js';
 
 /**
  * Teaching Groups — a **subject-specific split** inside a Level (SRS §4.4c,

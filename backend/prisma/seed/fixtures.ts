@@ -172,33 +172,68 @@ async function main(): Promise<void> {
   console.log(`  branches: ${branches.length} (2 rooms each, operational since 180 days ago)`);
 
   // --- 3 groups per branch, on local wall-clock times (TD-11)
+  // Revision 43: **organisation and delivery are separate**. An Administrative
+  // Group is a roster at a branch and carries no timetable; the weekly slot
+  // belongs to a Recurring Course Schedule, which materializes Sessions.
+  // Rewritten rather than migrated, by Document Owner decision: the retired
+  // model recorded no Subject for a slot, so any conversion would have had to
+  // invent curriculum data.
   const days = [DayOfWeek.monday, DayOfWeek.wednesday, DayOfWeek.saturday];
-  let groupCount = 0;
+  const subjects = await prisma.subject.findMany({ where: { deletedAt: null }, take: 3 });
+
   const groups = [];
   for (const branch of branches) {
     const rooms = await prisma.room.findMany({ where: { branchId: branch.id, deletedAt: null } });
     for (let i = 0; i < 3; i++) {
       const name = `${FIXTURE_TAG} مجموعة ${branch.name.slice(-4)} ${i + 1}`;
-      const existing = await prisma.group.findFirst({ where: { name, deletedAt: null } });
+      const levelId = levels[i % levels.length]!.id;
+      const existing = await prisma.administrativeGroup.findFirst({
+        where: { name, deletedAt: null },
+      });
       const group =
         existing ??
-        (await prisma.group.create({
-          data: {
-            name,
-            levelId: levels[i % levels.length]!.id,
-            branchId: branch.id,
-            roomId: rooms[i % rooms.length]?.id ?? null,
-            dayOfWeek: days[i]!,
-            startTime: wallClock('17:00'),
-            endTime: wallClock('19:00'),
-            maxStudents: 12,
-          },
+        (await prisma.administrativeGroup.create({
+          data: { name, levelId, branchId: branch.id, displayOrder: i },
         }));
       groups.push(group);
-      groupCount++;
+
+      // The delivery half. One schedule per group, so the fixture exercises the
+      // `administrative_group` teaching mode; the other two modes are covered by
+      // the integration suites rather than seeded here.
+      const subjectId = subjects[i % subjects.length]?.id;
+      if (subjectId) {
+        const already = await prisma.recurringCourseSchedule.findFirst({
+          where: { administrativeGroupId: group.id, deletedAt: null },
+        });
+        if (!already) {
+          await prisma.levelSubject.upsert({
+            where: { levelId_subjectId: { levelId, subjectId } },
+            create: { levelId, subjectId },
+            update: {},
+          });
+          await prisma.recurringCourseSchedule.create({
+            data: {
+              subjectId,
+              teachingMode: 'administrative_group',
+              administrativeGroupId: group.id,
+              branchId: branch.id,
+              roomId: rooms[i % rooms.length]?.id ?? null,
+              // Wall-clock, never UTC instants (TD-11, §20 rule 14).
+              startTime: wallClock('17:00'),
+              endTime: wallClock('19:00'),
+              recurrence: 'weekly',
+              weekdays: [days[i]!],
+              academicYearId: academicYear.id,
+            },
+          });
+        }
+      }
     }
   }
-  console.log(`  groups: ${groupCount} (wall-clock 17:00–19:00, never UTC instants)`);
+  console.log(
+    `  administrative groups: ${groups.length}, each with a weekly course schedule ` +
+      `(wall-clock 17:00–19:00, never UTC instants)`,
+  );
 
   // --- People: a teacher, two parents, an adult student, and login-less minors
   async function upsertPerson(nameArabic: string, opts: { preProvisionedEmail?: string } = {}) {
@@ -236,13 +271,22 @@ async function main(): Promise<void> {
   const minorConsenting = await upsertPerson('سعاد الصغيرة');
   const minorNoConsent = await upsertPerson('ياسمين الصغيرة');
 
-  // Teacher scoping resolves exclusively through GroupTeacher (§4.2).
+  // Revision 43: teacher scope resolves through `CourseScheduleStaff` (§4.4c) —
+  // a teacher reaches students through the courses they staff, not through a
+  // group assignment.
   for (const group of groups.slice(0, 2)) {
-    const link = await prisma.groupTeacher.findFirst({
-      where: { groupId: group.id, teacherId: teacher.id, deletedAt: null },
+    const schedule = await prisma.recurringCourseSchedule.findFirst({
+      where: { administrativeGroupId: group.id, deletedAt: null },
+      select: { id: true },
+    });
+    if (!schedule) continue;
+    const link = await prisma.courseScheduleStaff.findFirst({
+      where: { scheduleId: schedule.id, userId: teacher.id, deletedAt: null },
     });
     if (!link) {
-      await prisma.groupTeacher.create({ data: { groupId: group.id, teacherId: teacher.id } });
+      await prisma.courseScheduleStaff.create({
+        data: { scheduleId: schedule.id, userId: teacher.id, position: 'teacher' },
+      });
     }
   }
   const teacherScope = await prisma.userBranchRole.findFirst({
@@ -305,11 +349,20 @@ async function main(): Promise<void> {
     [minorConsenting, groups[0]!],
     [minorNoConsent, groups[0]!],
   ] as const) {
-    const existing = await prisma.studentGroup.findFirst({
-      where: { studentId: student.id, groupId: group.id, deletedAt: null },
+    const existing = await prisma.enrollment.findFirst({
+      where: { studentId: student.id, administrativeGroupId: group.id, deletedAt: null },
     });
     if (!existing) {
-      await prisma.studentGroup.create({ data: { studentId: student.id, groupId: group.id } });
+      // `levelId` comes from the GROUP, never invented here — the composite FK
+      // would refuse a disagreement, but passing it from the group is what makes
+      // the column a constraint rather than a second source of truth (§4.4c).
+      await prisma.enrollment.create({
+        data: {
+          studentId: student.id,
+          administrativeGroupId: group.id,
+          levelId: group.levelId,
+        },
+      });
     }
   }
   console.log('  enrollments: 3 into group 1 (one without consent → gate engages, BR-2)');
@@ -364,6 +417,9 @@ async function main(): Promise<void> {
           visibility: spec.visibility,
           consentForcedPrivate: spec.forced,
           levelId: levels[0]!.id,
+          // Required since the Revision 43 contract phase (§7): content belongs
+          // to a Subject as well as a Level.
+          subjectId: subjects[0]!.id,
           branchId: branches[0]!.id,
           academicYearId: academicYear.id,
           // Hash-segmented immutable key shape (TD-9); visibility is never

@@ -14,7 +14,7 @@ Four layers, each testing something the others structurally cannot.
 **Coverage: ≥ 80 % on services and policies.** No coverage gate on generated or boilerplate
 code — a coverage number that counts generated clients measures nothing.
 
-Current totals: **133 backend unit · 651 integration · 219 frontend**.
+Current totals: **133 backend unit · 576 integration · 219 frontend**.
 
 ## Running them
 
@@ -116,6 +116,15 @@ inside the same minute can exhaust the auth zone and fail whichever
 `200` was expected, moving to a different test each run** — a genuine failure
 stays put. Confirm by running that one suite alone; if it passes, the code is
 fine and the window simply needs to elapse.
+
+**The API container serves the HTTP suites, so schema changes need a rebuild.**
+`*.http.integration.test.ts` calls the running container, not an in-process app.
+After a migration the container still holds the previous Prisma client, so a
+dropped table surfaces as a `500` — or, where the route degrades, as an
+unexplained empty result rather than an error. Rebuild `api` before running
+those suites. (Health lives at the **origin root**, `/healthz`, not under
+`/api/v1/` — a `401` there means you asked the guarded router, not that the API
+is unwell.)
 
 **A queue must be registered before anything can be enqueued into it.**
 `pgboss.job` is partitioned by queue name, so adding a job to the TD-7 catalogue

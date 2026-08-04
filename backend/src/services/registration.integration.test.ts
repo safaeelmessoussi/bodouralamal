@@ -242,7 +242,7 @@ describe('§4.1 Revision 39 — the applicant chooses a Branch, and only a Branc
     // person ENDS UP is still nothing, because placement follows approval. A
     // role assignment and an enrolment are both absent.
     expect(await prisma.userBranchRole.count({ where: { userId: result.applicantId } })).toBe(0);
-    expect(await prisma.studentGroup.count({ where: { studentId: result.applicantId } })).toBe(0);
+    expect(await prisma.enrollment.count({ where: { studentId: result.applicantId } })).toBe(0);
   });
 
   it('records the branch on the APPLICANT only, never copied onto the child', async () => {

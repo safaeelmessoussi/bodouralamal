@@ -9,7 +9,7 @@ import {
   deleteAdministrativeGroup,
   listAdministrativeGroups,
 } from './administrative-group.service.js';
-import type { Actor } from './branch.service.js';
+import type { Actor } from '../policies/actor.js';
 import { createBranch } from './branch.service.js';
 import { createLevel, FIRST_GROUP_NAME, levelsWithoutGroups } from './level.service.js';
 import {

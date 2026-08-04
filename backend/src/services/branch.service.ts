@@ -1,6 +1,6 @@
 import type { Branch, PrismaClient, Room } from '../generated/prisma/client.js';
 import * as scope from '../policies/branch-scope.js';
-import { type RoleScope } from '../policies/branch-scope.js';
+import type { Actor } from '../policies/actor.js';
 import { AppError } from '../lib/errors.js';
 import { page, pageWindow, type Page, type PageParams } from '../lib/pagination.js';
 import * as audit from '../repositories/audit.repository.js';
@@ -16,18 +16,6 @@ import { backfillFirstGroups } from './administrative-group.service.js';
  * layer).
  */
 
-export interface Actor {
-  userId: string;
-  roles: string[];
-  /**
-   * Carried so a **public** endpoint can apply §4.4's rule that a `Pending`
-   * account sees the public tier — the guarded router refuses non-active
-   * callers outright, but `/calendar` must serve them something.
-   */
-  accountStatus?: string;
-  /** Branch ids this actor is scoped to; empty for an unscoped Super Admin. */
-  roleScopes: RoleScope[];
-}
 
 const isSuperAdmin = (actor: Actor): boolean => scope.isSuperAdmin(actor.roleScopes);
 const isAdmin = (actor: Actor): boolean => scope.hasRole(actor.roleScopes, 'admin') || isSuperAdmin(actor);
@@ -222,13 +210,19 @@ export async function deleteBranch(
     const branch = await tx.branch.findFirst({ where: { id, deletedAt: null } });
     if (!branch) throw new AppError('NOT_FOUND', 'branch not found');
 
-    const [rooms, groups] = await Promise.all([
+    // TD-5 (Revision 43): a Branch is blocked by Rooms, **Administrative
+    // Groups** and **Course Schedules** — the last is new, because a schedule
+    // states its branch directly and deleting the branch would orphan every
+    // session it has materialized.
+    const [rooms, groups, schedules] = await Promise.all([
       tx.room.count({ where: { branchId: id, deletedAt: null } }),
-      tx.group.count({ where: { branchId: id, deletedAt: null } }),
+      tx.administrativeGroup.count({ where: { branchId: id, deletedAt: null } }),
+      tx.recurringCourseSchedule.count({ where: { branchId: id, deletedAt: null } }),
     ]);
     await assertNoBlockingReferences([
       { label: 'rooms', count: rooms },
       { label: 'groups', count: groups },
+      { label: 'course_schedules', count: schedules },
     ]);
 
     // TD-4.8: soft delete + Trash snapshot + audit, all in one transaction.
@@ -333,8 +327,17 @@ export async function deleteRoom(prisma: PrismaClient, actor: Actor, id: string)
     if (!room) throw new AppError('NOT_FOUND', 'room not found');
     scope.assertCanActOnBranch(actor.roleScopes, MANAGING_ROLE, room.branchId);
 
-    const groups = await tx.group.count({ where: { roomId: id, deletedAt: null } });
-    await assertNoBlockingReferences([{ label: 'groups', count: groups }]);
+    // TD-5 (Revision 43): a Room is blocked by the schedules and the future
+    // sessions that book it. An Administrative Group has no room at all now, so
+    // it can no longer block one.
+    const [schedules, sessions] = await Promise.all([
+      tx.recurringCourseSchedule.count({ where: { roomId: id, deletedAt: null } }),
+      tx.session.count({ where: { roomId: id, deletedAt: null } }),
+    ]);
+    await assertNoBlockingReferences([
+      { label: 'course_schedules', count: schedules },
+      { label: 'sessions', count: sessions },
+    ]);
 
     await tx.room.update({
       where: { id },

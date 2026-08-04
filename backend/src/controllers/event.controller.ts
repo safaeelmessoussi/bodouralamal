@@ -12,7 +12,7 @@ import {
   deleteEvent,
   updateEvent,
 } from '../services/event.service.js';
-import type { Actor } from '../services/group.service.js';
+import type { Actor } from '../policies/actor.js';
 
 /**
  * Events — TD-3.4 (`/events`, `/admin/branches/{id}/event-backfill`), §4.4.

@@ -1,4 +1,5 @@
 import type { PrismaClient } from '../generated/prisma/client.js';
+import { expandSchedule } from '../lib/recurrence.js';
 
 /**
  * The Revision 43 educational model, as test fixtures.
@@ -40,7 +41,14 @@ export async function createTeachingContext(
   prisma: PrismaClient,
   tag: string,
   branchId: string,
-  opts: { levelId?: string; categoryId?: string } = {},
+  opts: {
+    levelId?: string;
+    categoryId?: string;
+    /** Defaults to Saturday; the calendar suite needs specific weekdays. */
+    weekday?: string;
+    /** Start hour, wall-clock (TD-11). End is one and a half hours later. */
+    hour?: number;
+  } = {},
 ): Promise<TeachingFixture> {
   const categoryId =
     opts.categoryId ?? (await prisma.category.create({ data: { name: `${tag} فئة` } })).id;
@@ -66,10 +74,10 @@ export async function createTeachingContext(
       teachingMode: 'administrative_group',
       administrativeGroupId: group.id,
       branchId,
-      startTime: new Date(Date.UTC(1970, 0, 1, 9, 0, 0)),
-      endTime: new Date(Date.UTC(1970, 0, 1, 10, 0, 0)),
+      startTime: new Date(Date.UTC(1970, 0, 1, opts.hour ?? 9, 0, 0)),
+      endTime: new Date(Date.UTC(1970, 0, 1, (opts.hour ?? 9) + 1, 30, 0)),
       recurrence: 'weekly',
-      weekdays: ['saturday'],
+      weekdays: [(opts.weekday ?? 'saturday') as never],
       academicYearId: academicYear.id,
     },
   });
@@ -82,8 +90,8 @@ export async function createTeachingContext(
     data: {
       scheduleId: schedule.id,
       date: new Date('2026-09-12'),
-      startTime: new Date(Date.UTC(1970, 0, 1, 9, 0, 0)),
-      endTime: new Date(Date.UTC(1970, 0, 1, 10, 0, 0)),
+      startTime: new Date(Date.UTC(1970, 0, 1, opts.hour ?? 9, 0, 0)),
+      endTime: new Date(Date.UTC(1970, 0, 1, (opts.hour ?? 9) + 1, 30, 0)),
     },
   });
 
@@ -159,4 +167,66 @@ export async function clearTeachingContext(prisma: PrismaClient, tag: string): P
   await prisma.subject.deleteMany({ where: tagged });
   await prisma.level.deleteMany({ where: tagged });
   await prisma.category.deleteMany({ where: tagged });
+}
+
+/**
+ * Materializes a schedule's sessions across an arbitrary range.
+ *
+ * **Test-only, and deliberately unbounded by the production rules.**
+ * `session.materialize` never generates the past and stops at the academic-year
+ * horizon (§4.4) — both correct for the application and both useless to a suite
+ * that needs occurrences in, say, February 2026 to exercise Morocco's Ramadan
+ * clock shift. Those rules are the *service's* job to enforce and the service's
+ * own suite proves them; a fixture that had to respect them could not set up the
+ * scenario at all.
+ *
+ * Uses the same `expandSchedule` the job uses, so the dates are the ones
+ * production would have produced.
+ */
+export async function materializeRange(
+  prisma: PrismaClient,
+  fixture: Pick<TeachingFixture, 'scheduleId'>,
+  from: Date,
+  to: Date,
+): Promise<string[]> {
+  const schedule = await prisma.recurringCourseSchedule.findUniqueOrThrow({
+    where: { id: fixture.scheduleId },
+    select: {
+      startTime: true,
+      endTime: true,
+      roomId: true,
+      recurrence: true,
+      weekdays: true,
+      dayOfMonth: true,
+      monthOfYear: true,
+      anchorDate: true,
+      staff: { where: { deletedAt: null }, select: { userId: true, position: true } },
+    },
+  });
+
+  const ids: string[] = [];
+  for (const date of expandSchedule(schedule, from, to)) {
+    const row = await prisma.session.upsert({
+      where: { scheduleId_date: { scheduleId: fixture.scheduleId, date } },
+      create: {
+        scheduleId: fixture.scheduleId,
+        date,
+        startTime: schedule.startTime,
+        endTime: schedule.endTime,
+        roomId: schedule.roomId,
+      },
+      update: {},
+      select: { id: true },
+    });
+    // Revision 43.4: the occurrence carries its own staffing snapshot.
+    for (const s of schedule.staff) {
+      await prisma.sessionStaff.upsert({
+        where: { sessionId_userId: { sessionId: row.id, userId: s.userId } },
+        create: { sessionId: row.id, userId: s.userId, position: s.position },
+        update: { position: s.position, deletedAt: null },
+      });
+    }
+    ids.push(row.id);
+  }
+  return ids;
 }

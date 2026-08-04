@@ -11,7 +11,7 @@ import {
   recordMonthStart,
   yearHistory,
 } from '../services/hijri-calendar.service.js';
-import type { Actor } from './../services/group.service.js';
+import type { Actor } from '../policies/actor.js';
 
 /**
  * Recording the Ministry's official Hijri announcements — TD-3.4 (Revisions

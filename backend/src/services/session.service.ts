@@ -6,7 +6,7 @@ import { audienceSize, staffsSession } from '../policies/roster-resolution.js';
 import * as audit from '../repositories/audit.repository.js';
 import { updateWithVersion } from '../repositories/optimistic-lock.js';
 import { protectionReasonsFor, SELECT_PROTECTABLE } from '../policies/session-protection.js';
-import type { Actor } from './branch.service.js';
+import type { Actor } from '../policies/actor.js';
 
 /**
  * Sessions — the materialized dated occurrence (SRS §4.4, TD-1, TD-8,

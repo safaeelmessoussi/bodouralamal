@@ -3,7 +3,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { loadConfig } from '../lib/config.js';
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
 import type { RoleScope } from '../policies/branch-scope.js';
-import type { Actor } from './group.service.js';
+import type { Actor } from '../policies/actor.js';
 import {
   listYear,
   publishYear,

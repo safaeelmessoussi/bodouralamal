@@ -3,7 +3,7 @@ import type { NextFunction, Request, Response } from 'express';
 import { verifyAccessToken } from '../lib/access-token.js';
 import type { AppConfig } from '../lib/config.js';
 import { AppError } from '../lib/errors.js';
-import type { Actor } from '../services/branch.service.js';
+import type { Actor } from '../policies/actor.js';
 
 /**
  * Bearer authentication (SRS TD-12).

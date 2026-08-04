@@ -4,7 +4,7 @@ import { MAX_HIJRI_YEAR, MIN_HIJRI_YEAR, MONTHS_IN_YEAR, hijriMonthNameArabic } 
 import * as scope from '../policies/branch-scope.js';
 import * as audit from '../repositories/audit.repository.js';
 import { updateWithVersion } from '../repositories/optimistic-lock.js';
-import type { Actor } from './group.service.js';
+import type { Actor } from '../policies/actor.js';
 
 /**
  * Official Moroccan Hijri calendar management — SRS Revision 31, §5.7, TD-2,

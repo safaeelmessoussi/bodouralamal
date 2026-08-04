@@ -73,11 +73,6 @@ async function clear(): Promise<void> {
     select: { id: true },
   });
   const ids = users.map((u) => u.id);
-  const groups = await prisma.group.findMany({
-    where: { name: { startsWith: TAG } },
-    select: { id: true },
-  });
-  const groupIds = groups.map((g) => g.id);
   await prisma.auditLog.deleteMany({
     where: { OR: [{ actorUserId: { in: ids } }, { targetId: { in: ids } }] },
   });
@@ -92,7 +87,6 @@ async function clear(): Promise<void> {
   await prisma.courseScheduleStaff.deleteMany({ where: { userId: { in: ids } } });
   await clearTeachingContext(prisma, TAG);
   contexts.clear();
-  await prisma.group.deleteMany({ where: { id: { in: groupIds } } });
   await prisma.userBranchRole.deleteMany({ where: { userId: { in: ids } } });
   await prisma.user.deleteMany({ where: { id: { in: ids } } });
   await prisma.branch.deleteMany({ where: { name: { startsWith: TAG } } });

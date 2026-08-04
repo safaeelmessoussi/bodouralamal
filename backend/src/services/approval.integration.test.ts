@@ -211,7 +211,7 @@ describe('§5.6 / TD-4.2 approval queue', () => {
     // enrolment: placement remains an administrative action after approval.
     expect((await prisma.user.findUnique({ where: { id: parentId } }))?.accountStatus).toBe('active');
     expect(await prisma.userBranchRole.count({ where: { userId: parentId } })).toBe(0);
-    expect(await prisma.studentGroup.count({ where: { studentId: parentId } })).toBe(0);
+    expect(await prisma.enrollment.count({ where: { studentId: parentId } })).toBe(0);
     // The request itself survives approval — it is the record of what was asked.
     expect((await prisma.user.findUnique({ where: { id: parentId } }))?.intendedBranchId).toBe(branchId);
   });

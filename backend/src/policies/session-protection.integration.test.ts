@@ -163,6 +163,9 @@ describe('the built-in rules hold with NO registration step', () => {
       data: {
         title: `${TAG} ملف`,
         levelId: (await prisma.level.findFirstOrThrow({ where: { name: { startsWith: TAG } } })).id,
+        // Required since the Revision 43 contract phase (§7).
+        subjectId: (await prisma.subject.findFirstOrThrow({ where: { name: { startsWith: TAG } } }))
+          .id,
         academicYearId: (await prisma.academicYear.findFirstOrThrow()).id,
         storageBucket: 'private',
         storageKey: `${TAG}/${Date.now()}`,

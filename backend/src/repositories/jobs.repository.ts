@@ -51,26 +51,3 @@ export async function enqueue(
     VALUES (${queue}, ${JSON.stringify(data)}::jsonb, ${singletonKey ?? null})
   `;
 }
-
-/**
- * Enqueues a consent re-evaluation for each group the student is enrolled in
- * (§4.1a, TD-7 payload `{ group_id }`).
- *
- * A student in no group enqueues nothing — there is no group whose consent state
- * could change — and that is a normal outcome, not an error.
- */
-export async function enqueueConsentReevaluation(
-  tx: Prisma.TransactionClient,
-  studentId: string,
-): Promise<string[]> {
-  const enrolments = await tx.studentGroup.findMany({
-    where: { studentId, deletedAt: null, group: { deletedAt: null } },
-    select: { groupId: true },
-  });
-  const groupIds = [...new Set(enrolments.map((e) => e.groupId))];
-
-  for (const groupId of groupIds) {
-    await enqueue(tx, JOB_QUEUES.consentReevaluate, { group_id: groupId }, groupId);
-  }
-  return groupIds;
-}

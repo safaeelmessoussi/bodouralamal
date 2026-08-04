@@ -353,7 +353,11 @@
   - ✓ **Independence between Subjects proven directly**: a Tajweed seat for a student already holding a Quran seat in the same Level is accepted; a second Quran seat is refused
   - ⚠ **The proof run caught a defect in my own CHECK.** The cancellation-reason constraint was first written so that `btrim(NULL) <> ''` evaluated to `NULL`, which a CHECK treats as satisfied — it silently accepted the row it existed to refuse. Rewritten with an explicit `IS NOT NULL`, re-proven, and the reasoning left as a comment above it
 - [ ] *Migrate:* backfill each existing `Group` into an `AdministrativeGroup` + one `RecurringCourseSchedule` carrying its slot; `StudentGroup` → `Enrollment`; `GroupTeacher` → `CourseScheduleStaff`; `EventGroup` → `EventAdministrativeGroup`; `Grade.group_id` → `administrative_group_id`
-- [ ] *Contract (separate, later migration):* drop `Group.day_of_week/start_time/end_time/room_id/max_students`, `EducationalContent.event_id`, and the retired tables — tagged with its contract-phase justification for `check-migration-drop-rename.sh`
+- [x] *Contract (separate, later migration):* the retired tables and columns dropped, tagged with the contract-phase justification
+  - ✓ **No data migrated, by Document Owner decision** — no production deployment exists, and a backfill would have had to invent the Subject the old model never recorded
+  - ✓ Verified on a **fresh database**: all 19 migrations apply from empty, and the four retired tables are absent
+  - ✓ Migration is **idempotent** — a contract step that partially applied must be re-runnable, which this one had to be
+- [x] *Migrate:* **superseded** — dev fixtures and the seed were rewritten under the new model instead of migrated (authorised)
 
 **Domain**
 - [x] Level creation **takes a required `branch_id` and** auto-creates المجموعة 1 at it, in the same transaction (TD-4.6b, §4.4b, R43.1) — the Branch is an input, **never a column on `Level`**
