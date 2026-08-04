@@ -63,11 +63,36 @@ When work is finished, report it in **these six sections, in this order**:
 | Section | Contains |
 |---|---|
 | **1. User-visible changes** | What changed, in terms a non-developer understands |
-| **2. Engineering highlights** | The decisions and trade-offs that mattered |
-| **3. Documentation updates** | Exactly which documents changed, and **why** |
-| **4. Additional defects discovered** | Unrelated defects found and fixed along the way |
-| **5. Verification** | Tests, guards, builds, accessibility, API checks — what was actually run |
-| **6. Remaining work** | Anything intentionally left for later |
+| **2. Engineering highlights** | **Decisions, not description** — a trade-off, a rejected alternative, a constraint discovered |
+| **3. Documentation updates** | **Which document now owns what was learned** — not a list of files |
+| **4. Additional defects discovered** | Unrelated defects found and fixed along the way, **and where the knowledge was recorded** |
+| **5. Verification** | What was **actually run** — plus a skipped check where the reason is non-obvious |
+| **6. Remaining work** | **The highest-value next target first**, then everything else still open |
+
+### The report is ephemeral; the ledger is not
+
+**A completion report is read once and is gone at the next context compaction.**
+[`CHANGES.log`](../CHANGES.log), the handbook and the code are what survive.
+
+**So no fact of lasting value may exist only in a report.** Record it where it lasts, and let
+the report *point* at it. This is §16.4's own rule turned on the report itself: a report is
+not where knowledge is **stored**, it is where knowledge is **surfaced** so the Document Owner
+can act on it.
+
+That single rule removes more volume than any restructuring, because the longest part of a
+report — the rationale — becomes a pointer instead of prose. It is also the fix for a
+duplication that is easy to miss precisely because one of the two copies is a chat message:
+writing the same slice's reasoning into both the ledger and the report is
+[two authoritative homes](engineering-constitution.md#12--one-authoritative-home-per-concept)
+for one explanation.
+
+**The test each section must pass:**
+
+> **Does this answer a question the commit and the ledger cannot answer?**
+
+A file list does not — `git show` has it. A convention settled three sessions ago does not. A
+diff narrated in prose does not. A *decision*, a *constraint*, an *unrun check* and *what is
+still open* all do, and that is why those are the six.
 
 **Use all six headings even when a section is short.** Write *"None"* rather than omitting
 one, so a missing section never reads as an oversight.
