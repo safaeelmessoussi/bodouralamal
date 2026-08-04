@@ -2,7 +2,7 @@
 
 # API endpoints
 
-**47 operations across 35 paths**, all under `/api/v1` except the health check.
+**53 operations across 39 paths**, all under `/api/v1` except the health check.
 The count comes from the generator, which reconciles against the live router — if this line
 disagrees with `openapi.json`, this line is the one that is wrong.
 
@@ -99,13 +99,42 @@ dropping them: a `201` after sending a capacity would tell a client a limit had 
 and there is none to record. `branch_id` is load-bearing — it is the single answer to *which
 branch is this person at*, which `intended_branch_id` deliberately does not give.
 
+### Teaching Groups — the subject split
+
+A **Teaching Group** exists only where a Subject needs students divided differently from the
+administrative roster. A Subject with no groups is taught to the whole Level, so creating these is
+never a prerequisite for teaching anything. The splits are **independent between Subjects**: one
+student sits in Administrative Group 1, Quran Group 2 and Tajweed Group 1 at once.
+
+| | Path | Notes |
+|---|---|---|
+| `GET` `POST` | `/admin/levels/{levelId}/subjects/{subjectId}/teaching-groups` | `GET` returns `{groups, split, unassigned}` — the whole split in one read, **unpaginated**. `POST` is 👤; the Subject must actually be assigned to the Level |
+| `PATCH` `DELETE` | `/admin/teaching-groups/{id}` | 👤. Only `name` and `display_order`. `DELETE` answers **`200 {released_students}`**, not `204`, and is blocked by a schedule targeting the group |
+| `POST` | `/admin/teaching-groups/{id}/members` | 🔒 scoped by the **student's** enrolment branch. At most one seat per (student, Subject, Level) |
+| `DELETE` | `/admin/teaching-groups/{id}/members/{studentId}` | The student returns to `unassigned` |
+
+**`unassigned` is BR-22 made visible.** A student enrolled in the Level who holds no seat in a
+split Subject has **no sessions for it at all**, and nothing else in the platform would say so.
+That is also why the list is unpaginated — a page boundary drawn through an alarm hides half of it.
+**`split` is not redundant with `groups.length`:** an empty `unassigned` on an unsplit Subject means
+*the question does not apply*; on a split one it means *everyone is placed*. The two render
+identically without the flag and only one of them is fine.
+
+**The authority is split, and the reason is structural** (Revision 43.3). A Teaching Group carries
+**no branch** — it belongs to a Subject and a Level, and a Level spans branches — so *"within your
+branch scope"* has no referent for the group itself. Group CRUD is therefore Super Admin, alongside
+the Levels and Subjects it organises; **membership** is Admin, scoped by the branch the *student* is
+enrolled at, which is a referent that exists. Without the split a Marrakesh Admin could delete the
+Quran split Targa's students depend on while the unassigned list showed them only Marrakesh
+students: authority over everyone, visibility of some. It follows that a branch Admin's `unassigned`
+list is deliberately **partial** — they may place only the students they are responsible for.
+
 ### Not yet mounted
 
 Every service below is **built and tested**; the contract phase removed the old routes and these
 replace them one resource at a time.
 
-`/admin/levels/{levelId}/subjects/{subjectId}/teaching-groups` ·
-`/admin/teaching-groups/{id}` (+ `/members`) · `/admin/course-schedules` (+ `/conflicts`, `/roster`) ·
+`/admin/course-schedules` (+ `/conflicts`, `/roster`) ·
 `/sessions/{id}` (+ `/cancel`, `/restore`, `/content`) · `GET /library`
 
 ## Events

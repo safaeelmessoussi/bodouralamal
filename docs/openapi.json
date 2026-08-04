@@ -2352,6 +2352,378 @@
         }
       }
     },
+    "/admin/levels/{levelId}/subjects/{subjectId}/teaching-groups": {
+      "get": {
+        "summary": "List a subject split for a level",
+        "description": "TD-3.12 (Revision 43), §4.4c, **BR-22**. Returns `{ groups, split, unassigned }` — **the whole split in one read**, because the unassigned list is unreadable without the groups beside it: the screen's question is *who is not placed, and where could they go*, and two round trips would let a client render half the answer. **`split` is not redundant with `groups.length`:** a Subject with no Teaching Groups is taught to the entire Level (§4.4c), so an empty `unassigned` there means *the question does not apply*, whereas an empty `unassigned` on a **split** Subject means *everyone is placed*. The two render identically without the flag and one of them is an alarm. **`unassigned` is BR-22 made visible** — students enrolled in the Level holding no seat for this split Subject have **no sessions for it at all**, and nothing else in the platform would say so. **Not paginated:** a page boundary drawn through that list would let a beneficiary receiving no teaching fall onto page two. **Branch-scoped for an Admin, unscoped for a Super Admin** (Revision 43.3), so a branch Admin correctly sees a *partial* unassigned list — their own students, the only ones they may place. Each group carries `member_count`, so answering *how many are in this split* costs no request per group. **No `branch_id` on a group** (§4.4c): it belongs to a Subject and a Level, and a Level spans branches (§4.4b).",
+        "responses": {
+          "200": {
+            "description": "The split: groups, the `split` flag, and the unassigned students."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a malformed levelId or subjectId.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN for a caller holding neither admin nor super_admin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a teaching group",
+        "description": "TD-3.12, §4.4c. **Super Admin only (Revision 43.3)** — a Teaching Group is curriculum *structure*, alongside the Levels and Subjects it organises (Revision 26), and it carries **no branch**, so the *\"within your branch scope\"* check every other operational service performs has no referent to apply. Without that split a Marrakesh Admin could delete the Quran split that Targa's students depend on while seeing only Marrakesh students in the unassigned list: authority over everyone, visibility of some. Body: `{ name, display_order? }` — **strictly** those keys. `level_id` and `subject_id` are **path segments and are refused in the body**: `StudentTeachingGroup` carries the same pair denormalized under a composite FK (Revision 43.2), and taking them from a caller would leave that FK as the only thing between a typo and a seat filed under the wrong curriculum item. **The Subject must actually be assigned to the Level** (`409 STATE_CONFLICT`, `reason: SUBJECT_NOT_IN_LEVEL`) — splitting a Subject a Level does not offer would create groups nothing can ever schedule, sitting in the taxonomy looking legitimate. Creating these is **not** a prerequisite for teaching: a Subject with no rows here is taught to the entire Level.",
+        "responses": {
+          "201": {
+            "description": "Created, with `member_count: 0`."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a missing name or an unknown key such as level_id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN — group CRUD is Super Admin only (R43.3).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an unknown Level or Subject.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT with reason SUBJECT_NOT_IN_LEVEL.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/teaching-groups/{id}": {
+      "patch": {
+        "summary": "Rename or reorder a teaching group",
+        "description": "TD-3.12, **Super Admin only (Revision 43.3)**. **Only `name` and `display_order` are editable**; `subject_id` and `level_id` are **rejected** rather than ignored. Either would break the composite FK that keeps every member row's `(subject, level)` agreeing with its group's, and would silently re-file a whole cohort under a different curriculum item — a re-creation, not an edit. **TD-15 optimistic locking:** send the `version` you loaded; a stale one is `409 VERSION_CONFLICT`, never a silent overwrite.",
+        "responses": {
+          "200": {
+            "description": "Updated."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a missing version, or an attempt to move the group between Subjects or Levels.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN — Super Admin only (R43.3).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). VERSION_CONFLICT.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete a teaching group",
+        "description": "TD-3.12, **Super Admin only (Revision 43.3)**, TD-5 soft delete with a Trash snapshot and an audit row. **Refused while a Recurring Course Schedule targets it** — `409 STATE_CONFLICT`, `reason: SCHEDULES_EXIST` — so a split can never vanish from under a timetable. Its member rows go with it and **the affected students return to that Subject's `unassigned` list** (BR-22) rather than disappearing from the platform's account of who is taught what. **Answers `200 { released_students }`, deliberately not `204`:** BR-22 requires that return to be visible, and this count is the only moment the number exists — afterwards the list has been worked through and released students are indistinguishable from those never placed. Consent re-evaluation is enqueued for each member **while they are still in the audience**, since afterwards a derived lookup would skip the very sessions whose gate just changed.",
+        "responses": {
+          "200": {
+            "description": "Deleted; `released_students` is how many returned to `unassigned`."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN — Super Admin only (R43.3).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT with reason SCHEDULES_EXIST.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/teaching-groups/{id}/members": {
+      "post": {
+        "summary": "Place a student into a teaching group",
+        "description": "TD-3.12, §4.4c. **Admin or Super Admin, scoped by the branch the STUDENT is enrolled at** (Revision 43.3) — `Enrollment → AdministrativeGroup.branch_id` is a referent that exists where the group's own branch does not. A student outside that scope answers `404`, never `403` (§20 rule 17). Body: `{ student_id }` — **strictly** that one key; the Subject and Level come from the group, so the uniqueness rule is enforced against values this service chose. **A student not enrolled in the Level cannot be placed at all** (`409 STATE_CONFLICT`, `reason: NOT_ENROLLED_IN_LEVEL`) — BR-22 read from the other direction: enrolment precedes placement. **At most one seat per (student, Subject, Level)** (§4.4c), backed by a partial unique index (Revision 43.2): the same group twice is `409 DUPLICATE`, and a *different* split of the same Subject is `409 STATE_CONFLICT` with `reason: ALREADY_IN_SUBJECT_SPLIT` naming `current_teaching_group_id`, because the intended action was almost certainly a move. **The splits are independent between Subjects** — one student sits in Administrative Group 1, Quran Group 2 and Tajweed Group 1 at once, which falls out of the uniqueness being per `(student, subject, level)` rather than per student. Enqueues `consent.reevaluate` in the same transaction (§4.1a, TD-7).",
+        "responses": {
+          "201": {
+            "description": "Placed."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a missing or malformed student_id, or an unknown key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN for a caller holding neither admin nor super_admin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an unknown group, an unknown student, or a student outside the caller's branch scope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). DUPLICATE in this group; STATE_CONFLICT with reason ALREADY_IN_SUBJECT_SPLIT or NOT_ENROLLED_IN_LEVEL.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/teaching-groups/{id}/members/{studentId}": {
+      "delete": {
+        "summary": "Remove a student from a teaching group",
+        "description": "TD-3.12, §4.4c, TD-5. The student returns to that Subject's `unassigned` list (BR-22) — **never silently classless**. Scoped exactly as placement is, by the branch the student is enrolled at (Revision 43.3). Enqueues consent re-evaluation on the same transaction, since the student's session audience has changed.",
+        "responses": {
+          "204": {
+            "description": "Removed."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an unknown group, a student outside scope, or a student not in this group.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/healthz": {
       "servers": [
         {

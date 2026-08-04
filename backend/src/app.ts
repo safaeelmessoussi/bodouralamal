@@ -14,6 +14,7 @@ import * as socialProfile from './controllers/social-profile.controller.js';
 import * as users from './controllers/user.controller.js';
 import * as branch from './controllers/branch.controller.js';
 import * as administrativeGroups from './controllers/administrative-group.controller.js';
+import * as teachingGroups from './controllers/teaching-group.controller.js';
 import { createRegistration } from './controllers/registration.controller.js';
 import { healthController } from './controllers/health.controller.js';
 import type { PrismaClient } from './generated/prisma/client.js';
@@ -164,6 +165,31 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
   guarded.delete(
     '/admin/administrative-groups/:id/roster/:studentId',
     administrativeGroups.unenrol(prisma),
+  );
+
+  // Teaching Groups (§4.4c, BR-22, TD-3.12, Revision 43) — the SUBJECT-SPECIFIC
+  // split inside a Level, which exists only where a Subject needs students
+  // divided differently from the administrative roster.
+  //
+  // The collection is addressed by `(Level, Subject)` because that pair is what
+  // a split IS. Authority is split with it (Revision 43.3): the group itself has
+  // no branch to scope by, so its CRUD is Super Admin, while membership is Admin
+  // scoped by the branch the STUDENT is enrolled at — both asserted in the
+  // service, never here.
+  guarded.get(
+    '/admin/levels/:levelId/subjects/:subjectId/teaching-groups',
+    teachingGroups.list(prisma),
+  );
+  guarded.post(
+    '/admin/levels/:levelId/subjects/:subjectId/teaching-groups',
+    teachingGroups.create(prisma),
+  );
+  guarded.patch('/admin/teaching-groups/:id', teachingGroups.update(prisma));
+  guarded.delete('/admin/teaching-groups/:id', teachingGroups.remove(prisma));
+  guarded.post('/admin/teaching-groups/:id/members', teachingGroups.addMember(prisma));
+  guarded.delete(
+    '/admin/teaching-groups/:id/members/:studentId',
+    teachingGroups.removeMember(prisma),
   );
   api.use(guarded);
 

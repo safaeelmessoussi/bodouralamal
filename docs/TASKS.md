@@ -423,7 +423,13 @@
   - ✓ BR-21 refused with an explanation, not a raw constraint error: same group is `DUPLICATE`, another group of the same Level is `ALREADY_ENROLLED_IN_LEVEL` **naming the group that holds them**
   - ✓ `id` on a roster entry is the **enrolment** id, not the student's; un-enrolment leaves the tombstoned row and the academic record intact (TD-5)
   - ✓ No capacity check anywhere (BR-23); 6 HTTP tests, 24 in the file
-- [ ] TD-3.12 **Teaching Groups** (incl. `unassigned[]`, BR-22) and their membership verbs
+- [x] TD-3.12 **Teaching Groups** (incl. `unassigned[]`, BR-22) and their membership verbs
+  - ✓ Addressed by `(Level, Subject)` because that pair **is** the split; both refused in a body and on `PATCH`, so a cohort can never be silently re-filed under another curriculum item
+  - ✓ `GET` returns `{groups, split, unassigned}` in one read — the unassigned list is unreadable without the groups beside it — and is **unpaginated**, since a page boundary through an alarm hides half of it
+  - ✓ `split` kept distinct from `groups.length`: *the question does not apply* must not render like *everyone is placed*
+  - ✓ `DELETE` answers `200 {released_students}`, not `204` — BR-22 forbids a silent release, and the count exists only at that moment
+  - ✓ R43.3 authority split proven over HTTP: group CRUD `403` for a branch Admin, membership `201` for their own student, `404` (never `403`) for a student enrolled elsewhere
+  - ✓ 21 HTTP tests; `pending-denial` rose 44 → 50 on its own from the generated document
 - [ ] TD-3.12 **Course Schedules** (incl. `/conflicts` and `/roster`) and **Sessions** (override / cancel / restore / content)
 - [ ] TD-3.13 public library; `/calendar` filter set + `prefilled_filters`; `/calendar/sessions/{id}`
 - [ ] `/admin/groups` (+ roster), `/admin/schedules`, `/admin/levels/{id}/subjects/{subjectId}`, `/teacher/schedules`, Session page (§14.1)

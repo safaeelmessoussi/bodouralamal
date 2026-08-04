@@ -219,6 +219,137 @@ export function enrollmentDto(row: {
   };
 }
 
+/* ── Teaching Group (§4.4c, BR-22, Revision 43) ──────────────────────────── */
+
+export interface TeachingGroupDto {
+  id: string;
+  name: string;
+  /** The pair that identifies *which split of which subject*. Not editable. */
+  level_id: string;
+  subject_id: string;
+  display_order: number | null;
+  /**
+   * Live members. Present because the §5.6 screen's only question about a split
+   * is *how many are in it*, and a list endpoint that forced one request per
+   * group to answer it would be an N+1 by contract.
+   */
+  member_count: number;
+  /** TD-15: the client sends this back on edit; a stale one is a `409`. */
+  version: number;
+}
+
+/**
+ * Deliberately **absent**: `branch_id`. A Teaching Group has none — it belongs
+ * to a Subject and a Level, and a Level spans branches (§4.4b). That absence is
+ * the structural reason Revision 43.3 split the authority over these groups
+ * (Super Admin) from the authority over their membership (Admin, scoped by the
+ * branch the *student* is enrolled at). A `branch_id` here would invite exactly
+ * the scope check that has no referent.
+ */
+export function teachingGroupDto(row: {
+  id: string;
+  name: string;
+  levelId: string;
+  subjectId: string;
+  displayOrder: number | null;
+  memberCount: number;
+  version: number;
+}): TeachingGroupDto {
+  return {
+    id: row.id,
+    name: row.name,
+    level_id: row.levelId,
+    subject_id: row.subjectId,
+    display_order: row.displayOrder,
+    member_count: row.memberCount,
+    version: row.version,
+  };
+}
+
+/**
+ * A student enrolled in the Level who holds no seat in this split Subject
+ * (BR-22).
+ *
+ * `administrative_group_id` and `branch_id` travel because the screen's next
+ * action is *place this student*, and both are the context needed to decide
+ * where — without them the list names a problem and withholds what is required
+ * to fix it.
+ */
+export interface UnassignedStudentDto {
+  student_id: string;
+  /** Staff-facing legal name, as on the roster — not a public display identity. */
+  name: string | null;
+  administrative_group_id: string;
+  branch_id: string;
+}
+
+export function unassignedStudentDto(row: {
+  studentId: string;
+  nameArabic: string | null;
+  administrativeGroupId: string;
+  branchId: string;
+}): UnassignedStudentDto {
+  return {
+    student_id: row.studentId,
+    name: row.nameArabic,
+    administrative_group_id: row.administrativeGroupId,
+    branch_id: row.branchId,
+  };
+}
+
+/**
+ * The whole split for one `(Level, Subject)`, in one read.
+ *
+ * **`split` is not redundant with `groups.length`.** A Subject with no Teaching
+ * Groups is taught to the entire Level (§4.4c), so nobody is unassigned and the
+ * empty `unassigned` means *the question does not apply*. A **split** Subject
+ * with an empty `unassigned` means *everyone is placed*. The two states render
+ * identically without this flag, and one of them is an alarm.
+ */
+export interface TeachingGroupListDto {
+  groups: TeachingGroupDto[];
+  split: boolean;
+  unassigned: UnassignedStudentDto[];
+}
+
+/** The seat as written, returned from `POST /members`. */
+export interface TeachingGroupMemberDto {
+  id: string;
+  student_id: string;
+  teaching_group_id: string;
+}
+
+export function teachingGroupMemberDto(row: {
+  id: string;
+  studentId: string;
+  teachingGroupId: string;
+}): TeachingGroupMemberDto {
+  return {
+    id: row.id,
+    student_id: row.studentId,
+    teaching_group_id: row.teachingGroupId,
+  };
+}
+
+/**
+ * What a deletion released (BR-22).
+ *
+ * A `204` would be the conventional answer and is **wrong here**: deleting a
+ * split returns its members to the `unassigned` list, and BR-22 requires that to
+ * be visible rather than silent. This count is the only place the number is ever
+ * available — afterwards the list has been worked through and cannot be
+ * distinguished from students who were never placed.
+ */
+export interface TeachingGroupDeletionDto {
+  released_students: number;
+}
+
+export function teachingGroupDeletionDto(row: {
+  releasedStudents: number;
+}): TeachingGroupDeletionDto {
+  return { released_students: row.releasedStudents };
+}
+
 /* ── Approval queue (§5.6, §14.2) ────────────────────────────────────────── */
 
 export interface ApprovalDto {
