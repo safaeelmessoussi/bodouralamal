@@ -230,7 +230,7 @@ describe('a schedule edit never destroys work (§4.4, §20 rule 24)', () => {
     expect(survivor?.deletedAt).toBeNull();
     expect(survivor?.roomId).toBe(roomB);
     // Reported, not silently skipped — the administrator is told.
-    expect(result.materialized.protectedSessions.map((p) => p.reason)).toContain('OVERRIDDEN');
+    expect(result.materialized.protectedSessions.flatMap((p) => p.reasons)).toContain('OVERRIDDEN');
   });
 
   it('leaves a session carrying LINKED CONTENT alone', async () => {
@@ -261,7 +261,7 @@ describe('a schedule edit never destroys work (§4.4, §20 rule 24)', () => {
     );
 
     expect((await prisma.session.findUnique({ where: { id: target.id } }))?.deletedAt).toBeNull();
-    expect(result.materialized.protectedSessions.map((p) => p.reason)).toContain('HAS_CONTENT');
+    expect(result.materialized.protectedSessions.flatMap((p) => p.reasons)).toContain('HAS_CONTENT');
   });
 
   it('leaves a CANCELLED session alone — the cancellation is a record', async () => {
@@ -282,9 +282,7 @@ describe('a schedule edit never destroys work (§4.4, §20 rule 24)', () => {
     const survivor = await prisma.session.findUnique({ where: { id: target.id } });
     expect(survivor?.deletedAt).toBeNull();
     expect(survivor?.status).toBe('cancelled');
-    expect(result.materialized.protectedSessions.map((p) => p.reason)).toContain(
-      'STATUS_CANCELLED',
-    );
+    expect(result.materialized.protectedSessions.flatMap((p) => p.reasons)).toContain('LIFECYCLE');
   });
 
   it('DOES remove plain, untouched sessions the rule no longer produces', async () => {
@@ -837,7 +835,7 @@ describe('Revision 43.4 — a Session snapshots its teaching assignment', () => 
     const past = await prisma.session.findFirstOrThrow({
       where: { scheduleId: id, date: day('2026-06-02') },
     });
-    const held = await markHeld(prisma, superAdmin(), past.id, past.version);
+    await markHeld(prisma, superAdmin(), past.id, past.version);
 
     await prisma.courseScheduleStaff.updateMany({
       where: { scheduleId: id },
@@ -925,7 +923,7 @@ describe('Revision 43.5 — a Session carrying educational work is protected', (
     expect(after.deletedAt).toBeNull();
     // Neither deleted by the weekday change nor re-pointed by the room change.
     expect(after.roomId).toBe(roomA);
-    expect(result.materialized.protectedSessions.map((p) => p.reason)).toContain('HAS_CONTENT');
+    expect(result.materialized.protectedSessions.flatMap((p) => p.reasons)).toContain('HAS_CONTENT');
   });
 
   it('a future session with work keeps its STAFF when the schedule changes hands', async () => {
@@ -1023,8 +1021,8 @@ describe('Revision 43.5 — a Session carrying educational work is protected', (
     const row = await prisma.auditLog.findFirstOrThrow({
       where: { actionType: 'session.regenerate', targetId: future.id },
     });
-    const detail = row.detail as { was_protected_for?: string; overwrote?: { staff?: string[] } };
-    expect(detail.was_protected_for).toBe('HAS_CONTENT');
+    const detail = row.detail as { was_protected_for?: string[]; overwrote?: { staff?: string[] } };
+    expect(detail.was_protected_for).toContain('HAS_CONTENT');
     expect(detail.overwrote?.staff?.join(',')).toContain(original);
   });
 

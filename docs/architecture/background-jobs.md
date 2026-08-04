@@ -90,12 +90,34 @@ answer, so the rows exist.
    date-independent**: a recording attached to next Tuesday's class is as much
    someone's labour as one attached to last Tuesday's.
 
-   **"Carries work" is one predicate with one definition**, shared by every
-   caller — materialization, schedule edits and schedule deletion all ask the
-   same function. As each kind of work ships it joins that predicate and every
-   caller inherits the protection. A second copy of the test is how a future
-   feature silently loses it, and the deletion path *did* carry one until it was
-   unified.
+   **The rule is semantic, not a list of features** (Revision 43.6): *a session
+   is protected whenever it holds data created by a user or an administrator
+   whose loss or silent modification would change historical truth.* Attendance,
+   grades, evaluations, certificates and messaging are **instances** of that
+   rule, not clauses of it — an implementer asks *"would losing this
+   misrepresent what happened?"*, not *"is my feature on the list?"*.
+
+   **One mechanism, extended by contribution.** `policies/session-protection.ts`
+   is the single authority every scheduling operation asks, and a module
+   contributes its condition **knowing nothing about scheduling**:
+
+   ```ts
+   registerSessionProtectionRule({
+     code: 'HAS_ATTENDANCE',
+     describes: 'attendance has been recorded for this session',
+     evaluate: (tx, sessions) => /* one query for all of them */,
+   });
+   ```
+
+   Two properties are required and are not negotiable: rules are **evaluated in
+   bulk**, so protection never becomes a per-session query; and the **built-ins
+   are always present** rather than registered at boot, because a protection you
+   can switch off by forgetting a bootstrap call is not a protection. Rules may
+   only *add* protection — there is no un-protect, or one module could overrule
+   another's safeguard.
+
+   *(The deletion path carried its own private copy of this test until Revision
+   43.5 unified it — which is exactly the failure the registry now prevents.)*
 
    Overwriting a protected session is possible only by **naming it explicitly**.
    There is no blanket "regenerate all" option and no flag on the edit: an option

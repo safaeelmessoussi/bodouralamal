@@ -5,7 +5,7 @@ import * as scope from '../policies/branch-scope.js';
 import { audienceSize, staffsSession } from '../policies/roster-resolution.js';
 import * as audit from '../repositories/audit.repository.js';
 import { updateWithVersion } from '../repositories/optimistic-lock.js';
-import { protectionReason } from './session-materialize.service.js';
+import { protectionReasonsFor, SELECT_PROTECTABLE } from '../policies/session-protection.js';
 import type { Actor } from './branch.service.js';
 
 /**
@@ -521,18 +521,18 @@ async function regenerateOne(
   });
   if (!schedule) throw new AppError('NOT_FOUND', 'the schedule no longer exists');
 
-  const [before, linked] = await Promise.all([
-    prisma.sessionStaff.findMany({
-      where: { sessionId, deletedAt: null },
-      select: { userId: true, position: true },
-    }),
-    prisma.sessionContent.count({ where: { sessionId, deletedAt: null } }),
-  ]);
-  const wasProtectedFor = protectionReason({
-    overridden: session.overridden,
-    status: session.status,
-    _count: { linkedContent: linked },
+  const before = await prisma.sessionStaff.findMany({
+    where: { sessionId, deletedAt: null },
+    select: { userId: true, position: true },
   });
+  // Asked of the one authoritative mechanism, so the audit row names whatever
+  // safeguard actually applied — including one a module contributed that this
+  // file has never heard of (§4.4, R43.6).
+  const protectable = await prisma.session.findUniqueOrThrow({
+    where: { id: sessionId },
+    select: SELECT_PROTECTABLE,
+  });
+  const wasProtectedFor = await protectionReasonsFor(prisma, protectable);
 
   return prisma.$transaction(async (tx) => {
     const updated = await tx.session.update({

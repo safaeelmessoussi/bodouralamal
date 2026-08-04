@@ -1,5 +1,6 @@
 import type { Prisma, PrismaClient } from '../generated/prisma/client.js';
 import { atMidnightUtc, expandSchedule, type ScheduleRecurrence } from '../lib/recurrence.js';
+import { protectionReasons, SELECT_PROTECTABLE } from '../policies/session-protection.js';
 
 /**
  * `session.materialize` — turning a Recurring Course Schedule into dated
@@ -54,9 +55,11 @@ export interface MaterializeResult {
    *  that already existed, so §4.4's promise that it "rewrites future Sessions"
    *  was not true. */
   resynced: number;
-  /** Sessions deliberately NOT touched because they carry a human decision or
-   *  attached work. Surfaced, never silently skipped (§4.4). */
-  protectedSessions: { id: string; date: Date; reason: string }[];
+  /** Sessions deliberately NOT touched because they hold data whose loss would
+   *  change historical truth (§4.4, Revision 43.6). Surfaced with **every**
+   *  applicable reason, never silently skipped — an administrator deciding
+   *  whether to overwrite one deserves all of them. */
+  protectedSessions: { id: string; date: Date; reasons: string[] }[];
 }
 
 /**
@@ -86,76 +89,23 @@ export async function horizonFor(
 }
 
 /**
- * **THE protection predicate — one definition, every caller (§4.4, Revision
- * 43.5).**
- *
- * A Session is protected from schedule-driven regeneration when it carries a
- * human decision or **educational work**. §4.4 states this once and requires it
- * to stay one predicate: *"as each kind of work ships it joins that predicate
- * and every caller inherits the protection. A second copy of the test is how a
- * future feature silently loses it."*
- *
- * **The protection is DATE-INDEPENDENT** (43.5). A recording attached to next
- * Tuesday's class is exactly as much someone's labour as one attached to last
- * Tuesday's, so a future session carrying work is as protected as a past one.
- *
- * **What counts, and where the rest will attach:**
- *
- * | Signal | Status |
- * |---|---|
- * | `overridden` — a human decided about this occurrence | built |
- * | `status` is `held` or `cancelled` — it happened, or its absence is a record | built |
- * | linked educational content — recordings, homework, materials (§4.9) | built |
- * | attendance (§4.7) | **specified, deliberately unbuilt** — add its count here |
- * | notes · announcements (§10.1) | **not yet specified as entities** — add here |
- * | grades sat in this session | `Grade` has no session reference today; if one is added, add its count here |
- *
- * Adding a row to that table is the *whole* change needed to protect a new kind
- * of work — which is the reason this is a table and not three `if`s scattered
- * across three services.
- */
-export const SELECT_FOR_PROTECTION = {
-  id: true,
-  date: true,
-  overridden: true,
-  status: true,
-  _count: { select: { linkedContent: { where: { deletedAt: null } } } },
-} as const;
-
-/** The reason one session is protected, or `null` if it may be regenerated. */
-export function protectionReason(session: {
-  overridden: boolean;
-  status: string;
-  _count: { linkedContent: number };
-}): string | null {
-  if (session.overridden) return 'OVERRIDDEN';
-  if (session.status !== 'scheduled') return `STATUS_${session.status.toUpperCase()}`;
-  if (session._count.linkedContent > 0) return 'HAS_CONTENT';
-  return null;
-}
-
-/**
  * Protection reasons for a schedule's sessions from `from` onward.
  *
- * One query rather than one per session: at horizon scale a per-row check would
- * be an N+1 wearing a guard's clothing.
+ * Delegates entirely to `policies/session-protection.ts`, which is the **single
+ * authoritative mechanism** (§4.4, Revision 43.6). Materialization does not know
+ * what kinds of work exist and must not learn: attendance, grades, evaluations
+ * and anything later contribute their own rules there.
  */
 async function protectedSessionIds(
   tx: Prisma.TransactionClient,
   scheduleId: string,
   from: Date,
-): Promise<Map<string, string>> {
+): Promise<Map<string, string[]>> {
   const sessions = await tx.session.findMany({
     where: { scheduleId, deletedAt: null, date: { gte: from } },
-    select: SELECT_FOR_PROTECTION,
+    select: SELECT_PROTECTABLE,
   });
-
-  const reasons = new Map<string, string>();
-  for (const s of sessions) {
-    const reason = protectionReason(s);
-    if (reason !== null) reasons.set(s.id, reason);
-  }
-  return reasons;
+  return protectionReasons(tx, sessions);
 }
 
 /**
@@ -250,10 +200,10 @@ export async function materializeSchedule(
     created,
     resynced,
     existing: existingRows.length - orphaned.length,
-    protectedSessions: [...protectedIds.entries()].map(([id, reason]) => ({
+    protectedSessions: [...protectedIds.entries()].map(([id, reasons]) => ({
       id,
       date: existingRows.find((r) => r.id === id)?.date ?? from,
-      reason,
+      reasons,
     })),
   };
 }

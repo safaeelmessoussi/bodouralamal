@@ -7,11 +7,13 @@ import { enqueue, JOB_QUEUES } from '../repositories/jobs.repository.js';
 import { updateWithVersion } from '../repositories/optimistic-lock.js';
 import type { Actor } from './branch.service.js';
 import {
+  protectionReasons,
+  SELECT_PROTECTABLE,
+} from '../policies/session-protection.js';
+import {
   horizonFor,
   loadSchedule,
   materializeSchedule,
-  protectionReason,
-  SELECT_FOR_PROTECTION,
   type MaterializeResult,
 } from './session-materialize.service.js';
 
@@ -463,7 +465,7 @@ export async function updateCourseSchedule(
         // Both numbers, because §4.4 makes reporting the untouched ones part of
         // the behaviour rather than a nicety.
         sessions_left_alone: materialized.protectedSessions.length,
-        protected_reasons: materialized.protectedSessions.map((p) => p.reason),
+        protected_reasons: materialized.protectedSessions.flatMap((p) => p.reasons),
       },
     });
 
@@ -499,11 +501,17 @@ export async function deleteCourseSchedule(
     // which is exactly the second copy §4.4 forbids: attendance would have
     // joined the protection in one place and not the other, and a delete would
     // have quietly taken sessions a schedule edit refused to touch.
+    // The SAME mechanism every other scheduling path asks (§4.4, R43.6).
+    // This once re-implemented the test inline — `!overridden && content === 0`
+    // — which is the second copy §4.4 forbids: attendance would have joined the
+    // protection for edits and not for deletion, and a delete would quietly
+    // have taken sessions an edit had just refused to touch.
     const future = await tx.session.findMany({
       where: { scheduleId: id, deletedAt: null, date: { gte: now } },
-      select: SELECT_FOR_PROTECTION,
+      select: SELECT_PROTECTABLE,
     });
-    const removable = future.filter((s) => protectionReason(s) === null);
+    const reasons = await protectionReasons(tx, future);
+    const removable = future.filter((s) => !reasons.has(s.id));
 
     const stamp = new Date();
     await tx.session.updateMany({
