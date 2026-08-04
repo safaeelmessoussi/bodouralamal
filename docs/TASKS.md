@@ -353,7 +353,8 @@
 - [ ] *Contract (separate, later migration):* drop `Group.day_of_week/start_time/end_time/room_id/max_students`, `EducationalContent.event_id`, and the retired tables — tagged with its contract-phase justification for `check-migration-drop-rename.sh`
 
 **Domain**
-- [ ] Level creation auto-creates المجموعة 1 in the same transaction (TD-4.6b, §4.4b)
+- [ ] Level creation **takes a required `branch_id` and** auto-creates المجموعة 1 at it, in the same transaction (TD-4.6b, §4.4b, R43.1) — the Branch is an input, **never a column on `Level`**
+- [ ] First-Branch bootstrap backfill: creating the deployment's first Branch creates المجموعة 1 for every Level that has none, atomically and idempotently (TD-4.6d, §15.1)
 - [ ] Roster resolution — one implementation serving all three teaching modes (§4.4c); **Entire Level is branch-bound**
 - [ ] Teacher scope from `CourseScheduleStaff` — **replaces `policies/teacher-scope.ts`'s `GroupTeacher` resolution**, one module, every consumer migrated (TD-2, §4.4c)
 - [ ] Teaching Groups + membership, and the **`unassigned` list** (BR-22)
