@@ -112,6 +112,30 @@ describe('GET /admin/hijri-calendar', () => {
     expect(res.body.data![1]!.gregorian_start_date).toBeNull();
   });
 
+  it('pins the EXACT wire shape of the envelope and of a month row', async () => {
+    // `toMatchObject` above checks a subset, which is right for values and
+    // wrong for the contract: it cannot see a field that is missing, and the
+    // client's declared type had invented three names — `hijri_year`/`months`/
+    // `hijri_month_ar` against the real `year`/`data`/`month_name_ar`. Nothing
+    // failed, because `api<T>()` is an unchecked cast, so the mismatch surfaced
+    // only in a browser: `data.months` was undefined, `.filter()` on it threw,
+    // and the admin screen rendered blank white.
+    //
+    // The exact key set is the assertion that would have caught it.
+    await recordMonth(1, '2026-06-17');
+    const res = await call('GET', `/admin/hijri-calendar?year=${YEAR}`, superToken);
+
+    expect(Object.keys(res.body).sort()).toEqual(['data', 'year']);
+    expect(Object.keys(res.body.data![0]!).sort()).toEqual([
+      'gregorian_start_date',
+      'hijri_month',
+      'month_name_ar',
+      'source',
+      'status',
+      'version',
+    ]);
+  });
+
   it('TD-2: an Admin is refused, and an anonymous caller gets the TD-3.8 envelope', async () => {
     expect((await call('GET', `/admin/hijri-calendar?year=${YEAR}`, adminToken)).status).toBe(403);
 

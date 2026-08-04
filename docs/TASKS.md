@@ -358,8 +358,12 @@
 **Domain**
 - [ ] Level creation **takes a required `branch_id` and** auto-creates المجموعة 1 at it, in the same transaction (TD-4.6b, §4.4b, R43.1) — the Branch is an input, **never a column on `Level`**
 - [ ] First-Branch bootstrap backfill: creating the deployment's first Branch creates المجموعة 1 for every Level that has none, atomically and idempotently (TD-4.6d, §15.1)
-- [ ] Roster resolution — one implementation serving all three teaching modes (§4.4c); **Entire Level is branch-bound**
-- [ ] Teacher scope from `CourseScheduleStaff` — **replaces `policies/teacher-scope.ts`'s `GroupTeacher` resolution**, one module, every consumer migrated (TD-2, §4.4c)
+- [x] Roster resolution — one implementation serving all three teaching modes (§4.4c); **Entire Level is branch-bound**
+  - ✓ 17 integration tests; both claims mutation-proven (drop the branch bound → 2 fail; resolve a split to the administrative roster → 4 fail)
+- [~] Teacher scope from `CourseScheduleStaff` (§4.4c, TD-2) — **replaces `teacher-scope.ts`'s `GroupTeacher` resolution**
+  - ✓ Backend — `studentsTaughtBy`, `teacherBranchIds`, `staffsSession` in `roster-resolution.ts`; branch scope now **stated** by the schedule instead of inferred through two hops
+  - ✓ Tests — assistants have identical reach; a teacher with no schedules reaches nobody; revoking a staffing ends reach on the next call
+  - △ **Consumers not yet migrated** — exam authoring, Quran logging and social-profile access still resolve through `teacher-scope.ts`. Both modules are live during the expand phase by design; cutting the consumers over is its own step, before the contract migration drops `GroupTeacher`
 - [ ] Teaching Groups + membership, and the **`unassigned` list** (BR-22)
 - [ ] Course schedule CRUD with conflict detection **against materialized Sessions** — room, teacher **and assistant** — under the TD-4.6c row lock; `SCHEDULE_CONFLICT`
 - [ ] `session.materialize` (TD-7): idempotent per `(schedule_id, date)`, academic-year horizon, nightly cron; **never rewrites an overridden session or one carrying work** (§20 rule 24)
