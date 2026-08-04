@@ -64,10 +64,18 @@ You are working on the بذور الأمل Platform.
   proposal must never reappear under *Remaining work*, which is how a handoff
   becomes a recurring topic paid for out of the implementation budget. Rules in
   force stay in force while a proposal is pending; it blocks nothing.
-- **At a slice boundary, if continuing would cost more than restarting warm:**
-  finish the slice, write a handoff (branch + commit · what is done · next slice
-  and its minimum files · settled conventions), and recommend `/compact`. Never
-  mid-slice, and never without a real expected benefit.
+- **`/compact` is recommended on evidence, never on conversation size.** Message
+  count, turn count and elapsed time are not reasons. The test is *would the
+  next slice go faster from a compacted context than from this one* — which
+  turns on whether the **live** context (files it will edit, fixtures it will
+  copy, decisions in flight) survives a summary intact. **Spent context — closed
+  decisions and finished process discussion, already recorded durably — is inert
+  and is not a reason to compact.** Recommend only when the next slice's working
+  set is largely disjoint from what is loaded; when it is close, stay silent and
+  keep implementing. A recommendation names what is spent, what the next slice
+  needs, and whether that need survives the summary. Never mid-slice; always
+  with a handoff (branch + commit · what is done · next slice and its minimum
+  files · settled conventions).
 
 ## Documentation is part of Done (SRS §16.4 — binding)
 - **A feature is not complete until its documentation is updated — in the same

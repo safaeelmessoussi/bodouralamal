@@ -207,15 +207,48 @@ to its own rule: it is not to be continuously re-tuned.
 
 ## The context threshold
 
-Monitor context growth. When continuing in the current conversation has become materially
-less efficient than continuing from a compacted one:
+**The recommendation is an estimate of engineering throughput, never an observation about
+conversation size.** Message count, turn count and elapsed time are not evidence and must
+never be given as the reason.
 
-1. **Finish the current logical slice** — never compact mid-slice.
-2. **Produce a handoff** (below).
-3. **Recommend `/compact`.**
+### The test
 
-**Do not recommend it without a real expected benefit.** A compaction at the wrong moment
-costs a re-derivation of everything the summary drops.
+> **Would the next slice go faster from a compacted context than from this one?**
+
+Answer it by separating what is loaded into two kinds:
+
+| | |
+|---|---|
+| **Live context** | What the next slice will actually reuse — file contents it will edit, fixture and test shapes it will copy, decisions still in flight |
+| **Spent context** | Closed decisions, completed process discussions, resolved detours, superseded approaches — **already recorded durably elsewhere**, which is why they are spent |
+
+**Spent context is inert, not harmful.** Its presence is not a reason to compact. The
+recommendation turns on **live** context only:
+
+- **Recommend** when the next slice's working set is **largely disjoint** from what is loaded
+  — a different subsystem, a different layer — so most of what is carried will never be
+  consulted while the useful part is small enough to survive a summary intact.
+- **Do not recommend** when the loaded implementation context — the fixtures, the file shapes,
+  the conventions in their concrete form — is **what the next slice will build on**. A summary
+  compresses that too, and the re-reads it forces are a real cost paid immediately, against a
+  saving that is speculative.
+
+### Compaction is not free, so the default is not to recommend
+
+A compaction at the wrong moment costs a re-derivation of everything the summary drops, paid
+in full at the start of the next slice. A conversation carrying some inert history costs
+almost nothing. **When the two are close, say nothing and keep implementing** — the asymmetry
+is the whole reason the default is silence.
+
+### State the evidence, not the feeling
+
+A recommendation names three things, or it is not made:
+
+1. **what is spent**, and where it is now recorded durably;
+2. **what the next slice needs**, concretely;
+3. **whether that need survives a summary** — the part that decides it.
+
+"The conversation is long" is none of these.
 
 ### What makes a handoff cheap to resume from
 
