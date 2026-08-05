@@ -7,8 +7,28 @@ import { requireActor } from '../middleware/authenticate.js';
 import { approvalDto, pageOf } from './dto.js';
 import { decide, listApprovals, type ApprovalType } from '../services/approval.service.js';
 
-/** TD-9: reasons max 500 chars. */
-const decisionSchema = z.object({ reason: z.string().trim().max(500).optional() });
+/**
+ * TD-9: reasons max 500 chars.
+ *
+ * `assignments` (Revision 49, proposed) is the role and branch scope the
+ * approver grants **in the same transaction as the activation**, so the account
+ * never exists in the `Active`-with-no-role state — a person who can sign in and
+ * reach nothing. It is accepted on both verbs and **ignored on rejection**,
+ * where the service discards it: a rejected applicant receiving a role is the
+ * single worst outcome this endpoint could produce, so it is refused in the
+ * service rather than merely omitted from a schema a client could still fill.
+ *
+ * `branch_id: null` means **all branches for that assignment** (§7 R24), never
+ * *no branch* — a required, explicitly nullable key, so the unscoped grant is
+ * never the easiest thing to type by accident.
+ */
+const decisionSchema = z.object({
+  reason: z.string().trim().max(500).optional(),
+  assignments: z
+    .array(z.object({ role: z.string().trim().min(1).max(40), branch_id: z.uuid().nullable() }))
+    .max(20)
+    .optional(),
+});
 const listSchema = z.object({
   type: z.enum(['registration', 'family-link']).optional(),
   /** §14.2 / Revision 39 — a filter, never a scope (see the service). */
@@ -42,6 +62,14 @@ function decision(prisma: PrismaClient, approve: boolean) {
     const result = await decide(prisma, requireActor(req).userId, id.data, {
       approve,
       ...(parsed.data.reason ? { reason: parsed.data.reason } : {}),
+      ...(parsed.data.assignments
+        ? {
+            assignments: parsed.data.assignments.map((a) => ({
+              role: a.role,
+              branchId: a.branch_id,
+            })),
+          }
+        : {}),
     });
     res.json({ type: result.type, records_updated: result.activated });
   };

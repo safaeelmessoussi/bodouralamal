@@ -1,4 +1,4 @@
-import type { PrismaClient } from '../generated/prisma/client.js';
+import type { Prisma, PrismaClient } from '../generated/prisma/client.js';
 import { AppError, uniqueViolationFields } from '../lib/errors.js';
 import { pageWindow, type Page } from '../lib/pagination.js';
 import { MIN_QUERY_LENGTH, normalizePhone, normalizeSearchText } from '../lib/search-normalize.js';
@@ -584,13 +584,25 @@ async function assertNotLastSuperAdmin(
  * doing either is privilege propagation — the same rule `preProvision` applies
  * to creation, applied to the operation that can also perform it.
  */
-export async function setUserRoles(
-  prisma: PrismaClient,
-  actorUserId: string,
+/**
+ * **The one implementation of *set this user's roles*.**
+ *
+ * Extracted so approval can grant a role **inside its own transaction**
+ * (TD-4.2 — activation and the role it was approved for must commit together)
+ * without a second copy of the privilege guard, the branch-liveness check and
+ * the last-administrator rule. A copied authorization rule is the kind that
+ * drifts while both copies keep passing their own tests.
+ *
+ * Takes a `tx` and an already-resolved actor: the caller owns the transaction
+ * boundary and the TD-12 freshness assertion, because approval and user
+ * management assert different role sets to get there.
+ */
+export async function applyRoleAssignments(
+  tx: Prisma.TransactionClient,
+  actor: { userId: string; roles: string[] },
   id: string,
   assignments: RoleAssignmentInput[],
-): Promise<UserListItem> {
-  const actor = await assertFreshActive(prisma, actorUserId, USER_ADMIN_ROLES);
+): Promise<void> {
   const isSuperAdmin = actor.roles.includes('super_admin');
 
   for (const a of assignments) {
@@ -599,9 +611,7 @@ export async function setUserRoles(
     }
   }
 
-  await prisma.$transaction(async (tx) => {
-    await loadManageable(tx, actor, id);
-
+  {
     const existing = await tx.userBranchRole.findMany({
       where: { userId: id },
       select: { id: true, roleId: true, branchId: true, deletedAt: true, role: { select: { name: true } } },
@@ -674,6 +684,33 @@ export async function setUserRoles(
         revoked: revoked.map((e) => ({ role: e.role.name, branch_id: e.branchId })),
       },
     });
+  }
+}
+
+/**
+ * `PUT /admin/users/{id}/roles` — **replaces** a user's whole assignment set.
+ *
+ * A `PUT` of the complete set rather than add/remove verbs: the set is what an
+ * administrator reasons about, one call yields one audit row describing one
+ * decision, and there is no window in which a user holds half of an intended
+ * change — which add-then-remove would create every time a role is *moved*
+ * between branches.
+ */
+export async function setUserRoles(
+  prisma: PrismaClient,
+  actorUserId: string,
+  id: string,
+  assignments: RoleAssignmentInput[],
+): Promise<UserListItem> {
+  const actor = await assertFreshActive(prisma, actorUserId, USER_ADMIN_ROLES);
+
+  await prisma.$transaction(async (tx) => {
+    // Visibility is asserted here rather than inside the shared core: approval
+    // reaches an applicant the §4.2 R25 user-list rule deliberately hides from
+    // a branch Admin (a self-registered person has no branch assignment yet),
+    // and the approval queue is unscoped by design (Revisions 25, 29).
+    await loadManageable(tx, actor, id);
+    await applyRoleAssignments(tx, actor, id, assignments);
   });
 
   // **Sessions are deliberately NOT revoked here, and the SRS is what decides

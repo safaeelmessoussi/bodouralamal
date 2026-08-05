@@ -171,8 +171,14 @@ describe('GET /api/v1/admin/approvals', () => {
     const item = (res.body.data as Record<string, unknown>[]).find((i) => i.id === parentId)!;
 
     expect(Object.keys(item).sort()).toEqual(
-      ['applicants', 'branch', 'bundle', 'id', 'submitted_at', 'type'],
+      ['applicants', 'branch', 'bundle', 'id', 'requested_role', 'submitted_at', 'type'],
     );
+    // `requested_role` joined in Revision 49 and is deliberately argued onto
+    // this list rather than arriving on it: without it the approver cannot tell
+    // a teacher applicant from a family registration, which is the entire
+    // reason the staff workflow needed anything at all. **A hint, never an
+    // authority** — it is `null` here because this bundle asked for no role.
+    expect(item['requested_role']).toBeNull();
     // R39: what the applicant ASKED FOR, projected to exactly two fields.
     expect(Object.keys(item.branch as object).sort()).toEqual(['id', 'name']);
     expect(Object.keys(item.bundle as object).sort()).toEqual(['child_count', 'link_count']);

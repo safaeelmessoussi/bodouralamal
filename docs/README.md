@@ -132,6 +132,7 @@ The technical core. Written for an engineer who has never seen the repository.
 | [`SRS-PROPOSAL-R46.md`](SRS-PROPOSAL-R46.md) | **Draft revision awaiting the Document Owner** — reference-data selectors in TD-3. **The endpoints are already live**, on the Owner's explicit instruction | Contributors may draft; only the Owner applies |
 | [`SRS-PROPOSAL-R47.md`](SRS-PROPOSAL-R47.md) | **Draft revision awaiting the Document Owner** — curriculum taxonomy CRUD in TD-3, and how a Level's deletion meets TD-4.6b. **The endpoints are already live** | Contributors may draft; only the Owner applies |
 | [`SRS-PROPOSAL-R48.md`](SRS-PROPOSAL-R48.md) | **Draft revision awaiting the Document Owner** — user management in TD-3, and whether `super_admin` is grantable through the application. **The endpoints are already live** | Contributors may draft; only the Owner applies |
+| [`SRS-PROPOSAL-R49.md`](SRS-PROPOSAL-R49.md) | **Draft revision awaiting the Document Owner** — staff registration requests and role assignment at approval. **No endpoint was added**; three contracts gained an optional field each | Contributors may draft; only the Owner applies |
 | [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) | Milestone build order | Document Owner only |
 | [`TASKS.md`](TASKS.md) | Granular delivery checklist — the fastest read on what is done | Contributors |
 | [`CHANGES.log`](CHANGES.log) | Append-only ledger of what was built and why | Contributors, append-only |

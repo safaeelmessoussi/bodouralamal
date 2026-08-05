@@ -107,12 +107,48 @@ const consents = z.object({
  */
 const branchId = z.uuid();
 
-/** Adult self-registration — Women's track (§4.1). No child, no media release. */
+/**
+ * What the applicant is asking to become (Revision 49, proposed).
+ *
+ * **A hint to the §5.6 approver, never an authority.** Nothing is granted by
+ * submitting it: the role arrives only when a Super Admin assigns it at
+ * approval, and a self-declared value that granted access would be privilege
+ * escalation by form submission.
+ *
+ * **`teacher` is the only accepted value**, deliberately. An applicant may not
+ * self-nominate for an administrator role — those accounts arrive through staff
+ * pre-provisioning (§4.1, §4.1b step 4b), an authenticated path with a named
+ * actor and an existing audit row. Widening this set is an SRS revision, and
+ * the database CHECK makes that literally true.
+ *
+ * **Absent means the ordinary path** — a student or a parent registering a
+ * family — which is why it is optional rather than defaulted.
+ *
+ * **Its branch SCOPE is not collected here**, and that is the load-bearing half
+ * of this design. `branch_id` already records the branch the applicant *asked
+ * for* (R39 — "a request, not a placement"), but a role's branch scope is an
+ * authorization boundary (TD-2): collecting it from the applicant would let a
+ * person propose the extent of their own permissions. The approver chooses it,
+ * defaulting to the branch requested here.
+ */
+const requestedRole = z.literal('teacher');
+
+/**
+ * Adult self-registration (§4.1). No child, no media release.
+ *
+ * **The staff request rides on this path rather than on a third `kind`.** A
+ * teacher applying is an adult registering themselves; the only difference is
+ * what they are asking to become, and that is one optional field. A separate
+ * `kind: 'staff'` would have duplicated every name, consent and branch rule for
+ * a form that is otherwise identical — and §4.1b step 4c names exactly two
+ * forms, so a third would be a flow the SRS does not describe.
+ */
 export const adultRegistrationSchema = z
   .object({
     kind: z.literal('adult'),
     applicant: personCore,
     branch_id: branchId,
+    requested_role: requestedRole.optional(),
     consents,
   })
   .strict();

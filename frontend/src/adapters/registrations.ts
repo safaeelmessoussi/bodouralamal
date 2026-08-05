@@ -43,6 +43,20 @@ export interface AdultRegistration {
   applicant: PersonInput;
   /** The branch the applicant asked for — a request, not a placement (R39). */
   branch_id: string;
+  /**
+   * What the applicant is asking to *become* (Revision 49) — `'teacher'`, or
+   * absent for the ordinary path.
+   *
+   * **A hint to the approver, never an authority.** Nothing is granted by
+   * sending it: the role arrives only when a Super Admin assigns it at
+   * approval. `'teacher'` is the only accepted value — administrator accounts
+   * are created by staff pre-provisioning, an authenticated path.
+   *
+   * **Its branch SCOPE is deliberately not collected**: `branch_id` above says
+   * where the applicant wants to study or teach, while a role's scope is an
+   * authorization boundary the approver decides.
+   */
+  requested_role?: 'teacher';
   consents: { data_processing: boolean };
 }
 

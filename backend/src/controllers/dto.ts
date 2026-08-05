@@ -916,6 +916,13 @@ export function academicYearRefDto(row: {
 export interface ApprovalDto {
   id: string;
   type: 'registration' | 'family-link';
+  /**
+   * What a self-service applicant asked to become (Revision 49) — `'teacher'`
+   * or `null`. **A hint, never an authority**: it is what makes a staff request
+   * distinguishable in the queue, and the role itself is granted only by the
+   * assignment the approver states.
+   */
+  requested_role: string | null;
   /** §14.2 column: Applicant(s). */
   applicants: { id: string; name: string; role: 'applicant' | 'child' | 'parent' }[];
   /** An instant, correctly — a submission is a moment, not a calendar date. */
@@ -949,6 +956,7 @@ export function approvalDto(row: {
   submittedAt: Date;
   bundle: { childCount: number; linkCount: number };
   branch: { id: string; name: string } | null;
+  requestedRole: string | null;
 }): ApprovalDto {
   return {
     id: row.id,
@@ -959,6 +967,7 @@ export function approvalDto(row: {
     // Field by field, never a spread — the branch is projected to exactly the
     // two fields the screen renders (§16.2).
     branch: row.branch ? { id: row.branch.id, name: row.branch.name } : null,
+    requested_role: row.requestedRole,
   };
 }
 

@@ -3,6 +3,7 @@ import { AppError } from '../lib/errors.js';
 import { pageWindow, type Page } from '../lib/pagination.js';
 import { assertFreshActive } from '../policies/freshness.policy.js';
 import * as audit from '../repositories/audit.repository.js';
+import { applyRoleAssignments } from './user.service.js';
 
 /**
  * Approval queue (SRS §5.6, §14.2, TD-3.2, TD-4.2, TD-12).
@@ -38,6 +39,16 @@ export interface ApprovalItem {
    * enrolment would make one filter mean two different things.
    */
   branch: { id: string; name: string } | null;
+  /**
+   * What a self-service applicant asked to become (Revision 49, proposed) —
+   * `'teacher'` or `null`.
+   *
+   * **A hint, never an authority.** It is what makes a staff request
+   * *distinguishable* in the queue; the role itself is granted only by the
+   * assignment the approver makes. `null` on a family registration and on every
+   * family-link item, which requests no role at all.
+   */
+  requestedRole: string | null;
 }
 
 export async function listApprovals(
@@ -106,6 +117,7 @@ export async function listApprovals(
         branch: applicant.intendedBranch
           ? { id: applicant.intendedBranch.id, name: applicant.intendedBranch.name }
           : null,
+        requestedRole: applicant.requestedRole,
       });
     }
   }
@@ -141,6 +153,8 @@ export async function listApprovals(
         // lives in their Group. Resolving a branch through that enrolment would
         // make one filter mean two different things depending on the row.
         branch: null,
+        // A link request concerns an existing child and asks for no role.
+        requestedRole: null,
       });
     }
   }
@@ -152,6 +166,25 @@ interface Decision {
   approve: boolean;
   /** TD-9: max 500 chars. Mandatory on rejection (§5.6, §14.2). */
   reason?: string;
+  /**
+   * Role and branch-scope assignments to grant **in the same transaction as the
+   * activation** (Revision 49, proposed).
+   *
+   * **Why it belongs here and not on a second call.** §4.1 already makes
+   * approval *"a single administrative act that admits the applicant"*, and an
+   * account that is `Active` with no role is a person who can sign in and reach
+   * nothing — a state the platform should never pass through when the approver
+   * already knows what the account is for. Two calls would create exactly that
+   * window, and leave the second one forgettable.
+   *
+   * **The applicant's `requested_role` is a hint and is never applied
+   * automatically.** The approver states the assignment, or there is none.
+   *
+   * Omitted or empty means *approve without granting anything*, which is the
+   * ordinary path for a student or a parent — they receive their access through
+   * enrolment, not through a role assignment.
+   */
+  assignments?: { role: string; branchId: string | null }[];
 }
 
 /**
@@ -227,6 +260,21 @@ export async function decide(
         activated += 1;
       }
 
+      // Revision 49 — the role the account was approved FOR, granted in this
+      // same transaction (TD-4.2). `applyRoleAssignments` is the one
+      // implementation of this: it carries the privilege guard (only a Super
+      // Admin may grant an administrator role), the branch-liveness check and
+      // the last-administrator rule, so approving cannot become a second, weaker
+      // way to hand out authority.
+      //
+      // Rejection assigns nothing, whatever was sent: a rejected applicant
+      // receiving a role would be the single worst outcome this endpoint could
+      // produce.
+      const assignments = decision.approve ? (decision.assignments ?? []) : [];
+      if (assignments.length > 0) {
+        await applyRoleAssignments(tx, actor, applicant.id, assignments);
+      }
+
       await audit.write(tx, {
         actorUserId: actor.userId,
         actionType: decision.approve ? 'user.approve' : 'user.reject',
@@ -235,6 +283,11 @@ export async function decide(
         detail: {
           type: 'registration',
           children_activated: applicant.parentLinks.length,
+          // What was ASKED vs what was GRANTED, both recorded: the gap between
+          // them is the approver's decision, and it is the thing an auditor
+          // would come here to see.
+          requested_role: applicant.requestedRole,
+          granted: assignments.map((a) => ({ role: a.role, branch_id: a.branchId })),
           ...(decision.reason ? { reason: decision.reason } : {}),
         },
       });

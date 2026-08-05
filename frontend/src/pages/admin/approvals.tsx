@@ -23,7 +23,10 @@ import {
   type RowAction,
   type TableStatus,
 } from '../../components/ui/data-table.js';
+import { Button } from '../../components/ui/button.js';
+import { Dialog } from '../../components/ui/dialog.js';
 import { SelectField } from '../../components/ui/field.js';
+import { ROLES } from '../../adapters/users.js';
 import { useSession } from '../../contexts/session.js';
 import { t } from '../../i18n/index.js';
 import { ApiError } from '../../lib/api.js';
@@ -58,7 +61,8 @@ import { ApiError } from '../../lib/api.js';
  * that type wholesale rather than matching none of it.
  */
 export function ApprovalsPage(): ReactNode {
-  const { accessToken } = useSession();
+  const { me, accessToken } = useSession();
+  const isSuperAdmin = (me?.roles ?? []).includes('super_admin');
 
   const [rows, setRows] = useState<Approval[]>([]);
   const [status, setStatus] = useState<TableStatus>('loading');
@@ -68,6 +72,9 @@ export function ApprovalsPage(): ReactNode {
   const [branchFilter, setBranchFilter] = useState<string | null>(null);
   const [branches, setBranches] = useState<PublicBranch[]>([]);
   const [deciding, setDeciding] = useState<{ row: Approval; approve: boolean } | null>(null);
+  /** Approving a staff request is a different act from approving a family, so
+   *  it gets its own dialog rather than a confirmation with a form bolted on. */
+  const [staffApproval, setStaffApproval] = useState<Approval | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -135,6 +142,19 @@ export function ApprovalsPage(): ReactNode {
         r.branch ? r.branch.name : <span className="muted">{t('admin.approvals.branchNone')}</span>,
     },
     {
+      key: 'requested',
+      header: t('admin.approvals.colRequested'),
+      // Revision 49 — what makes a staff request distinguishable at a glance.
+      // A hint, never an authority: the role is granted by the assignment the
+      // approver states, not by this cell.
+      cell: (r) =>
+        r.requested_role ? (
+          t(`admin.users.role.${r.requested_role}`)
+        ) : (
+          <span className="muted">—</span>
+        ),
+    },
+    {
       key: 'submitted',
       header: t('admin.approvals.colSubmitted'),
       secondary: true,
@@ -146,7 +166,14 @@ export function ApprovalsPage(): ReactNode {
   ];
 
   const actions: RowAction<Approval>[] = [
-    { label: t('admin.approvals.approve'), onSelect: (row) => setDeciding({ row, approve: true }) },
+    {
+      label: t('admin.approvals.approve'),
+      onSelect: (row) =>
+        // A request for a role needs a decision about that role; a family
+        // registration does not. Sending both through one dialog would either
+        // ask everyone about roles or nobody.
+        row.requested_role ? setStaffApproval(row) : setDeciding({ row, approve: true }),
+    },
     {
       label: t('admin.approvals.reject'),
       danger: true,
@@ -154,15 +181,21 @@ export function ApprovalsPage(): ReactNode {
     },
   ];
 
-  async function confirmDecision(reason?: string): Promise<void> {
-    if (!deciding) return;
-    const { row, approve } = deciding;
+  async function confirmDecision(
+    reason?: string,
+    assignments?: { role: string; branch_id: string | null }[],
+    row?: Approval,
+  ): Promise<void> {
+    const target = row ?? deciding?.row;
+    const approve = row ? true : (deciding?.approve ?? false);
+    if (!target) return;
     setBusy(true);
     try {
       const result = approve
-        ? await approveApproval(row.id, accessToken, reason)
-        : await rejectApproval(row.id, reason ?? '', accessToken);
+        ? await approveApproval(target.id, accessToken, reason, assignments)
+        : await rejectApproval(target.id, reason ?? '', accessToken);
       setDeciding(null);
+      setStaffApproval(null);
       await load();
       // What actually changed, not what was requested — `records_updated` is
       // why this can be a statement rather than an assumption (TD-4.2).
@@ -177,8 +210,20 @@ export function ApprovalsPage(): ReactNode {
       // reloading is the honest response — the administrator needs to see that
       // it is no longer theirs to decide.
       const gone = error instanceof ApiError && (error.status === 404 || error.status === 409);
-      setNotice(t(gone ? 'admin.approvals.alreadyDecided' : 'admin.approvals.decisionFailed'));
+      // A refused privilege grant is its own message: an Admin cannot create an
+      // administrator through approval any more than through the Users screen.
+      const forbidden = error instanceof ApiError && error.status === 403;
+      setNotice(
+        t(
+          forbidden
+            ? 'admin.approvals.roleForbidden'
+            : gone
+              ? 'admin.approvals.alreadyDecided'
+              : 'admin.approvals.decisionFailed',
+        ),
+      );
       setDeciding(null);
+      setStaffApproval(null);
       if (gone) await load();
     } finally {
       setBusy(false);
@@ -241,6 +286,19 @@ export function ApprovalsPage(): ReactNode {
         pagination={{ page, pageSize: 25, total, onPage: setPage }}
       />
 
+      {staffApproval ? (
+        <StaffApprovalDialog
+          row={staffApproval}
+          branches={branches}
+          canGrantAdmin={isSuperAdmin}
+          busy={busy}
+          onCancel={() => setStaffApproval(null)}
+          onConfirm={(assignments) =>
+            void confirmDecision(undefined, assignments, staffApproval)
+          }
+        />
+      ) : null}
+
       <ConfirmDialog
         open={deciding !== null}
         title={t(
@@ -266,5 +324,102 @@ export function ApprovalsPage(): ReactNode {
         onCancel={() => setDeciding(null)}
       />
     </AdminLayout>
+  );
+}
+
+
+/**
+ * Approving a staff request — the activation **and** the role, in one act.
+ *
+ * §4.1 already calls approval *"a single administrative act that admits the
+ * applicant"*, and an account that is active with no role is a person who can
+ * sign in and reach nothing. Granting here means the platform never passes
+ * through that state when the approver already knows what the account is for.
+ *
+ * **The requested role is a default, not a decision.** It is prefilled because
+ * it is almost always right, and it is editable because it was written by the
+ * applicant — the same relationship §4.1 gives the preselected first Level.
+ *
+ * **The branch scope defaults to the branch the applicant asked for** and is
+ * separately editable, because those are two different questions: one is where
+ * they want to teach, the other is the extent of their authority (TD-2).
+ *
+ * **Administrator roles are hidden for an Admin** rather than shown and refused
+ * — approval must not become a weaker way to hand out authority than the Users
+ * screen. The server enforces it with the same function either way.
+ */
+function StaffApprovalDialog({
+  row,
+  branches,
+  canGrantAdmin,
+  busy,
+  onConfirm,
+  onCancel,
+}: {
+  row: Approval;
+  branches: PublicBranch[];
+  canGrantAdmin: boolean;
+  busy: boolean;
+  onConfirm: (assignments: { role: string; branch_id: string | null }[]) => void;
+  onCancel: () => void;
+}): ReactNode {
+  const [role, setRole] = useState(row.requested_role ?? 'teacher');
+  const [branchId, setBranchId] = useState<string>(row.branch?.id ?? '');
+
+  const offered = ROLES.filter((r) => canGrantAdmin || (r !== 'admin' && r !== 'super_admin'));
+
+  return (
+    <Dialog
+      open
+      onClose={onCancel}
+      title={t('admin.approvals.staffTitle').replace(
+        '{names}',
+        row.applicants.map((a) => a.name).join('، '),
+      )}
+    >
+      <div className="form">
+        <p>
+          {t('admin.approvals.staffBody').replace(
+            '{role}',
+            t(`admin.users.role.${row.requested_role ?? 'teacher'}`),
+          )}
+        </p>
+        <SelectField
+          label={t('admin.approvals.grantRole')}
+          value={role}
+          onChange={setRole}
+          options={offered.map((r) => ({ value: r, label: t(`admin.users.role.${r}`) }))}
+          hint={t('admin.approvals.grantRoleHint')}
+        />
+        <SelectField
+          label={t('admin.users.branchScope')}
+          value={branchId}
+          onChange={setBranchId}
+          options={[
+            { value: '', label: t('admin.users.allBranches') },
+            ...branches.map((b) => ({ value: b.id, label: b.name })),
+          ]}
+          hint={t('admin.approvals.grantScopeHint')}
+        />
+        <div className="form__actions">
+          <Button variant="secondary" onClick={onCancel}>
+            {t('common.cancel')}
+          </Button>
+          {/* Approving WITHOUT a role stays reachable: an applicant may have
+              asked for something the approver does not agree to, and refusing
+              the role is not the same decision as refusing the person. */}
+          <Button variant="secondary" disabled={busy} onClick={() => onConfirm([])}>
+            {t('admin.approvals.approveWithoutRole')}
+          </Button>
+          <Button
+            variant="primary"
+            disabled={busy}
+            onClick={() => onConfirm([{ role, branch_id: branchId || null }])}
+          >
+            {t('admin.approvals.approveWithRole')}
+          </Button>
+        </div>
+      </div>
+    </Dialog>
   );
 }

@@ -303,6 +303,16 @@ model User {
   /// neither.
   preProvisionedEmail String? @map("pre_provisioned_email")
 
+  /// What a self-service applicant ASKED TO BE (Revision 49, proposed) — a hint
+  /// to the §5.6 approver and **never** an authority. Authority lives in
+  /// `user_branch_role`, written at approval by a Super Admin; a self-declared
+  /// value that granted access would be privilege escalation by form
+  /// submission. Constrained in SQL to `teacher`: administrator accounts arrive
+  /// through staff pre-provisioning (§4.1b step 4b), an authenticated path with
+  /// a named actor. Retained after approval as provenance, like
+  /// `pre_provisioned_email`.
+  requestedRole String? @map("requested_role") @db.VarChar(40)
+
   // TD-10 normalized shadow columns, populated by the migration's
   // normalization function and indexed for substring search. Never normalized
   // per-row at query time.

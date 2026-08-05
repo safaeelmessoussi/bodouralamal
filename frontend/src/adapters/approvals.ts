@@ -36,6 +36,15 @@ export interface Approval {
    * means *not stated* rather than *no branch*.
    */
   branch: { id: string; name: string } | null;
+  /**
+   * What a self-service applicant asked to become (Revision 49) — `'teacher'`
+   * or `null`.
+   *
+   * **A hint, never an authority.** It is what makes a staff request
+   * distinguishable in this queue; the role itself is granted only by the
+   * assignment the approver states below.
+   */
+  requested_role: string | null;
 }
 
 export interface Page<T> {
@@ -62,16 +71,32 @@ export async function listApprovals(
  * Approving is **atomic across the whole bundle** (TD-4.2): parent, child and
  * link activate together or not at all. `records_updated` reports what actually
  * changed, which is why the screen can state a result rather than assume one.
+ *
+ * It optionally **grants a role and branch scope in that same transaction**
+ * (Revision 49).
+ *
+ * §4.1 already makes approval *"a single administrative act that admits the
+ * applicant"*, and an account that is active with no role is a person who can
+ * sign in and reach nothing. Assigning here means the platform never passes
+ * through that state when the approver already knows what the account is for —
+ * and it leaves nothing to a second, forgettable step.
+ *
+ * `branch_id: null` means **all branches for that assignment** (§7 R24), never
+ * *no branch*.
  */
 export async function approveApproval(
   id: string,
   token: string | null,
   reason?: string,
+  assignments?: { role: string; branch_id: string | null }[],
 ): Promise<DecisionResult> {
   return api<DecisionResult>(`/admin/approvals/${id}/approve`, {
     method: 'POST',
     token,
-    body: reason ? { reason } : {},
+    body: {
+      ...(reason ? { reason } : {}),
+      ...(assignments && assignments.length > 0 ? { assignments } : {}),
+    },
   });
 }
 

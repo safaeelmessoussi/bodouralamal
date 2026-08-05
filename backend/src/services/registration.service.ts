@@ -208,6 +208,13 @@ export async function register(
           // and copying it onto the child would be a second value to keep in
           // step. The child's branch, once they have one, is their Group's.
           intendedBranchId: input.branch_id,
+          // Revision 49 (proposed) — what they ASKED to be. Written here for the
+          // same reason `sex` is: the registration precedes the User, so it
+          // lands in this transaction rather than being patched on. It grants
+          // nothing; `user_branch_role` is written at approval by a Super Admin.
+          // Absent on the parent+child path, which is a family rather than a
+          // staff request.
+          requestedRole: input.kind === 'adult' ? (input.requested_role ?? null) : null,
           accountStatus: 'pending',
         },
       });

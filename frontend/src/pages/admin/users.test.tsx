@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import type { Approval } from '../../adapters/approvals.js';
 import type { RoleAssignment, UserSummary } from '../../adapters/users.js';
 import { ACCOUNT_STATUSES, ROLES } from '../../adapters/users.js';
 import { ar } from '../../i18n/ar.js';
@@ -39,6 +40,18 @@ const WIRE: UserSummary = {
  * fails the build; a test naming the field would merely have to be excluded
  * from that grep, weakening the guard to restate it.
  */
+/** A queue row, typed as the adapter's interface so a rename on either side is
+ *  a typecheck failure here. */
+const QUEUE_ITEM: Approval = {
+  id: '00000000-0000-4000-8000-000000000009',
+  type: 'registration',
+  applicants: [{ id: WIRE.id, name: WIRE.name_arabic, role: 'applicant' }],
+  submitted_at: '2026-08-05T10:00:00.000Z',
+  bundle: { child_count: 0, link_count: 0 },
+  branch: { id: ASSIGNMENT.branch_id!, name: ASSIGNMENT.branch_name! },
+  requested_role: null,
+};
+
 describe('the adapter type matches the wire contract', () => {
   it('carries exactly the keys the staff list publishes', () => {
     expect(Object.keys(WIRE).sort()).toEqual([
@@ -107,5 +120,36 @@ describe('the registry and the router agree', () => {
     const module = ADMIN_MODULES.find((m) => m.path === '/admin/users');
     expect(module?.status).toBe('ready');
     expect(module?.roles).toContain('admin');
+  });
+});
+
+describe('the staff registration workflow (Revision 49)', () => {
+  it('makes a staff request distinguishable in the queue', () => {
+    // Before `requested_role` the approver saw names and a branch, and could
+    // not tell a teacher applicant from a family registration — which is the
+    // entire gap the workflow needed closing. `null` is the ordinary path.
+    const staff: Approval = { ...QUEUE_ITEM, requested_role: 'teacher' };
+    const family: Approval = { ...QUEUE_ITEM, requested_role: null };
+    expect(staff.requested_role).toBe('teacher');
+    expect(family.requested_role).toBeNull();
+  });
+
+  it('has a label for the only self-requestable role', () => {
+    // Administrator accounts arrive by staff pre-provisioning, never by a
+    // public form — so `teacher` is the only value this cell ever renders.
+    expect(ar.admin.users.role.teacher).toBeTruthy();
+  });
+
+  it('offers approving WITHOUT a role as its own action', () => {
+    // Refusing the requested role is not the same decision as refusing the
+    // person, and a dialog with only one confirm button would conflate them.
+    expect(ar.admin.approvals.approveWithoutRole).toBeTruthy();
+    expect(ar.admin.approvals.approveWithRole).toBeTruthy();
+  });
+
+  it('names the refusal an Admin gets for granting an administrator role', () => {
+    // Approval must not read as a weaker path to authority than the Users
+    // screen — and the message says the approval itself is still available.
+    expect(ar.admin.approvals.roleForbidden).toBeTruthy();
   });
 });

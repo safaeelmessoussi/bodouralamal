@@ -557,7 +557,13 @@
   - TD-10's two-character floor applied before the request; every filter change resets to page 1
   - Each `409` reason gets its own sentence — the remedies differ completely
   - **P1 found while probing the running stack:** the `LAST_SUPER_ADMIN` test had revoked real seeded `super_admin` assignments and left the dev database with **none**, all tests green. Fixed three ways (borrow `account_status` not the grant · restore in `finally` · `afterAll` asserts the platform is still administrable) and recorded in `development/testing.md`
-- [ ] **Admin portal completion** (Owner priority, 2026-08-05) — remaining: staff registration-request workflow (Teachers/Admins/Super Admins → طلبات الانضمام → approve/reject)
+- [x] **Staff registration workflow** — audited first; **no endpoint added** (drafted as `SRS-PROPOSAL-R49.md`)
+  - Admins/Super Admins creating staff was **already complete** via `POST /admin/users` pre-provisioning (§4.1's first-class staff path)
+  - The only missing datum was **what the applicant asked to be**, so the queue could not tell a teacher applicant from a family registration
+  - `requested_role` accepts only `teacher`, enforced by Zod **and** a database CHECK — widening it is a revision, not a code change
+  - **Branch scope is never collected at registration:** a role's scope is an authorization boundary (TD-2), and collecting it would let an applicant propose the extent of their own permissions
+  - Role + scope granted **in the approval transaction**, through the same `applyRoleAssignments` the Users screen uses — approval cannot become a weaker path to authority
+- [ ] **§4.1 (R43): approval does not assign Levels or Administrative Groups** — found during the R49 audit. The SRS requires the approver to select Levels and one Group each, with the `Enrollment` rows written in the same transaction; `decide()` only flips statuses, so **an approved student is admitted and enrolled in nothing**. Belongs in the transaction R49 just extended
 - [ ] Public Educational Library frontend — **same filters, same items, ordering only** for signed-in users (§5.2)
   - Note: the public calendar's *screen* filters (branch · category · level) stay identical for everyone and are compliant. Adding TD-3.4's `subject_id`/`teacher_id`/`academic_year_id` to a **public** screen would need public reference lists that do not exist — `/admin/subjects` is Admin-only by design
 

@@ -109,9 +109,9 @@ specification says it is, and keeps the gap **visible rather than silent**.
 
 | | Path | Audience | Notes |
 |---|---|---|---|
-| `POST` | `/registrations` | 🌐 + token | Gated by the signed onboarding token; no session exists yet. **Identity comes solely from the token payload** |
+| `POST` | `/registrations` | 🌐 + token | Gated by the signed onboarding token; no session exists yet. **Identity comes solely from the token payload.** Optional `requested_role: 'teacher'` (R49) — **a hint that grants nothing** |
 | `GET` | `/admin/approvals` | 🔒 | Deliberately **unscoped** — the permanent path by which a branch Admin meets applicants |
-| `POST` | `/admin/approvals/{id}/approve` | 🔒 | Atomic bundle activation |
+| `POST` | `/admin/approvals/{id}/approve` | 🔒 | Atomic bundle activation. Optional `assignments: [{ role, branch_id }]` (R49) granted **in the same transaction** |
 | `POST` | `/admin/approvals/{id}/reject` | 🔒 | Body carries a reason |
 | `POST` | `/family-links` | 🔒 | **Staff-mediated** link of an existing child. Parents have no search over children |
 | `DELETE` | `/admin/family-links/{id}` | 🔒 | Soft delete **is** the revocation — effective on the next request |
@@ -127,6 +127,29 @@ specification says it is, and keeps the gap **visible rather than silent**.
 | `PUT` | `/admin/users/{id}/roles` | 🔒 | **Replaces** the whole assignment set. Administrator roles are Super-Admin-only to grant or revoke |
 | `GET` `POST` | `/students/{id}/consents` | 🔒 | Versioned records; staff-recorded grants carry the actor |
 | `GET` `PUT` | `/students/{id}/social-profile` | 🔒 | **Both reads and writes audited.** Out of scope answers `404`, never `403` |
+
+### The staff registration workflow needed no new endpoint
+
+A prospective teacher self-registers through the adult form with
+`requested_role: 'teacher'`; the request appears in طلبات الانضمام, distinguishable from a
+family registration for the first time; a Super Admin approves and grants the role and its
+branch scope in one transaction. **Admins creating staff directly was already complete** —
+`POST /admin/users` pre-provisions with role and scope, which §4.1 calls the first-class staff
+path.
+
+**`requested_role` grants nothing** and accepts only `teacher`: administrator accounts arrive
+by pre-provisioning, an authenticated path with a named actor, and a database `CHECK` makes
+widening the set an SRS revision rather than a code change.
+
+**A role's branch scope is never collected at registration.** `branch_id` is the branch the
+applicant *asked for* (R39 — a request, not a placement); a role's scope is an authorization
+boundary (TD-2), and collecting it from the applicant would let a person propose the extent of
+their own permissions.
+
+**The grant runs through the same function `PUT /admin/users/{id}/roles` uses**, so approval
+cannot become a weaker path to authority: administrator roles stay Super-Admin-only, and a
+refused grant takes the activation with it. Rejection grants nothing whatever the caller sends.
+Drafted in [SRS-PROPOSAL-R49](../SRS-PROPOSAL-R49.md).
 
 **Suspension is a verb, not a field**, because TD-4.15 binds the transition to revoking every
 live `RefreshToken` in the same transaction — a client that set `account_status` on the edit and

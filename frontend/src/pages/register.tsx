@@ -53,7 +53,18 @@ export function Register(): ReactNode {
   const [branches, setBranches] = useState<PublicBranch[]>([]);
   const [branchesFailed, setBranchesFailed] = useState(false);
 
-  const [kind, setKind] = useState<'adult' | 'parent_child'>('adult');
+  /**
+   * What the visitor is here to do — a **form-level** choice with three options
+   * (Revision 49), which maps to only the two payload `kind`s §4.1b step 4c
+   * defines.
+   *
+   * A teacher applying *is* an adult registering themselves; the only
+   * difference is what they ask to become. Adding a third `kind` to the wire
+   * would have duplicated every name, consent and branch rule for an identical
+   * form, and invented a flow the SRS does not describe.
+   */
+  const [intent, setIntent] = useState<'adult' | 'parent_child' | 'teacher'>('adult');
+  const kind: 'adult' | 'parent_child' = intent === 'parent_child' ? 'parent_child' : 'adult';
   const [applicant, setApplicant] = useState<PersonForm>(emptyPerson);
   const [child, setChild] = useState<PersonForm>(emptyPerson);
   const [branchId, setBranchId] = useState<string | null>(null);
@@ -108,7 +119,10 @@ export function Register(): ReactNode {
     setFailureId(null);
     setServerErrors({ fields: {}, unmapped: [] });
     try {
-      await submitRegistration(buildPayload({ kind, applicant, child, branchId: branchId!, mediaRelease }), token);
+      await submitRegistration(
+        buildPayload({ intent, applicant, child, branchId: branchId!, mediaRelease }),
+        token,
+      );
       setDone(true);
     } catch (error) {
       // Field-level first: the server said WHICH field, and the whole point is
@@ -195,14 +209,25 @@ export function Register(): ReactNode {
           >
             <SelectField
               label={t('register.kindLabel')}
-              value={kind}
-              onChange={(next) => setKind(next as 'adult' | 'parent_child')}
+              value={intent}
+              onChange={(next) => setIntent(next as typeof intent)}
               options={[
                 { value: 'adult', label: t('register.kindAdult') },
                 { value: 'parent_child', label: t('register.kindParentChild') },
+                { value: 'teacher', label: t('register.kindTeacher') },
               ]}
               hint={t('register.kindHint')}
             />
+
+            {intent === 'teacher' ? (
+              // Said plainly rather than implied: submitting this asks for
+              // something a person has to grant. An applicant who expects to be
+              // teaching tomorrow has misunderstood the form, and the form is
+              // where that is cheapest to correct.
+              <p className="state" role="status">
+                {t('register.teacherNotice')}
+              </p>
+            ) : null}
 
             <fieldset className="register-form__group">
               <legend>{kind === 'adult' ? t('register.you') : t('register.parent')}</legend>
@@ -607,7 +632,7 @@ export function validate(state: FormState): Record<string, string> {
 }
 
 function buildPayload(state: {
-  kind: 'adult' | 'parent_child';
+  intent: 'adult' | 'parent_child' | 'teacher';
   applicant: PersonForm;
   child: PersonForm;
   branchId: string;
@@ -632,11 +657,17 @@ function buildPayload(state: {
     ...(p.notes.trim() ? { notes: p.notes.trim() } : {}),
   });
 
-  if (state.kind === 'adult') {
+  if (state.intent !== 'parent_child') {
     return {
       kind: 'adult',
       applicant: person(state.applicant),
       branch_id: state.branchId,
+      // The ONLY difference between an adult registering and a teacher
+      // applying. It grants nothing — a Super Admin assigns the role at
+      // approval — and its branch SCOPE is not collected here at all:
+      // `branch_id` says where they want to teach, while a role's scope is an
+      // authorization boundary the approver decides.
+      ...(state.intent === 'teacher' ? { requested_role: 'teacher' as const } : {}),
       consents: { data_processing: true },
     };
   }
