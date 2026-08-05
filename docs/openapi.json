@@ -1530,6 +1530,290 @@
         }
       }
     },
+    "/admin/users/{id}": {
+      "patch": {
+        "summary": "Edit a user's own fields",
+        "description": "§5.6 `/admin/users` *\"edit\"*, §14.2, TD-15 optimistic locking. Body: `{ version, name_arabic?, name_french?, nickname?, phone? }` — **strictly** those keys. **`account_status` is refused, not ignored**: suspension carries TD-4.15's obligation to revoke every live `RefreshToken` **in the same transaction**, so a client that set the field here and received `200` would believe access had been withdrawn while a 30-day credential was still live. It is the same reasoning that makes `PATCH /sessions/{id}` refuse `status`. **`pre_provisioned_email` is refused** because it authorises *claiming* an account (§7 R15) — editing it after the fact would hand a half-registered person's account to someone else — and **`public_display_name`** because §20 rule 21 resolves the published identity server-side, and a back-office form is exactly where a second answer to *which name did this person publish* would appear. **A user outside a branch Admin's §4.2 R25 visibility answers `404`, never `403`** (§20 rule 17): saying *exists, but not yours* is itself the disclosure that rule prevents. TD-12 freshness applies — user-management mutations re-read the caller's live status and role on every request. The **TD-10 search shadow columns are maintained by a database trigger**, never by this handler; a second normalization would drift from the one the indexes were built with and make search find some rows and not others. The audit row records **which fields changed, not their values** — a name and a phone number are personal data, and TD-8's record must not become a second copy of them.",
+        "responses": {
+          "200": {
+            "description": "The updated user, in the list's own shape."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a missing version, or a refused key such as account_status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN for a caller who is neither admin nor super_admin, or whose own account is no longer active.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an unknown user or one outside the caller's visibility.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). VERSION_CONFLICT.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/users/{id}/suspend": {
+      "post": {
+        "summary": "Suspend an account",
+        "description": "§5.6 *\"deactivate\"*, **TD-1 `Active → Suspended`**, **TD-4.15**. Body: `{ version, reason }`. **Every live session is revoked in the same transaction** — TD-12 requires suspension to take effect on the next refresh *immediately*, and a suspension that commits without revoking leaves a 30-day credential alive, which is precisely the safeguarding failure the freshness rule exists to prevent. The `auth.token_revoked` audit row names the affected session ids, so a specific session stays attributable. **The reason is mandatory and may not be blank**, for the reason a cancellation's is: it is the only record of why access was withdrawn, and afterwards nobody can reconstruct it. **Refused from any status but `Active`** (`409 STATE_CONFLICT`, `reason: INVALID_TRANSITION`) — TD-1 allows the transition from nowhere else. **You cannot suspend your own account** (`reason: SELF_SUSPENSION`): the administrator is locked out by their own next request, and the recovery path is a VPS shell. **Nor the last active Super Admin** (`reason: LAST_SUPER_ADMIN`) — Revision 22 documents that lockout as a *recovery* path requiring `DATABASE_URL` and a manual seed run, not an outcome a back-office control may produce with one click.",
+        "responses": {
+          "200": {
+            "description": "The suspended user."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a missing version or a blank reason.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an unknown user or one outside the caller's visibility.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). VERSION_CONFLICT, or STATE_CONFLICT with reason INVALID_TRANSITION, SELF_SUSPENSION or LAST_SUPER_ADMIN.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/users/{id}/reactivate": {
+      "post": {
+        "summary": "Reactivate a suspended account",
+        "description": "**TD-1 `Suspended → Active`**. Body: `{ version }`. **Sessions stay revoked** — the person signs in again, which is the only way the new state is actually proven rather than assumed. **`Rejected` is deliberately not reachable from here**: TD-1 makes it terminal and §4.1b step 4a refuses it at login, because re-admitting a rejected applicant is a fresh registration decision rather than the undo of a suspension. Any other starting status is `409 STATE_CONFLICT` with `reason: INVALID_TRANSITION`.",
+        "responses": {
+          "200": {
+            "description": "The reactivated user."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a missing version.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an unknown user or one outside the caller's visibility.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). VERSION_CONFLICT, or STATE_CONFLICT with reason INVALID_TRANSITION.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/users/{id}/roles": {
+      "put": {
+        "summary": "Replace a user's role and branch-scope assignments",
+        "description": "§5.6 *\"role/branch-scope assignment\"*, §14.2, TD-2. Body: `{ assignments: [{ role, branch_id }] }` — **the complete set the user should hold afterwards**. A `PUT` of the whole set rather than add/remove verbs: the set is what an administrator reasons about, one call yields one audit row describing one decision, and **there is no window in which the user holds half of an intended change** — which add-then-remove creates every time a role moves between branches. **`branch_id: null` means all branches for that assignment** (§7 R24), never *no branch*; it is a required, explicitly nullable key rather than an optional one, so the unscoped grant is never the easiest thing to type by accident. **Removal is a soft delete** (TD-5) — a revoked assignment is tombstoned, so *\"who was an administrator at this branch in March\"* stays answerable, and re-granting an identical assignment revives that row rather than colliding with the unique index that spans deleted rows. **Only a Super Admin may grant or revoke `admin` or `super_admin`**; an Admin doing either is privilege propagation, the same rule `POST /admin/users` applies to creation. **`super_admin` IS assignable here**, unlike at creation: Revision 22 states that after bootstrap *every subsequent change of administrators happens exclusively through the application*, and refusing the role would leave a VPS shell as the only route to a second Super Admin. **The last active Super Admin cannot lose the role** (`409 STATE_CONFLICT`, `reason: LAST_SUPER_ADMIN`). **Sessions are deliberately NOT revoked** — Revision 10 resolves this trade-off explicitly: every safeguarding-sensitive operation re-asserts live assignments per request, so a revoked role stops mattering immediately where it matters, and §7 fixes `RefreshRevokedReason` at four values, none of which honestly describes a demotion.",
+        "responses": {
+          "200": {
+            "description": "The user with their new assignments."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — an unknown role, or a missing branch_id key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN — an Admin attempting to grant or revoke an administrator role.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an unknown user, one outside the caller's visibility, or an unknown branch.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT with reason LAST_SUPER_ADMIN.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/family-links": {
       "post": {
         "summary": "Link an existing child to a parent (staff-mediated)",

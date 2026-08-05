@@ -542,7 +542,16 @@
   - A Category **never** cascades its Levels — those carry people's records
   - `PATCH /admin/levels/{id}` **refuses** `category_id` (the one `.strict()` schema here): dropping it silently would let a client believe a move succeeded
   - `/admin/levels`, `/admin/taxonomy` and the new `/admin/levels/{id}/subjects` screen are live; the contract-derived Pending-denial suite grew by 11, one per operation
-- [ ] **Admin portal completion** (Owner priority, 2026-08-05) — remaining: user management (edit · suspend · role/branch-scope assignment) · Room CRUD frontend · staff registration-request workflow
+- [x] **Room CRUD frontend** — zero new backend: all eight Branch/Room routes already existed
+  - A dialog behind each branch row, not a sibling list: §14.1 names one node, and a room has no meaning apart from its branch
+  - Offered to an Admin as well as a Super Admin — an Admin reads this screen because scheduling depends on knowing which rooms exist
+- [x] **User management backend** — `PATCH /admin/users/{id}`, `POST .../suspend`, `POST .../reactivate`, `PUT .../roles` (drafted as `SRS-PROPOSAL-R48.md`)
+  - **Suspension is a verb, not a field**: TD-4.15 binds it to revoking every live session in the same transaction, so `account_status` is refused on the edit rather than dropped
+  - `PUT .../roles` replaces the whole set — one call, one decision, one audit row, and no window where a user holds half a change
+  - **`super_admin` is grantable here** (R22: administrator changes happen exclusively through the application), guarded by `LAST_SUPER_ADMIN` and `SELF_SUSPENSION`
+  - A role change deliberately does **not** revoke sessions — R10 accepts the window, and §7's `RefreshRevokedReason` has no value that honestly describes a demotion
+  - `check-display-identity.sh`'s exception is now **symbol-scoped rather than file-scoped**, proven by reintroducing the bug
+- [ ] **Admin portal completion** (Owner priority, 2026-08-05) — remaining: the `/admin/users` **screen** · staff registration-request workflow
 - [ ] Public Educational Library frontend — **same filters, same items, ordering only** for signed-in users (§5.2)
   - Note: the public calendar's *screen* filters (branch · category · level) stay identical for everyone and are compliant. Adding TD-3.4's `subject_id`/`teacher_id`/`academic_year_id` to a **public** screen would need public reference lists that do not exist — `/admin/subjects` is Admin-only by design
 

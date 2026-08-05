@@ -993,3 +993,56 @@ export function settingDto(row: {
     version: row.version,
   };
 }
+
+/* ── Users (§5.6 /admin/users, §14.2) ────────────────────────────────────── */
+
+/**
+ * A user as the §14.2 Users screen lists them — **and as every write answers**.
+ *
+ * One shape for the list and for edit, suspend, reactivate and role assignment,
+ * so a screen renders the result of an action with the renderer it already has
+ * and never re-fetches a page to see one row change.
+ *
+ * Deliberately **absent**: `pre_provisioned_email` (an authorisation to claim an
+ * account, not a contact detail), `notes`, `sex`, `intended_branch_id`, and
+ * anything from `StudentSocialProfile` — §4.10 restricts those to assigned
+ * teachers, so a back-office list is the last place they belong.
+ */
+export interface UserDto {
+  id: string;
+  name_arabic: string;
+  nickname: string | null;
+  public_display_name: string | null;
+  phone: string | null;
+  account_status: string;
+  roles: { role: string; branch_id: string | null; branch_name: string | null }[];
+  /** TD-15 — what the edit dialog sends back. Its presence here is why there is
+   *  no separate single-user read. */
+  version: number;
+}
+
+export function userDto(row: {
+  id: string;
+  nameArabic: string;
+  nickname: string | null;
+  publicDisplayName: string | null;
+  phone: string | null;
+  accountStatus: string;
+  roles: { role: string; branchId: string | null; branchName: string | null }[];
+  version: number;
+}): UserDto {
+  return {
+    id: row.id,
+    name_arabic: row.nameArabic,
+    nickname: row.nickname,
+    public_display_name: row.publicDisplayName,
+    phone: row.phone,
+    account_status: row.accountStatus,
+    roles: row.roles.map((r) => ({
+      role: r.role,
+      branch_id: r.branchId,
+      branch_name: r.branchName,
+    })),
+    version: row.version,
+  };
+}

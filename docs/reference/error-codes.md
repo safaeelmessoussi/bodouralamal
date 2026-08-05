@@ -99,6 +99,29 @@ child-context middleware**, where an unapproved link is `404`. Returning link st
 non-owner would leak existence — which is why a duplicate staff-created link answers
 `DUPLICATE` instead.
 
+#### `STATE_CONFLICT` carries a `reason`, and clients should branch on it
+
+`STATE_CONFLICT` alone says *the state disagrees*; the remedy differs completely by case, so
+`details.reason` is the discriminator a screen actually renders. **A client that shows one
+generic message for all of these is hiding the only useful part of the answer.**
+
+| `reason` | Raised by | The user's next step |
+|---|---|---|
+| `SUBJECT_NOT_IN_LEVEL` | Creating a Teaching Group | Assign the Subject to the Level first (§4.4b) |
+| `TEACHING_GROUPS_EXIST` | Removing a Subject from a Level | Delete the splits first — their members would otherwise hold seats in a subject that is not offered |
+| `SCHEDULES_EXIST` | Deleting a Teaching Group | Move or delete the timetable entries that target it |
+| `ALREADY_IN_SUBJECT_SPLIT` | Placing a student | They are in another split of the same Subject — the intent was almost certainly a *move* |
+| `NOT_ENROLLED_IN_LEVEL` | Placing a student | Enrolment precedes placement (BR-22 from the other side) |
+| `ALREADY_HELD` · `SESSION_IN_PAST` | Session edits | A held session cannot be rescheduled; a past one cannot be restored onto the timetable |
+| `INVALID_TRANSITION` | Suspend / reactivate | TD-1 does not allow it from this status; `details.account_status` says which |
+| `SELF_SUSPENSION` | Suspend | An administrator cannot suspend themselves — the next request would lock them out |
+| `LAST_SUPER_ADMIN` | Suspend, or `PUT .../roles` | Appoint another Super Admin first. Revision 22's lockout recovery needs a VPS shell and is not a UI outcome |
+| `CONSENT_TEXT_VERSION_NOT_CONFIGURED` | Registration (`503`, not `409`) | An owner task (§2.3) — the message names the missing setting |
+
+**Deletion blocked by references is different**: it carries `details.blocked_by`, an object of
+`{ relationship: count }` naming every blocker at once, so a screen can say *which* rather than
+making the administrator remove things one at a time to find out.
+
 ### 413 · 429
 
 | Code | When | What a client should do |

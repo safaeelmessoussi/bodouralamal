@@ -155,6 +155,14 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
   guarded.put('/students/:id/social-profile', socialProfile.write(prisma));
   guarded.get('/admin/users', users.list(prisma));
   guarded.post('/admin/users', users.create(prisma));
+  // §5.6 "edit, deactivate, role/branch-scope assignment". Suspension is its own
+  // verb rather than a field on the edit, because TD-4.15 requires it to revoke
+  // every live session in the same transaction — an obligation a field
+  // assignment cannot carry.
+  guarded.patch('/admin/users/:id', users.update(prisma));
+  guarded.post('/admin/users/:id/suspend', users.suspend(prisma));
+  guarded.post('/admin/users/:id/reactivate', users.reactivate(prisma));
+  guarded.put('/admin/users/:id/roles', users.setRoles(prisma));
   guarded.post('/family-links', familyLinks.create(prisma));
   guarded.delete('/admin/family-links/:id', familyLinks.revoke(prisma));
   guarded.get('/admin/branches', branch.listBranches(prisma));

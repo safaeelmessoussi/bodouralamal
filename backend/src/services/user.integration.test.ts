@@ -437,6 +437,14 @@ describe('§14.2 / TD-10 — user list, filters and search', () => {
     // already on this row, and staff need to see who has set one. This
     // assertion is the review gate for that kind of addition — a field must be
     // argued onto the list, never arrive on it by accident.
+    //
+    // `version` joined deliberately when the Users screen gained edit,
+    // suspend and role assignment: TD-15 requires the value the form loaded to
+    // travel back on the write. Publishing it here is what let that screen
+    // reuse this list — the alternative was a single-user read returning these
+    // same fields plus one, which is a second projection of one concept kept in
+    // step by hand. It is a row's revision counter, not information about a
+    // person, so §4.10 has no view on it.
     for (const row of page.data) {
       expect(Object.keys(row).sort()).toEqual(
         [
@@ -447,6 +455,7 @@ describe('§14.2 / TD-10 — user list, filters and search', () => {
           'phone',
           'publicDisplayName',
           'roles',
+          'version',
         ].sort(),
       );
     }

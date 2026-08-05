@@ -2,11 +2,16 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 
 import {
   createBranch,
+  createRoom,
   deleteBranch,
+  deleteRoom,
   listBranches,
+  listRooms,
   updateBranch,
+  updateRoom,
   type Branch,
   type BranchInput,
+  type Room,
 } from '../../adapters/branches-admin.js';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
 import { Button } from '../../components/ui/button.js';
@@ -51,6 +56,7 @@ export function BranchesPage(): ReactNode {
   const [query, setQuery] = useState('');
   const [editing, setEditing] = useState<Branch | 'new' | null>(null);
   const [deleting, setDeleting] = useState<Branch | null>(null);
+  const [rooms, setRooms] = useState<Branch | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -113,12 +119,20 @@ export function BranchesPage(): ReactNode {
 
   // Hidden entirely for an Admin, rather than shown disabled: §14.2 gates the
   // action by role, and a permanently dead control teaches nothing.
-  const actions: RowAction<Branch>[] = canWrite
-    ? [
-        { label: t('common.edit'), onSelect: (r) => setEditing(r) },
-        { label: t('common.delete'), danger: true, onSelect: (r) => setDeleting(r) },
-      ]
-    : [];
+  //
+  // **Rooms is the exception and is offered to an Admin too**, because an Admin
+  // reads this screen precisely because scheduling depends on knowing which
+  // rooms exist. The dialog gates its own write controls, and the server
+  // enforces the matrix regardless.
+  const actions: RowAction<Branch>[] = [
+    { label: t('admin.branches.rooms'), onSelect: (r) => setRooms(r) },
+    ...(canWrite
+      ? [
+          { label: t('common.edit'), onSelect: (r: Branch) => setEditing(r) },
+          { label: t('common.delete'), danger: true, onSelect: (r: Branch) => setDeleting(r) },
+        ]
+      : []),
+  ];
 
   async function save(input: BranchInput, existing: Branch | null): Promise<void> {
     setBusy(true);
@@ -211,6 +225,10 @@ export function BranchesPage(): ReactNode {
         />
       ) : null}
 
+      {rooms ? (
+        <RoomsDialog branch={rooms} canWrite={canWrite} onClose={() => setRooms(null)} />
+      ) : null}
+
       <ConfirmDialog
         open={deleting !== null}
         title={t('admin.branches.deleteTitle')}
@@ -222,6 +240,177 @@ export function BranchesPage(): ReactNode {
         onCancel={() => setDeleting(null)}
       />
     </AdminLayout>
+  );
+}
+
+/**
+ * The rooms of one branch (§5.6 *"Branches & Rooms"*, §14.1).
+ *
+ * **A dialog behind the branch row rather than a sibling screen**, because a
+ * room has no meaning apart from its branch — §14.1 names one node, not two, and
+ * a `/admin/rooms` list would have to repeat the branch on every line to be
+ * readable at all.
+ *
+ * **Reads for an Admin, writes for a Super Admin** (TD-2 R26). An Admin opens
+ * this because scheduling depends on knowing which rooms exist; the server
+ * enforces the write rule regardless, so the hidden controls are UX rather than
+ * the boundary.
+ *
+ * **Deletion is refused while a schedule or a session books the room** (TD-5).
+ * That is reported as its own reason: the remedy — move or delete the bookings —
+ * is nothing like the remedy for a failed request.
+ */
+function RoomsDialog({
+  branch,
+  canWrite,
+  onClose,
+}: {
+  branch: Branch;
+  canWrite: boolean;
+  onClose: () => void;
+}): ReactNode {
+  const { accessToken } = useSession();
+  const [rows, setRows] = useState<Room[]>([]);
+  const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
+  const [draft, setDraft] = useState('');
+  const [editing, setEditing] = useState<Room | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      setRows((await listRooms(branch.id, accessToken)).data);
+      setState('ready');
+    } catch {
+      setState('error');
+    }
+  }, [branch.id, accessToken]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  async function submit(): Promise<void> {
+    const name = draft.trim();
+    if (name === '') return;
+    setBusy(true);
+    setNotice(null);
+    try {
+      if (editing) await updateRoom(editing.id, editing.version, name, accessToken);
+      else await createRoom(branch.id, name, accessToken);
+      setDraft('');
+      setEditing(null);
+      await load();
+    } catch (error) {
+      // A stale version is someone else's edit; reloading is the only correct
+      // response, never a silent overwrite (TD-15).
+      const conflict = error instanceof ApiError && error.status === 409;
+      setNotice(t(conflict ? 'common.conflict' : 'common.saveFailed'));
+      if (conflict) {
+        setEditing(null);
+        await load();
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove(room: Room): Promise<void> {
+    setBusy(true);
+    setNotice(null);
+    try {
+      await deleteRoom(room.id, accessToken);
+      await load();
+    } catch (error) {
+      const blocked = error instanceof ApiError && error.status === 409;
+      setNotice(t(blocked ? 'admin.branches.roomBlocked' : 'common.deleteFailed'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog
+      open
+      onClose={onClose}
+      title={t('admin.branches.roomsTitle').replace('{branch}', branch.name)}
+    >
+      {notice ? (
+        <p className="admin-notice" role="status" aria-live="polite">
+          {notice}
+        </p>
+      ) : null}
+
+      {state === 'loading' ? <p className="state">{t('common.loading')}</p> : null}
+      {state === 'error' ? (
+        <p className="state" role="alert">
+          {t('common.loadFailed')}
+        </p>
+      ) : null}
+
+      {state === 'ready' ? (
+        <>
+          {rows.length === 0 ? (
+            // A named state, not an empty box: a branch with no rooms cannot
+            // host a schedule that names one, and saying so here is cheaper
+            // than discovering it as a refusal on the schedules screen.
+            <p className="state" role="status">
+              {t('admin.branches.roomsEmpty')}
+            </p>
+          ) : (
+            <ul className="admin-list">
+              {rows.map((room) => (
+                <li key={room.id}>
+                  <span>{room.name}</span>
+                  {canWrite ? (
+                    <>
+                      <Button
+                        variant="secondary"
+                        onClick={() => {
+                          setEditing(room);
+                          setDraft(room.name);
+                        }}
+                      >
+                        {t('common.edit')}
+                      </Button>
+                      <Button variant="secondary" disabled={busy} onClick={() => void remove(room)}>
+                        {t('common.delete')}
+                      </Button>
+                    </>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+          )}
+
+          {canWrite ? (
+            <div className="form">
+              <TextField
+                label={t(editing ? 'admin.branches.roomRename' : 'admin.branches.roomAdd')}
+                value={draft}
+                onChange={setDraft}
+              />
+              <div className="form__actions">
+                {editing ? (
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      setEditing(null);
+                      setDraft('');
+                    }}
+                  >
+                    {t('common.cancel')}
+                  </Button>
+                ) : null}
+                <Button variant="primary" disabled={busy || draft.trim() === ''} onClick={() => void submit()}>
+                  {t(editing ? 'common.save' : 'admin.branches.roomAdd')}
+                </Button>
+              </div>
+            </div>
+          ) : null}
+        </>
+      ) : null}
+    </Dialog>
   );
 }
 

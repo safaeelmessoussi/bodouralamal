@@ -2,7 +2,7 @@
 
 # API endpoints
 
-**82 operations across 59 paths**, all under `/api/v1` except the health check.
+**86 operations across 63 paths**, all under `/api/v1` except the health check.
 The count comes from the generator, which reconciles against the live router — if this line
 disagrees with `openapi.json`, this line is the one that is wrong.
 
@@ -120,9 +120,40 @@ specification says it is, and keeps the gap **visible rather than silent**.
 
 | | Path | Audience | Notes |
 |---|---|---|---|
-| `GET` `POST` | `/admin/users` | 🔒 | List with search; create pre-provisions against a Google address |
+| `GET` `POST` | `/admin/users` | 🔒 | List with search (carries `version`, so the edit form needs no second read); create pre-provisions against a Google address |
+| `PATCH` | `/admin/users/{id}` | 🔒 | The person's own fields. **`account_status`, `pre_provisioned_email` and `public_display_name` are refused, not dropped** |
+| `POST` | `/admin/users/{id}/suspend` | 🔒 | TD-1 `Active → Suspended`; **revokes every live session in the same transaction** (TD-4.15). Reason mandatory |
+| `POST` | `/admin/users/{id}/reactivate` | 🔒 | TD-1 `Suspended → Active`. Sessions stay revoked; `Rejected` is terminal and unreachable |
+| `PUT` | `/admin/users/{id}/roles` | 🔒 | **Replaces** the whole assignment set. Administrator roles are Super-Admin-only to grant or revoke |
 | `GET` `POST` | `/students/{id}/consents` | 🔒 | Versioned records; staff-recorded grants carry the actor |
 | `GET` `PUT` | `/students/{id}/social-profile` | 🔒 | **Both reads and writes audited.** Out of scope answers `404`, never `403` |
+
+**Suspension is a verb, not a field**, because TD-4.15 binds the transition to revoking every
+live `RefreshToken` in the same transaction — a client that set `account_status` on the edit and
+received `200` would believe access had been withdrawn while a 30-day credential was still
+live. It is the same rule that makes `PATCH /sessions/{id}` refuse `status`.
+
+**A user outside a branch Admin's §4.2 R25 visibility answers `404`, never `403`** (§20 rule
+17) — *exists, but not yours* is itself the disclosure that rule prevents.
+
+**Two guards keep the platform out of its own lockout-recovery path.** The last active Super
+Admin cannot be stripped of the role or suspended (`LAST_SUPER_ADMIN`), and nobody may suspend
+their own account (`SELF_SUSPENSION`). Revision 22 documents that lockout as a recovery needing
+`DATABASE_URL` and a manual seed run — not something a back-office control may cause.
+
+**`super_admin` is grantable through `PUT .../roles` but not through `POST /admin/users`.**
+Revision 22 requires administrator changes to happen *exclusively through the application*;
+pre-provisioning an unclaimed account straight into the highest role is a different risk from
+promoting one that already exists and has been approved. Drafted in
+[SRS-PROPOSAL-R48](../SRS-PROPOSAL-R48.md).
+
+**A role change deliberately does not revoke sessions** — Revision 10 accepts the ≤1-hour
+stateless window for everything that is not safeguarding-sensitive, and those operations
+re-assert live assignments per request. §7 also fixes `RefreshRevokedReason` at four values,
+none of which honestly describes a demotion.
+
+**There is no user-delete endpoint.** §5.6 lists *deactivate*; a person's soft delete reaches
+grades, submissions, Quran logs and consent records, which is its own decision.
 
 ## Reference data
 

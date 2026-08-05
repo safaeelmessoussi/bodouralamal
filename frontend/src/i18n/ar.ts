@@ -604,6 +604,13 @@ export const ar = {
       deleteBody: 'سيتم حذف «{name}». يمكن استرجاعه خلال 90 يوماً.',
       // TD-5: deletion is prohibited while rooms or groups reference the branch.
       deleteBlocked: 'لا يمكن حذف هذا المقر لأن قاعات أو حلقات ما زالت مرتبطة به.',
+      // القاعات خلف كل فرع لا كقائمة مستقلة: القاعة لا معنى لها خارج فرعها.
+      rooms: 'القاعات',
+      roomsTitle: 'قاعات {branch}',
+      roomsEmpty: 'لا توجد قاعات في هذا الفرع بعد. الجدول الذي يحدد قاعة يحتاج إلى واحدة على الأقل.',
+      roomAdd: 'إضافة قاعة',
+      roomRename: 'تعديل اسم القاعة',
+      roomBlocked: 'لا يمكن حذف هذه القاعة لأن جداول أو حصص ما زالت تحجزها.',
     },
     // §5.6 / §14.2 — طلبات الانضمام. The queue is deliberately unscoped by
     // branch (Revision 29), so the lede says who it covers rather than implying

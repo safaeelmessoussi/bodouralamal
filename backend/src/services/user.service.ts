@@ -5,6 +5,7 @@ import { MIN_QUERY_LENGTH, normalizePhone, normalizeSearchText } from '../lib/se
 import { branchesForRole } from '../policies/branch-scope.js';
 import { assertFreshActive } from '../policies/freshness.policy.js';
 import * as audit from '../repositories/audit.repository.js';
+import { revokeAllSessions } from './refresh-token.service.js';
 
 /**
  * Staff pre-provisioning (SRS §3.1, §4.1b step 4b, §5.6 `/admin/users`, §7 R15).
@@ -172,6 +173,14 @@ export interface UserListItem {
   phone: string | null;
   accountStatus: string;
   roles: { role: string; branchId: string | null; branchName: string | null }[];
+  /**
+   * TD-15, and the reason the Users screen needs no second read.
+   *
+   * The edit dialog loads its row from this list and sends the version back;
+   * a `GET /admin/users/{id}` returning the same fields plus one would be a
+   * second projection of one concept, kept in step by hand.
+   */
+  version: number;
 }
 
 /** TD-10: default 25, max 100. */
@@ -257,6 +266,7 @@ export async function listUsers(
         publicDisplayName: true,
         phone: true,
         accountStatus: true,
+        version: true,
         branchRoles: {
           where: { deletedAt: null },
           select: { branchId: true, role: { select: { name: true } }, branch: { select: { name: true } } },
@@ -284,7 +294,440 @@ export async function listUsers(
         branchId: r.branchId,
         branchName: r.branch?.name ?? null,
       })),
+      version: u.version,
     })),
     meta: { page, page_size: pageSize, total },
+  };
+}
+
+/* ── User management (§5.6 "edit, deactivate, role/branch-scope assignment") ─ */
+
+/**
+ * The editable person fields.
+ *
+ * **`account_status` is deliberately absent**, and that is the same rule
+ * `PATCH /sessions/{id}` follows for its own status: a suspension carries
+ * obligations a field assignment cannot — TD-4.15 requires every live
+ * `RefreshToken` to be revoked **in the same transaction**, or a 30-day
+ * credential outlives the suspension. Accepting `account_status` here would give
+ * that transition a second entrance with none of that attached.
+ *
+ * **`pre_provisioned_email` is absent too.** It is the address authorised to
+ * *claim* an account (§7 R15), so editing it after the fact would hand a
+ * half-registered person's account to someone else — and once bound it is
+ * retained as provenance, never rewritten.
+ *
+ * **`public_display_name` is absent** — §20 rule 21 resolves the published
+ * identity server-side, and a back-office form is exactly where a second answer
+ * to *which name did this person publish* would be introduced.
+ */
+export interface UserProfileInput {
+  nameArabic?: string;
+  nameFrench?: string | null;
+  nickname?: string | null;
+  phone?: string | null;
+}
+
+/**
+ * Loads the target and refuses one the caller may not act on.
+ *
+ * **Out of scope answers `404`, never `403`** (§20 rule 17): telling a branch
+ * Admin that a user exists but belongs to someone else is itself a disclosure,
+ * and the §4.2 R25 visibility rule exists precisely so unrelated people stay
+ * invisible. The rule is the same one `listUsers` applies, expressed as a lookup
+ * rather than as a check afterwards.
+ */
+async function loadManageable(
+  db: Pick<PrismaClient, 'user'>,
+  actor: { roleScopes: Parameters<typeof branchesForRole>[0] },
+  id: string,
+): Promise<{ id: string; nameArabic: string; accountStatus: string; version: number }> {
+  const managed = branchesForRole(actor.roleScopes, 'admin');
+  const user = await db.user.findFirst({
+    where: {
+      id,
+      deletedAt: null,
+      ...(managed !== null
+        ? { branchRoles: { some: { deletedAt: null, branchId: { in: managed } } } }
+        : {}),
+    },
+    select: { id: true, nameArabic: true, accountStatus: true, version: true },
+  });
+  if (!user) throw new AppError('NOT_FOUND', 'no such user');
+  return user;
+}
+
+export async function updateUser(
+  prisma: PrismaClient,
+  actorUserId: string,
+  id: string,
+  expectedVersion: number,
+  input: UserProfileInput,
+): Promise<UserListItem> {
+  const actor = await assertFreshActive(prisma, actorUserId, USER_ADMIN_ROLES);
+
+  await prisma.$transaction(async (tx) => {
+    await loadManageable(tx, actor, id);
+    // TD-15.1: a conditional UPDATE on `version`. `updateMany` is what makes the
+    // condition part of the write rather than a check preceding it.
+    const written = await tx.user.updateMany({
+      where: { id, version: expectedVersion, deletedAt: null },
+      data: {
+        ...(input.nameArabic !== undefined ? { nameArabic: input.nameArabic } : {}),
+        ...(input.nameFrench !== undefined ? { nameFrench: input.nameFrench } : {}),
+        ...(input.nickname !== undefined ? { nickname: input.nickname } : {}),
+        ...(input.phone !== undefined ? { phone: input.phone } : {}),
+        version: { increment: 1 },
+      },
+    });
+    if (written.count === 0) {
+      throw new AppError('VERSION_CONFLICT', 'this record changed since you loaded it');
+    }
+
+    // **Nothing re-normalizes the TD-10 shadow columns here, and nothing
+    // should.** `user_search_shadow_sync_trigger` fires `BEFORE UPDATE OF
+    // name_arabic, name_french, nickname, phone` and maintains all four. A
+    // first draft of this function re-computed them explicitly — a second
+    // normalization, drifting from the one the indexes were built with, which
+    // would make search find some rows and not others with nothing failing.
+    await audit.write(tx, {
+      actorUserId: actor.userId,
+      actionType: 'user.update',
+      targetEntity: 'User',
+      targetId: id,
+      // The FIELDS changed, not their values: a name and a phone number are
+      // personal data, and TD-8's record must not become a second copy of them.
+      detail: { fields: Object.keys(input).filter((k) => input[k as keyof UserProfileInput] !== undefined) },
+    });
+  });
+
+  return readOne(prisma, id);
+}
+
+/**
+ * Suspends an account — TD-1 `Active → Suspended`, TD-4.15.
+ *
+ * **Every live session is revoked in the same transaction.** TD-12 requires
+ * suspension to take effect on the next refresh *immediately*; a suspension that
+ * commits without revoking leaves a 30-day credential alive, which is the exact
+ * safeguarding failure the freshness rule exists to prevent.
+ *
+ * **A reason is mandatory**, for the reason a cancellation's is: it is the only
+ * record of why access was withdrawn, and afterwards nobody can reconstruct it.
+ */
+export async function suspendUser(
+  prisma: PrismaClient,
+  actorUserId: string,
+  id: string,
+  expectedVersion: number,
+  reason: string,
+): Promise<UserListItem> {
+  const actor = await assertFreshActive(prisma, actorUserId, USER_ADMIN_ROLES);
+  if (id === actor.userId) {
+    // Not paternalism: an administrator who suspends themselves is locked out
+    // by their own next request, and the recovery path is a VPS shell.
+    throw new AppError('STATE_CONFLICT', 'you cannot suspend your own account', {
+      reason: 'SELF_SUSPENSION',
+    });
+  }
+
+  await prisma.$transaction(async (tx) => {
+    const target = await loadManageable(tx, actor, id);
+    if (target.accountStatus !== 'active') {
+      // TD-1 allows this transition only from Active.
+      throw new AppError('STATE_CONFLICT', `cannot suspend an account that is ${target.accountStatus}`, {
+        reason: 'INVALID_TRANSITION',
+        account_status: target.accountStatus,
+      });
+    }
+    await assertNotLastSuperAdmin(tx, id);
+
+    const written = await tx.user.updateMany({
+      where: { id, version: expectedVersion, accountStatus: 'active', deletedAt: null },
+      data: { accountStatus: 'suspended', version: { increment: 1 } },
+    });
+    if (written.count === 0) {
+      throw new AppError('VERSION_CONFLICT', 'this record changed since you loaded it');
+    }
+
+    await audit.write(tx, {
+      actorUserId: actor.userId,
+      actionType: 'user.suspend',
+      targetEntity: 'User',
+      targetId: id,
+      detail: { reason },
+    });
+    // TD-4.15, in this transaction and not after it. Writes its own
+    // `auth.token_revoked` row naming the affected session ids.
+    await revokeAllSessions(tx, { userId: id, reason: 'suspension', actorUserId: actor.userId });
+  });
+
+  return readOne(prisma, id);
+}
+
+/** TD-1 `Suspended → Active`. Restores nothing else: sessions stay revoked, so
+ *  the person signs in again, which is the only way the new state is proven. */
+export async function reactivateUser(
+  prisma: PrismaClient,
+  actorUserId: string,
+  id: string,
+  expectedVersion: number,
+): Promise<UserListItem> {
+  const actor = await assertFreshActive(prisma, actorUserId, USER_ADMIN_ROLES);
+
+  await prisma.$transaction(async (tx) => {
+    const target = await loadManageable(tx, actor, id);
+    if (target.accountStatus !== 'suspended') {
+      // `Rejected` is TERMINAL (TD-1, §4.1b step 4a) and is deliberately not
+      // reachable from here: re-admitting a rejected applicant is a fresh
+      // registration decision, not the undo of a suspension.
+      throw new AppError('STATE_CONFLICT', `cannot reactivate an account that is ${target.accountStatus}`, {
+        reason: 'INVALID_TRANSITION',
+        account_status: target.accountStatus,
+      });
+    }
+
+    const written = await tx.user.updateMany({
+      where: { id, version: expectedVersion, accountStatus: 'suspended', deletedAt: null },
+      data: { accountStatus: 'active', version: { increment: 1 } },
+    });
+    if (written.count === 0) {
+      throw new AppError('VERSION_CONFLICT', 'this record changed since you loaded it');
+    }
+
+    await audit.write(tx, {
+      actorUserId: actor.userId,
+      actionType: 'user.reactivate',
+      targetEntity: 'User',
+      targetId: id,
+      detail: {},
+    });
+  });
+
+  return readOne(prisma, id);
+}
+
+/* ── Role and branch-scope assignment (§5.6, §14.2, TD-2) ────────────────── */
+
+/** One assignment: a role, and the branch it is scoped to. `null` is
+ *  **all branches for that assignment** (§7 R24), never *no branch*. */
+export interface RoleAssignmentInput {
+  role: string;
+  branchId: string | null;
+}
+
+/**
+ * Every role the platform has, `super_admin` included.
+ *
+ * **`super_admin` is assignable here, deliberately, and this is a change from
+ * `preProvision`'s narrower set.** Revision 22 states that after bootstrap
+ * *"every subsequent change of administrators — assignment, promotion,
+ * demotion, suspension — happens **exclusively through the application**"*. If
+ * this endpoint refused the role, the only route to a second Super Admin would
+ * be the lockout-recovery seed, which needs a VPS shell — the opposite of what
+ * that sentence requires. Granting it stays a Super Admin's act, and the
+ * last-administrator guard below is what keeps the recovery path from being
+ * *needed*.
+ */
+const ALL_ROLES = ['super_admin', 'admin', 'teacher', 'student', 'parent'] as const;
+
+/**
+ * Refuses an act that would leave the platform with **no active Super Admin**.
+ *
+ * Revision 22 documents the lockout-recovery path — clear every Super Admin and
+ * `SUPER_ADMIN_EMAIL` becomes live again — but reaching it requires
+ * `DATABASE_URL` and a manual seed run on the VPS. That is a sanctioned
+ * *recovery*, not an outcome a back-office control may produce with one click.
+ */
+async function assertNotLastSuperAdmin(
+  tx: Pick<PrismaClient, 'user'>,
+  losingUserId: string,
+): Promise<void> {
+  const remaining = await tx.user.count({
+    where: {
+      id: { not: losingUserId },
+      accountStatus: 'active',
+      deletedAt: null,
+      branchRoles: { some: { deletedAt: null, role: { name: 'super_admin' } } },
+    },
+  });
+  if (remaining === 0) {
+    const self = await tx.user.count({
+      where: {
+        id: losingUserId,
+        branchRoles: { some: { deletedAt: null, role: { name: 'super_admin' } } },
+      },
+    });
+    if (self > 0) {
+      throw new AppError('STATE_CONFLICT', 'this is the last active Super Admin', {
+        reason: 'LAST_SUPER_ADMIN',
+      });
+    }
+  }
+}
+
+/**
+ * **Replaces** a user's whole set of role assignments.
+ *
+ * A `PUT` of the complete set rather than add/remove verbs: the set is what an
+ * administrator reasons about, one call yields one audit row describing one
+ * decision, and there is no window in which a user holds half of an intended
+ * change — which add-then-remove would create every time a role is *moved*
+ * between branches.
+ *
+ * **Removal is a soft delete** (TD-5): a revoked assignment is tombstoned rather
+ * than erased, so *"who was an administrator at this branch in March"* stays
+ * answerable. Re-granting an identical assignment revives the tombstoned row,
+ * because `(user_id, role_id, branch_id)` is unique across deleted rows too.
+ *
+ * **Only a Super Admin may grant or revoke `admin` or `super_admin`.** An Admin
+ * doing either is privilege propagation — the same rule `preProvision` applies
+ * to creation, applied to the operation that can also perform it.
+ */
+export async function setUserRoles(
+  prisma: PrismaClient,
+  actorUserId: string,
+  id: string,
+  assignments: RoleAssignmentInput[],
+): Promise<UserListItem> {
+  const actor = await assertFreshActive(prisma, actorUserId, USER_ADMIN_ROLES);
+  const isSuperAdmin = actor.roles.includes('super_admin');
+
+  for (const a of assignments) {
+    if (!(ALL_ROLES as readonly string[]).includes(a.role)) {
+      throw new AppError('VALIDATION_FAILED', `unknown role ${a.role}`);
+    }
+  }
+
+  await prisma.$transaction(async (tx) => {
+    await loadManageable(tx, actor, id);
+
+    const existing = await tx.userBranchRole.findMany({
+      where: { userId: id },
+      select: { id: true, roleId: true, branchId: true, deletedAt: true, role: { select: { name: true } } },
+    });
+
+    const roleRows = await tx.role.findMany({ where: { name: { in: [...ALL_ROLES] } } });
+    const roleIdByName = new Map(roleRows.map((r) => [r.name, r.id]));
+
+    const wanted = new Set(assignments.map((a) => `${a.role}|${a.branchId ?? ''}`));
+    const live = existing.filter((e) => e.deletedAt === null);
+    const privileged = (role: string): boolean => role === 'admin' || role === 'super_admin';
+
+    // Guard BEFORE writing anything: a partially applied privileged change is
+    // worse than a refused one.
+    const changing = [
+      ...assignments.filter(
+        (a) => !live.some((e) => e.role.name === a.role && e.branchId === a.branchId),
+      ).map((a) => a.role),
+      ...live.filter((e) => !wanted.has(`${e.role.name}|${e.branchId ?? ''}`)).map((e) => e.role.name),
+    ];
+    if (changing.some(privileged) && !isSuperAdmin) {
+      throw new AppError('FORBIDDEN', 'only a Super Admin may grant or revoke administrator roles');
+    }
+
+    // Branch scopes must be live: an assignment pointing at a deleted branch is
+    // a scope that silently matches nothing.
+    const branchIds = [...new Set(assignments.map((a) => a.branchId).filter((b): b is string => b !== null))];
+    if (branchIds.length > 0) {
+      const found = await tx.branch.count({ where: { id: { in: branchIds }, deletedAt: null } });
+      if (found !== branchIds.length) throw new AppError('NOT_FOUND', 'branch not found');
+    }
+
+    const losingSuperAdmin =
+      live.some((e) => e.role.name === 'super_admin') &&
+      !assignments.some((a) => a.role === 'super_admin');
+    if (losingSuperAdmin) await assertNotLastSuperAdmin(tx, id);
+
+    // Revoke what is no longer wanted (TD-5 soft delete).
+    const revoked = live.filter((e) => !wanted.has(`${e.role.name}|${e.branchId ?? ''}`));
+    if (revoked.length > 0) {
+      await tx.userBranchRole.updateMany({
+        where: { id: { in: revoked.map((e) => e.id) } },
+        data: { deletedAt: new Date(), deletedById: actor.userId },
+      });
+    }
+
+    // Grant what is missing, reviving a tombstoned row rather than inserting a
+    // duplicate the unique index would refuse anyway.
+    for (const a of assignments) {
+      const roleId = roleIdByName.get(a.role);
+      if (!roleId) throw new AppError('VALIDATION_FAILED', `unknown role ${a.role}`);
+      const prior = existing.find((e) => e.roleId === roleId && e.branchId === a.branchId);
+      if (prior === undefined) {
+        await tx.userBranchRole.create({ data: { userId: id, roleId, branchId: a.branchId } });
+      } else if (prior.deletedAt !== null) {
+        await tx.userBranchRole.update({
+          where: { id: prior.id },
+          data: { deletedAt: null, deletedById: null },
+        });
+      }
+    }
+
+    await audit.write(tx, {
+      actorUserId: actor.userId,
+      actionType: 'user.roles_set',
+      targetEntity: 'User',
+      targetId: id,
+      detail: {
+        assignments: assignments.map((a) => ({ role: a.role, branch_id: a.branchId })),
+        revoked: revoked.map((e) => ({ role: e.role.name, branch_id: e.branchId })),
+      },
+    });
+  });
+
+  // **Sessions are deliberately NOT revoked here, and the SRS is what decides
+  // it.** A role change leaves the access token carrying the old scopes for up
+  // to an hour on ordinary routes — but Revision 10 states exactly that
+  // trade-off and resolves it the other way: every safeguarding-sensitive
+  // operation re-asserts the caller's live assignments per request
+  // (`assertFreshActive`), so a revoked role stops mattering *immediately*
+  // where it matters, and the stateless window is accepted elsewhere.
+  //
+  // Revoking would also require a new `RefreshRevokedReason`, and §7 fixes that
+  // enum at four values — `logout`, `suspension`, `user_deleted`,
+  // `reuse_detected`. Reusing `suspension` for a demotion would make the audit
+  // trail say something untrue about why access ended, which is worse than the
+  // hour.
+  return readOne(prisma, id);
+}
+
+/**
+ * One user in the list's own shape.
+ *
+ * **Not a public endpoint** — it exists so a write can answer with the row the
+ * screen already renders, rather than the screen re-fetching a whole page to
+ * see one change.
+ */
+async function readOne(prisma: PrismaClient, id: string): Promise<UserListItem> {
+  const u = await prisma.user.findUniqueOrThrow({
+    where: { id },
+    select: {
+      id: true,
+      nameArabic: true,
+      nickname: true,
+      publicDisplayName: true,
+      phone: true,
+      accountStatus: true,
+      version: true,
+      branchRoles: {
+        where: { deletedAt: null },
+        select: { branchId: true, role: { select: { name: true } }, branch: { select: { name: true } } },
+      },
+    },
+  });
+  return {
+    id: u.id,
+    nameArabic: u.nameArabic,
+    nickname: u.nickname,
+    publicDisplayName: u.publicDisplayName,
+    phone: u.phone,
+    accountStatus: u.accountStatus,
+    roles: u.branchRoles.map((r) => ({
+      role: r.role.name,
+      branchId: r.branchId,
+      branchName: r.branch?.name ?? null,
+    })),
+    version: u.version,
   };
 }

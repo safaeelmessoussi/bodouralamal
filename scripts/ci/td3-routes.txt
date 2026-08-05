@@ -50,6 +50,10 @@ GET /students/{id}/social-profile              # §4.10, BR-16, TD-2 Revision 28
 PUT /students/{id}/social-profile              # §4.10, TD-2 Revision 28 (SA / Admin in branch / Teacher own students)
 GET /admin/users                              # §5.6 /admin/users "search (fields: TD-10), filter, list"; §14.2 Users screen
 POST /admin/users                             # §5.6 /admin/users "create (staff pre-provisioning against a Google email)"; §4.1b step 4b; TD-2
+PATCH /admin/users/{id}                       # §5.6 /admin/users "edit"; §14.2 Users screen; TD-15
+POST /admin/users/{id}/suspend                # §5.6 "deactivate"; TD-1 Active→Suspended; TD-4.15 revokes sessions
+POST /admin/users/{id}/reactivate             # §5.6 "deactivate" (its inverse); TD-1 Suspended→Active
+PUT /admin/users/{id}/roles                   # §5.6 "role/branch-scope assignment"; §14.2; TD-2
 DELETE /admin/family-links/{id}                # §4.3 Revision 16 (soft-delete IS revocation), TD-2, TD-8 familylink.revoke
 
 # ── Calendar & events (TD-3.4)

@@ -24,13 +24,42 @@ if [[ -n "$leaks" ]]; then
 fi
 
 # 2. A response must never carry both inputs for a client to choose between.
-exposed=$(grep -rn "public_display_name:" backend/src/controllers 2>/dev/null || true)
+#
+# The §14.2 staff user surface is the one admissible exception: staff MANAGE the
+# value, and none of those screens is public.
+#
+# **The exception is scoped to a SYMBOL, not to a file**, and that distinction is
+# load-bearing. It used to name `user.controller.ts`, which stopped meaning
+# anything the moment the projection moved into `dto.ts` — the surface was
+# identical, the guard fired, and the tempting fix was to add `dto.ts` to the
+# list. That would have exempted the file where **every** response shape lives,
+# gutting the check while leaving it looking present. So the enclosing
+# declaration is resolved instead: the field is admissible only inside `UserDto`
+# / `userDto`, and only where the staff user schema accepts it as INPUT.
+exposed=$(grep -rn --include='*.ts' --exclude='*.test.ts' "public_display_name" backend/src/controllers 2>/dev/null || true)
 if [[ -n "$exposed" ]]; then
-  # The §14.2 staff user list is the one admissible surface: staff manage the
-  # value, and that list is not public.
-  offending=$(echo "$exposed" | grep -v "user.controller.ts" || true)
+  offending=$(
+    echo "$exposed" | while IFS=: read -r file line _; do
+      # The nearest preceding top-level declaration owns this line.
+      owner=$(awk -v n="$line" '
+        NR > n { exit }
+        /^(export )?(interface|function|const) [A-Za-z_]+/ {
+          for (i = 1; i <= NF; i++) {
+            if ($i == "interface" || $i == "function" || $i == "const") {
+              owner = $(i + 1); sub(/[^A-Za-z_].*$/, "", owner); break
+            }
+          }
+        }
+        END { print owner }
+      ' "$file")
+      case "$owner" in
+        UserDto | userDto | createSchema) ;;
+        *) echo "$file:$line: inside \`$owner\`" ;;
+      esac
+    done
+  )
   if [[ -n "$offending" ]]; then
-    echo "FAIL: a controller exposes the raw field outside the staff user list:"
+    echo "FAIL: the raw field is exposed outside the staff user surface (§20 rule 21):"
     echo "$offending" | sed 's/^/  /'
     status=1
   fi
