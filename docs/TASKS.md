@@ -524,7 +524,12 @@
   - An empty list renders **nothing**, not an empty heading: on a public page *there are none* and *there are some you may not see* must not look alike
   - Items link **into the Library** (§5.2 — one reader, one permission path), never to a download
   - **Fixed live drift found here:** the calendar adapter still declared `kind: 'group'`, so every session had been rendering as an Event since Revision 43
-- [ ] Public calendar and public Educational Library — **same filters, same items, ordering only** for signed-in users (§5.2)
+- [x] **Public Calendar frontend** — consumes `prefilled_filters` (TD-3.4, R43)
+  - Applied **once per visit, not once per fetch**, and only to filters the reader has not set — re-applying would drag a filter back the moment someone cleared it, which is the opposite of *freely changeable*
+  - A suggestion, never a scope: the server does not narrow by it and neither does the client
+  - `null` for anonymous and Pending is distinct from an object of nulls, and the page uses that to decide whether to prefill at all
+- [ ] Public Educational Library frontend — **same filters, same items, ordering only** for signed-in users (§5.2)
+  - Note: the public calendar's *screen* filters (branch · category · level) stay identical for everyone and are compliant. Adding TD-3.4's `subject_id`/`teacher_id`/`academic_year_id` to a **public** screen would need public reference lists that do not exist — `/admin/subjects` is Admin-only by design
 
 **Gates**
 - [ ] §18 *Educational Model* checklist green — including the §19.2 named regressions: composite-FK rejection **attempted directly in SQL**, weekly-vs-biweekly conflict on the alternating week, double-`materialize` idempotency, schedule edit sparing an overridden session, and anonymous-vs-authenticated parity on `/calendar` and `/library`

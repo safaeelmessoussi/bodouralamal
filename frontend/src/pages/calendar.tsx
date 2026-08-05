@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { fetchBranches, type PublicBranch } from '../adapters/branches.js';
 import {
@@ -56,6 +56,8 @@ export function CalendarPage(): ReactNode {
   const [load, setLoad] = useState<Load>({ kind: 'loading' });
   const [openDay, setOpenDay] = useState<Date | null>(null);
   const [openEvent, setOpenEvent] = useState<Occurrence | null>(null);
+  /** Prefilling happens once per visit, not once per fetch — see the effect. */
+  const prefillApplied = useRef(false);
 
   const from = toIsoDate(startOfMonth(month));
   const to = toIsoDate(endOfMonth(month));
@@ -113,8 +115,25 @@ export function CalendarPage(): ReactNode {
     setLoad({ kind: 'loading' });
     void (async () => {
       try {
-        const rows = await fetchOccurrences({ from, to, branchId, categoryId, levelId });
-        if (!cancelled) setLoad({ kind: 'ready', occurrences: rows });
+        const result = await fetchOccurrences({ from, to, branchId, categoryId, levelId });
+        if (cancelled) return;
+        setLoad({ kind: 'ready', occurrences: result.occurrences });
+
+        // TD-3.4 (R43): the server derives `prefilled_filters` from the live
+        // profile, and the caller may change any of them. **Applied once**, on
+        // the first response, and only to filters the reader has not already
+        // set — re-applying on every fetch would drag a filter back the moment
+        // someone cleared it, which is the opposite of "freely changeable".
+        //
+        // It is a suggestion, not a scope: the server does not narrow results by
+        // it, and neither does this.
+        if (!prefillApplied.current && result.prefilled) {
+          prefillApplied.current = true;
+          const p = result.prefilled;
+          if (p.branch_id && branchId === null) setBranchId(p.branch_id);
+          if (p.category_id && categoryId === null) setCategoryId(p.category_id);
+          if (p.level_id && levelId === null) setLevelId(p.level_id);
+        }
       } catch {
         if (!cancelled) setLoad({ kind: 'error' });
       }

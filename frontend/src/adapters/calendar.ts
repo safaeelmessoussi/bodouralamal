@@ -60,8 +60,28 @@ export interface Occurrence {
   hijri_month_ar: string | null;
 }
 
+/**
+ * The filters a signed-in caller's screen opens on (TD-3.4, R43), derived
+ * server-side from their profile and **freely changeable**.
+ *
+ * `null` for an anonymous or Pending caller — *there is nothing to prefill* and
+ * *nothing was unambiguous* are different answers, and an object of nulls would
+ * conflate them. A field is prefilled only when unambiguous: a student enrolled
+ * in three Levels has no single "own Level", so it stays `null` rather than
+ * opening their calendar on a third of their own timetable.
+ */
+export interface PrefilledFilters {
+  academic_year_id: string | null;
+  category_id: string | null;
+  level_id: string | null;
+  branch_id: string | null;
+  subject_id: string | null;
+  teacher_id: string | null;
+}
+
 interface CalendarPage {
   data: Occurrence[];
+  prefilled_filters: PrefilledFilters | null;
 }
 
 export interface CalendarQuery {
@@ -72,13 +92,19 @@ export interface CalendarQuery {
   levelId?: string | null;
 }
 
-export async function fetchOccurrences(query: CalendarQuery): Promise<Occurrence[]> {
+export interface CalendarResult {
+  occurrences: Occurrence[];
+  /** Present only for an authenticated, active caller. */
+  prefilled: PrefilledFilters | null;
+}
+
+export async function fetchOccurrences(query: CalendarQuery): Promise<CalendarResult> {
   const params = new URLSearchParams({ from: query.from, to: query.to });
   if (query.branchId) params.set('branch_id', query.branchId);
   if (query.categoryId) params.set('category_id', query.categoryId);
   if (query.levelId) params.set('level_id', query.levelId);
   const page = await api<CalendarPage>(`/calendar?${params.toString()}`);
-  return page.data;
+  return { occurrences: page.data, prefilled: page.prefilled_filters ?? null };
 }
 
 /* ─────────────────────────────────────────────────────────────────────────────

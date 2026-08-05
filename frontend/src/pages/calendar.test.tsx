@@ -10,7 +10,7 @@ import { EventChip } from '../components/calendar/event-chip.js';
 import { EventDetailsDialog } from '../components/calendar/event-details-dialog.js';
 import { CalendarNav } from '../components/calendar/calendar-nav.js';
 import { LevelSelector } from '../components/calendar/level-selector.js';
-import type { HijriDay, Occurrence } from '../adapters/calendar.js';
+import type { HijriDay, Occurrence, PrefilledFilters } from '../adapters/calendar.js';
 import { tList } from '../i18n/index.js';
 import { leadingBlanks, monthGrid, toIsoDate } from '../lib/dates.js';
 
@@ -579,5 +579,42 @@ describe('event details', () => {
       <EventDetailsDialog occurrence={occurrence()} branchNames={new Map()} onClose={() => undefined} />,
     );
     expect(html).not.toContain('details__hijri');
+  });
+});
+
+/* ── prefilled_filters (TD-3.4, R43) ─────────────────────────────────────── */
+
+describe('prefilled_filters is a suggestion, never a scope', () => {
+  it('is null for an anonymous caller, not an object of nulls', () => {
+    // "There is nothing to prefill" and "nothing was unambiguous" are different
+    // answers; an object of nulls would conflate them, and the page uses the
+    // null to decide whether to prefill at all.
+    const anonymous: PrefilledFilters | null = null;
+    expect(anonymous).toBeNull();
+  });
+
+  it('carries the same keys as the filter set it prefills', () => {
+    // The point of the contract: a client can apply it directly. A key here
+    // that no filter accepts would be a suggestion nothing could act on.
+    const prefilled: PrefilledFilters = {
+      academic_year_id: null,
+      category_id: 'c1',
+      level_id: null,
+      branch_id: 'b1',
+      subject_id: null,
+      teacher_id: null,
+    };
+    expect(Object.keys(prefilled).sort()).toEqual([
+      'academic_year_id',
+      'branch_id',
+      'category_id',
+      'level_id',
+      'subject_id',
+      'teacher_id',
+    ]);
+    // A plural profile yields null rather than an arbitrary first choice —
+    // opening a student's calendar on one of three enrolled Levels would show a
+    // third of their timetable while looking like all of it.
+    expect(prefilled.level_id).toBeNull();
   });
 });
