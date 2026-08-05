@@ -2,9 +2,10 @@ import type { ReactNode } from 'react';
 
 import { AdminLayout } from '../../components/admin/admin-layout.js';
 import { Icon } from '../../components/ui/icon.js';
+import { ModulePending } from '../../components/portal/nav-item.js';
 import { useSession } from '../../contexts/session.js';
 import { t } from '../../i18n/index.js';
-import { moduleForPath, visibleModules, type AdminModule } from '../../lib/admin-modules.js';
+import { moduleForPath, visibleModules } from '../../lib/admin-modules.js';
 import { ApprovalsPage } from './approvals.js';
 import { BranchesPage } from './branches.js';
 import { HijriCalendarPage } from './hijri-calendar.js';
@@ -121,16 +122,6 @@ function AdminDashboard(): ReactNode {
  * the person who can act on it — and because "coming soon" tells nobody whether
  * the wait is a day or a milestone.
  */
-export function ModulePending({ module }: { module: AdminModule }): ReactNode {
-  return (
-    <div className="state" role="status">
-      <p>{t('admin.pendingTitle')}</p>
-      {module.blockedReasonKey ? (
-        <p className="muted">{t(module.blockedReasonKey)}</p>
-      ) : null}
-    </div>
-  );
-}
 
 function AdminNotFound(): ReactNode {
   return (

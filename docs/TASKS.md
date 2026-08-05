@@ -480,7 +480,13 @@
   - ✓ Client-side contract guard mirroring the server's key set, so an adapter rename is a typecheck failure rather than a blank page
   - ✓ Write form deliberately deferred to its own slice — half a form would claim a capability the module lacks
 - [ ] `/admin/schedules` **write form** (subject · mode + single target · room · staff · times · recurrence, with conflict reporting on save)
-- [ ] `/admin/groups` (+ roster), `/admin/levels/{id}/subjects/{subjectId}` (Teaching Groups), `/teacher/schedules`, Session page frontend (§14.1)
+- [x] **Portal separation** — `TEACHER_MODULES` beside `ADMIN_MODULES`, shared mechanics extracted
+  - ✓ `lib/portal-modules.ts` owns the *behaviour* (status vocabulary, role gating, longest-match path resolution); each portal owns its *list*
+  - ✓ `components/portal/` owns the shared shell and nav rendering; `AdminLayout` and `TeacherLayout` differ only in their sidebar, which is the part that genuinely differs
+  - ✓ **`section` deliberately stayed admin-only** — §14.1 groups the back office and gives the teacher portal no equivalent; hoisting it would make the shared layer the first caller's shape
+  - ✓ A test asserts the registries **share no path**, so resolution cannot depend on which registry a caller asked
+- [ ] `/teacher/schedules` **screen** — registered and honestly blocked. **Needs a Document Owner decision:** §14.1 line 753 defines it, but TD-3 documents no endpoint a Teacher may call (`GET /admin/course-schedules` requires Admin in the service, and §20 rule 16 forbids inventing a route)
+- [ ] `/admin/groups` (+ roster), `/admin/levels/{id}/subjects/{subjectId}` (Teaching Groups), Session page frontend (§14.1)
 - [ ] Public calendar and public Educational Library — **same filters, same items, ordering only** for signed-in users (§5.2)
 
 **Gates**

@@ -9,8 +9,8 @@ import {
   visibleModules,
   type AdminModule,
 } from '../../lib/admin-modules.js';
-import { ApplicationHeader } from '../header/application-header.js';
-import { NoPermissionState } from '../states.js';
+import { NavItem } from '../portal/nav-item.js';
+import { PortalShell } from '../portal/portal-shell.js';
 
 /**
  * The back-office shell: sidebar navigation beside the module's own content.
@@ -48,26 +48,15 @@ export function AdminLayout({
   const permitted = current ? canAccess(current, roles) : false;
 
   return (
-    <>
-      <ApplicationHeader />
-      <div className="admin">
-        <AdminSidebar roles={roles} current={current} />
-        <main id="main" className="admin__main">
-          <div className="admin__head">
-            <div>
-              <h1 className="admin__title">{title}</h1>
-              {lede ? <p className="lede">{lede}</p> : null}
-            </div>
-            {permitted && actions ? <div className="admin__actions">{actions}</div> : null}
-          </div>
-
-          {/* An `Active` account holding no role at all is reachable only through
-              staff error, and §14.4 says it renders this rather than a dashboard
-              — no endpoint would authorise one anyway. */}
-          {permitted ? children : <NoPermissionState />}
-        </main>
-      </div>
-    </>
+    <PortalShell
+      title={title}
+      lede={lede}
+      actions={actions}
+      permitted={permitted}
+      sidebar={<AdminSidebar roles={roles} current={current} />}
+    >
+      {children}
+    </PortalShell>
   );
 }
 
@@ -112,29 +101,3 @@ function AdminSidebar({
   );
 }
 
-function NavItem({
-  module,
-  current,
-}: {
-  module: AdminModule;
-  current: AdminModule | null;
-}): ReactNode {
-  const isCurrent = current?.path === module.path;
-  return (
-    <li>
-      <a
-        className="admin-nav__item"
-        href={module.path}
-        // The programmatic "you are here", which a class alone does not convey.
-        {...(isCurrent ? { 'aria-current': 'page' as const } : {})}
-      >
-        <span>{t(module.labelKey)}</span>
-        {/* Marked in the menu as well as on the page: a reader deciding where to
-            click deserves to know before the click, not after. */}
-        {module.status === 'blocked' ? (
-          <span className="admin-nav__badge">{t('admin.soon')}</span>
-        ) : null}
-      </a>
-    </li>
-  );
-}

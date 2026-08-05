@@ -6,6 +6,7 @@ import { ActiveChildProvider } from './contexts/active-child.js';
 import { SessionProvider } from './contexts/session.js';
 import { resolveRoute } from './lib/route.js';
 import { AdminRouter } from './pages/admin/index.js';
+import { TeacherRouter } from './pages/teacher/index.js';
 import { CalendarPage } from './pages/calendar.js';
 import { Landing } from './pages/landing.js';
 import { Register } from './pages/register.js';
@@ -64,6 +65,16 @@ function App(): React.ReactNode {
       return (
         <PendingGuard>
           <AdminRouter />
+        </PendingGuard>
+      );
+    case 'teacher':
+      // Its own registry (`lib/teacher-modules.ts`), for the same reason the
+      // back office has one: the route, the navigation entry and the permission
+      // are one list. Also inside `PendingGuard` — a Pending user must never
+      // glimpse the application shell (§14.4, Revision 8).
+      return (
+        <PendingGuard>
+          <TeacherRouter />
         </PendingGuard>
       );
     case 'screen-pending':

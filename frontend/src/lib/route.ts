@@ -1,4 +1,5 @@
 import { isAdminPath } from './admin-modules.js';
+import { isTeacherPath } from './teacher-modules.js';
 import { ROLE_HOME_PATHS } from './role-home.js';
 
 /**
@@ -24,8 +25,11 @@ export type Route =
   | 'account-deactivated'
   /** A §14.1 role home whose screen belongs to a later milestone. */
   | 'screen-pending'
-  /** The back office, resolved by the module registry. */
+  /** The back office, resolved by its module registry. */
   | 'admin'
+  /** The teacher portal, resolved by its own registry — a separate application
+   *  branch of §14.1, not a section of the back office. */
+  | 'teacher'
   /** A path §14.1 does not define. A real page — never nothing. */
   | 'not-found';
 
@@ -59,6 +63,11 @@ export function resolveRoute(pathname: string): Route {
   // The back office owns its own sub-paths, so it is checked before the role
   // homes — `/admin` appears in both lists and the registry is the authority.
   if (isAdminPath(path)) return 'admin';
+
+  // The teacher portal owns its sub-paths the same way, and for the same
+  // reason: `/teacher` is in both this registry and ROLE_HOME_PATHS, and the
+  // registry is the authority.
+  if (isTeacherPath(path)) return 'teacher';
 
   // §14.1 defines these; no milestone has delivered them. "Not built yet" and
   // "does not exist" are different facts and get different pages.

@@ -60,25 +60,40 @@ describe('every path resolves to a page — never to nothing', () => {
 describe('the §14.1 sitemap decides, not a second list', () => {
   it('sends every role home somewhere real', () => {
     // The invariant that would have caught the original defect: a link the
-    // header can produce must resolve to a page. `/admin` is the back office;
-    // the rest are defined nodes whose screens are later milestones.
+    // header can produce must resolve to a page. `/admin` is the back office,
+    // `/teacher` is the teacher portal, and the rest are defined nodes whose
+    // screens are later milestones.
     for (const { role, path } of ROLE_HOMES) {
       const route = resolveRoute(path);
-      expect(['admin', 'screen-pending'] satisfies Route[]).toContain(route);
+      expect(['admin', 'teacher', 'screen-pending'] satisfies Route[]).toContain(route);
       expect(route, `${role} → ${path} must not be a dead link`).not.toBe('not-found');
     }
   });
 
   it('distinguishes "not built yet" from "does not exist"', () => {
-    // Two different facts. Collapsing them would tell a teacher their home is
+    // Two different facts. Collapsing them would tell someone their home is
     // gone when it is merely unbuilt.
-    expect(resolveRoute('/teacher')).toBe('screen-pending');
+    //
+    // `/teacher` is no longer one of them: it now resolves to its own portal,
+    // which renders the teacher navigation with each entry naming what it is
+    // waiting for. That is strictly more informative than the generic
+    // "not built yet" page it used to get.
+    expect(resolveRoute('/teacher')).toBe('teacher');
+    expect(resolveRoute('/dashboard/student')).toBe('screen-pending');
     expect(resolveRoute('/nonsense')).toBe('not-found');
   });
 
   it('lets the back office own its sub-paths', () => {
     expect(resolveRoute('/admin/branches')).toBe('admin');
     expect(resolveRoute('/admin/groups/abc/roster')).toBe('admin');
+  });
+
+  it('lets the teacher portal own its sub-paths, without reaching the back office', () => {
+    // Separate registries, separate applications: a teaching path must never
+    // resolve into the administration shell.
+    expect(resolveRoute('/teacher/schedules')).toBe('teacher');
+    expect(resolveRoute('/teacher/exams')).toBe('teacher');
+    expect(resolveRoute('/teacher-not-really')).toBe('not-found');
   });
 
   it('does not mistake a prefix for a match', () => {

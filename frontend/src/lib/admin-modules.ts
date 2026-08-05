@@ -17,36 +17,27 @@
  * investigation being repeated. It is also the honest signal to the Document
  * Owner about where the back office actually stands.
  */
-export type ModuleStatus =
-  /**
-   * Endpoints exist **and the screen is implemented**.
-   *
-   * Both halves matter. Three modules carried `ready` while no screen existed,
-   * so the sidebar promised a working section and the page then said *"this
-   * section is being prepared"* — two different answers to one question. The
-   * test beside this file now asserts that every `ready` module has a route,
-   * so the registry cannot make a promise the router does not keep.
-   */
-  | 'ready'
-  /** §14.1 lists the node; the screen or its endpoints do not exist yet. */
-  | 'blocked';
+import {
+  canAccess as canAccessModule,
+  resolveModule,
+  visibleIn,
+  type ModuleStatus,
+  type PortalModule,
+} from './portal-modules.js';
 
-export interface AdminModule {
-  /** Path exactly as §14.1 writes it. */
-  path: string;
-  /** i18n key for the sidebar label. */
-  labelKey: string;
+/**
+ * A back-office node: a portal module plus §14.1's grouping.
+ *
+ * `section` is the one thing that is genuinely admin-shaped — §14.1 groups the
+ * back office and gives the teacher portal no equivalent — so it lives here
+ * rather than in the shared layer.
+ */
+export interface AdminModule extends PortalModule {
   /** §14.1's grouping. `null` sits above the groups, like the dashboard. */
   section: AdminSection | null;
-  /** Roles that may see and open it (TD-2). Order is irrelevant. */
-  roles: readonly string[];
-  status: ModuleStatus;
-  /**
-   * For a blocked module: what is missing, as an i18n key. Shown on the page so
-   * the reader learns the reason rather than meeting an apology.
-   */
-  blockedReasonKey?: string;
 }
+
+export type { ModuleStatus };
 
 export type AdminSection = 'academic' | 'people' | 'calendar' | 'content' | 'administration';
 
@@ -179,13 +170,11 @@ export const ADMIN_MODULES: readonly AdminModule[] = [
 ];
 
 /** Whether the session holds any of the roles a module requires (TD-2). */
-export function canAccess(module: AdminModule, roles: readonly string[]): boolean {
-  return module.roles.some((role) => roles.includes(role));
-}
+export const canAccess = canAccessModule;
 
-/** The modules a given session may see, in §14.1's order. */
+/** The back-office modules a given session may see, in §14.1's order. */
 export function visibleModules(roles: readonly string[]): AdminModule[] {
-  return ADMIN_MODULES.filter((module) => canAccess(module, roles));
+  return visibleIn(ADMIN_MODULES, roles);
 }
 
 /**
@@ -198,14 +187,7 @@ export function visibleModules(roles: readonly string[]): AdminModule[] {
  * navigation node §14.1 does not list.
  */
 export function moduleForPath(pathname: string): AdminModule | null {
-  const path = pathname.replace(/\/+$/, '') || '/';
-  let best: AdminModule | null = null;
-  for (const module of ADMIN_MODULES) {
-    if (path === module.path || path.startsWith(`${module.path}/`)) {
-      if (!best || module.path.length > best.path.length) best = module;
-    }
-  }
-  return best;
+  return resolveModule(ADMIN_MODULES, pathname);
 }
 
 /** Whether a path belongs to the back office at all. */
