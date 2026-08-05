@@ -12,6 +12,7 @@ import {
   previewConflicts,
   updateCourseSchedule,
   type CourseScheduleInput,
+  listScheduleSessions,
 } from './course-schedule.service.js';
 import { runMaterialization } from './session-materialize.service.js';
 import {
@@ -1196,5 +1197,44 @@ describe('SRS Revision 50 — "this session and all future sessions" splits the 
       (await prisma.recurringCourseSchedule.findUniqueOrThrow({ where: { id } })).effectiveUntil,
     ).toBeNull();
     expect(await prisma.recurringCourseSchedule.count({ where: { subjectId, deletedAt: null } })).toBe(1);
+  });
+});
+
+describe('listing a schedule\'s occurrences (§4.4, Revision 50)', () => {
+  it('returns them chronologically, with the protection reasons the dialog needs', async () => {
+    const { id } = await createCourseSchedule(prisma, superAdmin(), baseInput(), NOW);
+    const page = await listScheduleSessions(prisma, superAdmin(), id, {});
+
+    expect(page.data.length).toBeGreaterThan(0);
+    const dates = page.data.map((s) => s.date.toISOString().slice(0, 10));
+    expect([...dates].sort()).toEqual(dates);
+    // Nothing is protected yet, and an EMPTY list is the meaningful answer: it
+    // says a schedule edit or a split may rewrite this occurrence.
+    expect(page.data.every((s) => s.protectedReasons.length === 0)).toBe(true);
+  });
+
+  it('names WHY an occurrence is protected, using the shared rules', async () => {
+    // §4.4 requires the dialog to state which occurrences will change, which is
+    // unanswerable without knowing which are spared — and the codes come from
+    // the same R43.6 rule set every scheduling path asks, not a second copy.
+    const { id } = await createCourseSchedule(prisma, superAdmin(), baseInput(), NOW);
+    const first = await prisma.session.findFirstOrThrow({
+      where: { scheduleId: id },
+      orderBy: { date: 'asc' },
+    });
+    await prisma.session.update({ where: { id: first.id }, data: { overridden: true } });
+
+    const page = await listScheduleSessions(prisma, superAdmin(), id, {});
+    const row = page.data.find((s) => s.id === first.id)!;
+    expect(row.overridden).toBe(true);
+    expect(row.protectedReasons.length).toBeGreaterThan(0);
+  });
+
+  it('answers 404 for a schedule outside the caller\'s branch scope', async () => {
+    // §20 rule 17: out of reach is NOT_FOUND, never FORBIDDEN — expressed in the
+    // lookup rather than as a check afterwards.
+    const { id } = await createCourseSchedule(prisma, superAdmin(), baseInput(), NOW);
+    const e = await failure(() => listScheduleSessions(prisma, admin([otherBranchId]), id, {}));
+    expect(e.code).toBe('NOT_FOUND');
   });
 });

@@ -1,0 +1,403 @@
+import { useCallback, useEffect, useState, type ReactNode } from 'react';
+
+import { updateCourseSchedule } from '../../adapters/course-schedules.js';
+import {
+  cancelSession,
+  listScheduleSessions,
+  restoreSession,
+  updateSession,
+  type EditScope,
+  type ScheduleSession,
+} from '../../adapters/sessions.js';
+import { AdminLayout } from '../../components/admin/admin-layout.js';
+import { Button } from '../../components/ui/button.js';
+import { DataTable, type Column, type RowAction, type TableStatus } from '../../components/ui/data-table.js';
+import { Dialog } from '../../components/ui/dialog.js';
+import { DateField, TextField } from '../../components/ui/field.js';
+import { useSession } from '../../contexts/session.js';
+import { t } from '../../i18n/index.js';
+import { ApiError } from '../../lib/api.js';
+
+/**
+ * `/admin/schedules/{id}/sessions` — the occurrences of one recurring class,
+ * and **the screen SRS Revision 50 exists for**.
+ *
+ * **Every operation that can reach a series asks which occurrences it applies
+ * to**, and R50 makes that mandatory rather than courteous: an administrator who
+ * moves "the Tuesday class" without being asked cannot know whether they moved
+ * one week or a year. The dialog therefore **states what is about to change
+ * before it confirms**, and a scope is always chosen explicitly — a default is
+ * permitted, a silent choice is not.
+ *
+ * **The three scopes reach three different places**, which is why this is not
+ * one endpoint with a flag:
+ *
+ * - *This session only* → `PATCH /sessions/{id}`, marking it `overridden`, which
+ *   is what protects it from every later schedule rewrite (R43.4, R43.6).
+ * - *This and all future* → the schedule is **split**: closed the day before,
+ *   with a successor anchored here.
+ * - *All sessions* → the schedule itself, sparing overridden occurrences.
+ *
+ * **`protected_reasons` is rendered, not hidden.** An occurrence somebody
+ * overrode, held or attached work to will be spared by the wider scopes, and the
+ * dialog says so — otherwise an administrator choosing *all sessions* would
+ * reasonably expect it to include everything, and be wrong.
+ *
+ * **A sub-view of the Schedules module**, reached by drilling in: the path
+ * carries an id, so nothing links to it from a menu (§14.1 lists no such node) —
+ * the same relationship `/admin/groups/{id}/roster` has to its module.
+ */
+export function ScheduleSessionsPage({ scheduleId }: { scheduleId: string }): ReactNode {
+  const { accessToken } = useSession();
+
+  const [rows, setRows] = useState<ScheduleSession[]>([]);
+  const [status, setStatus] = useState<TableStatus>('loading');
+  const [editing, setEditing] = useState<ScheduleSession | null>(null);
+  const [cancelling, setCancelling] = useState<ScheduleSession | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    setStatus('loading');
+    try {
+      setRows((await listScheduleSessions(scheduleId, accessToken)).data);
+      setStatus('ready');
+    } catch {
+      setStatus('error');
+    }
+  }, [scheduleId, accessToken]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const columns: Column<ScheduleSession>[] = [
+    {
+      key: 'date',
+      header: t('admin.sessions.colDate'),
+      cell: (r) => <time dateTime={r.date}>{r.date}</time>,
+    },
+    {
+      key: 'time',
+      // Rendered exactly as sent: parsing a wall-clock value would move the
+      // class for a reader in another timezone (TD-11).
+      header: t('admin.sessions.colTime'),
+      cell: (r) => `${r.start_time} – ${r.end_time}`,
+    },
+    {
+      key: 'status',
+      header: t('admin.sessions.colStatus'),
+      // Announced as a word, never colour alone (§14.4).
+      cell: (r) => t(`admin.sessions.status.${r.status}`),
+    },
+    {
+      key: 'protection',
+      header: t('admin.sessions.colProtection'),
+      secondary: true,
+      // The honest reading of an empty list: a wider scope MAY rewrite this one.
+      cell: (r) =>
+        r.protected_reasons.length === 0 ? (
+          <span className="muted">{t('admin.sessions.notProtected')}</span>
+        ) : (
+          r.protected_reasons.map((c) => t(`admin.sessions.protection.${c}`)).join('، ')
+        ),
+    },
+  ];
+
+  const actions: RowAction<ScheduleSession>[] = [
+    { label: t('common.edit'), onSelect: (r) => setEditing(r) },
+    {
+      label: t('admin.sessions.cancel'),
+      danger: true,
+      onSelect: (r) => setCancelling(r),
+      available: (r) => r.status === 'scheduled',
+    },
+    {
+      label: t('admin.sessions.restore'),
+      onSelect: (r) => void run(() => restoreSession(r.id, r.version, accessToken), 'admin.sessions.restored'),
+      // TD-1 allows this only from `cancelled`, and the server additionally
+      // refuses it once the date has passed.
+      available: (r) => r.status === 'cancelled',
+    },
+  ];
+
+  async function run(action: () => Promise<unknown>, okKey: string): Promise<void> {
+    setBusy(true);
+    setNotice(null);
+    try {
+      await action();
+      setEditing(null);
+      setCancelling(null);
+      await load();
+      setNotice(t(okKey));
+    } catch (error) {
+      const reason =
+        error instanceof ApiError ? (error.details?.['reason'] as string | undefined) : undefined;
+      setNotice(
+        t(
+          reason === 'SESSION_IN_PAST'
+            ? 'admin.sessions.pastRestore'
+            : reason === 'ALREADY_HELD'
+              ? 'admin.sessions.alreadyHeld'
+              : error instanceof ApiError && error.status === 409
+                ? 'common.conflict'
+                : 'common.saveFailed',
+        ),
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  /** The three scopes, each reaching the endpoint that owns it. */
+  async function applyEdit(
+    session: ScheduleSession,
+    scope: EditScope,
+    edit: { date: string; start_time: string; end_time: string },
+  ): Promise<void> {
+    if (scope === 'this_session') {
+      await run(
+        () => updateSession(session.id, session.version, edit, accessToken),
+        'admin.sessions.savedOne',
+      );
+      return;
+    }
+    // Both wider scopes edit the RULE, so they carry only what a rule has —
+    // times, never a date. Moving one occurrence to another day is exactly what
+    // "this session only" is for.
+    const scheduleEdit = { start_time: edit.start_time, end_time: edit.end_time };
+    await run(
+      () =>
+        updateCourseSchedule(
+          scheduleId,
+          // The schedule's own version is not on this screen; the server
+          // refuses a stale one, and the notice tells the reader to reload.
+          0,
+          scope === 'this_and_future'
+            ? { ...scheduleEdit, scope: 'this_and_future', from_date: session.date }
+            : scheduleEdit,
+          accessToken,
+        ),
+      scope === 'this_and_future' ? 'admin.sessions.savedSplit' : 'admin.sessions.savedAll',
+    );
+  }
+
+  return (
+    <AdminLayout
+      title={t('admin.sessions.title')}
+      lede={t('admin.sessions.lede')}
+      actions={
+        <Button variant="secondary" onClick={() => (window.location.href = '/admin/schedules')}>
+          {t('admin.sessions.backToSchedules')}
+        </Button>
+      }
+    >
+      {notice ? (
+        <p className="admin-notice" role="status" aria-live="polite">
+          {notice}
+        </p>
+      ) : null}
+
+      <DataTable
+        caption={t('admin.sessions.caption')}
+        columns={columns}
+        rows={rows}
+        rowKey={(r) => r.id}
+        status={status}
+        actions={actions}
+        onRetry={() => void load()}
+      />
+
+      {editing ? (
+        <ScopeDialog
+          session={editing}
+          total={rows.length}
+          busy={busy}
+          onCancel={() => setEditing(null)}
+          onConfirm={(scope, edit) => void applyEdit(editing, scope, edit)}
+        />
+      ) : null}
+
+      {cancelling ? (
+        <CancelDialog
+          session={cancelling}
+          busy={busy}
+          onCancel={() => setCancelling(null)}
+          onConfirm={(reason) =>
+            void run(
+              () => cancelSession(cancelling.id, cancelling.version, reason, accessToken),
+              'admin.sessions.cancelled',
+            )
+          }
+        />
+      ) : null}
+    </AdminLayout>
+  );
+}
+
+/**
+ * **The scope question §4.4 (Revision 50) makes mandatory.**
+ *
+ * It states *which* occurrences each choice touches, with a live count, before
+ * anything is confirmed. The counts are the point: "this and all future" reads
+ * very differently when it means three occurrences than when it means thirty.
+ *
+ * **The date is editable only under *this session only***, because the wider
+ * scopes edit the recurrence *rule*, and a rule has times but no single date.
+ * Moving one class to another day is precisely what the narrow scope is for.
+ */
+function ScopeDialog({
+  session,
+  total,
+  busy,
+  onConfirm,
+  onCancel,
+}: {
+  session: ScheduleSession;
+  total: number;
+  busy: boolean;
+  onConfirm: (
+    scope: EditScope,
+    edit: { date: string; start_time: string; end_time: string },
+  ) => void;
+  onCancel: () => void;
+}): ReactNode {
+  const [scope, setScope] = useState<EditScope>('this_session');
+  const [date, setDate] = useState(session.date);
+  const [startTime, setStartTime] = useState(session.start_time);
+  const [endTime, setEndTime] = useState(session.end_time);
+
+  return (
+    <Dialog open onClose={onCancel} title={t('admin.sessions.editTitle')} wide>
+      <div className="form">
+        <fieldset>
+          <legend>{t('admin.sessions.scopeLegend')}</legend>
+          {/* Radios, not a select: three mutually exclusive answers to one
+              question, all of which must be visible at once — a collapsed
+              control would hide two thirds of a decision §4.4 calls mandatory. */}
+          {(['this_session', 'this_and_future', 'all_sessions'] as EditScope[]).map((option) => (
+            <label key={option} className="field field--choice">
+              <input
+                type="radio"
+                name="scope"
+                value={option}
+                checked={scope === option}
+                onChange={() => setScope(option)}
+              />
+              <span>
+                <strong>{t(`admin.sessions.scope.${option}`)}</strong>
+                <span className="field__hint">
+                  {t(`admin.sessions.scopeHint.${option}`)
+                    .replace('{date}', session.date)
+                    .replace('{total}', String(total))}
+                </span>
+              </span>
+            </label>
+          ))}
+        </fieldset>
+
+        {/* Stated before confirming, which is the clause's actual requirement. */}
+        <p className="admin-notice" role="status">
+          {t(`admin.sessions.willChange.${scope}`)
+            .replace('{date}', session.date)
+            .replace('{total}', String(total))}
+        </p>
+
+        {scope === 'this_session' ? (
+          <DateField label={t('admin.sessions.colDate')} value={date} onChange={setDate} />
+        ) : (
+          // Said rather than silently omitted: a reader who expected to move the
+          // date needs to know which choice does that.
+          <p className="muted">{t('admin.sessions.dateOnlyThisSession')}</p>
+        )}
+        <div className="form__row">
+          <TextField
+            label={t('admin.sessions.startTime')}
+            value={startTime}
+            onChange={setStartTime}
+            hint={t('admin.sessions.timeHint')}
+          />
+          <TextField
+            label={t('admin.sessions.endTime')}
+            value={endTime}
+            onChange={setEndTime}
+          />
+        </div>
+
+        <div className="form__actions">
+          <Button variant="secondary" onClick={onCancel}>
+            {t('common.cancel')}
+          </Button>
+          <Button
+            variant="primary"
+            disabled={busy}
+            onClick={() =>
+              onConfirm(scope, {
+                date: scope === 'this_session' ? date : session.date,
+                start_time: startTime,
+                end_time: endTime,
+              })
+            }
+          >
+            {t('common.save')}
+          </Button>
+        </div>
+      </div>
+    </Dialog>
+  );
+}
+
+/**
+ * Cancelling one occurrence.
+ *
+ * **The reason is mandatory** and the dialog says why: it is the only record of
+ * why a class did not happen, and the audience size is written to the audit row
+ * at this moment — while it is still answerable.
+ *
+ * **Scoped to this occurrence alone**, deliberately. Cancelling a whole series
+ * is deleting the schedule, which is a different act on a different screen with
+ * its own confirmation; offering it here would let one click end a term.
+ */
+function CancelDialog({
+  session,
+  busy,
+  onConfirm,
+  onCancel,
+}: {
+  session: ScheduleSession;
+  busy: boolean;
+  onConfirm: (reason: string) => void;
+  onCancel: () => void;
+}): ReactNode {
+  const [reason, setReason] = useState('');
+  return (
+    <Dialog
+      open
+      onClose={onCancel}
+      title={t('admin.sessions.cancelTitle').replace('{date}', session.date)}
+    >
+      <div className="form">
+        <p>{t('admin.sessions.cancelBody')}</p>
+        <TextField
+          label={t('admin.sessions.cancelReason')}
+          value={reason}
+          onChange={setReason}
+          required
+          hint={t('admin.sessions.cancelReasonHint')}
+        />
+        <div className="form__actions">
+          <Button variant="secondary" onClick={onCancel}>
+            {t('common.cancel')}
+          </Button>
+          <Button
+            variant="danger"
+            disabled={busy || reason.trim() === ''}
+            onClick={() => onConfirm(reason.trim())}
+          >
+            {t('admin.sessions.cancel')}
+          </Button>
+        </div>
+      </div>
+    </Dialog>
+  );
+}

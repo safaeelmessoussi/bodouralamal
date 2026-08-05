@@ -150,6 +150,14 @@ export function SchedulesPage(): ReactNode {
 
   const actions: RowAction<CourseSchedule>[] = [
     {
+      // R50's scope dialog lives behind this: editing one occurrence has to
+      // start from a list of occurrences.
+      label: t('admin.schedules.viewSessions'),
+      onSelect: (r) => {
+        window.location.href = `/admin/schedules/${r.id}/sessions`;
+      },
+    },
+    {
       label: t('admin.schedules.viewConflicts'),
       onSelect: (r) => {
         void (async () => {

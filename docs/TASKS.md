@@ -594,7 +594,11 @@
   - The original is closed **before** the successor's conflict check, or it collides with the half it replaces
   - The successor **inherits** `effective_until`, so splitting a bounded series does not make its tail unbounded
   - 7 tests including the §18 criteria; `all_sessions` proven unchanged
-- [ ] **Session management UI** with the three scopes. The backend for all three now exists
+- [x] **Session management UI** — all three R50 scopes, at `/admin/schedules/{id}/sessions`
+  - Needed one endpoint: `GET /admin/course-schedules/{id}/sessions`, a **sibling of `/conflicts` and `/roster`**. `GET /calendar` could not serve it — it omits `schedule_id` on the public surface, and widening a public payload for an admin need is the pattern rejected twice before
+  - Rows carry `protected_reasons`: §4.4 requires the dialog to say what will change, which needs knowing what will be spared
+  - The scope is asked before **every** operation that can reach a series, with a live count, and stated before confirming
+  - The date moves only under *this session only* — the wider scopes edit a rule, and a rule has times but no date
 - [ ] **TD-3.5 storage endpoints** — `POST /uploads/initiate`, `/complete`, `/abort`, `GET /content/{id}/download-url`. **Specified in TD-3.5 but not mounted**; `app.ts` has no `/uploads`
 - [ ] **Educational Content upload UI** — attach to a Subject of a Level (library) or to a Session (`POST /sessions/{id}/content` already exists)
 

@@ -177,17 +177,30 @@ export async function createCourseSchedule(
  * ignored — each would re-point Sessions already materialized against the old
  * answer — so this signature is the contract, not a convenience.
  */
+/**
+ * Edits the schedule, at one of §4.4 (Revision 50)'s two schedule-level scopes.
+ *
+ * **`all_sessions`** (the default) rewrites future un-overridden Sessions.
+ * **`this_and_future`** requires `from_date` and **splits the schedule**: this
+ * one is closed the day before, and a successor carrying the new values is
+ * anchored at that date with its staff copied. The response is the
+ * **successor**, plus `split_from_schedule_id` naming the closed half — so a
+ * caller can tell its list now holds two rows where it held one.
+ *
+ * *This session only* is deliberately not a value here: it is
+ * `PATCH /sessions/{id}` in `sessions.ts`, because it edits one occurrence
+ * rather than the rule that produced it.
+ */
 export async function updateCourseSchedule(
   id: string,
   version: number,
   input: Partial<
     Pick<CourseScheduleInput, 'room_id' | 'start_time' | 'end_time' | 'recurrence' | 'weekdays'>
-  >,
+  > & { scope?: 'all_sessions' | 'this_and_future'; from_date?: string },
   token: string | null,
-): Promise<ScheduleWriteResult> {
-  return api<ScheduleWriteResult>(`/admin/course-schedules/${id}`, {
-    method: 'PATCH',
-    token,
-    body: { version, ...input },
-  });
+): Promise<ScheduleWriteResult & { split_from_schedule_id?: string }> {
+  return api<ScheduleWriteResult & { split_from_schedule_id?: string }>(
+    `/admin/course-schedules/${id}`,
+    { method: 'PATCH', token, body: { version, ...input } },
+  );
 }

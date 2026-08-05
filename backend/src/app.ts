@@ -260,6 +260,9 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
   // biweekly-alternating Tuesday 15:00 collide only on alternate weeks.
   guarded.get('/admin/course-schedules/:id/conflicts', courseSchedules.conflicts(prisma));
   guarded.get('/admin/course-schedules/:id/roster', courseSchedules.roster(prisma));
+  // R50 — the occurrences the scope dialog is chosen from. A sibling of
+  // `/conflicts` and `/roster`: all three answer a question about one schedule.
+  guarded.get('/admin/course-schedules/:id/sessions', courseSchedules.sessions(prisma));
 
   // Sessions (§4.4, TD-1, TD-3.12) — the individual occurrence. NOT under
   // `/admin/`: TD-2 gives a Teacher write access to the sessions they staff, so

@@ -148,6 +148,7 @@ PATCH /admin/course-schedules/{id}            # TD-3.12; TD-15; reports rewritte
 DELETE /admin/course-schedules/{id}           # TD-3.12, §4.4; TD-5
 GET /admin/course-schedules/{id}/conflicts    # TD-3.12, §4.4 — computed against MATERIALIZED sessions
 GET /admin/course-schedules/{id}/roster       # TD-3.12, §4.4c — the resolved audience, never a snapshot
+GET /admin/course-schedules/{id}/sessions     # §4.4 R50 — the occurrences the scope dialog picks from; sibling of /conflicts and /roster
 PATCH /sessions/{id}                          # TD-3.12, §4.4; sets `overridden`; TD-2 limits a Teacher to sessions they staff
 POST /sessions/{id}/cancel                    # TD-3.12; TD-1 scheduled → cancelled; reason mandatory
 POST /sessions/{id}/restore                   # TD-3.12; TD-1 cancelled → scheduled, only before the date

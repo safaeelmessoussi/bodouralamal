@@ -1092,3 +1092,57 @@ export function userDto(row: {
     version: row.version,
   };
 }
+
+/* ── A schedule's materialized occurrences (§4.4, Revision 50) ───────────── */
+
+/**
+ * One occurrence, as the scope dialog lists them.
+ *
+ * **`protected_reasons` is the load-bearing field.** §4.4 requires the dialog to
+ * state which occurrences are about to change, and that is unanswerable without
+ * saying which will be spared. The codes come from the R43.6 rule set and are
+ * part of the contract — renaming one changes an administrator's record of why
+ * something was left alone.
+ */
+export interface ScheduleSessionDto {
+  id: string;
+  /** TD-11 calendar date, never an instant. */
+  date: string;
+  /** Wall-clock `HH:MM` (TD-11). */
+  start_time: string;
+  end_time: string;
+  status: string;
+  /** R43.4 — *a human decided about this occurrence*. */
+  overridden: boolean;
+  room_id: string | null;
+  /** TD-15: sent back on a "this session only" edit. */
+  version: number;
+  staff: { user_id: string; position: string }[];
+  protected_reasons: string[];
+}
+
+export function scheduleSessionDto(row: {
+  id: string;
+  date: Date;
+  startTime: Date;
+  endTime: Date;
+  status: string;
+  overridden: boolean;
+  roomId: string | null;
+  version: number;
+  staff: { userId: string; position: string }[];
+  protectedReasons: string[];
+}): ScheduleSessionDto {
+  return {
+    id: row.id,
+    date: row.date.toISOString().slice(0, 10),
+    start_time: row.startTime.toISOString().slice(11, 16),
+    end_time: row.endTime.toISOString().slice(11, 16),
+    status: row.status,
+    overridden: row.overridden,
+    room_id: row.roomId,
+    version: row.version,
+    staff: row.staff.map((s) => ({ user_id: s.userId, position: s.position })),
+    protected_reasons: row.protectedReasons,
+  };
+}

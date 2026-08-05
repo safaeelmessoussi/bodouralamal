@@ -13,6 +13,7 @@ import { GroupsPage } from './groups.js';
 import { HijriCalendarPage } from './hijri-calendar.js';
 import { LevelSubjectsPage } from './level-subjects.js';
 import { LevelsPage } from './levels.js';
+import { ScheduleSessionsPage } from './schedule-sessions.js';
 import { SchedulesPage } from './schedules.js';
 import { SettingsPage } from './settings.js';
 import { SubjectOrganisationPage } from './subject-organisation.js';
@@ -70,7 +71,20 @@ export const IMPLEMENTED_ADMIN_PATHS: readonly string[] = [
  */
 const SUBJECT_ORG = /^\/admin\/levels\/([^/]+)\/subjects(?:\/([^/]+))?\/?$/;
 
+/**
+ * `/admin/schedules/{id}/sessions` — the occurrences of one recurring class, and
+ * the screen SRS Revision 50's three scopes are chosen on.
+ *
+ * An internal view of the Schedules module, matched by pattern for the same
+ * reason Subject Organisation is: the path carries an id, so nothing links to it
+ * from a menu and §14.1 lists no such node.
+ */
+const SCHEDULE_SESSIONS = /^\/admin\/schedules\/([^/]+)\/sessions\/?$/;
+
 export function AdminRouter(): ReactNode {
+  const scheduleSessions = SCHEDULE_SESSIONS.exec(window.location.pathname);
+  if (scheduleSessions) return <ScheduleSessionsPage scheduleId={scheduleSessions[1]!} />;
+
   const subjectOrg = SUBJECT_ORG.exec(window.location.pathname);
   if (subjectOrg) {
     const subjectId = subjectOrg[2];

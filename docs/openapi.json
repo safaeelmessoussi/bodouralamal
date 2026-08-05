@@ -4283,6 +4283,57 @@
         }
       }
     },
+    "/admin/course-schedules/{id}/sessions": {
+      "get": {
+        "summary": "List a schedule's occurrences",
+        "description": "**§4.4, Revision 50** — the materialized Sessions the scope dialog is chosen from. **A sibling of `/conflicts` and `/roster`, not a new surface:** all three answer a question about one schedule and hang off it, where a top-level `GET /sessions` would be a second way to reach the same rows with its own scope rules to keep in step. **`GET /calendar` could not serve this:** it returns occurrences **without their `schedule_id`**, deliberately, since it is a public surface and a reader does not need the rule behind a class — but a screen offering *this and all future* must know which schedule it is about to split. **Each row carries `protected_reasons`**, the stable R43.6 codes, because §4.4 requires the dialog to state which occurrences are about to change and that is unanswerable without knowing which will be spared; an empty list means a schedule edit or a split may rewrite it. `overridden` is R43.4's *a human decided about this occurrence*. Chronological, paginated (TD-10), and **role-scoped exactly as the schedule list is** — a schedule out of reach answers `404`, never `403` (§20 rule 17), because the scope is expressed in the lookup rather than as a check afterwards. Times are wall-clock `HH:MM` and the date is a calendar date (TD-11).",
+        "responses": {
+          "200": {
+            "description": "The occurrence page in the TD-10 envelope."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN for a caller who is neither admin nor teaching staff.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an unknown schedule or one outside the caller's scope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/sessions/{id}": {
       "patch": {
         "summary": "Override one occurrence",

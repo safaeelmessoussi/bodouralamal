@@ -794,6 +794,96 @@ export async function deleteCourseSchedule(
   });
 }
 
+/**
+ * **One schedule's materialized occurrences** — the list the §4.4 (Revision 50)
+ * scope dialog is chosen from.
+ *
+ * **A sibling of `/conflicts` and `/roster`, not a new surface.** All three
+ * answer a question about one schedule and hang off it; a top-level
+ * `GET /sessions` would be a second way to reach the same rows with its own
+ * scope rules to keep in step.
+ *
+ * **Why the calendar could not serve this.** `GET /calendar` returns
+ * occurrences without their `schedule_id` — deliberately, since it is a public
+ * surface and a reader does not need the rule behind a class. A screen offering
+ * *this and all future* must know which schedule it is about to split, and the
+ * honest way to know is to have asked for that schedule's sessions.
+ *
+ * **Each row carries WHY it is protected**, using the same rules every
+ * scheduling path asks (R43.6). §4.4 requires the dialog to state which
+ * occurrences are about to change; that is unanswerable without knowing which
+ * ones will be spared.
+ */
+export async function listScheduleSessions(
+  prisma: PrismaClient,
+  actor: Actor,
+  id: string,
+  params: PageParams = {},
+): Promise<Page<ScheduleSessionRow>> {
+  assertCanRead(actor);
+
+  const schedule = await prisma.recurringCourseSchedule.findFirst({
+    where: { id, deletedAt: null, ...readableScope(actor) },
+    select: { id: true },
+  });
+  // Out of reach answers 404, never 403 (§20 rule 17) — the scope is expressed
+  // in the lookup rather than as a check afterwards.
+  if (!schedule) throw new AppError('NOT_FOUND', 'no such schedule');
+
+  const where = { scheduleId: id, deletedAt: null };
+  const window = pageWindow(params);
+  const [rows, total] = await Promise.all([
+    prisma.session.findMany({
+      where,
+      // Chronological: this list is read as a timetable, and `id` is the stable
+      // tiebreaker that keeps pagination from repeating a row.
+      orderBy: [{ date: 'asc' }, { id: 'asc' }],
+      skip: window.skip,
+      take: window.take,
+      select: {
+        id: true,
+        date: true,
+        startTime: true,
+        endTime: true,
+        status: true,
+        overridden: true,
+        roomId: true,
+        version: true,
+        staff: { where: { deletedAt: null }, select: { userId: true, position: true } },
+      },
+    }),
+    prisma.session.count({ where }),
+  ]);
+
+  const reasons = await protectionReasons(
+    prisma as unknown as Prisma.TransactionClient,
+    rows.map((r) => ({ id: r.id, date: r.date, overridden: r.overridden, status: r.status })),
+  );
+
+  return page(
+    rows.map((r) => ({ ...r, protectedReasons: reasons.get(r.id) ?? [] })),
+    window,
+    total,
+  );
+}
+
+export interface ScheduleSessionRow {
+  id: string;
+  date: Date;
+  startTime: Date;
+  endTime: Date;
+  status: string;
+  /** R43.4 — *a human decided about this occurrence*, not *differs from the
+   *  schedule*. What "this session only" leaves behind. */
+  overridden: boolean;
+  roomId: string | null;
+  version: number;
+  staff: { userId: string; position: string }[];
+  /** Stable codes from the R43.6 rule set. Empty means a schedule edit or a
+   *  split may rewrite this occurrence. */
+  protectedReasons: string[];
+}
+
 /** Read-only conflict preview for a candidate schedule — the
  *  `GET /admin/course-schedules/{id}/conflicts` behaviour, service side. */
 export async function previewConflicts(

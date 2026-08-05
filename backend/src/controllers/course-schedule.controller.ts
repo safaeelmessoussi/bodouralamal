@@ -11,6 +11,7 @@ import {
   scheduleConflictDto,
   scheduleDeletionDto,
   scheduleRosterEntryDto,
+  scheduleSessionDto,
 } from './dto.js';
 import { idParam, parse } from './parse.js';
 import {
@@ -151,6 +152,27 @@ export function conflicts(prisma: PrismaClient) {
 }
 
 /** The resolved audience — computed live on every call, never a stored snapshot. */
+/**
+ * `GET /admin/course-schedules/{id}/sessions` — the occurrences the §4.4
+ * (Revision 50) scope dialog is chosen from.
+ *
+ * A sibling of `/conflicts` and `/roster`: all three answer a question about one
+ * schedule and hang off it.
+ */
+export function sessions(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    // TD-10's shared page parsing — the same helper every paginated read uses,
+    // rather than a second interpretation of `page`/`page_size`.
+    const result = await schedules.listScheduleSessions(
+      prisma,
+      requireActor(req),
+      idParam(req, 'id'),
+      pageParamsFrom(req.query),
+    );
+    res.json(pageOf(result, scheduleSessionDto));
+  };
+}
+
 export function roster(prisma: PrismaClient) {
   return async (req: Request, res: Response): Promise<void> => {
     const students = await schedules.resolveScheduleRoster(
