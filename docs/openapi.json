@@ -562,6 +562,47 @@
         }
       }
     },
+    "/calendar/sessions/{id}": {
+      "get": {
+        "summary": "The Session page",
+        "description": "TD-3.4, §5.2 (Revision 43). **Public at the caller's tier**, mounted beside the grid it is opened from: an anonymous visitor sees a public session's existence and details, and **never its private recordings**. Returns `{ occurrence, notes, recordings, linked_content }`. **`occurrence` is byte-identical to the grid's** — TD-3.4 says *the occurrence above, plus …*, and one `include` and one mapper serve both, because two that agree today are two that drift. **`recordings` and `linked_content` are disjoint:** §4.9 recording resources are exactly the **audio** items among the linked content (video is excluded from the MVP entirely), so the split is a fact about the file rather than a second column to keep in step. Both lists pass **the same §4.9 tier rule the library list applies** — literally the same predicate, exported rather than restated — so a change to the tiers cannot reach one surface without the other, and BR-2's `consent_forced_private` exclusion holds here too. Each item is exactly `id`, `title`, `subject_id`, `level_id`: enough to open it **inside the Educational Library** (§5.2 — one reader, one permission path), and deliberately not the object location, which only `GET /content/{id}/download-url` (TD-3.5) hands out after its own check. **`notes` is always `null` and the key is present on purpose:** TD-3.4 names it and §5.2 lists notes on the page, but **§7 gives `Session` no notes column and defines no note entity** — `User.notes` is a different field on a different model. Adding one is a §7 schema decision and therefore the Document Owner's, exactly like the deferred `EducationalContent` uploader field. Shipping the key null keeps a client coded against TD-3.4 finding the field where the specification says it is, and keeps the gap **visible rather than silent**.",
+        "responses": {
+          "200": {
+            "description": "The session page."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — the id is not a uuid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND — no such session, or its schedule is deleted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/calendar/bootstrap": {
       "get": {
         "summary": "Calendar bootstrap",

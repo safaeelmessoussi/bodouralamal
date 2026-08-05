@@ -1,8 +1,9 @@
-import type { PrismaClient } from '../generated/prisma/client.js';
+import type { Prisma, PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
 import { publicDisplayName } from '../lib/display-name.js';
 import { baseHijri, sortMonthStarts, type MonthStart } from '../lib/hijri.js';
 import * as scope from '../policies/branch-scope.js';
+import { visibleContentIds } from './library.service.js';
 import { expandEvent } from '../lib/recurrence.js';
 
 /**
@@ -268,6 +269,89 @@ async function operationalFloor(
   return branch?.operationalStartDate ?? null;
 }
 
+/**
+ * The columns a Session occurrence needs, in one place.
+ *
+ * `GET /calendar` and `GET /calendar/sessions/{id}` return **the same
+ * occurrence** (TD-3.4: *"the occurrence above, plus …"*). Two `include` blocks
+ * and two mappers would be two shapes that agree today, and this project's own
+ * history is that the copy drifts — so both read this constant and call the one
+ * mapper below.
+ */
+const SESSION_OCCURRENCE_INCLUDE = {
+  room: { select: { name: true } },
+  staff: {
+    where: { deletedAt: null },
+    select: { user: { select: { id: true, nameArabic: true, publicDisplayName: true } } },
+  },
+  schedule: {
+    select: {
+      branchId: true,
+      branch: { select: { name: true } },
+      subject: { select: { id: true, name: true } },
+      teachingMode: true,
+      level: { select: { id: true, name: true, category: { select: { id: true, name: true } } } },
+      administrativeGroup: {
+        select: {
+          name: true,
+          level: { select: { id: true, name: true, category: { select: { id: true, name: true } } } },
+        },
+      },
+      teachingGroup: {
+        select: {
+          name: true,
+          level: { select: { id: true, name: true, category: { select: { id: true, name: true } } } },
+        },
+      },
+    },
+  },
+} as const;
+
+type SessionWithOccurrenceData = Prisma.SessionGetPayload<{
+  include: typeof SESSION_OCCURRENCE_INCLUDE;
+}>;
+
+/** The single Session → `Occurrence` mapping. */
+function sessionOccurrence(
+  session: SessionWithOccurrenceData,
+  monthStarts: readonly MonthStart[],
+): Occurrence {
+  const sch = session.schedule;
+  const level = sch.level ?? sch.administrativeGroup?.level ?? sch.teachingGroup?.level ?? null;
+  return {
+    kind: 'session',
+    id: session.id,
+    title: sch.subject.name,
+    date: iso(session.date),
+    startTime: hhmm(session.startTime),
+    endTime: hhmm(session.endTime),
+    visibility: null,
+    branchId: sch.branchId,
+    // A Session has no description of its own; the audience label that used to
+    // be smuggled in here now has its own field.
+    description: null,
+    subjectId: sch.subject.id,
+    subjectName: sch.subject.name,
+    teachingMode: sch.teachingMode,
+    audienceLabel:
+      sch.administrativeGroup?.name ?? sch.teachingGroup?.name ?? level?.name ?? null,
+    status: session.status,
+    recurrence: null,
+    branchName: sch.branch.name,
+    roomName: session.room?.name ?? null,
+    categoryId: level?.category.id ?? null,
+    categoryName: level?.category.name ?? null,
+    levelId: level?.id ?? null,
+    levelName: level?.name ?? null,
+    // From the session's OWN snapshot, never the schedule's (Revision 43.4).
+    instructors: session.staff.map((assignment) => ({
+      id: assignment.user.id,
+      displayName: publicDisplayName(assignment.user),
+    })),
+    ...hijri(session.date, monthStarts),
+  };
+}
+
 export async function readCalendar(
   prisma: PrismaClient,
   actor: CalendarActor | null,
@@ -418,34 +502,7 @@ export async function readCalendar(
           ? { staff: { some: { userId: query.teacherId, deletedAt: null } } }
           : {}),
       },
-      include: {
-        room: { select: { name: true } },
-        staff: {
-          where: { deletedAt: null },
-          select: { user: { select: { id: true, nameArabic: true, publicDisplayName: true } } },
-        },
-        schedule: {
-          select: {
-            branchId: true,
-            branch: { select: { name: true } },
-            subject: { select: { id: true, name: true } },
-            teachingMode: true,
-            level: { select: { id: true, name: true, category: { select: { id: true, name: true } } } },
-            administrativeGroup: {
-              select: {
-                name: true,
-                level: { select: { id: true, name: true, category: { select: { id: true, name: true } } } },
-              },
-            },
-            teachingGroup: {
-              select: {
-                name: true,
-                level: { select: { id: true, name: true, category: { select: { id: true, name: true } } } },
-              },
-            },
-          },
-        },
-      },
+      include: SESSION_OCCURRENCE_INCLUDE,
     });
 
     for (const session of sessions) {
@@ -457,38 +514,7 @@ export async function readCalendar(
       // these is non-null" as a single filter.
       if (query.categoryId && level?.category.id !== query.categoryId) continue;
 
-      out.push({
-        kind: 'session',
-        id: session.id,
-        title: sch.subject.name,
-        date: iso(session.date),
-        startTime: hhmm(session.startTime),
-        endTime: hhmm(session.endTime),
-        visibility: null,
-        branchId: sch.branchId,
-        // A Session has no description of its own; the audience label that used
-        // to be smuggled in here now has its own field.
-        description: null,
-        subjectId: sch.subject.id,
-        subjectName: sch.subject.name,
-        teachingMode: sch.teachingMode,
-        audienceLabel:
-          sch.administrativeGroup?.name ?? sch.teachingGroup?.name ?? level?.name ?? null,
-        status: session.status,
-        recurrence: null,
-        branchName: sch.branch.name,
-        roomName: session.room?.name ?? null,
-        categoryId: level?.category.id ?? null,
-        categoryName: level?.category.name ?? null,
-        levelId: level?.id ?? null,
-        levelName: level?.name ?? null,
-        // From the session's OWN snapshot, never the schedule's (Revision 43.4).
-        instructors: session.staff.map((assignment) => ({
-          id: assignment.user.id,
-          displayName: publicDisplayName(assignment.user),
-        })),
-        ...hijri(session.date, monthStarts),
-      });
+      out.push(sessionOccurrence(session, monthStarts));
     }
   }
 
@@ -590,5 +616,103 @@ export async function prefilledFilters(
     // "own teacher", and guessing one would filter a parent's calendar down to
     // a single member of staff.
     teacherId: staffed.length > 0 ? actor.userId : null,
+  };
+}
+
+/* ── The §5.2 Session page (TD-3.4 `GET /calendar/sessions/{id}`) ────────── */
+
+/**
+ * One linked item, in the shape TD-3.4 names:
+ * `linked_content[{ id, title, subject_id, level_id }]`.
+ */
+export interface SessionPageContent {
+  id: string;
+  title: string;
+  subjectId: string;
+  levelId: string;
+  mimeType: string;
+}
+
+export interface SessionPage {
+  occurrence: Occurrence;
+  /**
+   * **No storage exists for this yet.** TD-3.4 names `notes` in the response and
+   * §5.2 lists them on the page, but §7 gives `Session` no notes column and
+   * defines no note entity — `User.notes` is a different field on a different
+   * model. Inventing a column would be a §7 schema decision, which is the
+   * Document Owner's (the same class as the deferred `EducationalContent`
+   * uploader field), so the endpoint ships the key with `null` rather than
+   * omitting it: a client coded against TD-3.4 finds the field where the
+   * specification says it is, and the gap is visible instead of silent.
+   */
+  notes: null;
+  /**
+   * Session **recordings** — §4.9's recording resources, which are exactly the
+   * audio items among the linked content (video is excluded from the MVP
+   * entirely, §4.9). These are what BR-2's consent gate forces private, which is
+   * why §5.2 says an anonymous visitor sees a public session's details but
+   * *never its private recordings*.
+   */
+  recordings: SessionPageContent[];
+  /** The linked materials — the linked content that is not a recording, so the
+   *  two lists are disjoint and each answers a different question. */
+  linkedContent: SessionPageContent[];
+}
+
+/**
+ * The §5.2 Session page: the calendar occurrence, plus what is attached to it.
+ *
+ * **Public, at the caller's tier.** The occurrence itself is public — §4.4
+ * (Revision 43) made the timetable browsable by anonymous visitors — while the
+ * attached content passes the §4.9 tiers through `visibleContentIds`, the *same*
+ * rule the library list applies. That is the whole shape of §5.2's sentence: an
+ * anonymous visitor sees a public session's existence and details, never its
+ * private recordings.
+ */
+export async function readSessionPage(
+  prisma: PrismaClient,
+  actor: CalendarActor | null,
+  sessionId: string,
+): Promise<SessionPage> {
+  const session = await prisma.session.findFirst({
+    where: { id: sessionId, deletedAt: null, schedule: { deletedAt: null } },
+    include: SESSION_OCCURRENCE_INCLUDE,
+  });
+  if (!session) throw new AppError('NOT_FOUND', 'no such session');
+
+  const monthStarts = await publishedMonthStarts(prisma, session.date, session.date);
+
+  const links = await prisma.sessionContent.findMany({
+    where: { sessionId, deletedAt: null, content: { deletedAt: null } },
+    select: {
+      content: {
+        select: { id: true, title: true, subjectId: true, levelId: true, mimeType: true },
+      },
+    },
+  });
+
+  const visible = await visibleContentIds(
+    prisma,
+    actor,
+    links.map((l) => l.content.id),
+  );
+  const items = links
+    .map((l) => l.content)
+    .filter((c) => visible.has(c.id))
+    .map((c) => ({
+      id: c.id,
+      title: c.title,
+      subjectId: c.subjectId,
+      levelId: c.levelId,
+      mimeType: c.mimeType,
+    }));
+
+  return {
+    occurrence: sessionOccurrence(session, monthStarts),
+    notes: null,
+    // §4.9: teachers upload phone recordings, and video is excluded entirely, so
+    // "is this a recording" is exactly "is this audio".
+    recordings: items.filter((c) => c.mimeType.startsWith('audio/')),
+    linkedContent: items.filter((c) => !c.mimeType.startsWith('audio/')),
   };
 }

@@ -252,3 +252,34 @@ export async function listLibrary(
 
   return page(rows, window, Number(counted[0]?.total ?? 0));
 }
+
+/**
+ * Which of these content ids the caller may see, under **the same §4.9 tier
+ * rule the library list applies**.
+ *
+ * Exported so the §5.2 Session page does not grow a second expression of that
+ * rule. It reuses `tierPredicate` verbatim: one rule, one rendering, and a
+ * change to the tiers cannot reach one surface without the other. Writing a
+ * Prisma-`where` twin of the predicate for the Session page was the obvious
+ * alternative and is exactly the duplication that drifts here.
+ */
+export async function visibleContentIds(
+  prisma: PrismaClient,
+  actor: LibraryActor | null,
+  ids: readonly string[],
+): Promise<Set<string>> {
+  if (ids.length === 0) return new Set();
+
+  const privateLevels =
+    actor !== null && actor.accountStatus === 'active' && !isStaff(actor)
+      ? await privateLevelIds(prisma, actor)
+      : [];
+
+  const rows = await prisma.$queryRaw<{ id: string }[]>`
+    SELECT c."id"
+    FROM "educational_content" c
+    WHERE c."deleted_at" IS NULL
+      AND c."id" IN (${Prisma.join(ids.map((id) => Prisma.sql`${id}::uuid`))})
+      AND ${tierPredicate(actor, privateLevels)}`;
+  return new Set(rows.map((r) => r.id));
+}

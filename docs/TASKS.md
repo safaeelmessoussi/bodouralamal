@@ -464,7 +464,14 @@
   - ✓ Sessions gained `subject_id`, `subject_name`, `teaching_mode`, `audience_label`, `status`; `audience_label` stops impersonating `description`
   - ✓ `prefilled_filters` is `null` for anonymous **and** Pending; a value is prefilled **only when unambiguous** — plural yields `null`, never *first*
   - ✓ Proven not to change the result set: a signed-in member with no enrolments sees exactly what an anonymous visitor sees
-- [ ] `/calendar/sessions/{id}` — the §5.2 Session page (occurrence + notes + recordings + `linked_content[]`)
+- [x] `/calendar/sessions/{id}` — the §5.2 Session page
+  - ✓ The `occurrence` is **byte-identical to the grid's** — one `include` and one mapper, extracted so the two cannot drift; asserted field for field
+  - ✓ `recordings` and `linked_content` are **disjoint**, split on the file being audio (§4.9: video is excluded entirely), so no second column has to be kept true
+  - ✓ Both lists reuse **the library's §4.9 tier predicate itself**, exported rather than restated — one rule, one rendering
+  - ✓ Public at the caller's tier: anonymous sees the public recording, never the private one; a teacher also sees hidden
+  - ✓ **`notes` ships `null`** — TD-3.4 names it but §7 defines no storage; a §7 schema decision, deferred, and visible rather than silent
+  - ✓ Registered in `scripts/ci/td3-routes.txt`, which caught its absence (66/82 TD-3, 0 undocumented)
+  - ✓ 9 HTTP tests green first run; `pending-denial` grew to 63 with a positive exemption assertion
 - [ ] `/admin/groups` (+ roster), `/admin/schedules`, `/admin/levels/{id}/subjects/{subjectId}`, `/teacher/schedules`, Session page (§14.1)
 - [ ] Public calendar and public Educational Library — **same filters, same items, ordering only** for signed-in users (§5.2)
 

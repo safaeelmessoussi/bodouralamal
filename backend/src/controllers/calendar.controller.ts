@@ -6,7 +6,10 @@ import { AppError } from '../lib/errors.js';
 import {
   prefilledFilters,
   readCalendar,
+  readSessionPage,
   type CalendarActor,
+  type Occurrence,
+  type SessionPageContent,
 } from '../services/calendar.service.js';
 
 /**
@@ -91,36 +94,67 @@ export function read(prisma: PrismaClient) {
             teacher_id: prefilled.teacherId,
           }
         : null,
-      data: occurrences.map((o) => ({
-        kind: o.kind,
-        id: o.id,
-        title: o.title,
-        date: o.date,
-        start_time: o.startTime,
-        end_time: o.endTime,
-        visibility: o.visibility,
-        branch_id: o.branchId,
-        description: o.description,
-        recurrence: o.recurrence,
-        branch_name: o.branchName,
-        room_name: o.roomName,
-        category_id: o.categoryId,
-        category_name: o.categoryName,
-        level_id: o.levelId,
-        level_name: o.levelName,
-        subject_id: o.subjectId,
-        subject_name: o.subjectName,
-        teaching_mode: o.teachingMode,
-        audience_label: o.audienceLabel,
-        status: o.status,
-        instructors: o.instructors.map((instructor) => ({
-          id: instructor.id,
-          display_name: instructor.displayName,
-        })),
-        // §4.4 decorative overlay, admin offset applied server-side.
-        hijri_date: o.hijriDate,
-        hijri_month_ar: o.hijriMonthArabic,
-      })),
+      data: occurrences.map(occurrenceDto),
+    });
+  };
+}
+
+/** The wire shape of one occurrence — shared by the grid and the Session page. */
+function occurrenceDto(o: Occurrence): Record<string, unknown> {
+  return {
+    kind: o.kind,
+    id: o.id,
+    title: o.title,
+    date: o.date,
+    start_time: o.startTime,
+    end_time: o.endTime,
+    visibility: o.visibility,
+    branch_id: o.branchId,
+    description: o.description,
+    recurrence: o.recurrence,
+    branch_name: o.branchName,
+    room_name: o.roomName,
+    category_id: o.categoryId,
+    category_name: o.categoryName,
+    level_id: o.levelId,
+    level_name: o.levelName,
+    subject_id: o.subjectId,
+    subject_name: o.subjectName,
+    teaching_mode: o.teachingMode,
+    audience_label: o.audienceLabel,
+    status: o.status,
+    instructors: o.instructors.map((i) => ({ id: i.id, display_name: i.displayName })),
+    hijri_date: o.hijriDate,
+    hijri_month_ar: o.hijriMonthArabic,
+  };
+}
+
+const contentDto = (c: SessionPageContent): Record<string, unknown> => ({
+  id: c.id,
+  title: c.title,
+  subject_id: c.subjectId,
+  level_id: c.levelId,
+});
+
+/**
+ * `GET /calendar/sessions/{id}` (TD-3.4) — the §5.2 Session page.
+ *
+ * Public, at the caller's tier, and mounted beside `/calendar` for that reason.
+ * An unknown session and one whose schedule is deleted answer the same `404`.
+ */
+export function readSession(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const id = z.uuid().safeParse(req.params['id']);
+    if (!id.success) throw new AppError('VALIDATION_FAILED', 'id must be a uuid');
+
+    const page = await readSessionPage(prisma, calendarActor(req), id.data);
+    res.json({
+      // The occurrence exactly as the grid renders it — TD-3.4 says "the
+      // occurrence above, plus …", and one mapper serves both.
+      occurrence: occurrenceDto(page.occurrence),
+      notes: page.notes,
+      recordings: page.recordings.map(contentDto),
+      linked_content: page.linkedContent.map(contentDto),
     });
   };
 }

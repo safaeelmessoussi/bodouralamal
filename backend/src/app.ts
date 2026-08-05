@@ -100,6 +100,10 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
   // tier. It therefore mounts BEFORE the guarded router, with optional
   // authentication, and the service resolves the tier from the live actor.
   api.get('/calendar', optionalAuthenticate(config), calendar.read(prisma));
+  // TD-3.4: the §5.2 Session page. Public at the caller's tier, exactly like the
+  // grid it is opened from — an anonymous visitor sees a public session's
+  // details, never its private recordings.
+  api.get('/calendar/sessions/:id', optionalAuthenticate(config), calendar.readSession(prisma));
 
   // TD-3.9 (Revision 35): the §5.1 landing-page branch list. Public and
   // anonymous, and mounted BEFORE the guarded router for that reason. No

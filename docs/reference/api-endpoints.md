@@ -2,7 +2,7 @@
 
 # API endpoints
 
-**65 operations across 49 paths**, all under `/api/v1` except the health check.
+**66 operations across 50 paths**, all under `/api/v1` except the health check.
 The count comes from the generator, which reconciles against the live router — if this line
 disagrees with `openapi.json`, this line is the one that is wrong.
 
@@ -39,6 +39,7 @@ Three anonymous endpoints, each a deliberate decision about what may be public.
 | | Path | Returns |
 |---|---|---|
 | `GET` | `/calendar` | Occurrences at the caller's visibility tier. **Self-sufficient** — opening an event costs no further request. **Uncached** |
+| `GET` | `/calendar/sessions/{id}` | The §5.2 **Session page**: `{ occurrence, notes, recordings, linked_content }`. Public at the caller's tier — a public session's details, never its private recordings |
 | `GET` | `/calendar/bootstrap` | The calendar screen's reference data in one read. **Cached 5 min + strong ETag.** Reference data only — never operational data. `?category_id=` narrows **only** the Level list, server-side (§4.4); an unknown id yields an empty list rather than falling back to all |
 | `GET` | `/branches` | The landing-page branch directory: id, name, address, phone, email, opening hours, map link, display order. **Never** version, operational start date, or timestamps |
 
@@ -76,6 +77,33 @@ conflate them. **A value is prefilled only when it is unambiguous:** a student e
 three Levels has no single "own Level", and picking one would open their calendar on a third of
 their own timetable while looking like it showed all of it. **Plural yields `null`, never
 *first*.**
+
+### The Session page
+
+`GET /calendar/sessions/{id}` returns `{ occurrence, notes, recordings, linked_content }`.
+
+**The `occurrence` is byte-identical to the grid's.** TD-3.4 says *the occurrence above,
+plus …*, so one `include` and one mapper serve both — two that agree today are two that drift,
+and a test asserts they match field for field.
+
+**`recordings` and `linked_content` are disjoint, and the split is a fact about the file.**
+§4.9's recording resources are exactly the **audio** items among the linked content, since
+teachers upload phone recordings and video is excluded from the MVP entirely. Deriving it
+avoids a second column that would have to be kept in step with reality.
+
+**Both lists pass the same §4.9 tier rule the library applies** — literally the same predicate,
+exported rather than restated, so a change to the tiers cannot reach one surface without the
+other. BR-2's `consent_forced_private` exclusion holds here too. Each item is exactly `id`,
+`title`, `subject_id`, `level_id`: enough to open it **inside the Educational Library** (§5.2 —
+one reader, one permission path), and deliberately not the object location, which only
+`GET /content/{id}/download-url` hands out after its own check.
+
+**`notes` is always `null`, and the key ships on purpose.** TD-3.4 names it and §5.2 lists notes
+on the page, but **§7 gives `Session` no notes column and defines no note entity** —
+`User.notes` is a different field on a different model. Adding one is a §7 schema decision and
+therefore the Document Owner's, the same class as the deferred `EducationalContent` uploader
+field. Shipping the key null lets a client coded against TD-3.4 find the field where the
+specification says it is, and keeps the gap **visible rather than silent**.
 
 ## Registration and approvals
 

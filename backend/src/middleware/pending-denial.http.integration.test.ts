@@ -122,6 +122,11 @@ const EXEMPT = new Set([
   '/branches',
   // Revision 36 (TD-3.10): the calendar screen's reference data, anonymous.
   '/calendar/bootstrap',
+  // TD-3.4 (Revision 43): the §5.2 Session page is PUBLIC at the caller's tier,
+  // exactly like the calendar grid it is opened from. A Pending account sees a
+  // public session's existence and details, and never its private recordings —
+  // which is the tier doing the work, not the guard.
+  '/calendar/sessions/{id}',
   // TD-3.13 (Revision 43): the Educational Library is PUBLIC (§5.2). A Pending
   // account sees the public tier exactly as an anonymous visitor does, for the
   // same reason the calendar does — the account exists and grants nothing
@@ -213,6 +218,16 @@ describe('TD-1 — the two exceptions a Pending session DOES reach', () => {
   it('logout is reachable, because a pending user must be able to leave', async () => {
     const res = await call('POST', '/auth/logout', pendingToken);
     expect(res.status).toBe(204);
+  });
+});
+
+describe('TD-3.4 — the Session page is public at the caller’s tier', () => {
+  it('serves a Pending account, which then sees the public tier only', async () => {
+    // A 404 here would be the SESSION not existing, not the account being
+    // refused — the point is that it is not a 401/403.
+    const res = await call('GET', '/calendar/sessions/00000000-0000-4000-8000-000000000000', pendingToken);
+    expect(res.status).toBe(404);
+    expect(res.body.error?.code).toBe('NOT_FOUND');
   });
 });
 
