@@ -14,6 +14,10 @@ import { Button } from '../../components/ui/button.js';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
 import { DataTable, type Column, type RowAction, type TableStatus } from '../../components/ui/data-table.js';
 import { Dialog } from '../../components/ui/dialog.js';
+import {
+  RecurrenceEditor,
+  SchedulingTimes,
+} from '../../components/scheduling/recurrence-editor.js';
 import { DateField, SelectField, TextArea, TextField } from '../../components/ui/field.js';
 import { useSession } from '../../contexts/session.js';
 import { t } from '../../i18n/index.js';
@@ -390,13 +394,25 @@ function EventFormDialog({
             }))}
             hint={t('admin.calendar.visibilityHint')}
           />
-          <SelectField
-            label={t('admin.calendar.colRecurrence')}
-            value={form.recurrence}
-            onChange={(v) => set('recurrence')(v as EventRecurrence)}
-            options={RECURRENCES.map((r) => ({ value: r, label: t(`calendar.recurrence.${r}`) }))}
-          />
         </div>
+        {/* The SHARED control (§4.4). An administrator who edits a class next
+            sees the same field, in the same place, with the same words — which
+            is the objective; the fields inside differ because the two models
+            genuinely differ. */}
+        <RecurrenceEditor
+          value={{
+            variant: 'anchored',
+            type: form.recurrence,
+            endDate: form.recurrenceEnd,
+          }}
+          onChange={(next) =>
+            setForm((f) => ({
+              ...f,
+              recurrence: next.type as EventRecurrence,
+              recurrenceEnd: next.variant === 'anchored' ? next.endDate : f.recurrenceEnd,
+            }))
+          }
+        />
         <div className="form__row">
           <DateField
             label={t('admin.calendar.startDate')}
@@ -411,27 +427,13 @@ function EventFormDialog({
             hint={t('admin.calendar.endDateHint')}
           />
         </div>
-        <div className="form__row">
-          <TextField
-            label={t('admin.calendar.startTime')}
-            value={form.startTime}
-            onChange={set('startTime')}
-            hint={t('admin.calendar.timeHint')}
-          />
-          <TextField
-            label={t('admin.calendar.endTime')}
-            value={form.endTime}
-            onChange={set('endTime')}
-          />
-        </div>
-        {form.recurrence !== 'none' ? (
-          <DateField
-            label={t('admin.calendar.recurrenceEnd')}
-            value={form.recurrenceEnd}
-            onChange={set('recurrenceEnd')}
-            hint={t('admin.calendar.recurrenceEndHint')}
-          />
-        ) : null}
+        {/* Shared, and identical on both screens. */}
+        <SchedulingTimes
+          startTime={form.startTime}
+          endTime={form.endTime}
+          onStart={set('startTime')}
+          onEnd={set('endTime')}
+        />
 
         {event ? (
           // Not offered, and the reason is stated: the server refuses scope on

@@ -25,6 +25,10 @@ import {
 } from '../../adapters/reference-data.js';
 import { searchUsers, type UserSummary } from '../../adapters/users.js';
 import { Button } from '../../components/ui/button.js';
+import {
+  RecurrenceEditor,
+  SchedulingTimes,
+} from '../../components/scheduling/recurrence-editor.js';
 import { TextField } from '../../components/ui/field.js';
 import { ApiError } from '../../lib/api.js';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
@@ -286,16 +290,10 @@ export function SchedulesPage(): ReactNode {
 }
 
 const MODES = ['entire_level', 'administrative_group', 'teaching_group'] as const;
-const RECURRENCES = ['weekly', 'multiple_weekdays', 'biweekly_alternating', 'none'] as const;
-const WEEKDAYS = [
-  'monday',
-  'tuesday',
-  'wednesday',
-  'thursday',
-  'friday',
-  'saturday',
-  'sunday',
-] as const;
+// The recurrence vocabulary and the weekday list moved to
+// `components/scheduling/recurrence-editor.tsx`, which both scheduling screens
+// now render — one implementation, one look, and one place a new pattern is
+// added.
 
 /**
  * Create and edit a schedule.
@@ -523,37 +521,20 @@ function ScheduleDialog({
       {/* Typed as text, not `type="time"`: TD-11 wall-clock values travel as
           `HH:MM` strings, and a native time input in some locales hands back a
           12-hour rendering. The server validates the format regardless. */}
-      <TextField label={t('admin.schedules.start')} value={start} onChange={setStart} required />
-      <TextField label={t('admin.schedules.end')} value={end} onChange={setEnd} required />
+      {/* **The SAME components the events form uses** (§4.4). The two models
+          differ — an Event is anchored on its start date, a class happens *on
+          Tuesdays* — so the fields differ; the control, its labels and its
+          ordering do not. That is what makes the two screens feel like one
+          product rather than two. */}
+      <SchedulingTimes startTime={start} endTime={end} onStart={setStart} onEnd={setEnd} />
 
-      <label>
-        <span>{t('admin.schedules.recurrence')}</span>
-        <select value={recurrence} onChange={(e) => setRecurrence(e.target.value)}>
-          {RECURRENCES.map((r) => (
-            <option key={r} value={r}>
-              {t(`admin.schedules.recurrence_${r}`)}
-            </option>
-          ))}
-        </select>
-      </label>
-
-      <fieldset>
-        <legend>{t('admin.schedules.weekdays')}</legend>
-        {WEEKDAYS.map((d) => (
-          <label key={d}>
-            <input
-              type="checkbox"
-              checked={weekdays.includes(d)}
-              onChange={(e) =>
-                setWeekdays((current) =>
-                  e.target.checked ? [...current, d] : current.filter((x) => x !== d),
-                )
-              }
-            />
-            <span>{t(`admin.schedules.day_${d}`)}</span>
-          </label>
-        ))}
-      </fieldset>
+      <RecurrenceEditor
+        value={{ variant: 'weekday_set', type: recurrence, weekdays }}
+        onChange={(next) => {
+          setRecurrence(next.type);
+          if (next.variant === 'weekday_set') setWeekdays(next.weekdays);
+        }}
+      />
 
       {!fixed ? (
         <label>
