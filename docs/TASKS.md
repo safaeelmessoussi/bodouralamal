@@ -134,6 +134,7 @@
   - ✓ Dashboard is a **launcher, not a statistics screen** — §5.6's counts have no endpoint, and inventing a number would be worse than omitting one
   - ✓ Tests — 15 registry tests (106 frontend total)
   - △ **6 of 11 modules ready** (dashboard, groups, users, approvals, calendar, branches, Hijri calendar); **5 blocked** on endpoints that do not exist: levels, taxonomy, content (M6), settings
+  - ✓ **Superseded 2026-08-05:** schedules, settings, Hijri (M3b-24/R42), and **levels + taxonomy (M3b-29)** are now `ready`. Still blocked: users, calendar, content
   - ✓ **Module 2 — Branches (`/admin/branches`)**: list, create, edit, delete, search, TD-10 pagination. **Writing is Super Admin only** (R26) and the controls are hidden for an Admin, who reads this screen because Group management depends on it — the server enforces the matrix regardless. TD-15 optimistic locking with a named conflict message that reloads rather than overwriting; TD-5's "deletion prohibited while rooms or groups reference it" surfaced as its own reason rather than a generic failure
   - ✓ ~~**Finding — `GET /admin/branches` returns raw Prisma rows**~~ **RESOLVED by SRS Revision 38**: the endpoint now returns an explicit contract DTO and the adapter lost its wire types and its date converter. *Adapters adapt contracts to UI models; they do not repair inconsistent contracts* — the repair had left the contract wrong for the next client and hidden that it was wrong from everyone
   - ✓ **Module 3 — Approvals (`/admin/approvals`, طلبات الانضمام)**: both item types, server-side Type filter, TD-10 pagination, approve (atomic, no reason) and reject (reason required, TD-9 500). Reports `records_updated` — what actually changed, not what was requested; a 404/409 reads as *someone else decided first* and reloads. **Configuration of the framework, not a new one** — `DataTable` and the field primitives were unedited
@@ -244,8 +245,8 @@
 
 > **Carry-over from Revision 26 (recorded in the pre-M3 sweep):** Levels, Categories, Subjects, AcademicYear and
 > SystemSettings are **reference/configuration data — writes are Super Admin only, reads are Admin (branch-scoped)**.
-> None of them has an endpoint yet, so the rule is currently unenforced for want of a surface; it must be applied when
-> `/admin/levels` and `/admin/taxonomy` are built here.
+> **Applied 2026-08-05 (M3b-29):** `/admin/levels` and `/admin/taxonomy` are built and enforce exactly this — Admin
+> reads, Super Admin writes, Teachers refused. SystemSettings did the same in R42; AcademicYear remains read-only.
 > **Resolved by Revision 30:** Teachers are `⊘` for reading reference data. They receive branch, room, level and
 > subject information only through the operational APIs they are authorised to use, never by browsing reference-data
 > endpoints. The implementation already behaved this way and is unchanged.
@@ -534,7 +535,14 @@
   - `PUT` revives a removed assignment rather than duplicating it — one row, so *is this Subject taught here* has one answer
   - Removal refused while Teaching Groups exist: members would otherwise hold seats in a subject the Level does not offer
   - 5 new HTTP tests including the end-to-end assertion that a teaching group can now be created
-- [ ] **Admin portal completion** (Owner priority, 2026-08-05): Level CRUD · Category CRUD · Subject CRUD · user management · Room CRUD · registration-request workflow
+- [x] **Curriculum taxonomy CRUD** — Categories, Subjects and Levels (§5.6, §14.1; drafted as `SRS-PROPOSAL-R47.md`)
+  - **The audit came first and most of it said *reuse*:** Branches & Rooms, Subject Organisation and the Level↔Subject assignment all had complete backends and needed frontend only. `createLevel` already implemented TD-4.6b **with no route to reach it**
+  - `GET /admin/subjects` gained `version` so the editor could reuse the selector — **one list, not two reads of one table**; this narrows R46's wording, whose premise was that the endpoint had no write
+  - **Deleting a Level cascades its Administrative Groups** — the inverse of TD-4.6b, and a rule the SRS did not have: every Level owns at least one group by construction, so a guard counting them would make deletion unreachable. The audit row names the cascaded ids
+  - A Category **never** cascades its Levels — those carry people's records
+  - `PATCH /admin/levels/{id}` **refuses** `category_id` (the one `.strict()` schema here): dropping it silently would let a client believe a move succeeded
+  - `/admin/levels`, `/admin/taxonomy` and the new `/admin/levels/{id}/subjects` screen are live; the contract-derived Pending-denial suite grew by 11, one per operation
+- [ ] **Admin portal completion** (Owner priority, 2026-08-05) — remaining: user management (edit · suspend · role/branch-scope assignment) · Room CRUD frontend · staff registration-request workflow
 - [ ] Public Educational Library frontend — **same filters, same items, ordering only** for signed-in users (§5.2)
   - Note: the public calendar's *screen* filters (branch · category · level) stay identical for everyone and are compliant. Adding TD-3.4's `subject_id`/`teacher_id`/`academic_year_id` to a **public** screen would need public reference lists that do not exist — `/admin/subjects` is Admin-only by design
 

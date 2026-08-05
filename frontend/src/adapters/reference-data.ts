@@ -16,6 +16,12 @@ export interface SubjectRef {
   id: string;
   name: string;
   display_order: number | null;
+  /**
+   * TD-15 — and the reason there is only one Subject list. The الفئات والمواد
+   * editor sends it back on an edit; a selector ignores it. Publishing it here
+   * is what let that screen reuse this endpoint instead of a parallel read.
+   */
+  version: number;
 }
 
 export interface AcademicYearRef {

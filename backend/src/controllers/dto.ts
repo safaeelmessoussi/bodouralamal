@@ -725,23 +725,173 @@ export interface SubjectRefDto {
   id: string;
   name: string;
   display_order: number | null;
+  /** TD-15 — see the note below on why this one field is present. */
+  version: number;
 }
 
 /**
- * Deliberately **absent**: `version`, `created_at`, `updated_at`, `deleted_at`,
+ * Deliberately **absent**: `created_at`, `updated_at`, `deleted_at`,
  * `deleted_by`.
  *
  * A selector needs an id, a label and what it sorts by. A reference list is
- * exactly where *"just return the row"* is most tempting and least noticed —
- * the endpoint has no write, so a `version` here would be a field with no
- * possible use and one more thing a client could come to depend on.
+ * exactly where *"just return the row"* is most tempting and least noticed.
+ *
+ * **`version` is the one addition, and it is what avoided a second list.** When
+ * Subject gained create/edit/delete, the الفئات والمواد screen needed the TD-15
+ * version to send back on an edit. Publishing it here let that screen reuse this
+ * endpoint; the alternative was a parallel `GET` over the same table with a
+ * wider projection — two reads of one concept, kept in step by hand.
  */
 export function subjectRefDto(row: {
   id: string;
   name: string;
   displayOrder: number | null;
+  version: number;
 }): SubjectRefDto {
-  return { id: row.id, name: row.name, display_order: row.displayOrder };
+  return { id: row.id, name: row.name, display_order: row.displayOrder, version: row.version };
+}
+
+/* ── Curriculum taxonomy (§5.6 Categories & Subjects, §14.1) ─────────────── */
+
+export interface CategoryDto {
+  id: string;
+  name: string;
+  display_order: number | null;
+  /** Live Levels in this Category — what says whether deleting it is possible
+   *  at all, without a request per row. */
+  level_count: number;
+  version: number;
+}
+
+export function categoryDto(row: {
+  id: string;
+  name: string;
+  displayOrder: number | null;
+  levelCount: number;
+  version: number;
+}): CategoryDto {
+  return {
+    id: row.id,
+    name: row.name,
+    display_order: row.displayOrder,
+    level_count: row.levelCount,
+    version: row.version,
+  };
+}
+
+/**
+ * A Level's own fields — the shape a write answers with.
+ *
+ * Split from the list projection below on purpose: a create or an edit knows the
+ * Level, and **counting its groups and enrolments to answer it would be
+ * inventing work the caller did not ask for**. The list is where those counts
+ * earn their query.
+ */
+export interface LevelCoreDto {
+  id: string;
+  name: string;
+  category_id: string;
+  /** §4.4b / Revision 27 — `any | girls_only | boys_only`. */
+  gender_restriction: string;
+  display_order: number | null;
+  version: number;
+}
+
+export function levelCoreDto(row: {
+  id: string;
+  name: string;
+  categoryId: string;
+  genderRestriction: string;
+  displayOrder: number | null;
+  version: number;
+}): LevelCoreDto {
+  return {
+    id: row.id,
+    name: row.name,
+    category_id: row.categoryId,
+    gender_restriction: row.genderRestriction,
+    display_order: row.displayOrder,
+    version: row.version,
+  };
+}
+
+/**
+ * A Level as the back office lists it.
+ *
+ * `category_name` travels because a Levels screen groups by Category, and
+ * resolving 21 names client-side from a second list is how two lists get out of
+ * step. It is a **label**, never an identifier: `category_id` is the identifier.
+ */
+export interface LevelDto extends LevelCoreDto {
+  category_name: string;
+  group_count: number;
+  subject_count: number;
+  enrollment_count: number;
+}
+
+/**
+ * Written out field by field rather than spread over `levelCoreDto` — the
+ * §16.2 (Revision 38) rule is *build the object field by field*, and a spread
+ * of a DTO is indistinguishable from a spread of a database row at the point
+ * where it matters. The guard is blunt on purpose and the honest response is to
+ * satisfy it, not to exempt it.
+ */
+export function levelDto(row: {
+  id: string;
+  name: string;
+  categoryId: string;
+  categoryName: string;
+  genderRestriction: string;
+  displayOrder: number | null;
+  groupCount: number;
+  subjectCount: number;
+  enrollmentCount: number;
+  version: number;
+}): LevelDto {
+  return {
+    id: row.id,
+    name: row.name,
+    category_id: row.categoryId,
+    category_name: row.categoryName,
+    gender_restriction: row.genderRestriction,
+    display_order: row.displayOrder,
+    group_count: row.groupCount,
+    subject_count: row.subjectCount,
+    enrollment_count: row.enrollmentCount,
+    version: row.version,
+  };
+}
+
+/**
+ * `POST /admin/levels` — the Level **and** the المجموعة 1 created with it
+ * (TD-4.6b). The group is reported rather than left implicit: it was created by
+ * this request, at a branch the caller named, and a client that never sees it
+ * cannot tell an administrator where their new Level's first group went.
+ */
+export interface CreatedLevelDto extends LevelCoreDto {
+  first_group: { id: string; name: string; branch_id: string };
+}
+
+export function createdLevelDto(
+  level: {
+    id: string;
+    name: string;
+    categoryId: string;
+    genderRestriction: string;
+    displayOrder: number | null;
+    version: number;
+  },
+  firstGroup: { id: string; name: string; branchId: string },
+): CreatedLevelDto {
+  return {
+    id: level.id,
+    name: level.name,
+    category_id: level.categoryId,
+    gender_restriction: level.genderRestriction,
+    display_order: level.displayOrder,
+    version: level.version,
+    first_group: { id: firstGroup.id, name: firstGroup.name, branch_id: firstGroup.branchId },
+  };
 }
 
 export interface AcademicYearRefDto {

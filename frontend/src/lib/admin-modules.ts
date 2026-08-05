@@ -93,16 +93,14 @@ export const ADMIN_MODULES: readonly AdminModule[] = [
     labelKey: 'admin.nav.levels',
     section: 'academic',
     roles: STAFF,
-    status: 'blocked',
-    blockedReasonKey: 'admin.blocked.levels',
+    status: 'ready',
   },
   {
     path: '/admin/taxonomy',
     labelKey: 'admin.nav.taxonomy',
     section: 'academic',
     roles: STAFF,
-    status: 'blocked',
-    blockedReasonKey: 'admin.blocked.taxonomy',
+    status: 'ready',
   },
 
   // ── People ────────────────────────────────────────────────────────────────

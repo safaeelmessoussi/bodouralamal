@@ -19,6 +19,7 @@ import * as courseSchedules from './controllers/course-schedule.controller.js';
 import * as sessionsCtl from './controllers/session.controller.js';
 import * as libraryCtl from './controllers/library.controller.js';
 import * as referenceData from './controllers/reference-data.controller.js';
+import * as taxonomy from './controllers/taxonomy.controller.js';
 import { createRegistration } from './controllers/registration.controller.js';
 import { healthController } from './controllers/health.controller.js';
 import type { PrismaClient } from './generated/prisma/client.js';
@@ -224,6 +225,23 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
     '/admin/levels/:levelId/subjects/:subjectId',
     referenceData.unassignSubject(prisma),
   );
+
+  // Curriculum taxonomy CRUD (§5.6 "Categories & Subjects" + "Levels", §14.1).
+  // Admin reads, Super Admin writes (TD-2 R26) — enforced in the services, never
+  // by the URL prefix. `POST /admin/levels` is TD-4.6b: it creates المجموعة 1 in
+  // the same transaction, which is why it takes a `branch_id` the Level itself
+  // does not store.
+  guarded.get('/admin/categories', taxonomy.categories(prisma));
+  guarded.post('/admin/categories', taxonomy.createCategoryHandler(prisma));
+  guarded.patch('/admin/categories/:id', taxonomy.updateCategoryHandler(prisma));
+  guarded.delete('/admin/categories/:id', taxonomy.deleteCategoryHandler(prisma));
+  guarded.post('/admin/subjects', taxonomy.createSubjectHandler(prisma));
+  guarded.patch('/admin/subjects/:id', taxonomy.updateSubjectHandler(prisma));
+  guarded.delete('/admin/subjects/:id', taxonomy.deleteSubjectHandler(prisma));
+  guarded.get('/admin/levels', taxonomy.levels(prisma));
+  guarded.post('/admin/levels', taxonomy.createLevelHandler(prisma));
+  guarded.patch('/admin/levels/:id', taxonomy.updateLevelHandler(prisma));
+  guarded.delete('/admin/levels/:id', taxonomy.deleteLevelHandler(prisma));
 
   guarded.get('/admin/course-schedules', courseSchedules.list(prisma));
   guarded.post('/admin/course-schedules', courseSchedules.create(prisma));

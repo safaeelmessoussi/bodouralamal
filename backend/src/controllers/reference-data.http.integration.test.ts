@@ -96,20 +96,28 @@ afterAll(async () => {
 });
 
 describe('GET /admin/subjects', () => {
-  it('returns exactly the three selector fields', async () => {
+  it('returns exactly the four selector fields', async () => {
     const res = await call('/admin/subjects', superAdmin);
     expect(res.status).toBe(200);
     const row = res.body.data!.find((r) => r.id === subjectId)!;
-    expect(Object.keys(row).sort()).toEqual(['display_order', 'id', 'name']);
+    expect(Object.keys(row).sort()).toEqual(['display_order', 'id', 'name', 'version']);
   });
 
-  it('carries nothing a read-only list has no use for', async () => {
+  it('carries `version`, which is what stopped a second Subject list existing', async () => {
+    // When Subject gained create/edit/delete, the الفئات والمواد screen needed
+    // the TD-15 version to send back on an edit. Publishing it on THIS list let
+    // that screen reuse this endpoint; the alternative was a parallel GET over
+    // the same table with a wider projection — two reads of one concept, kept
+    // in step by hand.
+    const res = await call('/admin/subjects', superAdmin);
+    for (const row of res.body.data!) expect(typeof row.version).toBe('number');
+  });
+
+  it('carries nothing a list has no use for', async () => {
     // A reference list is exactly where "just return the row" is most tempting.
-    // The endpoint has no write, so a `version` would be a field with no
-    // possible use and one more thing a client could come to depend on.
     const res = await call('/admin/subjects', superAdmin);
     for (const row of res.body.data!) {
-      for (const absent of ['version', 'created_at', 'updated_at', 'deleted_at', 'deleted_by']) {
+      for (const absent of ['created_at', 'updated_at', 'deleted_at', 'deleted_by']) {
         expect(row).not.toHaveProperty(absent);
       }
     }

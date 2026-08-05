@@ -98,6 +98,27 @@ GET /admin/levels/{levelId}/subjects          # TD-3 extension 2026-08-05; §4.4
 PUT /admin/levels/{levelId}/subjects/{subjectId}     # TD-3 extension; Super Admin (R26, R43.3); idempotent
 DELETE /admin/levels/{levelId}/subjects/{subjectId}  # TD-3 extension; TD-5; refused while Teaching Groups exist
 
+# ── Curriculum taxonomy CRUD (Revision 21 pattern: documented by the §5.6
+#    screen and the §14.2 screen standard, exactly as Branches & Rooms are).
+#    §5.6 names the back-office screens "Levels" and "Categories & Subjects";
+#    §14.1 lists مستويات and الفئات والمواد as navigation nodes. A screen the SRS
+#    mandates cannot be built without the endpoints its own standard requires,
+#    so these are documented rather than invented — the same reasoning that
+#    admitted the Branch and Room routes above.
+#    Read: Admin+ (TD-2 R26). Write: Super Admin (TD-2 R26). SRS wording is
+#    drafted in docs/SRS-PROPOSAL-R47.md and awaits the Document Owner.
+GET /admin/categories                         # §5.6 "Categories & Subjects", §14.2 screen standard
+POST /admin/categories                        # §5.6; Super Admin only (reference data, TD-2 R26)
+PATCH /admin/categories/{id}                  # §5.6; TD-15 optimistic locking
+DELETE /admin/categories/{id}                 # §5.6; TD-5, refused while Levels reference it
+POST /admin/subjects                          # §5.6 "Categories & Subjects"; Super Admin (TD-2 R26)
+PATCH /admin/subjects/{id}                    # §5.6; TD-15
+DELETE /admin/subjects/{id}                   # §5.6; TD-5, refused while anything still teaches it
+GET /admin/levels                             # §5.6 "Levels", §14.1 مستويات; Admin+ read (TD-2 R26)
+POST /admin/levels                            # §5.6; Super Admin; TD-4.6b — Level + المجموعة 1 atomically
+PATCH /admin/levels/{id}                      # §5.6; TD-15; category_id deliberately not editable
+DELETE /admin/levels/{id}                     # §5.6; TD-5; cascades its own empty groups (TD-4.6b inverse)
+
 # ── Educational organisation & delivery (TD-3.12, Revision 43)
 #    These REPLACE the nine /admin/groups routes of the retired model, which the
 #    Revision 43 contract phase removed from the router and which lingered here

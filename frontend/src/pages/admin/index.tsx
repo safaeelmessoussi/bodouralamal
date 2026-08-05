@@ -10,9 +10,12 @@ import { ApprovalsPage } from './approvals.js';
 import { BranchesPage } from './branches.js';
 import { GroupsPage } from './groups.js';
 import { HijriCalendarPage } from './hijri-calendar.js';
+import { LevelSubjectsPage } from './level-subjects.js';
+import { LevelsPage } from './levels.js';
 import { SchedulesPage } from './schedules.js';
 import { SettingsPage } from './settings.js';
 import { SubjectOrganisationPage } from './subject-organisation.js';
+import { TaxonomyPage } from './taxonomy.js';
 
 /**
  * Back-office routing and the module screens that are not yet implemented.
@@ -40,28 +43,37 @@ export const IMPLEMENTED_ADMIN_PATHS: readonly string[] = [
   '/admin/approvals',
   '/admin/schedules',
   '/admin/groups',
+  '/admin/levels',
+  '/admin/taxonomy',
   '/superadmin/hijri-calendar',
   '/superadmin/settings',
 ];
 
 /**
- * `/admin/levels/{levelId}/subjects/{subjectId?}` — §14.1's Subject Organisation
- * node.
+ * The two views the Levels module owns beneath its own path.
  *
- * Matched by pattern rather than by a registry entry, because the path carries
- * ids: nothing can link to it from a menu, so it is not a *navigation* node. It
- * is one of the internal views a module owns — the same relationship
- * `/admin/groups/{id}/roster` has to its module — and it is checked before the
- * registry so it is not swallowed by the Levels module's `blocked` status,
- * whose own screen (Level CRUD) has no endpoints and is a different thing.
+ * Matched by pattern rather than by registry entries, because the paths carry
+ * ids: nothing can link to them from a menu, so they are not *navigation* nodes.
+ * They are internal views a module owns — the same relationship
+ * `/admin/groups/{id}/roster` has to its module.
+ *
+ * **The two are different questions and get different screens.** Without a
+ * subject id: *which Subjects does this Level teach* (§4.4b — the assignment
+ * whose absence made every teaching group fail with `SUBJECT_NOT_IN_LEVEL`).
+ * With one: §14.1's Subject Organisation node — *how is that Subject split, and
+ * who is unplaced* (§4.4c, BR-22). Collapsing them into one screen would put an
+ * alarm about unplaced students behind a dropdown.
  */
 const SUBJECT_ORG = /^\/admin\/levels\/([^/]+)\/subjects(?:\/([^/]+))?\/?$/;
 
 export function AdminRouter(): ReactNode {
   const subjectOrg = SUBJECT_ORG.exec(window.location.pathname);
   if (subjectOrg) {
-    return (
-      <SubjectOrganisationPage levelId={subjectOrg[1]!} subjectId={subjectOrg[2] ?? null} />
+    const subjectId = subjectOrg[2];
+    return subjectId === undefined ? (
+      <LevelSubjectsPage levelId={subjectOrg[1]!} />
+    ) : (
+      <SubjectOrganisationPage levelId={subjectOrg[1]!} subjectId={subjectId} />
     );
   }
 
@@ -89,6 +101,10 @@ export function AdminRouter(): ReactNode {
       return <SchedulesPage />;
     case '/admin/groups':
       return <GroupsPage />;
+    case '/admin/levels':
+      return <LevelsPage />;
+    case '/admin/taxonomy':
+      return <TaxonomyPage />;
     case '/superadmin/hijri-calendar':
       return <HijriCalendarPage />;
     case '/superadmin/settings':

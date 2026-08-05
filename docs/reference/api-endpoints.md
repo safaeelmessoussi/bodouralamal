@@ -2,7 +2,7 @@
 
 # API endpoints
 
-**66 operations across 50 paths**, all under `/api/v1` except the health check.
+**82 operations across 59 paths**, all under `/api/v1` except the health check.
 The count comes from the generator, which reconciles against the live router — if this line
 disagrees with `openapi.json`, this line is the one that is wrong.
 
@@ -136,6 +136,41 @@ they receive reference information through the operational APIs they are authori
 | `GET` `POST` | `/admin/branches/{id}/rooms` | 👤 write · 🔒 read |
 | `PATCH` `DELETE` | `/admin/rooms/{id}` | 👤 |
 
+### Curriculum taxonomy — Categories, Subjects, Levels
+
+Documented by the §5.6 screens and the §14.2 screen standard, exactly as Branches and Rooms
+are (the Revision 21 pattern). SRS wording is drafted in
+[SRS-PROPOSAL-R47](../SRS-PROPOSAL-R47.md).
+
+| | Path | Audience |
+|---|---|---|
+| `GET` `POST` | `/admin/categories` | 👤 write · 🔒 read |
+| `PATCH` `DELETE` | `/admin/categories/{id}` | 👤 |
+| `POST` | `/admin/subjects` | 👤 (the `GET` is the selector below) |
+| `PATCH` `DELETE` | `/admin/subjects/{id}` | 👤 |
+| `GET` `POST` | `/admin/levels` | 👤 write · 🔒 read |
+| `PATCH` `DELETE` | `/admin/levels/{id}` | 👤 |
+
+**`POST /admin/levels` creates the Level *and* its first Administrative Group** (TD-4.6b) in
+one transaction, which is why it takes a `branch_id` the Level itself never stores: a Level
+with no group is a Level nobody can be admitted to, so that state never exists rather than
+existing until something fills it in. A `branch_id` **column** would instead make a Level
+branch-local and break `entire_level` teaching mode (§4.4c).
+
+**`DELETE /admin/levels/{id}` is the inverse and takes those groups with it.** Every Level owns
+at least one group by construction, so a guard that counted groups would make deletion
+unreachable; the enrolment, schedule and grade guards have already established the groups are
+empty, and the audit row names the cascaded ids.
+
+**`PATCH /admin/levels/{id}` refuses `category_id` rather than ignoring it.** A move would
+re-file every enrolled student into a different educational stage, and §2.2 scopes
+`display_order` *within* the Category. Dropping the key silently would let a client believe the
+move succeeded.
+
+**Deleting a Category never cascades its Levels** — a Level carries enrolments, groups and
+schedules, and cascading would delete a live curriculum from a control labelled *delete
+category*.
+
 ## Reference-data selectors
 
 **TD-3 extension, Document Owner decision 2026-08-05.** `POST /admin/course-schedules`
@@ -144,7 +179,7 @@ requires `subject_id` and `academic_year_id`, and nothing in TD-3 could list eit
 
 | | Path | Returns |
 |---|---|---|
-| `GET` | `/admin/subjects` | `id`, `name`, `display_order` |
+| `GET` | `/admin/subjects` | `id`, `name`, `display_order`, `version` |
 | `GET` | `/admin/academic-years` | `id`, `label`, `is_current` |
 | `GET` | `/admin/levels/{levelId}/subjects` | Which Subjects a Level teaches (§4.4b) |
 | `PUT` `DELETE` | `/admin/levels/{levelId}/subjects/{subjectId}` | 👤 Assign / remove. `PUT` is idempotent in effect; removal is refused while Teaching Groups exist |

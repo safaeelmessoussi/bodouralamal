@@ -6,9 +6,11 @@ import {
   assignSubjectToLevel,
   listAcademicYears,
   listLevelSubjects,
-  listSubjects,
   unassignSubjectFromLevel,
 } from '../services/reference-data.service.js';
+// Subject's home is the taxonomy service — this endpoint is its selector
+// projection, not a second source for it.
+import { listSubjects } from '../services/taxonomy.service.js';
 import { academicYearRefDto, subjectRefDto } from './dto.js';
 import { idParam } from './parse.js';
 

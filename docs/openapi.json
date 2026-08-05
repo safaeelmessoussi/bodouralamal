@@ -2767,8 +2767,8 @@
     },
     "/admin/subjects": {
       "get": {
-        "summary": "List subjects (selector)",
-        "description": "**TD-3 extension, Document Owner decision 2026-08-05.** `POST /admin/course-schedules` requires `subject_id` and nothing in TD-3 could list Subjects, so the §5.6 schedule form was unbuildable. Authorised explicitly rather than assumed — and this is the **canonical source for every admin selector needing a Subject**: a screen that needs one reads this rather than growing its own list. Two alternatives were rejected: widening `/calendar/bootstrap`, whose contract is *the calendar screen's* reference data and which would then be shaped by an unrelated screen, and a screen-specific payload, which is how a second source of truth for one concept starts. **Read-only** — Subjects are seeded and managed outside this surface. **Admin or Super Admin** (TD-2 R26: Admins read reference data); **Teachers are excluded** (R30 — reference data is an administrative concern, and a teacher receives subject information through the operational APIs they are authorised to use). **Unpaginated, deliberately:** a selector offering a subset is lying about the choice available, and the set is bounded by the curriculum, which is the condition that makes TD-10 the wrong tool. Ordered by `display_order` then the natively `ar-x-icu` collated name (BR-19, §20 rule 13). **Exactly `id`, `name`, `display_order`** — no `version`, no timestamps: the endpoint has no write, so a version would be a field with no possible use and one more thing a client could come to depend on.",
+        "summary": "List subjects (selector and taxonomy list)",
+        "description": "**TD-3 extension, Document Owner decision 2026-08-05.** `POST /admin/course-schedules` requires `subject_id` and nothing in TD-3 could list Subjects, so the §5.6 schedule form was unbuildable. Authorised explicitly rather than assumed — and this is the **canonical source for every admin selector needing a Subject**: a screen that needs one reads this rather than growing its own list. Two alternatives were rejected: widening `/calendar/bootstrap`, whose contract is *the calendar screen's* reference data and which would then be shaped by an unrelated screen, and a screen-specific payload, which is how a second source of truth for one concept starts. **Admin or Super Admin** (TD-2 R26: Admins read reference data); **Teachers are excluded** (R30 — reference data is an administrative concern, and a teacher receives subject information through the operational APIs they are authorised to use). **Unpaginated, deliberately:** a selector offering a subset is lying about the choice available, and the set is bounded by the curriculum, which is the condition that makes TD-10 the wrong tool. Ordered by `display_order` then the natively `ar-x-icu` collated name (BR-19, §20 rule 13). **Exactly `id`, `name`, `display_order`, `version`** — no timestamps. **`version` is present and is what stopped a second Subject list existing:** when Subject gained create/edit/delete, the §5.6 الفئات والمواد screen needed the TD-15 version to send back on an edit, and publishing it here let that screen reuse this endpoint instead of a parallel `GET` over the same table kept in step by hand.",
         "responses": {
           "200": {
             "description": "Every live subject."
@@ -2785,6 +2785,645 @@
           },
           "403": {
             "description": "Error envelope (TD-3.8). FORBIDDEN for a caller below Admin, including a Teacher (R30).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a subject",
+        "description": "§5.6 *\"Categories & Subjects\"*, §14.1 الفئات والمواد. **Super Admin only** (TD-2 R26 — the curriculum vocabulary is reference data). Body: `{ name, display_order? }`. A Subject is *what a Level teaches*; creating one does not make it taught anywhere — that is `PUT /admin/levels/{levelId}/subjects/{subjectId}`, and keeping the two apart is what stops \"the subject exists\" being mistaken for \"the subject is offered\".",
+        "responses": {
+          "201": {
+            "description": "Created."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN below Super Admin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/subjects/{id}": {
+      "patch": {
+        "summary": "Rename or reorder a subject",
+        "description": "§5.6, Super Admin only (TD-2 R26). **TD-15 optimistic locking:** send the `version` you loaded; a stale one is `409 VERSION_CONFLICT`, never a silent overwrite.",
+        "responses": {
+          "200": {
+            "description": "Updated."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a missing version.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN below Super Admin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). VERSION_CONFLICT.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete a subject",
+        "description": "§5.6, Super Admin only; TD-5 soft delete with a Trash snapshot and an audit row. **Refused while anything still teaches it** — `409 STATE_CONFLICT` naming each blocker in `blocked_by`: its Level assignments (§4.4b), the Teaching Groups that split it (§4.4c), the Course Schedules that deliver it (§4.4), and the Exams and Library content filed under it. Every one of those FKs is `Restrict`, so the alternative to this check is a constraint violation surfacing as a 500. **The Level assignment is a blocker rather than a cascade**: it is cheap to undo from the §4.4b screen, and undoing it deliberately is how an administrator discovers which Levels were still teaching this.",
+        "responses": {
+          "204": {
+            "description": "Deleted."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN below Super Admin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT with blocked_by naming levels, teaching_groups, course_schedules, exams or content.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/categories": {
+      "get": {
+        "summary": "List categories",
+        "description": "§5.6 *\"Categories & Subjects\"*, §14.1. **Not the same read as `/calendar/bootstrap`**, which also returns categories: that contract is the *public calendar screen's* reference data, cached, carrying neither `version` nor counts. Widening it to serve an editor would let an unrelated screen shape a public, cached payload — the reasoning already recorded for `/admin/subjects`. Admin+ read (TD-2 R26); Teachers excluded (R30). Unpaginated — the set is bounded by the curriculum, and a taxonomy screen with a hidden second page cannot answer *\"does this already exist\"*, which is the question it is opened to answer. Each row carries `level_count`, which is what says whether deleting it is possible at all without a request per row. **Categories are generic educational stages and must never encode sex** (Revision 27); who a Level admits lives on `Level.gender_restriction`, where a query can read it.",
+        "responses": {
+          "200": {
+            "description": "Every live category."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN for a caller below Admin, including a Teacher (R30).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a category",
+        "description": "§5.6, **Super Admin only** (TD-2 R26). Body: `{ name, display_order? }`. Answers with `level_count: 0` — stated rather than counted, since a category cannot be created with Levels in it.",
+        "responses": {
+          "201": {
+            "description": "Created."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN below Super Admin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/categories/{id}": {
+      "patch": {
+        "summary": "Rename or reorder a category",
+        "description": "§5.6, Super Admin only (TD-2 R26), TD-15 optimistic locking.",
+        "responses": {
+          "200": {
+            "description": "Updated."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a missing version.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN below Super Admin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). VERSION_CONFLICT.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete a category",
+        "description": "§5.6, Super Admin only; TD-5 soft delete with a Trash snapshot and an audit row. **Refused while Levels or Event scopes reference it** (`409 STATE_CONFLICT`, `blocked_by`). A Category is deliberately **not** allowed to take its Levels with it: a Level carries enrolments, groups and schedules, so cascading here would delete a live curriculum from a control whose label says *delete category*.",
+        "responses": {
+          "204": {
+            "description": "Deleted."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN below Super Admin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT with blocked_by naming levels or events.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/levels": {
+      "get": {
+        "summary": "List levels",
+        "description": "§5.6 *\"Levels\"*, §14.1 مستويات, §4.4b. Admin+ read (TD-2 R26); Teachers excluded (R30). **Ordered by Category first**, because §7 scopes a Level's `display_order` *within* its Category and a flat ordering would interleave two curricula. `?category_id=` narrows **server-side**, so the client never filters a list the server owns; a malformed value is `400`, not a silently unfiltered list. **Unpaginated** — a Levels screen that hides its second page cannot answer *\"does this Level already exist\"*. Each row carries `group_count`, `subject_count` and `enrollment_count`: without them the delete control is a guess and the only way to find out is to press it. `category_name` travels as a **label** for grouping, never as an identifier — `category_id` is that. **No `branch_id`**: a Level is Category-scoped and branch-independent and may hold groups at several branches (§4.4b).",
+        "responses": {
+          "200": {
+            "description": "Every live level, ordered by category then display order."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a malformed category_id filter.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN for a caller below Admin, including a Teacher (R30).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a level",
+        "description": "§5.6, **Super Admin only** (TD-2 R26), **TD-4.6b / Revision 43.1**: the `Level` insert **and its first `AdministrativeGroup` (المجموعة 1)** and the audit row are one transaction — both commit or neither does. Body: `{ name, category_id, gender_restriction?, display_order?, branch_id }`. **`branch_id` is required and is NOT stored on the Level**: it says where المجموعة 1 sits. A Level with no Administrative Group is a Level nobody can be admitted to — the §4.1 approval flow asks an administrator to pick one group per selected Level and would have nothing to offer — so that state never exists rather than existing until something fills it in. Adding a `branch_id` **column** would instead make a Level branch-local and break `entire_level` teaching mode, which resolves a Level's students across the groups at one branch (§4.4c). **`gender_restriction` is data, not a naming convention** (Revision 27): availability is structural — a (stage, sex) combination is available precisely when a Level exists for that stage whose restriction admits that sex — so enabling Teen + Male later is Super Admin data entry with no schema change. The response reports the created group, because an administrator cannot otherwise tell where their new Level's first group went.",
+        "responses": {
+          "201": {
+            "description": "Created, carrying `first_group`."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a missing branch_id or an unknown gender_restriction.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN below Super Admin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an unknown category or branch.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/levels/{id}": {
+      "patch": {
+        "summary": "Rename, reorder or re-restrict a level",
+        "description": "§5.6, Super Admin only (TD-2 R26), TD-15 optimistic locking. **`category_id` is refused, not ignored** (a strict schema): moving a Level between Categories would silently re-file every enrolled student into a different educational stage, and §2.2 scopes `display_order` *within* the Category, so the ordering would also stop meaning anything. Dropping the key instead would let a client receive `200` and believe the move succeeded. **`gender_restriction` IS editable** and is not the same hazard — Revision 27 names enabling a new (stage, sex) combination as ordinary Super Admin data entry. Tightening it **does not evict anyone already enrolled**: the restriction gates admission (§4.4b), and retroactively removing students from a Level they are studying in is not a decision this endpoint may take silently.",
+        "responses": {
+          "200": {
+            "description": "Updated."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a missing version, or an attempt to move the Level between Categories.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN below Super Admin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). VERSION_CONFLICT.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete a level",
+        "description": "§5.6, Super Admin only; TD-5 soft delete with a Trash snapshot and an audit row. **Refused while anything educational references it** (`409 STATE_CONFLICT`, `blocked_by`): enrolments, Teaching Groups, Course Schedules, Exams, Library content, its Subject assignments, published Grades or Event scopes — each of those is either a person's record or a commitment made to one. **Its Administrative Groups are removed WITH it rather than counted against it**, which is the exact inverse of TD-4.6b: every Level owns at least one group by construction, so a guard that counted groups would make deletion unreachable. They are safe to take because the guards above have already established that none of them holds an enrolment, a schedule or a grade — what remains is the empty scaffolding the Level's own creation put there. The audit row **names the cascaded group ids**, because those groups disappeared as a consequence of this decision and TD-8's record has to say which.",
+        "responses": {
+          "204": {
+            "description": "Deleted, with its empty groups."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN below Super Admin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT with blocked_by naming enrollments, teaching_groups, course_schedules, exams, content, subjects, grades or events.",
             "content": {
               "application/json": {
                 "schema": {
