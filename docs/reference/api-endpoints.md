@@ -518,6 +518,99 @@ protect; the fourth is a fact about a child.
 moved `visibility` already. A hard constraint that holds only while a background job is current
 is a race, not a constraint.
 
+## Storage — uploads, replacement, deletion and the mint (TD-3.5)
+
+| | Path | Notes |
+|---|---|---|
+| `POST` | `/uploads/initiate` | Phase one. Returns `{ upload_id, key, put_url, expires_in }` |
+| `POST` | `/uploads/{upload_id}/complete` | Phase two. Body `{ title, description? }` only |
+| `POST` | `/uploads/{upload_id}/abort` | Best-effort; deletes the object |
+| `DELETE` | `/content/{id}` | R53. Soft delete + Trash snapshot + quarantine |
+| `GET` | `/content/{id}/download-url` | Short-lived presigned GET after the §4.9 check |
+
+**The file never passes through the API.** The browser PUTs straight to MinIO through the
+presigned URL, which is why the flow has two phases at all — the server sees the object only
+after it exists. On a 4 GB VPS with mobile users, proxying a 100 MB upload through the API
+container is not an option (§2.3).
+
+**Everything decidable before a byte moves is decided at `/initiate`:** the §4.9 branch scope,
+the TD-9 whitelist, the TD-9 size cap, and the per-user quota. A teacher on a phone connection
+must learn they cannot publish Globally *before* uploading eighty megabytes, not after.
+
+**`/complete` decides only what the object itself can answer.** A **ranged GET of
+`bytes=0-511`** for the magic bytes and a **HEAD** for the true size (§4.9, Revision 8) — the
+server never streams or buffers the file. A mismatch deletes the object, creates no row, and
+answers **`409 VALIDATION_FAILED`**: the request was well-formed, the object was not what it
+claimed. TD-3.8 records that status as the *"409 variant on upload complete"*, and it is the
+only place in the catalog where a code's status varies.
+
+### `upload_id` is a signed ticket, not a database row
+
+§7 defines **no pending-upload entity**, and inventing one would have been a schema decision
+the specification never took — plus a table that can disagree with the bucket, and a
+reconciliation problem where there was none. The ticket carries the state instead, and
+`upload.gc` (TD-7) then reaps *objects* older than 48 h that no content row claims, which is
+the thing that actually needs collecting.
+
+**It binds every authorization decision taken at phase one** — the caller, the key, the bucket,
+the declared size and type, and the §4.9 scope fields. Without that, a Teacher could initiate
+inside their branch and complete into the Global scope, and the check at phase one would be
+decorative. **Title and description are deliberately *not* bound**: they are free text no
+authorization turns on, and keeping them out of a URL path segment holds the ticket to a few
+hundred bytes.
+
+The signing key is derived from `JWT_SIGNING_KEY` by HKDF under its own label, so an upload
+ticket and an access token can never be exchanged for one another — the separation TD-13
+requires between token classes, without a configuration variable TD-13 does not list.
+
+### Replacement extends the upload flow (R53)
+
+`content_meta.replaces_content_id` targets an existing record. The same two phases run, and
+completion updates that row: **a new key with a new hash segment, the previous object
+quarantined, `version` incremented.** Keys are never reused or overwritten (TD-9, §20 rule 15),
+so a cached URL of the old object can never mask a newer upload.
+
+It is **not** a route of its own, because a replacement *is* an upload — the same presigned PUT,
+whitelist, cap, magic-byte check and quota. A second route would be that flow written twice, and
+resolving the target at `/initiate` means an unauthorized replacement is refused before a URL is
+ever minted.
+
+### Video is not accepted
+
+TD-9's whitelist names audio, documents, slides and images and **no video type at all**, and
+§4.9 (Revision 12) states *"video remains excluded entirely"*. The library client still maps
+`video/*` for **presentation**, because the two lists answer different questions — what may be
+stored, versus how a stored thing is shown. Accepting video is a Document Owner decision and an
+SRS revision, not an implementation detail.
+
+### The mint is where three rules meet
+
+1. **TD-12 freshness.** *"Statelessness ends where safeguarding begins."* `account_status` and
+   the role assignment are re-read from the database on **every** request, so a Teacher
+   suspended mid-session loses access to a private recording at once rather than at token expiry.
+2. **The §4.9 tiers**, applied through **the same predicate `GET /library` uses**. The rule that
+   decides what a person may see in a list is the rule that decides what they may open; a second
+   expression of it is the duplication this project has been bitten by before.
+3. **Child context** (§4.3) for a Parent acting on a minor's behalf — and here, unlike the
+   library listing, the private tier narrows to **that one child**. The two surfaces genuinely
+   differ, and they differ in the direction that is safe: browsing is a shared reading surface,
+   while minting a URL for a private recording is the safeguarding-sensitive act TD-12 singles
+   out. The `childContext` middleware is **not** mounted on the route, because staff reach
+   content by a different path and would be asked for a header they have no reason to send; the
+   resolver is called directly for exactly the callers the rule is about.
+
+The response carries `Cache-Control: no-store` — a shared cache would hand one caller's grant to
+another — and out-of-scope content answers **404, never 403** (§20 rule 17).
+
+### The per-user upload quota (TD-4.12)
+
+**30 per hour**, counted in PostgreSQL **inside the initiating transaction** under a row lock.
+Reading the count outside it would let two initiations at the boundary both see 29 and both
+pass. Revision 14 is equally explicit about where it may *not* live: not in process memory (dies
+with the container, wrong across replicas) and not in pg-boss (a quota decision is synchronous).
+Exhaustion is `429 RATE_LIMITED` in the standard envelope, identical in shape to an Nginx edge
+rejection so a client handles one thing.
+
 ## Events
 
 | | Path | Notes |
@@ -551,7 +644,6 @@ milestone lands. **They are a work-in-progress signal, not invented endpoints.**
 |---|---|
 | **M4 — Quran** | `POST /students/{id}/quran-logs` · `PATCH` / `DELETE /quran-logs/{id}` — each returns the **synchronously recalculated** coverage |
 | **M5 — Exams** | `POST /exams` · `POST /exams/{id}/publish` · `POST /exams/{id}/submissions` · `PATCH /submissions/{id}` · `POST /submissions/{id}/submit` · `POST /grades/{id}/publish` · `/republish` · `/pass-fail-override` |
-| **M6 — Storage** | `POST /uploads/initiate` · `/complete` · `/abort` · `GET /content/{id}/download-url` |
 | **Jobs** | `GET /jobs/{id}` — any endpoint that enqueues returns `202` with a job id |
 
 **Post-MVP, deliberately absent:** grading-template routes, multipart upload endpoints, CSV
@@ -565,7 +657,7 @@ is now built and mounted. The remaining items are genuine, and smaller than the 
 
 | Needed | For | Status |
 |---|---|---|
-| `GET /content/{id}/download-url` | Every preview and download | **Specified (TD-3.5), unimplemented** — M6 |
+| `GET /content/{id}/download-url` | Every preview and download | **Built** — see *Storage* above |
 | An **uploader** on `EducationalContent` | The teacher display name the cards show | **Not in §7's field list.** Needs a revision plus a forward-only migration |
 
 The per-level counts the §5.2 cards show are derivable from `GET /library` with a

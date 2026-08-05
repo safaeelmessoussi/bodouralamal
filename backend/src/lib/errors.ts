@@ -66,12 +66,22 @@ export class AppError extends Error {
      */
     message?: string,
     readonly details: Record<string, unknown> = {},
+    /**
+     * The one sanctioned departure from the catalog's status column, and TD-3.8
+     * names it itself: `VALIDATION_FAILED` is a `400` everywhere except upload
+     * completion, where §4.9 specifies **`409 VALIDATION_FAILED`** for a MIME or
+     * size mismatch — the request was well-formed, the *object* it refers to was
+     * not what it claimed. The catalog row records this as "(409 variant on
+     * upload complete)", so honouring it here is following the contract rather
+     * than bending it. The **code** never varies; only the status does.
+     */
+    private readonly statusOverride?: number,
   ) {
     super(message ?? code);
   }
 
   get status(): number {
-    return ERROR_CODES[this.code].status;
+    return this.statusOverride ?? ERROR_CODES[this.code].status;
   }
 }
 

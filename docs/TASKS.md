@@ -638,16 +638,20 @@
 - [ ] §18 Exams & Grading checklist green (incl. both race tests)
 
 ## M6 — Content, Consent & Storage
-- [ ] Upload initiate/complete/abort: single-shot presigned PUT, branch-scope validation, Teacher Global rejection (§4.9, TD-3.5)
-- [ ] Authoritative per-user upload quota 30/hour in PostgreSQL (`RateLimitCounter`), locked + incremented in the initiate transaction (TD-4.12, TD-15.2); `429 RATE_LIMITED` envelope; never in-process memory, never pg-boss, never njs (§3.1 Revision 14)
-- [ ] Magic-byte validation at /complete via ranged GET (bytes 0–511) to MinIO + HEAD size check; reject-and-delete (§4.9, TD-9)
-- [ ] Hash-segmented immutable keys; replacement mints new key + quarantines old (TD-9)
+- [x] Upload initiate/complete/abort: single-shot presigned PUT, branch-scope validation, Teacher Global rejection (§4.9, TD-3.5)
+  - ✓ `upload_id` is a **signed ticket, not a table** — §7 defines no pending-upload entity, so `upload.gc` reaps objects no content row claims rather than reconciling a table against a bucket. The ticket binds every phase-one authorization decision so `/complete` cannot restate them
+  - ✓ Teacher branch scope resolves through `CourseScheduleStaff` (§4.4c), never the role assignment
+  - ✓ **Replace and delete** shipped with it (R53): replacement extends `/uploads/initiate` via `replaces_content_id`; `DELETE /content/{id}` soft-deletes, snapshots and quarantines
+  - ⚠ **Video is refused**, per TD-9's whitelist and §4.9 Revision 12. The Owner's brief asked for video support; widening the list is an SRS revision, not an implementation choice
+- [x] Authoritative per-user upload quota 30/hour in PostgreSQL (`RateLimitCounter`), locked + incremented in the initiate transaction (TD-4.12, TD-15.2); `429 RATE_LIMITED` envelope; never in-process memory, never pg-boss, never njs (§3.1 Revision 14)
+- [x] Magic-byte validation at /complete via ranged GET (bytes 0–511) to MinIO + HEAD size check; reject-and-delete (§4.9, TD-9)
+- [x] Hash-segmented immutable keys; replacement mints new key + quarantines old (TD-9)
 - [ ] FileUploader: progress, failure, clean retry (R-9) (§14.3)
 - [ ] Phone-recording upload guidance panel on /teacher/content (§4.9); cross-browser playback E2E for TD-9 containers (§14.7)
 - [ ] Visibility transitions + bucket-migrate job + `/content-unavailable` (§3.1, TD-4.9)
 - [ ] Consent re-evaluation engine wired to enrollment/teaching-group membership/consent/upload; consent_forced_private; **empty resolved audience → Category default** (§4.1a, §4.9, BR-2 as restated by R43)
 - [ ] Admin-only consent-gate override with mandatory justification + audit (BR-3, TD-8)
-- [ ] Presigned GET mint with full permission + child-context check, 10 min TTL (TD-12)
+- [x] Presigned GET mint with full permission + child-context check, 10 min TTL (TD-12)
 - [~] Resources directory nesting: Category→Level→Year(current pinned)→Branch(Global top)→Subject (§5.2)
   - ✓ **Frontend complete against a MOCK adapter** — `/resources` with both §5.2 views: the level index grouped by category (الكبار → اليافعون → الطفل, fixed editorial order, unknown categories sorted last rather than dropped) and one level's contents grouped **academic year (newest first) → branch**. Level cards carry name, optional description and both counts, with correct Arabic plural agreement; levels with no content never appear
   - ✓ **Content cards** — title, type in words *and* icon, publication date, file size in Arabic units, teacher display name rendered **verbatim** (§20 rule 21 — the type carries no other name field), optional description clamped to two lines, optional subject badge. A field the backend did not send is **absent, not blank**

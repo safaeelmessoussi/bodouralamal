@@ -21,12 +21,14 @@ import * as libraryCtl from './controllers/library.controller.js';
 import * as referenceData from './controllers/reference-data.controller.js';
 import * as taxonomy from './controllers/taxonomy.controller.js';
 import * as trash from './controllers/trash.controller.js';
+import * as contentCtl from './controllers/content.controller.js';
 import { createRegistration } from './controllers/registration.controller.js';
 import { healthController } from './controllers/health.controller.js';
 import type { PrismaClient } from './generated/prisma/client.js';
 import { verifyAccessToken } from './lib/access-token.js';
 import type { AppConfig } from './lib/config.js';
 import { AppError } from './lib/errors.js';
+import { createStorageClients } from './lib/storage.js';
 import { authenticate, optionalAuthenticate } from './middleware/authenticate.js';
 import {
   accessLog,
@@ -285,6 +287,22 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
   guarded.post('/sessions/:id/restore', sessionsCtl.restore(prisma));
   guarded.post('/sessions/:id/content', sessionsCtl.linkContent(prisma));
   guarded.delete('/sessions/:id/content/:contentId', sessionsCtl.unlinkContent(prisma));
+
+  // TD-3.5 storage. The browser PUTs straight to MinIO through a presigned URL,
+  // so the file never passes through this process (§2.3) — these routes decide
+  // and verify, they do not carry bytes. `:uploadId` is the signed ticket itself
+  // (`lib/upload-token.ts`), which is why no pending-upload table exists.
+  const storage = createStorageClients(config);
+  guarded.post('/uploads/initiate', contentCtl.initiate(prisma, storage, config));
+  guarded.post('/uploads/:uploadId/complete', contentCtl.complete(prisma, storage, config));
+  guarded.post('/uploads/:uploadId/abort', contentCtl.abort(storage, config));
+  // R53: replacement reuses the upload flow (`replaces_content_id`); deletion is
+  // its own route because it moves no bytes in.
+  guarded.delete('/content/:id', contentCtl.remove(prisma, storage));
+  // TD-12: minting is one of the high-risk operations where an unexpired token
+  // is not sufficient — the service re-asserts the caller against live rows.
+  guarded.get('/content/:id/download-url', contentCtl.downloadUrl(prisma, storage));
+
   api.use(guarded);
 
   app.use('/api/v1', api);

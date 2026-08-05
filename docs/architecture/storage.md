@@ -79,12 +79,45 @@ POST /uploads/initiate
 
   browser PUTs directly to storage through the proxy, with progress
 
-POST /uploads/{id}/complete
+POST /uploads/{upload_id}/complete
   → server issues a RANGED GET (bytes 0-511) to MinIO and inspects magic bytes
   → HEAD verifies size against the declared value and the caps
-  → mismatch → object deleted, no record created
-  → otherwise the content row is created
+  → mismatch → object deleted, no record created, 409 VALIDATION_FAILED
+  → otherwise the content row is created (or UPDATED, on a replacement)
+
+POST /uploads/{upload_id}/abort
+  → deletes the object; best-effort, because upload.gc sweeps what a client abandons
 ```
+
+### `upload_id` is a signed ticket, not a database row
+
+**§7 defines no pending-upload entity.** Something has to carry phase one's decisions into
+phase two, and the two candidates were a new table or a signed token. The table was rejected:
+inventing an entity is a schema decision the specification never took, and a table that records
+uploads can disagree with the bucket that holds them, creating a reconciliation problem where
+there was none. The ticket carries the state instead, and `upload.gc` (TD-7) then reaps
+*objects* older than 48 h that no content row claims — which is the thing that actually needs
+collecting, and is true whether or not any bookkeeping row ever existed.
+
+**The ticket binds every authorization decision taken at `/initiate`** — caller, key, bucket,
+declared size and type, and the §4.9 scope fields. Without that binding, a Teacher could
+initiate inside their own branch and complete into the Global scope, and the check at phase one
+would be decorative. **Title and description are deliberately not bound**: they are free text no
+authorization turns on, and keeping them out holds the ticket to a few hundred bytes, which
+matters because it travels as a URL path segment.
+
+Its signing key is derived from `JWT_SIGNING_KEY` by HKDF under its own label. That is the
+separation TD-13 requires between token classes — an upload ticket and an access token must
+never be interchangeable — obtained without adding a configuration variable TD-13 does not list.
+
+### Replacement extends this flow rather than getting a route (R53)
+
+`content_meta.replaces_content_id` targets an existing record: the same two phases run, and
+completion updates that row instead of creating one. A replacement **is** an upload — it needs
+the same presigned PUT, whitelist, cap, magic-byte verification and quota — so a second route
+would be this flow written twice, and the copy that drifts still passes its own tests.
+Resolving the target at `/initiate` also means an unauthorized replacement is refused **before**
+a URL is minted.
 
 **The server never streams or buffers the whole file to validate it.** A 512-byte window is
 enough to check magic bytes, and fetching more would put a 100 MB file through the API
@@ -98,7 +131,21 @@ survives a renamed file.
 | | Cap | Accepted types |
 |---|---|---|
 | Audio | **100 MB** | `audio/webm`, `audio/mp4`, `audio/ogg`, `audio/mpeg`, `audio/wav` |
-| Documents, slides, images | **50 MB** | PDF, JPEG, PNG, WebP, common office types |
+| Documents, slides, images | **50 MB** | PDF, JPEG, PNG, WebP, docx/pptx/xlsx |
+| Video | — | **Not accepted.** TD-9's whitelist names no video type and §4.9 excludes it entirely |
+
+**Video's absence is a rule, not an omission.** The library client maps `video/*` for
+*presentation*, because that list answers a different question — how a stored thing is shown,
+rather than what may be stored. Accepting video is a Document Owner decision and an SRS
+revision (§20 rule 16), not an implementation detail.
+
+**The magic-byte check is a predicate per type, not a prefix table**, because three of the
+signatures are not prefixes: RIFF containers carry their real type at offset 8 (so WAV and WebP
+are distinguishable, which a four-byte test would not manage), MP4 carries `ftyp` at offset 4,
+and MP3 is either an ID3 tag or an eleven-bit frame sync — and matching `FF` alone would admit
+every JPEG as audio. The three OOXML types are ZIP archives and are indistinguishable at this
+depth, so the check there is *consistent with the declaration*, which is what a 512-byte window
+can honestly assert.
 
 100 MB was reduced from 500 MB: at 32 kbps mono speech that is over six hours of recording,
 and the smaller cap shrinks three things at once — the blast radius of a failed single-shot
@@ -188,11 +235,23 @@ The API location stays at `2m`. **Never raise the body limit globally to "fix" u
 
 ## Deletion and quarantine
 
-Soft-deleting content moves the object to a **quarantine prefix** in the private bucket,
-pending the 90-day window. A daily job permanently removes objects past it.
+`DELETE /content/{id}` (R53) soft-deletes the row, writes a `Trash` snapshot, and moves the
+object to a **quarantine prefix**, pending the 90-day window. A daily job permanently removes
+objects past it.
 
 That job is the only path to hard deletion — matching the audit log's design, where one job
-is the only sanctioned deletion route.
+is the only sanctioned deletion route, and matching Revision 52's ruling that the Trash has no
+permanent-delete action either.
+
+**The object is moved rather than destroyed, and that is the whole point.** A deletion that
+removed the file immediately would make BR-15's window a promise the platform keeps for every
+entity except the one where the data is largest and least reproducible — a session recording
+cannot be re-made.
+
+**The copy precedes the delete**, so a failure between the two leaves a duplicate rather than
+nothing. And a quarantine failure does not fail the request: the row is already updated and the
+audit row already written, so reporting failure would tell the caller their deletion did not
+happen when it did. `content.quarantine-purge` sweeps whatever is left.
 
 ## File preview behaviour
 

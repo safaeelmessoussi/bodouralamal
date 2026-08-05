@@ -24,6 +24,8 @@ This is a standalone, self-contained specification. It does not reference extern
 * **§19 — Environments, Deployment Pipeline & Testing Strategy.**
 * **§20 — AI Implementation Rules:** hard guardrails for any autonomous coding agent. §20 closes the document deliberately: it is the last thing an agent reads before writing code.
 
+**Revision 53 (content replacement and deletion get a contract, 2026-08-06):** TD-3.5 defined creation and no lifecycle, while TD-9 already specified how replacement must behave and TD-5/BR-15 how deletion must — mechanics with no endpoint to reach them, though §5.5 and §5.6 both list the actions. **Replacement extends the upload flow**: `content_meta` gains an optional `replaces_content_id`, and completion updates that record rather than creating one — **a new key with a new hash segment, the previous object quarantined, `version` incremented**, exactly as TD-9 requires. It is deliberately **not** a route of its own: a replacement *is* an upload, needing the same presigned PUT, the same whitelist and cap checks, the same magic-byte verification and the same quota, and a second route would be that flow written twice. **Deletion is its own route**, `DELETE /content/{id}`, because it moves no bytes in: soft delete, `Trash` snapshot, and **the object moved to `quarantine/…` rather than destroyed**, so BR-15's ninety-day window means for a recording what it means everywhere else. **No permanent-delete route**, consistent with Revision 52.
+
 **Revision 52 (Document Owner decision — the Trash page ships now, with per-entity restore, 2026-08-05):** Revision 6 deferred `/admin/trash` in full and Revision 7 marked that deferral as intentional. **The browsing page returns to the MVP**, and **restore returns per entity type rather than universally** — the Owner's direction: *"do not delay the entire feature because some entity types are more complex; the UI can support different capabilities per entity type."*
 
 **A Super Admin screen** lists every soft-deleted record with its entity type, a label read from the snapshot, who deleted it, when, and when BR-15's ninety-day window purges it, with filtering by type and date and a search. **Super Admin only** (TD-2): the list spans every entity regardless of branch, which no other surface allows.
@@ -1258,9 +1260,15 @@ GET /library?category_id=&level_id=&academic_year_id=&subject_id=&page=   (PUBLI
 POST /uploads/initiate      → { filename, size, mime, content_meta } → { upload_id, key, put_url }
                               (branch scope validated here per §4.9 — Teachers cannot pass branch_id null;
                                single presigned PUT, TTL TD-12)
+                              content_meta.replaces_content_id (optional, R53): the upload REPLACES
+                               that record's file — new key, old object quarantined, version
+                               incremented; never an overwrite (TD-9)
 POST /uploads/{upload_id}/complete  → server-side validation via ranged GET (Range: bytes=0-511)
                                       to MinIO for magic bytes + HEAD for size (§4.9), creates EducationalContent
 POST /uploads/{upload_id}/abort
+DELETE /content/{id}                → soft delete + Trash snapshot + object moved to quarantine/… (R53,
+                                      TD-5, BR-15). NEVER a permanent delete — the 90-day window is
+                                      closed by content.quarantine-purge (TD-7)
 GET  /content/{id}/download-url     → permission check (incl. child context where applicable) → short-lived presigned GET (private bucket)
 ```
 (Multipart initiate/part-urls/complete/abort arrive with the post-MVP resumable upgrade, §10.1.)
@@ -1525,6 +1533,7 @@ Every action below writes an `AuditLog` row (actor, timestamp, action_type, targ
 | *(post-MVP — template engine, §10.1, Revision 13)* `template.activate` / `template.demote` | sum at time of action; rows join the grid when the engine ships |
 | `quranlog.update` / `quranlog.delete` | log reference, old→new range, recalculated coverage |
 | `group.delete` / `branch.delete_blocked` etc. | entity snapshot reference |
+| `content.upload` / `content.replace` / `content.delete` *(Revision 53)* | mime, size, visibility and branch scope on upload; previous **and** new storage key on replacement; the storage key on deletion. The three rows are what make the storage lifecycle answerable, and none is in the `audit.purge` allowlist |
 | `enrollment.create` / `enrollment.delete` *(Revision 43)* | student, Level, Administrative Group, and whether it came from an approval (TD-4.2) or a roster edit. **Placement is the decision that determines which branch a person attends and which classes they appear on**, so it needs the same accountability as a role assignment |
 | `session.cancel` / `session.restore` *(Revision 43)* | session reference, **mandatory reason** on cancel, and the resolved-audience size at the moment of the action — a cancellation is the one calendar action beneficiaries notice, and "how many people did this affect" is unanswerable later once the roster has moved on |
 | `session.override` *(Revision 43)* | session reference, the fields changed old→new (date/time/room/**staff**, 43.4). Distinguishes a human's deliberate change from a `session.materialize` default, which is exactly the distinction that protects it from the next schedule edit (§20 rule 24) |

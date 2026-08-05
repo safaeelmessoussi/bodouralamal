@@ -4802,6 +4802,301 @@
         }
       }
     },
+    "/uploads/initiate": {
+      "post": {
+        "summary": "Initiate a single-shot upload",
+        "description": "TD-3.5, §4.9, TD-9. **Phase one of two.** The browser then PUTs the file **straight to MinIO** through the returned `put_url`, so the file never passes through the API (§2.3 — a small VPS and mobile connections). Body: `{ filename, size, mime, content_meta }`; `content_meta` is `{ level_id, subject_id, academic_year_id, branch_id, visibility?, replaces_content_id? }`. **`branch_id` is required and explicitly nullable** — `null` is the **Global / بدون فرع** scope (§4.9), an authorization-relevant value only an Admin may choose, so an absent key would make Global the silent default for a Teacher who forgot the field. **§4.9 Global-scope rule, enforced here:** only Super Admins and Admins may assign Global; a **Teacher is locked to the branches of the schedules they staff** (resolved through `CourseScheduleStaff` per §4.4c — the single definition of a teacher's reach, never the role assignment), and a Teacher passing `null` or an out-of-scope branch is refused. **Everything decidable before a byte moves is decided here** — the scope, the TD-9 MIME whitelist, the TD-9 size cap, and the per-user quota — because a teacher on a phone connection must learn they cannot publish Globally *before* uploading 80 MB. **`visibility` defaults to the Category setting** (`content.default_visibility.category.{id}`, §4.9/§15.1) when omitted. **The subject must actually be taught at the level** (`LevelSubject`, R43). **`replaces_content_id` (R53)** targets an existing record: the same flow runs and completion updates that row — a **new key with a new hash segment**, the old object quarantined, `version` incremented; keys are never reused or overwritten (TD-9, §20 rule 15). **The per-user quota is 30/hour**, counted in PostgreSQL **inside this transaction** under a row lock (TD-4.12, TD-15.2, Revision 14) — never in process memory, never through pg-boss. **`upload_id` is a signed ticket, not a database row:** §7 defines no pending-upload entity, and the ticket binds every authorization decision taken here so that `/complete` cannot restate them. `upload.gc` (TD-7) reaps objects older than 48 h that no content row claims.",
+        "responses": {
+          "201": {
+            "description": "Ticket issued; `{ upload_id, key, put_url, expires_in }`. The PUT URL is rooted at `STORAGE_BASE_URL` and survives the Nginx `/storage` prefix strip (§3.1)."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a malformed body, or a MIME type absent from the TD-9 whitelist (video is NOT on it, §4.9 Revision 12).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN with details.reason GLOBAL_SCOPE_FORBIDDEN or BRANCH_OUT_OF_SCOPE (§4.9).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an unknown level or academic year, or content the caller may not replace.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT with details.reason SUBJECT_NOT_AT_LEVEL.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Error envelope (TD-3.8). PAYLOAD_TOO_LARGE — the declared size exceeds the TD-9 cap (audio 100 MB, everything else 50 MB).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Error envelope (TD-3.8). RATE_LIMITED — the 30/hour upload quota is exhausted (TD-4.12).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/uploads/{uploadId}/complete": {
+      "post": {
+        "summary": "Complete an upload",
+        "description": "TD-3.5, §4.9 (Revision 8), TD-9. **Phase two.** Verifies the object that was actually stored: a **ranged GET of `bytes=0-511`** for the magic bytes and a **HEAD** for the true size — the server **never streams or buffers the file** to validate it. A mismatch **deletes the object and creates no row**, answering **`409 VALIDATION_FAILED`**: the request was well-formed, the object was not what it claimed (TD-3.8 records this as the \"409 variant on upload complete\"). On success the `EducationalContent` row is created, or **updated when the ticket carries `replaces_content_id`** (R53). Body: `{ title, description? }` and **nothing else** — the scope, type, size and key were bound into the ticket at `/initiate` and are not re-openable from the body, for the same reason §4.1b refuses an email from the registration body. **The ticket is checked for ownership**, so one teacher cannot complete another's upload into their own scope.",
+        "responses": {
+          "201": {
+            "description": "Created; `{ id }` addresses the `EducationalContent` record."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND — the ticket is malformed, expired, forged, or belongs to another caller; details.reason is MALFORMED, EXPIRED or BAD_SIGNATURE.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED for a magic-byte or size mismatch (object deleted, no row created), or UPLOAD_INCOMPLETE when nothing was ever PUT to the key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/uploads/{uploadId}/abort": {
+      "post": {
+        "summary": "Abort an upload",
+        "description": "TD-3.5. Removes the object at the ticket's key so an abandoned upload leaves nothing behind. **Deliberately best-effort:** aborting an upload that never started is a success from the caller's point of view, and `upload.gc` (TD-7) sweeps anything a client abandons without telling the server — reaping **strictly** older than 48 h, so an in-progress slow upload is never collected.",
+        "responses": {
+          "204": {
+            "description": "Aborted."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for a ticket that is malformed, expired, forged or another caller's.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/content/{id}": {
+      "delete": {
+        "summary": "Delete educational content",
+        "description": "R53, TD-5, BR-15, §4.10. **Soft delete**: `deleted_at`/`deleted_by`, a `Trash` snapshot, and the object **moved to `quarantine/…` rather than destroyed**, so BR-15's ninety-day window means for a recording what it means for every other entity — a session recording cannot be re-made, and a deletion that destroyed it at once would make the Trash's promise a lie exactly where the data is largest. `content.quarantine-purge` (TD-7) closes the window. **There is no permanent-delete route**, consistent with Revision 52. Writable by staff within the same branch scope an upload takes (§4.9): a Teacher may **read** Global content and may not **edit** it. Out-of-scope answers **404, never 403** (§20 rule 17).",
+        "responses": {
+          "204": {
+            "description": "Deleted; the object is in quarantine and the Trash carries the snapshot."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN where the branch scope refuses the write (§4.9).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for unknown content, already-deleted content, or content outside the caller's reach.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/content/{id}/download-url": {
+      "get": {
+        "summary": "Mint a presigned download URL",
+        "description": "TD-3.5, TD-12, §4.9, §3.1, §20 rule 4. **The only way private content is ever read.** Private-bucket objects are never exposed through stable URLs; every read is a short-lived presigned GET minted **after** a server-side permission check. **Three rules meet here.** (1) **TD-12 freshness** — *\"statelessness ends where safeguarding begins\"*: an unexpired access token is not sufficient, so `account_status` and the role assignment are re-read from the database on **every** request, and a Teacher suspended mid-session loses access to a private recording **at once** rather than at token expiry. (2) **The §4.9 tiers**, applied through the **same predicate `GET /library` uses** and deliberately not a second expression of it — the rule that decides what a person may see in a list is the rule that decides what they may open. (3) **Child context** (§4.3) for a Parent acting on a minor's behalf: `X-Active-Child-ID` is verified against an approved `FamilyLink` on this very request, and the private-tier check is narrowed to **that** child. The middleware is not mounted on the route, because staff reach content by a different path and would be asked for a header they have no reason to send. **TTL 10 minutes** (TD-12), and the response carries `Cache-Control: no-store` — a shared cache would hand one caller's grant to another. Out-of-scope content answers **404, never 403** (§20 rule 17), so a response cannot confirm a file exists.",
+        "responses": {
+          "200": {
+            "description": "`{ url, expires_in }` — the URL is rooted at `STORAGE_BASE_URL` and expires in 600 s."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a Parent-only caller sent no X-Active-Child-ID (§4.3).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN — the TD-12 freshness check found the account no longer active or the role assignment gone.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for unknown content, content outside the caller's tier, or a child the caller has no approved link to.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/healthz": {
       "servers": [
         {

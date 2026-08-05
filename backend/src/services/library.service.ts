@@ -46,6 +46,13 @@ export interface LibraryActor {
   roles: string[];
   roleScopes: readonly { role: string; branches: string[] | null }[];
   accountStatus: string;
+  /**
+   * Set **only** by the presigned-GET mint (TD-3.5), where §4.3's child context
+   * applies and the browsing surface's reasoning does not — see
+   * `privateLevelIds`. Already verified against an approved `FamilyLink` by the
+   * time it arrives here; this type never resolves it.
+   */
+  actingStudentId?: string;
 }
 
 export interface LibraryFilters extends PageParams {
@@ -115,8 +122,28 @@ function isStaff(actor: LibraryActor): boolean {
  * one shared reading surface (§5.2, "one reader and one permission path"). A
  * parent who could only see a child's materials by switching context would be
  * unable to compare two children's resources at all.
+ *
+ * **`actingStudentId` narrows this to one child, and only the presigned-GET mint
+ * sets it** (TD-3.5). The reasoning above is about *browsing*; minting a URL for
+ * a private recording is the safeguarding-sensitive act TD-12 singles out, and
+ * §4.3 requires the specific link to be verified on that very request. So the
+ * two surfaces genuinely differ, and they differ in the direction that is safe:
+ * the narrower rule applies where the file is actually opened.
  */
 async function privateLevelIds(prisma: PrismaClient, actor: LibraryActor): Promise<string[]> {
+  if (actor.actingStudentId !== undefined) {
+    const own = await prisma.enrollment.findMany({
+      where: {
+        studentId: actor.actingStudentId,
+        deletedAt: null,
+        administrativeGroup: { deletedAt: null },
+      },
+      select: { levelId: true },
+      distinct: ['levelId'],
+    });
+    return own.map((e) => e.levelId);
+  }
+
   const links = await prisma.familyLink.findMany({
     where: { parentId: actor.userId, status: 'approved', deletedAt: null },
     select: { studentId: true },
