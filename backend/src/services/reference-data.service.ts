@@ -1,6 +1,7 @@
 import type { PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
 import * as scope from '../policies/branch-scope.js';
+import * as audit from '../repositories/audit.repository.js';
 import type { Actor } from '../policies/actor.js';
 
 /**
@@ -96,5 +97,142 @@ export async function listAcademicYears(
     // to `YYYY-YYYY`.
     orderBy: { label: 'desc' },
     select: { id: true, label: true, isCurrent: true },
+  });
+}
+
+/* ── Level ↔ Subject assignment (§4.4b, TD-3 extension 2026-08-05) ───────── */
+
+/**
+ * **Which Subjects a Level teaches.**
+ *
+ * This was the missing link, and its absence was not theoretical: the platform
+ * shipped with **zero `LevelSubject` rows and no way to create one**, so
+ * `createTeachingGroup` refused every request with `SUBJECT_NOT_IN_LEVEL` and
+ * the Subject Organisation screen could not be used at all. A curriculum join
+ * that nothing can write is a table that will always be empty.
+ *
+ * **Writes are Super Admin**, matching the Teaching Groups the join gates
+ * (Revision 43.3): which Subjects a Level teaches is curriculum *structure*,
+ * alongside the Levels and Subjects themselves (Revision 26). Reads follow the
+ * reference-data rule — Admin and above.
+ */
+export async function listLevelSubjects(
+  prisma: PrismaClient,
+  actor: Actor,
+  levelId: string,
+): Promise<SubjectRef[]> {
+  assertCanReadReferenceData(actor);
+
+  const rows = await prisma.levelSubject.findMany({
+    where: { levelId, deletedAt: null, subject: { deletedAt: null } },
+    select: { subject: { select: { id: true, name: true, displayOrder: true } } },
+    orderBy: { subject: { name: 'asc' } },
+  });
+  return rows.map((r) => r.subject);
+}
+
+function assertCanWriteCurriculum(actor: Actor): void {
+  if (!scope.isSuperAdmin(actor.roleScopes)) {
+    throw new AppError('FORBIDDEN', 'curriculum structure is Super Admin only (R26, R43.3)');
+  }
+}
+
+/**
+ * Assigns a Subject to a Level.
+ *
+ * **Idempotent by design.** A previously removed assignment is revived rather
+ * than duplicated — the unique key is `(level_id, subject_id)`, and a second row
+ * would make *"is this Subject taught here"* a question with two answers.
+ */
+export async function assignSubjectToLevel(
+  prisma: PrismaClient,
+  actor: Actor,
+  levelId: string,
+  subjectId: string,
+): Promise<void> {
+  assertCanWriteCurriculum(actor);
+
+  await prisma.$transaction(async (tx) => {
+    const level = await tx.level.findFirst({ where: { id: levelId, deletedAt: null }, select: { id: true } });
+    if (!level) throw new AppError('NOT_FOUND', 'no such level');
+    const subject = await tx.subject.findFirst({
+      where: { id: subjectId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!subject) throw new AppError('NOT_FOUND', 'no such subject');
+
+    const existing = await tx.levelSubject.findFirst({
+      where: { levelId, subjectId },
+      select: { id: true, deletedAt: true },
+    });
+    if (existing && existing.deletedAt === null) {
+      throw new AppError('DUPLICATE', 'subject is already assigned to this level');
+    }
+    // TD-8's `target_id` is a UUID column, so the audit row points at the JOIN
+    // ROW's own id — not a composite `level:subject` string, which is what the
+    // first attempt used and what the database rejected outright. The join row
+    // is also the more correct subject: it is the thing that was created.
+    const id = existing
+      ? (
+          await tx.levelSubject.update({
+            where: { id: existing.id },
+            data: { deletedAt: null, deletedById: null },
+            select: { id: true },
+          })
+        ).id
+      : (await tx.levelSubject.create({ data: { levelId, subjectId }, select: { id: true } })).id;
+
+    await audit.write(tx, {
+      actorUserId: actor.userId,
+      actionType: 'levelsubject.assign',
+      targetEntity: 'LevelSubject',
+      targetId: id,
+      detail: { level_id: levelId, subject_id: subjectId },
+    });
+  });
+}
+
+/**
+ * Removes a Subject from a Level (TD-5 soft delete).
+ *
+ * **Refused while Teaching Groups exist for the pair.** Those groups are the
+ * split of a Subject this Level would no longer teach: removing the assignment
+ * beneath them would leave every member holding a seat in a subject the Level
+ * does not offer, and BR-22's unassigned list could not describe that state.
+ */
+export async function unassignSubjectFromLevel(
+  prisma: PrismaClient,
+  actor: Actor,
+  levelId: string,
+  subjectId: string,
+): Promise<void> {
+  assertCanWriteCurriculum(actor);
+
+  await prisma.$transaction(async (tx) => {
+    const row = await tx.levelSubject.findFirst({
+      where: { levelId, subjectId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!row) throw new AppError('NOT_FOUND', 'subject is not assigned to this level');
+
+    const splits = await tx.teachingGroup.count({ where: { levelId, subjectId, deletedAt: null } });
+    if (splits > 0) {
+      throw new AppError('STATE_CONFLICT', 'teaching groups exist for this subject and level', {
+        reason: 'TEACHING_GROUPS_EXIST',
+        teaching_groups: splits,
+      });
+    }
+
+    await tx.levelSubject.update({
+      where: { id: row.id },
+      data: { deletedAt: new Date(), deletedById: actor.userId },
+    });
+    await audit.write(tx, {
+      actorUserId: actor.userId,
+      actionType: 'levelsubject.unassign',
+      targetEntity: 'LevelSubject',
+      targetId: row.id,
+      detail: { level_id: levelId, subject_id: subjectId },
+    });
   });
 }

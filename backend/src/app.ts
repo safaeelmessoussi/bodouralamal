@@ -215,6 +215,15 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
   // that needs either reads these rather than growing its own list.
   guarded.get('/admin/subjects', referenceData.subjects(prisma));
   guarded.get('/admin/academic-years', referenceData.academicYears(prisma));
+  // Which Subjects a Level teaches (§4.4b). The join that gates Teaching Groups
+  // had no write path at all, so `LevelSubject` was permanently empty and every
+  // teaching-group creation answered SUBJECT_NOT_IN_LEVEL.
+  guarded.get('/admin/levels/:levelId/subjects', referenceData.levelSubjects(prisma));
+  guarded.put('/admin/levels/:levelId/subjects/:subjectId', referenceData.assignSubject(prisma));
+  guarded.delete(
+    '/admin/levels/:levelId/subjects/:subjectId',
+    referenceData.unassignSubject(prisma),
+  );
 
   guarded.get('/admin/course-schedules', courseSchedules.list(prisma));
   guarded.post('/admin/course-schedules', courseSchedules.create(prisma));

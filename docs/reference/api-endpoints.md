@@ -146,6 +146,8 @@ requires `subject_id` and `academic_year_id`, and nothing in TD-3 could list eit
 |---|---|---|
 | `GET` | `/admin/subjects` | `id`, `name`, `display_order` |
 | `GET` | `/admin/academic-years` | `id`, `label`, `is_current` |
+| `GET` | `/admin/levels/{levelId}/subjects` | Which Subjects a Level teaches (§4.4b) |
+| `PUT` `DELETE` | `/admin/levels/{levelId}/subjects/{subjectId}` | 👤 Assign / remove. `PUT` is idempotent in effect; removal is refused while Teaching Groups exist |
 
 **These are the canonical source for every admin selector needing a Subject or an Academic
 Year.** A screen that needs one reads these; it does not grow its own list. Widening

@@ -528,6 +528,13 @@
   - Applied **once per visit, not once per fetch**, and only to filters the reader has not set — re-applying would drag a filter back the moment someone cleared it, which is the opposite of *freely changeable*
   - A suggestion, never a scope: the server does not narrow by it and neither does the client
   - `null` for anonymous and Pending is distinct from an object of nulls, and the page uses that to decide whether to prefill at all
+- [x] **Level ↔ Subject assignment** — `GET`/`PUT`/`DELETE /admin/levels/{levelId}/subjects[/{subjectId}]`
+  - **Root cause of the "إضافة فوج" failure, found by measurement:** the database held **zero `LevelSubject` rows and no write path existed**, so every teaching-group creation answered `SUBJECT_NOT_IN_LEVEL`
+  - Super Admin writes (curriculum structure, R26/R43.3); Admin+ reads
+  - `PUT` revives a removed assignment rather than duplicating it — one row, so *is this Subject taught here* has one answer
+  - Removal refused while Teaching Groups exist: members would otherwise hold seats in a subject the Level does not offer
+  - 5 new HTTP tests including the end-to-end assertion that a teaching group can now be created
+- [ ] **Admin portal completion** (Owner priority, 2026-08-05): Level CRUD · Category CRUD · Subject CRUD · user management · Room CRUD · registration-request workflow
 - [ ] Public Educational Library frontend — **same filters, same items, ordering only** for signed-in users (§5.2)
   - Note: the public calendar's *screen* filters (branch · category · level) stay identical for everyone and are compliant. Adding TD-3.4's `subject_id`/`teacher_id`/`academic_year_id` to a **public** screen would need public reference lists that do not exist — `/admin/subjects` is Admin-only by design
 

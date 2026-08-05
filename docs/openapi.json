@@ -2847,6 +2847,177 @@
         }
       }
     },
+    "/admin/levels/{levelId}/subjects": {
+      "get": {
+        "summary": "Which Subjects a Level teaches",
+        "description": "**TD-3 extension 2026-08-05**, §4.4b. The `LevelSubject` join gates Teaching Groups — `POST .../teaching-groups` refuses with `SUBJECT_NOT_IN_LEVEL` when the pair is not assigned — and **it had no write path at all**, so the table was permanently empty and the Subject Organisation screen could not be used. That is the gap these three operations close. Admin+ read (TD-2 R26).",
+        "responses": {
+          "200": {
+            "description": "The subjects assigned to this level."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED for a malformed levelId.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN below Admin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/levels/{levelId}/subjects/{subjectId}": {
+      "put": {
+        "summary": "Assign a Subject to a Level",
+        "description": "**Super Admin only** — which Subjects a Level teaches is curriculum *structure*, alongside the Levels and Subjects themselves (R26) and alongside the Teaching Groups this join gates (R43.3). **Idempotent:** a previously removed assignment is revived rather than duplicated, because the key is `(level_id, subject_id)` and a second row would make *is this Subject taught here* a question with two answers. `PUT` rather than `POST` for the same reason — the operation names a pair, not a new entity.",
+        "responses": {
+          "204": {
+            "description": "Assigned."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN below Super Admin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an unknown Level or Subject.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). DUPLICATE — already assigned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Remove a Subject from a Level",
+        "description": "Super Admin only; TD-5 soft delete. **Refused while Teaching Groups exist for the pair** (`409 STATE_CONFLICT`, `reason: TEACHING_GROUPS_EXIST`): those groups are the split of a Subject the Level would no longer teach, so removing the assignment beneath them would leave every member holding a seat in a subject the Level does not offer — a state BR-22's unassigned list has no way to describe.",
+        "responses": {
+          "204": {
+            "description": "Removed."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN below Super Admin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND — not assigned.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT with reason TEACHING_GROUPS_EXIST.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/admin/course-schedules": {
       "get": {
         "summary": "List course schedules",

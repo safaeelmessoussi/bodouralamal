@@ -2,8 +2,15 @@ import type { Request, Response } from 'express';
 
 import type { PrismaClient } from '../generated/prisma/client.js';
 import { requireActor } from '../middleware/authenticate.js';
-import { listAcademicYears, listSubjects } from '../services/reference-data.service.js';
+import {
+  assignSubjectToLevel,
+  listAcademicYears,
+  listLevelSubjects,
+  listSubjects,
+  unassignSubjectFromLevel,
+} from '../services/reference-data.service.js';
 import { academicYearRefDto, subjectRefDto } from './dto.js';
+import { idParam } from './parse.js';
 
 /**
  * Reference-data selectors (TD-3 extension, Document Owner decision 2026-08-05).
@@ -27,5 +34,38 @@ export function academicYears(prisma: PrismaClient) {
   return async (req: Request, res: Response): Promise<void> => {
     const rows = await listAcademicYears(prisma, requireActor(req));
     res.json({ data: rows.map(academicYearRefDto) });
+  };
+}
+
+/* ── Level ↔ Subject assignment ─────────────────────────────────────────── */
+
+export function levelSubjects(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const rows = await listLevelSubjects(prisma, requireActor(req), idParam(req, 'levelId'));
+    res.json({ data: rows.map(subjectRefDto) });
+  };
+}
+
+export function assignSubject(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    await assignSubjectToLevel(
+      prisma,
+      requireActor(req),
+      idParam(req, 'levelId'),
+      idParam(req, 'subjectId'),
+    );
+    res.status(204).end();
+  };
+}
+
+export function unassignSubject(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    await unassignSubjectFromLevel(
+      prisma,
+      requireActor(req),
+      idParam(req, 'levelId'),
+      idParam(req, 'subjectId'),
+    );
+    res.status(204).end();
   };
 }
