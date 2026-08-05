@@ -2,11 +2,17 @@
 
 # Draft SRS Revision 50 — editing a recurring schedule: the three scopes, and the split
 
-> **Status: PROPOSED. Not in force.** `docs/SRS.md` is immutable to implementing
-> agents (CLAUDE.md), so this is drafted wording for the **Document Owner** to apply.
-> **Unlike R44–R49, no code has been written against this yet** — the Owner asked for the
-> decision to be recorded *before* implementation, and this proposal is that record.
-> **Delete it once applied.**
+> **Status: APPLIED to `docs/SRS.md` on 2026-08-05**, on the Document Owner's explicit
+> authorisation to edit the specification directly — *"I am explicitly authorizing that change
+> even if it overrides the previous guardrail in CLAUDE.md."*
+>
+> **The SRS is now the source of truth for this behaviour.** §0 carries the Revision 50 entry,
+> §4.4 the three scopes and the split, TD-3.12 the `scope`/`from_date` parameters, §7
+> `effective_until`, and §18 the acceptance criteria.
+>
+> This file is retained only for the **rationale** — the rejected alternatives and the
+> implementation traps below, which the specification states as rules rather than arguments.
+> Delete it once that reasoning has a home in the handbook.
 
 ---
 
