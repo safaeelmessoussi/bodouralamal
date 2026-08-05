@@ -578,6 +578,17 @@
   - `kind` derived client-side from the MIME type: §14.6 is a *presentation* rule, and presentation is the client's job
   - Note: the public calendar's *screen* filters (branch · category · level) stay identical for everyone and are compliant. Adding TD-3.4's `subject_id`/`teacher_id`/`academic_year_id` to a **public** screen would need public reference lists that do not exist — `/admin/subjects` is Admin-only by design
 
+### Admin Dashboard — session management and content (Owner priority, 2026-08-05)
+- [x] **Recurrence edit scopes specified** — `SRS-PROPOSAL-R50.md`, drafted before implementation by instruction
+  - *This session only* and *all sessions* are **already built**; only *this and all future* lacked a mechanism
+  - Implemented as a **schedule split**, not an exception model: the platform already materializes every occurrence and marks the overridden ones, and §4.4 computes conflicts against sessions rather than rules
+  - Needs one column: `effective_until` (nullable calendar date; `NULL` = open-ended)
+  - **No new endpoint** — `scope` + `from_date` on `PATCH /admin/course-schedules/{id}`
+- [ ] **Admin Calendar — Event CRUD** (`/admin/calendar`, currently `blocked`). **Frontend only**: `POST`/`PATCH`/`DELETE /events` all exist
+- [ ] **Session management UI** with the three scopes. Frontend for scopes 1 and 3; scope 2 needs the R50 split behind it
+- [ ] **TD-3.5 storage endpoints** — `POST /uploads/initiate`, `/complete`, `/abort`, `GET /content/{id}/download-url`. **Specified in TD-3.5 but not mounted**; `app.ts` has no `/uploads`
+- [ ] **Educational Content upload UI** — attach to a Subject of a Level (library) or to a Session (`POST /sessions/{id}/content` already exists)
+
 **Gates**
 - [ ] §18 *Educational Model* checklist green — including the §19.2 named regressions: composite-FK rejection **attempted directly in SQL**, weekly-vs-biweekly conflict on the alternating week, double-`materialize` idempotency, schedule edit sparing an overridden session, and anonymous-vs-authenticated parity on `/calendar` and `/library`
 
