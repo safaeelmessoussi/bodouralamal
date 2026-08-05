@@ -60,6 +60,50 @@ function assertCanManage(actor: Actor): void {
   }
 }
 
+/** Whether this caller manages schedules — creates, edits, deletes them. */
+const isManager = (actor: Actor): boolean =>
+  scope.hasRole(actor.roleScopes, MANAGING_ROLE) || isSuperAdmin(actor);
+
+/**
+ * **Reading a schedule is not managing one** (Document Owner decision,
+ * 2026-08-05).
+ *
+ * §14.1 gives a Teacher a *My Teaching* screen listing the schedules they staff,
+ * and §5.6 line 753 grants them roster access to its resolved audience — while
+ * being explicit that they **do not create or edit schedules**. That is a
+ * difference in *scope*, not in *resource*: the representation a teacher needs
+ * is byte-identical to an administrator's, so it is served by the same endpoint
+ * with role-scoped data rather than by a second route returning the same shape.
+ *
+ * **`/admin/` is a routing namespace, not an authorization boundary** — a
+ * sentence this codebase already repeats everywhere the prefix appears, now
+ * applied to who may read as well as to which branch they may reach.
+ */
+function assertCanRead(actor: Actor): void {
+  if (!(isManager(actor) || scope.hasRole(actor.roleScopes, 'teacher'))) {
+    throw new AppError('FORBIDDEN', 'reading course schedules requires admin or teaching staff');
+  }
+}
+
+/**
+ * The `where` fragment that limits a reader to what they may see.
+ *
+ * **A manager is scoped by branch; a teacher by the schedules they staff**
+ * (§4.4c — `CourseScheduleStaff` is the single teacher-scope resolution, stated
+ * once there and pointed at everywhere else). A caller holding both roles is
+ * scoped as a manager: the wider reach is the one their administrative role
+ * grants, and intersecting the two would hide a colleague's schedule from an
+ * administrator merely because they also teach.
+ */
+function readableScope(actor: Actor): Prisma.RecurringCourseScheduleWhereInput {
+  if (isManager(actor)) {
+    const branches = scope.branchesForRole(actor.roleScopes, MANAGING_ROLE);
+    // `null` means all-branches (§7, R24) — not "no branches".
+    return branches === null ? {} : { branchId: { in: branches } };
+  }
+  return { staff: { some: { userId: actor.userId, deletedAt: null } } };
+}
+
 export interface ScheduleStaffInput {
   userId: string;
   position: 'teacher' | 'assistant';
@@ -605,15 +649,17 @@ export async function listCourseSchedules(
     academicYearId?: string;
   } & PageParams,
 ): Promise<Page<RecurringCourseSchedule & { staff: { userId: string; position: string }[] }>> {
-  assertCanManage(actor);
+  assertCanRead(actor);
 
-  const branches = scope.branchesForRole(actor.roleScopes, MANAGING_ROLE);
   const where: Prisma.RecurringCourseScheduleWhereInput = {
     deletedAt: null,
     ...(filters.branchId ? { branchId: filters.branchId } : {}),
     ...(filters.subjectId ? { subjectId: filters.subjectId } : {}),
     ...(filters.academicYearId ? { academicYearId: filters.academicYearId } : {}),
-    ...(branches === null ? {} : { branchId: { in: branches } }),
+    // Applied last so an explicit filter can NARROW the caller's reach but
+    // never widen it — a teacher passing `branch_id` still sees only what they
+    // staff, because both conditions must hold.
+    ...readableScope(actor),
   };
 
   const window = pageWindow(filters);
@@ -646,10 +692,14 @@ export async function resolveScheduleRoster(
   actor: Actor,
   id: string,
 ): Promise<{ id: string; nameArabic: string | null }[]> {
-  assertCanManage(actor);
+  assertCanRead(actor);
 
   const schedule = await prisma.recurringCourseSchedule.findFirst({
-    where: { id, deletedAt: null },
+    // §5.6 line 753 grants a Teacher roster access to the audience of a
+    // schedule they staff. Expressed as part of the lookup rather than as a
+    // check afterwards, so a schedule they do not staff is NOT FOUND rather
+    // than found-and-refused (§20 rule 17).
+    where: { id, deletedAt: null, ...readableScope(actor) },
     select: {
       branchId: true,
       teachingMode: true,
@@ -658,10 +708,9 @@ export async function resolveScheduleRoster(
       teachingGroupId: true,
     },
   });
-  if (!schedule) throw new AppError('NOT_FOUND', 'no such schedule');
   // Out of scope answers 404, never 403 (§20 rule 17) — a 403 confirms the
   // schedule exists somewhere the caller may not look.
-  scope.assertCanActOnBranch(actor.roleScopes, MANAGING_ROLE, schedule.branchId, 'no such schedule');
+  if (!schedule) throw new AppError('NOT_FOUND', 'no such schedule');
 
   return resolveAudience(prisma, schedule, { id: true, nameArabic: true }) as Promise<
     { id: string; nameArabic: string | null }[]

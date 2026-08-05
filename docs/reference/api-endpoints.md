@@ -197,10 +197,21 @@ about delivery lives here.
 
 | | Path | Notes |
 |---|---|---|
-| `GET` `POST` | `/admin/course-schedules` | `?branch_id=` `?subject_id=` `?academic_year_id=` narrow within scope. A write returns `{ schedule, materialization }` |
+| `GET` `POST` | `/admin/course-schedules` | **`GET` is role-scoped:** Super Admin sees all, a branch Admin their branches, a **Teacher the schedules they staff**. `POST` is Admin. Filters narrow within scope. A write returns `{ schedule, materialization }` |
 | `PATCH` `DELETE` | `/admin/course-schedules/{id}` | Only the *when* and the *room* are editable. `DELETE` answers `200 { future_removed, retained }` |
 | `GET` | `/admin/course-schedules/{id}/conflicts` | Computed against **materialized Sessions**, never against recurrence rules |
 | `GET` | `/admin/course-schedules/{id}/roster` | The **resolved** audience — recomputed per request, never a stored snapshot |
+
+**One endpoint, role-scoped — `/admin/` is a routing namespace, not an authorization
+boundary** (Document Owner decision, 2026-08-05). A Teacher's *My Teaching* screen (§14.1,
+§5.6 line 753) consumes this same route and receives the schedules they staff, resolved through
+`CourseScheduleStaff` (§4.4c). A second teacher route was rejected: the representation is
+byte-identical, so it would have been duplication rather than separation. **Reading is not
+managing** — `POST`, `PATCH`, `DELETE` and `/conflicts` stay Admin, because §14.1 says teachers
+*do not create or edit schedules*. A teacher who staffs nothing gets an **empty list, not a
+`403`**: they may ask the question, and their scope resolves to nothing. An explicit filter can
+**narrow** a caller's reach but never widen it. The same rule governs `/roster`, which §5.6
+grants a teacher for a schedule they staff; one they do not staff is `404`, never `403`.
 
 **`teaching_mode` + `target_id`, never three nullable columns.** A body or a response carrying
 two targets has no correct reading, and the database CHECK that refuses it would report an

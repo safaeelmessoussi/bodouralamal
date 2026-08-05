@@ -31,10 +31,11 @@ const TEACHER = ['teacher'] as const;
 /**
  * §14.1's teaching nodes, in its order.
  *
- * Every entry is `blocked` for now, and the reasons are specific rather than
- * "coming soon" — see each `blockedReasonKey`. The teaching *screens* are ahead;
- * what exists today is this registry and the shell that renders it, which is
- * what makes the portal a place a screen can be added to.
+ * `/teacher/schedules` is live: the Document Owner decided (2026-08-05) that
+ * `GET /admin/course-schedules` is **role-scoped on one endpoint** rather than
+ * duplicated per audience, so the teacher portal consumes the same route and
+ * receives the schedules they staff. The rest stay `blocked` with specific
+ * reasons rather than "coming soon".
  */
 export const TEACHER_MODULES: readonly TeacherModule[] = [
   {
@@ -51,8 +52,7 @@ export const TEACHER_MODULES: readonly TeacherModule[] = [
     path: '/teacher/schedules',
     labelKey: 'teacher.nav.schedules',
     roles: TEACHER,
-    status: 'blocked',
-    blockedReasonKey: 'teacher.blocked.schedules',
+    status: 'ready',
   },
   {
     path: '/teacher/content',

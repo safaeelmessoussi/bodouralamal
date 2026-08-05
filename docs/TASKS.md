@@ -485,7 +485,14 @@
   - ✓ `components/portal/` owns the shared shell and nav rendering; `AdminLayout` and `TeacherLayout` differ only in their sidebar, which is the part that genuinely differs
   - ✓ **`section` deliberately stayed admin-only** — §14.1 groups the back office and gives the teacher portal no equivalent; hoisting it would make the shared layer the first caller's shape
   - ✓ A test asserts the registries **share no path**, so resolution cannot depend on which registry a caller asked
-- [ ] `/teacher/schedules` **screen** — registered and honestly blocked. **Needs a Document Owner decision:** §14.1 line 753 defines it, but TD-3 documents no endpoint a Teacher may call (`GET /admin/course-schedules` requires Admin in the service, and §20 rule 16 forbids inventing a route)
+- [x] `/teacher/schedules` **screen** — consumes the **same** `GET /admin/course-schedules`, role-scoped
+  - ✓ Document Owner decision: `/admin/` is a **routing namespace, not an authorization boundary**; one endpoint with role-scoped data beats two returning an identical representation
+  - ✓ Super Admin all · branch Admin their branches · **Teacher the schedules they staff** (`CourseScheduleStaff`, §4.4c) · everyone else `403`
+  - ✓ **Reading is not managing:** create/edit/delete/`conflicts` stay Admin (§14.1 — teachers do not create or edit schedules)
+  - ✓ A teacher staffing nothing gets an **empty list, not `403`**; an explicit filter narrows but never widens
+  - ✓ `/roster` follows the same rule (§5.6 line 753); a schedule they do not staff is `404`, never `403`
+  - ✓ Screen shares the adapter and both cell renderers with `/admin/schedules` — no create/edit/delete controls
+  - ✓ **SRS wording proposed, not written:** `docs/SRS-PROPOSAL-R45.md`
 - [ ] `/admin/groups` (+ roster), `/admin/levels/{id}/subjects/{subjectId}` (Teaching Groups), Session page frontend (§14.1)
 - [ ] Public calendar and public Educational Library — **same filters, same items, ordering only** for signed-in users (§5.2)
 

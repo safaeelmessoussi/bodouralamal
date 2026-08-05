@@ -50,6 +50,14 @@ describe('the teacher registry matches §14.1', () => {
     expect(teacherModuleForPath('/admin')).toBeNull();
   });
 
+  it('marks the schedules module ready — it shares the back office endpoint', () => {
+    // The Document Owner decided (2026-08-05) to role-scope
+    // GET /admin/course-schedules rather than add a teacher route returning the
+    // identical representation. `ready` here is the registry's promise that a
+    // screen exists; the router's switch is what keeps it.
+    expect(TEACHER_MODULES.find((m) => m.path === '/teacher/schedules')?.status).toBe('ready');
+  });
+
   it('names what each blocked module is waiting for', () => {
     // §14.4 forbids the blank page; "coming soon" tells nobody whether the wait
     // is a day or a milestone.

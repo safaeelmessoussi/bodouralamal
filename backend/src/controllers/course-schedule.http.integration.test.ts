@@ -82,6 +82,7 @@ async function makeUser(label: string, sex: 'female' | null = null): Promise<str
 let superAdmin: string;
 let scopedAdmin: string;
 let teacherToken: string;
+let staffingTeacherToken: string;
 let branchA: string;
 let branchB: string;
 let roomA: string;
@@ -196,6 +197,9 @@ beforeAll(async () => {
   superAdmin = bearer(await makeUser('مدير عام'), [{ role: 'super_admin', branches: null }]);
   scopedAdmin = bearer(await makeUser('مدير فرع'), [{ role: 'admin', branches: [branchA] }]);
   teacherToken = bearer(await makeUser('أستاذة'), [{ role: 'teacher', branches: null }]);
+  // The teacher who actually staffs `teacherId`'s schedules — the fixture wires
+  // `teacherId` into every scheduleBody() as staff.
+  staffingTeacherToken = bearer(teacherId, [{ role: 'teacher', branches: null }]);
 });
 
 afterAll(async () => {
@@ -213,10 +217,14 @@ afterAll(async () => {
  */
 let slotIndex = 0;
 function slot(): { start_time: string; end_time: string } {
-  const minutes = 6 * 60 + slotIndex++ * 30;
+  // Starts at 00:00 in 15-minute steps, deliberately: the TD-11 test pins an
+  // explicit 15:00–16:30 schedule in this same room and weekday, and an
+  // allocator that walks up to 15:00 eventually collides with it. Adding tests
+  // is what surfaced that — the allocator was fine until the count grew.
+  const minutes = slotIndex++ * 15;
   const hh = String(Math.floor(minutes / 60)).padStart(2, '0');
   const mm = String(minutes % 60).padStart(2, '0');
-  const end = minutes + 20;
+  const end = minutes + 10;
   return {
     start_time: `${hh}:${mm}`,
     end_time: `${String(Math.floor(end / 60)).padStart(2, '0')}:${String(end % 60).padStart(2, '0')}`,
@@ -389,13 +397,20 @@ describe('the write boundary refuses what would re-point history', () => {
 });
 
 describe('the routes are mounted and guarded (TD-2)', () => {
-  it('refuses an anonymous caller and a teacher', async () => {
+  it('refuses an anonymous caller, and serves a teacher their own scope', async () => {
     const anon = await call('GET', '/admin/course-schedules');
     expect(anon.status).toBe(401);
     expect(anon.body.error?.code).toBe('AUTH_REQUIRED');
 
+    // This assertion used to demand 403 for any teacher. The Document Owner
+    // decided (2026-08-05) that `/admin/` is a routing namespace rather than an
+    // authorization boundary, so a Teacher READS this endpoint scoped to the
+    // schedules they staff — see the role-scoped block at the foot of this file.
+    // A teacher staffing nothing gets an empty list, which is a different fact
+    // from being refused.
     const teacher = await call('GET', '/admin/course-schedules', teacherToken);
-    expect(teacher.status).toBe(403);
+    expect(teacher.status).toBe(200);
+    expect(teacher.body.data).toEqual([]);
   });
 
   it('a branch-scoped Admin sees their own branch only', async () => {
@@ -519,5 +534,106 @@ describe('deletion reports what it kept (§4.4, TD-5)', () => {
       select: { deletedAt: true },
     });
     expect(row.deletedAt).not.toBeNull();
+  });
+});
+
+/* ── Role-scoped reads on ONE endpoint (Document Owner decision, 2026-08-05) ── */
+
+describe('a Teacher reads the schedules they staff, through the same endpoint', () => {
+  it('lists only their own, and never another teacher’s', async () => {
+    // `/admin/` is a routing namespace, not an authorization boundary. The
+    // representation a teacher needs is byte-identical to an administrator's,
+    // so it is the same route with role-scoped data rather than a second one
+    // returning the same shape.
+    const mine = await call('POST', '/admin/course-schedules', superAdmin, scheduleBody());
+    expect(mine.status).toBe(201);
+    const mineId = (mine.body.schedule as { id: string }).id;
+
+    // Staffed by nobody in this suite's teacher fixture.
+    const theirs = await call(
+      'POST',
+      '/admin/course-schedules',
+      superAdmin,
+      scheduleBody({ staff: [] }),
+    );
+    expect(theirs.status).toBe(201);
+    const theirsId = (theirs.body.schedule as { id: string }).id;
+
+    const res = await call('GET', '/admin/course-schedules?page_size=100', staffingTeacherToken);
+    expect(res.status).toBe(200);
+    const ids = res.body.data!.map((r) => r.id);
+    expect(ids).toContain(mineId);
+    expect(ids).not.toContain(theirsId);
+  });
+
+  it('a teacher who staffs nothing sees an empty list, not a 403', async () => {
+    // Empty is the honest answer: they may read this resource, and their scope
+    // resolves to nothing. A 403 would say they may not ask the question.
+    const res = await call('GET', '/admin/course-schedules', teacherToken);
+    expect(res.status).toBe(200);
+    expect(res.body.data).toEqual([]);
+  });
+
+  it('an explicit filter can NARROW a teacher’s reach but never widen it', async () => {
+    const res = await call(
+      'GET',
+      `/admin/course-schedules?branch_id=${branchB}&page_size=100`,
+      staffingTeacherToken,
+    );
+    expect(res.status).toBe(200);
+    // They staff nothing at branch B, and asking for it does not reach past
+    // their own scope — both conditions must hold.
+    expect(res.body.data).toEqual([]);
+  });
+
+  it('reads the roster of a schedule they staff, and 404s on one they do not', async () => {
+    // §5.6 line 753 grants roster access to the audience of a schedule they
+    // staff. A schedule they do not staff is NOT FOUND rather than
+    // found-and-refused (§20 rule 17).
+    const mine = await call('POST', '/admin/course-schedules', superAdmin, scheduleBody());
+    const theirs = await call(
+      'POST',
+      '/admin/course-schedules',
+      superAdmin,
+      scheduleBody({ staff: [] }),
+    );
+
+    const ok = await call(
+      'GET',
+      `/admin/course-schedules/${(mine.body.schedule as { id: string }).id}/roster`,
+      staffingTeacherToken,
+    );
+    expect(ok.status).toBe(200);
+
+    const denied = await call(
+      'GET',
+      `/admin/course-schedules/${(theirs.body.schedule as { id: string }).id}/roster`,
+      staffingTeacherToken,
+    );
+    expect(denied.status).toBe(404);
+    expect(denied.body.error?.code).toBe('NOT_FOUND');
+  });
+
+  it('still cannot create, edit, delete, or preview conflicts', async () => {
+    // §14.1: teachers "do not create or edit schedules". Widening the READ did
+    // not widen the write — that distinction is the whole point of scoping by
+    // role rather than by route.
+    const created = await call('POST', '/admin/course-schedules', superAdmin, scheduleBody());
+    const id = (created.body.schedule as { id: string }).id;
+    const version = (created.body.schedule as { version: number }).version;
+
+    expect((await call('POST', '/admin/course-schedules', staffingTeacherToken, scheduleBody())).status).toBe(403);
+    expect(
+      (await call('PATCH', `/admin/course-schedules/${id}`, staffingTeacherToken, { version, start_time: '21:00' })).status,
+    ).toBe(403);
+    expect((await call('DELETE', `/admin/course-schedules/${id}`, staffingTeacherToken)).status).toBe(403);
+    expect((await call('GET', `/admin/course-schedules/${id}/conflicts`, staffingTeacherToken)).status).toBe(403);
+  });
+
+  it('refuses a caller who is neither admin nor teaching staff', async () => {
+    const outsider = bearer(await makeUser('زائرة'), []);
+    const res = await call('GET', '/admin/course-schedules', outsider);
+    expect(res.status).toBe(403);
+    expect(res.body.error?.code).toBe('FORBIDDEN');
   });
 });
