@@ -108,3 +108,29 @@
 .hero__badge img {
   width: 72%;
 }
+
+/* ── CTA Block (final call to action) ────────────────────────────────────── */
+
+.cta-block {
+  display: grid;
+  gap: var(--space-6);
+  align-items: center;
+  text-align: center;
+}
+
+.cta-block h2 {
+  font-size: var(--font-size-lg);
+}
+
+.cta-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  justify-content: center;
+}
+@media (max-width: 43.9rem) {
+  .cta-buttons .btn {
+    flex: 1 0 auto;
+    min-width: 12rem;
+  }
+}
