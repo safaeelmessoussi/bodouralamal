@@ -493,7 +493,14 @@
   - ✓ `/roster` follows the same rule (§5.6 line 753); a schedule they do not staff is `404`, never `403`
   - ✓ Screen shares the adapter and both cell renderers with `/admin/schedules` — no create/edit/delete controls
   - ✓ **SRS wording proposed, not written:** `docs/SRS-PROPOSAL-R45.md`
-- [ ] `/admin/groups` (+ roster), `/admin/levels/{id}/subjects/{subjectId}` (Teaching Groups), Session page frontend (§14.1)
+- [x] `/admin/groups` (+ roster) — Administrative Groups screen
+  - ✓ Level and Branch chosen at creation and **disabled on edit**, matching what the server accepts rather than offering fields it refuses
+  - ✓ Each of the three delete refusals names its own cause (`ENROLMENTS_EXIST` · `SCHEDULES_EXIST` · `LAST_GROUP_IN_LEVEL`) instead of a generic failure
+  - ✓ BR-21 surfaced as *already in another group of this Level*, which is the information needed to decide on a move
+  - ✓ Roster uses `GET /admin/users` for the picker; the enrolment id is kept distinct from the student id, asserted in a test
+  - ✓ Level list read from the **public calendar bootstrap** — no `/admin/levels` exists and inventing one would be a new public contract
+- [ ] `/admin/schedules` **write form** — **blocked**: `subject_id` and `academic_year_id` are required by `POST /admin/course-schedules`, and **no `GET /admin/subjects` or `/admin/academic-years` exists in TD-3**. Building them would create a new public contract
+- [ ] `/admin/levels/{id}/subjects/{subjectId}` (Teaching Groups), Session page frontend (§14.1)
 - [ ] Public calendar and public Educational Library — **same filters, same items, ordering only** for signed-in users (§5.2)
 
 **Gates**

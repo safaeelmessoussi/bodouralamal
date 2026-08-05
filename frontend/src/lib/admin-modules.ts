@@ -76,8 +76,7 @@ export const ADMIN_MODULES: readonly AdminModule[] = [
     labelKey: 'admin.nav.groups',
     section: 'academic',
     roles: STAFF,
-    status: 'blocked',
-    blockedReasonKey: 'admin.blocked.groups',
+    status: 'ready',
   },
   {
     // §14.1 Academic → "Course Schedules ... /admin/schedules (staff, R43)".

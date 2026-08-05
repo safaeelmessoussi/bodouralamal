@@ -8,6 +8,7 @@ import { t } from '../../i18n/index.js';
 import { moduleForPath, visibleModules } from '../../lib/admin-modules.js';
 import { ApprovalsPage } from './approvals.js';
 import { BranchesPage } from './branches.js';
+import { GroupsPage } from './groups.js';
 import { HijriCalendarPage } from './hijri-calendar.js';
 import { SchedulesPage } from './schedules.js';
 import { SettingsPage } from './settings.js';
@@ -37,6 +38,7 @@ export const IMPLEMENTED_ADMIN_PATHS: readonly string[] = [
   '/admin/branches',
   '/admin/approvals',
   '/admin/schedules',
+  '/admin/groups',
   '/superadmin/hijri-calendar',
   '/superadmin/settings',
 ];
@@ -64,6 +66,8 @@ export function AdminRouter(): ReactNode {
       return <ApprovalsPage />;
     case '/admin/schedules':
       return <SchedulesPage />;
+    case '/admin/groups':
+      return <GroupsPage />;
     case '/superadmin/hijri-calendar':
       return <HijriCalendarPage />;
     case '/superadmin/settings':
