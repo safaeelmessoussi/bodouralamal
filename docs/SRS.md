@@ -24,6 +24,10 @@ This is a standalone, self-contained specification. It does not reference extern
 * **§19 — Environments, Deployment Pipeline & Testing Strategy.**
 * **§20 — AI Implementation Rules:** hard guardrails for any autonomous coding agent. §20 closes the document deliberately: it is the last thing an agent reads before writing code.
 
+**Revision 51 (Document Owner decision — Scheduling is one navigation section, 2026-08-05):** §14.1 listed Course Schedules under *Academic* and Events under *Calendar*, which follows the **models** rather than the question an administrator is asking. Both are things that happen on a calendar, and finding them in unrelated parts of the menu made them feel like unrelated systems. **They join one section, `الجدولة` (Scheduling), with two nodes — `الأنشطة` (Events) and `الحصص` (Sessions).** **No route changes**, and **nothing about the models changes**: §4.4's separation of Events from teaching occurrences and §20 rule 22's prohibition on re-conflating organisation with delivery both stand. This is a statement about **where a person looks**, not about what the two things are.
+
+**The presentation layer is shared; the models are not.** Both screens render the same page layout, the same table, the same toolbars, the same dialogs, the same field primitives and the same recurrence control. **Three components are deliberately NOT shared, because the interface would otherwise imply a capability the model does not have:** a **room selector** (an Event has no room — §7 gives it no `room_id`), the **occurrence scope dialog** (Revision 50's three scopes need a materialized occurrence to override, and an Event's occurrences are computed on read), and the **conflict preview** (conflicts are room, teacher and assistant overlaps, and an Event has none of the three). Where a control cannot be shared, the screens **omit it rather than disable it** — a dead control teaches nothing (§14.2).
+
 **Revision 50 (Document Owner decision — recurrence edit scopes, 2026-08-05):** an administrator editing, cancelling or deleting one occurrence of a recurring class **must be asked which occurrences the change applies to**, and offered exactly three scopes: **this session only**, **this session and all future sessions**, and **all sessions of this schedule**. The question is mandatory for **every operation that can reach a series**, not only for edits — an administrator who moves "the Tuesday class" without being asked cannot know whether they moved one week or a year.
 
 **Two scopes are unchanged and were already implemented.** *This session only* is `PATCH /sessions/{id}`, which sets `overridden` (Revision 43.4 — *a human decided about this occurrence*) and is thereafter protected from schedule rewrites (Revision 43.6). *All sessions* is `PATCH /admin/course-schedules/{id}`, which rewrites future un-overridden sessions and reports `resynced` and `protected_sessions`.
@@ -1698,7 +1702,7 @@ AUTHENTICATED (role-gated; header: account switcher incl. child context, languag
 ├── Dashboard ......................... role-specific home (/dashboard/student, /dashboard/parent, /teacher, /admin)
 ├── Academic
 │   ├── Administrative Groups ......... /admin/groups (staff, R43) · /admin/groups/{id}/roster
-│   ├── Course Schedules .............. /admin/schedules (staff, R43) · /teacher/schedules (teacher view)
+│   │   (Course Schedules moved to الجدولة / Scheduling — Revision 51; /teacher/schedules is unchanged)
 │   ├── Levels ........................ /admin/levels
 │   ├── Subject Organisation .......... /admin/levels/{id}/subjects/{subjectId} (Teaching Groups, R43)
 │   ├── Subjects ...................... /admin/taxonomy (subjects tab)
@@ -1708,7 +1712,11 @@ AUTHENTICATED (role-gated; header: account switcher incl. child context, languag
 │   ├── Users ......................... /admin/users
 │   ├── Approvals ..................... /admin/approvals
 │   └── Family ........................ /dashboard/parent · /family/link-child
-├── Calendar .......................... /admin/calendar (Events + unified view) · /dashboard/student/calendar (view)
+├── الجدولة / Scheduling *(Revision 51)*
+│   ├── Events ........................ /admin/calendar
+│   ├── Sessions ...................... /admin/schedules (staff, R43) · /teacher/schedules (teacher view)
+│   │   └── Occurrences ............... /admin/schedules/{id}/sessions (the R50 scope dialog)
+│   └── Student view .................. /dashboard/student/calendar (view)
 ├── Content
 │   ├── Resources ..................... /resources (all roles)
 │   ├── Upload / Record ............... /teacher/content

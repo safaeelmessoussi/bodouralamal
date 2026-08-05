@@ -29,7 +29,7 @@ import {
   RecurrenceEditor,
   SchedulingTimes,
 } from '../../components/scheduling/recurrence-editor.js';
-import { TextField } from '../../components/ui/field.js';
+import { SelectField, TextField } from '../../components/ui/field.js';
 import { ApiError } from '../../lib/api.js';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
@@ -448,73 +448,72 @@ function ScheduleDialog({
     >
       {notice ? <p role="status">{notice}</p> : null}
 
-      <label>
-        <span>{t('admin.schedules.subject')}</span>
-        <select value={subjectId} disabled={fixed} onChange={(e) => setSubjectId(e.target.value)}>
-          <option value="">{t('common.choose')}</option>
-          {subjects.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name}
-            </option>
-          ))}
-        </select>
-      </label>
+      {/* **The shared field primitives, exactly as the Events form uses them.**
+          These were six hand-rolled `<label><select>` blocks, which is why the
+          two scheduling screens looked like different products: a raw control
+          carries no label association, no hint slot and no error slot, so it
+          spaces and behaves differently from every other form in the platform
+          (constitution §4.3). The MODEL fields below stay different — that is
+          the honest part — while the way they are asked no longer does. */}
+      <SelectField
+        label={t('admin.schedules.subject')}
+        value={subjectId}
+        onChange={setSubjectId}
+        disabled={fixed}
+        options={[
+          { value: '', label: t('common.choose') },
+          ...subjects.map((s) => ({ value: s.id, label: s.name })),
+        ]}
+      />
 
-      <label>
-        <span>{t('admin.schedules.mode')}</span>
-        <select
-          value={mode}
-          disabled={fixed}
-          onChange={(e) => {
-            setMode(e.target.value);
-            // The target belongs to the mode; keeping the old id would submit
-            // an entity of the wrong kind.
-            setTargetId('');
-          }}
-        >
-          {MODES.filter((m) => m !== 'teaching_group' || fixed).map((m) => (
-            <option key={m} value={m}>
-              {t(`admin.schedules.mode_${m}`)}
-            </option>
-          ))}
-        </select>
-      </label>
+      <SelectField
+        label={t('admin.schedules.mode')}
+        value={mode}
+        disabled={fixed}
+        onChange={(v: string) => {
+          setMode(v);
+          // The target belongs to the mode; keeping the old id would submit an
+          // entity of the wrong kind.
+          setTargetId('');
+        }}
+        options={MODES.filter((m) => m !== 'teaching_group' || fixed).map((m) => ({
+          value: m,
+          label: t(`admin.schedules.mode_${m}`),
+        }))}
+      />
 
-      <label>
-        <span>{t('admin.schedules.target')}</span>
-        <select value={targetId} disabled={fixed} onChange={(e) => setTargetId(e.target.value)}>
-          <option value="">{t('common.choose')}</option>
-          {targets.map((x) => (
-            <option key={x.id} value={x.id}>
-              {x.name}
-            </option>
-          ))}
-        </select>
-      </label>
+      <SelectField
+        label={t('admin.schedules.target')}
+        value={targetId}
+        onChange={setTargetId}
+        disabled={fixed}
+        options={[
+          { value: '', label: t('common.choose') },
+          ...targets.map((x) => ({ value: x.id, label: x.name })),
+        ]}
+      />
 
-      <label>
-        <span>{t('admin.schedules.branch')}</span>
-        <select value={branchId} disabled={fixed} onChange={(e) => setBranchId(e.target.value)}>
-          <option value="">{t('common.choose')}</option>
-          {branches.map((b) => (
-            <option key={b.id} value={b.id}>
-              {b.name}
-            </option>
-          ))}
-        </select>
-      </label>
+      <SelectField
+        label={t('admin.schedules.branch')}
+        value={branchId}
+        onChange={setBranchId}
+        disabled={fixed}
+        options={[
+          { value: '', label: t('common.choose') },
+          ...branches.map((b) => ({ value: b.id, label: b.name })),
+        ]}
+      />
 
-      <label>
-        <span>{t('admin.schedules.year')}</span>
-        <select value={yearId} disabled={fixed} onChange={(e) => setYearId(e.target.value)}>
-          <option value="">{t('common.choose')}</option>
-          {years.map((y) => (
-            <option key={y.id} value={y.id}>
-              {y.label}
-            </option>
-          ))}
-        </select>
-      </label>
+      <SelectField
+        label={t('admin.schedules.year')}
+        value={yearId}
+        onChange={setYearId}
+        disabled={fixed}
+        options={[
+          { value: '', label: t('common.choose') },
+          ...years.map((y) => ({ value: y.id, label: y.label })),
+        ]}
+      />
 
       {fixed ? <p className="muted">{t('admin.schedules.fixedAfterCreate')}</p> : null}
 
@@ -537,20 +536,18 @@ function ScheduleDialog({
       />
 
       {!fixed ? (
-        <label>
-          <span>{t('admin.schedules.teacher')}</span>
-          <select value={teacherId} onChange={(e) => setTeacherId(e.target.value)}>
-            <option value="">{t('common.choose')}</option>
-            {teachers.map((x) => (
-              <option key={x.id} value={x.id}>
-                {x.name_arabic}
-              </option>
-            ))}
-          </select>
-        </label>
+        <SelectField
+          label={t('admin.schedules.teacher')}
+          value={teacherId}
+          onChange={setTeacherId}
+          options={[
+            { value: '', label: t('common.choose') },
+            ...teachers.map((x) => ({ value: x.id, label: x.name_arabic })),
+          ]}
+        />
       ) : null}
 
-      <div className="dialog__actions">
+      <div className="form__actions">
         <Button variant="secondary" onClick={onCancel}>
           {t('common.cancel')}
         </Button>

@@ -2,13 +2,13 @@
 
 # Draft SRS Revision 51 — Scheduling is one section with two models
 
-> **Status: PROPOSED. Not in force.** §14.1's sitemap is normative — *"AI agents must
-> implement exactly this navigation hierarchy — no invented sections, no reshuffling"* — so the
-> regrouping below **cannot** be implemented without this revision. Drafted for the Document
-> Owner to apply.
+> **Status: APPLIED to `docs/SRS.md` on 2026-08-05**, on the Document Owner's approval of the
+> grouping and instruction to *"prepare it as an SRS revision."* §0 carries the entry and §14.1's
+> sitemap now lists الجدولة with Events and Sessions under it.
 >
-> **The component sharing that accompanies it needs no revision and is already done**
-> (2026-08-05): it changes no navigation, no contract and no model.
+> Retained for the **rationale** — particularly the table of what could not be shared and why,
+> which the specification states as a rule rather than an argument. Delete it once that
+> reasoning has a home in the handbook.
 
 ---
 

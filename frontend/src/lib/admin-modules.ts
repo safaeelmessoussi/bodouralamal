@@ -39,13 +39,16 @@ export interface AdminModule extends PortalModule {
 
 export type { ModuleStatus };
 
-export type AdminSection = 'academic' | 'people' | 'calendar' | 'content' | 'administration';
+/** §14.1's groups. `scheduling` replaced `calendar` in Revision 51: an
+ *  administrator groups Events and Sessions by *things that are scheduled*,
+ *  which is the question they are asking, rather than by which model they are. */
+export type AdminSection = 'academic' | 'people' | 'scheduling' | 'content' | 'administration';
 
 /** §14.1's group order, which the sidebar renders in exactly this sequence. */
 export const ADMIN_SECTIONS: readonly AdminSection[] = [
   'academic',
   'people',
-  'calendar',
+  'scheduling',
   'content',
   'administration',
 ];
@@ -84,7 +87,9 @@ export const ADMIN_MODULES: readonly AdminModule[] = [
     // sitemap the registry claims to hold as data was not the sitemap it held.
     path: '/admin/schedules',
     labelKey: 'admin.nav.schedules',
-    section: 'academic',
+    // R51 — with Events, under Scheduling. The MODELS are unchanged (§4.4,
+    // §20 r22); only where a person looks for them.
+    section: 'scheduling',
     roles: STAFF,
     status: 'ready',
   },
@@ -123,7 +128,7 @@ export const ADMIN_MODULES: readonly AdminModule[] = [
   {
     path: '/admin/calendar',
     labelKey: 'admin.nav.calendar',
-    section: 'calendar',
+    section: 'scheduling',
     roles: STAFF,
     status: 'ready',
   },
