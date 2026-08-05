@@ -567,7 +567,10 @@
   - Built by extracting `enrolInGroup` from `enrolStudent`, so approval places students by the **same rules the roster screen uses** — branch scope, §4.4b sex restriction, BR-21, consent re-evaluation
   - **An approval that would leave a student unplaced is refused** (`ENROLLMENT_REQUIRED`, naming who). Who must be placed is derived from the bundle; a staff request enrols nobody
   - Only people in the bundle may be named (`NOT_IN_BUNDLE`), or approval would be an unscoped enrolment endpoint
-  - **Deviation, recorded:** §4.1 step 1's preselection of *the first Level of the applicant's Category* is not implemented because **no Category is recorded at registration**. The clause calls it a default, not a decision; the proposal names the one-column change that would enable it
+  - ✓ **Deviation closed (Owner decision, 2026-08-05):** registration now records `intended_category_id`, so §4.1 step 1's preselection works — the Level list filters to the stated Category and its first Level is preselected, with *any Category* one click away
+  - Category dropdown is the **live Categories ordered by `display_order`**, read from the public `/calendar/bootstrap` — no new endpoint, no hardcoded list
+  - Required for a student, **refused for a staff request** (a teacher is admitted to no Level)
+  - **Deleting a Category is refused while pending requests reference it**; decided ones never block, and the soft delete keeps them readable
 - [ ] Public Educational Library frontend — **same filters, same items, ordering only** for signed-in users (§5.2)
   - Note: the public calendar's *screen* filters (branch · category · level) stay identical for everyone and are compliant. Adding TD-3.4's `subject_id`/`teacher_id`/`academic_year_id` to a **public** screen would need public reference lists that do not exist — `/admin/subjects` is Admin-only by design
 

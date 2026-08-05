@@ -280,11 +280,17 @@ export async function updateCategory(
 }
 
 /**
- * TD-5 soft delete, **refused while Levels or Event scopes reference it**.
+ * TD-5 soft delete, **refused while Levels, Event scopes or PENDING
+ * registration requests reference it**.
  *
  * A Category is deliberately *not* allowed to take its Levels with it: a Level
  * carries enrolments, groups and schedules, so cascading here would delete a
  * live curriculum from a screen whose control says "delete category".
+ *
+ * **The soft delete is what keeps decided requests valid.** A person who asked
+ * for a stage the association later retired still has a readable record,
+ * because the row is still there to join to — which is why only *pending*
+ * requests block, and history never does.
  */
 export async function deleteCategory(prisma: PrismaClient, actor: Actor, id: string): Promise<void> {
   assertCanWrite(actor);
@@ -295,13 +301,28 @@ export async function deleteCategory(prisma: PrismaClient, actor: Actor, id: str
     const category = await tx.category.findFirst({ where: { id, deletedAt: null } });
     if (!category) throw new AppError('NOT_FOUND', 'category not found');
 
-    const [levels, events] = await Promise.all([
+    const [levels, events, pendingRequests] = await Promise.all([
       tx.level.count({ where: { categoryId: id, deletedAt: null } }),
       tx.eventCategory.count({ where: { categoryId: id } }),
+      // Revision 49 (Document Owner decision, 2026-08-05): **a Category with
+      // PENDING registration requests pointing at it must not vanish
+      // underneath them** — the §4.1 approval screen would be left preselecting
+      // Levels from a stage that no longer exists, and the applicant's stated
+      // choice would silently become unreadable.
+      //
+      // **Only pending ones block.** Once a request is decided, its
+      // `intended_category_id` is history — what the person asked for — and the
+      // soft delete keeps that row perfectly readable, since a soft-deleted
+      // Category is still there to join to. Blocking on decided requests would
+      // mean a Category could never be retired at all.
+      tx.user.count({
+        where: { intendedCategoryId: id, accountStatus: 'pending', deletedAt: null },
+      }),
     ]);
     await assertNoBlockingReferences([
       { label: 'levels', count: levels },
       { label: 'events', count: events },
+      { label: 'pending_requests', count: pendingRequests },
     ]);
 
     await tx.category.update({

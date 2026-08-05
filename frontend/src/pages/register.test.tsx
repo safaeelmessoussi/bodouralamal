@@ -24,10 +24,12 @@ const person = {
   sex: 'female' as const,
 };
 const base = {
-  kind: 'adult' as const,
+  // R49 — the FORM's three options, not the wire's two `kind`s.
+  intent: 'adult' as const,
   applicant: person,
   child: person,
   branchId: 'b1',
+  categoryId: 'c1',
   dataProcessing: true,
   mediaRelease: '' as const,
 };
@@ -44,6 +46,21 @@ describe('§4.1 Revision 39 — the branch is a required choice', () => {
   });
 });
 
+describe('§4.1 step 1 / Revision 49 — the educational stage', () => {
+  it('refuses a student submission with no stage chosen', () => {
+    // Without it §4.1 step 1 cannot preselect "the first Level of the
+    // applicant's Category" — the clause that was unimplementable until this
+    // field existed.
+    expect(validate({ ...base, categoryId: null })).toHaveProperty('category');
+  });
+
+  it('does NOT require one from a staff request', () => {
+    // A teacher is admitted to no Level, so the question has no answer — and
+    // the server refuses a staff request that states one.
+    expect(validate({ ...base, intent: 'teacher', categoryId: null })).toEqual({});
+  });
+});
+
 describe('consent rules (§4.1, BR-1)', () => {
   it('refuses without data-processing consent', () => {
     // Not a warning: there is no lawful basis to create the record at all.
@@ -51,7 +68,7 @@ describe('consent rules (§4.1, BR-1)', () => {
   });
 
   it('requires a media-release DECISION for a minor, and accepts "no"', () => {
-    const parentChild = { ...base, kind: 'parent_child' as const };
+    const parentChild = { ...base, intent: 'parent_child' as const };
     // Unanswered is refused…
     expect(validate(parentChild)).toHaveProperty('mediaRelease');
     // …but declining is a valid, recorded answer. BR-1 reads an absent record
@@ -86,7 +103,7 @@ describe('person rules mirror TD-9', () => {
     // the first would send an invalid child to be rejected by the server.
     const errors = validate({
       ...base,
-      kind: 'parent_child',
+      intent: 'parent_child',
       mediaRelease: 'no',
       child: { ...person, firstNameArabic: '' },
     });

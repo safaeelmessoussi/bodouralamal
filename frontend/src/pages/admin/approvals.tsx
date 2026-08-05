@@ -482,12 +482,16 @@ function StaffApprovalDialog({
  * **Teaching Groups are never offered here** (§4.1): at approval nobody yet
  * knows how each Subject will be split, and most Subjects are never split.
  *
- * **No Level is preselected**, and that is a deviation worth naming: §4.1 asks
- * for *"the first Level of the applicant's Category"*, but **registration
- * records no Category** — §4.1b step 5 collects a branch and nothing else
- * organisational. Guessing one from the form's `kind` would be an inference the
- * specification does not authorise, so the Levels are listed in Category order
- * and the administrator chooses. Recorded in `SRS-PROPOSAL-R49.md`.
+ * **The first Level of the applicant's Category is preselected** (§4.1 step 1),
+ * which became implementable when registration started recording a Category
+ * (Revision 49). It is **a default, not a decision**, in the clause's own
+ * words — the Level list is filtered to that Category for the same reason, and
+ * *"any Category"* is one click away, because an applicant may have chosen the
+ * wrong stage and correcting it is the approver's job.
+ *
+ * **An applicant registered before Revision 49 has no Category**, and that is
+ * rendered as what it is — *not stated* — with no filter and nothing
+ * preselected, rather than as a guess.
  */
 function PlacementDialog({
   row,
@@ -505,11 +509,15 @@ function PlacementDialog({
   // a parent registering a family.
   const children = row.applicants.filter((a) => a.role === 'child');
   const students = children.length > 0 ? children : row.applicants.filter((a) => a.role === 'applicant');
+  const studentIds = students.map((s) => s.id);
 
   const [levels, setLevels] = useState<Level[]>([]);
   const [groups, setGroups] = useState<AdministrativeGroup[]>([]);
   const [choice, setChoice] = useState<Record<string, { levelId: string; groupId: string }>>({});
   const [loadFailed, setLoadFailed] = useState(false);
+  /** §4.1 step 1 filters to the applicant's Category — and lets the approver
+   *  leave it, because the applicant may have chosen the wrong stage. */
+  const [categoryFilter, setCategoryFilter] = useState<string>(row.category?.id ?? '');
 
   useEffect(() => {
     void (async () => {
@@ -520,6 +528,26 @@ function PlacementDialog({
         ]);
         setLevels(lvls);
         setGroups(grps.data);
+
+        // §4.1 step 1: **the first Level of the applicant's Category is
+        // preselected** — a DEFAULT, not a decision. Applied once, when the
+        // lists arrive, so a later edit is never overwritten. The group follows
+        // step 2: a Level with one group needs no interaction.
+        const wanted = row.category?.id;
+        if (wanted) {
+          const first = lvls.find((l) => l.category_id === wanted);
+          if (first) {
+            const inLevel = grps.data.filter((g) => g.level_id === first.id);
+            setChoice(
+              Object.fromEntries(
+                studentIds.map((id) => [
+                  id,
+                  { levelId: first.id, groupId: inLevel.length === 1 ? inLevel[0]!.id : '' },
+                ]),
+              ),
+            );
+          }
+        }
       } catch {
         // Without these the approval cannot be completed at all, so this is a
         // blocking failure rather than a degraded one.
@@ -550,6 +578,26 @@ function PlacementDialog({
           </p>
         ) : null}
 
+        {/* The stage the applicant asked for, and an escape from it. §4.1 makes
+            the preselection a default; an applicant who picked the wrong stage
+            is exactly why the approver can widen this. */}
+        <SelectField
+          label={t('admin.approvals.colRequested')}
+          value={categoryFilter}
+          onChange={setCategoryFilter}
+          options={[
+            { value: '', label: t('admin.approvals.anyCategory') },
+            ...[...new Map(levels.map((l) => [l.category_id, l.category_name])).entries()].map(
+              ([id, name]) => ({ value: id, label: name }),
+            ),
+          ]}
+          hint={
+            row.category
+              ? t('admin.approvals.categoryRequested').replace('{category}', row.category.name)
+              : t('admin.approvals.categoryNotStated')
+          }
+        />
+
         {students.map((s) => {
           const picked = choice[s.id];
           const inLevel = picked ? groups.filter((g) => g.level_id === picked.levelId) : [];
@@ -566,7 +614,9 @@ function PlacementDialog({
                   // Ordered by Category server-side (§2.2 scopes a Level's
                   // order within its Category), so the list reads as curricula
                   // rather than as one flat run.
-                  ...levels.map((l) => ({ value: l.id, label: `${l.category_name} — ${l.name}` })),
+                  ...levels
+                    .filter((l) => categoryFilter === '' || l.category_id === categoryFilter)
+                    .map((l) => ({ value: l.id, label: `${l.category_name} — ${l.name}` })),
                 ]}
               />
               {picked && inLevel.length > 1 ? (

@@ -189,6 +189,35 @@ suite owns, and `TAG` is a convention rather than a column. The cheap
 approximation — assert in `afterAll` that at least one active Super Admin
 exists — is now part of the test itself.
 
+### And a third time, from the other direction: teardown ORDER and tag overlap
+
+Revision 49 added `User.intended_category_id` as `ON DELETE RESTRICT`, and two
+teardown bugs surfaced within an hour. Both looked like logic failures. Neither
+was.
+
+- **`clearPlacement` ran before the suite deleted its users.** A Category still
+  named by a pending applicant refuses to go — *the constraint working exactly as
+  designed*. Shared cleanup helpers must run **after** the rows that reference
+  them, and the helper's docstring now says so rather than leaving each caller to
+  rediscover it.
+- **The placement fixture was tagged `${TAG}p`, which `startsWith(TAG)` matches.**
+  The suite's own `clear()` swept the placement's Branch before its
+  Administrative Group was gone, and `Restrict` refused again. Fixture tags must
+  be **disjoint namespaces, not prefix extensions** — `[appr-test-place]` rather
+  than `[appr-test]p`, because the closing bracket is what separates them.
+
+**Both produced nine to fourteen red tests across unrelated files**, including
+pagination and permission tests with no connection to the change. That breadth is
+the signature: **when a failure list spans files with no common subject, suspect
+the fixture, not the feature.**
+
+**A failed teardown compounds.** Each crashed run left its rows behind, and after
+three runs `listUsers`' first page of 25 no longer contained the user a
+visibility test expected — a *real* test asserting a *real* rule, failing on
+accumulated debris. The development database had to be purged by hand before the
+suite could be trusted again. **A red teardown is never "just cleanup"; it is the
+next run's false failure.**
+
 ## Assert that a failure is ACTIONABLE, not merely that it fails
 
 There *was* a test for the missing consent version. It asserted

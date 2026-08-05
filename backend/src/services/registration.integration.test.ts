@@ -42,12 +42,16 @@ function identity() {
 
 /** The branch this suite's applicants choose (§4.1, Revision 39). */
 let branchId = '';
+/** Revision 49 — the applicant's educational stage travels with every
+ *  registration, so the fixture provides one. */
+let categoryId = '';
 
 const parentChild = (): RegistrationInput => ({
   kind: 'parent_child',
   parent: { first_name_arabic: `${TAG}`, last_name_arabic: `والدة`, phone: '+212 600 000 001', sex: 'female' as const },
   child: { first_name_arabic: `${TAG}`, last_name_arabic: `طفلة`, sex: 'female' as const },
   branch_id: branchId,
+  category_id: categoryId,
   consents: { data_processing: true, media_release: true },
 });
 
@@ -67,6 +71,10 @@ async function clear(): Promise<void> {
   // so a branch still referenced by a registration refuses to go — which is the
   // guarantee, working.
   await prisma.branch.deleteMany({ where: { name: { startsWith: TAG } } });
+  // After the users too: `intended_category_id` is ON DELETE RESTRICT, for the
+  // same reason the branch is — a Category with requests pointing at it must not
+  // vanish underneath them (R49).
+  await prisma.category.deleteMany({ where: { name: { startsWith: TAG } } });
 }
 
 beforeEach(async () => {
@@ -78,6 +86,7 @@ beforeEach(async () => {
     create: { key: CONSENT_TEXT_VERSION_KEY, value: TEXT_VERSION },
   });
   branchId = (await prisma.branch.create({ data: { name: `${TAG} مقر` } })).id;
+  categoryId = (await prisma.category.create({ data: { name: `${TAG} فئة` } })).id;
 });
 
 const countTagged = () => prisma.user.count({ where: { nameArabic: { startsWith: TAG } } });
@@ -111,6 +120,7 @@ describe('§7 Revision 40 — الاسم الشخصي / الاسم العائل�
         kind: 'adult',
         applicant: { first_name_arabic: `${TAG} خديجة`, last_name_arabic: 'بنعلي', sex: 'female' },
         branch_id: branchId,
+        category_id: categoryId,
         consents: { data_processing: true },
       },
       KEY,
@@ -135,6 +145,7 @@ describe('§7 Revision 40 — الاسم الشخصي / الاسم العائل�
         parent: { first_name_arabic: `${TAG} أمينة`, last_name_arabic: 'بنعلي', sex: 'female' },
         child: { first_name_arabic: `${TAG} سارة`, last_name_arabic: 'بنعلي', sex: 'female' },
         branch_id: branchId,
+        category_id: categoryId,
         consents: { data_processing: true, media_release: false },
       },
       KEY,
@@ -156,6 +167,7 @@ describe('§7 Revision 40 — الاسم الشخصي / الاسم العائل�
         sex: 'female',
       },
       branch_id: '00000000-0000-4000-8000-000000000000',
+      category_id: categoryId,
       consents: { data_processing: true },
     });
     expect(parsed.success).toBe(false);
@@ -165,6 +177,7 @@ describe('§7 Revision 40 — الاسم الشخصي / الاسم العائل�
     const base = {
       kind: 'adult' as const,
       branch_id: '00000000-0000-4000-8000-000000000000',
+      category_id: categoryId,
       consents: { data_processing: true },
     };
     // Missing family name.
@@ -203,6 +216,7 @@ describe('§4.1 Revision 39 — the applicant chooses a Branch, and only a Branc
         kind: 'adult',
         applicant: { first_name_arabic: 'خديجة', last_name_arabic: 'الاختبارية', sex: 'female', [field]: 'anything' },
         branch_id: '00000000-0000-4000-8000-000000000000',
+        category_id: categoryId,
         consents: { data_processing: true },
       });
       expect(parsed.success, `${field} must be rejected`).toBe(false);
@@ -230,6 +244,7 @@ describe('§4.1 Revision 39 — the applicant chooses a Branch, and only a Branc
         kind: 'adult',
         applicant: { first_name_arabic: `${TAG}`, last_name_arabic: `مختارة`, sex: 'female' },
         branch_id: branchId,
+        category_id: categoryId,
         consents: { data_processing: true },
       },
       KEY,
@@ -268,6 +283,7 @@ describe('§4.1 Revision 39 — the applicant chooses a Branch, and only a Branc
           kind: 'adult',
           applicant: { first_name_arabic: `${TAG}`, last_name_arabic: `وهمية`, sex: 'female' },
           branch_id: '00000000-0000-4000-8000-000000000000',
+          category_id: categoryId,
           consents: { data_processing: true },
         },
         KEY,
@@ -291,6 +307,7 @@ describe('§4.1 Revision 39 — the applicant chooses a Branch, and only a Branc
           kind: 'adult',
           applicant: { first_name_arabic: `${TAG}`, last_name_arabic: `مرفوضة`, sex: 'female' },
           branch_id: closed.id,
+          category_id: categoryId,
           consents: { data_processing: true },
         },
         KEY,
@@ -316,6 +333,7 @@ describe('§4.1 Revision 39 — the applicant chooses a Branch, and only a Branc
         kind: 'adult',
         applicant: { first_name_arabic: `${TAG}`, last_name_arabic: `مبكرة`, sex: 'female' },
         branch_id: future.id,
+        category_id: categoryId,
         consents: { data_processing: true },
       },
       KEY,
@@ -336,6 +354,7 @@ describe('§4.1b step 5 Revision 27 — registration captures sex before the Use
         parent: { first_name_arabic: `${TAG}`, last_name_arabic: `والدة`, sex: 'female' },
         child: { first_name_arabic: `${TAG}`, last_name_arabic: `ابن`, sex: 'male' },
         branch_id: branchId,
+        category_id: categoryId,
         consents: { data_processing: true, media_release: true },
       },
       KEY,
@@ -357,6 +376,7 @@ describe('§4.1b step 5 Revision 27 — registration captures sex before the Use
         kind: 'adult',
         applicant: { first_name_arabic: `${TAG}`, last_name_arabic: `راشدة`, sex: 'female' },
         branch_id: branchId,
+        category_id: categoryId,
         consents: { data_processing: true },
       },
       KEY,
@@ -390,6 +410,7 @@ describe('§4.1b step 5 Revision 27 — registration captures sex before the Use
         kind: 'adult',
         applicant: { first_name_arabic: 'خديجة', last_name_arabic: 'الاختبارية', sex },
         branch_id: '00000000-0000-4000-8000-000000000000',
+        category_id: categoryId,
         consents: { data_processing: true },
       });
       expect(parsed.success).toBe(true);
@@ -522,11 +543,15 @@ describe('§4.1b step 5 / TD-4.1 unified registration', () => {
     const id = identity();
     const victim = fileURLToPath(new URL('../test-support/registration-victim.ts', import.meta.url));
 
-    const child = spawn('npx', ['tsx', victim, TAG, id.email, id.providerSubjectId, branchId], {
-      cwd: fileURLToPath(new URL('../..', import.meta.url)),
-      env: process.env,
-      stdio: ['ignore', 'pipe', 'pipe'],
-    });
+    const child = spawn(
+      'npx',
+      ['tsx', victim, TAG, id.email, id.providerSubjectId, branchId, categoryId],
+      {
+        cwd: fileURLToPath(new URL('../..', import.meta.url)),
+        env: process.env,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      },
+    );
 
     // Wait until it is genuinely parked INSIDE the transaction, past every write
     // but before the commit — a timer would be a guess, and a guess that fired
@@ -645,6 +670,7 @@ describe('§4.1b step 5 / TD-4.1 unified registration', () => {
         kind: 'adult',
         applicant: { first_name_arabic: `${TAG}`, last_name_arabic: `خديجة`, sex: 'female' as const },
         branch_id: branchId,
+        category_id: categoryId,
         consents: { data_processing: true },
       },
       KEY,

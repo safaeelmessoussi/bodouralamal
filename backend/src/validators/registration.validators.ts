@@ -108,6 +108,27 @@ const consents = z.object({
 const branchId = z.uuid();
 
 /**
+ * The educational stage the applicant is asking for (Revision 49, proposed).
+ *
+ * **A request, exactly as `branch_id` is** (R39 — *"a request, not a
+ * placement"*). It narrows and preselects the Levels the approver is offered on
+ * the §4.1 screen; the approver may choose any Level, and the `Enrollment` is
+ * what actually admits the person.
+ *
+ * **Why it exists at all:** §4.1 step 1 requires the approval screen to
+ * preselect *"the first Level of the applicant's Category"*, and nothing
+ * recorded a Category — §4.1b step 5 collects a branch and no other
+ * organisational value — so that clause was unimplementable. Inferring a
+ * Category from the form's `kind` was rejected: Revision 27 makes Categories
+ * editable generic stages an administrator may add to, so the mapping would be a
+ * guess the specification never authorised.
+ *
+ * Existence and liveness are checked in the service, where the database is in
+ * reach. Zod validates shape; the service validates truth.
+ */
+const categoryId = z.uuid();
+
+/**
  * What the applicant is asking to become (Revision 49, proposed).
  *
  * **A hint to the §5.6 approver, never an authority.** Nothing is granted by
@@ -148,10 +169,28 @@ export const adultRegistrationSchema = z
     kind: z.literal('adult'),
     applicant: personCore,
     branch_id: branchId,
+    /**
+     * **Required for a student, absent for a staff request.** A teacher is not
+     * admitted to a Level (§4.1), so asking them for an educational stage would
+     * be asking a question with no answer — and accepting one would put a
+     * Category on a record no approval will ever enrol.
+     */
+    category_id: categoryId.optional(),
     requested_role: requestedRole.optional(),
     consents,
   })
-  .strict();
+  .strict()
+  .refine((v) => v.requested_role !== undefined || v.category_id !== undefined, {
+    path: ['category_id'],
+    message: 'category_id is required unless this is a staff request (§4.1, R49)',
+  })
+  .refine((v) => v.requested_role === undefined || v.category_id === undefined, {
+    path: ['category_id'],
+    // Refused rather than ignored: a staff applicant who picked a stage has
+    // misunderstood the form, and silently dropping it would leave them
+    // believing they had asked to study.
+    message: 'a staff request is not admitted to a Level, so it takes no category_id',
+  });
 
 /** Unified Parent + Child registration (§4.1). Both records or neither. */
 export const parentChildRegistrationSchema = z
@@ -160,6 +199,13 @@ export const parentChildRegistrationSchema = z
     parent: personCore,
     child: personCore,
     branch_id: branchId,
+    /**
+     * **The CHILD's stage, and required.** The child is the one who enrols; the
+     * parent's access comes through the family link. Like `branch_id` it is
+     * top-level and recorded once — the parent makes one choice for the
+     * application, not one per person.
+     */
+    category_id: categoryId,
     consents,
   })
   .strict();

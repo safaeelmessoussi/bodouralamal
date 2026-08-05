@@ -57,6 +57,15 @@ export interface AdultRegistration {
    * authorization boundary the approver decides.
    */
   requested_role?: 'teacher';
+  /**
+   * The educational stage the applicant is asking for (Revision 49).
+   *
+   * **Required for a student, absent for a staff request** — a teacher is
+   * admitted to no Level (§4.1), so the server refuses the pair together. Like
+   * `branch_id` it is a **request**: it narrows and preselects the Levels the
+   * approver is offered, and the enrolment is what actually admits the person.
+   */
+  category_id?: string;
   consents: { data_processing: boolean };
 }
 
@@ -65,6 +74,9 @@ export interface ParentChildRegistration {
   parent: PersonInput;
   child: PersonInput;
   branch_id: string;
+  /** The **child's** stage, and required: the child is the one who enrols. One
+   *  choice per application, recorded once — like `branch_id`. */
+  category_id: string;
   /** `media_release` is a required *decision* for a minor; `false` is valid and
    *  is stored as a real record, because BR-1 reads an absent record as refusal
    *  and a declined release must be distinguishable from an unanswered one. */

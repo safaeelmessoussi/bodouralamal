@@ -36,6 +36,14 @@ const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);
 let savedConsentVersion: SavedConsentVersion | null = null;
 const BASE = `${config.PUBLIC_BASE_URL}/api/v1`;
 const TAG = '[http-appr-test]';
+/**
+ * **Deliberately not a prefix-extension of `TAG`.** `clear()` deletes by
+ * `startsWith(TAG)`, so a placement tagged `${TAG}p` would be swept by the
+ * suite's own branch delete — before its Administrative Group was gone, and the
+ * `Restrict` FK would refuse. The separating `-` before the bracket is what
+ * keeps the two namespaces disjoint.
+ */
+const PLACEMENT_TAG = '[http-appr-test-place]';
 
 interface Res {
   status: number;
@@ -80,6 +88,10 @@ async function submitBundle(intoBranchId?: string): Promise<{ parentId: string; 
       parent: { first_name_arabic: `${TAG}`, last_name_arabic: `والدة`, sex: 'female' as const },
       child: { first_name_arabic: `${TAG}`, last_name_arabic: `طفلة`, sex: 'female' as const },
       branch_id: intoBranchId ?? branchId,
+      // R49 — the stage the parent chose for the child, which §4.1 step 1
+      // preselects the first Level from. The fixture's placement Category, so
+      // the preselection and the group the approval uses agree.
+      category_id: placement.categoryId,
       consents: { data_processing: true, media_release: true },
     },
     config.ONBOARDING_TOKEN_KEY,
@@ -88,7 +100,6 @@ async function submitBundle(intoBranchId?: string): Promise<{ parentId: string; 
 }
 
 async function clear(): Promise<void> {
-  await clearPlacement(prisma, `${TAG}p`);
   const users = await prisma.user.findMany({
     where: { nameArabic: { startsWith: TAG } },
     select: { id: true },
@@ -101,12 +112,22 @@ async function clear(): Promise<void> {
   await prisma.familyLink.deleteMany({
     where: { OR: [{ parentId: { in: ids } }, { studentId: { in: ids } }] },
   });
+  // §4.1 (R43): approving now CREATES enrolments, and `enrollment.student_id`
+  // is ON DELETE RESTRICT — so they go before the people they belong to. This
+  // line did not exist before approval placed anybody, which is why adding the
+  // placement turned an unrelated dozen tests red.
+  await prisma.enrollment.deleteMany({ where: { studentId: { in: ids } } });
   await prisma.userIdentity.deleteMany({ where: { userId: { in: ids } } });
   await prisma.userBranchRole.deleteMany({ where: { userId: { in: ids } } });
   await prisma.user.deleteMany({ where: { id: { in: ids } } });
   await prisma.consumedToken.deleteMany({ where: { purpose: 'onboarding' } });
   // After the users: `intended_branch_id` is ON DELETE RESTRICT.
   await prisma.branch.deleteMany({ where: { name: { startsWith: TAG } } });
+  // **Last, not first.** `intended_branch_id` and `intended_category_id` are
+  // both ON DELETE RESTRICT (R39, R49), so a Category or Branch still named by
+  // a user refuses to go — which is the constraint doing its job, and the
+  // reason this ordering is a requirement rather than a preference.
+  await clearPlacement(prisma, PLACEMENT_TAG);
 }
 
 let adminId: string;
@@ -133,7 +154,7 @@ beforeAll(async () => {
   }
 
   await clear();
-  placement = await provisionPlacement(prisma, `${TAG}p`);
+  placement = await provisionPlacement(prisma, PLACEMENT_TAG);
   await prisma.systemSetting.upsert({
     where: { key: CONSENT_TEXT_VERSION_KEY },
     update: { value: 'http-appr-v1' },
@@ -177,7 +198,7 @@ describe('GET /api/v1/admin/approvals', () => {
     const item = (res.body.data as Record<string, unknown>[]).find((i) => i.id === parentId)!;
 
     expect(Object.keys(item).sort()).toEqual(
-      ['applicants', 'branch', 'bundle', 'id', 'requested_role', 'submitted_at', 'type'],
+      ['applicants', 'branch', 'bundle', 'category', 'id', 'requested_role', 'submitted_at', 'type'],
     );
     // `requested_role` joined in Revision 49 and is deliberately argued onto
     // this list rather than arriving on it: without it the approver cannot tell
@@ -185,6 +206,10 @@ describe('GET /api/v1/admin/approvals', () => {
     // reason the staff workflow needed anything at all. **A hint, never an
     // authority** — it is `null` here because this bundle asked for no role.
     expect(item['requested_role']).toBeNull();
+    // `category` joined in Revision 49, and it is what made §4.1 step 1's
+    // preselection implementable at all: nothing had recorded the applicant's
+    // stage, so the clause could not be honoured. Two fields, like the branch.
+    expect(Object.keys(item['category'] as object).sort()).toEqual(['id', 'name']);
     // R39: what the applicant ASKED FOR, projected to exactly two fields.
     expect(Object.keys(item.branch as object).sort()).toEqual(['id', 'name']);
     expect(Object.keys(item.bundle as object).sort()).toEqual(['child_count', 'link_count']);

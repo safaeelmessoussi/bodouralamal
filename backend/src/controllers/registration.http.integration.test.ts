@@ -36,6 +36,9 @@ const TAG = '[http-reg-test]';
 
 let savedConsentVersion: SavedConsentVersion | null = null;
 let branchId = '';
+/** Revision 49 — the applicant's educational stage travels with every
+ *  registration, so the fixture provides one. */
+let categoryId = '';
 
 interface Res {
   status: number;
@@ -74,6 +77,7 @@ const adult = () => ({
   kind: 'adult' as const,
   applicant: person('خديجة', 'بنعلي'),
   branch_id: branchId,
+  category_id: categoryId,
   consents: { data_processing: true },
 });
 
@@ -92,6 +96,10 @@ async function clear(): Promise<void> {
   await prisma.user.deleteMany({ where: { id: { in: ids } } });
   await prisma.consumedToken.deleteMany({ where: { purpose: 'onboarding' } });
   await prisma.branch.deleteMany({ where: { name: { startsWith: TAG } } });
+  // After the users too: `intended_category_id` is ON DELETE RESTRICT, for the
+  // same reason the branch is — a Category with requests pointing at it must not
+  // vanish underneath them (R49).
+  await prisma.category.deleteMany({ where: { name: { startsWith: TAG } } });
 }
 
 beforeAll(async () => {
@@ -102,6 +110,7 @@ beforeAll(async () => {
   savedConsentVersion = await captureConsentVersion(prisma);
   await clear();
   branchId = (await prisma.branch.create({ data: { name: `${TAG} مقر` } })).id;
+  categoryId = (await prisma.category.create({ data: { name: `${TAG} فئة` } })).id;
 });
 
 afterAll(async () => {
@@ -166,6 +175,7 @@ describe('a well-formed submission succeeds end to end', () => {
           parent: person('أمينة', 'بنعلي'),
           child: person('سارة', 'بنعلي'),
           branch_id: branchId,
+          category_id: categoryId,
           consents: { data_processing: true, media_release: false },
         },
         freshToken(),
@@ -195,6 +205,7 @@ describe('the boundary refuses what it should, over HTTP', () => {
           kind: 'adult',
           applicant: { ...person('خديجة', 'بنعلي'), name_arabic: 'شيء آخر' },
           branch_id: branchId,
+          category_id: categoryId,
           consents: { data_processing: true },
         },
         freshToken(),

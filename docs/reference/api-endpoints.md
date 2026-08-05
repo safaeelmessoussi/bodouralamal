@@ -109,7 +109,7 @@ specification says it is, and keeps the gap **visible rather than silent**.
 
 | | Path | Audience | Notes |
 |---|---|---|---|
-| `POST` | `/registrations` | 🌐 + token | Gated by the signed onboarding token; no session exists yet. **Identity comes solely from the token payload.** Optional `requested_role: 'teacher'` (R49) — **a hint that grants nothing** |
+| `POST` | `/registrations` | 🌐 + token | Gated by the signed onboarding token; no session exists yet. **Identity comes solely from the token payload.** `category_id` (the stage asked for) and optional `requested_role: 'teacher'` — **a hint that grants nothing** (R49) |
 | `GET` | `/admin/approvals` | 🔒 | Deliberately **unscoped** — the permanent path by which a branch Admin meets applicants |
 | `POST` | `/admin/approvals/{id}/approve` | 🔒 | Atomic bundle activation, **plus the §4.1 placement**: `enrollments: [{ user_id, administrative_group_id }]`, and optional `assignments: [{ role, branch_id }]`, all in **one transaction** |
 | `POST` | `/admin/approvals/{id}/reject` | 🔒 | Body carries a reason |
@@ -150,10 +150,18 @@ Placement runs through the **same function the roster screen uses**, so it carri
 branch-scope check, §4.4b's `gender_restriction` vs `User.sex` rule, BR-21 and the consent
 re-evaluation enqueue.
 
-**Not implemented: §4.1 step 1's preselection** of the first Level of the applicant's Category —
-**no Category is recorded at registration**. The clause calls it *a default, not a decision*, so
-the mandatory content is met; the screen lists Levels in Category order instead. Recorded in
-[SRS-PROPOSAL-R49](../SRS-PROPOSAL-R49.md).
+**§4.1 step 1's preselection works** because registration records the stage the applicant asked
+for (`User.intended_category_id`, R49). The approval screen filters the Level list to that
+Category and preselects its first Level — **a default, not a decision**, so *"any Category"*
+stays one click away for an applicant who chose the wrong stage. An applicant registered before
+R49 has no Category, rendered as *not stated* rather than guessed.
+
+**`category_id` is required for a student and refused for a staff request** — a teacher is
+admitted to no Level. The form populates it from the **live Categories ordered by
+`display_order`**, read from `/calendar/bootstrap`, which already publishes exactly that list
+publicly. **Deleting a Category is refused while pending requests reference it**
+(`blocked_by.pending_requests`); decided requests never block, and the TD-5 soft delete keeps
+them readable.
 
 ### The staff registration workflow needed no new endpoint
 

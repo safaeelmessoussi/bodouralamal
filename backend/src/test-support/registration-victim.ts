@@ -30,8 +30,11 @@ const subject = process.argv[4];
 /** §4.1 Revision 39 — the applicant's chosen branch, passed in by the parent
  *  test so this process creates no reference data of its own. */
 const branchId = process.argv[5];
-if (!tag || !email || !subject || !branchId) {
-  throw new Error('usage: registration-victim <tag> <email> <subject> <branchId>');
+/** Revision 49 — the applicant's stage travels with the payload, so the crash
+ *  fixture must supply one or the schema refuses before the crash can happen. */
+const categoryId = process.argv[6];
+if (!tag || !email || !subject || !branchId || !categoryId) {
+  throw new Error('usage: registration-victim <tag> <email> <subject> <branchId> <categoryId>');
 }
 
 const config = loadConfig();
@@ -62,6 +65,7 @@ const input: RegistrationInput = {
   parent: { first_name_arabic: `${tag}`, last_name_arabic: `والدة`, phone: '+212 600 000 009', sex: 'female' },
   child: { first_name_arabic: `${tag}`, last_name_arabic: `طفلة`, sex: 'female' },
   branch_id: branchId,
+  category_id: categoryId,
   consents: { data_processing: true, media_release: true },
 };
 

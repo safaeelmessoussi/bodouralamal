@@ -50,6 +50,7 @@ const QUEUE_ITEM: Approval = {
   bundle: { child_count: 0, link_count: 0 },
   branch: { id: ASSIGNMENT.branch_id!, name: ASSIGNMENT.branch_name! },
   requested_role: null,
+  category: { id: '00000000-0000-4000-8000-00000000000a', name: 'طفل' },
 };
 
 describe('the adapter type matches the wire contract', () => {

@@ -52,6 +52,12 @@ export async function provisionPlacement(
  * Every FK here is `Restrict`, so the order is not a preference — a Level with a
  * live group cannot be deleted, and the failure would surface as a constraint
  * violation in `afterAll` rather than as anything readable.
+ *
+ * **Call this AFTER deleting the suite's users, never before.**
+ * `User.intended_category_id` is `Restrict` too (R49), so a Category still named
+ * by a pending applicant refuses to go — which is the constraint working, and
+ * exactly what it exists to prevent in production. Calling it first cost nine
+ * red tests that looked like a logic failure and were a teardown ordering bug.
  */
 export async function clearPlacement(prisma: PrismaClient, tag: string): Promise<void> {
   const levels = await prisma.level.findMany({

@@ -13,6 +13,7 @@ import { SiteFooter } from '../components/site-footer.js';
 import { ConsentNotice } from '../components/consent-notice.js';
 import { ErrorState } from '../components/states.js';
 import { BranchSelector } from '../components/ui/branch-selector.js';
+import { fetchCalendarBootstrap, type CategoryRef } from '../adapters/calendar.js';
 import { Button } from '../components/ui/button.js';
 import { Container } from '../components/ui/container.js';
 import { SelectField, TextArea, TextField } from '../components/ui/field.js';
@@ -50,6 +51,10 @@ import { ApiError } from '../lib/api.js';
 export function Register(): ReactNode {
   const [token, setToken] = useState<string | null>(null);
   const [tokenChecked, setTokenChecked] = useState(false);
+  /** Live Categories, ordered by `display_order` — read from the PUBLIC
+   *  calendar bootstrap, which already publishes exactly that list. */
+  const [categories, setCategories] = useState<CategoryRef[]>([]);
+  const [categoryId, setCategoryId] = useState<string | null>(null);
   const [branches, setBranches] = useState<PublicBranch[]>([]);
   const [branchesFailed, setBranchesFailed] = useState(false);
 
@@ -92,6 +97,14 @@ export function Register(): ReactNode {
     setBranchesFailed(false);
     try {
       setBranches(await fetchBranches());
+      // **The public calendar bootstrap, not a new endpoint.** It already
+      // publishes every live Category ordered by `display_order`, anonymously
+      // and cached — which is exactly this control's need. This is not the
+      // widening rejected for the admin selectors: nothing is added to that
+      // payload, a second public surface is reading the fields it already has.
+      const today = new Date().toISOString().slice(0, 10);
+      const bootstrap = await fetchCalendarBootstrap({ from: today, to: today });
+      setCategories(bootstrap.categories);
     } catch {
       // The branch is required, so a failed list is a blocking failure rather
       // than a degraded one — offering the form without it would let someone
@@ -104,7 +117,15 @@ export function Register(): ReactNode {
     void loadBranches();
   }, [loadBranches]);
 
-  const localErrors = validate({ kind, applicant, child, branchId, dataProcessing, mediaRelease });
+  const localErrors = validate({
+    intent,
+    applicant,
+    child,
+    branchId,
+    categoryId,
+    dataProcessing,
+    mediaRelease,
+  });
   const valid = Object.keys(localErrors).length === 0;
   // The server's verdict wins where the two disagree: it is the authority
   // (§1.1), and a field the client thought fine but the server refused must
@@ -120,7 +141,14 @@ export function Register(): ReactNode {
     setServerErrors({ fields: {}, unmapped: [] });
     try {
       await submitRegistration(
-        buildPayload({ intent, applicant, child, branchId: branchId!, mediaRelease }),
+        buildPayload({
+          intent,
+          applicant,
+          child,
+          branchId: branchId!,
+          categoryId: categoryId!,
+          mediaRelease,
+        }),
         token,
       );
       setDone(true);
@@ -264,6 +292,27 @@ export function Register(): ReactNode {
                 hint={t('register.branchHint')}
                 error={touched ? (errors['branch'] ?? null) : null}
               />
+
+              {/* R49 — the educational stage. Offered only where it means
+                  something: a teacher is admitted to no Level (§4.1), and the
+                  server refuses a staff request that states one. Populated from
+                  the live Categories in `display_order`, never hardcoded, so a
+                  stage the association adds appears here without a code change
+                  (Revision 27 makes these editable generic stages). */}
+              {intent === 'teacher' ? null : (
+                <SelectField
+                  label={t('register.categoryLabel')}
+                  value={categoryId ?? ''}
+                  onChange={(v) => setCategoryId(v === '' ? null : v)}
+                  required
+                  options={[
+                    { value: '', label: t('register.categoryEmpty') },
+                    ...categories.map((c) => ({ value: c.id, label: c.name })),
+                  ]}
+                  hint={t('register.categoryHint')}
+                  error={touched ? (errors['category'] ?? null) : null}
+                />
+              )}
             </fieldset>
 
             <fieldset className="register-form__group">
@@ -577,10 +626,13 @@ export function explainFailure(error: unknown): string {
 /* ── Validation, mirroring TD-9 ───────────────────────────────────────────── */
 
 interface FormState {
-  kind: 'adult' | 'parent_child';
+  /** The FORM's three options, not the wire's two `kind`s — a teacher applying
+   *  is an adult registering themselves (R49). */
+  intent: 'adult' | 'parent_child' | 'teacher';
   applicant: PersonForm;
   child: PersonForm;
   branchId: string | null;
+  categoryId: string | null;
   dataProcessing: boolean;
   mediaRelease: '' | 'yes' | 'no';
 }
@@ -614,18 +666,23 @@ export function validate(state: FormState): Record<string, string> {
   };
 
   person(state.applicant, 'applicant');
-  if (state.kind === 'parent_child') person(state.child, 'child');
+  if (state.intent === 'parent_child') person(state.child, 'child');
 
   // §4.1 Revision 39 — a choice, never a default. Defaulting would place
   // someone at a branch nobody picked.
   if (!state.branchId) errors['branch'] = t('register.errBranch');
+
+  // R49 — required for a student, and meaningless for a staff request: a
+  // teacher is admitted to no Level, and the server refuses the pair together.
+  if (state.intent !== 'teacher' && !state.categoryId)
+    errors['category'] = t('register.errCategory');
 
   // §4.1: there is no lawful basis to create the record without this, so it is
   // refused rather than warned about.
   if (!state.dataProcessing) errors['dataProcessing'] = t('register.errConsent');
 
   // A DECISION is required for a minor; "no" is a valid one (BR-1).
-  if (state.kind === 'parent_child' && state.mediaRelease === '')
+  if (state.intent === 'parent_child' && state.mediaRelease === '')
     errors['mediaRelease'] = t('register.errMediaDecision');
 
   return errors;
@@ -636,6 +693,7 @@ function buildPayload(state: {
   applicant: PersonForm;
   child: PersonForm;
   branchId: string;
+  categoryId: string;
   mediaRelease: '' | 'yes' | 'no';
 }): RegistrationInput {
   const person = (p: PersonForm): PersonInput => ({
@@ -667,7 +725,11 @@ function buildPayload(state: {
       // approval — and its branch SCOPE is not collected here at all:
       // `branch_id` says where they want to teach, while a role's scope is an
       // authorization boundary the approver decides.
-      ...(state.intent === 'teacher' ? { requested_role: 'teacher' as const } : {}),
+      // A staff request states no stage and a student must — a teacher is
+      // admitted to no Level, and the server refuses the pair together.
+      ...(state.intent === 'teacher'
+        ? { requested_role: 'teacher' as const }
+        : { category_id: state.categoryId }),
       consents: { data_processing: true },
     };
   }
@@ -676,6 +738,8 @@ function buildPayload(state: {
     parent: person(state.applicant),
     child: person(state.child),
     branch_id: state.branchId,
+    // The CHILD's stage: the child is the one who enrols.
+    category_id: state.categoryId,
     consents: { data_processing: true, media_release: state.mediaRelease === 'yes' },
   };
 }

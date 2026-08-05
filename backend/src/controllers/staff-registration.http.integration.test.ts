@@ -30,6 +30,14 @@ const config = loadConfig();
 const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);
 const BASE = `${config.PUBLIC_BASE_URL}/api/v1`;
 const TAG = '[http-staffreg-test]';
+/**
+ * **Deliberately not a prefix-extension of `TAG`.** `clear()` deletes by
+ * `startsWith(TAG)`, so a placement tagged `${TAG}p` would be swept by the
+ * suite's own branch delete — before its Administrative Group was gone, and the
+ * `Restrict` FK would refuse. The separating `-` before the bracket is what
+ * keeps the two namespaces disjoint.
+ */
+const PLACEMENT_TAG = '[http-staffreg-test-place]';
 
 let savedConsentVersion: SavedConsentVersion | null = null;
 
@@ -100,7 +108,11 @@ async function apply(requestedRole?: 'teacher'): Promise<string> {
           sex: 'female',
         },
         branch_id: branchId,
-        ...(requestedRole ? { requested_role: requestedRole } : {}),
+        // R49: a student states a stage; a staff request must NOT — a teacher
+        // is admitted to no Level, and the schema refuses the pair together.
+        ...(requestedRole
+          ? { requested_role: requestedRole }
+          : { category_id: placement.categoryId }),
         consents: { data_processing: true },
       },
     },
@@ -110,7 +122,6 @@ async function apply(requestedRole?: 'teacher'): Promise<string> {
 }
 
 async function clear(): Promise<void> {
-  await clearPlacement(prisma, `${TAG}p`);
   const users = await prisma.user.findMany({
     where: { nameArabic: { startsWith: TAG } },
     select: { id: true },
@@ -122,11 +133,21 @@ async function clear(): Promise<void> {
     });
     await prisma.consentRecord.deleteMany({ where: { studentId: { in: ids } } });
     await prisma.userBranchRole.deleteMany({ where: { userId: { in: ids } } });
-    await prisma.userIdentity.deleteMany({ where: { userId: { in: ids } } });
+    // §4.1 (R43): approving now CREATES enrolments, and `enrollment.student_id`
+  // is ON DELETE RESTRICT — so they go before the people they belong to. This
+  // line did not exist before approval placed anybody, which is why adding the
+  // placement turned an unrelated dozen tests red.
+  await prisma.enrollment.deleteMany({ where: { studentId: { in: ids } } });
+  await prisma.userIdentity.deleteMany({ where: { userId: { in: ids } } });
     await prisma.refreshToken.deleteMany({ where: { userId: { in: ids } } });
     await prisma.user.deleteMany({ where: { id: { in: ids } } });
   }
   await prisma.branch.deleteMany({ where: { name: { startsWith: TAG } } });
+  // **Last, not first.** `intended_branch_id` and `intended_category_id` are
+  // both ON DELETE RESTRICT (R39, R49), so a Category or Branch still named by
+  // a user refuses to go — which is the constraint doing its job, and the
+  // reason this ordering is a requirement rather than a preference.
+  await clearPlacement(prisma, PLACEMENT_TAG);
 }
 
 beforeAll(async () => {
@@ -136,7 +157,7 @@ beforeAll(async () => {
   await clear();
 
   branchId = (await prisma.branch.create({ data: { name: `${TAG} فرع` } })).id;
-  placement = await provisionPlacement(prisma, `${TAG}p`);
+  placement = await provisionPlacement(prisma, PLACEMENT_TAG);
   superAdmin = bearer(await makeStaff('super_admin', null), ['super_admin']);
   branchAdmin = bearer(await makeStaff('admin', branchId), ['admin']);
 });

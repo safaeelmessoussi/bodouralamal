@@ -202,22 +202,35 @@ who needs placing.
 **(b) Only people in the bundle may be placed** (`NOT_IN_BUNDLE`). Without it, naming any
 student's id would place them — approval would become an unscoped enrolment endpoint.
 
-### One deviation, stated rather than fudged
+### §4.1 step 1's preselection, and the column that made it possible
 
-§4.1 step 1 asks that **"the first Level of the applicant's Category is preselected."**
+§4.1 step 1 asks that **"the first Level of the applicant's Category is preselected."** Nothing
+recorded a Category — §4.1b step 5 collects a branch *"and no other organisational value"* — so
+the clause was **unimplementable**, and the first version of this work shipped without it.
 
-**No Category is recorded anywhere.** §4.1b step 5 collects a branch *"and no other
-organisational value"*, so at approval neither the server nor the screen knows the applicant's
-Category. Inferring one from the form's `kind` is plausible and is exactly the kind of inference
-a specification should authorise rather than an implementation assume — especially since
-Revision 27 makes Categories generic stages an administrator may add to.
+**Document Owner decision (2026-08-05): record the Category at registration.**
+`User.intended_category_id` joins `intended_branch_id` as the second thing an applicant *asks
+for*: nullable, FK to `Category`, `ON DELETE RESTRICT`.
 
-Implemented as **no preselection**, with Levels listed in Category order so the first Level of
-each Category is immediately at hand. The clause calls the preselection *"a default, not a
-decision"*, so §4.1's mandatory content is fully met.
+* **Required for a student, refused for a staff request.** A teacher is admitted to no Level, so
+  the question has no answer; accepting one would put a stage on a record no approval will ever
+  enrol, and dropping it silently would leave the applicant believing they had asked to study.
+* **The dropdown is populated from the live Categories, ordered by `display_order`** — never
+  hardcoded, so a stage the association adds appears without a code change. Revision 27 makes
+  these editable generic stages, which is precisely why a hardcoded list would rot.
+* **It is a request, not a placement**, exactly as the branch is. It **filters and preselects**
+  what the approver is offered; *"any Category"* stays one click away, because an applicant may
+  have chosen the wrong stage and correcting it is the approver's job.
+* **The public form reads the Category list from `/calendar/bootstrap`**, which already publishes
+  every live Category, ordered, anonymously and cached. **This is not the widening rejected for
+  the admin selectors:** nothing is added to that payload — a second public surface reads the
+  fields it already has.
 
-**If the Owner wants it**, the smallest honest route is to record the Category at registration —
-one nullable column and one payload field, alongside `requested_role`.
+**Deleting a Category is refused while PENDING registration requests reference it**
+(`blocked_by.pending_requests`), per the Owner's caution. Only *pending* ones block: once a
+request is decided its `intended_category_id` is history, and because the delete is a **soft**
+delete the row is still there to join to, so decided requests stay perfectly readable. Blocking
+on those too would mean a Category could never be retired at all.
 
 ### Wording to add to §0's Revision 49 entry
 

@@ -923,6 +923,11 @@ export interface ApprovalDto {
    * assignment the approver states.
    */
   requested_role: string | null;
+  /**
+   * The educational stage the applicant asked for (Revision 49) — what §4.1
+   * step 1 preselects the first Level from. A request, never a placement.
+   */
+  category: { id: string; name: string } | null;
   /** §14.2 column: Applicant(s). */
   applicants: { id: string; name: string; role: 'applicant' | 'child' | 'parent' }[];
   /** An instant, correctly — a submission is a moment, not a calendar date. */
@@ -957,6 +962,7 @@ export function approvalDto(row: {
   bundle: { childCount: number; linkCount: number };
   branch: { id: string; name: string } | null;
   requestedRole: string | null;
+  category: { id: string; name: string } | null;
 }): ApprovalDto {
   return {
     id: row.id,
@@ -968,6 +974,8 @@ export function approvalDto(row: {
     // two fields the screen renders (§16.2).
     branch: row.branch ? { id: row.branch.id, name: row.branch.name } : null,
     requested_role: row.requestedRole,
+    // Field by field, never a spread — two fields, the same as the branch.
+    category: row.category ? { id: row.category.id, name: row.category.name } : null,
   };
 }
 

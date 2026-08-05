@@ -45,6 +45,16 @@ export interface Approval {
    * assignment the approver states below.
    */
   requested_role: string | null;
+  /**
+   * The educational stage the applicant asked for (Revision 49) — what §4.1
+   * step 1 preselects the first Level from.
+   *
+   * A **request**, never a placement: it narrows and preselects what the
+   * approver is offered, and the approver may choose any Level. `null` on a
+   * family-link item, on a staff request, and on any account registered before
+   * this revision — where it means *not stated*.
+   */
+  category: { id: string; name: string } | null;
 }
 
 export interface Page<T> {

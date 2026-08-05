@@ -289,6 +289,16 @@ model User {
   intendedBranchId String? @map("intended_branch_id") @db.Uuid
   intendedBranch   Branch? @relation("UserIntendedBranch", fields: [intendedBranchId], references: [id], onDelete: Restrict)
 
+  /// The educational stage the applicant asked for (Revision 49, proposed) —
+  /// a REQUEST, exactly as `intended_branch_id` is. §4.1 step 1 preselects "the
+  /// first Level of the applicant's Category" and nothing recorded one, so the
+  /// clause was unimplementable. It narrows and preselects what the approver is
+  /// offered; the approver may choose any Level, and the `Enrollment` is what
+  /// admits the person. `Restrict`: a Category with pending requests must not
+  /// vanish underneath them.
+  intendedCategoryId String?   @map("intended_category_id") @db.Uuid
+  intendedCategory   Category? @relation("UserIntendedCategory", fields: [intendedCategoryId], references: [id], onDelete: Restrict)
+
   /// The email authorized to claim this account BEFORE any external identity
   /// exists (§7, Revision 15). Staff set it when pre-provisioning; it is the
   /// only way an unbound account can be found by email, because `UserIdentity`
@@ -535,6 +545,8 @@ model Category {
 
   levels      Level[]
   eventScopes EventCategory[]
+  /// Revision 49 — applicants who asked for this stage. See `User`.
+  intendedBy  User[]          @relation("UserIntendedCategory")
 
   @@index([displayOrder])
   @@map("category")

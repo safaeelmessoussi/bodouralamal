@@ -179,6 +179,23 @@ export async function register(
         throw new AppError('VALIDATION_FAILED', 'branch_id does not name a live branch (§4.1)');
       }
 
+      // Revision 49 — the same liveness rule the branch gets, for the same
+      // reason: a Category soft-deleted between the form loading and the form
+      // submitting would leave the approval screen preselecting from a stage
+      // that no longer exists. Checked inside the transaction so a delete
+      // committed a moment ago cannot slip through — the FK alone would not
+      // catch it, because a soft delete leaves the row.
+      const wantedCategoryId = input.category_id;
+      if (wantedCategoryId !== undefined) {
+        const category = await tx.category.findFirst({
+          where: { id: wantedCategoryId, deletedAt: null },
+          select: { id: true },
+        });
+        if (!category) {
+          throw new AppError('VALIDATION_FAILED', 'category_id does not name a live category (§4.1)');
+        }
+      }
+
       // Every new registration enters Pending (§4.1); no role is granted until
       // an Admin approves (TD-4.2).
       const applicant: User = await tx.user.create({
@@ -208,6 +225,11 @@ export async function register(
           // and copying it onto the child would be a second value to keep in
           // step. The child's branch, once they have one, is their Group's.
           intendedBranchId: input.branch_id,
+          // Revision 49 — on the APPLICANT row, exactly like the branch. On the
+          // parent+child path the parent chose one stage for the application,
+          // and the approval screen reads it from the bundle's applicant; a
+          // copy on the child would be a second value to keep in step.
+          intendedCategoryId: input.category_id ?? null,
           // Revision 49 (proposed) — what they ASKED to be. Written here for the
           // same reason `sex` is: the registration precedes the User, so it
           // lands in this transaction rather than being patched on. It grants

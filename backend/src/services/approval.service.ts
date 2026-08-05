@@ -50,6 +50,17 @@ export interface ApprovalItem {
    * family-link item, which requests no role at all.
    */
   requestedRole: string | null;
+  /**
+   * The educational stage the applicant asked for (Revision 49) — what §4.1
+   * step 1 needs to preselect *"the first Level of the applicant's Category"*.
+   *
+   * **A request, never a placement.** It narrows and preselects what the
+   * approver is offered; the approver may choose any Level. `null` on a
+   * family-link item and on a staff request, which is admitted to no Level, and
+   * on any account registered before this revision — where it means *not
+   * stated*, exactly as a null branch does.
+   */
+  category: { id: string; name: string } | null;
 }
 
 export async function listApprovals(
@@ -95,6 +106,8 @@ export async function listApprovals(
         // Only what the DTO publishes (§16.2): the branch's id and name, never
         // the whole row.
         intendedBranch: { select: { id: true, name: true } },
+        // Only what the DTO publishes (§16.2), never the whole row.
+        intendedCategory: { select: { id: true, name: true } },
       },
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
       skip,
@@ -119,6 +132,9 @@ export async function listApprovals(
           ? { id: applicant.intendedBranch.id, name: applicant.intendedBranch.name }
           : null,
         requestedRole: applicant.requestedRole,
+        category: applicant.intendedCategory
+          ? { id: applicant.intendedCategory.id, name: applicant.intendedCategory.name }
+          : null,
       });
     }
   }
@@ -154,8 +170,10 @@ export async function listApprovals(
         // lives in their Group. Resolving a branch through that enrolment would
         // make one filter mean two different things depending on the row.
         branch: null,
-        // A link request concerns an existing child and asks for no role.
+        // A link request concerns an existing child and asks for no role,
+        // and no stage: the child's placement already exists.
         requestedRole: null,
+        category: null,
       });
     }
   }

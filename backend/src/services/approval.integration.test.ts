@@ -29,6 +29,14 @@ const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);
 let savedConsentVersion: SavedConsentVersion | null = null;
 const KEY = config.ONBOARDING_TOKEN_KEY;
 const TAG = '[appr-test]';
+/**
+ * **Deliberately not a prefix-extension of `TAG`.** `clear()` deletes by
+ * `startsWith(TAG)`, so a placement tagged `${TAG}p` would be swept by the
+ * suite's own branch delete — before its Administrative Group was gone, and the
+ * `Restrict` FK would refuse. The separating `-` before the bracket is what
+ * keeps the two namespaces disjoint.
+ */
+const PLACEMENT_TAG = '[appr-test-place]';
 
 let counter = 0;
 function identity() {
@@ -64,6 +72,10 @@ async function submitBundle(intoBranchId?: string): Promise<{ parentId: string; 
       parent: { first_name_arabic: `${TAG}`, last_name_arabic: `والدة`, sex: 'female' as const },
       child: { first_name_arabic: `${TAG}`, last_name_arabic: `طفلة`, sex: 'female' as const },
       branch_id: intoBranchId ?? branchId,
+      // R49 — the stage the parent chose for the child, which §4.1 step 1
+      // preselects the first Level from. The fixture's placement Category, so
+      // the preselection and the group the approval uses agree.
+      category_id: placement.categoryId,
       consents: { data_processing: true, media_release: true },
     },
     KEY,
@@ -72,7 +84,6 @@ async function submitBundle(intoBranchId?: string): Promise<{ parentId: string; 
 }
 
 async function clear(): Promise<void> {
-  await clearPlacement(prisma, `${TAG}p`);
   const users = await prisma.user.findMany({
     where: { nameArabic: { startsWith: TAG } },
     select: { id: true },
@@ -81,6 +92,11 @@ async function clear(): Promise<void> {
   await prisma.auditLog.deleteMany({ where: { OR: [{ targetId: { in: ids } }, { actorUserId: { in: ids } }] } });
   await prisma.consentRecord.deleteMany({ where: { studentId: { in: ids } } });
   await prisma.familyLink.deleteMany({ where: { OR: [{ parentId: { in: ids } }, { studentId: { in: ids } }] } });
+  // §4.1 (R43): approving now CREATES enrolments, and `enrollment.student_id`
+  // is ON DELETE RESTRICT — so they go before the people they belong to. This
+  // line did not exist before approval placed anybody, which is why adding the
+  // placement turned an unrelated dozen tests red.
+  await prisma.enrollment.deleteMany({ where: { studentId: { in: ids } } });
   await prisma.userIdentity.deleteMany({ where: { userId: { in: ids } } });
   await prisma.userBranchRole.deleteMany({ where: { userId: { in: ids } } });
   await prisma.user.deleteMany({ where: { id: { in: ids } } });
@@ -88,6 +104,11 @@ async function clear(): Promise<void> {
   // After the users: `intended_branch_id` is ON DELETE RESTRICT, so a branch
   // still referenced refuses to go.
   await prisma.branch.deleteMany({ where: { name: { startsWith: TAG } } });
+  // **Last, not first.** `intended_branch_id` and `intended_category_id` are
+  // both ON DELETE RESTRICT (R39, R49), so a Category or Branch still named by
+  // a user refuses to go — which is the constraint doing its job, and the
+  // reason this ordering is a requirement rather than a preference.
+  await clearPlacement(prisma, PLACEMENT_TAG);
 }
 
 /** Two branches, because a filter that is never given something to exclude has
@@ -117,7 +138,7 @@ beforeEach(async () => {
   });
   branchId = (await prisma.branch.create({ data: { name: `${TAG} مقر أ` } })).id;
   otherBranchId = (await prisma.branch.create({ data: { name: `${TAG} مقر ب` } })).id;
-  placement = await provisionPlacement(prisma, `${TAG}p`);
+  placement = await provisionPlacement(prisma, PLACEMENT_TAG);
 });
 
 afterAll(async () => {
