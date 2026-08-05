@@ -602,7 +602,11 @@
 - [ ] **TD-3.5 storage endpoints** — `POST /uploads/initiate`, `/complete`, `/abort`, `GET /content/{id}/download-url`. **Specified in TD-3.5 but not mounted**; `app.ts` has no `/uploads`
 - [ ] **Educational Content upload UI** — attach to a Subject of a Level (library) or to a Session (`POST /sessions/{id}/content` already exists)
 
-**Gates**
+- [x] **Rooms CRUD** — verified complete (shipped M3b-30); added the missing delete confirmation that every other destructive action already had
+- [ ] **Trash UI — BLOCKED on an SRS decision.** §7/§10.1 defer `/admin/trash`, and Revision 7 says those annotations *must be kept*. `SRS-PROPOSAL-R52.md` recommends read-only browsing now, then the CLI restore script, then Restore
+- [ ] **The `db:restore` CLI script** — required by §7 for MVP restoration and **never implemented**. The TD-5 cascade must reinstate `FamilyLink`, `Enrollment`, `StudentTeachingGroup`, `CourseScheduleStaff`, `UserBranchRole` and `UserIdentity`, or a restored User is silently broken
+
+**Gates
 - [ ] §18 *Educational Model* checklist green — including the §19.2 named regressions: composite-FK rejection **attempted directly in SQL**, weekly-vs-biweekly conflict on the alternating week, double-`materialize` idempotency, schedule edit sparing an overridden session, and anonymous-vs-authenticated parity on `/calendar` and `/library`
 
 ## M4 — Quran Progress

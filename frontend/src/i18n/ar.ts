@@ -793,6 +793,8 @@ export const ar = {
       roomAdd: 'إضافة قاعة',
       roomRename: 'تعديل اسم القاعة',
       roomBlocked: 'لا يمكن حذف هذه القاعة لأن جداول أو حصص ما زالت تحجزها.',
+      roomDeleteTitle: 'حذف القاعة',
+      roomDeleteBody: 'سيتم حذف قاعة «{name}». لا يمكن الحذف ما دامت جداول أو حصص تحجزها.',
     },
     // §5.6 / §14.2 — طلبات الانضمام. The queue is deliberately unscoped by
     // branch (Revision 29), so the lede says who it covers rather than implying

@@ -274,6 +274,12 @@ function RoomsDialog({
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [draft, setDraft] = useState('');
   const [editing, setEditing] = useState<Room | null>(null);
+  /** Deleting a room is destructive and confirms, like **every** other
+   *  destructive action in the back office (§14.2). It did not, which was an
+   *  inconsistency rather than a decision: a stray click removed a room with no
+   *  way back short of the Trash runbook. A native `<dialog>` stacks in the top
+   *  layer, so this confirms above the rooms dialog rather than replacing it. */
+  const [confirming, setConfirming] = useState<Room | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -315,17 +321,22 @@ function RoomsDialog({
     }
   }
 
-  async function remove(room: Room): Promise<void> {
+  async function remove(): Promise<void> {
+    if (!confirming) return;
     setBusy(true);
     setNotice(null);
     try {
-      await deleteRoom(room.id, accessToken);
+      await deleteRoom(confirming.id, accessToken);
       await load();
+      setNotice(t('common.deleted'));
     } catch (error) {
+      // TD-5: refused while a schedule or a session books the room. Saying which
+      // is more useful than "failed" — the remedy is entirely different.
       const blocked = error instanceof ApiError && error.status === 409;
       setNotice(t(blocked ? 'admin.branches.roomBlocked' : 'common.deleteFailed'));
     } finally {
       setBusy(false);
+      setConfirming(null);
     }
   }
 
@@ -373,7 +384,7 @@ function RoomsDialog({
                       >
                         {t('common.edit')}
                       </Button>
-                      <Button variant="secondary" disabled={busy} onClick={() => void remove(room)}>
+                      <Button variant="secondary" disabled={busy} onClick={() => setConfirming(room)}>
                         {t('common.delete')}
                       </Button>
                     </>
@@ -410,6 +421,17 @@ function RoomsDialog({
           ) : null}
         </>
       ) : null}
+
+      <ConfirmDialog
+        open={confirming !== null}
+        title={t('admin.branches.roomDeleteTitle')}
+        body={t('admin.branches.roomDeleteBody').replace('{name}', confirming?.name ?? '')}
+        confirmLabel={t('common.delete')}
+        danger
+        busy={busy}
+        onConfirm={() => void remove()}
+        onCancel={() => setConfirming(null)}
+      />
     </Dialog>
   );
 }
