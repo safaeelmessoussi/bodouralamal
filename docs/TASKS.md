@@ -499,7 +499,17 @@
   - ✓ BR-21 surfaced as *already in another group of this Level*, which is the information needed to decide on a move
   - ✓ Roster uses `GET /admin/users` for the picker; the enrolment id is kept distinct from the student id, asserted in a test
   - ✓ Level list read from the **public calendar bootstrap** — no `/admin/levels` exists and inventing one would be a new public contract
-- [ ] `/admin/schedules` **write form** — **blocked**: `subject_id` and `academic_year_id` are required by `POST /admin/course-schedules`, and **no `GET /admin/subjects` or `/admin/academic-years` exists in TD-3**. Building them would create a new public contract
+- [x] **Reference-data selectors** — `GET /admin/subjects`, `GET /admin/academic-years` (TD-3 extension, Owner-authorised)
+  - Canonical source for every admin selector needing either; widening `/calendar/bootstrap` and a screen-specific payload both rejected, with reasons recorded
+  - Unpaginated (a selector offering a subset misrepresents the choice) and carrying no `version` (no write exists)
+  - Admin+ read (TD-2 R26); Teacher refused (R30) — asserted
+  - 8 HTTP tests; SRS wording drafted in `SRS-PROPOSAL-R46.md`
+- [x] `/admin/schedules` **write form** — create and edit
+  - Edit disables Subject, mode, target, branch and year — the server rejects them, so the form does not offer them
+  - The target picker follows the mode (one target of the kind the mode names); `teaching_group` withheld until Subject Organisation can supply its target
+  - Times are plain text, not a native time control — TD-11 wall-clock travels as `HH:MM`
+  - Every save opens a materialization report, so `protected_sessions` is seen rather than swallowed
+  - `SCHEDULE_CONFLICT` gets its own message: the remedy is to free a named room or person
 - [ ] `/admin/levels/{id}/subjects/{subjectId}` (Teaching Groups), Session page frontend (§14.1)
 - [ ] Public calendar and public Educational Library — **same filters, same items, ordering only** for signed-in users (§5.2)
 

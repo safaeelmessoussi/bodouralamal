@@ -129,6 +129,7 @@ The technical core. Written for an engineer who has never seen the repository.
 | [`SRS.md`](SRS.md) | **The normative specification.** Revision 43.6 | Document Owner only |
 | [`SRS-PROPOSAL-R44.md`](SRS-PROPOSAL-R44.md) | **Draft revision awaiting the Document Owner** — the completion-report format. Delete once applied or rejected | Contributors may draft; only the Owner applies |
 | [`SRS-PROPOSAL-R45.md`](SRS-PROPOSAL-R45.md) | **Draft revision awaiting the Document Owner** — one endpoint, role-scoped. **The behaviour is already live**, so rejecting this one requires a code change | Contributors may draft; only the Owner applies |
+| [`SRS-PROPOSAL-R46.md`](SRS-PROPOSAL-R46.md) | **Draft revision awaiting the Document Owner** — reference-data selectors in TD-3. **The endpoints are already live**, on the Owner's explicit instruction | Contributors may draft; only the Owner applies |
 | [`IMPLEMENTATION_PLAN.md`](IMPLEMENTATION_PLAN.md) | Milestone build order | Document Owner only |
 | [`TASKS.md`](TASKS.md) | Granular delivery checklist — the fastest read on what is done | Contributors |
 | [`CHANGES.log`](CHANGES.log) | Append-only ledger of what was built and why | Contributors, append-only |

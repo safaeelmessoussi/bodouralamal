@@ -136,6 +136,29 @@ they receive reference information through the operational APIs they are authori
 | `GET` `POST` | `/admin/branches/{id}/rooms` | 👤 write · 🔒 read |
 | `PATCH` `DELETE` | `/admin/rooms/{id}` | 👤 |
 
+## Reference-data selectors
+
+**TD-3 extension, Document Owner decision 2026-08-05.** `POST /admin/course-schedules`
+requires `subject_id` and `academic_year_id`, and nothing in TD-3 could list either — the
+§5.6 schedule form was unbuildable.
+
+| | Path | Returns |
+|---|---|---|
+| `GET` | `/admin/subjects` | `id`, `name`, `display_order` |
+| `GET` | `/admin/academic-years` | `id`, `label`, `is_current` |
+
+**These are the canonical source for every admin selector needing a Subject or an Academic
+Year.** A screen that needs one reads these; it does not grow its own list. Widening
+`/calendar/bootstrap` was rejected — its contract is *the calendar screen's* reference data,
+publicly cached, and an unrelated screen must not shape it — as was a screen-specific payload,
+which is how a second source of truth for one concept begins.
+
+**Both are unpaginated**, deliberately: a selector offering a subset misrepresents the choice
+available, and both sets are bounded by the curriculum. **Neither carries a `version`** — there
+is no write, so the field would have no use and would become something a client depends on.
+Admin and above (TD-2 R26); **Teachers are excluded** (R30 — reference data is an
+administrative concern).
+
 ## Educational organisation and delivery
 
 Revision 43 split the retired `Group` into an **organisational** unit and a **delivery** one, and
