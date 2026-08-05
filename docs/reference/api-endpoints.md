@@ -433,6 +433,16 @@ forbids inventing one.
 |---|---|---|
 | `GET` | `/library` | 🌐 **Public and anonymous.** `?category_id=` `?level_id=` `?academic_year_id=` `?subject_id=` `?page=`. Paginated (TD-10) |
 
+**Each item carries the §5.2 headings resolved server-side** — `category_id`/`category_name`,
+`level_name`, `subject_name`, `academic_year_label`, `branch_name`. That view groups
+Category → Level → Academic Year → Branch, and **no public endpoint publishes Subject or
+Academic Year names**: `/admin/subjects` and `/admin/academic-years` are Admin-only by design
+(R30), and `/calendar/bootstrap` carries Categories, Levels and Branches but neither of those.
+Carrying them makes the response self-sufficient, which TD-3.4 already requires of the calendar;
+the alternatives were widening that cached payload for an unrelated screen, or a new public
+reference surface exposing the whole curriculum to anonymous callers. **They are labels, never
+identifiers.** `branch_name` is `null` exactly where `branch_id` is, and that means **Global**.
+
 **It never answers `401`.** An invalid credential is *ignored*, not refused — a public
 surface that can `401` is not public. It mounts before the guarded router with optional
 authentication, exactly as `/calendar` does, and a **Pending** account sees the public tier

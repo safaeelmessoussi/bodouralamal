@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
+import { kindOf } from '../adapters/content.js';
 import type { ContentItem, LevelContent, LevelSummary } from '../adapters/content.js';
 import { ContentCard } from '../components/content/content-card.js';
 import {
@@ -230,5 +231,28 @@ describe('the preview dialog (§14.6)', () => {
     expect(html).not.toContain('<video');
     expect(html).not.toContain('<audio');
     expect(html).not.toContain('<iframe');
+  });
+});
+
+describe('§14.6 presentation class is derived from the MIME type', () => {
+  it('maps each class the interface behaves differently for', () => {
+    // §14.6 defines behaviour per class — PDFs inline, audio and video in
+    // place, images in a lightbox — so the mapping has to exist somewhere. It
+    // lives on the client because presentation is the client's job (§1.1 gives
+    // the server authority over decisions, not over rendering).
+    expect(kindOf('application/pdf')).toBe('pdf');
+    expect(kindOf('audio/mpeg')).toBe('audio');
+    expect(kindOf('video/mp4')).toBe('video');
+    expect(kindOf('image/jpeg')).toBe('image');
+  });
+
+  it('falls back to the DOWNLOAD-ONLY class for anything unrecognised', () => {
+    // The safe end of the range: a new accepted MIME type renders as a download
+    // rather than as a broken inline player. Office files are download-only in
+    // the MVP anyway (§14.6).
+    expect(kindOf('application/vnd.openxmlformats-officedocument.wordprocessingml.document')).toBe(
+      'document',
+    );
+    expect(kindOf('application/octet-stream')).toBe('document');
   });
 });

@@ -1,27 +1,40 @@
+import { api } from '../lib/api.js';
+import { fetchCalendarBootstrap } from './calendar.js';
+
 /**
- * The educational-content adapter (§4.9, §5.2).
+ * The educational-content adapter (§4.9, §5.2, TD-3.13).
  *
- * ─────────────────────────────────────────────────────────────────────────────
- * ⚠ THE IMPLEMENTATION IN THIS FILE IS A TEMPORARY MOCK. THE INTERFACE IS NOT.
+ * **Backed by the real `GET /library` since Revision 43 landed it.** The mock
+ * this file used to carry promised that *"swapping the mock for real `api()`
+ * calls is a change to the two exported functions and to nothing else"*, and
+ * that is what happened: every type below, and every component and page reading
+ * them, is unchanged.
  *
- * No content endpoint exists yet: TD-3.5 defines the three upload routes and
- * `GET /content/{id}/download-url`, and **no route anywhere in the SRS lists
- * content**. Adding one requires a Document Owner revision (§20 rule 16;
- * Revision 21 — later milestones add endpoints through subsequent revisions), so
- * it is not invented here.
+ * ## Two things the endpoint does not carry, and what happens to them
  *
- * What IS built here is the shape the production adapter will have. Every type
- * below is written as the API response it expects to parse, in `snake_case`, so
- * that swapping the mock for real `api()` calls is a change to the two exported
- * functions and to nothing else — no component, no page and no test touches the
- * mock directly.
+ * **`teacher_display_name` is always `null`.** `EducationalContent` has **no
+ * uploader field** — §7 defines none, and adding one is a schema decision the
+ * Document Owner has not taken (it is recorded as deferred). The key stays on
+ * the type so a client coded against §5.2 finds it where the specification says
+ * it is, and the card renders nothing rather than a guess.
  *
- * **Read `MOCK` as "not yet wired", never as "this is how it behaves".** The
- * production behaviour is whatever the approved revision specifies; the numbers
- * and titles below are placeholders chosen to exercise the layout (a level with
- * one year, a level with several, a year with two branches, global content, every
- * previewable type, and a download-only type).
- * ─────────────────────────────────────────────────────────────────────────────
+ * **`kind` is derived here from the MIME type.** The mock argued this belonged
+ * server-side; on reflection it does not. §14.6 defines *presentation*
+ * behaviour per class — PDFs inline, audio in place, office files
+ * download-only — and presentation is the client's job (§1.1 gives the server
+ * authority over decisions, not over rendering). One mapping in one module
+ * keeps that true without a column that would have to be kept in step with the
+ * MIME allow-list.
+ *
+ * ## Why the level index has no counts
+ *
+ * §5.2 describes a *drilling folder system*, and its card design asked for a
+ * content count and a year count per Level. **`GET /library` is a flat,
+ * paginated, filtered list** (TD-3.13) and publishes no aggregate, so those
+ * numbers cannot be obtained without fetching every page of every Level on a
+ * public screen. They are therefore **omitted rather than approximated** — a
+ * card without a count is honest; a card with a count derived from page one is
+ * not. Reported rather than resolved: an aggregate would be a new contract.
  */
 
 /* ── The contract shape ──────────────────────────────────────────────────── */
@@ -85,8 +98,10 @@ export interface LevelSummary {
   category_id: string;
   category_name: string;
   description: string | null;
-  content_count: number;
-  academic_year_count: number;
+  /** `null` where no aggregate exists — see the note at the top of this file.
+   *  An absent count is honest; one derived from page one is not. */
+  content_count: number | null;
+  academic_year_count: number | null;
 }
 
 export interface LevelContent {
@@ -111,13 +126,125 @@ export interface LevelContent {
  * exists.
  */
 export async function fetchContentLevels(): Promise<LevelSummary[]> {
-  return mockDelay(MOCK_LEVELS);
+  // The PUBLIC calendar bootstrap already publishes every live Category and
+  // Level, anonymously and ordered — the same list this index needs. Nothing is
+  // added to that payload; a second public surface reads what it already has.
+  const today = new Date().toISOString().slice(0, 10);
+  const bootstrap = await fetchCalendarBootstrap({ from: today, to: today });
+  const categoryName = new Map(bootstrap.categories.map((c) => [c.id, c.name]));
+
+  return bootstrap.levels.map((level) => ({
+    level_id: level.id,
+    level_name: level.name,
+    category_id: level.category_id,
+    category_name: categoryName.get(level.category_id) ?? '',
+    description: null,
+    // See the note at the top of this file: no aggregate exists, and an
+    // approximation would be worse than an absence.
+    content_count: null,
+    academic_year_count: null,
+  }));
 }
 
-/** Page 2: one level's content, grouped year → branch. */
+/** TD-10 caps a page at 100. The library is filtered to one Level here, so this
+ *  is a bound on how much one Level may hold before the view truncates — stated
+ *  rather than assumed infinite. */
+const MAX_PAGE_SIZE = 100;
+
+/** §14.6 maps a MIME type to how the item is PRESENTED. Unknown types fall to
+ *  `document`, which is download-only — the safe end of the range. */
+export function kindOf(mime: string): ContentKind {
+  if (mime === 'application/pdf') return 'pdf';
+  if (mime.startsWith('audio/')) return 'audio';
+  if (mime.startsWith('video/')) return 'video';
+  if (mime.startsWith('image/')) return 'image';
+  return 'document';
+}
+
+/** One item as `GET /library` sends it (TD-3.13). */
+interface LibraryItemWire {
+  id: string;
+  title: string;
+  description: string | null;
+  visibility: string;
+  level_id: string;
+  subject_id: string;
+  academic_year_id: string;
+  branch_id: string | null;
+  mime_type: string;
+  size_bytes: number;
+  created_at: string;
+  category_id: string;
+  category_name: string;
+  level_name: string;
+  subject_name: string;
+  academic_year_label: string;
+  branch_name: string | null;
+}
+
+/**
+ * Page 2: one level's content, grouped **year → branch** (§5.2).
+ *
+ * **The grouping is done here, from a flat list.** TD-3.13 specifies one
+ * filtered paginated route and no nested shape, so the hierarchy §5.2 describes
+ * is a rendering of what the server returned — not a second contract. The
+ * server still decides *which items exist*: the tier rules, the BR-2 consent
+ * gate and the own-branch-first ordering are all applied before this sees a row.
+ *
+ * **Branch order is preserved from the response, not re-sorted.** §5.2 orders
+ * own branch → Global → other branches for a signed-in reader, and that decision
+ * is the server's; re-sorting here would be a second implementation of it.
+ */
 export async function fetchLevelContent(levelId: string): Promise<LevelContent | null> {
-  const found = MOCK_LEVEL_CONTENT[levelId] ?? null;
-  return mockDelay(found);
+  const body = await api<{ data: LibraryItemWire[]; meta: { total: number } }>(
+    `/library?level_id=${encodeURIComponent(levelId)}&page_size=${MAX_PAGE_SIZE}`,
+  );
+  const rows = body.data;
+  if (rows.length === 0) return null;
+
+  const years: YearGroup[] = [];
+  for (const row of rows) {
+    let year = years.find((y) => y.academic_year_id === row.academic_year_id);
+    if (!year) {
+      year = {
+        academic_year_id: row.academic_year_id,
+        label: row.academic_year_label,
+        // No public source says which year is current, and guessing from the
+        // label would be a second answer to a question `is_current` already
+        // owns. Absent is the honest value.
+        is_current: false,
+        branches: [],
+      };
+      years.push(year);
+    }
+    let branch = year.branches.find((b) => b.branch_id === row.branch_id);
+    if (!branch) {
+      branch = { branch_id: row.branch_id, branch_name: row.branch_name, items: [] };
+      year.branches.push(branch);
+    }
+    branch.items.push({
+      id: row.id,
+      title: row.title,
+      description: row.description,
+      kind: kindOf(row.mime_type),
+      mime_type: row.mime_type,
+      size_bytes: row.size_bytes,
+      // TD-11: an upload is an instant; the card shows the calendar date of it.
+      published_on: row.created_at.slice(0, 10),
+      // `EducationalContent` records no uploader — see the note at the top.
+      teacher_display_name: null,
+      subject_name: row.subject_name,
+    });
+  }
+
+  const first = rows[0]!;
+  return {
+    level_id: levelId,
+    level_name: first.level_name,
+    category_name: first.category_name,
+    description: null,
+    years,
+  };
 }
 
 /**
@@ -130,274 +257,12 @@ export async function fetchLevelContent(levelId: string): Promise<LevelContent |
  * fetched when it is used, not when the list is drawn.
  */
 export async function fetchContentUrl(contentId: string): Promise<string | null> {
-  return mockDelay(MOCK_URLS[contentId] ?? null);
+  // TD-3.5's `GET /content/{id}/download-url` is an M6 endpoint and does not
+  // exist yet, so there is nothing to call. Returning `null` is what the preview
+  // dialog already renders as "not available" — deliberately not a constructed
+  // URL, because a presigned GET is minted after a server-side §4.9 check and
+  // can never be assembled by a client (§3.1, TD-12).
+  void contentId;
+  return null;
 }
 
-/* ═══════════════════════════════════════════════════════════════════════════
- * MOCK DATA — TEMPORARY. Everything below this line is deleted when the
- * endpoints land. Nothing above it changes.
- * ═══════════════════════════════════════════════════════════════════════════ */
-
-/** A short delay so loading states and skeletons are actually exercised in
- *  development rather than never rendering. */
-function mockDelay<T>(value: T): Promise<T> {
-  return new Promise((resolve) => {
-    setTimeout(() => resolve(value), 350);
-  });
-}
-
-const CAT_ADULT = { id: 'cat-adult', name: 'الكبار' };
-const CAT_TEEN = { id: 'cat-teen', name: 'اليافعون' };
-const CAT_CHILD = { id: 'cat-child', name: 'الطفل' };
-
-const MOCK_LEVELS: LevelSummary[] = [
-  {
-    level_id: 'lvl-a1',
-    level_name: 'المستوى الأول',
-    category_id: CAT_ADULT.id,
-    category_name: CAT_ADULT.name,
-    description: 'حفظ جزء البقرة مع التجويد التطبيقي.',
-    content_count: 6,
-    academic_year_count: 2,
-  },
-  {
-    level_id: 'lvl-a0',
-    level_name: 'محو الأمية',
-    category_id: CAT_ADULT.id,
-    category_name: CAT_ADULT.name,
-    description: 'دروس القراءة والكتابة للمبتدئات.',
-    content_count: 2,
-    academic_year_count: 1,
-  },
-  {
-    level_id: 'lvl-t2',
-    level_name: 'المستوى الثاني',
-    category_id: CAT_TEEN.id,
-    category_name: CAT_TEEN.name,
-    description: null,
-    content_count: 3,
-    academic_year_count: 1,
-  },
-  {
-    level_id: 'lvl-c1',
-    level_name: 'المستوى الأول',
-    category_id: CAT_CHILD.id,
-    category_name: CAT_CHILD.name,
-    description: 'أناشيد وقصص قرآنية للأطفال.',
-    content_count: 1,
-    academic_year_count: 1,
-  },
-];
-
-const item = (over: Partial<ContentItem> & Pick<ContentItem, 'id' | 'title' | 'kind'>): ContentItem => ({
-  description: null,
-  mime_type: 'application/pdf',
-  size_bytes: 1_240_000,
-  published_on: '2026-06-12',
-  teacher_display_name: 'أم عبد الله',
-  subject_name: null,
-  ...over,
-});
-
-const MOCK_LEVEL_CONTENT: Record<string, LevelContent> = {
-  'lvl-a1': {
-    level_id: 'lvl-a1',
-    level_name: 'المستوى الأول',
-    category_name: CAT_ADULT.name,
-    description: 'حفظ جزء البقرة مع التجويد التطبيقي.',
-    years: [
-      {
-        academic_year_id: 'ay-2627',
-        label: '2026-2027',
-        is_current: true,
-        branches: [
-          {
-            // Global scope sorts first (§5.2, BR-20).
-            branch_id: null,
-            branch_name: null,
-            items: [
-              item({
-                id: 'c-1',
-                title: 'دليل التجويد المصوّر',
-                kind: 'pdf',
-                description: 'ملخص أحكام النون الساكنة والتنوين.',
-                subject_name: 'تفسير',
-                size_bytes: 2_600_000,
-                published_on: '2026-07-02',
-              }),
-            ],
-          },
-          {
-            branch_id: 'br-amerchich',
-            branch_name: 'مقر أمرشيش',
-            items: [
-              item({
-                id: 'c-2',
-                title: 'حلقة المراجعة — تسجيل الجلسة',
-                kind: 'audio',
-                mime_type: 'audio/mpeg',
-                size_bytes: 18_400_000,
-                published_on: '2026-06-28',
-                description: 'تسجيل صوتي لحلقة المراجعة الأسبوعية.',
-              }),
-              item({
-                id: 'c-3',
-                title: 'شرح مخارج الحروف',
-                kind: 'video',
-                mime_type: 'video/mp4',
-                size_bytes: 74_900_000,
-                published_on: '2026-06-20',
-                teacher_display_name: 'أم يوسف',
-              }),
-              item({
-                id: 'c-4',
-                title: 'ورقة تمارين الأسبوع',
-                kind: 'document',
-                mime_type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-                size_bytes: 96_000,
-                published_on: '2026-06-18',
-              }),
-            ],
-          },
-          {
-            branch_id: 'br-targa',
-            branch_name: 'مقر تاركة',
-            items: [
-              item({
-                id: 'c-5',
-                title: 'لوحة الحروف',
-                kind: 'image',
-                mime_type: 'image/png',
-                size_bytes: 540_000,
-                published_on: '2026-06-15',
-                teacher_display_name: null,
-              }),
-            ],
-          },
-        ],
-      },
-      {
-        academic_year_id: 'ay-2526',
-        label: '2025-2026',
-        is_current: false,
-        branches: [
-          {
-            branch_id: 'br-amerchich',
-            branch_name: 'مقر أمرشيش',
-            items: [
-              item({
-                id: 'c-6',
-                title: 'مذكّرة الدورة الأولى',
-                kind: 'pdf',
-                published_on: '2025-11-04',
-                size_bytes: 830_000,
-              }),
-            ],
-          },
-        ],
-      },
-    ],
-  },
-  'lvl-a0': {
-    level_id: 'lvl-a0',
-    level_name: 'محو الأمية',
-    category_name: CAT_ADULT.name,
-    description: 'دروس القراءة والكتابة للمبتدئات.',
-    years: [
-      {
-        academic_year_id: 'ay-2627',
-        label: '2026-2027',
-        is_current: true,
-        branches: [
-          {
-            branch_id: 'br-targa',
-            branch_name: 'مقر تاركة',
-            items: [
-              item({ id: 'c-7', title: 'كرّاسة الحروف', kind: 'pdf', size_bytes: 410_000 }),
-              item({
-                id: 'c-8',
-                title: 'نطق الحروف — تسجيل',
-                kind: 'audio',
-                mime_type: 'audio/webm',
-                size_bytes: 6_100_000,
-              }),
-            ],
-          },
-        ],
-      },
-    ],
-  },
-  'lvl-t2': {
-    level_id: 'lvl-t2',
-    level_name: 'المستوى الثاني',
-    category_name: CAT_TEEN.name,
-    description: null,
-    years: [
-      {
-        academic_year_id: 'ay-2627',
-        label: '2026-2027',
-        is_current: true,
-        branches: [
-          {
-            branch_id: 'br-amerchich',
-            branch_name: 'مقر أمرشيش',
-            items: [
-              item({ id: 'c-9', title: 'مقرر الفقه', kind: 'pdf' }),
-              item({
-                id: 'c-10',
-                title: 'مراجعة سورة الكهف',
-                kind: 'audio',
-                mime_type: 'audio/mp4',
-                size_bytes: 12_000_000,
-              }),
-              item({
-                id: 'c-11',
-                title: 'صور من النشاط السنوي',
-                kind: 'image',
-                mime_type: 'image/jpeg',
-                size_bytes: 1_900_000,
-              }),
-            ],
-          },
-        ],
-      },
-    ],
-  },
-  'lvl-c1': {
-    level_id: 'lvl-c1',
-    level_name: 'المستوى الأول',
-    category_name: CAT_CHILD.name,
-    description: 'أناشيد وقصص قرآنية للأطفال.',
-    years: [
-      {
-        academic_year_id: 'ay-2627',
-        label: '2026-2027',
-        is_current: true,
-        branches: [
-          {
-            branch_id: null,
-            branch_name: null,
-            items: [
-              item({
-                id: 'c-12',
-                title: 'نشيد الحروف',
-                kind: 'audio',
-                mime_type: 'audio/mpeg',
-                size_bytes: 3_200_000,
-              }),
-            ],
-          },
-        ],
-      },
-    ],
-  },
-};
-
-/**
- * Placeholder URLs. Deliberately **empty strings** rather than links to real
- * media: a mock that fetched from an external host would be blocked by §3.1's
- * CSP anyway, and pointing at a fake file would make the viewer look broken
- * rather than unwired. The preview dialog therefore renders its "preview not
- * available yet" state, which is itself worth seeing.
- */
-const MOCK_URLS: Record<string, string> = {};

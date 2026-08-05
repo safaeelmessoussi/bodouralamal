@@ -24,16 +24,35 @@ const BASE = `${config.PUBLIC_BASE_URL}/api/v1`;
 const TAG = '[http-library-test]';
 const YEAR_LABEL = '2097-2098';
 
+/**
+ * The exact wire shape. The **labels** joined it when the §5.2 library screen
+ * was built: that view groups Category → Level → Academic Year → Branch, and
+ * **no public endpoint publishes Subject or Academic Year names** —
+ * `/admin/subjects` and `/admin/academic-years` are Admin-only by design (R30).
+ * Carrying them makes the response self-sufficient, which TD-3.4 already
+ * requires of the calendar; the alternatives were widening that cached payload
+ * for an unrelated screen, or a public reference surface exposing the whole
+ * curriculum to anonymous callers.
+ *
+ * They are **labels, never identifiers** — the ids remain what a client filters
+ * and links by, and both are asserted below.
+ */
 const ITEM_KEYS = [
   'academic_year_id',
+  'academic_year_label',
   'branch_id',
+  'branch_name',
+  'category_id',
+  'category_name',
   'created_at',
   'description',
   'id',
   'level_id',
+  'level_name',
   'mime_type',
   'size_bytes',
   'subject_id',
+  'subject_name',
   'title',
   'visibility',
 ];
@@ -237,6 +256,13 @@ describe('the endpoint is public and never answers 401', () => {
     const res = await call(`${scoped}${academicYearId}`);
     expect(res.status).toBe(200);
     expect(Object.keys(res.body.data![0]!).sort()).toEqual(ITEM_KEYS);
+    // Every label resolves to something a heading can render: an id echoed as
+    // its own name would satisfy the key set and be useless on screen.
+    const item = res.body.data![0]! as Record<string, unknown>;
+    for (const label of ['category_name', 'level_name', 'subject_name', 'academic_year_label']) {
+      expect(typeof item[label]).toBe('string');
+      expect(item[label]).not.toBe(item[label.replace(/_(name|label)$/, '_id')]);
+    }
   });
 
   it('IGNORES an invalid credential rather than refusing it', async () => {

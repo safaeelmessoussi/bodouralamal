@@ -571,7 +571,11 @@
   - Category dropdown is the **live Categories ordered by `display_order`**, read from the public `/calendar/bootstrap` — no new endpoint, no hardcoded list
   - Required for a student, **refused for a staff request** (a teacher is admitted to no Level)
   - **Deleting a Category is refused while pending requests reference it**; decided ones never block, and the soft delete keeps them readable
-- [ ] Public Educational Library frontend — **same filters, same items, ordering only** for signed-in users (§5.2)
+- [x] **Public Educational Library frontend** — the mock adapter replaced by `GET /library`
+  - The mock's promise held: **only its two exported functions changed** — no component, page or test touched it
+  - `GET /library` now resolves the §5.2 headings (`category_name`, `level_name`, `subject_name`, `academic_year_label`, `branch_name`) because **no public endpoint publishes Subject or Academic Year names**; self-sufficient, as TD-3.4 already requires of the calendar
+  - **No per-level counts** (no aggregate exists — a count from page one would be a claim) and **no teacher attribution** (`EducationalContent` records no uploader; deferred Owner decision)
+  - `kind` derived client-side from the MIME type: §14.6 is a *presentation* rule, and presentation is the client's job
   - Note: the public calendar's *screen* filters (branch · category · level) stay identical for everyone and are compliant. Adding TD-3.4's `subject_id`/`teacher_id`/`academic_year_id` to a **public** screen would need public reference lists that do not exist — `/admin/subjects` is Admin-only by design
 
 **Gates**

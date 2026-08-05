@@ -41,9 +41,18 @@ import { t } from '../i18n/index.js';
  * note in the level view. That is a divergence, and it is reported rather than
  * silently resolved.
  *
- * ⚠ **Data comes from a MOCK adapter.** No content endpoint exists yet
- * (`adapters/content.ts` explains why and what is missing). The interface, the
- * states and the layout are production; the numbers are not.
+ * **Real data since TD-3.13 landed.** `GET /library` backs the level view; the
+ * index reads the public calendar bootstrap for the Level list. Two consequences
+ * are visible on screen and are deliberate, both explained in
+ * `adapters/content.ts`: **the index shows no per-level counts**, because the
+ * endpoint publishes no aggregate and a count derived from page one would be a
+ * claim rather than a placeholder; and **no item names a teacher**, because
+ * `EducationalContent` records no uploader at all.
+ *
+ * **Nothing here filters by visibility.** The server returns what this caller
+ * may see — tiers, the BR-2 consent gate and the own-branch-first ordering are
+ * all applied before a row arrives. A client that filtered would be a second
+ * implementation of a permission rule.
  */
 type Load<T> =
   | { kind: 'loading' }

@@ -67,6 +67,33 @@ export interface LibraryItem {
   mimeType: string;
   sizeBytes: bigint;
   createdAt: Date;
+  /**
+   * **The labels the ids stand for, resolved here.**
+   *
+   * §5.2 groups the library **Category → Level → Academic Year → Branch**, and a
+   * client cannot render any of those headings from ids alone. There is no
+   * public source for the names either: `/admin/subjects` and
+   * `/admin/academic-years` are Admin-only by design (R30), and
+   * `/calendar/bootstrap` publishes Categories, Levels and Branches but neither
+   * Subjects nor Academic Years.
+   *
+   * So the response carries them, which is the property TD-3.4 already gives the
+   * calendar — *self-sufficient, opening an item costs no further request*. The
+   * alternatives were worse: widening the calendar's cached payload for an
+   * unrelated screen (rejected twice already), or a new public reference surface
+   * exposing the whole curriculum to anonymous callers when the library only
+   * needs the names of rows it is already returning.
+   *
+   * **Labels, never identifiers.** The ids above remain what a client filters
+   * and links by.
+   */
+  levelName: string;
+  categoryId: string;
+  categoryName: string;
+  subjectName: string;
+  academicYearLabel: string;
+  /** `null` is **Global / بدون فرع** (§4.9, BR-20), not unknown. */
+  branchName: string | null;
 }
 
 /** Staff — Admin, Super Admin or Teacher — are the only ones §4.9 shows `hidden` to. */
@@ -239,8 +266,23 @@ export async function listLibrary(
              c."branch_id"               AS "branchId",
              c."mime_type"               AS "mimeType",
              c."size_bytes"              AS "sizeBytes",
-             c."created_at"              AS "createdAt"
+             c."created_at"              AS "createdAt",
+             -- §5.2's headings. INNER joins on level/subject/year because each
+             -- FK is NOT NULL and Restrict, so a row without them cannot exist;
+             -- the branch is LEFT because NULL there means Global (§4.9), which
+             -- is a value rather than a missing one.
+             l."name"                    AS "levelName",
+             l."category_id"             AS "categoryId",
+             cat."name"                  AS "categoryName",
+             s."name"                    AS "subjectName",
+             y."label"                   AS "academicYearLabel",
+             b."name"                    AS "branchName"
       FROM "educational_content" c
+      JOIN "level" l          ON l."id"  = c."level_id"
+      JOIN "category" cat     ON cat."id" = l."category_id"
+      JOIN "subject" s        ON s."id"  = c."subject_id"
+      JOIN "academic_year" y  ON y."id"  = c."academic_year_id"
+      LEFT JOIN "branch" b    ON b."id"  = c."branch_id"
       ${where}
       -- Newest first within each bucket; the title is the tie-break and is
       -- natively ar-x-icu collated (TD-6a), so no per-query COLLATE (§20 r13).

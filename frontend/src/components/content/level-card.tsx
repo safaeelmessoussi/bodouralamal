@@ -31,15 +31,27 @@ export function LevelCard({ level }: { level: LevelSummary }): ReactNode {
           <span className="level-card__description">{level.description}</span>
         ) : null}
 
-        <span className="level-card__counts">
-          <span className="level-card__count">
-            <strong>{level.content_count}</strong> {countLabel(level.content_count, 'content.countItems')}
+        {/* **Rendered only when a count actually exists.** `GET /library`
+            publishes no aggregate (TD-3.13 is a flat filtered list), so these
+            are `null` on the index — and a card showing "0 items" for a Level
+            nobody has counted would be a claim, not a placeholder. The row
+            disappears rather than lying. */}
+        {level.content_count !== null || level.academic_year_count !== null ? (
+          <span className="level-card__counts">
+            {level.content_count !== null ? (
+              <span className="level-card__count">
+                <strong>{level.content_count}</strong>{' '}
+                {countLabel(level.content_count, 'content.countItems')}
+              </span>
+            ) : null}
+            {level.academic_year_count !== null ? (
+              <span className="level-card__count">
+                <strong>{level.academic_year_count}</strong>{' '}
+                {countLabel(level.academic_year_count, 'content.countYears')}
+              </span>
+            ) : null}
           </span>
-          <span className="level-card__count">
-            <strong>{level.academic_year_count}</strong>{' '}
-            {countLabel(level.academic_year_count, 'content.countYears')}
-          </span>
-        </span>
+        ) : null}
       </a>
     </li>
   );

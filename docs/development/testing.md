@@ -14,7 +14,9 @@ Four layers, each testing something the others structurally cannot.
 **Coverage: ≥ 80 % on services and policies.** No coverage gate on generated or boilerplate
 code — a coverage number that counts generated clients measures nothing.
 
-Current totals: **133 backend unit · 576 integration · 219 frontend**.
+Current totals: **797 backend across 43 files · 266 frontend across 19**. The backend figure
+is the integration sweep, which is what `scripts/dev/test-integration.sh` runs and what CI
+gates on; the unit suite is a subset of it rather than a separate number.
 
 ## Running them
 

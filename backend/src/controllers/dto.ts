@@ -675,6 +675,23 @@ export interface LibraryItemDto {
   size_bytes: number;
   /** An instant, correctly — an upload happens at a moment (cf. TD-11). */
   created_at: string;
+  /**
+   * §5.2's headings, resolved server-side.
+   *
+   * The library groups **Category → Level → Academic Year → Branch**, and no
+   * public endpoint publishes Subject or Academic Year names — `/admin/*` is
+   * Admin-only by design (R30). Carrying them makes the response
+   * self-sufficient, which is what TD-3.4 already requires of the calendar.
+   * **Labels, never identifiers:** the ids above stay what a client filters by.
+   */
+  category_id: string;
+  category_name: string;
+  level_name: string;
+  subject_name: string;
+  academic_year_label: string;
+  /** `null` is **Global / بدون فرع**, not unknown — it renders as its own
+   *  container (§4.9, BR-20). */
+  branch_name: string | null;
 }
 
 /**
@@ -701,6 +718,12 @@ export function libraryItemDto(row: {
   mimeType: string;
   sizeBytes: bigint;
   createdAt: Date;
+  categoryId: string;
+  categoryName: string;
+  levelName: string;
+  subjectName: string;
+  academicYearLabel: string;
+  branchName: string | null;
 }): LibraryItemDto {
   return {
     id: row.id,
@@ -716,6 +739,12 @@ export function libraryItemDto(row: {
     // a file size fits a double long before it reaches the TD-9 cap.
     size_bytes: Number(row.sizeBytes),
     created_at: row.createdAt.toISOString(),
+    category_id: row.categoryId,
+    category_name: row.categoryName,
+    level_name: row.levelName,
+    subject_name: row.subjectName,
+    academic_year_label: row.academicYearLabel,
+    branch_name: row.branchName,
   };
 }
 
