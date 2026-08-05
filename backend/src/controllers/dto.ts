@@ -1146,3 +1146,64 @@ export function scheduleSessionDto(row: {
     protected_reasons: row.protectedReasons,
   };
 }
+
+/* ── Trash (§7, TD-5, BR-15, Revision 52) ────────────────────────────────── */
+
+export interface TrashEntryDto {
+  id: string;
+  target_entity: string;
+  target_id: string;
+  /** A name pulled from the snapshot — without it the list is a page of UUIDs. */
+  label: string | null;
+  /** An instant: a deletion happens at a moment (cf. TD-11). */
+  deleted_at: string;
+  deleted_by_id: string | null;
+  /** The staff-facing legal name, as everywhere in the back office. */
+  deleted_by_name: string | null;
+  /** BR-15's 90-day window. */
+  purge_after: string;
+  /**
+   * **Decided by the server, per entity type.** A client cannot know which
+   * deletions cascade, and one that guessed would offer a button that silently
+   * half-restores a person (§7).
+   */
+  restorable: boolean;
+  /** A stable code when `restorable` is false — rendered, so renaming one
+   *  changes what an administrator is told about their own data. */
+  restore_blocked_reason: string | null;
+}
+
+/**
+ * Deliberately **absent: `snapshot`**.
+ *
+ * It is the whole row as it was — every column, including ones no screen is
+ * entitled to (a person's phone, notes, `pre_provisioned_email`). The Trash
+ * screen's question is *what was deleted, by whom, and when*, and the snapshot
+ * answers a different and far more sensitive one. Restoration reads it
+ * server-side; nothing needs it on the wire.
+ */
+export function trashEntryDto(row: {
+  id: string;
+  targetEntity: string;
+  targetId: string;
+  label: string | null;
+  deletedAt: Date;
+  deletedById: string | null;
+  deletedByName: string | null;
+  purgeAfter: Date;
+  restorable: boolean;
+  restoreBlockedReason: string | null;
+}): TrashEntryDto {
+  return {
+    id: row.id,
+    target_entity: row.targetEntity,
+    target_id: row.targetId,
+    label: row.label,
+    deleted_at: row.deletedAt.toISOString(),
+    deleted_by_id: row.deletedById,
+    deleted_by_name: row.deletedByName,
+    purge_after: row.purgeAfter.toISOString(),
+    restorable: row.restorable,
+    restore_blocked_reason: row.restoreBlockedReason,
+  };
+}

@@ -2,7 +2,7 @@
 
 # API endpoints
 
-**86 operations across 63 paths**, all under `/api/v1` except the health check.
+**89 operations across 66 paths**, all under `/api/v1` except the health check.
 The count comes from the generator, which reconciles against the live router — if this line
 disagrees with `openapi.json`, this line is the one that is wrong.
 
@@ -104,6 +104,28 @@ on the page, but **§7 gives `Session` no notes column and defines no note entit
 therefore the Document Owner's, the same class as the deferred `EducationalContent` uploader
 field. Shipping the key null lets a client coded against TD-3.4 find the field where the
 specification says it is, and keeps the gap **visible rather than silent**.
+
+## Trash (§7, TD-5, BR-15 — Revision 52)
+
+| | Path | Audience | Notes |
+|---|---|---|---|
+| `GET` | `/admin/trash` | 👤 | Soft-deleted records: entity, label, who deleted it, when, `purge_after`. Filters `entity` `deleted_by` `from` `to` `q` |
+| `POST` | `/admin/trash/{id}/restore` | 👤 | **Per entity type.** Refused loudly for anything that cascades |
+
+**`restorable` is a server decision, published per row.** A client cannot know which deletions
+cascade, and one that guessed would offer a button that silently half-restores a person.
+**Restorable today: `Branch`, `Category`, `Subject`, `Room`** — the types whose deletion is
+*guarded* rather than cascading, so nothing was removed alongside them. Everything else answers
+`409` with `CASCADE_RELATIONSHIPS` or `CASCADE_CHILDREN`, and the screen states the reason
+rather than merely hiding the action.
+
+**Two further guards:** `PARENT_DELETED` (a Room whose Branch is still binned would be alive but
+unreachable) and `ALREADY_PURGED` (BR-15 removed the row; the snapshot alone cannot safely
+recreate it, since every foreign key it names may have gone too).
+
+**There is no permanent-delete route.** BR-15's window is enforced by `content.quarantine-purge`;
+a manual override is a data-retention decision and needs its own revision. **The `snapshot` is
+never on the wire** — it is the whole row, including columns no screen is entitled to.
 
 ## Registration and approvals
 

@@ -2,15 +2,20 @@
 
 # Draft SRS Revision 52 — the Trash UI returns to the MVP
 
-> **Status: PROPOSED. Not in force, and nothing is built against it.**
+> **Status: APPLIED to `docs/SRS.md` on 2026-08-05**, with the Owner's amendment: **do not
+> defer the feature — ship it with per-entity capability.** *"Restore should be supported only
+> for entity types whose restoration is already safe and complete … the UI can support different
+> capabilities per entity type."*
 >
-> **This one is different from R44–R51.** Those recorded decisions the SRS was silent about.
-> This one asks the Owner to **reverse an explicit postponement**: §7 line 726 and §10.1 place
-> `/admin/trash` outside the MVP, and Revision 7 states that those postponement annotations
-> *"are intentional and must be kept — they are what AI rule §20.16 enforces against."*
+> That is a better answer than the split this proposal recommended, and it is what shipped.
+> Retained for the rationale below — the cascade hazard and the entity analysis — which the
+> specification states as a rule rather than an argument.
 >
-> I therefore stopped rather than implementing. **Approving this proposal is what authorises
-> the work.**
+> **Why this one needed asking at all:** unlike R44–R51, which recorded decisions the SRS was
+> silent about, this reversed an **explicit postponement** — §7 and §10.1 placed `/admin/trash`
+> outside the MVP, and Revision 7 stated those annotations *"are intentional and must be kept —
+> they are what AI rule §20.16 enforces against."* Stopping to ask was the point; the Owner's
+> answer then improved the design.
 
 ---
 
@@ -62,10 +67,17 @@ whether the *related* row still exists — a student's Administrative Group may 
 deleted since. A Trash page that offers one **Restore** button for every entity type is
 promising a correctness it does not have.
 
-## What I recommend, and it is not the whole feature
+## What I recommended, and what the Owner decided instead
 
-**Ship the read-only half now, and the CLI script the SRS already mandates. Leave restore for
-its own slice.**
+*(Recorded as written, because the Owner's amendment is the better answer and the contrast is
+the useful part: I proposed deferring restore wholesale; the Owner proposed deferring it **per
+entity type**, which ships the same safety with far more of the feature.)*
+
+**What shipped:** browsing, plus restore for `Branch`, `Category`, `Subject` and `Room` — the
+types whose deletion is *guarded* rather than cascading — with every other type refused loudly
+and the reason stated on the row.
+
+**What I had proposed:**
 
 1. **`GET /admin/trash`** — list, filter by entity type, by who deleted it and when, search,
    and show `purge_after`. Super Admin only. **This has no correctness hazard at all**: it

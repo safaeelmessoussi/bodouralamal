@@ -38,6 +38,8 @@ GET /me                                       # TD-3.1, TD-1
 
 # ── Registration & approvals (TD-3.2)
 POST /registrations                           # TD-3.2, §4.1b step 5; R49 optional requested_role (hint only, grants nothing)
+GET /admin/trash                              # §7/TD-5/BR-15 (R52) — soft-deleted records; Super Admin only; read-only
+POST /admin/trash/{id}/restore                # §7 (R52) — only where the TD-5 cascade does not arise; refused loudly otherwise
 GET /admin/settings                           # TD-3.11, §5.6 (R42) — Super Admin only
 PUT /admin/settings/{key}                     # TD-3.11 (R42) — allow-listed keys, audited
 GET /admin/approvals                          # TD-3.2, §5.6

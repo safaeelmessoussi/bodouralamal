@@ -37,6 +37,9 @@ describe('the registry matches §14.1', () => {
         '/admin/levels',
         '/admin/schedules',
         '/admin/taxonomy',
+        // R52 — §14.1's Administration group gained the Trash node when the
+        // Revision 6 deferral was superseded.
+        '/admin/trash',
         '/admin/users',
         '/superadmin/hijri-calendar',
         '/superadmin/settings',

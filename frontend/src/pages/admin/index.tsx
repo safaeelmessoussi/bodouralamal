@@ -18,6 +18,7 @@ import { SchedulesPage } from './schedules.js';
 import { SettingsPage } from './settings.js';
 import { SubjectOrganisationPage } from './subject-organisation.js';
 import { TaxonomyPage } from './taxonomy.js';
+import { TrashPage } from './trash.js';
 import { UsersPage } from './users.js';
 
 /**
@@ -50,6 +51,7 @@ export const IMPLEMENTED_ADMIN_PATHS: readonly string[] = [
   '/admin/taxonomy',
   '/admin/users',
   '/admin/calendar',
+  '/admin/trash',
   '/superadmin/hijri-calendar',
   '/superadmin/settings',
 ];
@@ -127,6 +129,8 @@ export function AdminRouter(): ReactNode {
       return <UsersPage />;
     case '/admin/calendar':
       return <AdminCalendarPage />;
+    case '/admin/trash':
+      return <TrashPage />;
     case '/superadmin/hijri-calendar':
       return <HijriCalendarPage />;
     case '/superadmin/settings':

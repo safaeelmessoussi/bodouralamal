@@ -152,6 +152,15 @@ export const ADMIN_MODULES: readonly AdminModule[] = [
     status: 'ready',
   },
   {
+    // §7/BR-15 (R52) — Super Admin only: the list spans every entity regardless
+    // of branch, which no other surface allows.
+    path: '/admin/trash',
+    labelKey: 'admin.nav.trash',
+    section: 'administration',
+    roles: SUPER_ONLY,
+    status: 'ready',
+  },
+  {
     path: '/superadmin/hijri-calendar',
     labelKey: 'admin.nav.hijri',
     section: 'administration',

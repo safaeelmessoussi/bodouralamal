@@ -603,8 +603,13 @@
 - [ ] **Educational Content upload UI** — attach to a Subject of a Level (library) or to a Session (`POST /sessions/{id}/content` already exists)
 
 - [x] **Rooms CRUD** — verified complete (shipped M3b-30); added the missing delete confirmation that every other destructive action already had
-- [ ] **Trash UI — BLOCKED on an SRS decision.** §7/§10.1 defer `/admin/trash`, and Revision 7 says those annotations *must be kept*. `SRS-PROPOSAL-R52.md` recommends read-only browsing now, then the CLI restore script, then Restore
-- [ ] **The `db:restore` CLI script** — required by §7 for MVP restoration and **never implemented**. The TD-5 cascade must reinstate `FamilyLink`, `Enrollment`, `StudentTeachingGroup`, `CourseScheduleStaff`, `UserBranchRole` and `UserIdentity`, or a restored User is silently broken
+- [x] **Trash UI (`/admin/trash`)** — SRS Revision 52 applied; list, filter by type and date, search, restore **per entity type**
+  - `restorable` is a **server** decision on every row: a client cannot know which deletions cascade
+  - Restorable: `Branch`, `Category`, `Subject`, `Room` — the types whose deletion is *guarded* rather than cascading
+  - Blocked types state **why**, rather than silently omitting the action
+  - Guards the SRS did not name: `PARENT_DELETED` and `ALREADY_PURGED`
+  - **No permanent delete** — BR-15's window is the purge job's, and bypassing it needs its own revision
+- [ ] **Widen the restorable set** — each type needs its TD-5 cascade reinstated and tested before it joins: `Level` (its Administrative Groups), `TeachingGroup` (member seats), `RecurringCourseSchedule` (future Sessions), `User` (`FamilyLink`, `Enrollment`, `StudentTeachingGroup`, `CourseScheduleStaff`, `UserBranchRole`, `UserIdentity`). Until then the screen says so per row
 
 **Gates
 - [ ] §18 *Educational Model* checklist green — including the §19.2 named regressions: composite-FK rejection **attempted directly in SQL**, weekly-vs-biweekly conflict on the alternating week, double-`materialize` idempotency, schedule edit sparing an overridden session, and anonymous-vs-authenticated parity on `/calendar` and `/library`

@@ -20,6 +20,7 @@ import * as sessionsCtl from './controllers/session.controller.js';
 import * as libraryCtl from './controllers/library.controller.js';
 import * as referenceData from './controllers/reference-data.controller.js';
 import * as taxonomy from './controllers/taxonomy.controller.js';
+import * as trash from './controllers/trash.controller.js';
 import { createRegistration } from './controllers/registration.controller.js';
 import { healthController } from './controllers/health.controller.js';
 import type { PrismaClient } from './generated/prisma/client.js';
@@ -130,6 +131,12 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
   // re-asserts the caller's live status against the database per request.
   // Platform settings (TD-3.11, §5.6, Revision 42). Super Admin only, asserted
   // in the service against live rows — the `/admin/` prefix is not the boundary.
+  // §7/TD-5/BR-15 (R52) — soft-deleted records. Super Admin only, asserted in
+  // the service. No permanent-delete route: BR-15's window is enforced by the
+  // purge job, and a manual override is its own retention decision.
+  guarded.get('/admin/trash', trash.list(prisma));
+  guarded.post('/admin/trash/:id/restore', trash.restore(prisma));
+
   guarded.get('/admin/settings', settings.list(prisma));
   guarded.put('/admin/settings/:key', settings.update(prisma));
 

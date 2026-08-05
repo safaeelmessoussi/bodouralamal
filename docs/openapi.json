@@ -246,6 +246,108 @@
         }
       }
     },
+    "/admin/trash": {
+      "get": {
+        "summary": "List soft-deleted records",
+        "description": "**§7, TD-5, BR-15, Revision 52.** Every soft-deleted record with its entity type, a label read from the snapshot, who deleted it, when, and when BR-15's 90-day window purges it. **Super Admin only** (TD-2), asserted in the service: this list spans every entity regardless of branch, so a branch-scoped Admin would see other branches' records — which no other surface allows. Filters: `entity`, `deleted_by`, `from`, `to` run in SQL; `q` narrows the page already read, because the label lives inside a JSONB snapshot under a key that differs per entity, so a SQL predicate would need one expression per type and would still miss any type added later. **`restorable` and `restore_blocked_reason` are decided by the SERVER, per entity type**, and a client must never infer them: a screen cannot know which deletions cascade, and one that guessed would offer a button that silently half-restores a person. **The `snapshot` is deliberately absent from the response** — it is the whole row as it was, including columns no screen is entitled to (a phone number, notes, `pre_provisioned_email`); this screen's question is *what was deleted, by whom, and when*, and restoration reads the snapshot server-side.",
+        "responses": {
+          "200": {
+            "description": "The trash page in the TD-10 envelope."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN below Super Admin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/trash/{id}/restore": {
+      "post": {
+        "summary": "Restore a soft-deleted record",
+        "description": "**Revision 52 — supported per entity type, and only where §7's cascade problem does not arise.** §7 states the hazard: the TD-5 cascade removes `FamilyLink`, `Enrollment`, `StudentTeachingGroup`, `CourseScheduleStaff`, `UserBranchRole` and `UserIdentity` rows, and **a User restored without them is a half-restored, silently broken account** — the row returns, every screen looks right, and the person is enrolled in nothing. **Restorable today: `Branch`, `Category`, `Subject`, `Room`** — the four whose deletion is GUARDED rather than cascading, so nothing was removed alongside them and clearing the tombstone genuinely restores the whole record. **Every other type is refused loudly** (`409 STATE_CONFLICT`, `reason: CASCADE_RELATIONSHIPS` or `CASCADE_CHILDREN`) rather than silently half-restored. **A child is never restored into a deleted parent** (`PARENT_DELETED`): a Room whose Branch is still in the Trash would be technically alive and practically unreachable. **`ALREADY_PURGED`** where BR-15 has removed the row itself — the snapshot alone cannot safely recreate it, since every foreign key it names may have gone too. On success the tombstone is removed, because the record is no longer deleted and leaving it listed would make the Trash disagree with the platform; the `trash.restore` audit row is what keeps the event answerable.",
+        "responses": {
+          "200": {
+            "description": "Restored; names the entity and id."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN below Super Admin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an unknown trash entry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT with reason CASCADE_RELATIONSHIPS, CASCADE_CHILDREN, NOT_YET_SUPPORTED, PARENT_DELETED, ALREADY_PURGED or NOT_DELETED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/admin/settings": {
       "get": {
         "summary": "Platform settings",
