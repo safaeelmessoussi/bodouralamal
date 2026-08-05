@@ -53,4 +53,10 @@ export const cancelSessionSchema = z
 
 export const restoreSessionSchema = z.object({ version }).strict();
 
-export const linkContentSchema = z.object({ content_id: uuid }).strict();
+/**
+ * **The key is `educational_content_id`, exactly as TD-3.12 names it.** A
+ * shorter `content_id` reads better and would have been wrong: `.strict()` makes
+ * the boundary refuse anything else, so a client following the specification
+ * would have received a `400` from an endpoint that claimed to implement it.
+ */
+export const linkContentSchema = z.object({ educational_content_id: uuid }).strict();

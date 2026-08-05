@@ -91,11 +91,11 @@ export function linkContent(prisma: PrismaClient) {
       prisma,
       requireActor(req),
       sessionId,
-      body.content_id,
+      body.educational_content_id,
     );
     res
       .status(201)
-      .json(sessionContentLinkDto({ id: link.id, sessionId, contentId: body.content_id }));
+      .json(sessionContentLinkDto({ id: link.id, sessionId, contentId: body.educational_content_id }));
   };
 }
 

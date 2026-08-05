@@ -645,7 +645,8 @@ export function sessionDto(row: {
 export interface SessionContentLinkDto {
   id: string;
   session_id: string;
-  content_id: string;
+  /** Named as TD-3.12 names it on the way in — one vocabulary per concept. */
+  educational_content_id: string;
 }
 
 export function sessionContentLinkDto(row: {
@@ -653,7 +654,7 @@ export function sessionContentLinkDto(row: {
   sessionId: string;
   contentId: string;
 }): SessionContentLinkDto {
-  return { id: row.id, session_id: row.sessionId, content_id: row.contentId };
+  return { id: row.id, session_id: row.sessionId, educational_content_id: row.contentId };
 }
 
 /* ── Approval queue (§5.6, §14.2) ────────────────────────────────────────── */

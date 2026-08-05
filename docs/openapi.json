@@ -3282,13 +3282,13 @@
     "/sessions/{id}/content": {
       "post": {
         "summary": "Link content to a session",
-        "description": "TD-3.12, §4.9. Body: `{ content_id }` — **strictly** that key. The link is **its own row**, so the returned `id` addresses the association rather than the file. Linking the same content twice is `409 DUPLICATE`; a previously unlinked pair relinks rather than creating a second row. **A linked content item is one of the things that makes a Session protected** (§4.4, R43.6) — a schedule edit will leave this occurrence alone and report it, rather than rewriting it — so this endpoint changes what a later schedule edit is allowed to do.",
+        "description": "TD-3.12, §4.9. Body: `{ educational_content_id }` — **strictly** that key, spelled exactly as TD-3.12 names it; a shorter `content_id` reads better and would have made a specification-following client receive `400` from an endpoint claiming to implement the clause. The link is **its own row**, so the returned `id` addresses the association rather than the file. Linking the same content twice is `409 DUPLICATE`; a previously unlinked pair relinks rather than creating a second row. **A linked content item is one of the things that makes a Session protected** (§4.4, R43.6) — a schedule edit will leave this occurrence alone and report it, rather than rewriting it — so this endpoint changes what a later schedule edit is allowed to do.",
         "responses": {
           "201": {
             "description": "Linked."
           },
           "400": {
-            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a missing or malformed content_id, or an unknown key.",
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a missing or malformed educational_content_id, or an unknown key.",
             "content": {
               "application/json": {
                 "schema": {

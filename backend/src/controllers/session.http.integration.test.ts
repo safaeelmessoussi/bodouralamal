@@ -37,7 +37,7 @@ const SESSION_KEYS = [
   'status',
   'version',
 ];
-const LINK_KEYS = ['content_id', 'id', 'session_id'];
+const LINK_KEYS = ['educational_content_id', 'id', 'session_id'];
 
 interface Res {
   status: number;
@@ -381,16 +381,16 @@ describe('content links never destroy the file (TD-3.12, §4.9)', () => {
     const s = await freshSession();
 
     const linked = await call('POST', `/sessions/${s.id}/content`, superAdmin, {
-      content_id: contentId,
+      educational_content_id: contentId,
     });
     expect(linked.status).toBe(201);
     expect(Object.keys(linked.body).sort()).toEqual(LINK_KEYS);
     // The link is its own row — this id addresses the association, not the file.
     expect(linked.body.id).not.toBe(contentId);
-    expect(linked.body.content_id).toBe(contentId);
+    expect(linked.body.educational_content_id).toBe(contentId);
 
     const again = await call('POST', `/sessions/${s.id}/content`, superAdmin, {
-      content_id: contentId,
+      educational_content_id: contentId,
     });
     expect(again.status).toBe(409);
     expect(again.body.error?.code).toBe('DUPLICATE');
@@ -441,7 +441,7 @@ describe('the routes are mounted and guarded (TD-2)', () => {
     for (const [method, path, body] of [
       ['PATCH', `/sessions/${s.id}`, { version: s.version }],
       ['POST', `/sessions/${s.id}/cancel`, { version: s.version, reason: 'x' }],
-      ['POST', `/sessions/${s.id}/content`, { content_id: contentId }],
+      ['POST', `/sessions/${s.id}/content`, { educational_content_id: contentId }],
     ] as const) {
       const res = await call(method, path, outsiderTeacher, body);
       expect(res.status).toBe(404);

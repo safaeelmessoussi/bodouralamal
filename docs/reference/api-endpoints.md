@@ -179,7 +179,7 @@ staffs what, and anything out of reach answers `404`.
 | `PATCH` | `/sessions/{id}` | A **field edit**, not a transition. Always marks `overridden` |
 | `POST` | `/sessions/{id}/cancel` | Reason **mandatory** and may not be blank |
 | `POST` | `/sessions/{id}/restore` | Refused once the date has passed |
-| `POST` | `/sessions/{id}/content` | Links an existing library item |
+| `POST` | `/sessions/{id}/content` | Links an existing library item. Body key is `educational_content_id`, as TD-3.12 names it |
 | `DELETE` | `/sessions/{id}/content/{contentId}` | **Unlinks; never deletes the file** |
 
 **One verb per TD-1 transition, and `PATCH` is not one of them.** `status` is *refused* on the
