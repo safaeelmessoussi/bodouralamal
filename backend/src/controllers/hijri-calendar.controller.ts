@@ -10,6 +10,8 @@ import {
   publishYear,
   recordMonthStart,
   yearHistory,
+  coverage,
+  COVERAGE_WARNING_DAYS,
 } from '../services/hijri-calendar.service.js';
 import type { Actor } from '../policies/actor.js';
 
@@ -59,9 +61,28 @@ export function list(prisma: PrismaClient) {
     const parsed = yearParam.safeParse(req.query['year']);
     if (!parsed.success) throw new AppError('VALIDATION_FAILED', 'year is required');
 
-    const months = await listYear(prisma, actorOf(req), parsed.data);
+    const actor = actorOf(req);
+    const [months, reach] = await Promise.all([
+      listYear(prisma, actor, parsed.data),
+      coverage(prisma, actor),
+    ]);
     res.json({
       year: parsed.data,
+      // How far the official calendar reaches, on the screen that exists to
+      // maintain it. A manually-recorded dataset that runs out must say so —
+      // silence is exactly how this feature would stop working unnoticed.
+      coverage: {
+        published_through: isoDate(reach.publishedThroughStart),
+        days_remaining: reach.daysRemaining,
+        warning: reach.daysRemaining !== null && reach.daysRemaining < COVERAGE_WARNING_DAYS,
+        next_unrecorded: reach.nextUnrecorded
+          ? {
+              hijri_year: reach.nextUnrecorded.hijriYear,
+              hijri_month: reach.nextUnrecorded.hijriMonth,
+              month_name_ar: reach.nextUnrecorded.monthNameArabic,
+            }
+          : null,
+      },
       data: months.map((m) => ({
         hijri_month: m.hijriMonth,
         month_name_ar: m.monthNameArabic,

@@ -272,6 +272,57 @@ What remains is sufficient and deliberate:
 If the Ministry ever publishes an API or dataset, an importer is added **without redesigning
 anything** — what is needed is a fetcher, a route, and an audit row.
 
+### Re-examined 2026-08-05: automation was reconsidered and rejected again
+
+The Document Owner restated *"the system MUST always follow the official Moroccan Hijri
+calendar"* as a project constraint and asked whether something more robust than manual
+maintenance was possible. It was re-examined from scratch, and **the constraint is precisely
+what rules automation out.**
+
+Every automatable Hijri calendar is a *calculation*, and Morocco does not calculate:
+
+| Candidate | Why it fails the constraint |
+|---|---|
+| **Umm al-Qura** | Saudi Arabia's calculated calendar. Diverges from Morocco's announcements regularly, and by design — different country, different method |
+| **Tabular / arithmetic** | A fixed 30-year leap cycle. Cannot represent an observation-based calendar at all |
+| **Astronomical conjunction / visibility models** | Predicts when the crescent *could* be seen. Morocco declares when it *was* seen, by naked eye, from Moroccan territory — the two disagree whenever weather or judgement intervenes |
+| **Scraping the Ministry's announcements** | Prose news posts with no stable structure, published *after* the sighting. A parser here fails silently and produces a wrong date, which is worse than no date |
+
+**An automated overlay would not be occasionally imprecise — it would be confidently wrong**,
+and a wrong official date is a worse failure than a missing one. Automation does not serve
+this constraint; it violates it. **The Revision 32 decision stands unchanged.**
+
+### The failure mode that IS worth fixing: running out in silence
+
+Correctness was never the weakness of the manual path — [silence over guessing](#the-overlay-is-invisible-until-someone-records-a-month--including-in-development)
+is exactly right, and `baseHijri` returns `null` rather than a guess.
+
+The weakness is **operational**: when the recorded months run out, every date quietly renders
+Gregorian-only and *nothing says so*. No error, no log, no screen state. A manually maintained
+dataset that degrades in silence is how a feature stops working without anyone noticing.
+
+So `GET /admin/hijri-calendar` carries a **`coverage`** block — `published_through`,
+`days_remaining`, `warning`, `next_unrecorded` — on the screen that exists to maintain it.
+
+Four decisions inside it, each with a reason:
+
+- **It computes no Hijri date.** It is arithmetic on Gregorian dates the Ministry supplied.
+  The constraint is untouched.
+- **`days_remaining` counts to the 29-day floor, not 30**, because day 30 only resolves when
+  the next consecutive month is recorded. Counting to 30 would promise runway the resolver
+  will not deliver.
+- **It goes negative rather than clamping at zero.** *Expired 40 days ago* and *expires today*
+  call for different urgency, and clamping erases the difference.
+- **`null`, never `0`, when nothing is published.** *Nobody has recorded anything* and *it ran
+  out today* are different answers; a screen showing `0` for both reports an expiry that never
+  existed.
+
+**Only published months count** — §5.7 renders only those, so counting drafts would report
+runway the platform will not use.
+
+**No route was added** (§20 rule 16): this extends the response of the endpoint that already
+exists for exactly this job.
+
 ### Constraints that protect the data
 
 Beyond the obvious range checks (month 1–12, year 1300–1600 — which brackets any date this

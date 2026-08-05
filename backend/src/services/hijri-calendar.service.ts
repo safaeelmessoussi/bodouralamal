@@ -88,6 +88,90 @@ export async function listYear(
 }
 
 /**
+ * **How far the official calendar actually reaches, and when it runs out.**
+ *
+ * The Revision 32 decision not to ship an importer is correct and is not
+ * revisited here: Morocco's months are declared by the Ministry of Habous on
+ * **actual moon sighting**, announced the evening before, and every computable
+ * calendar — Umm al-Qura, tabular, astronomical conjunction — diverges from
+ * those announcements unpredictably. Automating would produce a calendar that is
+ * *confidently wrong* against the official one, which breaks the constraint
+ * rather than serving it.
+ *
+ * **But the manual process has an operational failure mode, and this is it.**
+ * When the recorded months run out, `baseHijri` correctly returns `null` and
+ * every date renders Gregorian-only. Nothing is *wrong* — and nothing says the
+ * overlay has stopped. The calendar degrades in silence, which is the one thing
+ * a manually-maintained dataset must never do.
+ *
+ * So the coverage is computed and surfaced on the screen that exists to maintain
+ * it. **This adds no route** (§20 rule 16) and **computes no Hijri date**: it
+ * reports only what has been recorded and how many days of runway remain, which
+ * is arithmetic on Gregorian dates the Ministry itself supplied.
+ *
+ * **Only PUBLISHED months count.** A draft is a transcription in progress, and
+ * §5.7 already says only published months render anywhere — counting drafts here
+ * would report runway the platform will not actually use.
+ */
+export interface HijriCoverage {
+  /** The last published month start, or `null` when nothing is published. */
+  publishedThroughStart: Date | null;
+  /**
+   * Days from `today` until the last published month reaches its guaranteed
+   * 29-day floor. **Negative means the overlay has already gone dark.**
+   *
+   * The floor, not 30: day 30 only resolves when the *next consecutive* month is
+   * recorded (see `baseHijri`), so 29 is the honest runway of the last published
+   * month rather than an optimistic one.
+   */
+  daysRemaining: number | null;
+  /** The first Hijri (year, month) after the published run — what to record next. */
+  nextUnrecorded: { hijriYear: number; hijriMonth: number; monthNameArabic: string } | null;
+}
+
+/** Below this, the maintenance screen should be shouting. One month of warning. */
+export const COVERAGE_WARNING_DAYS = 30;
+
+const CERTAIN_MONTH_LENGTH = 29;
+
+export async function coverage(
+  prisma: PrismaClient,
+  actor: Actor,
+  today: Date = new Date(),
+): Promise<HijriCoverage> {
+  assertSuperAdmin(actor);
+
+  const last = await prisma.hijriMonthStart.findFirst({
+    where: { deletedAt: null, status: 'published' },
+    orderBy: [{ hijriYear: 'desc' }, { hijriMonth: 'desc' }],
+    select: { hijriYear: true, hijriMonth: true, gregorianStartDate: true },
+  });
+  if (!last) {
+    return { publishedThroughStart: null, daysRemaining: null, nextUnrecorded: null };
+  }
+
+  const floorMs =
+    last.gregorianStartDate.getTime() + CERTAIN_MONTH_LENGTH * 24 * 60 * 60 * 1000;
+  const daysRemaining = Math.floor((floorMs - today.getTime()) / (24 * 60 * 60 * 1000));
+
+  const nextMonth = last.hijriMonth === MONTHS_IN_YEAR ? 1 : last.hijriMonth + 1;
+  const nextYear = last.hijriMonth === MONTHS_IN_YEAR ? last.hijriYear + 1 : last.hijriYear;
+
+  return {
+    publishedThroughStart: last.gregorianStartDate,
+    daysRemaining,
+    nextUnrecorded:
+      nextYear > MAX_HIJRI_YEAR
+        ? null
+        : {
+            hijriYear: nextYear,
+            hijriMonth: nextMonth,
+            monthNameArabic: hijriMonthNameArabic(nextMonth),
+          },
+  };
+}
+
+/**
  * TD-9 (Revision 31): month *n+1* must start after month *n*, and no two months
  * of a year may share a start date — an out-of-order pair makes resolution
  * ambiguous, and resolution is what every Hijri label in the platform depends

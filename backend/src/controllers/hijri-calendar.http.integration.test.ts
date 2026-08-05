@@ -125,7 +125,17 @@ describe('GET /admin/hijri-calendar', () => {
     await recordMonth(1, '2026-06-17');
     const res = await call('GET', `/admin/hijri-calendar?year=${YEAR}`, superToken);
 
-    expect(Object.keys(res.body).sort()).toEqual(['data', 'year']);
+    expect(Object.keys(res.body).sort()).toEqual(['coverage', 'data', 'year']);
+    // The coverage report (2026-08-05): the safeguard against a manually
+    // maintained calendar running out in silence. Automation is impossible by
+    // the nature of the source — Morocco declares months on actual moon
+    // sighting — so the honest alternative is to make the gap loud.
+    expect(Object.keys(res.body.coverage as object).sort()).toEqual([
+      'days_remaining',
+      'next_unrecorded',
+      'published_through',
+      'warning',
+    ]);
     expect(Object.keys(res.body.data![0]!).sort()).toEqual([
       'gregorian_start_date',
       'hijri_month',

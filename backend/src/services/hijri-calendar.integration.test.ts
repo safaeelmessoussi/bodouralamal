@@ -5,6 +5,7 @@ import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
 import type { RoleScope } from '../policies/branch-scope.js';
 import type { Actor } from '../policies/actor.js';
 import {
+  coverage,
   listYear,
   publishYear,
   recordMonthStart,
@@ -353,5 +354,75 @@ describe('TD-8 — history is the audit trail', () => {
     });
     expect(await yearHistory(prisma, superAdmin(), YEAR)).toHaveLength(0);
     expect((await yearHistory(prisma, superAdmin(), YEAR + 1)).length).toBeGreaterThan(0);
+  });
+});
+
+/**
+ * Coverage — the safeguard against the one failure mode a manually-maintained
+ * calendar has (Revision 32 constraint, 2026-08-05).
+ *
+ * The Ministry's announcements cannot be automated: Morocco declares months on
+ * actual moon sighting, so every computable calendar diverges from the official
+ * one. That decision stands. What must not stand is the overlay going dark in
+ * silence when the recorded months run out.
+ */
+describe('coverage reports how far the official calendar reaches', () => {
+  it('reports nothing published as no coverage at all, never as zero days', () => {
+    // `null` and `0` are different answers: one is "nobody has recorded
+    // anything", the other is "it ran out today". A screen that shows 0 for both
+    // tells an administrator the calendar is expiring when it never existed.
+    return coverage(prisma, superAdmin(), day('2026-06-20')).then((c) => {
+      expect(c.publishedThroughStart).toBeNull();
+      expect(c.daysRemaining).toBeNull();
+      expect(c.nextUnrecorded).toBeNull();
+    });
+  });
+
+  it('counts only PUBLISHED months — a draft is runway the platform will not use', async () => {
+    await recordMonthStart(prisma, superAdmin(), {
+      year: YEAR,
+      month: 1,
+      gregorianStartDate: day('2026-06-17'),
+    });
+    // Recorded but not published: §5.7 renders only published months, so this
+    // must not be reported as coverage.
+    expect((await coverage(prisma, superAdmin(), day('2026-06-20'))).daysRemaining).toBeNull();
+
+    await publishYear(prisma, superAdmin(), YEAR);
+    const after = await coverage(prisma, superAdmin(), day('2026-06-20'));
+    expect(after.publishedThroughStart).toEqual(day('2026-06-17'));
+    // 29-day floor, not 30: day 30 only resolves when the next consecutive
+    // month is recorded, so 29 is the honest runway.
+    expect(after.daysRemaining).toBe(26);
+  });
+
+  it('names the next month to record, rolling the year at month 12', async () => {
+    await recordMonthStart(prisma, superAdmin(), {
+      year: YEAR,
+      month: 12,
+      gregorianStartDate: day('2027-05-08'),
+    });
+    await publishYear(prisma, superAdmin(), YEAR);
+
+    const c = await coverage(prisma, superAdmin(), day('2027-05-10'));
+    expect(c.nextUnrecorded).toEqual({
+      hijriYear: YEAR + 1,
+      hijriMonth: 1,
+      monthNameArabic: 'محرم',
+    });
+  });
+
+  it('goes negative once the overlay has already gone dark', async () => {
+    await recordMonthStart(prisma, superAdmin(), {
+      year: YEAR,
+      month: 1,
+      gregorianStartDate: day('2026-06-17'),
+    });
+    await publishYear(prisma, superAdmin(), YEAR);
+
+    // Negative rather than clamped at zero: "expired 40 days ago" and "expires
+    // today" call for different urgency, and clamping erases the difference.
+    const c = await coverage(prisma, superAdmin(), day('2026-08-25'));
+    expect(c.daysRemaining).toBeLessThan(0);
   });
 });
