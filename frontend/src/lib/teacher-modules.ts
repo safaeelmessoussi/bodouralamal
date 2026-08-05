@@ -55,11 +55,13 @@ export const TEACHER_MODULES: readonly TeacherModule[] = [
     status: 'ready',
   },
   {
+    // §5.5: file attach with progress and retry, visibility honouring the
+    // Category default, and **no Global scope** — the server enforces all three
+    // (§4.9), and the screen renders its refusals rather than reimplementing them.
     path: '/teacher/content',
     labelKey: 'teacher.nav.content',
     roles: TEACHER,
-    status: 'blocked',
-    blockedReasonKey: 'teacher.blocked.content',
+    status: 'ready',
   },
   {
     path: '/teacher/exams',

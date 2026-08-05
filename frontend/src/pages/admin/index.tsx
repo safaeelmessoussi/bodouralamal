@@ -8,6 +8,7 @@ import { t } from '../../i18n/index.js';
 import { moduleForPath, visibleModules } from '../../lib/admin-modules.js';
 import { ApprovalsPage } from './approvals.js';
 import { BranchesPage } from './branches.js';
+import { ContentPage } from '../content.js';
 import { AdminCalendarPage } from './calendar.js';
 import { GroupsPage } from './groups.js';
 import { HijriCalendarPage } from './hijri-calendar.js';
@@ -51,6 +52,7 @@ export const IMPLEMENTED_ADMIN_PATHS: readonly string[] = [
   '/admin/taxonomy',
   '/admin/users',
   '/admin/calendar',
+  '/admin/content',
   '/admin/trash',
   '/superadmin/hijri-calendar',
   '/superadmin/settings',
@@ -129,6 +131,11 @@ export function AdminRouter(): ReactNode {
       return <UsersPage />;
     case '/admin/calendar':
       return <AdminCalendarPage />;
+    case '/admin/content':
+      // The same screen the teacher portal renders (§5.5/§5.6). One capability,
+      // two chromes — the difference between the audiences is what the SERVER
+      // will accept (§4.9), not what the client offers.
+      return <ContentPage portal="admin" />;
     case '/admin/trash':
       return <TrashPage />;
     case '/superadmin/hijri-calendar':

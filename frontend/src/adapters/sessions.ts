@@ -113,3 +113,37 @@ export async function restoreSession(
 ): Promise<unknown> {
   return api(`/sessions/${id}/restore`, { method: 'POST', token, body: { version } });
 }
+
+/**
+ * `POST /sessions/{id}/content` — links an existing library item (TD-3.12, §4.9).
+ *
+ * **The body key is `educational_content_id`, spelled exactly as TD-3.12 names
+ * it.** The boundary is `.strict()`, so the shorter `content_id` that reads
+ * better would be refused — that exact slip was caught once already (M3b-14b),
+ * and a key the specification spells out is copied, never paraphrased.
+ *
+ * Linking makes the session **protected** (R43.6): a later schedule edit will
+ * spare this occurrence and report it rather than rewriting it.
+ */
+export async function linkSessionContent(
+  sessionId: string,
+  educationalContentId: string,
+  token: string | null,
+): Promise<unknown> {
+  return api(`/sessions/${sessionId}/content`, {
+    method: 'POST',
+    token,
+    body: { educational_content_id: educationalContentId },
+  });
+}
+
+/** Unlinks — and **never deletes the file** (TD-3.12). The item is a library
+ *  resource with its own lifecycle; removing it from one session's materials
+ *  must not destroy it for every other session that references it. */
+export async function unlinkSessionContent(
+  sessionId: string,
+  contentId: string,
+  token: string | null,
+): Promise<unknown> {
+  return api(`/sessions/${sessionId}/content/${contentId}`, { method: 'DELETE', token });
+}

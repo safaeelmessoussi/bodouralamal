@@ -29,7 +29,7 @@ import {
   RecurrenceEditor,
   SchedulingTimes,
 } from '../../components/scheduling/recurrence-editor.js';
-import { SelectField, TextField } from '../../components/ui/field.js';
+import { SelectField } from '../../components/ui/field.js';
 import { ApiError } from '../../lib/api.js';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';

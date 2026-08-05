@@ -16,6 +16,8 @@ import {
   type ContentFilterState,
 } from '../components/content/content-filters.js';
 import { ContentPreviewDialog } from '../components/content/content-preview-dialog.js';
+import { useActiveChild } from '../contexts/active-child.js';
+import { useSession } from '../contexts/session.js';
 import { LevelCard } from '../components/content/level-card.js';
 import { ApplicationHeader } from '../components/header/application-header.js';
 import { SiteFooter } from '../components/site-footer.js';
@@ -150,6 +152,10 @@ function LibraryView(): ReactNode {
 /* ── Page 2 — one level ──────────────────────────────────────────────────── */
 
 function LevelView({ levelId }: { levelId: string }): ReactNode {
+  // The library is public, so both are legitimately null — they change only what
+  // the MINT is allowed to return (TD-12, §4.3), never what the listing shows.
+  const { accessToken } = useSession();
+  const { activeChildId } = useActiveChild();
   const [load, setLoad] = useState<Load<LevelContent | null>>({ kind: 'loading' });
   const [filters, setFilters] = useState<ContentFilterState>(EMPTY_FILTERS);
   const [open, setOpen] = useState<ContentItem | null>(null);
@@ -262,7 +268,12 @@ function LevelView({ levelId }: { levelId: string }): ReactNode {
         </>
       ) : null}
 
-      <ContentPreviewDialog item={open} onClose={() => setOpen(null)} />
+      <ContentPreviewDialog
+        item={open}
+        onClose={() => setOpen(null)}
+        accessToken={accessToken}
+        activeChildId={activeChildId}
+      />
     </Shell>
   );
 }

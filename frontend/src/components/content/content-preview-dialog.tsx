@@ -47,9 +47,22 @@ const PREVIEWABLE: ReadonlySet<ContentItem['kind']> = new Set(['pdf', 'video', '
 export function ContentPreviewDialog({
   item,
   onClose,
+  accessToken = null,
+  activeChildId = null,
 }: {
   item: ContentItem | null;
   onClose: () => void;
+  /**
+   * The caller's credentials, **passed in rather than read from context**.
+   *
+   * TD-12 mints after a server-side permission check and §4.3 requires the
+   * active child on *this* request, so both must travel with the call — but this
+   * dialog also serves the **public** library, where both are legitimately
+   * absent. Taking them as props keeps that state expressible and keeps the
+   * component renderable without a provider.
+   */
+  accessToken?: string | null;
+  activeChildId?: string | null;
 }): ReactNode {
   const [load, setLoad] = useState<Load>({ kind: 'idle' });
   const [attempt, setAttempt] = useState(0);
@@ -63,10 +76,11 @@ export function ContentPreviewDialog({
     setLoad({ kind: 'loading' });
     void (async () => {
       try {
-        const url = await fetchContentUrl(item.id);
+        const url = await fetchContentUrl(item.id, accessToken, activeChildId);
         if (cancelled) return;
-        // An absent URL is not an error — it is the honest state while the mint
-        // endpoint is unbuilt, and it must not render as a broken player.
+        // An absent URL is not an error — §4.9's tiers are applied server-side
+        // and a refusal is indistinguishable from a missing item by design, so
+        // this renders "not available" rather than a broken player.
         setLoad(url ? { kind: 'ready', url } : { kind: 'unavailable' });
       } catch {
         if (!cancelled) setLoad({ kind: 'error' });
@@ -75,7 +89,7 @@ export function ContentPreviewDialog({
     return () => {
       cancelled = true;
     };
-  }, [item, attempt]);
+  }, [item, attempt, accessToken, activeChildId]);
 
   return (
     <Dialog open={item !== null} onClose={onClose} title={item?.title ?? t('content.previewTitle')} wide>

@@ -508,6 +508,57 @@ would mint permission checks for content nobody opened.
 > the client should refresh pre-emptively is a Document Owner decision, not an implementation
 > detail.
 
+## Content upload, and why one screen serves two portals
+
+`/admin/content` (§5.6) and `/teacher/content` (§5.5) render **the same component**. The
+capability is identical — attach a file to a Subject within a Level, replace it, delete it —
+and what differs between the audiences is **what the server will accept**, not what the client
+offers: a Teacher cannot choose the Global scope and is confined to the branches of the
+schedules they staff (§4.9). Building two screens would put that difference in the client,
+which is exactly where it must not live.
+
+So the page **renders refusals rather than pre-empting them**, with one deliberate exception:
+the Global option is not offered to a Teacher at all, because an option that always fails is
+worse than no option. Everything else the server decides, and the uploader turns each refusal
+into a sentence someone can act on — *"a teacher cannot publish without a branch"* rather than
+*"upload failed"*.
+
+### A teacher's branch list comes from their schedules
+
+Revision 30 forbids a teacher browsing reference data, and the admin branch list would in any
+case offer branches every upload would then be refused for. The list is therefore derived from
+**the schedules they staff** — the same §4.4c derivation the server uses to decide — with the
+*names* coming from the public branch list the landing page already serves anonymously.
+
+### Progress is a contract, not a flourish
+
+MVP uploads are single-shot with no resume: a failure restarts from zero (Risk R-9), and §4.9
+accepts that risk **in exchange for** visible progress and a clear retry. That is why the
+uploader uses `XMLHttpRequest` for the PUT and nothing else does: `fetch` reports download
+progress and not upload progress, and streamed request bodies are not supported across §14.7's
+matrix. One older API, in one place, for the one thing it can do.
+
+**Retry re-runs the whole flow** — a new ticket, a new key, a new hash segment — never a
+resumption. There is nothing to resume, and pretending otherwise is how a half-written object
+gets completed as though it were whole.
+
+### The list is `GET /library`, not a new endpoint
+
+TD-3.13's route is already tier-aware and shows staff all three visibilities including
+`hidden`, which is exactly the management view. A parallel admin listing would have been a
+second expression of the §4.9 tiers — the duplication that drifts. **Branch is the one filter
+applied client-side**, because TD-3.13 publishes no `branch_id` parameter and widening a public
+contract for a back-office convenience is the wrong trade.
+
+### Session materials link, never own
+
+The materials dialog on `/admin/schedules/{id}/sessions` is built around Revision 43's rule
+that content is **referenced** by a session and never owned by it. Linking an existing item is
+the primary action, because the semester PDF belongs to the Subject and is referenced by every
+session that uses it; uploading is a shortcut that creates the library item and then links it.
+**Removing unlinks and never deletes** (TD-3.12) — destroying a file for every other session
+that references it is not what *"remove from this session"* means.
+
 ## The CRUD framework
 
 Branches was the first CRUD module, and the deliverable was **not a branches screen** — it was
@@ -649,8 +700,8 @@ missing — not "coming soon", which tells nobody whether the wait is a day or a
 same badge appears in the sidebar, so a reader deciding where to click learns before the click
 rather than after.
 
-This is also the honest signal about where the back office stands: **six of eleven modules are
-ready; five are blocked on endpoints that do not exist.**
+This is also the honest signal about where the back office stands: **seven of eleven modules are
+ready; four are blocked on endpoints that do not exist.**
 
 ### Path resolution: longest match, separator-aware
 

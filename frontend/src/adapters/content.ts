@@ -256,13 +256,25 @@ export async function fetchLevelContent(levelId: string): Promise<LevelContent |
  * and not a field on `ContentItem`: a URL that expires in ten minutes must be
  * fetched when it is used, not when the list is drawn.
  */
-export async function fetchContentUrl(contentId: string): Promise<string | null> {
-  // TD-3.5's `GET /content/{id}/download-url` is an M6 endpoint and does not
-  // exist yet, so there is nothing to call. Returning `null` is what the preview
-  // dialog already renders as "not available" — deliberately not a constructed
-  // URL, because a presigned GET is minted after a server-side §4.9 check and
-  // can never be assembled by a client (§3.1, TD-12).
-  void contentId;
-  return null;
+export async function fetchContentUrl(
+  contentId: string,
+  token?: string | null,
+  activeChildId?: string | null,
+): Promise<string | null> {
+  try {
+    const body = await api<{ url: string; expires_in: number }>(
+      `/content/${encodeURIComponent(contentId)}/download-url`,
+      { ...(token ? { token } : {}), ...(activeChildId ? { activeChildId } : {}) },
+    );
+    return body.url;
+  } catch {
+    // §4.9's tiers are applied server-side and out-of-scope content answers 404
+    // rather than 403 (§20 rule 17), so a refusal here is indistinguishable from
+    // a missing item **by design**. `null` is what the preview dialog already
+    // renders as "not available", and the client must not try to say more —
+    // guessing which of the two it was is exactly the existence leak the uniform
+    // status exists to close.
+    return null;
+  }
 }
 

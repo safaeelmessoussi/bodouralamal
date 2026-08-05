@@ -24,13 +24,6 @@ import { t } from '../../i18n/index.js';
 import { ApiError } from '../../lib/api.js';
 
 const VISIBILITIES: EventVisibility[] = ['public', 'private', 'hidden'];
-const RECURRENCES: EventRecurrence[] = [
-  'none',
-  'daily',
-  'weekly',
-  'biweekly_alternating',
-  'yearly',
-];
 
 /** One event, as this screen reasons about it — an event row, not an occurrence. */
 interface EventRowView {
@@ -115,7 +108,6 @@ export function AdminCalendarPage(): ReactNode {
       })
       .catch(() => undefined);
     // Loaded once for the form; the window filter does not change the vocabulary.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const columns: Column<EventRowView>[] = [

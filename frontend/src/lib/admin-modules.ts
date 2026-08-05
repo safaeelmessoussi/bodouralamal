@@ -139,8 +139,7 @@ export const ADMIN_MODULES: readonly AdminModule[] = [
     labelKey: 'admin.nav.content',
     section: 'content',
     roles: STAFF,
-    status: 'blocked',
-    blockedReasonKey: 'admin.blocked.content',
+    status: 'ready',
   },
 
   // ── Administration ────────────────────────────────────────────────────────

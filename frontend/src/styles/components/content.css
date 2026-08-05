@@ -321,7 +321,83 @@
   justify-content: end;
 }
 
+
+/* ── Uploader (§4.9, §14.3) ──────────────────────────────────────────────── */
+
+/*
+ * The progress bar is REQUIRED, not decorative: MVP uploads have no resume, and
+ * §4.9 exchanges that accepted risk (R-9) for visible progress and a clear
+ * retry. It is styled from the semantic tokens like everything else, so the one
+ * element a person watches during a slow mobile upload does not look foreign.
+ */
+.uploader {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.uploader__progress {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.uploader__progress progress {
+  flex: 1 1 auto;
+  block-size: 0.6rem;
+  border: none;
+  border-radius: var(--radius-full);
+  background: var(--color-primary-soft);
+  accent-color: var(--color-accent);
+  /* An indeterminate bar during the two API phases: they are quick, and a
+     numeric value there would jump to 100 and sit, which reads as a stall. */
+  overflow: hidden;
+}
+
+.uploader__progress span {
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-muted);
+  min-inline-size: 3.5rem;
+  text-align: start;
+}
+
+/* ── Session materials (§4.9, TD-3.12) ───────────────────────────────────── */
+
+.materials {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-block-end: var(--space-4);
+}
+
+.materials h3 {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  margin: 0;
+}
+
+.materials__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.materials__list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+}
+
 /* ── Narrow screens ─────────────────────────────────────────────────────── */
+
 
 @media (max-width: 44rem) {
   .content-card {

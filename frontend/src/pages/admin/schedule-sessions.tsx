@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 
-import { updateCourseSchedule } from '../../adapters/course-schedules.js';
+import { listCourseSchedules, updateCourseSchedule } from '../../adapters/course-schedules.js';
 import {
   cancelSession,
   listScheduleSessions,
@@ -10,6 +10,7 @@ import {
   type ScheduleSession,
 } from '../../adapters/sessions.js';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
+import { SessionMaterialsDialog } from '../../components/content/session-materials-dialog.js';
 import { Button } from '../../components/ui/button.js';
 import { DataTable, type Column, type RowAction, type TableStatus } from '../../components/ui/data-table.js';
 import { Dialog } from '../../components/ui/dialog.js';
@@ -56,6 +57,16 @@ export function ScheduleSessionsPage({ scheduleId }: { scheduleId: string }): Re
   const [cancelling, setCancelling] = useState<ScheduleSession | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [materialsFor, setMaterialsFor] = useState<string | null>(null);
+  /** The schedule's own scope, so an upload from a session lands where the
+   *  class actually is — §4.9 requires Level, Subject, Year and Branch, and a
+   *  session carries none of them itself (it references a schedule). */
+  const [scope, setScope] = useState<{
+    levelId: string;
+    subjectId: string;
+    academicYearId: string;
+    branchId: string | null;
+  } | null>(null);
 
   const load = useCallback(async () => {
     setStatus('loading');
@@ -70,6 +81,24 @@ export function ScheduleSessionsPage({ scheduleId }: { scheduleId: string }): Re
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    void (async () => {
+      // The list endpoint is the only place this screen can learn its schedule's
+      // scope: there is no single-schedule read in TD-3.12, and inventing one
+      // for four fields would be a new endpoint (§20 rule 16).
+      const page = await listCourseSchedules(accessToken);
+      const mine = page.data.find((row) => row.id === scheduleId);
+      if (mine) {
+        setScope({
+          levelId: mine.target_id,
+          subjectId: mine.subject_id,
+          academicYearId: mine.academic_year_id,
+          branchId: mine.branch_id,
+        });
+      }
+    })();
+  }, [scheduleId, accessToken]);
 
   const columns: Column<ScheduleSession>[] = [
     {
@@ -106,6 +135,13 @@ export function ScheduleSessionsPage({ scheduleId }: { scheduleId: string }): Re
 
   const actions: RowAction<ScheduleSession>[] = [
     { label: t('common.edit'), onSelect: (r) => setEditing(r) },
+    {
+      label: t('session.materialsAction'),
+      onSelect: (r) => setMaterialsFor(r.id),
+      // Without the schedule's scope an upload has nowhere to land, so the
+      // action waits rather than opening a dialog that cannot finish.
+      available: () => scope !== null,
+    },
     {
       label: t('admin.sessions.cancel'),
       danger: true,
@@ -229,6 +265,14 @@ export function ScheduleSessionsPage({ scheduleId }: { scheduleId: string }): Re
               'admin.sessions.cancelled',
             )
           }
+        />
+      ) : null}
+      {scope ? (
+        <SessionMaterialsDialog
+          sessionId={materialsFor}
+          scope={scope}
+          token={accessToken}
+          onClose={() => setMaterialsFor(null)}
         />
       ) : null}
     </AdminLayout>

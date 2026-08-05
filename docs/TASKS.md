@@ -646,8 +646,8 @@
 - [x] Authoritative per-user upload quota 30/hour in PostgreSQL (`RateLimitCounter`), locked + incremented in the initiate transaction (TD-4.12, TD-15.2); `429 RATE_LIMITED` envelope; never in-process memory, never pg-boss, never njs (§3.1 Revision 14)
 - [x] Magic-byte validation at /complete via ranged GET (bytes 0–511) to MinIO + HEAD size check; reject-and-delete (§4.9, TD-9)
 - [x] Hash-segmented immutable keys; replacement mints new key + quarantines old (TD-9)
-- [ ] FileUploader: progress, failure, clean retry (R-9) (§14.3)
-- [ ] Phone-recording upload guidance panel on /teacher/content (§4.9); cross-browser playback E2E for TD-9 containers (§14.7)
+- [x] FileUploader: progress, failure, clean retry (R-9) (§14.3) — `XMLHttpRequest` for the PUT, because `fetch` cannot report upload progress
+- [~] Phone-recording upload guidance panel on /teacher/content (§4.9) — **panel shipped**; cross-browser playback E2E for TD-9 containers (§14.7) still to run
 - [ ] Visibility transitions + bucket-migrate job + `/content-unavailable` (§3.1, TD-4.9)
 - [ ] Consent re-evaluation engine wired to enrollment/teaching-group membership/consent/upload; consent_forced_private; **empty resolved audience → Category default** (§4.1a, §4.9, BR-2 as restated by R43)
 - [ ] Admin-only consent-gate override with mandatory justification + audit (BR-3, TD-8)
@@ -662,7 +662,9 @@
   - ✓ **Two views on one navigation node** — §14.1 lists exactly one resources node, so the drill-down is `?level=` rather than an invented path segment (§20 rule 16). Documented as the pattern for every future drill-down screen
   - ✓ Tests — 19 new (91 frontend total): the link-not-button distinction, plural agreement, verbatim display name, absent-vs-blank fields, each filter, group-dropping, Arabic search folding, and that a download-only kind renders **no** media element
   - ⚠ **BLOCKED on backend, Phase 2 reported separately:** no content listing endpoint exists **or is specified anywhere in the SRS**; `EducationalContent` has **no uploader field**, so the teacher name has no source; `GET /content/{id}/download-url` is specified but unimplemented. Two §5.2 divergences also need settling — the **Subject** tier (rendered as a card badge) and **`is_current` pinned** vs strict newest-first
-- [ ] Wire the library to real endpoints once the revision lands (delete the mock; the interface does not change)
+- [x] Wire the library to real endpoints once the revision lands (delete the mock; the interface does not change)
+  - ✓ **Preview and download now mint through `GET /content/{id}/download-url`** — `fetchContentUrl` was a stub returning `null` since the library shipped. Credentials travel as **props, not context**, because the same dialog serves the public library where both are legitimately absent
+  - ⚠ Still open from the original investigation: **`EducationalContent` has no uploader field**, so the teacher display name on a card has no source (a §7 change plus a migration), and the two §5.2 divergences — the Subject tier and `is_current` pinning — remain for the Owner
   - ⚠ **Investigated 2026-07-30 and reported, not built.** Four hard blockers, all needing a Document Owner decision:
     **(1) No content LISTING endpoint exists or is documented anywhere in the SRS.** TD-3.5 defines only `POST /uploads/initiate|/complete|/abort` and `GET /content/{id}/download-url`; there is no `GET` route that lists content. Building one is inventing an endpoint (§20 rule 16) and needs a revision (Revision 21: later milestones add endpoints through subsequent revisions).
     **(2) `EducationalContent` has no uploader field**, so the requested *teacher display name* has no source. §7's field list does not define one either — this is a §7 change plus a forward-only migration.

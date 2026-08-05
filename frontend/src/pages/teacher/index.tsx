@@ -4,6 +4,7 @@ import { ModulePending } from '../../components/portal/nav-item.js';
 import { TeacherLayout } from '../../components/teacher/teacher-layout.js';
 import { t } from '../../i18n/index.js';
 import { teacherModuleForPath } from '../../lib/teacher-modules.js';
+import { ContentPage } from '../content.js';
 import { TeacherSchedulesPage } from './schedules.js';
 
 /**
@@ -30,6 +31,10 @@ export function TeacherRouter(): ReactNode {
     switch (module.path) {
       case '/teacher/schedules':
         return <TeacherSchedulesPage />;
+      case '/teacher/content':
+        // The same screen the back office renders. The capability is identical;
+        // only the chrome and what the server will accept differ (§4.9).
+        return <ContentPage portal="teacher" />;
       default:
         // A `ready` module with no case here is a REGISTRY DEFECT: the
         // navigation promises a screen the router cannot render. Falling
