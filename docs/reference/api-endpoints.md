@@ -2,7 +2,7 @@
 
 # API endpoints
 
-**64 operations across 48 paths**, all under `/api/v1` except the health check.
+**65 operations across 49 paths**, all under `/api/v1` except the health check.
 The count comes from the generator, which reconciles against the live router — if this line
 disagrees with `openapi.json`, this line is the one that is wrong.
 
@@ -207,9 +207,50 @@ the things that makes a Session protected.
 **No route sets `held`.** The service can, TD-3.12 documents no endpoint for it, and §20 rule 16
 forbids inventing one.
 
-### Not yet mounted
+## The public Educational Library
 
-`GET /library` (TD-3.13) — the last endpoint of the Revision 43 educational surface.
+| | Path | Notes |
+|---|---|---|
+| `GET` | `/library` | 🌐 **Public and anonymous.** `?category_id=` `?level_id=` `?academic_year_id=` `?subject_id=` `?page=`. Paginated (TD-10) |
+
+**It never answers `401`.** An invalid credential is *ignored*, not refused — a public
+surface that can `401` is not public. It mounts before the guarded router with optional
+authentication, exactly as `/calendar` does, and a **Pending** account sees the public tier
+just as an anonymous visitor does (TD-1: the account exists and grants nothing).
+
+**Signing in reorders; it never unlocks.** The §5.2 order is **own branch → Global → other
+branches**. `branch_id IS NULL` is *Global*, not *unknown* (§7), which is why it sorts second
+rather than last — a platform-wide resource is more relevant to a reader than another branch's
+local one. Own branch resolves through `Enrollment → AdministrativeGroup.branch_id` for a
+member and through role scopes for staff. A caller with no branch context has no first bucket
+and the ordering degrades without a special case.
+
+**§4.9's three tiers still filter every result set, and that is not a contradiction of
+"nothing hidden".** TD-3.13's sentence is about *personalisation*; §5.2's *"identical filters
+never means identical results"* is about the tiers, which are a property of **who the caller
+is** rather than a personalisation:
+
+| Tier | Who sees it in a listing |
+|---|---|
+| `public` | Everyone, including anonymous |
+| `private` | Logged-in students enrolled in the target Level, **and parents of such students** |
+| `hidden` | Excluded from Student/Parent directories — Admins and Teachers only |
+
+A parent's access needs **no `X-Active-Child-ID`**: that header governs acting *as* a child on
+student-context endpoints, while the library is one shared reading surface (§5.2, *one reader
+and one permission path*). A parent forced to switch context could not compare two children's
+materials at all.
+
+**Listing is not the download gate.** A restricted item appears with its `visibility` so a
+client can badge it; `GET /content/{id}/download-url` (TD-3.5) performs the §4.9 check before
+any presigned URL is minted. The item DTO therefore **omits `storage_bucket`, `storage_key`,
+`original_filename` and `consent_forced_private`** — the first three are the object's location,
+and publishing them here would hand every anonymous visitor the input that check exists to
+protect; the fourth is a fact about a child.
+
+**BR-2 is enforced by an explicit exclusion**, not by trusting the re-evaluation engine to have
+moved `visibility` already. A hard constraint that holds only while a background job is current
+is a race, not a constraint.
 
 ## Events
 
@@ -250,19 +291,21 @@ milestone lands. **They are a work-in-progress signal, not invented endpoints.**
 **Post-MVP, deliberately absent:** grading-template routes, multipart upload endpoints, CSV
 import/export, the Hijri importer.
 
-### Not specified at all — the educational library's gap
+### What the library screen still needs
 
-The `/resources` library (§5.2) is **built and reviewable** against a mock adapter, and cannot
-be wired because **no endpoint exists to wire it to**. This is a genuine specification gap
-rather than an unimplemented milestone item: TD-3.5 defines the three upload routes and
-`GET /content/{id}/download-url`, and **no route anywhere in the SRS lists content.**
+**This section previously claimed no route anywhere in the SRS lists content.** That was true
+when it was written and **Revision 43 superseded it**: TD-3.13 specifies `GET /library`, which
+is now built and mounted. The remaining items are genuine, and smaller than the gap once was.
 
 | Needed | For | Status |
 |---|---|---|
-| A **level index** with per-level content and year counts | Page 1's cards. One request, not one per level — otherwise an N+1 on a public page | **Not specified.** Needs a revision |
-| A **level content read**, grouped year → branch | Page 2's whole hierarchy | **Not specified.** Needs a revision |
 | `GET /content/{id}/download-url` | Every preview and download | **Specified (TD-3.5), unimplemented** — M6 |
 | An **uploader** on `EducationalContent` | The teacher display name the cards show | **Not in §7's field list.** Needs a revision plus a forward-only migration |
+
+The per-level counts the §5.2 cards show are derivable from `GET /library` with a
+`?level_id=` filter and its TD-10 `meta.total`, so the *"level index"* and *"level content
+read"* the earlier note asked for are no longer separate endpoints — one filtered, paginated
+route answers both, which is why TD-3.13 specifies one.
 
 **Two constraints any listing endpoint must satisfy**, recorded because they are easy to miss
 and impossible to add safely later:

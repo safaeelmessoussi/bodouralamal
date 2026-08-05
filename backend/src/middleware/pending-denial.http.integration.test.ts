@@ -22,9 +22,10 @@ import { httpCall } from '../test-support/http-client.js';
  * deliberately written to fail loudly if a **new** route is added outside the
  * guarded router without thinking about Pending.
  *
- * The public calendar is the one documented exception (§4.4): a Pending account
- * sees the public tier there, exactly as an anonymous visitor does. That is
- * asserted here too, so the exception stays a decision rather than a hole.
+ * The public calendar and the public Educational Library are the documented
+ * exceptions (§4.4, TD-3.13): a Pending account sees the public tier of each,
+ * exactly as an anonymous visitor does. Both are asserted positively below, so
+ * an exception stays a decision rather than a hole.
  */
 const config = loadConfig();
 const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);
@@ -121,6 +122,11 @@ const EXEMPT = new Set([
   '/branches',
   // Revision 36 (TD-3.10): the calendar screen's reference data, anonymous.
   '/calendar/bootstrap',
+  // TD-3.13 (Revision 43): the Educational Library is PUBLIC (§5.2). A Pending
+  // account sees the public tier exactly as an anonymous visitor does, for the
+  // same reason the calendar does — the account exists and grants nothing
+  // (TD-1), which is not the same as being refused.
+  '/library',
   // §4.1b: the login flow itself, which a Pending user must be able to complete.
   '/auth/google',
   '/auth/google/callback',
@@ -207,6 +213,18 @@ describe('TD-1 — the two exceptions a Pending session DOES reach', () => {
   it('logout is reachable, because a pending user must be able to leave', async () => {
     const res = await call('POST', '/auth/logout', pendingToken);
     expect(res.status).toBe(204);
+  });
+});
+
+describe('TD-3.13 — the public library is an exception for the same reason', () => {
+  it('serves a Pending account the public tier, exactly as anonymous', async () => {
+    const asPending = await call('GET', '/library', pendingToken);
+    const asAnonymous = await call('GET', '/library');
+    expect(asPending.status).toBe(200);
+    expect(asAnonymous.status).toBe(200);
+    // Signing in reorders and never unlocks (TD-3.13); a Pending account is not
+    // active, so it gets neither the reorder nor anything extra.
+    expect(asPending.body).toEqual(asAnonymous.body);
   });
 });
 

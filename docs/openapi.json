@@ -3401,6 +3401,37 @@
         }
       }
     },
+    "/library": {
+      "get": {
+        "summary": "The public Educational Library",
+        "description": "TD-3.13 (Revision 43), §5.2, §4.9. **PUBLIC and anonymous.** An invalid credential is *ignored* rather than refused, so this endpoint **never answers `401`** — a public surface that can `401` is not public. `?category_id=` `?level_id=` `?academic_year_id=` `?subject_id=` `?page=` `?page_size=`; **the filter set is identical for anonymous and authenticated callers**, and a signed-in-only filter would make navigation differ by audience, which §5.2 forbids. **Signing in REORDERS, it does not unlock:** the same set comes back in the §5.2 order — **own branch → Global → other branches**. `branch_id IS NULL` is *Global*, not *unknown* (§7), which is why it sorts second and not last: a platform-wide resource is more relevant to a reader than another branch's local one. A caller with no branch context has no first bucket and the ordering degrades without a special case; own branch resolves through `Enrollment → AdministrativeGroup.branch_id` for a member and through role scopes for staff (§7 names this ordering as one of the three things that resolve through that column). **§4.9's three tiers still apply, and that is not a contradiction of \"nothing hidden\":** TD-3.13's sentence is about *personalisation*, §5.2's *\"identical filters never means identical results\"* is about the tiers, which are a property of who the caller is rather than a personalisation. `public` is visible to everyone including anonymous; `private` to logged-in students enrolled in the target Level **and parents of such students** — resolved through approved `FamilyLink`s without requiring an `X-Active-Child-ID` context, since the library is one shared reading surface and a parent must be able to compare two children's materials; `hidden` is **excluded from Student/Parent directories** and visible to Admins and Teachers only. A **Pending** account sees the public tier exactly like an anonymous visitor (TD-1). **BR-2: `consent_forced_private` items are excluded from the public tier explicitly**, not merely trusted to have had their visibility moved by the re-evaluation engine — a hard constraint that holds only while a background job is current is a race, not a constraint. **Listing is not the download gate:** a restricted item appears with its `visibility` so a client can badge it, and `GET /content/{id}/download-url` (TD-3.5) performs the §4.9 check before any presigned URL is minted. **The DTO deliberately omits `storage_bucket`, `storage_key`, `original_filename` and `consent_forced_private`** — the first three are the object's location, and publishing them on a public endpoint would hand every anonymous visitor the input the permission check exists to protect; the fourth is a fact about a child. **Paginated (TD-10).**",
+        "responses": {
+          "200": {
+            "description": "A page of library items in the TD-10 envelope."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a malformed filter id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/healthz": {
       "servers": [
         {

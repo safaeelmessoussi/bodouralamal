@@ -657,6 +657,68 @@ export function sessionContentLinkDto(row: {
   return { id: row.id, session_id: row.sessionId, educational_content_id: row.contentId };
 }
 
+/* ── Educational Library (§5.2, §4.9, TD-3.13, Revision 43) ──────────────── */
+
+export interface LibraryItemDto {
+  id: string;
+  title: string;
+  description: string | null;
+  /** §4.9 tier. Present so a client can badge a restricted item **before** the
+   *  reader asks for it — the download is what requires login, not the listing. */
+  visibility: string;
+  level_id: string;
+  subject_id: string;
+  academic_year_id: string;
+  /** `null` is **Global**, not unknown (§7) — it renders as its own container. */
+  branch_id: string | null;
+  mime_type: string;
+  size_bytes: number;
+  /** An instant, correctly — an upload happens at a moment (cf. TD-11). */
+  created_at: string;
+}
+
+/**
+ * Deliberately **absent**: `storage_bucket`, `storage_key`, `original_filename`
+ * and `consent_forced_private`.
+ *
+ * The first three are the object's location, and TD-3.5 mints a short-lived
+ * presigned URL through `GET /content/{id}/download-url` after a permission
+ * check — publishing the key on a **public** endpoint would hand every
+ * anonymous visitor the one input that check exists to protect. The fourth is
+ * the consent gate's internal state: it says *a student in this recording's
+ * audience has no media release*, which is a fact about a child, and BR-2 needs
+ * it enforced, not broadcast.
+ */
+export function libraryItemDto(row: {
+  id: string;
+  title: string;
+  description: string | null;
+  visibility: string;
+  levelId: string;
+  subjectId: string;
+  academicYearId: string;
+  branchId: string | null;
+  mimeType: string;
+  sizeBytes: bigint;
+  createdAt: Date;
+}): LibraryItemDto {
+  return {
+    id: row.id,
+    title: row.title,
+    description: row.description,
+    visibility: row.visibility,
+    level_id: row.levelId,
+    subject_id: row.subjectId,
+    academic_year_id: row.academicYearId,
+    branch_id: row.branchId,
+    mime_type: row.mimeType,
+    // `BigInt` has no JSON representation and would throw on serialisation;
+    // a file size fits a double long before it reaches the TD-9 cap.
+    size_bytes: Number(row.sizeBytes),
+    created_at: row.createdAt.toISOString(),
+  };
+}
+
 /* ── Approval queue (§5.6, §14.2) ────────────────────────────────────────── */
 
 export interface ApprovalDto {

@@ -449,7 +449,15 @@
   - ✓ 14 HTTP tests, green first run; full sweep 667 passing across 37 files
   - ✓ **TD-3.12 is complete** — 64/81 TD-3 endpoints implemented, 0 undocumented
   - Split from Course Schedules deliberately: ten operations in one slice does not fit a fresh context budget, and splitting at the resource boundary is cheaper than compacting halfway through ([why](development/engineering-efficiency.md#capacity-not-only-value))
-- [ ] TD-3.13 public library; `/calendar` filter set + `prefilled_filters`; `/calendar/sessions/{id}`
+- [x] TD-3.13 **public library** — `GET /library`
+  - ✓ Public and anonymous; **never answers `401`** (an invalid credential is ignored), mounted before the guarded router like `/calendar`
+  - ✓ Signing in **reorders, never unlocks**: own branch → Global → other branches (§5.2). `branch_id IS NULL` is *Global*, not *unknown*, so it sorts second
+  - ✓ §4.9's three tiers filter every result set — reconciled with TD-3.13's "nothing hidden" via §5.2's *identical filters never means identical results*
+  - ✓ Parents of enrolled students get the private tier **without** `X-Active-Child-ID` — the library is one shared reading surface
+  - ✓ BR-2 enforced by explicit exclusion, not by trusting the re-evaluation engine to have moved `visibility`
+  - ✓ DTO omits `storage_key`/`storage_bucket`/`original_filename`/`consent_forced_private`
+  - ✓ 16 HTTP tests; `pending-denial` grew to 62 and gained a positive exemption assertion
+- [ ] `/calendar` filter set + `prefilled_filters`; `/calendar/sessions/{id}`
 - [ ] `/admin/groups` (+ roster), `/admin/schedules`, `/admin/levels/{id}/subjects/{subjectId}`, `/teacher/schedules`, Session page (§14.1)
 - [ ] Public calendar and public Educational Library — **same filters, same items, ordering only** for signed-in users (§5.2)
 

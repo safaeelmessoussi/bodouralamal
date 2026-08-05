@@ -17,6 +17,7 @@ import * as administrativeGroups from './controllers/administrative-group.contro
 import * as teachingGroups from './controllers/teaching-group.controller.js';
 import * as courseSchedules from './controllers/course-schedule.controller.js';
 import * as sessionsCtl from './controllers/session.controller.js';
+import * as libraryCtl from './controllers/library.controller.js';
 import { createRegistration } from './controllers/registration.controller.js';
 import { healthController } from './controllers/health.controller.js';
 import type { PrismaClient } from './generated/prisma/client.js';
@@ -109,6 +110,13 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
   api.get('/calendar/bootstrap', calendarBootstrap.read(prisma));
 
   api.get('/branches', publicBranches.list(prisma));
+
+  // TD-3.13 (Revision 43): the Educational Library is PUBLIC. Mounted before the
+  // guarded router with OPTIONAL authentication, exactly as /calendar is — a
+  // credential reorders the result (own branch → Global → other branches, §5.2)
+  // and never unlocks anything. An invalid token is ignored rather than refused,
+  // so this endpoint never answers 401.
+  api.get('/library', optionalAuthenticate(config), libraryCtl.list(prisma));
 
   const guarded = express.Router();
   guarded.use(authenticate(config));
