@@ -2,7 +2,7 @@
 
 # API endpoints
 
-**59 operations across 43 paths**, all under `/api/v1` except the health check.
+**64 operations across 48 paths**, all under `/api/v1` except the health check.
 The count comes from the generator, which reconciles against the live router — if this line
 disagrees with `openapi.json`, this line is the one that is wrong.
 
@@ -167,12 +167,49 @@ deliberately is not.
 taught, to whom, or where, while the Sessions already materialized against the old answer
 remain — silently re-pointing a term of history. Those are re-creations, not edits.
 
+### Sessions — the individual occurrence
+
+A Session is the materialization of a schedule on one date. **These routes are deliberately not
+under `/admin/`:** TD-2 gives a Teacher write access to the sessions they staff, so the prefix
+would misdescribe the audience. Scope is asserted in the service, the only place that knows who
+staffs what, and anything out of reach answers `404`.
+
+| | Path | Notes |
+|---|---|---|
+| `PATCH` | `/sessions/{id}` | A **field edit**, not a transition. Always marks `overridden` |
+| `POST` | `/sessions/{id}/cancel` | Reason **mandatory** and may not be blank |
+| `POST` | `/sessions/{id}/restore` | Refused once the date has passed |
+| `POST` | `/sessions/{id}/content` | Links an existing library item |
+| `DELETE` | `/sessions/{id}/content/{contentId}` | **Unlinks; never deletes the file** |
+
+**One verb per TD-1 transition, and `PATCH` is not one of them.** `status` is *refused* on the
+edit endpoint, because a transition carries obligations a field assignment cannot: a
+cancellation must state a reason and records the audience size **while it is still answerable**,
+and a restore is refused after the date. Accepting `status` would give the state machine a
+second entrance with none of that attached. `schedule_id` is refused for a related reason —
+moving an occurrence to another schedule detaches it from the recurrence that explains it.
+
+**`overridden` means a human decided about this occurrence** — not "differs from the schedule".
+It is set by *any* override, including one whose values match the schedule exactly, because
+inferring it from a difference would silently un-protect a session whose schedule later moved
+to match it. That flag is what survives the next schedule edit.
+
+**Supplying `staff` replaces this occurrence's snapshot; omitting it leaves the snapshot
+untouched.** An empty array is therefore a real instruction — *this session has no staff* — and
+deliberately not the same as omission.
+
+**Unlinking content never destroys it.** The content is a library item with its own lifecycle
+(§4.9); removing it from one session's materials must not remove it from every other session,
+screen and download URL. The link row is soft-deleted, so the fact it once existed survives.
+Linking or unlinking changes what a later schedule edit may do, since a linked item is one of
+the things that makes a Session protected.
+
+**No route sets `held`.** The service can, TD-3.12 documents no endpoint for it, and §20 rule 16
+forbids inventing one.
+
 ### Not yet mounted
 
-Every service below is **built and tested**; the contract phase removed the old routes and these
-replace them one resource at a time.
-
-`/sessions/{id}` (+ `/cancel`, `/restore`, `/content`) · `GET /library`
+`GET /library` (TD-3.13) — the last endpoint of the Revision 43 educational surface.
 
 ## Events
 

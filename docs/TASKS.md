@@ -439,7 +439,15 @@
   - ✓ **Two service functions did not exist** and were written here: `listCourseSchedules` and `resolveScheduleRoster`
   - ✓ 17 HTTP tests; full sweep 648 passing across 36 files
 - [ ] **Fix the `auth-refresh` integration flake** — passes in isolation, fails intermittently and non-deterministically inside the full sweep ([evidence](development/testing.md#known-flake--auth-refreshhttpintegrationtestts)). Do not paper over it with a retry
-- [ ] TD-3.12 **Sessions** (override / cancel / restore / content) — 4 operations
+- [x] TD-3.12 **Sessions** (override / cancel / restore / content) — 5 operations
+  - ✓ `status` **refused** on `PATCH` — a transition carries a mandatory reason and an audience count recorded while still answerable; a field assignment carries neither
+  - ✓ `overridden` set by **any** override, including a no-op one: the flag records that a human decided, which is what survives the next schedule edit (R43.4)
+  - ✓ `staff` supplied replaces the snapshot, omitted leaves it — an empty array is a real instruction, not an omission
+  - ✓ Restore refused after the date (`SESSION_IN_PAST`) — a past class cannot be asserted back onto the timetable
+  - ✓ Unlinking content **never deletes the file**; the link row tombstones (TD-5)
+  - ✓ Not under `/admin/`: TD-2 gives a Teacher their own staffed sessions, so the prefix would misdescribe the audience; a teacher who staffs nothing gets `404`, never `403`
+  - ✓ 14 HTTP tests, green first run; full sweep 667 passing across 37 files
+  - ✓ **TD-3.12 is complete** — 64/81 TD-3 endpoints implemented, 0 undocumented
   - Split from Course Schedules deliberately: ten operations in one slice does not fit a fresh context budget, and splitting at the resource boundary is cheaper than compacting halfway through ([why](development/engineering-efficiency.md#capacity-not-only-value))
 - [ ] TD-3.13 public library; `/calendar` filter set + `prefilled_filters`; `/calendar/sessions/{id}`
 - [ ] `/admin/groups` (+ roster), `/admin/schedules`, `/admin/levels/{id}/subjects/{subjectId}`, `/teacher/schedules`, Session page (§14.1)

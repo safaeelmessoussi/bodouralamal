@@ -44,13 +44,13 @@ export const weekday = z.enum([
  * would make a class's start time depend on the sender's timezone, which is the
  * exact bug TD-11 separates the two kinds of value to prevent.
  */
-const wallClock = z
+export const wallClock = z
   .string()
   .regex(/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/, 'expected HH:MM or HH:MM:SS')
   .transform((v) => new Date(`1970-01-01T${v.length === 5 ? `${v}:00` : v}Z`));
 
 /** A TD-11 calendar date — `YYYY-MM-DD`, never an instant. */
-const calendarDate = z
+export const calendarDate = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, 'expected YYYY-MM-DD')
   .transform((v) => new Date(`${v}T00:00:00Z`));

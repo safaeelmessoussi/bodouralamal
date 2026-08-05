@@ -574,6 +574,88 @@ export function scheduleRosterEntryDto(row: {
   return { student_id: row.id, name: row.nameArabic };
 }
 
+/* ── Session (§4.4, TD-1, TD-3.12, Revision 43) ──────────────────────────── */
+
+export interface SessionDto {
+  id: string;
+  schedule_id: string;
+  /** TD-11 calendar date — a class happens on a day, not at an instant. */
+  date: string;
+  /** TD-11 wall-clock, `HH:MM`. */
+  start_time: string;
+  end_time: string;
+  room_id: string | null;
+  /** TD-1 lifecycle. Moved only by `/cancel` and `/restore`, never by `PATCH`. */
+  status: string;
+  /**
+   * **A human decided about this occurrence** (Revision 43.4) — not "differs
+   * from the schedule". The flag is set by any override, even one whose values
+   * happen to match the schedule, because inferring it from a difference would
+   * silently un-protect a session whose schedule later moved to match it. This
+   * is what survives the next schedule edit.
+   */
+  overridden: boolean;
+  /**
+   * Present only on a cancelled session. **The only record of why a class did
+   * not happen** — §4.4 makes it mandatory at cancellation for that reason.
+   */
+  cancellation_reason: string | null;
+  /** TD-15: the client sends this back; a stale one is a `409`. */
+  version: number;
+}
+
+/**
+ * Deliberately **absent**: `created_at`, `updated_at`, `deleted_at`,
+ * `deleted_by`, and the staffing snapshot. Staffing is written through the
+ * override verb and read from the schedule's roster surfaces; a session DTO
+ * carrying a partial copy would be a second place to look for it.
+ */
+export function sessionDto(row: {
+  id: string;
+  scheduleId: string;
+  date: Date;
+  startTime: Date;
+  endTime: Date;
+  roomId: string | null;
+  status: string;
+  overridden: boolean;
+  cancellationReason: string | null;
+  version: number;
+}): SessionDto {
+  return {
+    id: row.id,
+    schedule_id: row.scheduleId,
+    date: row.date.toISOString().slice(0, 10),
+    start_time: timeOnly(row.startTime),
+    end_time: timeOnly(row.endTime),
+    room_id: row.roomId,
+    status: row.status,
+    overridden: row.overridden,
+    cancellation_reason: row.cancellationReason,
+    version: row.version,
+  };
+}
+
+/**
+ * A content link, returned from `POST /sessions/{id}/content`.
+ *
+ * The link is its own row: `DELETE` **unlinks and never deletes the file**
+ * (TD-3.12), so this id addresses the association rather than the content.
+ */
+export interface SessionContentLinkDto {
+  id: string;
+  session_id: string;
+  content_id: string;
+}
+
+export function sessionContentLinkDto(row: {
+  id: string;
+  sessionId: string;
+  contentId: string;
+}): SessionContentLinkDto {
+  return { id: row.id, session_id: row.sessionId, content_id: row.contentId };
+}
+
 /* ── Approval queue (§5.6, §14.2) ────────────────────────────────────────── */
 
 export interface ApprovalDto {

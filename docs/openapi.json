@@ -3066,6 +3066,341 @@
         }
       }
     },
+    "/sessions/{id}": {
+      "patch": {
+        "summary": "Override one occurrence",
+        "description": "TD-3.12, §4.4, TD-1, TD-15. **A field edit, not a transition.** Body: `{ version, date?, start_time?, end_time?, room_id?, staff? }` — **strictly** those keys. **`status` is refused**: cancelling and restoring are TD-1 transitions carrying obligations a field assignment cannot — a cancellation must state a reason and record how many people it affected, a restore is refused once the date has passed — so accepting `status` here would give the state machine a second entrance with none of that attached. **`schedule_id` is refused** too: moving an occurrence to another schedule detaches it from the recurrence that explains it, leaving a row no schedule edit will ever reach again. **The write always marks the row `overridden`, even when the new values equal the schedule's** (Revision 43.4): the flag records that *a human decided about this occurrence*, which is what must survive the next schedule edit — inferring it from *differs from the schedule* would silently un-protect a session whose schedule later moved to match it. **`staff` supplied REPLACES this occurrence's snapshot; omitted leaves it untouched** — an empty array is therefore a real instruction (*this session has no staff*) and deliberately not the same as omission. A **held** session cannot be rescheduled (`409 ALREADY_HELD`). **Not under `/admin/`**, deliberately: TD-2 gives a Teacher write access to the sessions they staff, so the prefix would misdescribe the audience; scope is asserted in the service, which is the only place that knows who staffs what, and anything out of reach answers `404` (§20 rule 17).",
+        "responses": {
+          "200": {
+            "description": "The updated occurrence."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a missing version, an ISO instant where a wall-clock time belongs, or an unknown key such as status or schedule_id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN for a caller who is neither admin nor teaching staff.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an unknown session, or one the caller does not staff.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). VERSION_CONFLICT, or STATE_CONFLICT with reason ALREADY_HELD.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sessions/{id}/cancel": {
+      "post": {
+        "summary": "Cancel a session",
+        "description": "TD-3.12, TD-1 `scheduled → cancelled`. Body: `{ version, reason }`. **The reason is mandatory and may not be whitespace** (`400 CANCELLATION_REASON_REQUIRED`): it is the only record of *why* a class did not happen, and a cancellation that says nothing is indistinguishable later from one whose reason was lost. The audience size is resolved and **written to the TD-8 audit row at the moment of cancellation**, because *how many people did this affect* becomes unanswerable once the roster has moved on. Any transition TD-1 does not allow is `409 STATE_CONFLICT`.",
+        "responses": {
+          "200": {
+            "description": "The cancelled occurrence, carrying its reason."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a missing version, or a blank reason (CANCELLATION_REASON_REQUIRED).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an unknown session, or one the caller does not staff.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). VERSION_CONFLICT, or STATE_CONFLICT for a transition TD-1 forbids.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sessions/{id}/restore": {
+      "post": {
+        "summary": "Restore a cancelled session",
+        "description": "TD-3.12, TD-1 `cancelled → scheduled`. Body: `{ version }`. **Refused once the date has passed** — `409 STATE_CONFLICT`, `reason: SESSION_IN_PAST`, carrying the date. Restoring a class that has already not happened would assert it was scheduled when nobody could have attended, which is a false historical record rather than a recoverable mistake. Any other transition TD-1 forbids is the same `409`.",
+        "responses": {
+          "200": {
+            "description": "The restored occurrence."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a missing version.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an unknown session, or one the caller does not staff.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). VERSION_CONFLICT, or STATE_CONFLICT with reason SESSION_IN_PAST.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sessions/{id}/content": {
+      "post": {
+        "summary": "Link content to a session",
+        "description": "TD-3.12, §4.9. Body: `{ content_id }` — **strictly** that key. The link is **its own row**, so the returned `id` addresses the association rather than the file. Linking the same content twice is `409 DUPLICATE`; a previously unlinked pair relinks rather than creating a second row. **A linked content item is one of the things that makes a Session protected** (§4.4, R43.6) — a schedule edit will leave this occurrence alone and report it, rather than rewriting it — so this endpoint changes what a later schedule edit is allowed to do.",
+        "responses": {
+          "201": {
+            "description": "Linked."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a missing or malformed content_id, or an unknown key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an unknown session, an unknown content item, or a session the caller does not staff.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). DUPLICATE — already linked.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sessions/{id}/content/{contentId}": {
+      "delete": {
+        "summary": "Unlink content from a session",
+        "description": "TD-3.12 — **unlinks, and NEVER deletes the file.** The content is an educational library item with its own lifecycle (§4.9); removing it from one session's materials must not destroy it for every other session, screen and download URL that references it. The link row is soft-deleted (TD-5), so the fact that it once existed survives. Unlinking may make the session no longer protected, which means a later schedule edit can rewrite it.",
+        "responses": {
+          "204": {
+            "description": "Unlinked; the content itself is untouched."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an unknown session, a session the caller does not staff, or content that is not linked to it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/healthz": {
       "servers": [
         {

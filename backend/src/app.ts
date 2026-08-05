@@ -16,6 +16,7 @@ import * as branch from './controllers/branch.controller.js';
 import * as administrativeGroups from './controllers/administrative-group.controller.js';
 import * as teachingGroups from './controllers/teaching-group.controller.js';
 import * as courseSchedules from './controllers/course-schedule.controller.js';
+import * as sessionsCtl from './controllers/session.controller.js';
 import { createRegistration } from './controllers/registration.controller.js';
 import { healthController } from './controllers/health.controller.js';
 import type { PrismaClient } from './generated/prisma/client.js';
@@ -205,6 +206,21 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
   // biweekly-alternating Tuesday 15:00 collide only on alternate weeks.
   guarded.get('/admin/course-schedules/:id/conflicts', courseSchedules.conflicts(prisma));
   guarded.get('/admin/course-schedules/:id/roster', courseSchedules.roster(prisma));
+
+  // Sessions (§4.4, TD-1, TD-3.12) — the individual occurrence. NOT under
+  // `/admin/`: TD-2 gives a Teacher write access to the sessions they staff, so
+  // the path would misdescribe the audience. Scope is asserted in the service,
+  // which is the only place that knows who staffs what.
+  //
+  // One verb per TD-1 transition. PATCH edits fields and always marks the
+  // occurrence `overridden`; it never carries `status`, because a cancellation
+  // must state a reason and a restore is refused after the date — obligations a
+  // field assignment cannot carry.
+  guarded.patch('/sessions/:id', sessionsCtl.override(prisma));
+  guarded.post('/sessions/:id/cancel', sessionsCtl.cancel(prisma));
+  guarded.post('/sessions/:id/restore', sessionsCtl.restore(prisma));
+  guarded.post('/sessions/:id/content', sessionsCtl.linkContent(prisma));
+  guarded.delete('/sessions/:id/content/:contentId', sessionsCtl.unlinkContent(prisma));
   api.use(guarded);
 
   app.use('/api/v1', api);
