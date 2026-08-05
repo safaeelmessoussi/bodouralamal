@@ -3,6 +3,7 @@ import { AppError } from '../lib/errors.js';
 import { pageWindow, type Page } from '../lib/pagination.js';
 import { assertFreshActive } from '../policies/freshness.policy.js';
 import * as audit from '../repositories/audit.repository.js';
+import { enrolInGroup } from './enrollment.service.js';
 import { applyRoleAssignments } from './user.service.js';
 
 /**
@@ -185,6 +186,29 @@ interface Decision {
    * enrolment, not through a role assignment.
    */
   assignments?: { role: string; branchId: string | null }[];
+  /**
+   * The Levels and Administrative Groups the applicant is admitted to —
+   * **§4.1, Revision 43**, which makes this the defining content of an approval
+   * rather than an optional extra:
+   *
+   * > *"Approval and every resulting `Enrollment` row are written in **one
+   * > transaction** (TD-4) — an approved account with no enrollment is a person
+   * > the platform admitted and then lost."*
+   *
+   * One entry per (person, Level). `userId` names **who** is being enrolled,
+   * because a bundle admits more than one person and they are not
+   * interchangeable: on the parent+child path it is the **child** who enrols,
+   * while the parent receives access through the family link. A teacher request
+   * enrols nobody.
+   *
+   * **Exactly one group per Level** (§4.1 step 2) falls out of the shape —
+   * `administrativeGroupId` is singular, and BR-21's partial unique index is the
+   * backstop.
+   *
+   * **Teaching Groups are never assigned here** (§4.1): at approval nobody yet
+   * knows how each Subject will be split, and most Subjects are never split.
+   */
+  enrollments?: { userId: string; administrativeGroupId: string }[];
 }
 
 /**
@@ -275,6 +299,63 @@ export async function decide(
         await applyRoleAssignments(tx, actor, applicant.id, assignments);
       }
 
+      // §4.1 (Revision 43) — the placement, in THIS transaction. Nothing here
+      // is re-implemented: `enrolInGroup` carries the branch-scope check, the
+      // §4.4b sex restriction, BR-21's one-group-per-Level rule and the consent
+      // re-evaluation enqueue, so approval and the roster screen place students
+      // by exactly the same rules.
+      //
+      // Rejection enrols nobody, whatever was sent — for the reason it grants
+      // no role: admitting someone to a Level while refusing them the account
+      // is not a state that should be reachable.
+      const enrollments = decision.approve ? (decision.enrollments ?? []) : [];
+      // **Who may be enrolled is bounded by the bundle**, not by the caller: the
+      // applicant themselves, or one of the pending children this approval is
+      // activating. Without that check an approver could place any student in
+      // the platform by naming their id here, turning approval into an
+      // unscoped enrolment endpoint.
+      const admissible = new Set([applicant.id, ...applicant.parentLinks.map((l) => l.studentId)]);
+      for (const e of enrollments) {
+        if (!admissible.has(e.userId)) {
+          throw new AppError('VALIDATION_FAILED', 'that person is not part of this approval', {
+            reason: 'NOT_IN_BUNDLE',
+            user_id: e.userId,
+          });
+        }
+      }
+      // **Every person this approval admits as a STUDENT must be placed.** §4.1
+      // does not leave this optional — *"an approved account with no enrollment
+      // is a person the platform admitted and then lost"* — so the refusal
+      // happens here rather than being left to whoever notices later.
+      //
+      // Who counts as a student is DERIVED, not asked for: a bundle carrying
+      // pending children is a parent registering a family, and it is the
+      // children who enrol while the parent's access comes through the family
+      // link; a lone applicant is themselves the student. A staff request
+      // (`requested_role`) enrols nobody at all — a teacher is not admitted to a
+      // Level.
+      if (decision.approve) {
+        const children = applicant.parentLinks.map((l) => l.studentId);
+        const mustEnrol =
+          children.length > 0
+            ? children
+            : applicant.requestedRole === null
+              ? [applicant.id]
+              : [];
+        const placed = new Set(enrollments.map((e) => e.userId));
+        const missing = mustEnrol.filter((id) => !placed.has(id));
+        if (missing.length > 0) {
+          throw new AppError('VALIDATION_FAILED', 'every admitted student needs a placement (§4.1)', {
+            reason: 'ENROLLMENT_REQUIRED',
+            missing_user_ids: missing,
+          });
+        }
+      }
+
+      for (const e of enrollments) {
+        await enrolInGroup(tx, actor, e.administrativeGroupId, e.userId, 'approval');
+      }
+
       await audit.write(tx, {
         actorUserId: actor.userId,
         actionType: decision.approve ? 'user.approve' : 'user.reject',
@@ -288,6 +369,13 @@ export async function decide(
           // would come here to see.
           requested_role: applicant.requestedRole,
           granted: assignments.map((a) => ({ role: a.role, branch_id: a.branchId })),
+          // §4.1's placement, recorded on the approval itself as well as on each
+          // `enrollment.create` row: this is the act that admitted them, and it
+          // must be answerable from the approval alone.
+          enrolled: enrollments.map((e) => ({
+            user_id: e.userId,
+            administrative_group_id: e.administrativeGroupId,
+          })),
           ...(decision.reason ? { reason: decision.reason } : {}),
         },
       });

@@ -111,7 +111,7 @@ specification says it is, and keeps the gap **visible rather than silent**.
 |---|---|---|---|
 | `POST` | `/registrations` | 🌐 + token | Gated by the signed onboarding token; no session exists yet. **Identity comes solely from the token payload.** Optional `requested_role: 'teacher'` (R49) — **a hint that grants nothing** |
 | `GET` | `/admin/approvals` | 🔒 | Deliberately **unscoped** — the permanent path by which a branch Admin meets applicants |
-| `POST` | `/admin/approvals/{id}/approve` | 🔒 | Atomic bundle activation. Optional `assignments: [{ role, branch_id }]` (R49) granted **in the same transaction** |
+| `POST` | `/admin/approvals/{id}/approve` | 🔒 | Atomic bundle activation, **plus the §4.1 placement**: `enrollments: [{ user_id, administrative_group_id }]`, and optional `assignments: [{ role, branch_id }]`, all in **one transaction** |
 | `POST` | `/admin/approvals/{id}/reject` | 🔒 | Body carries a reason |
 | `POST` | `/family-links` | 🔒 | **Staff-mediated** link of an existing child. Parents have no search over children |
 | `DELETE` | `/admin/family-links/{id}` | 🔒 | Soft delete **is** the revocation — effective on the next request |
@@ -127,6 +127,33 @@ specification says it is, and keeps the gap **visible rather than silent**.
 | `PUT` | `/admin/users/{id}/roles` | 🔒 | **Replaces** the whole assignment set. Administrator roles are Super-Admin-only to grant or revoke |
 | `GET` `POST` | `/students/{id}/consents` | 🔒 | Versioned records; staff-recorded grants carry the actor |
 | `GET` `PUT` | `/students/{id}/social-profile` | 🔒 | **Both reads and writes audited.** Out of scope answers `404`, never `403` |
+
+### Approval is the act that admits somebody (§4.1, Revision 43)
+
+**`enrollments` is not an optional extra — it is what approval *is*.** §4.1: *"Approval and
+every resulting `Enrollment` row are written in one transaction — an approved account with no
+enrollment is a person the platform admitted and then lost."* An approval that would leave an
+admitted student unplaced is **refused** (`400`, `reason: ENROLLMENT_REQUIRED`), naming who is
+missing.
+
+**Who must be placed is derived, never asked for**: the children of a family registration (the
+parent's access comes through the family link), or a lone applicant, and **nobody for a staff
+request** — a teacher is not admitted to a Level. Only people in the bundle may be named
+(`NOT_IN_BUNDLE`), or approval would be an unscoped enrolment endpoint.
+
+**`level_id` is not accepted** — the group already names its Level, and `Enrollment.level_id` is
+read from the group so a composite FK keeps them agreeing rather than a caller. **Exactly one
+group per Level**, with BR-21's partial unique index as the backstop. **Teaching Groups are
+never assigned here**: at approval nobody yet knows how each Subject will be split.
+
+Placement runs through the **same function the roster screen uses**, so it carries the
+branch-scope check, §4.4b's `gender_restriction` vs `User.sex` rule, BR-21 and the consent
+re-evaluation enqueue.
+
+**Not implemented: §4.1 step 1's preselection** of the first Level of the applicant's Category —
+**no Category is recorded at registration**. The clause calls it *a default, not a decision*, so
+the mandatory content is met; the screen lists Levels in Category order instead. Recorded in
+[SRS-PROPOSAL-R49](../SRS-PROPOSAL-R49.md).
 
 ### The staff registration workflow needed no new endpoint
 

@@ -116,7 +116,17 @@ generic message for all of these is hiding the only useful part of the answer.**
 | `INVALID_TRANSITION` | Suspend / reactivate | TD-1 does not allow it from this status; `details.account_status` says which |
 | `SELF_SUSPENSION` | Suspend | An administrator cannot suspend themselves — the next request would lock them out |
 | `LAST_SUPER_ADMIN` | Suspend, or `PUT .../roles` | Appoint another Super Admin first. Revision 22's lockout recovery needs a VPS shell and is not a UI outcome |
+| `GENDER_RESTRICTION` | Enrolment, including at approval | The Level admits one sex (§4.4b); `details.required_sex` says which. **The student's own sex is never echoed** |
+| `ALREADY_ENROLLED_IN_LEVEL` | Enrolment | BR-21 — one group per Level. `current_administrative_group_id` is named, because the intent was probably a *move* |
 | `CONSENT_TEXT_VERSION_NOT_CONFIGURED` | Registration (`503`, not `409`) | An owner task (§2.3) — the message names the missing setting |
+
+Two more travel on **`400 VALIDATION_FAILED`** rather than `409`, because they describe a
+malformed request rather than a state that moved on:
+
+| `details.reason` | Raised by | The user's next step |
+|---|---|---|
+| `ENROLLMENT_REQUIRED` | Approval | §4.1: every admitted student needs a Level and a group **in the approval itself**. `missing_user_ids` names who — on a family bundle that is the only way to know which of them |
+| `NOT_IN_BUNDLE` | Approval | A placement named somebody this approval does not admit. Without the check, approval would be an unscoped enrolment endpoint |
 
 **Deletion blocked by references is different**: it carries `details.blocked_by`, an object of
 `{ relationship: count }` naming every blocker at once, so a screen can say *which* rather than

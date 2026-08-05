@@ -28,6 +28,22 @@ const decisionSchema = z.object({
     .array(z.object({ role: z.string().trim().min(1).max(40), branch_id: z.uuid().nullable() }))
     .max(20)
     .optional(),
+  /**
+   * §4.1 (Revision 43) — the Levels and Administrative Groups the applicant is
+   * admitted to, written in the same transaction as the activation.
+   *
+   * **`level_id` is deliberately absent**: the group already names its Level,
+   * and taking one from the caller would create a second source for a fact the
+   * database constrains through a composite FK. `Enrollment.level_id` is read
+   * from the group for exactly that reason.
+   *
+   * `user_id` is required because a bundle admits more than one person and they
+   * are not interchangeable — on the parent+child path the **child** enrols.
+   */
+  enrollments: z
+    .array(z.object({ user_id: z.uuid(), administrative_group_id: z.uuid() }))
+    .max(20)
+    .optional(),
 });
 const listSchema = z.object({
   type: z.enum(['registration', 'family-link']).optional(),
@@ -67,6 +83,14 @@ function decision(prisma: PrismaClient, approve: boolean) {
             assignments: parsed.data.assignments.map((a) => ({
               role: a.role,
               branchId: a.branch_id,
+            })),
+          }
+        : {}),
+      ...(parsed.data.enrollments
+        ? {
+            enrollments: parsed.data.enrollments.map((e) => ({
+              userId: e.user_id,
+              administrativeGroupId: e.administrative_group_id,
             })),
           }
         : {}),

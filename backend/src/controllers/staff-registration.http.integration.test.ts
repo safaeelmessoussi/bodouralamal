@@ -5,6 +5,7 @@ import { loadConfig } from '../lib/config.js';
 import { issueOnboardingToken } from '../lib/onboarding-token.js';
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
 import { httpCall } from '../test-support/http-client.js';
+import { clearPlacement, provisionPlacement, type Placement } from '../test-support/placement.js';
 import {
   captureConsentVersion,
   restoreConsentVersion,
@@ -60,6 +61,8 @@ const bearer = (userId: string, roles: string[]): string =>
 let superAdmin: string;
 let branchAdmin: string;
 let branchId: string;
+/** §4.1 (R43): approving a student requires a placement, so the fixture has one. */
+let placement: Placement;
 
 async function makeStaff(role: string, branch: string | null): Promise<string> {
   const user = await prisma.user.create({
@@ -107,6 +110,7 @@ async function apply(requestedRole?: 'teacher'): Promise<string> {
 }
 
 async function clear(): Promise<void> {
+  await clearPlacement(prisma, `${TAG}p`);
   const users = await prisma.user.findMany({
     where: { nameArabic: { startsWith: TAG } },
     select: { id: true },
@@ -132,6 +136,7 @@ beforeAll(async () => {
   await clear();
 
   branchId = (await prisma.branch.create({ data: { name: `${TAG} فرع` } })).id;
+  placement = await provisionPlacement(prisma, `${TAG}p`);
   superAdmin = bearer(await makeStaff('super_admin', null), ['super_admin']);
   branchAdmin = bearer(await makeStaff('admin', branchId), ['admin']);
 });
@@ -254,17 +259,54 @@ describe('approval grants the role and its scope in one transaction', () => {
     expect(detail['granted']).toEqual([{ role: 'teacher', branch_id: branchId }]);
   });
 
-  it('approves without assigning anything, which is the ordinary path', async () => {
-    // A student or a parent receives access through enrolment, not through a
-    // role assignment — so an empty assignment set must stay a normal outcome
-    // rather than an error.
+  it('approves an ordinary applicant with a placement and no role', async () => {
+    // A student receives access through ENROLMENT, not through a role
+    // assignment — so an empty assignment set is a normal outcome, while an
+    // empty placement is not (§4.1, R43).
+    const id = await apply();
+    const res = await call('POST', `/admin/approvals/${id}/approve`, superAdmin, {
+      enrollments: [{ user_id: id, administrative_group_id: placement.groupId }],
+    });
+    expect(res.status).toBe(200);
+    expect((await prisma.user.findUniqueOrThrow({ where: { id } })).accountStatus).toBe('active');
+    expect(await prisma.userBranchRole.count({ where: { userId: id, deletedAt: null } })).toBe(0);
+    expect(await prisma.enrollment.count({ where: { studentId: id, deletedAt: null } })).toBe(1);
+  });
+
+  it('refuses to approve a student with NO placement (§4.1, R43)', async () => {
+    // "An approved account with no enrollment is a person the platform admitted
+    // and then lost." The refusal names WHO is missing, because on a family
+    // bundle that is the only way to know which of them.
     const id = await apply();
     const res = await call('POST', `/admin/approvals/${id}/approve`, superAdmin, {});
+    expect(res.status).toBe(400);
+    expect(res.body.error?.details?.['reason']).toBe('ENROLLMENT_REQUIRED');
+    expect(res.body.error?.details?.['missing_user_ids']).toEqual([id]);
+    expect((await prisma.user.findUniqueOrThrow({ where: { id } })).accountStatus).toBe('pending');
+  });
+
+  it('enrols NOBODY for a staff request — a teacher is not admitted to a Level', async () => {
+    const id = await apply('teacher');
+    const res = await call('POST', `/admin/approvals/${id}/approve`, superAdmin, {
+      assignments: [{ role: 'teacher', branch_id: branchId }],
+    });
     expect(res.status).toBe(200);
+    expect(await prisma.enrollment.count({ where: { studentId: id } })).toBe(0);
+  });
+
+  it('refuses a placement for somebody outside the bundle', async () => {
+    // Otherwise approval would be an unscoped enrolment endpoint: naming any
+    // student's id would place them.
+    const mine = await apply('teacher');
+    const stranger = await apply('teacher');
+    const res = await call('POST', `/admin/approvals/${mine}/approve`, superAdmin, {
+      enrollments: [{ user_id: stranger, administrative_group_id: placement.groupId }],
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.error?.details?.['reason']).toBe('NOT_IN_BUNDLE');
     expect(
-      (await prisma.user.findUniqueOrThrow({ where: { id } })).accountStatus,
-    ).toBe('active');
-    expect(await prisma.userBranchRole.count({ where: { userId: id, deletedAt: null } })).toBe(0);
+      (await prisma.user.findUniqueOrThrow({ where: { id: stranger } })).accountStatus,
+    ).toBe('pending');
   });
 
   it('grants NOTHING on rejection, whatever the caller sends', async () => {

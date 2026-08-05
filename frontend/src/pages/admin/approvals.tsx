@@ -27,6 +27,11 @@ import { Button } from '../../components/ui/button.js';
 import { Dialog } from '../../components/ui/dialog.js';
 import { SelectField } from '../../components/ui/field.js';
 import { ROLES } from '../../adapters/users.js';
+import {
+  listAdministrativeGroups,
+  type AdministrativeGroup,
+} from '../../adapters/administrative-groups.js';
+import { listLevels, type Level } from '../../adapters/taxonomy.js';
 import { useSession } from '../../contexts/session.js';
 import { t } from '../../i18n/index.js';
 import { ApiError } from '../../lib/api.js';
@@ -75,6 +80,9 @@ export function ApprovalsPage(): ReactNode {
   /** Approving a staff request is a different act from approving a family, so
    *  it gets its own dialog rather than a confirmation with a form bolted on. */
   const [staffApproval, setStaffApproval] = useState<Approval | null>(null);
+  /** §4.1 (R43) — approving a registration IS the placement, so the queue
+   *  cannot approve one without asking where the student goes. */
+  const [placing, setPlacing] = useState<Approval | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -172,7 +180,14 @@ export function ApprovalsPage(): ReactNode {
         // A request for a role needs a decision about that role; a family
         // registration does not. Sending both through one dialog would either
         // ask everyone about roles or nobody.
-        row.requested_role ? setStaffApproval(row) : setDeciding({ row, approve: true }),
+        // Three different acts behind one label. A staff request needs a role;
+        // a registration needs a PLACEMENT, without which §4.1 refuses; a
+        // family-link request needs neither.
+        row.requested_role
+          ? setStaffApproval(row)
+          : row.type === 'registration'
+            ? setPlacing(row)
+            : setDeciding({ row, approve: true }),
     },
     {
       label: t('admin.approvals.reject'),
@@ -183,19 +198,27 @@ export function ApprovalsPage(): ReactNode {
 
   async function confirmDecision(
     reason?: string,
-    assignments?: { role: string; branch_id: string | null }[],
-    row?: Approval,
+    options?: {
+      assignments?: { role: string; branch_id: string | null }[];
+      enrollments?: { user_id: string; administrative_group_id: string }[];
+      row?: Approval;
+    },
   ): Promise<void> {
-    const target = row ?? deciding?.row;
-    const approve = row ? true : (deciding?.approve ?? false);
+    const target = options?.row ?? deciding?.row;
+    const approve = options?.row ? true : (deciding?.approve ?? false);
     if (!target) return;
     setBusy(true);
     try {
       const result = approve
-        ? await approveApproval(target.id, accessToken, reason, assignments)
+        ? await approveApproval(target.id, accessToken, {
+            ...(reason ? { reason } : {}),
+            ...(options?.assignments ? { assignments: options.assignments } : {}),
+            ...(options?.enrollments ? { enrollments: options.enrollments } : {}),
+          })
         : await rejectApproval(target.id, reason ?? '', accessToken);
       setDeciding(null);
       setStaffApproval(null);
+      setPlacing(null);
       await load();
       // What actually changed, not what was requested — `records_updated` is
       // why this can be a statement rather than an assumption (TD-4.2).
@@ -224,6 +247,7 @@ export function ApprovalsPage(): ReactNode {
       );
       setDeciding(null);
       setStaffApproval(null);
+      setPlacing(null);
       if (gone) await load();
     } finally {
       setBusy(false);
@@ -286,6 +310,17 @@ export function ApprovalsPage(): ReactNode {
         pagination={{ page, pageSize: 25, total, onPage: setPage }}
       />
 
+      {placing ? (
+        <PlacementDialog
+          row={placing}
+          busy={busy}
+          onCancel={() => setPlacing(null)}
+          onConfirm={(enrollments) =>
+            void confirmDecision(undefined, { enrollments, row: placing })
+          }
+        />
+      ) : null}
+
       {staffApproval ? (
         <StaffApprovalDialog
           row={staffApproval}
@@ -294,7 +329,7 @@ export function ApprovalsPage(): ReactNode {
           busy={busy}
           onCancel={() => setStaffApproval(null)}
           onConfirm={(assignments) =>
-            void confirmDecision(undefined, assignments, staffApproval)
+            void confirmDecision(undefined, { assignments, row: staffApproval })
           }
         />
       ) : null}
@@ -417,6 +452,165 @@ function StaffApprovalDialog({
             onClick={() => onConfirm([{ role, branch_id: branchId || null }])}
           >
             {t('admin.approvals.approveWithRole')}
+          </Button>
+        </div>
+      </div>
+    </Dialog>
+  );
+}
+
+/**
+ * Where each admitted student goes — **§4.1, Revision 43**.
+ *
+ * > *"Approval and every resulting `Enrollment` row are written in one
+ * > transaction — an approved account with no enrollment is a person the
+ * > platform admitted and then lost."*
+ *
+ * So this is not an optional extra step bolted onto a confirmation: it **is**
+ * the approval. The screen cannot offer a plain "approve" for a registration,
+ * because the server would refuse it.
+ *
+ * **One row per person the bundle admits as a student** — on a parent+child
+ * registration that is the child, and the parent is deliberately absent: their
+ * access comes through the family link, and offering to enrol them would invite
+ * placing a parent in a Level.
+ *
+ * **Exactly one group per Level** (§4.1 step 2), and where a Level has a single
+ * group it is chosen automatically — §4.1 asks for that explicitly, and a
+ * dropdown with one option is a question nobody needs asked.
+ *
+ * **Teaching Groups are never offered here** (§4.1): at approval nobody yet
+ * knows how each Subject will be split, and most Subjects are never split.
+ *
+ * **No Level is preselected**, and that is a deviation worth naming: §4.1 asks
+ * for *"the first Level of the applicant's Category"*, but **registration
+ * records no Category** — §4.1b step 5 collects a branch and nothing else
+ * organisational. Guessing one from the form's `kind` would be an inference the
+ * specification does not authorise, so the Levels are listed in Category order
+ * and the administrator chooses. Recorded in `SRS-PROPOSAL-R49.md`.
+ */
+function PlacementDialog({
+  row,
+  busy,
+  onConfirm,
+  onCancel,
+}: {
+  row: Approval;
+  busy: boolean;
+  onConfirm: (enrollments: { user_id: string; administrative_group_id: string }[]) => void;
+  onCancel: () => void;
+}): ReactNode {
+  const { accessToken } = useSession();
+  // The applicant enrols only when there is no child: a bundle with children is
+  // a parent registering a family.
+  const children = row.applicants.filter((a) => a.role === 'child');
+  const students = children.length > 0 ? children : row.applicants.filter((a) => a.role === 'applicant');
+
+  const [levels, setLevels] = useState<Level[]>([]);
+  const [groups, setGroups] = useState<AdministrativeGroup[]>([]);
+  const [choice, setChoice] = useState<Record<string, { levelId: string; groupId: string }>>({});
+  const [loadFailed, setLoadFailed] = useState(false);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const [lvls, grps] = await Promise.all([
+          listLevels(accessToken),
+          listAdministrativeGroups(accessToken, 1, {}),
+        ]);
+        setLevels(lvls);
+        setGroups(grps.data);
+      } catch {
+        // Without these the approval cannot be completed at all, so this is a
+        // blocking failure rather than a degraded one.
+        setLoadFailed(true);
+      }
+    })();
+  }, [accessToken]);
+
+  function pickLevel(studentId: string, levelId: string): void {
+    const inLevel = groups.filter((g) => g.level_id === levelId);
+    setChoice((c) => ({
+      ...c,
+      // §4.1 step 2: a Level with one group needs no interaction.
+      [studentId]: { levelId, groupId: inLevel.length === 1 ? inLevel[0]!.id : '' },
+    }));
+  }
+
+  const complete = students.every((s) => choice[s.id]?.groupId);
+
+  return (
+    <Dialog open onClose={onCancel} title={t('admin.approvals.placeTitle')}>
+      <div className="form">
+        <p>{t('admin.approvals.placeBody')}</p>
+
+        {loadFailed ? (
+          <p className="state" role="alert">
+            {t('common.loadFailed')}
+          </p>
+        ) : null}
+
+        {students.map((s) => {
+          const picked = choice[s.id];
+          const inLevel = picked ? groups.filter((g) => g.level_id === picked.levelId) : [];
+          return (
+            <fieldset key={s.id}>
+              <legend>{s.name}</legend>
+              <SelectField
+                label={t('admin.levels.colName')}
+                value={picked?.levelId ?? ''}
+                onChange={(v) => pickLevel(s.id, v)}
+                required
+                options={[
+                  { value: '', label: t('common.choose') },
+                  // Ordered by Category server-side (§2.2 scopes a Level's
+                  // order within its Category), so the list reads as curricula
+                  // rather than as one flat run.
+                  ...levels.map((l) => ({ value: l.id, label: `${l.category_name} — ${l.name}` })),
+                ]}
+              />
+              {picked && inLevel.length > 1 ? (
+                <SelectField
+                  label={t('admin.approvals.placeGroup')}
+                  value={picked.groupId}
+                  onChange={(v) =>
+                    setChoice((c) => ({ ...c, [s.id]: { ...picked, groupId: v } }))
+                  }
+                  required
+                  options={[
+                    { value: '', label: t('common.choose') },
+                    ...inLevel.map((g) => ({ value: g.id, label: g.name })),
+                  ]}
+                />
+              ) : null}
+              {picked && inLevel.length === 0 ? (
+                // A Level with no live group cannot admit anybody — saying so
+                // here is cheaper than a refusal after the fact.
+                <p className="state" role="status">
+                  {t('admin.approvals.placeNoGroups')}
+                </p>
+              ) : null}
+            </fieldset>
+          );
+        })}
+
+        <div className="form__actions">
+          <Button variant="secondary" onClick={onCancel}>
+            {t('common.cancel')}
+          </Button>
+          <Button
+            variant="primary"
+            disabled={busy || !complete}
+            onClick={() =>
+              onConfirm(
+                students.map((s) => ({
+                  user_id: s.id,
+                  administrative_group_id: choice[s.id]!.groupId,
+                })),
+              )
+            }
+          >
+            {t('admin.approvals.approve')}
           </Button>
         </div>
       </div>

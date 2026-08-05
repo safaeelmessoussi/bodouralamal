@@ -236,15 +236,32 @@ export async function listGroupRoster(
  * mis-filed student, and would surface as an opaque constraint error rather
  * than a decision this service made.
  */
-export async function enrolStudent(
-  prisma: PrismaClient,
+/**
+ * **The one implementation of *enrol this student in this group*.**
+ *
+ * Extracted so §4.1's approval can create enrolments **inside its own
+ * transaction** — Revision 43 requires the activation and every resulting
+ * `Enrollment` to commit together, because *"an approved account with no
+ * enrollment is a person the platform admitted and then lost"* — without a
+ * second copy of the branch-scope check, the §4.4b sex restriction, BR-21 and
+ * the consent re-evaluation enqueue. A copied placement rule is one that drifts
+ * while both copies keep passing their own tests.
+ *
+ * `source` reaches the TD-8 detail unchanged, so the audit trail distinguishes a
+ * placement made at approval from one made later on the roster screen. They are
+ * different administrative acts and an auditor asking *how did this student get
+ * here* needs them to read differently.
+ */
+export async function enrolInGroup(
+  tx: Prisma.TransactionClient,
   actor: Actor,
   administrativeGroupId: string,
   studentId: string,
+  source: 'roster_edit' | 'approval',
 ): Promise<EnrollmentRow> {
   assertCanManage(actor);
 
-  return prisma.$transaction(async (tx) => {
+  {
     const group = await tx.administrativeGroup.findFirst({
       where: { id: administrativeGroupId, deletedAt: null },
       select: {
@@ -313,11 +330,26 @@ export async function enrolStudent(
         level_id: group.levelId,
         administrative_group_id: administrativeGroupId,
         branch_id: group.branchId,
-        source: 'roster_edit',
+        source,
       },
     });
     return row;
-  });
+  }
+}
+
+/**
+ * `POST /admin/administrative-groups/{id}/roster` — one placement, one
+ * transaction of its own.
+ */
+export async function enrolStudent(
+  prisma: PrismaClient,
+  actor: Actor,
+  administrativeGroupId: string,
+  studentId: string,
+): Promise<EnrollmentRow> {
+  return prisma.$transaction((tx) =>
+    enrolInGroup(tx, actor, administrativeGroupId, studentId, 'roster_edit'),
+  );
 }
 
 /**

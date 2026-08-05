@@ -5,6 +5,7 @@ import { loadConfig } from '../lib/config.js';
 import { issueOnboardingToken } from '../lib/onboarding-token.js';
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
 import { httpCall } from '../test-support/http-client.js';
+import { clearPlacement, provisionPlacement, type Placement } from '../test-support/placement.js';
 import { CONSENT_TEXT_VERSION_KEY, register } from '../services/registration.service.js';
 import {
   captureConsentVersion,
@@ -87,6 +88,7 @@ async function submitBundle(intoBranchId?: string): Promise<{ parentId: string; 
 }
 
 async function clear(): Promise<void> {
+  await clearPlacement(prisma, `${TAG}p`);
   const users = await prisma.user.findMany({
     where: { nameArabic: { startsWith: TAG } },
     select: { id: true },
@@ -115,6 +117,9 @@ let branchId = '';
 let otherBranchId = '';
 let admin: string;
 let teacher: string;
+/** §4.1 (R43) makes placement part of approval, so every approval here needs a
+ *  Level and a group behind it. */
+let placement: Placement;
 
 beforeAll(async () => {
   savedConsentVersion ??= await captureConsentVersion(prisma);
@@ -128,6 +133,7 @@ beforeAll(async () => {
   }
 
   await clear();
+  placement = await provisionPlacement(prisma, `${TAG}p`);
   await prisma.systemSetting.upsert({
     where: { key: CONSENT_TEXT_VERSION_KEY },
     update: { value: 'http-appr-v1' },
@@ -252,14 +258,20 @@ describe('GET /api/v1/admin/approvals', () => {
 describe('POST /api/v1/admin/approvals/{id}/approve|reject', () => {
   it('approves a bundle end to end and reports what changed', async () => {
     const { parentId, childId } = await submitBundle();
-    const res = await call('POST', `/admin/approvals/${parentId}/approve`, admin, {});
+    // §4.1 (R43): the placement IS the approval. The child is the student; the
+    // parent's access comes through the family link.
+    const res = await call('POST', `/admin/approvals/${parentId}/approve`, admin, {
+      enrollments: [{ user_id: childId, administrative_group_id: placement.groupId }],
+    });
 
     expect(res.status).toBe(200);
     expect(res.body.type).toBe('registration');
     expect((await prisma.user.findUnique({ where: { id: parentId } }))?.accountStatus).toBe('active');
     expect((await prisma.user.findUnique({ where: { id: childId } }))?.accountStatus).toBe('active');
 
-    const second = await call('POST', `/admin/approvals/${parentId}/approve`, admin, {});
+    const second = await call('POST', `/admin/approvals/${parentId}/approve`, admin, {
+      enrollments: [{ user_id: childId, administrative_group_id: placement.groupId }],
+    });
     expect(second.status).toBe(409);
     expect(second.body.error?.code).toBe('STATE_CONFLICT');
   });
@@ -310,9 +322,14 @@ describe('POST /api/v1/admin/approvals/{id}/approve|reject', () => {
   });
 
   it('a request with no body at all does not 500', async () => {
+    // The point is the ABSENCE of a crash, not the status. Since §4.1 (R43)
+    // made the placement part of the approval, a bodyless approve is a
+    // well-formed refusal — which is still exactly what this test exists to
+    // prove: a missing body reaches the validator, not the error middleware.
     const { parentId } = await submitBundle();
     const res = await call('POST', `/admin/approvals/${parentId}/approve`, admin);
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(400);
+    expect(res.body.error?.code).toBe('VALIDATION_FAILED');
   });
 
   it('TD-12: suspending the admin revokes approval power without touching the token', async () => {

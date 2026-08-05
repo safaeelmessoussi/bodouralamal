@@ -87,15 +87,33 @@ export async function listApprovals(
 export async function approveApproval(
   id: string,
   token: string | null,
-  reason?: string,
-  assignments?: { role: string; branch_id: string | null }[],
+  options: {
+    reason?: string;
+    assignments?: { role: string; branch_id: string | null }[];
+    /**
+     * §4.1 (Revision 43) — the placement, written in the same transaction.
+     *
+     * **Required for every person the approval admits as a student**, or the
+     * server refuses with `ENROLLMENT_REQUIRED` naming who is missing: *"an
+     * approved account with no enrollment is a person the platform admitted and
+     * then lost."* A staff request enrols nobody.
+     *
+     * `level_id` is deliberately absent — the group already names its Level.
+     */
+    enrollments?: { user_id: string; administrative_group_id: string }[];
+  } = {},
 ): Promise<DecisionResult> {
   return api<DecisionResult>(`/admin/approvals/${id}/approve`, {
     method: 'POST',
     token,
     body: {
-      ...(reason ? { reason } : {}),
-      ...(assignments && assignments.length > 0 ? { assignments } : {}),
+      ...(options.reason ? { reason: options.reason } : {}),
+      ...(options.assignments && options.assignments.length > 0
+        ? { assignments: options.assignments }
+        : {}),
+      ...(options.enrollments && options.enrollments.length > 0
+        ? { enrollments: options.enrollments }
+        : {}),
     },
   });
 }

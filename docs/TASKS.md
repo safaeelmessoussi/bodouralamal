@@ -563,7 +563,11 @@
   - `requested_role` accepts only `teacher`, enforced by Zod **and** a database CHECK — widening it is a revision, not a code change
   - **Branch scope is never collected at registration:** a role's scope is an authorization boundary (TD-2), and collecting it would let an applicant propose the extent of their own permissions
   - Role + scope granted **in the approval transaction**, through the same `applyRoleAssignments` the Users screen uses — approval cannot become a weaker path to authority
-- [ ] **§4.1 (R43): approval does not assign Levels or Administrative Groups** — found during the R49 audit. The SRS requires the approver to select Levels and one Group each, with the `Enrollment` rows written in the same transaction; `decide()` only flips statuses, so **an approved student is admitted and enrolled in nothing**. Belongs in the transaction R49 just extended
+- [x] **§4.1 (R43): approval assigns Levels, Groups and writes the Enrollments** — the gap found in the R49 audit
+  - Built by extracting `enrolInGroup` from `enrolStudent`, so approval places students by the **same rules the roster screen uses** — branch scope, §4.4b sex restriction, BR-21, consent re-evaluation
+  - **An approval that would leave a student unplaced is refused** (`ENROLLMENT_REQUIRED`, naming who). Who must be placed is derived from the bundle; a staff request enrols nobody
+  - Only people in the bundle may be named (`NOT_IN_BUNDLE`), or approval would be an unscoped enrolment endpoint
+  - **Deviation, recorded:** §4.1 step 1's preselection of *the first Level of the applicant's Category* is not implemented because **no Category is recorded at registration**. The clause calls it a default, not a decision; the proposal names the one-column change that would enable it
 - [ ] Public Educational Library frontend — **same filters, same items, ordering only** for signed-in users (§5.2)
   - Note: the public calendar's *screen* filters (branch · category · level) stay identical for everyone and are compliant. Adding TD-3.4's `subject_id`/`teacher_id`/`academic_year_id` to a **public** screen would need public reference lists that do not exist — `/admin/subjects` is Admin-only by design
 

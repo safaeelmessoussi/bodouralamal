@@ -174,11 +174,63 @@ function, not two rules that agree today.
 
 ---
 
-## Reported, not built: §4.1's unimplemented approval payload
+## Part 2 — §4.1's approval payload, now implemented
 
-Revision 43 requires approval to assign **Levels and Administrative Groups** and to write the
-resulting `Enrollment` rows in the same transaction. **That is not implemented** — `decide()`
-only changes statuses, so an approved student is admitted to the school and enrolled in nothing.
+The audit found that **Revision 43's approval requirements were not implemented at all**: §4.1
+requires the approver to select Levels and one Administrative Group each, with every resulting
+`Enrollment` written in the same transaction, and `decide()` only changed statuses. An approved
+student was admitted to the school and **enrolled in nothing**.
 
-It is out of scope here (student placement, not staff), but it belongs in the transaction this
-revision just extended, and whoever builds it will touch exactly this code.
+Built through the **same `enrolInGroup` the roster screen uses**, so approval carries the
+branch-scope check, §4.4b's `gender_restriction` vs `User.sex` rule, BR-21's one-group-per-Level
+constraint and the consent re-evaluation enqueue without a second copy of any of them.
+
+### Two decisions the SRS implies but does not spell out
+
+**(a) The API *refuses* an approval that leaves a student unplaced.** §4.1 says the state is
+wrong — *"an approved account with no enrollment is a person the platform admitted and then
+lost"* — but not explicitly that the endpoint must reject it. Treating it as advice would make
+compliance depend on every client remembering. `400 VALIDATION_FAILED` with
+`reason: ENROLLMENT_REQUIRED`, naming who is missing, makes it a property of the platform.
+
+**Who counts as a student is derived, never asked for:** a bundle carrying pending children is a
+parent registering a family, so the children enrol and the parent's access comes through the
+family link; a lone applicant is themselves the student; a staff request enrols nobody, because
+a teacher is not admitted to a Level. Asking a client which is which would let a client decide
+who needs placing.
+
+**(b) Only people in the bundle may be placed** (`NOT_IN_BUNDLE`). Without it, naming any
+student's id would place them — approval would become an unscoped enrolment endpoint.
+
+### One deviation, stated rather than fudged
+
+§4.1 step 1 asks that **"the first Level of the applicant's Category is preselected."**
+
+**No Category is recorded anywhere.** §4.1b step 5 collects a branch *"and no other
+organisational value"*, so at approval neither the server nor the screen knows the applicant's
+Category. Inferring one from the form's `kind` is plausible and is exactly the kind of inference
+a specification should authorise rather than an implementation assume — especially since
+Revision 27 makes Categories generic stages an administrator may add to.
+
+Implemented as **no preselection**, with Levels listed in Category order so the first Level of
+each Category is immediately at hand. The clause calls the preselection *"a default, not a
+decision"*, so §4.1's mandatory content is fully met.
+
+**If the Owner wants it**, the smallest honest route is to record the Category at registration —
+one nullable column and one payload field, alongside `requested_role`.
+
+### Wording to add to §0's Revision 49 entry
+
+> **(4) Approval implements §4.1's placement (Revision 43).**
+> `POST /admin/approvals/{id}/approve` accepts `enrollments: [{ user_id, administrative_group_id }]`
+> and writes every `Enrollment` in the same transaction as the activation. **An approval that
+> would leave an admitted student unplaced is refused** (`400`, `reason: ENROLLMENT_REQUIRED`) —
+> §4.1's *"admitted and then lost"* is enforced rather than described. Who must be placed is
+> **derived** from the bundle: the children of a family registration, or a lone applicant, and
+> **nobody for a staff request**. Only people in the bundle may be named (`NOT_IN_BUNDLE`).
+> `level_id` is not accepted — the group names it, and `Enrollment.level_id` is read from the
+> group so a composite FK keeps them agreeing. **Teaching Groups are never assigned at approval**
+> (§4.1, unchanged). **Not implemented: step 1's preselection of the first Level of the
+> applicant's Category**, because **no Category is recorded at registration**; the clause calls
+> it a default rather than a decision, so the mandatory content is met, and recording a Category
+> at registration is the change that would enable it.
