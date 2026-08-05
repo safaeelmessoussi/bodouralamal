@@ -26,3 +26,22 @@ services:
     ports:
       # 9001 for the same reason (9000 was already taken on the dev host).
       - "127.0.0.1:9001:9000"
+
+  nginx:
+    volumes:
+      # TD-13's rate limits key on the client IP, and the whole integration
+      # suite arrives from one host — so the production ceiling that models a
+      # *person* using the platform is exhausted by a test runner, and requests
+      # start coming back `429 RATE_LIMITED`. That was the cause of a long-
+      # standing intermittent failure in auth-refresh.http.integration.test.ts:
+      # green in isolation, failing on different tests each full sweep.
+      #
+      # Only the ZONE RATES are replaced. Every `limit_req` directive, zone
+      # assignment and burst in app-routing.conf stays exactly as production has
+      # it, so a misrouted zone still fails here rather than in production.
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/snippets:/etc/nginx/snippets:ro
+      - ./nginx/html:/usr/share/nginx/errors:ro
+      - ./frontend/dist:/usr/share/nginx/html:ro
+      - ./nginx/snippets/rate-limits.dev.conf:/etc/nginx/snippets/rate-limits.conf:ro

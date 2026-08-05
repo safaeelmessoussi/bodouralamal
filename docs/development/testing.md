@@ -243,28 +243,51 @@ guard was proven by re-declaring the burger after its media query.
 
 A guard that has never failed is a guard nobody has tested.
 
-## Known flake — `auth-refresh.http.integration.test.ts`
+## The `auth-refresh` flake, and what it actually was
 
-**Status: open, cause unidentified.** Recorded on 2026-08-05 during the TD-3.12 Course
-Schedules slice, which did not cause it and does not touch the code involved.
+**Resolved 2026-08-05.** Worth keeping because the wrong hypothesis was reasonable and cost a
+session, and because the diagnosis is a reusable method rather than a fact about one test.
 
-**The evidence, because a flake claimed without it is just an excuse:**
+**The symptom.** Green in isolation, 8/8, repeatedly. Inside the full sweep: intermittent
+failures across four consecutive runs — **1, 0, 0, 3** — on **different tests each time**,
+always inside *the CSRF posture (TD-12)*.
 
-| | |
-|---|---|
-| Run in isolation | Green, repeatedly — 8/8 |
-| Run inside the full integration sweep | Fails intermittently: across four consecutive sweeps, **1, 0, 0 and 3** failures |
-| Which tests | **Different ones each time**, always inside *the CSRF posture (TD-12)* |
+**The wrong hypothesis, recorded because it was plausible.** Non-determinism plus
+isolation-passes reads as cross-file interference over the shared container and database, and
+two candidates fit: the `beforeEach` re-issuing a session while another file's request is in
+flight, and `purgeExpired`, the one delete in the codebase not scoped to a test tag. **Both
+were wrong.** `purgeExpired` only removes genuinely expired rows, so a freshly issued token
+survives it.
 
-Non-determinism plus isolation-passes points at **cross-file interference over the shared
-container and database**, not at the CSRF logic. Two candidates worth checking first: the
-`beforeEach` that re-issues a session while another file's request may still be in flight, and
-`purgeExpired` in `refresh-token.repository.ts`, which is the one delete in the codebase that
-is **not** scoped to a test tag.
+**What resolved it was reading the failure, not the test.** The assertion message said
+`expected 429 to be 401`. Not a data problem at all:
 
-**Do not "fix" this by retrying the test.** A retry would hide the interference, and the same
-interference would then be free to affect a suite whose failure is not so obviously spurious.
-The task is tracked in [`TASKS.md`](../TASKS.md).
+> **`limit_req_zone` keys on `$binary_remote_addr`, and the entire suite arrives from one
+> host.** TD-13's ceiling models *a person using the platform*; it does not model a test
+> runner. As the suite grew past ~680 tests, it started tripping — which is why the flake
+> appeared to worsen over time rather than randomly.
+
+**The fix is in the dev overlay only** — `nginx/snippets/rate-limits.dev.conf`, mounted over
+`rate-limits.conf` by `docker-compose.dev.yml`. **Only the zone rates change.** Every
+`limit_req` directive, zone assignment and burst stays exactly as production has it, so a
+misrouted zone still fails here rather than in production, and no TD-13 number moves.
+
+Three alternatives were rejected, each for a reason worth keeping:
+
+- **Retrying on 429 in the test** — hides the interference, which then resurfaces in a suite
+  whose failure is not so obviously spurious.
+- **Dropping `limit_req` from the dev routing** — stops exercising the limiter at all.
+- **Raising the production numbers** — bends a normative value to accommodate a test harness.
+
+**Verified by three consecutive clean sweeps** (688/688 each). One would have proved nothing:
+the flake's whole character was that it passed sometimes.
+
+### The method, which generalises
+
+**Read the failure message before theorising about the harness.** The status code named the
+cause in the first run that printed it; two sessions of plausible reasoning about FK ordering
+and purge scoping did not. A flake is still a defect with a mechanism, and the mechanism is
+usually in the output already.
 
 ## What is not tested, and why
 

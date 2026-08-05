@@ -438,7 +438,7 @@
   - ✓ Subject, target, branch and academic year rejected on `PATCH` — each would re-point already-materialized history
   - ✓ **Two service functions did not exist** and were written here: `listCourseSchedules` and `resolveScheduleRoster`
   - ✓ 17 HTTP tests; full sweep 648 passing across 36 files
-- [ ] **Fix the `auth-refresh` integration flake** — passes in isolation, fails intermittently and non-deterministically inside the full sweep ([evidence](development/testing.md#known-flake--auth-refreshhttpintegrationtestts)). Do not paper over it with a retry
+- [x] **Fixed the `auth-refresh` integration flake** — it was `429 RATE_LIMITED`, not data interference: `limit_req_zone` keys on the client IP and the whole suite arrives from one host. Dev overlay replaces the zone *rates* only; every `limit_req` directive and burst stays as production has it ([why](development/testing.md#the-auth-refresh-flake-and-what-it-actually-was)). Verified by three consecutive clean sweeps
 - [x] TD-3.12 **Sessions** (override / cancel / restore / content) — 5 operations
   - ✓ `status` **refused** on `PATCH` — a transition carries a mandatory reason and an audience count recorded while still answerable; a field assignment carries neither
   - ✓ `overridden` set by **any** override, including a no-op one: the flag records that a human decided, which is what survives the next schedule edit (R43.4)
