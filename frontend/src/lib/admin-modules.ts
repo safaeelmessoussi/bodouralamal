@@ -125,8 +125,7 @@ export const ADMIN_MODULES: readonly AdminModule[] = [
     labelKey: 'admin.nav.calendar',
     section: 'calendar',
     roles: STAFF,
-    status: 'blocked',
-    blockedReasonKey: 'admin.blocked.calendar',
+    status: 'ready',
   },
 
   // ── Content ───────────────────────────────────────────────────────────────

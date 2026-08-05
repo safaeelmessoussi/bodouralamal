@@ -8,6 +8,7 @@ import { t } from '../../i18n/index.js';
 import { moduleForPath, visibleModules } from '../../lib/admin-modules.js';
 import { ApprovalsPage } from './approvals.js';
 import { BranchesPage } from './branches.js';
+import { AdminCalendarPage } from './calendar.js';
 import { GroupsPage } from './groups.js';
 import { HijriCalendarPage } from './hijri-calendar.js';
 import { LevelSubjectsPage } from './level-subjects.js';
@@ -47,6 +48,7 @@ export const IMPLEMENTED_ADMIN_PATHS: readonly string[] = [
   '/admin/levels',
   '/admin/taxonomy',
   '/admin/users',
+  '/admin/calendar',
   '/superadmin/hijri-calendar',
   '/superadmin/settings',
 ];
@@ -109,6 +111,8 @@ export function AdminRouter(): ReactNode {
       return <TaxonomyPage />;
     case '/admin/users':
       return <UsersPage />;
+    case '/admin/calendar':
+      return <AdminCalendarPage />;
     case '/superadmin/hijri-calendar':
       return <HijriCalendarPage />;
     case '/superadmin/settings':
