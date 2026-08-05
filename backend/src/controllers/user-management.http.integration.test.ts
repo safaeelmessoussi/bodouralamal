@@ -105,7 +105,23 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await clear();
+
+  // **The cheap approximation of "this suite borrowed nothing it did not
+  // return".** The `LAST_SUPER_ADMIN` test has to make its target the last
+  // administrator in the whole database to prove the guard fires, and an
+  // earlier version of it left the development database with none at all —
+  // green tests, a back office nobody could enter, and no signal anywhere.
+  // Asserting the platform is still administrable is what turns that from a
+  // silent outcome into a failing run.
+  const administrable = await prisma.user.count({
+    where: {
+      accountStatus: 'active',
+      deletedAt: null,
+      branchRoles: { some: { deletedAt: null, role: { name: 'super_admin' } } },
+    },
+  });
   await prisma.$disconnect();
+  expect(administrable).toBeGreaterThan(0);
 });
 
 describe('PATCH /admin/users/{id} — the person\'s own fields', () => {
@@ -364,38 +380,69 @@ describe('PUT /admin/users/{id}/roles — the complete assignment set', () => {
   it('will not strip the last active Super Admin of the role', async () => {
     // Revision 22 documents that lockout as a RECOVERY path needing
     // DATABASE_URL and a manual seed run — not an outcome one click may produce.
-    // Every other Super Admin is removed first so the target really is the last.
+    //
+    // **The guard counts GLOBALLY, so proving it means being the last Super
+    // Admin in the whole database** — which is why this test suspends every
+    // other one first, and why getting that wrong is expensive. A first version
+    // revoked the `super_admin` ASSIGNMENT of every other holder, including
+    // real seeded accounts outside this file's `TAG` namespace, and restored
+    // only its own spare: it left the development database with **zero active
+    // Super Admins**, locked out of its own back office, and nothing failed.
+    //
+    // Two changes make that impossible now. It touches `account_status`
+    // instead of the assignment, so nobody's ROLE GRANT is ever rewritten; and
+    // every id it changes is captured first and restored in a `finally`, so an
+    // assertion failure mid-test cannot leave the platform administrator-less.
     const others = await prisma.user.findMany({
       where: {
-        id: { notIn: [superAdminId] },
+        id: { not: superAdminId },
         accountStatus: 'active',
         deletedAt: null,
         branchRoles: { some: { deletedAt: null, role: { name: 'super_admin' } } },
       },
       select: { id: true },
     });
-    await prisma.userBranchRole.updateMany({
-      where: { userId: { in: others.map((o) => o.id) }, role: { name: 'super_admin' } },
-      data: { deletedAt: new Date() },
-    });
+    const parked = others.map((o) => o.id);
 
-    const res = await call('PUT', `/admin/users/${superAdminId}/roles`, superAdmin, {
-      assignments: [],
-    });
-    expect(res.status).toBe(409);
-    expect(res.body.error?.details?.['reason']).toBe('LAST_SUPER_ADMIN');
+    try {
+      await prisma.user.updateMany({
+        where: { id: { in: parked } },
+        data: { accountStatus: 'suspended' },
+      });
+
+      const res = await call('PUT', `/admin/users/${superAdminId}/roles`, superAdmin, {
+        assignments: [],
+      });
+      expect(res.status).toBe(409);
+      expect(res.body.error?.details?.['reason']).toBe('LAST_SUPER_ADMIN');
+      // Refused means refused: the assignment is still live, not half-removed.
+      expect(
+        await prisma.userBranchRole.count({
+          where: { userId: superAdminId, deletedAt: null, role: { name: 'super_admin' } },
+        }),
+      ).toBe(1);
+
+      // The same guard protects suspension, which is the other way to reach
+      // zero administrators.
+      const suspendRes = await call('POST', `/admin/users/${superAdminId}/suspend`, superAdmin, {
+        version: 0,
+        reason: 'اختبار',
+      });
+      // Self-suspension is refused first — a different reason, and the one that
+      // actually applies when an administrator targets their own account.
+      expect(suspendRes.status).toBe(409);
+    } finally {
+      await prisma.user.updateMany({
+        where: { id: { in: parked } },
+        data: { accountStatus: 'active' },
+      });
+    }
+
+    // The spare is restored to active by the block above; assert it, because
+    // "the fixture cleaned up after itself" is the property that failed once.
     expect(
-      await prisma.userBranchRole.count({
-        where: { userId: superAdminId, deletedAt: null, role: { name: 'super_admin' } },
-      }),
-    ).toBe(1);
-
-    // Restore the spare, so ordering between files cannot leave the platform
-    // fixture without a second administrator.
-    await prisma.userBranchRole.updateMany({
-      where: { userId: spareSuperAdminId, role: { name: 'super_admin' } },
-      data: { deletedAt: null },
-    });
+      (await prisma.user.findUniqueOrThrow({ where: { id: spareSuperAdminId } })).accountStatus,
+    ).toBe('active');
   });
 
   it('refuses an unknown role and an unknown branch', async () => {

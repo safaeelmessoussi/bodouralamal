@@ -551,7 +551,13 @@
   - **`super_admin` is grantable here** (R22: administrator changes happen exclusively through the application), guarded by `LAST_SUPER_ADMIN` and `SELF_SUSPENSION`
   - A role change deliberately does **not** revoke sessions — R10 accepts the window, and §7's `RefreshRevokedReason` has no value that honestly describes a demotion
   - `check-display-identity.sh`'s exception is now **symbol-scoped rather than file-scoped**, proven by reintroducing the bug
-- [ ] **Admin portal completion** (Owner priority, 2026-08-05) — remaining: the `/admin/users` **screen** · staff registration-request workflow
+- [x] **`/admin/users` screen** — search, filter, create, edit, roles, suspend, reactivate. **Zero backend change**
+  - Suspension is a separate control from edit, mirroring the API: it ends every live session (TD-4.15), so it asks for a reason and says so
+  - Roles edited as a **set**, matching the `PUT` — one decision, no window where a person holds half a change
+  - TD-10's two-character floor applied before the request; every filter change resets to page 1
+  - Each `409` reason gets its own sentence — the remedies differ completely
+  - **P1 found while probing the running stack:** the `LAST_SUPER_ADMIN` test had revoked real seeded `super_admin` assignments and left the dev database with **none**, all tests green. Fixed three ways (borrow `account_status` not the grant · restore in `finally` · `afterAll` asserts the platform is still administrable) and recorded in `development/testing.md`
+- [ ] **Admin portal completion** (Owner priority, 2026-08-05) — remaining: staff registration-request workflow (Teachers/Admins/Super Admins → طلبات الانضمام → approve/reject)
 - [ ] Public Educational Library frontend — **same filters, same items, ordering only** for signed-in users (§5.2)
   - Note: the public calendar's *screen* filters (branch · category · level) stay identical for everyone and are compliant. Adding TD-3.4's `subject_id`/`teacher_id`/`academic_year_id` to a **public** screen would need public reference lists that do not exist — `/admin/subjects` is Admin-only by design
 

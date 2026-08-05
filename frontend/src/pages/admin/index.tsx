@@ -16,6 +16,7 @@ import { SchedulesPage } from './schedules.js';
 import { SettingsPage } from './settings.js';
 import { SubjectOrganisationPage } from './subject-organisation.js';
 import { TaxonomyPage } from './taxonomy.js';
+import { UsersPage } from './users.js';
 
 /**
  * Back-office routing and the module screens that are not yet implemented.
@@ -45,6 +46,7 @@ export const IMPLEMENTED_ADMIN_PATHS: readonly string[] = [
   '/admin/groups',
   '/admin/levels',
   '/admin/taxonomy',
+  '/admin/users',
   '/superadmin/hijri-calendar',
   '/superadmin/settings',
 ];
@@ -105,6 +107,8 @@ export function AdminRouter(): ReactNode {
       return <LevelsPage />;
     case '/admin/taxonomy':
       return <TaxonomyPage />;
+    case '/admin/users':
+      return <UsersPage />;
     case '/superadmin/hijri-calendar':
       return <HijriCalendarPage />;
     case '/superadmin/settings':

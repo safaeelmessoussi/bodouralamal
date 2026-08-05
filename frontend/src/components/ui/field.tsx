@@ -224,13 +224,22 @@ export function SearchInput({
   onChange,
   label,
   placeholder,
+  hint,
 }: {
   value: string;
   onChange: (value: string) => void;
   label?: string;
   placeholder?: string;
+  /**
+   * A rule the reader needs *while typing* — TD-10's two-character floor is the
+   * case that added it. A placeholder cannot carry it: the placeholder
+   * disappears at the first keystroke, which is exactly when the floor starts
+   * mattering. Wired through `aria-describedby` like every other field's hint.
+   */
+  hint?: string;
 }): ReactNode {
   const id = useId();
+  const hintId = `${id}-hint`;
   return (
     <div className="field field--search">
       <label className="field__label" htmlFor={id}>
@@ -242,8 +251,14 @@ export function SearchInput({
         className="field__control"
         value={value}
         placeholder={placeholder ?? t('common.searchPlaceholder')}
+        aria-describedby={hint ? hintId : undefined}
         onChange={(e) => onChange(e.target.value)}
       />
+      {hint ? (
+        <p className="field__hint" id={hintId}>
+          {hint}
+        </p>
+      ) : null}
     </div>
   );
 }

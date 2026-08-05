@@ -109,8 +109,7 @@ export const ADMIN_MODULES: readonly AdminModule[] = [
     labelKey: 'admin.nav.users',
     section: 'people',
     roles: STAFF,
-    status: 'blocked',
-    blockedReasonKey: 'admin.blocked.users',
+    status: 'ready',
   },
   {
     path: '/admin/approvals',

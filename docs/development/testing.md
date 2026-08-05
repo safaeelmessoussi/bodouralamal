@@ -153,6 +153,42 @@ Two lessons, both now enforced in code:
   the previous test left, so the suite would "restore" its own scratch value
   rather than the developer's.
 
+### The same failure, a second time: a global invariant needs global fixtures
+
+It recurred while testing `LAST_SUPER_ADMIN`, and the shape is worth naming
+because the first lesson did not prevent it.
+
+That guard **counts across the whole database** — *is this the last active Super
+Admin anywhere* — so proving it fires means making the target genuinely the
+last. The first version revoked the `super_admin` **role assignment** of every
+other holder, including real seeded accounts outside the suite's own `TAG`
+namespace, and restored only the spare it had created itself. It left the
+development database with **zero active Super Administrators**, locked out of
+its own back office, and every test passed.
+
+Recovering it meant hand-restoring two `user_branch_role` rows identified by a
+shared `deleted_at` timestamp and a null `deleted_by` — the fingerprint of a
+`updateMany` rather than of a person.
+
+**Three rules, in order of how much they buy:**
+
+- **A fixture may create and destroy rows it owns; it may only ever *borrow*
+  rows it does not.** The `TAG` prefix convention marks ownership, and a
+  `where` clause without it is the smell.
+- **Borrow the least dangerous column.** The rewritten test suspends the other
+  administrators (`account_status`) instead of revoking their grants: a status
+  is trivially restored and means nothing on its own, whereas a **revoked role
+  assignment is indistinguishable from a deliberate administrative act** — which
+  is exactly why the damage was hard to recognise as damage.
+- **Restore in `finally`, not at the end of the happy path.** The original
+  restore was the last statement of the test, so any earlier assertion failure
+  skipped it. A guard this consequential must survive its own test failing.
+
+**Why no code enforces this yet:** the check would have to know which rows a
+suite owns, and `TAG` is a convention rather than a column. The cheap
+approximation — assert in `afterAll` that at least one active Super Admin
+exists — is now part of the test itself.
+
 ## Assert that a failure is ACTIONABLE, not merely that it fails
 
 There *was* a test for the missing consent version. It asserted
