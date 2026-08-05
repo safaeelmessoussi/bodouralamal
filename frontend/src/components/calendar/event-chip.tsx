@@ -21,7 +21,7 @@ export function EventChip({
   occurrence: Occurrence;
   onOpen?: (occurrence: Occurrence) => void;
 }): ReactNode {
-  const kindKey = occurrence.kind === 'group' ? 'calendar.kindGroup' : 'calendar.kindEvent';
+  const kindKey = occurrence.kind === 'session' ? 'calendar.kindSession' : 'calendar.kindEvent';
   // Title first, time second — the priority order that matters when a cell is
   // scanned. Both live on ONE line: a two-line chip halves how many activities
   // a cell can show, and the time is short enough to sit beside the title.

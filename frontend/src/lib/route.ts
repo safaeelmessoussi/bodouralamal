@@ -20,6 +20,9 @@ export type Route =
   | 'register'
   | 'content-unavailable'
   | 'calendar'
+  /** §5.2's Session page. A parameterised public path, so it is matched by
+   *  pattern rather than by the literal switch above. */
+  | 'session'
   | 'resources'
   | 'pending-approval'
   | 'account-deactivated'
@@ -59,6 +62,11 @@ export function resolveRoute(pathname: string): Route {
     case '/account-deactivated':
       return 'account-deactivated';
   }
+
+  // §5.2's Session page: `/calendar/sessions/{id}`. Checked before the admin
+  // registry because it is public and parameterised, and the literal switch
+  // above cannot express an id.
+  if (/^\/calendar\/sessions\/[^/]+$/.test(path)) return 'session';
 
   // The back office owns its own sub-paths, so it is checked before the role
   // homes — `/admin` appears in both lists and the registry is the authority.

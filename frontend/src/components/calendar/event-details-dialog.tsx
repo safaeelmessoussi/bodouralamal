@@ -85,7 +85,7 @@ export function EventDetailsDialog({
             ) : null}
 
             <dt>{t('calendar.detailsKind')}</dt>
-            <dd>{t(occurrence.kind === 'group' ? 'calendar.kindGroup' : 'calendar.kindEvent')}</dd>
+            <dd>{t(occurrence.kind === 'session' ? 'calendar.kindSession' : 'calendar.kindEvent')}</dd>
 
             {/* Recurrence is meaningful only when there is one; `none` is the
                 default every event carries, so printing "لا يتكرر" on every

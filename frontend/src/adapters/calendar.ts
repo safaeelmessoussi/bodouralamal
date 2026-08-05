@@ -11,7 +11,14 @@ import { api } from '../lib/api.js';
  * error here rather than a blank line on the page.
  */
 export interface Occurrence {
-  kind: 'group' | 'event';
+  /**
+   * **`'session'`, not `'group'`** — Revision 43 replaced the retired Group with
+   * a Session as the teaching occurrence, and this type went on declaring the
+   * old name. Nothing failed: `api<T>()` is an unchecked cast, so the wrong
+   * literal compiled, every `=== 'group'` comparison quietly returned false, and
+   * **every session rendered as an Event** in the chip and the details dialog.
+   */
+  kind: 'session' | 'event';
   id: string;
   title: string;
   /** Local calendar date `YYYY-MM-DD` (TD-11) — never an instant. */
@@ -28,6 +35,16 @@ export interface Occurrence {
   category_name: string | null;
   level_id: string | null;
   level_name: string | null;
+  /* Sessions only (TD-3.4, R43). An Event has no subject, no teaching mode and
+     no lifecycle, so these are null for it rather than invented. */
+  subject_id: string | null;
+  subject_name: string | null;
+  teaching_mode: string | null;
+  /** Who the class is *for*: the group's name, or the Level's, by mode. */
+  audience_label: string | null;
+  /** TD-1 lifecycle. A cancelled occurrence still appears — the calendar's job
+   *  is to say a class is not happening, not to hide that it was scheduled. */
+  status: string | null;
   /**
    * `display_name` is **already resolved by the backend** — see §7's Public
    * display identity invariant, which is the single statement of that rule.
@@ -142,4 +159,43 @@ export async function fetchCalendarBootstrap(query: BootstrapQuery): Promise<Cal
   if (query.categoryId) params.set('category_id', query.categoryId);
   const body = await api<{ data: CalendarBootstrap }>(`/calendar/bootstrap?${params.toString()}`);
   return body.data;
+}
+
+/* ── The §5.2 Session page (TD-3.4 `GET /calendar/sessions/{id}`) ────────── */
+
+/**
+ * One item attached to a session — enough to open it **inside the Educational
+ * Library** (§5.2: one reader, one permission path), and deliberately not the
+ * object location, which only `GET /content/{id}/download-url` hands out after
+ * its own §4.9 check.
+ */
+export interface SessionContentRef {
+  id: string;
+  title: string;
+  subject_id: string;
+  level_id: string;
+}
+
+export interface SessionPage {
+  occurrence: Occurrence;
+  /**
+   * **Always `null` today, and the key is present on purpose.** TD-3.4 names it
+   * and §5.2 lists notes on the page, but §7 gives `Session` no notes column —
+   * a schema decision the Document Owner has not taken. The field ships so the
+   * gap stays visible rather than silent.
+   */
+  notes: string | null;
+  /** §4.9 recording resources — the audio items among the linked content. */
+  recordings: SessionContentRef[];
+  /** The materials — disjoint from `recordings`. */
+  linked_content: SessionContentRef[];
+}
+
+/**
+ * Public, at the caller's tier. An anonymous visitor sees a public session's
+ * details and **never its private recordings** (§5.2) — the server decides that,
+ * not this call.
+ */
+export async function fetchSessionPage(id: string): Promise<SessionPage> {
+  return api<SessionPage>(`/calendar/sessions/${id}`);
 }

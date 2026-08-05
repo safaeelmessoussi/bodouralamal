@@ -24,7 +24,7 @@ import { leadingBlanks, monthGrid, toIsoDate } from '../lib/dates.js';
  * did not supply one (Revision 31, §20 rule 14).
  */
 const occurrence = (over: Partial<Occurrence> = {}): Occurrence => ({
-  kind: 'group',
+  kind: 'session',
   id: 'g1',
   title: 'حلقة تحفيظ',
   date: '2026-06-15',
@@ -40,6 +40,13 @@ const occurrence = (over: Partial<Occurrence> = {}): Occurrence => ({
   category_name: null,
   level_id: null,
   level_name: null,
+  // Revision 43 session fields. The factory carries them so the fixture is a
+  // real occurrence rather than a subset that happens to compile.
+  subject_id: null,
+  subject_name: null,
+  teaching_mode: null,
+  audience_label: null,
+  status: null,
   instructors: [],
   hijri_date: null,
   hijri_month_ar: null,

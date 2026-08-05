@@ -6,6 +6,7 @@ import { ActiveChildProvider } from './contexts/active-child.js';
 import { SessionProvider } from './contexts/session.js';
 import { resolveRoute } from './lib/route.js';
 import { AdminRouter } from './pages/admin/index.js';
+import { SessionPage } from './pages/session.js';
 import { TeacherRouter } from './pages/teacher/index.js';
 import { CalendarPage } from './pages/calendar.js';
 import { Landing } from './pages/landing.js';
@@ -49,6 +50,9 @@ function App(): React.ReactNode {
     // would be a navigation node §14.1 does not list (§20 rule 16).
     case 'resources':
       return <ResourcesPage />;
+    case 'session':
+      // Public at the caller's tier, exactly like the grid it is opened from.
+      return <SessionPage />;
     case 'pending-approval':
       // The guard owns the Pending decision, so it renders the screen itself.
       return <PendingGuard>{null}</PendingGuard>;

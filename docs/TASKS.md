@@ -517,7 +517,13 @@
   - Each refusal names its cause: `ALREADY_IN_SUBJECT_SPLIT`, `NOT_ENROLLED_IN_LEVEL`, `SUBJECT_NOT_IN_LEVEL`, `SCHEDULES_EXIST`
   - Deletion reports how many students returned to *unassigned* — the count exists only at that moment
   - R43.3 authority split honoured: group CRUD Super Admin, placement Admin
-- [ ] Session page frontend (§14.1)
+- [x] **Session page frontend** — `/calendar/sessions/{id}` (§5.2)
+  - Public at the caller's tier; **no client-side filtering** — a client that filters is a second implementation of a permission rule
+  - A cancelled session is **shown and announced**, not hidden or merely coloured (§14.4)
+  - Recordings and materials stay separate lists, because a recording is what BR-2's consent gate acts on
+  - An empty list renders **nothing**, not an empty heading: on a public page *there are none* and *there are some you may not see* must not look alike
+  - Items link **into the Library** (§5.2 — one reader, one permission path), never to a download
+  - **Fixed live drift found here:** the calendar adapter still declared `kind: 'group'`, so every session had been rendering as an Event since Revision 43
 - [ ] Public calendar and public Educational Library — **same filters, same items, ordering only** for signed-in users (§5.2)
 
 **Gates**
