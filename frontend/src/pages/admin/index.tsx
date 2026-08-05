@@ -8,6 +8,7 @@ import { moduleForPath, visibleModules, type AdminModule } from '../../lib/admin
 import { ApprovalsPage } from './approvals.js';
 import { BranchesPage } from './branches.js';
 import { HijriCalendarPage } from './hijri-calendar.js';
+import { SchedulesPage } from './schedules.js';
 import { SettingsPage } from './settings.js';
 
 /**
@@ -34,6 +35,7 @@ export const IMPLEMENTED_ADMIN_PATHS: readonly string[] = [
   '/admin',
   '/admin/branches',
   '/admin/approvals',
+  '/admin/schedules',
   '/superadmin/hijri-calendar',
   '/superadmin/settings',
 ];
@@ -59,6 +61,8 @@ export function AdminRouter(): ReactNode {
       return <BranchesPage />;
     case '/admin/approvals':
       return <ApprovalsPage />;
+    case '/admin/schedules':
+      return <SchedulesPage />;
     case '/superadmin/hijri-calendar':
       return <HijriCalendarPage />;
     case '/superadmin/settings':

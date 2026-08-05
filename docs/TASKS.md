@@ -472,7 +472,15 @@
   - ✓ **`notes` ships `null`** — TD-3.4 names it but §7 defines no storage; a §7 schema decision, deferred, and visible rather than silent
   - ✓ Registered in `scripts/ci/td3-routes.txt`, which caught its absence (66/82 TD-3, 0 undocumented)
   - ✓ 9 HTTP tests green first run; `pending-denial` grew to 63 with a positive exemption assertion
-- [ ] `/admin/groups` (+ roster), `/admin/schedules`, `/admin/levels/{id}/subjects/{subjectId}`, `/teacher/schedules`, Session page (§14.1)
+- [x] `/admin/schedules` — Course Schedules screen (read · conflicts · resolved roster · delete)
+  - ✓ **The §14.1 node was missing from the module registry entirely** — and from the test pinning that registry, so the two agreed with each other while neither agreed with the sitemap
+  - ✓ Conflicts panel states it compares **materialized Sessions, not recurrence rules**; roster panel states it is **resolved now, not stored** — "no conflicts" from a rule comparison is a different assurance
+  - ✓ Delete surfaces `retained` — Sessions holding real work outlive the schedule, and the count is unavailable afterwards
+  - ✓ `timeLabel` exported and tested: TD-11 wall-clock rendered verbatim, never parsed through `Date`
+  - ✓ Client-side contract guard mirroring the server's key set, so an adapter rename is a typecheck failure rather than a blank page
+  - ✓ Write form deliberately deferred to its own slice — half a form would claim a capability the module lacks
+- [ ] `/admin/schedules` **write form** (subject · mode + single target · room · staff · times · recurrence, with conflict reporting on save)
+- [ ] `/admin/groups` (+ roster), `/admin/levels/{id}/subjects/{subjectId}` (Teaching Groups), `/teacher/schedules`, Session page frontend (§14.1)
 - [ ] Public calendar and public Educational Library — **same filters, same items, ordering only** for signed-in users (§5.2)
 
 **Gates**

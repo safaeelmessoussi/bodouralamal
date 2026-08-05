@@ -89,6 +89,16 @@ export const ADMIN_MODULES: readonly AdminModule[] = [
     blockedReasonKey: 'admin.blocked.groups',
   },
   {
+    // §14.1 Academic → "Course Schedules ... /admin/schedules (staff, R43)".
+    // The node was missing from this registry while §14.1 listed it, so the
+    // sitemap the registry claims to hold as data was not the sitemap it held.
+    path: '/admin/schedules',
+    labelKey: 'admin.nav.schedules',
+    section: 'academic',
+    roles: STAFF,
+    status: 'ready',
+  },
+  {
     path: '/admin/levels',
     labelKey: 'admin.nav.levels',
     section: 'academic',

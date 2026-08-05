@@ -19,6 +19,13 @@ describe('the registry matches §14.1', () => {
   it('lists every node the sitemap defines, and no others', () => {
     // §14.1: "no invented sections, no reshuffling". A path added here that the
     // sitemap does not list is exactly what §20 rule 16 forbids.
+    //
+    // The rule cuts both ways, and this list proved it: `/admin/schedules` is
+    // named in §14.1's Academic group ("Course Schedules ... /admin/schedules
+    // (staff, R43)") and was missing from BOTH the registry and this
+    // expectation, so the two agreed with each other and neither agreed with
+    // the sitemap. A test that pins one copy against another copy cannot catch
+    // that — only re-reading §14.1 could.
     expect(ADMIN_MODULES.map((m) => m.path).sort()).toEqual(
       [
         '/admin',
@@ -28,6 +35,7 @@ describe('the registry matches §14.1', () => {
         '/admin/content',
         '/admin/groups',
         '/admin/levels',
+        '/admin/schedules',
         '/admin/taxonomy',
         '/admin/users',
         '/superadmin/hijri-calendar',
