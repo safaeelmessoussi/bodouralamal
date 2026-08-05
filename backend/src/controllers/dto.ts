@@ -719,6 +719,48 @@ export function libraryItemDto(row: {
   };
 }
 
+/* ── Reference-data selectors (TD-3 extension, 2026-08-05) ───────────────── */
+
+export interface SubjectRefDto {
+  id: string;
+  name: string;
+  display_order: number | null;
+}
+
+/**
+ * Deliberately **absent**: `version`, `created_at`, `updated_at`, `deleted_at`,
+ * `deleted_by`.
+ *
+ * A selector needs an id, a label and what it sorts by. A reference list is
+ * exactly where *"just return the row"* is most tempting and least noticed —
+ * the endpoint has no write, so a `version` here would be a field with no
+ * possible use and one more thing a client could come to depend on.
+ */
+export function subjectRefDto(row: {
+  id: string;
+  name: string;
+  displayOrder: number | null;
+}): SubjectRefDto {
+  return { id: row.id, name: row.name, display_order: row.displayOrder };
+}
+
+export interface AcademicYearRefDto {
+  id: string;
+  /** `YYYY-YYYY` (§4.10, TD-6). */
+  label: string;
+  /** What lets a form default to the live year rather than asking someone to
+   *  remember which it is. */
+  is_current: boolean;
+}
+
+export function academicYearRefDto(row: {
+  id: string;
+  label: string;
+  isCurrent: boolean;
+}): AcademicYearRefDto {
+  return { id: row.id, label: row.label, is_current: row.isCurrent };
+}
+
 /* ── Approval queue (§5.6, §14.2) ────────────────────────────────────────── */
 
 export interface ApprovalDto {

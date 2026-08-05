@@ -18,6 +18,7 @@ import * as teachingGroups from './controllers/teaching-group.controller.js';
 import * as courseSchedules from './controllers/course-schedule.controller.js';
 import * as sessionsCtl from './controllers/session.controller.js';
 import * as libraryCtl from './controllers/library.controller.js';
+import * as referenceData from './controllers/reference-data.controller.js';
 import { createRegistration } from './controllers/registration.controller.js';
 import { healthController } from './controllers/health.controller.js';
 import type { PrismaClient } from './generated/prisma/client.js';
@@ -209,6 +210,12 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
   // Recurring Course Schedules (§4.4, TD-3.12, Revision 43) — the unit of
   // DELIVERY. A write materializes Sessions and reports what it left alone
   // (§4.4, R43.6), so `materialization` travels with both write verbs.
+  // Reference-data selectors (TD-3 extension, 2026-08-05). The canonical source
+  // for every admin selector needing a Subject or an Academic Year — a screen
+  // that needs either reads these rather than growing its own list.
+  guarded.get('/admin/subjects', referenceData.subjects(prisma));
+  guarded.get('/admin/academic-years', referenceData.academicYears(prisma));
+
   guarded.get('/admin/course-schedules', courseSchedules.list(prisma));
   guarded.post('/admin/course-schedules', courseSchedules.create(prisma));
   guarded.patch('/admin/course-schedules/:id', courseSchedules.update(prisma));

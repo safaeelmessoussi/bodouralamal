@@ -86,6 +86,15 @@ POST /admin/branches/{id}/rooms               # §5.6; Super Admin only (referen
 PATCH /admin/rooms/{id}                       # §5.6; Super Admin only (TD-2 R26)
 DELETE /admin/rooms/{id}                      # §5.6; Super Admin only (TD-2 R26); guarded by TD-5
 
+# ── Reference-data selectors (TD-3 EXTENSION — Document Owner decision,
+#    2026-08-05). Authorised explicitly rather than assumed: POST
+#    /admin/course-schedules requires subject_id and academic_year_id and
+#    nothing in TD-3 could list either, so the schedule form was unbuildable.
+#    Read-only, Admin+ (TD-2 R26 read; R30 excludes Teacher). SRS wording is
+#    drafted in docs/SRS-PROPOSAL-R46.md and awaits the Owner.
+GET /admin/subjects                           # TD-3 extension 2026-08-05; selector source for §5.6 schedule form
+GET /admin/academic-years                     # TD-3 extension 2026-08-05; selector source, carries is_current
+
 # ── Educational organisation & delivery (TD-3.12, Revision 43)
 #    These REPLACE the nine /admin/groups routes of the retired model, which the
 #    Revision 43 contract phase removed from the router and which lingered here

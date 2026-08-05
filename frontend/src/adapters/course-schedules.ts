@@ -138,3 +138,56 @@ export async function deleteCourseSchedule(
     token,
   });
 }
+
+export interface CourseScheduleInput {
+  subject_id: string;
+  teaching_mode: string;
+  /** Exactly one target, of the kind the mode names (§4.4c). */
+  target_id: string;
+  branch_id: string;
+  room_id?: string | null;
+  /** TD-11 wall-clock `HH:MM` — an ISO instant is refused by the server. */
+  start_time: string;
+  end_time: string;
+  recurrence: string;
+  weekdays?: string[];
+  academic_year_id: string;
+  staff?: { user_id: string; position: string }[];
+}
+
+export interface ScheduleWriteResult {
+  schedule: CourseSchedule;
+  materialization: Materialization;
+}
+
+export async function createCourseSchedule(
+  input: CourseScheduleInput,
+  token: string | null,
+): Promise<ScheduleWriteResult> {
+  return api<ScheduleWriteResult>('/admin/course-schedules', {
+    method: 'POST',
+    token,
+    body: input,
+  });
+}
+
+/**
+ * **Only the *when* and the *where in the building* are editable.** Subject,
+ * mode, target, branch and academic year are rejected by the server rather than
+ * ignored — each would re-point Sessions already materialized against the old
+ * answer — so this signature is the contract, not a convenience.
+ */
+export async function updateCourseSchedule(
+  id: string,
+  version: number,
+  input: Partial<
+    Pick<CourseScheduleInput, 'room_id' | 'start_time' | 'end_time' | 'recurrence' | 'weekdays'>
+  >,
+  token: string | null,
+): Promise<ScheduleWriteResult> {
+  return api<ScheduleWriteResult>(`/admin/course-schedules/${id}`, {
+    method: 'PATCH',
+    token,
+    body: { version, ...input },
+  });
+}

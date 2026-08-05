@@ -2765,6 +2765,88 @@
         }
       }
     },
+    "/admin/subjects": {
+      "get": {
+        "summary": "List subjects (selector)",
+        "description": "**TD-3 extension, Document Owner decision 2026-08-05.** `POST /admin/course-schedules` requires `subject_id` and nothing in TD-3 could list Subjects, so the §5.6 schedule form was unbuildable. Authorised explicitly rather than assumed — and this is the **canonical source for every admin selector needing a Subject**: a screen that needs one reads this rather than growing its own list. Two alternatives were rejected: widening `/calendar/bootstrap`, whose contract is *the calendar screen's* reference data and which would then be shaped by an unrelated screen, and a screen-specific payload, which is how a second source of truth for one concept starts. **Read-only** — Subjects are seeded and managed outside this surface. **Admin or Super Admin** (TD-2 R26: Admins read reference data); **Teachers are excluded** (R30 — reference data is an administrative concern, and a teacher receives subject information through the operational APIs they are authorised to use). **Unpaginated, deliberately:** a selector offering a subset is lying about the choice available, and the set is bounded by the curriculum, which is the condition that makes TD-10 the wrong tool. Ordered by `display_order` then the natively `ar-x-icu` collated name (BR-19, §20 rule 13). **Exactly `id`, `name`, `display_order`** — no `version`, no timestamps: the endpoint has no write, so a version would be a field with no possible use and one more thing a client could come to depend on.",
+        "responses": {
+          "200": {
+            "description": "Every live subject."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN for a caller below Admin, including a Teacher (R30).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/academic-years": {
+      "get": {
+        "summary": "List academic years (selector)",
+        "description": "**TD-3 extension, Document Owner decision 2026-08-05**, for the same reason as `/admin/subjects`: `POST /admin/course-schedules` requires `academic_year_id`. The **canonical source for every admin selector needing an Academic Year**. **Read-only**, Admin or Super Admin (TD-2 R26), Teachers excluded (R30). Newest first — `label` sorts correctly precisely because TD-6 constrains it to `YYYY-YYYY`, and a form is almost always about the current year or the next. **Exactly `id`, `label`, `is_current`.** `is_current` is the one piece of metadata a selector genuinely needs: it lets a form default to the live year instead of asking an administrator to remember which one that is. Unpaginated, for the reason given on `/admin/subjects`.",
+        "responses": {
+          "200": {
+            "description": "Every academic year, newest first."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN for a caller below Admin, including a Teacher (R30).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/admin/course-schedules": {
       "get": {
         "summary": "List course schedules",

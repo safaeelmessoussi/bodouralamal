@@ -1,14 +1,32 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 
 import {
+  createCourseSchedule,
   deleteCourseSchedule,
   listCourseSchedules,
   readConflicts,
   readScheduleRoster,
+  updateCourseSchedule,
   type CourseSchedule,
+  type Materialization,
   type ScheduleConflict,
   type ScheduleRosterEntry,
 } from '../../adapters/course-schedules.js';
+import {
+  listAdministrativeGroups,
+  type AdministrativeGroup,
+} from '../../adapters/administrative-groups.js';
+import { fetchCalendarBootstrap, type BranchRef, type LevelRef } from '../../adapters/calendar.js';
+import {
+  listAcademicYears,
+  listSubjects,
+  type AcademicYearRef,
+  type SubjectRef,
+} from '../../adapters/reference-data.js';
+import { searchUsers, type UserSummary } from '../../adapters/users.js';
+import { Button } from '../../components/ui/button.js';
+import { TextField } from '../../components/ui/field.js';
+import { ApiError } from '../../lib/api.js';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
 import {
@@ -73,6 +91,8 @@ export function SchedulesPage(): ReactNode {
   const [busy, setBusy] = useState(false);
 
   const [conflicts, setConflicts] = useState<ScheduleConflict[] | null>(null);
+  const [editing, setEditing] = useState<CourseSchedule | 'new' | null>(null);
+  const [written, setWritten] = useState<Materialization | null>(null);
   const [roster, setRoster] = useState<ScheduleRosterEntry[] | null>(null);
   const [deleting, setDeleting] = useState<CourseSchedule | null>(null);
 
@@ -149,6 +169,7 @@ export function SchedulesPage(): ReactNode {
         })();
       },
     },
+    { label: t('common.edit'), onSelect: (r) => setEditing(r) },
     { label: t('admin.schedules.remove'), danger: true, onSelect: (r) => setDeleting(r) },
   ];
 
@@ -174,7 +195,10 @@ export function SchedulesPage(): ReactNode {
   }
 
   return (
-    <AdminLayout title={t('admin.nav.schedules')}>
+    <AdminLayout
+      title={t('admin.nav.schedules')}
+      actions={<Button onClick={() => setEditing('new')}>{t('admin.schedules.create')}</Button>}
+    >
       <p className="lede">{t('admin.schedules.lede')}</p>
       {notice ? <p role="status">{notice}</p> : null}
 
@@ -225,6 +249,20 @@ export function SchedulesPage(): ReactNode {
         )}
       </Dialog>
 
+      <ScheduleDialog
+        open={editing !== null}
+        schedule={editing === 'new' ? null : editing}
+        token={accessToken}
+        onDone={(report) => {
+          setEditing(null);
+          setWritten(report);
+          void load();
+        }}
+        onCancel={() => setEditing(null)}
+      />
+
+      <MaterializationDialog report={written} onClose={() => setWritten(null)} />
+
       <ConfirmDialog
         open={deleting !== null}
         title={t('admin.schedules.deleteTitle')}
@@ -236,5 +274,344 @@ export function SchedulesPage(): ReactNode {
         onCancel={() => setDeleting(null)}
       />
     </AdminLayout>
+  );
+}
+
+const MODES = ['entire_level', 'administrative_group', 'teaching_group'] as const;
+const RECURRENCES = ['weekly', 'multiple_weekdays', 'biweekly_alternating', 'none'] as const;
+const WEEKDAYS = [
+  'monday',
+  'tuesday',
+  'wednesday',
+  'thursday',
+  'friday',
+  'saturday',
+  'sunday',
+] as const;
+
+/**
+ * Create and edit a schedule.
+ *
+ * **The form offers exactly what each verb accepts.** On edit, Subject, mode,
+ * target, branch and academic year are disabled: the server *rejects* them
+ * rather than dropping them, because each would re-point Sessions already
+ * materialized against the old answer. Only the *when* and the *room* remain,
+ * which is precisely what §4.4 promises rewrites future Sessions.
+ *
+ * **The target picker follows the mode**, because §4.4c gives a schedule exactly
+ * one target of the kind the mode names. A single control that changes meaning
+ * is the honest rendering of one field that changes meaning — two coexisting
+ * pickers would let a user fill both and imply a choice the model does not have.
+ *
+ * **`teaching_group` mode is deliberately not offered here.** Choosing one needs
+ * a Level *and* a Subject to reach `/admin/levels/{id}/subjects/{id}/teaching-groups`,
+ * which is the Subject Organisation screen's own job (§14.1). Offering the mode
+ * without a way to pick its target would be a control that cannot be completed.
+ */
+function ScheduleDialog({
+  open,
+  schedule,
+  token,
+  onDone,
+  onCancel,
+}: {
+  open: boolean;
+  schedule: CourseSchedule | null;
+  token: string | null;
+  onDone: (report: Materialization) => void;
+  onCancel: () => void;
+}): ReactNode {
+  const [subjects, setSubjects] = useState<SubjectRef[]>([]);
+  const [years, setYears] = useState<AcademicYearRef[]>([]);
+  const [levels, setLevels] = useState<LevelRef[]>([]);
+  const [branches, setBranches] = useState<BranchRef[]>([]);
+  const [groups, setGroups] = useState<AdministrativeGroup[]>([]);
+  const [teachers, setTeachers] = useState<UserSummary[]>([]);
+
+  const [subjectId, setSubjectId] = useState('');
+  const [mode, setMode] = useState<string>('administrative_group');
+  const [targetId, setTargetId] = useState('');
+  const [branchId, setBranchId] = useState('');
+  const [yearId, setYearId] = useState('');
+  const [start, setStart] = useState('09:00');
+  const [end, setEnd] = useState('10:00');
+  const [recurrence, setRecurrence] = useState('weekly');
+  const [weekdays, setWeekdays] = useState<string[]>(['monday']);
+  const [teacherId, setTeacherId] = useState('');
+  const [notice, setNotice] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    void (async () => {
+      const today = new Date().toISOString().slice(0, 10);
+      const [s, y, g, u] = await Promise.all([
+        listSubjects(token),
+        listAcademicYears(token),
+        listAdministrativeGroups(token, 1),
+        searchUsers(token, { role: 'teacher' }),
+      ]);
+      setSubjects(s);
+      setYears(y);
+      setGroups(g.data);
+      setTeachers(u.data);
+      try {
+        const bootstrap = await fetchCalendarBootstrap({ from: today, to: today });
+        setLevels(bootstrap.levels);
+        setBranches(bootstrap.branches);
+      } catch {
+        // Pickers stay empty; the dialog still functions for the rest.
+      }
+      // Default to the live year rather than asking an administrator which it
+      // is — the single reason `is_current` is on the selector contract.
+      setYearId((current) => current || (y.find((x) => x.is_current)?.id ?? ''));
+    })();
+  }, [open, token]);
+
+  useEffect(() => {
+    if (!schedule) return;
+    setSubjectId(schedule.subject_id);
+    setMode(schedule.teaching_mode);
+    setTargetId(schedule.target_id);
+    setBranchId(schedule.branch_id);
+    setYearId(schedule.academic_year_id);
+    setStart(schedule.start_time);
+    setEnd(schedule.end_time);
+    setRecurrence(schedule.recurrence);
+    setWeekdays(schedule.weekdays);
+  }, [schedule]);
+
+  const fixed = schedule !== null;
+  const targets =
+    mode === 'entire_level'
+      ? levels.map((l) => ({ id: l.id, name: l.name }))
+      : groups.map((g) => ({ id: g.id, name: g.name }));
+
+  const complete =
+    subjectId !== '' && targetId !== '' && branchId !== '' && yearId !== '' && start !== '' && end !== '';
+
+  async function submit(): Promise<void> {
+    setBusy(true);
+    setNotice(null);
+    try {
+      const result = schedule
+        ? await updateCourseSchedule(
+            schedule.id,
+            schedule.version,
+            { start_time: start, end_time: end, recurrence, weekdays },
+            token,
+          )
+        : await createCourseSchedule(
+            {
+              subject_id: subjectId,
+              teaching_mode: mode,
+              target_id: targetId,
+              branch_id: branchId,
+              academic_year_id: yearId,
+              start_time: start,
+              end_time: end,
+              recurrence,
+              weekdays,
+              ...(teacherId ? { staff: [{ user_id: teacherId, position: 'teacher' }] } : {}),
+            },
+            token,
+          );
+      onDone(result.materialization);
+    } catch (error) {
+      // A booking clash is the interesting failure and has its own code: the
+      // room or a person is already committed on a materialized date, which is
+      // a different remedy from any other refusal.
+      if (error instanceof ApiError && error.code === 'SCHEDULE_CONFLICT') {
+        setNotice(t('admin.schedules.clash'));
+      } else if (error instanceof ApiError && error.status === 409) {
+        setNotice(t('common.conflict'));
+      } else {
+        setNotice(t('common.saveFailed'));
+      }
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onClose={onCancel}
+      title={t(schedule ? 'admin.schedules.editTitle' : 'admin.schedules.create')}
+      wide
+    >
+      {notice ? <p role="status">{notice}</p> : null}
+
+      <label>
+        <span>{t('admin.schedules.subject')}</span>
+        <select value={subjectId} disabled={fixed} onChange={(e) => setSubjectId(e.target.value)}>
+          <option value="">{t('common.choose')}</option>
+          {subjects.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.name}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label>
+        <span>{t('admin.schedules.mode')}</span>
+        <select
+          value={mode}
+          disabled={fixed}
+          onChange={(e) => {
+            setMode(e.target.value);
+            // The target belongs to the mode; keeping the old id would submit
+            // an entity of the wrong kind.
+            setTargetId('');
+          }}
+        >
+          {MODES.filter((m) => m !== 'teaching_group' || fixed).map((m) => (
+            <option key={m} value={m}>
+              {t(`admin.schedules.mode_${m}`)}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label>
+        <span>{t('admin.schedules.target')}</span>
+        <select value={targetId} disabled={fixed} onChange={(e) => setTargetId(e.target.value)}>
+          <option value="">{t('common.choose')}</option>
+          {targets.map((x) => (
+            <option key={x.id} value={x.id}>
+              {x.name}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label>
+        <span>{t('admin.schedules.branch')}</span>
+        <select value={branchId} disabled={fixed} onChange={(e) => setBranchId(e.target.value)}>
+          <option value="">{t('common.choose')}</option>
+          {branches.map((b) => (
+            <option key={b.id} value={b.id}>
+              {b.name}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <label>
+        <span>{t('admin.schedules.year')}</span>
+        <select value={yearId} disabled={fixed} onChange={(e) => setYearId(e.target.value)}>
+          <option value="">{t('common.choose')}</option>
+          {years.map((y) => (
+            <option key={y.id} value={y.id}>
+              {y.label}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      {fixed ? <p className="muted">{t('admin.schedules.fixedAfterCreate')}</p> : null}
+
+      {/* Typed as text, not `type="time"`: TD-11 wall-clock values travel as
+          `HH:MM` strings, and a native time input in some locales hands back a
+          12-hour rendering. The server validates the format regardless. */}
+      <TextField label={t('admin.schedules.start')} value={start} onChange={setStart} required />
+      <TextField label={t('admin.schedules.end')} value={end} onChange={setEnd} required />
+
+      <label>
+        <span>{t('admin.schedules.recurrence')}</span>
+        <select value={recurrence} onChange={(e) => setRecurrence(e.target.value)}>
+          {RECURRENCES.map((r) => (
+            <option key={r} value={r}>
+              {t(`admin.schedules.recurrence_${r}`)}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      <fieldset>
+        <legend>{t('admin.schedules.weekdays')}</legend>
+        {WEEKDAYS.map((d) => (
+          <label key={d}>
+            <input
+              type="checkbox"
+              checked={weekdays.includes(d)}
+              onChange={(e) =>
+                setWeekdays((current) =>
+                  e.target.checked ? [...current, d] : current.filter((x) => x !== d),
+                )
+              }
+            />
+            <span>{t(`admin.schedules.day_${d}`)}</span>
+          </label>
+        ))}
+      </fieldset>
+
+      {!fixed ? (
+        <label>
+          <span>{t('admin.schedules.teacher')}</span>
+          <select value={teacherId} onChange={(e) => setTeacherId(e.target.value)}>
+            <option value="">{t('common.choose')}</option>
+            {teachers.map((x) => (
+              <option key={x.id} value={x.id}>
+                {x.name_arabic}
+              </option>
+            ))}
+          </select>
+        </label>
+      ) : null}
+
+      <div className="dialog__actions">
+        <Button variant="secondary" onClick={onCancel}>
+          {t('common.cancel')}
+        </Button>
+        <Button disabled={!complete || busy} onClick={() => void submit()}>
+          {t('common.save')}
+        </Button>
+      </div>
+    </Dialog>
+  );
+}
+
+/**
+ * What the write did to the timetable — shown after every successful save.
+ *
+ * **`protected_sessions` is the reason this dialog exists.** A write that
+ * reported only what it created would tell an administrator the timetable is
+ * consistent when part of it deliberately is not: those occurrences hold work
+ * whose loss would change historical truth, and every applicable reason is
+ * listed because someone deciding whether to override one deserves all of them.
+ */
+function MaterializationDialog({
+  report,
+  onClose,
+}: {
+  report: Materialization | null;
+  onClose: () => void;
+}): ReactNode {
+  return (
+    <Dialog open={report !== null} onClose={onClose} title={t('admin.schedules.writeTitle')}>
+      {report ? (
+        <>
+          <p>
+            {t('admin.schedules.writeSummary')
+              .replace('{created}', String(report.created))
+              .replace('{resynced}', String(report.resynced))}
+          </p>
+          {report.protected_sessions.length > 0 ? (
+            <>
+              <p className="lede">{t('admin.schedules.protectedLede')}</p>
+              <ul>
+                {report.protected_sessions.map((p) => (
+                  <li key={p.id}>
+                    <time dateTime={p.date}>{p.date}</time> — {p.reasons.join('، ')}
+                  </li>
+                ))}
+              </ul>
+            </>
+          ) : null}
+        </>
+      ) : null}
+    </Dialog>
   );
 }
