@@ -12,6 +12,7 @@ import { GroupsPage } from './groups.js';
 import { HijriCalendarPage } from './hijri-calendar.js';
 import { SchedulesPage } from './schedules.js';
 import { SettingsPage } from './settings.js';
+import { SubjectOrganisationPage } from './subject-organisation.js';
 
 /**
  * Back-office routing and the module screens that are not yet implemented.
@@ -43,7 +44,27 @@ export const IMPLEMENTED_ADMIN_PATHS: readonly string[] = [
   '/superadmin/settings',
 ];
 
+/**
+ * `/admin/levels/{levelId}/subjects/{subjectId?}` — §14.1's Subject Organisation
+ * node.
+ *
+ * Matched by pattern rather than by a registry entry, because the path carries
+ * ids: nothing can link to it from a menu, so it is not a *navigation* node. It
+ * is one of the internal views a module owns — the same relationship
+ * `/admin/groups/{id}/roster` has to its module — and it is checked before the
+ * registry so it is not swallowed by the Levels module's `blocked` status,
+ * whose own screen (Level CRUD) has no endpoints and is a different thing.
+ */
+const SUBJECT_ORG = /^\/admin\/levels\/([^/]+)\/subjects(?:\/([^/]+))?\/?$/;
+
 export function AdminRouter(): ReactNode {
+  const subjectOrg = SUBJECT_ORG.exec(window.location.pathname);
+  if (subjectOrg) {
+    return (
+      <SubjectOrganisationPage levelId={subjectOrg[1]!} subjectId={subjectOrg[2] ?? null} />
+    );
+  }
+
   const module = moduleForPath(window.location.pathname);
   if (!module) return <AdminNotFound />;
 

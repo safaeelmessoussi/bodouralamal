@@ -510,7 +510,14 @@
   - Times are plain text, not a native time control — TD-11 wall-clock travels as `HH:MM`
   - Every save opens a materialization report, so `protected_sessions` is seen rather than swallowed
   - `SCHEDULE_CONFLICT` gets its own message: the remedy is to free a named room or person
-- [ ] `/admin/levels/{id}/subjects/{subjectId}` (Teaching Groups), Session page frontend (§14.1)
+- [x] `/admin/levels/{id}/subjects/{subjectId}` — Subject Organisation (Teaching Groups)
+  - Routed by pattern, not a registry entry: the path carries ids, so no menu can link to it — it is an internal view of the Levels module, reached by drilling in from a group
+  - `split: false` is its own state, never rendered as *everyone is placed* — a Subject with no groups is taught to the whole Level, so the question does not apply
+  - The unassigned list leads the page and is unpaginated: BR-22 says a student with no group has **no sessions in that subject**, and a page boundary through an alarm hides half of it
+  - Each refusal names its cause: `ALREADY_IN_SUBJECT_SPLIT`, `NOT_ENROLLED_IN_LEVEL`, `SUBJECT_NOT_IN_LEVEL`, `SCHEDULES_EXIST`
+  - Deletion reports how many students returned to *unassigned* — the count exists only at that moment
+  - R43.3 authority split honoured: group CRUD Super Admin, placement Admin
+- [ ] Session page frontend (§14.1)
 - [ ] Public calendar and public Educational Library — **same filters, same items, ordering only** for signed-in users (§5.2)
 
 **Gates**

@@ -103,6 +103,8 @@ export const ar = {
     created: 'تمت الإضافة.',
     deleted: 'تم الحذف.',
     saveFailed: 'تعذّر الحفظ.',
+    loadFailed: 'تعذّر تحميل البيانات.',
+    loading: 'جارٍ التحميل…',
     deleteFailed: 'تعذّر الحذف.',
     // TD-15: a stale version means someone else edited the row. Reloading is
     // the only correct response — never a silent overwrite.
@@ -398,6 +400,28 @@ export const ar = {
       refused_ENROLMENTS_EXIST: 'لا يمكن الحذف: المجموعة تضم مستفيدات مسجّلات.',
       refused_SCHEDULES_EXIST: 'لا يمكن الحذف: يستهدف هذه المجموعة جدول حصص.',
       refused_LAST_GROUP_IN_LEVEL: 'لا يمكن الحذف: لا يجوز أن يبقى المستوى دون أي مجموعة.',
+    },
+    subjectOrg: {
+      title: 'تنظيم المادة',
+      lede: 'أفواج المادة داخل مستوى {level}. الفوج يُنشأ فقط عند الحاجة لتقسيم المستوى.',
+      create: 'إضافة فوج',
+      editTitle: 'تعديل الفوج',
+      pickSubject: 'اختر مادة لعرض تنظيمها.',
+      // A different claim from "everyone is placed": the question does not apply.
+      notSplit: 'هذه المادة تُدرَّس للمستوى كاملاً — لا يوجد تقسيم، ولا مستفيدات بلا فوج.',
+      unassignedTitle: 'مستفيدات بلا فوج',
+      unassignedLede: 'مسجّلات في المستوى وبلا فوج في هذه المادة — أي أنهن بلا حصص فيها.',
+      allPlaced: 'كل المستفيدات موزّعات على الأفواج.',
+      placeIn: 'إسناد إلى فوج…',
+      groupsTitle: 'الأفواج',
+      members: '{n} مستفيدة',
+      deleteTitle: 'حذف الفوج',
+      deleteBody: 'ستعود مستفيدات الفوج إلى قائمة «بلا فوج».',
+      deleted: 'حُذف الفوج. عادت {n} مستفيدة إلى قائمة «بلا فوج».',
+      refusedSchedules: 'لا يمكن الحذف: يستهدف هذا الفوج جدول حصص.',
+      alreadySplit: 'المستفيدة في فوج آخر من نفس المادة. الإسناد يتم بإخراجها أولاً.',
+      notEnrolled: 'المستفيدة غير مسجّلة في هذا المستوى — التسجيل يسبق الإسناد.',
+      notInLevel: 'هذه المادة غير مسندة إلى هذا المستوى.',
     },
     schedules: {
       lede: 'جداول الحصص المتكرّرة: المادة، نمط التدريس وهدفه، الفرع والقاعة، الأوقات والتكرار.',

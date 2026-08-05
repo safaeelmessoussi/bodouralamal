@@ -132,6 +132,15 @@ export function GroupsPage(): ReactNode {
 
   const actions: RowAction<AdministrativeGroup>[] = [
     { label: t('admin.groups.roster'), onSelect: (r) => setRosterOf(r) },
+    {
+      // §14.1's Subject Organisation node carries two ids, so no menu can link
+      // to it. Drilling in from a group is how it becomes reachable at all: the
+      // group names the Level, and the screen picks the Subject.
+      label: t('admin.subjectOrg.title'),
+      onSelect: (r) => {
+        window.location.href = `/admin/levels/${r.level_id}/subjects`;
+      },
+    },
     ...(canWrite
       ? [
           { label: t('common.edit'), onSelect: (r: AdministrativeGroup) => setEditing(r) },
