@@ -18,11 +18,13 @@ export const ERROR_CODES = {
   DUPLICATE: { status: 409, messageKey: 'errors.duplicate' },
   WEIGHT_SUM_EXCEEDED: { status: 409, messageKey: 'errors.grading.weight_sum' },
   TEMPLATE_NOT_ACTIVE: { status: 409, messageKey: 'errors.grading.template_not_active' },
-  /** RETIRED by Revision 43 (BR-23: room capacity informs and never refuses).
-   *  Retained only while the pre-R43 `roster.service.ts` still raises it during
-   *  the expand phase; the contract migration removes both together. Nothing
-   *  new may raise it. */
-  CAPACITY_FULL: { status: 409, messageKey: 'errors.capacity_full' },
+  /* CAPACITY_FULL was RETIRED by Revision 43 and is deliberately absent (SRS
+   * TD-3.8). It survived the contract phase by accident: it was retained only
+   * "while the pre-R43 roster.service.ts still raises it", that service is gone,
+   * and the code outlived its one caller. BR-23 leaves nothing that could raise
+   * it — room capacity informs and refuses nothing, and an Administrative Group
+   * has no capacity at all — and TD-3.8's own reason for removing it is that an
+   * unraisable code invites someone to find a use for it. */
   /** Revision 43, §4.4 — a room, teacher or assistant is already committed for
    *  an overlapping session. Detected against MATERIALIZED sessions, so the
    *  answer is exact rather than an approximate rule comparison. */
@@ -88,7 +90,6 @@ const FALLBACK_MESSAGES: Record<ErrorCode, string> = {
   DUPLICATE: 'هذا العنصر موجود مسبقاً.',
   WEIGHT_SUM_EXCEEDED: 'مجموع الأوزان يتجاوز الحد المسموح.',
   TEMPLATE_NOT_ACTIVE: 'هذه العملية تتطلب نموذجاً مُفعّلاً.',
-  CAPACITY_FULL: 'المجموعة مكتملة العدد.',
   SCHEDULE_CONFLICT: 'القاعة أو أحد المؤطرين مرتبط بحصة أخرى في نفس الوقت.',
   CONSENT_GATE_LOCKED: 'لا يمكن نشر هذا المحتوى: الموافقة على النشر غير متوفرة.',
   CONSENT_REQUIRED: 'يجب الموافقة على الشروط للمتابعة.',

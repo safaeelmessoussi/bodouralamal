@@ -15,6 +15,7 @@ import * as users from './controllers/user.controller.js';
 import * as branch from './controllers/branch.controller.js';
 import * as administrativeGroups from './controllers/administrative-group.controller.js';
 import * as teachingGroups from './controllers/teaching-group.controller.js';
+import * as courseSchedules from './controllers/course-schedule.controller.js';
 import { createRegistration } from './controllers/registration.controller.js';
 import { healthController } from './controllers/health.controller.js';
 import type { PrismaClient } from './generated/prisma/client.js';
@@ -191,6 +192,19 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
     '/admin/teaching-groups/:id/members/:studentId',
     teachingGroups.removeMember(prisma),
   );
+
+  // Recurring Course Schedules (§4.4, TD-3.12, Revision 43) — the unit of
+  // DELIVERY. A write materializes Sessions and reports what it left alone
+  // (§4.4, R43.6), so `materialization` travels with both write verbs.
+  guarded.get('/admin/course-schedules', courseSchedules.list(prisma));
+  guarded.post('/admin/course-schedules', courseSchedules.create(prisma));
+  guarded.patch('/admin/course-schedules/:id', courseSchedules.update(prisma));
+  guarded.delete('/admin/course-schedules/:id', courseSchedules.remove(prisma));
+  // Conflicts are computed against MATERIALIZED sessions, never against
+  // recurrence rules — comparing rules cannot see that a weekly and a
+  // biweekly-alternating Tuesday 15:00 collide only on alternate weeks.
+  guarded.get('/admin/course-schedules/:id/conflicts', courseSchedules.conflicts(prisma));
+  guarded.get('/admin/course-schedules/:id/roster', courseSchedules.roster(prisma));
   api.use(guarded);
 
   app.use('/api/v1', api);

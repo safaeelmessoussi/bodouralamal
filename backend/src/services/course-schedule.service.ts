@@ -1,7 +1,14 @@
-import type { Prisma, PrismaClient, TeachingMode } from '../generated/prisma/client.js';
+import type {
+  Prisma,
+  PrismaClient,
+  RecurringCourseSchedule,
+  TeachingMode,
+} from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
+import { page, pageWindow, type Page, type PageParams } from '../lib/pagination.js';
 import { expandSchedule, timesOverlap } from '../lib/recurrence.js';
 import * as scope from '../policies/branch-scope.js';
+import { resolveAudience } from '../policies/roster-resolution.js';
 import * as audit from '../repositories/audit.repository.js';
 import { enqueue, JOB_QUEUES } from '../repositories/jobs.repository.js';
 import { updateWithVersion } from '../repositories/optimistic-lock.js';
@@ -38,7 +45,9 @@ import {
  * `FOR UPDATE` before the check (TD-15.2): two administrators booking one room
  * at one instant must not both succeed.
  *
- * *Not built here:* the `/admin/course-schedules` endpoints. Service layer only.
+ * The `/admin/course-schedules` endpoints were mounted in the TD-3.12 HTTP
+ * slice; `listCourseSchedules` and `resolveScheduleRoster` at the foot of this
+ * file were written then, because nothing had needed them before.
  */
 
 const MANAGING_ROLE = 'admin';
@@ -573,4 +582,88 @@ export async function previewConflicts(
       id,
     ),
   );
+}
+
+/**
+ * The schedules an administrator may see, paginated (TD-10).
+ *
+ * **Added in the TD-3.12 HTTP slice, not before.** The contract-phase note at
+ * the top of this file said the endpoints were unbuilt; it did not say that two
+ * of the six had no service behind them either. Listing and roster resolution
+ * were the two, and `docs/reference/api-endpoints.md` claimed otherwise.
+ *
+ * Scoped exactly as every other operational read: a branch Admin sees their own
+ * branches, and an all-branches (`NULL`) scope means *every* branch, never
+ * *none* (§7, Revision 24).
+ */
+export async function listCourseSchedules(
+  prisma: PrismaClient,
+  actor: Actor,
+  filters: {
+    branchId?: string;
+    subjectId?: string;
+    academicYearId?: string;
+  } & PageParams,
+): Promise<Page<RecurringCourseSchedule & { staff: { userId: string; position: string }[] }>> {
+  assertCanManage(actor);
+
+  const branches = scope.branchesForRole(actor.roleScopes, MANAGING_ROLE);
+  const where: Prisma.RecurringCourseScheduleWhereInput = {
+    deletedAt: null,
+    ...(filters.branchId ? { branchId: filters.branchId } : {}),
+    ...(filters.subjectId ? { subjectId: filters.subjectId } : {}),
+    ...(filters.academicYearId ? { academicYearId: filters.academicYearId } : {}),
+    ...(branches === null ? {} : { branchId: { in: branches } }),
+  };
+
+  const window = pageWindow(filters);
+  const [rows, total] = await Promise.all([
+    prisma.recurringCourseSchedule.findMany({
+      where,
+      skip: window.skip,
+      take: window.take,
+      // A timetable reads by day then by time; `startTime` is a wall-clock
+      // column (TD-11), so this is a clock ordering and not an instant one.
+      orderBy: [{ startTime: 'asc' }, { endTime: 'asc' }],
+      include: { staff: { where: { deletedAt: null }, select: { userId: true, position: true } } },
+    }),
+    prisma.recurringCourseSchedule.count({ where }),
+  ]);
+  return page(rows, window, total);
+}
+
+/**
+ * **The resolved audience — never a snapshot** (TD-3.12, §4.4c).
+ *
+ * Computed live from the schedule's mode and target on every call. There is no
+ * stored roster to drift: a student enrolled, moved or un-enrolled a moment ago
+ * is in or out of this answer immediately, which is the property
+ * `roster-resolution.ts` exists to preserve and the reason it returns a `where`
+ * fragment rather than a list of ids.
+ */
+export async function resolveScheduleRoster(
+  prisma: PrismaClient,
+  actor: Actor,
+  id: string,
+): Promise<{ id: string; nameArabic: string | null }[]> {
+  assertCanManage(actor);
+
+  const schedule = await prisma.recurringCourseSchedule.findFirst({
+    where: { id, deletedAt: null },
+    select: {
+      branchId: true,
+      teachingMode: true,
+      levelId: true,
+      administrativeGroupId: true,
+      teachingGroupId: true,
+    },
+  });
+  if (!schedule) throw new AppError('NOT_FOUND', 'no such schedule');
+  // Out of scope answers 404, never 403 (§20 rule 17) — a 403 confirms the
+  // schedule exists somewhere the caller may not look.
+  scope.assertCanActOnBranch(actor.roleScopes, MANAGING_ROLE, schedule.branchId, 'no such schedule');
+
+  return resolveAudience(prisma, schedule, { id: true, nameArabic: true }) as Promise<
+    { id: string; nameArabic: string | null }[]
+  >;
 }

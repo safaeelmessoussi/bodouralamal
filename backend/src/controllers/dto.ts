@@ -350,6 +350,230 @@ export function teachingGroupDeletionDto(row: {
   return { released_students: row.releasedStudents };
 }
 
+/* ── Recurring Course Schedule (§4.4, TD-3.12, Revision 43) ──────────────── */
+
+/**
+ * A `TIME(0)` column rendered as a TD-11 **wall-clock time**.
+ *
+ * `HH:MM`, never an instant. The column has no date and no zone: a class starts
+ * at 15:00 at its branch, and an ISO instant here would invite a client to shift
+ * it, which is the precise bug TD-11 separates the two kinds of value to
+ * prevent. Prisma hands back a `Date` on the UTC epoch day, so the UTC clock
+ * fields are the stored ones.
+ */
+function timeOnly(value: Date): string {
+  return value.toISOString().slice(11, 16);
+}
+
+export interface CourseScheduleDto {
+  id: string;
+  subject_id: string;
+  /**
+   * **One mode, one target** (§4.4c). The three nullable columns behind this are
+   * deliberately not exposed as three fields: a response carrying two of them
+   * would have no correct reading, and the pair below cannot express that state
+   * at all.
+   */
+  teaching_mode: string;
+  target_id: string;
+  branch_id: string;
+  room_id: string | null;
+  /** TD-11 wall-clock, `HH:MM`. */
+  start_time: string;
+  end_time: string;
+  recurrence: string;
+  weekdays: string[];
+  day_of_month: number | null;
+  month_of_year: number | null;
+  /** TD-11 calendar date, `YYYY-MM-DD`. */
+  anchor_date: string | null;
+  academic_year_id: string;
+  staff: { user_id: string; position: string }[];
+  /** TD-15: the client sends this back on edit; a stale one is a `409`. */
+  version: number;
+}
+
+/**
+ * The mode's target, collapsed from the three columns the schema keeps.
+ *
+ * The database CHECK guarantees exactly one is set for the mode, so this reads
+ * the one the mode names. A `null` would mean the constraint had been bypassed —
+ * `roster-resolution.ts` treats the same state as a corrupted schema rather than
+ * bad input, and it is not this function's job to invent a different answer.
+ */
+function targetOf(row: {
+  teachingMode: string;
+  levelId: string | null;
+  administrativeGroupId: string | null;
+  teachingGroupId: string | null;
+}): string {
+  switch (row.teachingMode) {
+    case 'entire_level':
+      return row.levelId ?? '';
+    case 'administrative_group':
+      return row.administrativeGroupId ?? '';
+    default:
+      return row.teachingGroupId ?? '';
+  }
+}
+
+export function courseScheduleDto(row: {
+  id: string;
+  subjectId: string;
+  teachingMode: string;
+  levelId: string | null;
+  administrativeGroupId: string | null;
+  teachingGroupId: string | null;
+  branchId: string;
+  roomId: string | null;
+  startTime: Date;
+  endTime: Date;
+  recurrence: string;
+  weekdays: string[];
+  dayOfMonth: number | null;
+  monthOfYear: number | null;
+  anchorDate: Date | null;
+  academicYearId: string;
+  staff: { userId: string; position: string }[];
+  version: number;
+}): CourseScheduleDto {
+  return {
+    id: row.id,
+    subject_id: row.subjectId,
+    teaching_mode: row.teachingMode,
+    target_id: targetOf(row),
+    branch_id: row.branchId,
+    room_id: row.roomId,
+    start_time: timeOnly(row.startTime),
+    end_time: timeOnly(row.endTime),
+    recurrence: row.recurrence,
+    weekdays: row.weekdays,
+    day_of_month: row.dayOfMonth,
+    month_of_year: row.monthOfYear,
+    anchor_date: dateOnly(row.anchorDate),
+    academic_year_id: row.academicYearId,
+    staff: row.staff.map((s) => ({ user_id: s.userId, position: s.position })),
+    version: row.version,
+  };
+}
+
+/**
+ * What a write did to the timetable (§4.4, Revision 43.4/43.6).
+ *
+ * **`protected_sessions` is the load-bearing field.** A session holding data
+ * whose loss would change historical truth is left alone, and this is where the
+ * administrator learns *which* and *why* — with every applicable reason, since
+ * someone deciding whether to override one deserves all of them. A write that
+ * reported only `created` would claim a timetable is now consistent when part of
+ * it deliberately is not.
+ */
+export interface MaterializationDto {
+  created: number;
+  existing: number;
+  resynced: number;
+  protected_sessions: { id: string; date: string; reasons: string[] }[];
+}
+
+export function materializationDto(row: {
+  created: number;
+  existing: number;
+  resynced: number;
+  protectedSessions: { id: string; date: Date; reasons: string[] }[];
+}): MaterializationDto {
+  return {
+    created: row.created,
+    existing: row.existing,
+    resynced: row.resynced,
+    protected_sessions: row.protectedSessions.map((p) => ({
+      id: p.id,
+      // A session's date is a TD-11 calendar date, not an instant.
+      date: p.date.toISOString().slice(0, 10),
+      reasons: p.reasons,
+    })),
+  };
+}
+
+/**
+ * What a write returns: the schedule as **stored**, beside what it did to the
+ * timetable.
+ *
+ * **Nested rather than flattened**, for two reasons. The schedule keeps exactly
+ * the shape it has everywhere else, so one renderer serves a list row and a
+ * write response — flattening would make the write a near-copy that drifts. And
+ * it needs no spread: a spread of a DTO is safe, but `check-contract-dto.sh`
+ * cannot tell it from a spread of a row, and a guard that has to be argued with
+ * is one somebody eventually silences.
+ */
+export interface CourseScheduleWriteDto {
+  schedule: CourseScheduleDto;
+  materialization: MaterializationDto;
+}
+
+export function courseScheduleWriteDto(
+  row: Parameters<typeof courseScheduleDto>[0],
+  materialized: Parameters<typeof materializationDto>[0],
+): CourseScheduleWriteDto {
+  return { schedule: courseScheduleDto(row), materialization: materializationDto(materialized) };
+}
+
+/** What deleting a schedule removed, and what it deliberately kept (§4.4). */
+export interface ScheduleDeletionDto {
+  future_removed: number;
+  /**
+   * Sessions holding data whose loss would change historical truth. **They
+   * survive the schedule that created them**, so an administrator expecting a
+   * clear timetable needs the count — and it is unavailable afterwards.
+   */
+  retained: number;
+}
+
+export function scheduleDeletionDto(row: {
+  futureRemoved: number;
+  retained: number;
+}): ScheduleDeletionDto {
+  return { future_removed: row.futureRemoved, retained: row.retained };
+}
+
+/** One overlap an administrator has to resolve (TD-4.6c). */
+export interface ScheduleConflictDto {
+  kind: string;
+  /** TD-11 calendar date. */
+  date: string;
+  session_id: string;
+  schedule_id: string;
+  /** The person or room both classes want. */
+  resource_id: string;
+}
+
+export function scheduleConflictDto(row: {
+  kind: string;
+  date: string;
+  sessionId: string;
+  scheduleId: string;
+  resourceId: string;
+}): ScheduleConflictDto {
+  return {
+    kind: row.kind,
+    date: row.date,
+    session_id: row.sessionId,
+    schedule_id: row.scheduleId,
+    resource_id: row.resourceId,
+  };
+}
+
+/** A student in a schedule's **resolved** audience — computed live, never stored. */
+export interface ScheduleRosterEntryDto {
+  student_id: string;
+  name: string | null;
+}
+
+export function scheduleRosterEntryDto(row: {
+  id: string;
+  nameArabic: string | null;
+}): ScheduleRosterEntryDto {
+  return { student_id: row.id, name: row.nameArabic };
+}
+
 /* ── Approval queue (§5.6, §14.2) ────────────────────────────────────────── */
 
 export interface ApprovalDto {

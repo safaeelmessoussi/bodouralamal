@@ -86,7 +86,8 @@ audit log.
 | `STATE_CONFLICT` | A transition the state machine does not allow; **onboarding-token replay** | Usually "already handled" — refresh and re-render |
 | `VERSION_CONFLICT` | **Optimistic-lock mismatch** — a stale version on a staff-edited entity | *"This record was changed by someone else."* Reload, let the user re-apply |
 | `DUPLICATE` | Unique-constraint race loser | Treat as already-created |
-| `CAPACITY_FULL` | Group roster at capacity — **one code, not two** for "group full" | Show remaining capacity |
+| `SCHEDULE_CONFLICT` | **A room, teacher or assistant is already committed** for an overlapping session (§4.4). Detected against **materialized** sessions, so the answer is exact rather than an approximate rule comparison | Name the clashing session and offer to move one — the `details` carry the resource and the date |
+| ~~`CAPACITY_FULL`~~ | **Retired by Revision 43.** BR-23: room capacity informs and refuses nothing, and an Administrative Group has no capacity at all. **Nothing can raise it**, and TD-3.8 removed it because an unraisable code invites someone to find a use for it | — |
 | `SINGLE_SUBMISSION_FINAL` | Resume attempted on a single-submission exam | Explain the policy |
 | `UPLOAD_INCOMPLETE` | Completion called on a missing or partial object | Offer retry from the start |
 | `WEIGHT_SUM_EXCEEDED` | Template items would exceed 10,000 bp | *(post-MVP)* |

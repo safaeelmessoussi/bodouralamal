@@ -26,7 +26,6 @@ describe('TD-3.8 error envelope', () => {
       DUPLICATE: 409,
       WEIGHT_SUM_EXCEEDED: 409,
       TEMPLATE_NOT_ACTIVE: 409,
-      CAPACITY_FULL: 409,
       SCHEDULE_CONFLICT: 409,
       CONSENT_GATE_LOCKED: 403,
       CONSENT_REQUIRED: 400,
@@ -81,7 +80,7 @@ describe('TD-3.8 error envelope', () => {
   });
 
   it('passes an AppError through unchanged', () => {
-    const original = new AppError('CAPACITY_FULL', 'group full', { max: 12 });
+    const original = new AppError('SCHEDULE_CONFLICT', 'room busy', { max: 12 });
     const normalized = normalize(original);
     expect(normalized).toBe(original);
     expect(toEnvelope(normalized, REQ).error.details).toEqual({ max: 12 });

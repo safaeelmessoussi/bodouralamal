@@ -2724,6 +2724,348 @@
         }
       }
     },
+    "/admin/course-schedules": {
+      "get": {
+        "summary": "List course schedules",
+        "description": "TD-3.12, §4.4 — the **unit of delivery**. Admin within branch scope, or Super Admin, asserted in the service (TD-2). `?branch_id=`, `?subject_id=` and `?academic_year_id=` narrow **within** that scope and can never reach outside it; an all-branches (`NULL`) scope means *every* branch, never *none* (§7, R24). **Paginated (TD-10)**, ordered by start then end time — a timetable reads by clock, and `start_time` is a **wall-clock** `TIME(0)` column (TD-11), not an instant. **The DTO carries `teaching_mode` + `target_id`, never the three nullable target columns** (§4.4c): a response holding two of them would have no correct reading, and one field cannot express that state at all. Times render as `HH:MM` and `anchor_date` as `YYYY-MM-DD` — an ISO instant for either would invite a client to shift a class that starts at 15:00 at its branch, which is the exact bug TD-11 separates the two kinds of value to prevent.",
+        "responses": {
+          "200": {
+            "description": "Schedule page in the TD-10 envelope."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a malformed filter.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN for a caller holding neither admin nor super_admin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a course schedule",
+        "description": "TD-3.12, §4.4, TD-4.6c. Body: `{ subject_id, teaching_mode, target_id, branch_id, room_id?, start_time, end_time, recurrence, weekdays?, day_of_month?, month_of_year?, anchor_date?, academic_year_id, staff? }` — **strictly** those keys. **Exactly one target, named by the mode** (§4.4c): the wire shape is `teaching_mode` + `target_id` rather than three nullable columns, because a body carrying two of them has no correct reading and the database CHECK (`course_schedule_mode_target_check`) would report it as a constraint violation rather than as the ambiguity it is. **`start_time`/`end_time` are wall-clock `HH:MM`** and an ISO instant is **refused** (TD-11). **The schedule's branch must match its target's branch wherever the target is branch-bound** (§4.4) — an Administrative Group elsewhere is `400 BRANCH_MISMATCH`, since a room at one branch cannot serve students at another; a **Teaching Group has no branch** (§4.4c, R43.3), so there is nothing to match and the schedule's own branch is the statement of where it meets. **Conflict detection runs against MATERIALIZED Sessions, never against recurrence rules** (§4.4): comparing rules cannot see that a weekly and a biweekly-alternating Tuesday 15:00 collide only on alternate weeks. **Room, teacher and assistant are each checked** — a person cannot be in two rooms at once any more than a room can hold two classes — and the governing rows are taken `FOR UPDATE` first (TD-15.2), so two administrators booking one room at one instant cannot both succeed. **Room capacity is NOT consulted** (BR-23): it informs planning and refuses nothing. The response is `{ schedule, materialization }` — **nested, not flattened**, so the schedule keeps exactly the shape it has in a list row and one renderer serves both. `materialization` carries `created`, `existing`, `resynced` and **`protected_sessions`**, each with every applicable reason (§4.4, R43.6); a write that reported only `created` would claim the timetable is consistent when part of it deliberately is not.",
+        "responses": {
+          "201": {
+            "description": "Created, with the materialization report."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — an unknown key, an ISO instant where a wall-clock time is required, or BRANCH_MISMATCH / ROOM_BRANCH_MISMATCH.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an unknown subject, target, room, or a branch outside the caller's scope (§20 rule 17).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT — a room, teacher or assistant already booked on a materialized date.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/course-schedules/{id}": {
+      "patch": {
+        "summary": "Edit a course schedule",
+        "description": "TD-3.12, §4.4, TD-15. **Only the *when* and the *where in the building* are editable** — room, times and the recurrence rule, which is exactly what §4.4 promises rewrites future Sessions. **`subject_id`, `teaching_mode`, `target_id`, `branch_id` and `academic_year_id` are rejected, not ignored:** each changes *what is taught, to whom, or where* while the Sessions already materialized against the old answer remain, silently re-pointing a term of history. They are re-creations, exactly as moving an Administrative Group between Levels is. **TD-15 optimistic locking:** a stale `version` is `409 VERSION_CONFLICT`. The response is `{ schedule, materialization }`, whose `resynced` count is future, un-overridden Sessions brought back into line (R43.4) — without it an edit changed nothing about occurrences that already existed, and §4.4's promise was not true — and whose `protected_sessions` are those deliberately left alone because they hold data whose loss would change historical truth (R43.6).",
+        "responses": {
+          "200": {
+            "description": "Updated, with the materialization report."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a missing version, an unknown key, or an attempt to change the subject, target, branch or academic year.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an unknown schedule or one outside the caller's branch scope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). VERSION_CONFLICT, or STATE_CONFLICT for a booking clash on a materialized date.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete a course schedule",
+        "description": "TD-3.12, §4.4, TD-5. **Answers `200 { future_removed, retained }`, deliberately not `204`.** `retained` counts Sessions that hold data whose loss would change historical truth and therefore **survive the schedule that created them** (§4.4, R43.6) — an administrator expecting the timetable to be clear needs to know the ones that are not, and the number is unavailable afterwards. The protection predicate is the **same one materialization uses**, not a re-implementation: R43.6 made it semantic — *a Session is protected whenever it holds data created by a user or an administrator whose loss or silent modification would change historical truth* — precisely so a new module cannot forget to join a hardcoded list and silently lose the safeguard.",
+        "responses": {
+          "200": {
+            "description": "Deleted; `retained` is how many protected Sessions survive."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an unknown schedule or one outside the caller's branch scope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/course-schedules/{id}/conflicts": {
+      "get": {
+        "summary": "Preview a schedule's conflicts",
+        "description": "TD-3.12, §4.4, TD-4.6c. **Computed against MATERIALIZED Sessions, never against recurrence rules** — that is the whole reason materialization is eager, since comparing rules cannot see that a weekly and a biweekly-alternating Tuesday 15:00 collide only on alternate weeks. Each conflict names its `kind` (`room`, `teacher` or `assistant`), the calendar `date`, the `session_id` and `schedule_id` it collides with, and the `resource_id` both classes want. **All three kinds are checked:** a person cannot be in two rooms at once any more than a room can hold two classes. Read-only — this endpoint reports, and never resolves.",
+        "responses": {
+          "200": {
+            "description": "The conflict list, empty when there are none."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an unknown schedule or one outside the caller's branch scope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/course-schedules/{id}/roster": {
+      "get": {
+        "summary": "Resolve a schedule's audience",
+        "description": "TD-3.12, §4.4c — **the resolved audience, never a snapshot.** Computed live from the schedule's mode and target on every call: a student enrolled, moved or un-enrolled a moment ago is in or out of this answer immediately. There is no stored roster that could drift, which is the property `roster-resolution.ts` exists to preserve and the reason it composes a `where` fragment rather than materialising ids — between resolving a set and using it, the set can change. Every arm requires `deleted_at IS NULL` on **both** the membership row and the group it points at, so an un-enrolled student, a soft-deleted group and a removed teaching-group seat each drop out on the very next request. Ordered by the natively `ar-x-icu` collated name (§20 rule 13).",
+        "responses": {
+          "200": {
+            "description": "The resolved student list."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an unknown schedule or one outside the caller's branch scope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/healthz": {
       "servers": [
         {

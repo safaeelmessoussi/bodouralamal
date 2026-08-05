@@ -243,6 +243,29 @@ guard was proven by re-declaring the burger after its media query.
 
 A guard that has never failed is a guard nobody has tested.
 
+## Known flake — `auth-refresh.http.integration.test.ts`
+
+**Status: open, cause unidentified.** Recorded on 2026-08-05 during the TD-3.12 Course
+Schedules slice, which did not cause it and does not touch the code involved.
+
+**The evidence, because a flake claimed without it is just an excuse:**
+
+| | |
+|---|---|
+| Run in isolation | Green, repeatedly — 8/8 |
+| Run inside the full integration sweep | Fails intermittently: across four consecutive sweeps, **1, 0, 0 and 3** failures |
+| Which tests | **Different ones each time**, always inside *the CSRF posture (TD-12)* |
+
+Non-determinism plus isolation-passes points at **cross-file interference over the shared
+container and database**, not at the CSRF logic. Two candidates worth checking first: the
+`beforeEach` that re-issues a session while another file's request may still be in flight, and
+`purgeExpired` in `refresh-token.repository.ts`, which is the one delete in the codebase that
+is **not** scoped to a test tag.
+
+**Do not "fix" this by retrying the test.** A retry would hide the interference, and the same
+interference would then be free to affect a suite whose failure is not so obviously spurious.
+The task is tracked in [`TASKS.md`](../TASKS.md).
+
 ## What is not tested, and why
 
 - **No load-testing infrastructure runs continuously.** Latency targets are verified against

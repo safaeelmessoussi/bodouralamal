@@ -2,7 +2,7 @@
 
 # API endpoints
 
-**53 operations across 39 paths**, all under `/api/v1` except the health check.
+**59 operations across 43 paths**, all under `/api/v1` except the health check.
 The count comes from the generator, which reconciles against the live router — if this line
 disagrees with `openapi.json`, this line is the one that is wrong.
 
@@ -129,12 +129,49 @@ Quran split Targa's students depend on while the unassigned list showed them onl
 students: authority over everyone, visibility of some. It follows that a branch Admin's `unassigned`
 list is deliberately **partial** — they may place only the students they are responsible for.
 
+### Course Schedules — the unit of delivery
+
+A schedule carries the Subject, **one teaching mode with exactly one target**, the branch, the
+room, its staff, the times and a recurrence rule. Everything the retired `Group` used to hold
+about delivery lives here.
+
+| | Path | Notes |
+|---|---|---|
+| `GET` `POST` | `/admin/course-schedules` | `?branch_id=` `?subject_id=` `?academic_year_id=` narrow within scope. A write returns `{ schedule, materialization }` |
+| `PATCH` `DELETE` | `/admin/course-schedules/{id}` | Only the *when* and the *room* are editable. `DELETE` answers `200 { future_removed, retained }` |
+| `GET` | `/admin/course-schedules/{id}/conflicts` | Computed against **materialized Sessions**, never against recurrence rules |
+| `GET` | `/admin/course-schedules/{id}/roster` | The **resolved** audience — recomputed per request, never a stored snapshot |
+
+**`teaching_mode` + `target_id`, never three nullable columns.** A body or a response carrying
+two targets has no correct reading, and the database CHECK that refuses it would report an
+ambiguity as a constraint violation. One field cannot be ambiguous.
+
+**Times are TD-11 wall-clock `HH:MM`, and an ISO instant is refused.** A class starts at 15:00
+at its branch; an instant would let a client shift it.
+
+**Conflict detection is why materialization is eager.** Comparing recurrence rules cannot see
+that a weekly and a biweekly-alternating Tuesday 15:00 collide only on alternate weeks — so
+room, teacher and assistant are each checked against the Sessions that actually exist, with the
+governing rows taken `FOR UPDATE` first (TD-15.2) so two administrators booking one room at one
+instant cannot both succeed. A clash is [`SCHEDULE_CONFLICT`](error-codes.md), not the generic
+`STATE_CONFLICT`: the remedy is to free a named room or person. **Room capacity is never
+consulted** (BR-23).
+
+**Writes report what they did not do.** `materialization.protected_sessions` lists Sessions
+left alone because they hold data whose loss would change historical truth, with every
+applicable reason; `retained` on delete counts the ones that outlive the schedule. A response
+that reported only what changed would claim the timetable is consistent when part of it
+deliberately is not.
+
+**Subject, target, branch and academic year are not editable.** Each would change what is
+taught, to whom, or where, while the Sessions already materialized against the old answer
+remain — silently re-pointing a term of history. Those are re-creations, not edits.
+
 ### Not yet mounted
 
 Every service below is **built and tested**; the contract phase removed the old routes and these
 replace them one resource at a time.
 
-`/admin/course-schedules` (+ `/conflicts`, `/roster`) ·
 `/sessions/{id}` (+ `/cancel`, `/restore`, `/content`) · `GET /library`
 
 ## Events
