@@ -3,7 +3,11 @@ import { z } from 'zod';
 
 import type { PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
-import { readCalendar, type CalendarActor } from '../services/calendar.service.js';
+import {
+  prefilledFilters,
+  readCalendar,
+  type CalendarActor,
+} from '../services/calendar.service.js';
 
 /**
  * `GET /calendar` (TD-3.4) — the one **public** read in the system.
@@ -23,7 +27,13 @@ const querySchema = z.object({
   branch_id: z.uuid().optional(),
   level_id: z.uuid().optional(),
   category_id: z.uuid().optional(),
-  group_id: z.uuid().optional(),
+  // TD-3.4 spells this `administrative_group_id`. It shipped as `group_id` —
+  // a paraphrase of a key the specification states, which is the same class of
+  // defect as CHANGES.log M3b-14b and is corrected here.
+  administrative_group_id: z.uuid().optional(),
+  academic_year_id: z.uuid().optional(),
+  subject_id: z.uuid().optional(),
+  teacher_id: z.uuid().optional(),
 });
 
 /**
@@ -49,16 +59,38 @@ export function read(prisma: PrismaClient) {
     }
     const q = parsed.data;
 
-    const occurrences = await readCalendar(prisma, calendarActor(req), {
-      from: q.from,
-      to: q.to,
-      ...(q.branch_id ? { branchId: q.branch_id } : {}),
-      ...(q.level_id ? { levelId: q.level_id } : {}),
-      ...(q.category_id ? { categoryId: q.category_id } : {}),
-      ...(q.group_id ? { groupId: q.group_id } : {}),
-    });
+    const actor = calendarActor(req);
+    const [occurrences, prefilled] = await Promise.all([
+      readCalendar(prisma, actor, {
+        from: q.from,
+        to: q.to,
+        ...(q.branch_id ? { branchId: q.branch_id } : {}),
+        ...(q.level_id ? { levelId: q.level_id } : {}),
+        ...(q.category_id ? { categoryId: q.category_id } : {}),
+        ...(q.administrative_group_id
+          ? { administrativeGroupId: q.administrative_group_id }
+          : {}),
+        ...(q.academic_year_id ? { academicYearId: q.academic_year_id } : {}),
+        ...(q.subject_id ? { subjectId: q.subject_id } : {}),
+        ...(q.teacher_id ? { teacherId: q.teacher_id } : {}),
+      }),
+      prefilledFilters(prisma, actor),
+    ]);
 
     res.json({
+      // Absent for an anonymous caller: *there is nothing to prefill* and
+      // *nothing was unambiguous* are different answers, and an object of nulls
+      // would conflate them (TD-3.4, R43).
+      prefilled_filters: prefilled
+        ? {
+            academic_year_id: prefilled.academicYearId,
+            category_id: prefilled.categoryId,
+            level_id: prefilled.levelId,
+            branch_id: prefilled.branchId,
+            subject_id: prefilled.subjectId,
+            teacher_id: prefilled.teacherId,
+          }
+        : null,
       data: occurrences.map((o) => ({
         kind: o.kind,
         id: o.id,
@@ -76,6 +108,11 @@ export function read(prisma: PrismaClient) {
         category_name: o.categoryName,
         level_id: o.levelId,
         level_name: o.levelName,
+        subject_id: o.subjectId,
+        subject_name: o.subjectName,
+        teaching_mode: o.teachingMode,
+        audience_label: o.audienceLabel,
+        status: o.status,
         instructors: o.instructors.map((instructor) => ({
           id: instructor.id,
           display_name: instructor.displayName,

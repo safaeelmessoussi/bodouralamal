@@ -45,6 +45,38 @@ Three anonymous endpoints, each a deliberate decision about what may be public.
 `GET /branches` is deliberately **not** the admin route with permissions relaxed — an
 endpoint's audience is part of its contract.
 
+### The calendar's filters, and `prefilled_filters`
+
+The full TD-3.4 set: `from`, `to`, `academic_year_id`, `category_id`, `level_id`,
+`subject_id`, `branch_id`, `administrative_group_id`, `teacher_id`. **Identical for anonymous
+and authenticated callers** (§5.2) — signing in changes where the dropdowns *start*, never
+what they offer and never what the results are.
+
+**A filter a kind cannot satisfy excludes that kind rather than being ignored.** An Event has
+no subject, no academic year and no instructors, so `subject_id`, `academic_year_id` or
+`teacher_id` narrows the grid to Sessions. Ignoring them would return Events that do not match
+what was asked, which is the more misleading answer. **`branch_id`, `level_id`, `category_id`
+and `administrative_group_id` are deliberately not in that list** — an Event carries each
+through its explicit scope joins, so those filter both kinds.
+
+**`teacher_id` matches the session's own staffing snapshot**, not the schedule's (R43.4): a
+teacher who covered one occurrence finds it, and one later removed from the schedule does not
+lose the occurrences they actually took.
+
+**Sessions carry `subject_id`, `subject_name`, `teaching_mode`, `audience_label` and
+`status`.** `audience_label` is who the class is *for* — the Administrative Group's name, the
+Teaching Group's, or the Level's, by mode. It previously travelled inside `description`, which
+meant a Session's description field held something that was not a description. A **cancelled**
+session still appears: the calendar's job is to say a class is not happening, not to hide that
+it was scheduled.
+
+**`prefilled_filters` is `null` for an anonymous or Pending caller** — *there is nothing to
+prefill* and *nothing was unambiguous* are different answers, and an object of nulls would
+conflate them. **A value is prefilled only when it is unambiguous:** a student enrolled in
+three Levels has no single "own Level", and picking one would open their calendar on a third of
+their own timetable while looking like it showed all of it. **Plural yields `null`, never
+*first*.**
+
 ## Registration and approvals
 
 | | Path | Audience | Notes |

@@ -457,7 +457,14 @@
   - ✓ BR-2 enforced by explicit exclusion, not by trusting the re-evaluation engine to have moved `visibility`
   - ✓ DTO omits `storage_key`/`storage_bucket`/`original_filename`/`consent_forced_private`
   - ✓ 16 HTTP tests; `pending-denial` grew to 62 and gained a positive exemption assertion
-- [ ] `/calendar` filter set + `prefilled_filters`; `/calendar/sessions/{id}`
+- [x] `/calendar` **filter set + `prefilled_filters`** (TD-3.4, R43)
+  - ✓ Full set accepted: `academic_year_id`, `subject_id`, `teacher_id` added; **`group_id` corrected to `administrative_group_id`** — the name TD-3.4 spells out, and the schema refused the documented one (same defect class as M3b-14b)
+  - ✓ **A filter no Event can satisfy narrows the grid to Sessions** rather than being ignored — ignoring it would return Events that do not match the request
+  - ✓ `teacher_id` matches the **session's own staffing snapshot**, not the schedule's (R43.4)
+  - ✓ Sessions gained `subject_id`, `subject_name`, `teaching_mode`, `audience_label`, `status`; `audience_label` stops impersonating `description`
+  - ✓ `prefilled_filters` is `null` for anonymous **and** Pending; a value is prefilled **only when unambiguous** — plural yields `null`, never *first*
+  - ✓ Proven not to change the result set: a signed-in member with no enrolments sees exactly what an anonymous visitor sees
+- [ ] `/calendar/sessions/{id}` — the §5.2 Session page (occurrence + notes + recordings + `linked_content[]`)
 - [ ] `/admin/groups` (+ roster), `/admin/schedules`, `/admin/levels/{id}/subjects/{subjectId}`, `/teacher/schedules`, Session page (§14.1)
 - [ ] Public calendar and public Educational Library — **same filters, same items, ordering only** for signed-in users (§5.2)
 

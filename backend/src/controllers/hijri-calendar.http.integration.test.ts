@@ -37,6 +37,7 @@ interface Body {
   status?: string;
   version?: number;
   published?: number;
+  coverage?: Record<string, unknown>;
 }
 
 const call = (method: string, path: string, token?: string, body?: unknown) =>

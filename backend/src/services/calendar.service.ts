@@ -46,7 +46,12 @@ export interface CalendarQuery {
   branchId?: string;
   levelId?: string;
   categoryId?: string;
-  groupId?: string;
+  /** TD-3.4 names this `administrative_group_id`; `group_id` was a paraphrase
+   *  of a key the specification spells out (cf. CHANGES.log M3b-14b). */
+  administrativeGroupId?: string;
+  academicYearId?: string;
+  subjectId?: string;
+  teacherId?: string;
 }
 
 export interface Occurrence {
@@ -74,6 +79,23 @@ export interface Occurrence {
   /** Revision 36.1: `displayName` is ALREADY RESOLVED — clients render it
    *  verbatim and implement no fallback. */
   instructors: { id: string; displayName: string }[];
+  /* Sessions only (TD-3.4, R43). An Event has no subject, no teaching mode and
+     no lifecycle, so these stay null for it rather than being invented. */
+  subjectId: string | null;
+  subjectName: string | null;
+  teachingMode: string | null;
+  /**
+   * **Who the class is for**, in one string the calendar can render without a
+   * second request (§4.4c): the Administrative Group's name, the Teaching
+   * Group's, or the Level's, according to the mode. It previously travelled
+   * inside `description`, which meant a session's description field held
+   * something that was not a description and an Event's held something that
+   * was — TD-3.4 (R43) gives it its own name.
+   */
+  audienceLabel: string | null;
+  /** TD-1 lifecycle. A cancelled occurrence still appears — the calendar's job
+   *  is to say a class is not happening, not to hide that it was scheduled. */
+  status: string | null;
   /**
    * The decorative Hijri overlay (§4.4, §5.7), read from the Ministry's
    * official announcements as recorded in `HijriMonthStart` (Revisions 31–32).
@@ -273,13 +295,33 @@ export async function readCalendar(
   if (query.categoryId) {
     scopeFilters.push({ categoryScopes: { some: { categoryId: query.categoryId } } });
   }
-  if (query.groupId) {
+  if (query.administrativeGroupId) {
     scopeFilters.push({
-      administrativeGroupScopes: { some: { administrativeGroupId: query.groupId } },
+      administrativeGroupScopes: {
+        some: { administrativeGroupId: query.administrativeGroupId },
+      },
     });
   }
 
-  const events = await prisma.event.findMany({
+  /**
+   * **A filter no Event can satisfy excludes Events, rather than being ignored.**
+   *
+   * An Event has no subject, no academic year and no instructors (§4.4 — it is
+   * the *non-teaching* layer). Asking for `subject_id=X` and receiving Events
+   * back would return occurrences that plainly do not match the request, which
+   * is a more misleading answer than returning fewer rows. So these three
+   * narrow the grid to Sessions.
+   *
+   * `branch_id`, `level_id`, `category_id` and `administrative_group_id` are
+   * NOT in this list: an Event *can* carry each of them through its explicit
+   * scope joins, so those filter both kinds.
+   */
+  const sessionOnlyFilter =
+    query.subjectId !== undefined ||
+    query.academicYearId !== undefined ||
+    query.teacherId !== undefined;
+
+  const events = sessionOnlyFilter ? [] : await prisma.event.findMany({
     where: {
       deletedAt: null,
       startDate: { lte: query.to },
@@ -301,6 +343,11 @@ export async function readCalendar(
     for (const date of expandEvent(event, from, query.to)) {
       out.push({
         kind: 'event',
+        subjectId: null,
+        subjectName: null,
+        teachingMode: null,
+        audienceLabel: null,
+        status: null,
         id: event.id,
         title: event.title,
         date: iso(date),
@@ -358,8 +405,18 @@ export async function readCalendar(
                 ],
               }
             : {}),
-          ...(query.groupId ? { administrativeGroupId: query.groupId } : {}),
+          ...(query.administrativeGroupId
+            ? { administrativeGroupId: query.administrativeGroupId }
+            : {}),
+          ...(query.academicYearId ? { academicYearId: query.academicYearId } : {}),
+          ...(query.subjectId ? { subjectId: query.subjectId } : {}),
         },
+        // The session's OWN staffing snapshot, not the schedule's (R43.4): a
+        // teacher who covered one occurrence should find it here, and one
+        // removed from the schedule should not lose the ones they actually took.
+        ...(query.teacherId
+          ? { staff: { some: { userId: query.teacherId, deletedAt: null } } }
+          : {}),
       },
       include: {
         room: { select: { name: true } },
@@ -409,10 +466,15 @@ export async function readCalendar(
         endTime: hhmm(session.endTime),
         visibility: null,
         branchId: sch.branchId,
-        // The audience label, so the calendar can say WHO a class is for
-        // without a second request (§4.4c).
-        description:
+        // A Session has no description of its own; the audience label that used
+        // to be smuggled in here now has its own field.
+        description: null,
+        subjectId: sch.subject.id,
+        subjectName: sch.subject.name,
+        teachingMode: sch.teachingMode,
+        audienceLabel:
           sch.administrativeGroup?.name ?? sch.teachingGroup?.name ?? level?.name ?? null,
+        status: session.status,
         recurrence: null,
         branchName: sch.branch.name,
         roomName: session.room?.name ?? null,
@@ -437,4 +499,96 @@ export async function readCalendar(
       (a.startTime ?? '').localeCompare(b.startTime ?? '') ||
       a.id.localeCompare(b.id),
   );
+}
+
+/**
+ * `prefilled_filters` (TD-3.4, R43) — the filters a signed-in caller's screen
+ * opens on, derived from their profile and **freely changeable**.
+ *
+ * **The filter set itself is identical for everyone** (§5.2, SRS line 53). This
+ * changes where the dropdowns *start*, never what they offer and never what the
+ * results are — the §4.4 tier model still filters every set, for everyone.
+ *
+ * **A value is prefilled only when it is unambiguous, and `null` otherwise.**
+ * That is the one real design decision here, and it goes the safe way: a student
+ * enrolled in three Levels has no single "own Level", and picking one would open
+ * their calendar on a third of their own timetable while looking like it showed
+ * all of it. An unset filter shows everything they may see, which is the honest
+ * default. So plural means `null`, not *first*.
+ */
+export interface PrefilledFilters {
+  academicYearId: string | null;
+  categoryId: string | null;
+  levelId: string | null;
+  branchId: string | null;
+  subjectId: string | null;
+  teacherId: string | null;
+}
+
+/** The single element, or `null` when the answer is not unique. */
+function only<T>(values: T[]): T | null {
+  const distinct = [...new Set(values)];
+  return distinct.length === 1 ? distinct[0]! : null;
+}
+
+export async function prefilledFilters(
+  prisma: PrismaClient,
+  actor: CalendarActor | null,
+): Promise<PrefilledFilters | null> {
+  // Anonymous, or an account that grants nothing yet (TD-1): no profile to
+  // derive from. `null` rather than an object of nulls — *there is nothing to
+  // prefill* and *nothing was unambiguous* are different answers.
+  if (actor === null || actor.accountStatus !== 'active') return null;
+
+  const currentYear = await prisma.academicYear.findFirst({
+    where: { isCurrent: true },
+    select: { id: true },
+  });
+
+  // A teacher's own subjects and branches come from the schedules they staff
+  // (§4.4c — CourseScheduleStaff is the resolution, stated directly).
+  const staffed = await prisma.courseScheduleStaff.findMany({
+    where: { userId: actor.userId, deletedAt: null, schedule: { deletedAt: null } },
+    select: { schedule: { select: { branchId: true, subjectId: true } } },
+  });
+
+  // A parent has no enrolments of their own; §5.2 prefills from their children,
+  // reached through approved links only (§4.3).
+  const links = await prisma.familyLink.findMany({
+    where: { parentId: actor.userId, status: 'approved', deletedAt: null },
+    select: { studentId: true },
+  });
+
+  const enrolments = await prisma.enrollment.findMany({
+    where: {
+      studentId: { in: [actor.userId, ...links.map((l) => l.studentId)] },
+      deletedAt: null,
+      administrativeGroup: { deletedAt: null },
+    },
+    select: {
+      levelId: true,
+      level: { select: { categoryId: true } },
+      administrativeGroup: { select: { branchId: true } },
+    },
+  });
+
+  // An administrator's scope is their branches; a single-branch admin gets that
+  // branch, an all-branches one gets nothing to prefill, which is correct.
+  const scopedBranches = scope.reachableBranches(actor.roleScopes, ['admin', 'teacher']) ?? [];
+
+  return {
+    academicYearId: currentYear?.id ?? null,
+    categoryId: only(enrolments.map((e) => e.level.categoryId)),
+    levelId: only(enrolments.map((e) => e.levelId)),
+    branchId: only([
+      ...enrolments.map((e) => e.administrativeGroup.branchId),
+      ...staffed.map((x) => x.schedule.branchId),
+      ...scopedBranches,
+    ]),
+    subjectId: only(staffed.map((x) => x.schedule.subjectId)),
+    // A teacher's calendar opens on their own sessions. Anyone else has no
+    // "own teacher", and guessing one would filter a parent's calendar down to
+    // a single member of staff.
+    teacherId: staffed.length > 0 ? actor.userId : null,
+  };
 }

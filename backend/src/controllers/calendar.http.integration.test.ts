@@ -29,6 +29,7 @@ interface Row {
 interface Body {
   error?: { code?: string };
   data?: Row[];
+  prefilled_filters?: Record<string, string | null> | null;
 }
 
 const call = (path: string, token?: string) => httpCall<Body>(BASE, 'GET', path, { token });
@@ -209,5 +210,89 @@ describe('GET /calendar — query validation', () => {
   it('refuses an inverted range and one longer than a year', async () => {
     expect((await call('/calendar?from=2026-06-30&to=2026-06-01')).status).toBe(400);
     expect((await call('/calendar?from=2026-01-01&to=2028-01-01')).status).toBe(400);
+  });
+});
+
+/* ── TD-3.4 filter set + prefilled_filters (Revision 43) ─────────────────── */
+
+describe('the TD-3.4 filter set is accepted in full', () => {
+  it('accepts every documented filter, including administrative_group_id', async () => {
+    // `group_id` shipped instead of the name TD-3.4 spells out. Because the
+    // schema refuses unknown keys, a specification-following client received a
+    // 400 from an endpoint claiming to implement the clause — the same defect
+    // class as CHANGES.log M3b-14b.
+    const id = '00000000-0000-4000-8000-000000000000';
+    const res = await call(
+      `/calendar?${RANGE}&academic_year_id=${id}&category_id=${id}&level_id=${id}` +
+        `&subject_id=${id}&branch_id=${id}&administrative_group_id=${id}&teacher_id=${id}`,
+    );
+    expect(res.status).toBe(200);
+  });
+
+  it('a filter no Event can satisfy narrows the grid to Sessions', async () => {
+    // Silently ignoring it would return Events that do not match what was
+    // asked — the seeded public Event has no subject at all.
+    const id = '00000000-0000-4000-8000-000000000000';
+    const withSubject = await call(`/calendar?${RANGE}&subject_id=${id}`);
+    expect(withSubject.status).toBe(200);
+    expect(mine(withSubject.body).some((r) => r.kind === 'event')).toBe(false);
+
+    const unfiltered = await call(`/calendar?${RANGE}`);
+    expect(mine(unfiltered.body).some((r) => r.kind === 'event')).toBe(true);
+  });
+
+  it('still refuses a malformed filter rather than ignoring it', async () => {
+    const res = await call(`/calendar?${RANGE}&teacher_id=not-a-uuid`);
+    expect(res.status).toBe(400);
+    expect(res.body.error?.code).toBe('VALIDATION_FAILED');
+  });
+});
+
+describe('prefilled_filters changes where the dropdowns start, nothing else', () => {
+  it('is null for an anonymous caller, not an object of nulls', async () => {
+    // "There is nothing to prefill" and "nothing was unambiguous" are different
+    // answers; an object of nulls would conflate them.
+    const res = await call(`/calendar?${RANGE}`);
+    expect(res.status).toBe(200);
+    expect(res.body.prefilled_filters).toBeNull();
+  });
+
+  it('is present for an authenticated caller with the documented keys', async () => {
+    const token = bearer(await person('عضوة'), []);
+    const res = await call(`/calendar?${RANGE}`, token);
+    expect(res.status).toBe(200);
+    expect(Object.keys(res.body.prefilled_filters!).sort()).toEqual([
+      'academic_year_id',
+      'branch_id',
+      'category_id',
+      'level_id',
+      'subject_id',
+      'teacher_id',
+    ]);
+  });
+
+  it('is null for a Pending account, exactly as for an anonymous visitor (TD-1)', async () => {
+    const token = bearer(await person('قيد الانتظار'), [], 'pending');
+    const res = await call(`/calendar?${RANGE}`, token);
+    expect(res.body.prefilled_filters).toBeNull();
+  });
+
+  it('is RETURNED, not APPLIED — the grid is not narrowed by it', async () => {
+    // The distinction that matters. `academic_year_id` is prefilled for every
+    // active caller (the `is_current` year is unambiguous), and it is a
+    // session-only filter: if the server applied its own suggestion, Events
+    // would vanish from the response. They must not.
+    //
+    // Deliberately NOT asserted here: that a signed-in caller sees the same
+    // rows as an anonymous one. They do not, and should not — §4.4's tiers give
+    // an active account the private tier. Conflating "prefilling changes
+    // nothing" with "signing in changes nothing" is what an earlier version of
+    // this test got wrong.
+    const token = bearer(await person('بلا تسجيل'), []);
+    const res = await call(`/calendar?${RANGE}`, token);
+
+    expect(res.status).toBe(200);
+    expect(res.body.prefilled_filters!['academic_year_id']).not.toBeUndefined();
+    expect(mine(res.body).some((r) => r.kind === 'event')).toBe(true);
   });
 });
