@@ -266,6 +266,10 @@ export async function loadSchedule(
       dayOfMonth: true,
       monthOfYear: true,
       anchorDate: true,
+      // R50 — the series' own upper bound. Selected here because
+      // `expandSchedule` applies it, and a schedule loaded without it would
+      // materialize past its end as though the split had never happened.
+      effectiveUntil: true,
       staff: { where: { deletedAt: null }, select: { userId: true, position: true } },
     },
   });

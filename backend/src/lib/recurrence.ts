@@ -141,6 +141,18 @@ export interface ScheduleRecurrence {
    * requires it for that pattern (`course_schedule_recurrence_shape_check`).
    */
   anchorDate: Date | null;
+  /**
+   * The last date this recurrence produces occurrences for (SRS Revision 50).
+   *
+   * **`null` is open-ended.** It bounds a series together with `anchorDate`, and
+   * is what makes a schedule SPLIT expressible: the closed half stops here, the
+   * successor is anchored at the next day.
+   *
+   * **Optional on this type deliberately.** Callers that predate R50 — the
+   * conflict preview, the roster resolver — pass rules they build themselves,
+   * and an omitted bound must mean *unbounded* rather than *stops today*.
+   */
+  effectiveUntil?: Date | null;
 }
 
 /**
@@ -160,7 +172,15 @@ export interface ScheduleRecurrence {
  */
 export function expandSchedule(rule: ScheduleRecurrence, from: Date, to: Date): Date[] {
   const start = atMidnightUtc(from);
-  const end = atMidnightUtc(to);
+  // **R50: `effective_until` is a SECOND upper bound and the earlier one wins.**
+  // The caller's horizon is the academic year's end (`horizonFor`); this is
+  // where the series itself stops. Applying it HERE and nowhere else is the
+  // whole point — this function is the single place a rule becomes dates, and
+  // a second expansion applying its own bound would eventually disagree with
+  // this one.
+  const ruleEnd = rule.effectiveUntil ? atMidnightUtc(rule.effectiveUntil) : null;
+  const requested = atMidnightUtc(to);
+  const end = ruleEnd !== null && ruleEnd < requested ? ruleEnd : requested;
   if (start > end) return [];
 
   const wanted = new Set(

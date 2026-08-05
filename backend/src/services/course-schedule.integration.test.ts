@@ -1050,3 +1050,151 @@ describe('Revision 43.5 — a Session carrying educational work is protected', (
     ).toBe(2);
   });
 });
+
+describe('SRS Revision 50 — "this session and all future sessions" splits the schedule', () => {
+  /** The third Tuesday of the run, safely inside the horizon and after some
+   *  occurrences have already been generated. */
+  const SPLIT = '2026-06-16';
+
+  it('closes the original and anchors a successor at the split date', async () => {
+    const { id } = await createCourseSchedule(prisma, superAdmin(), baseInput(), NOW);
+    const before = await datesOf(id);
+    expect(before).toContain(SPLIT);
+
+    const result = await updateCourseSchedule(
+      prisma,
+      superAdmin(),
+      id,
+      { version: 0, roomId: roomB, scope: 'this_and_future', fromDate: day(SPLIT) },
+      NOW,
+    );
+
+    expect(result.successorId).toBeDefined();
+    const closed = await prisma.recurringCourseSchedule.findUniqueOrThrow({ where: { id } });
+    // Closed the DAY BEFORE, so the split date itself belongs to the successor.
+    expect(closed.effectiveUntil?.toISOString().slice(0, 10)).toBe('2026-06-15');
+    const successor = await prisma.recurringCourseSchedule.findUniqueOrThrow({
+      where: { id: result.successorId! },
+    });
+    expect(successor.anchorDate?.toISOString().slice(0, 10)).toBe(SPLIT);
+    expect(successor.roomId).toBe(roomB);
+  });
+
+  it('leaves past occurrences alone and gives later ones to the successor', async () => {
+    const { id } = await createCourseSchedule(prisma, superAdmin(), baseInput(), NOW);
+    const result = await updateCourseSchedule(
+      prisma,
+      superAdmin(),
+      id,
+      { version: 0, roomId: roomB, scope: 'this_and_future', fromDate: day(SPLIT) },
+      NOW,
+    );
+
+    // The original keeps everything before the split — those sessions belong to
+    // a rule that has not changed for any date it still covers.
+    const kept = await datesOf(id);
+    expect(kept.every((d) => d < SPLIT)).toBe(true);
+    expect(kept).toContain('2026-06-02');
+
+    // And the successor owns the split date onward.
+    const moved = await datesOf(result.successorId!);
+    expect(moved.every((d) => d >= SPLIT)).toBe(true);
+    expect(moved).toContain(SPLIT);
+  });
+
+  it('materializes NOTHING after `effective_until` — the bound is real', async () => {
+    // §18: a split schedule produces no occurrence past its end. Re-running
+    // materialization is the honest test, because that is what the nightly cron
+    // does and where an unbounded rule would show up.
+    const { id } = await createCourseSchedule(prisma, superAdmin(), baseInput(), NOW);
+    await updateCourseSchedule(
+      prisma,
+      superAdmin(),
+      id,
+      { version: 0, roomId: roomB, scope: 'this_and_future', fromDate: day(SPLIT) },
+      NOW,
+    );
+
+    await runMaterialization(prisma, { schedule_id: id }, NOW);
+    expect((await datesOf(id)).filter((d) => d >= SPLIT)).toEqual([]);
+  });
+
+  it('PRESERVES an overridden session — the split does not own it', async () => {
+    // The whole reason "this session only" and "this and all future" coexist:
+    // an occurrence a human decided about (R43.4) is not the split's to move,
+    // and the same protection predicate every other scheduling path asks
+    // (R43.6) is what keeps it.
+    const { id } = await createCourseSchedule(prisma, superAdmin(), baseInput(), NOW);
+    const target = await prisma.session.findFirstOrThrow({
+      where: { scheduleId: id, date: day('2026-06-23') },
+    });
+    await prisma.session.update({ where: { id: target.id }, data: { overridden: true } });
+
+    await updateCourseSchedule(
+      prisma,
+      superAdmin(),
+      id,
+      { version: 0, roomId: roomB, scope: 'this_and_future', fromDate: day(SPLIT) },
+      NOW,
+    );
+
+    const survivor = await prisma.session.findUnique({ where: { id: target.id } });
+    expect(survivor?.deletedAt).toBeNull();
+    // Still the ORIGINAL schedule's session: a split moves the rule, never the
+    // decisions somebody already made about individual occurrences.
+    expect(survivor?.scheduleId).toBe(id);
+  });
+
+  it('COPIES the staff, or the teacher vanishes from every future session', async () => {
+    // §4.4 names this failure explicitly, because it would look like a UI bug
+    // for weeks rather than like a split that dropped a column.
+    const teacher = await person('الأستاذة');
+    const { id } = await createCourseSchedule(
+      prisma,
+      superAdmin(),
+      baseInput({ staff: [{ userId: teacher, position: 'teacher' }] }),
+      NOW,
+    );
+
+    const result = await updateCourseSchedule(
+      prisma,
+      superAdmin(),
+      id,
+      { version: 0, roomId: roomB, scope: 'this_and_future', fromDate: day(SPLIT) },
+      NOW,
+    );
+
+    const staff = await prisma.courseScheduleStaff.findMany({
+      where: { scheduleId: result.successorId!, deletedAt: null },
+    });
+    expect(staff.map((s) => s.userId)).toEqual([teacher]);
+    // And it reached the sessions, which is what anybody actually notices.
+    const session = await prisma.session.findFirstOrThrow({
+      where: { scheduleId: result.successorId!, deletedAt: null },
+      include: { staff: true },
+    });
+    expect(session.staff.map((s) => s.userId)).toEqual([teacher]);
+  });
+
+  it('refuses `this_and_future` with no from_date', async () => {
+    const { id } = await createCourseSchedule(prisma, superAdmin(), baseInput(), NOW);
+    const e = await failure(() =>
+      updateCourseSchedule(prisma, superAdmin(), id, { version: 0, scope: 'this_and_future' }, NOW),
+    );
+    expect(e.code).toBe('VALIDATION_FAILED');
+    expect(e.details?.['reason']).toBe('FROM_DATE_REQUIRED');
+  });
+
+  it('leaves `all_sessions` behaving exactly as before', async () => {
+    // The default is unchanged by R50, and that is worth a test rather than an
+    // assumption: the whole revision is additive.
+    const { id } = await createCourseSchedule(prisma, superAdmin(), baseInput(), NOW);
+    const result = await updateCourseSchedule(prisma, superAdmin(), id, { version: 0, roomId: roomB }, NOW);
+
+    expect(result.successorId).toBeUndefined();
+    expect(
+      (await prisma.recurringCourseSchedule.findUniqueOrThrow({ where: { id } })).effectiveUntil,
+    ).toBeNull();
+    expect(await prisma.recurringCourseSchedule.count({ where: { subjectId, deletedAt: null } })).toBe(1);
+  });
+});

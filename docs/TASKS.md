@@ -588,7 +588,13 @@
   - The list dedupes `GET /calendar` occurrences by event id — **no `GET /events` was invented** (§20 r16)
   - The date window is a real input: the endpoint is date-bounded, and the screen says what it is showing
   - Scope on create only, mirroring the server's refusal of scope keys on `PATCH`
-- [ ] **Session management UI** with the three scopes. Frontend for scopes 1 and 3; scope 2 needs the R50 split behind it
+- [x] **R50 backend — `effective_until` and the schedule split**
+  - The bound lives in `expandSchedule()` **and nowhere else**; it is a second upper bound beside `horizonFor()` and the earlier wins
+  - One transaction: close the original, create the successor, **copy the staff**, release the unprotected future sessions
+  - The original is closed **before** the successor's conflict check, or it collides with the half it replaces
+  - The successor **inherits** `effective_until`, so splitting a bounded series does not make its tail unbounded
+  - 7 tests including the §18 criteria; `all_sessions` proven unchanged
+- [ ] **Session management UI** with the three scopes. The backend for all three now exists
 - [ ] **TD-3.5 storage endpoints** — `POST /uploads/initiate`, `/complete`, `/abort`, `GET /content/{id}/download-url`. **Specified in TD-3.5 but not mounted**; `app.ts` has no `/uploads`
 - [ ] **Educational Content upload UI** — attach to a Subject of a Level (library) or to a Session (`POST /sessions/{id}/content` already exists)
 

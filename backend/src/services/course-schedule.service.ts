@@ -6,7 +6,7 @@ import type {
 } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
 import { page, pageWindow, type Page, type PageParams } from '../lib/pagination.js';
-import { expandSchedule, timesOverlap } from '../lib/recurrence.js';
+import { addDays, atMidnightUtc, expandSchedule, timesOverlap } from '../lib/recurrence.js';
 import * as scope from '../policies/branch-scope.js';
 import { resolveAudience } from '../policies/roster-resolution.js';
 import * as audit from '../repositories/audit.repository.js';
@@ -444,10 +444,29 @@ export async function updateCourseSchedule(
     monthOfYear?: number | null;
     anchorDate?: Date | null;
     version: number;
+    /**
+     * **SRS Revision 50 — which occurrences this edit applies to.**
+     *
+     * `all_sessions` (the default, and the behaviour that predates R50) rewrites
+     * future un-overridden Sessions of this schedule. `this_and_future` **splits
+     * the schedule**: see `splitCourseSchedule`.
+     */
+    scope?: 'all_sessions' | 'this_and_future';
+    /** Required by `this_and_future` — the occurrence the split begins at. */
+    fromDate?: Date;
   },
   now: Date = new Date(),
-): Promise<{ id: string; materialized: MaterializeResult }> {
+): Promise<{ id: string; successorId?: string; materialized: MaterializeResult }> {
   assertCanManage(actor);
+
+  if (data.scope === 'this_and_future') {
+    if (!data.fromDate) {
+      throw new AppError('VALIDATION_FAILED', 'this_and_future requires from_date (§4.4, R50)', {
+        reason: 'FROM_DATE_REQUIRED',
+      });
+    }
+    return splitCourseSchedule(prisma, actor, id, data.fromDate, data, now);
+  }
 
   const existing = await prisma.recurringCourseSchedule.findFirst({
     where: { id, deletedAt: null },
@@ -533,6 +552,192 @@ export async function updateCourseSchedule(
  * record what happened, and discontinuing a schedule does not un-teach them.
  * Sessions carrying work are retained regardless of date and reported.
  */
+/**
+ * **SRS Revision 50 — "this session and all future sessions", by SPLITTING the
+ * schedule.**
+ *
+ * The current schedule is closed the day before `fromDate`, and a **successor**
+ * carrying the new values is anchored at `fromDate`. Past Sessions are
+ * untouched — they belong to a schedule whose rule has not changed for any date
+ * it still covers — and overridden Sessions keep their overrides, because the
+ * removal below asks the same protection predicate every other scheduling path
+ * asks (§4.4, R43.6).
+ *
+ * **One transaction.** §4.4 states it as a rule rather than a preference: a
+ * half-split leaves a gap in the timetable, which is worse than either the old
+ * schedule continuing or the new one starting.
+ *
+ * **Staff are copied to the successor.** A successor with no staff would
+ * silently drop the teacher from every future Session — the failure §4.4 names
+ * explicitly, and the one that would look like a UI bug for weeks.
+ *
+ * **No new recurrence machinery.** Both halves are ordinary schedules with
+ * ordinary rules, so conflict detection, roster resolution, the calendar and the
+ * Session page keep working with no knowledge that a split happened. That is the
+ * property the split was chosen for over an exception model.
+ */
+async function splitCourseSchedule(
+  prisma: PrismaClient,
+  actor: Actor,
+  id: string,
+  fromDate: Date,
+  data: {
+    roomId?: string | null;
+    startTime?: Date;
+    endTime?: Date;
+    recurrence?: string;
+    weekdays?: string[];
+    dayOfMonth?: number | null;
+    monthOfYear?: number | null;
+    anchorDate?: Date | null;
+    version: number;
+  },
+  now: Date,
+): Promise<{ id: string; successorId: string; materialized: MaterializeResult }> {
+  const existing = await prisma.recurringCourseSchedule.findFirst({
+    where: { id, deletedAt: null },
+    select: {
+      subjectId: true,
+      teachingMode: true,
+      levelId: true,
+      administrativeGroupId: true,
+      teachingGroupId: true,
+      branchId: true,
+      roomId: true,
+      startTime: true,
+      endTime: true,
+      recurrence: true,
+      weekdays: true,
+      dayOfMonth: true,
+      monthOfYear: true,
+      anchorDate: true,
+      effectiveUntil: true,
+      academicYearId: true,
+      staff: { where: { deletedAt: null }, select: { userId: true, position: true } },
+    },
+  });
+  if (!existing) throw new AppError('NOT_FOUND', 'no such schedule');
+  scope.assertCanActOnBranch(actor.roleScopes, MANAGING_ROLE, existing.branchId, 'no such schedule');
+
+  const splitOn = atMidnightUtc(fromDate);
+  // Splitting at or before a date the series never reached would produce a
+  // closed schedule covering nothing and a successor identical to the original.
+  if (existing.effectiveUntil && splitOn > atMidnightUtc(existing.effectiveUntil)) {
+    throw new AppError('VALIDATION_FAILED', 'that date is after this schedule already ends', {
+      reason: 'SPLIT_AFTER_END',
+    });
+  }
+  const closeAt = addDays(splitOn, -1);
+  const horizon = await horizonFor(prisma, now);
+
+  return prisma.$transaction(async (tx) => {
+    const successorValues = {
+      subjectId: existing.subjectId,
+      teachingMode: existing.teachingMode,
+      levelId: existing.levelId,
+      administrativeGroupId: existing.administrativeGroupId,
+      teachingGroupId: existing.teachingGroupId,
+      branchId: existing.branchId,
+      academicYearId: existing.academicYearId,
+      roomId: data.roomId === undefined ? existing.roomId : data.roomId,
+      startTime: data.startTime ?? existing.startTime,
+      endTime: data.endTime ?? existing.endTime,
+      // Cast to the Prisma enums: the caller's values are already validated by
+      // the same Zod schema the create path uses, and the database CHECKs are
+      // the backstop either way.
+      recurrence: (data.recurrence ?? existing.recurrence) as typeof existing.recurrence,
+      weekdays: (data.weekdays ?? existing.weekdays) as typeof existing.weekdays,
+      dayOfMonth: data.dayOfMonth === undefined ? existing.dayOfMonth : data.dayOfMonth,
+      monthOfYear: data.monthOfYear === undefined ? existing.monthOfYear : data.monthOfYear,
+      // The successor is anchored at the split, which is what makes
+      // `biweekly_alternating` keep counting from the right week.
+      anchorDate: splitOn,
+      // It inherits whatever end the original had — splitting a bounded series
+      // must not quietly make the tail unbounded.
+      effectiveUntil: existing.effectiveUntil,
+    };
+
+    // **Close the original first**, so the conflict check below compares the
+    // successor against a predecessor that has already stopped — otherwise a
+    // schedule would collide with the half of itself it is replacing.
+    await updateWithVersion({
+      delegate: tx.recurringCourseSchedule,
+      id,
+      expectedVersion: data.version,
+      requireNotDeleted: true,
+      data: { effectiveUntil: closeAt },
+    });
+
+    // Its own sessions AND the predecessor's are excluded: the predecessor's
+    // future occurrences are removed immediately below, so a clash with them is
+    // a clash with rows that are about to stop existing.
+    const conflicts = await findConflicts(
+      tx,
+      { ...successorValues, staff: existing.staff.map((s) => ({ userId: s.userId, position: s.position })) },
+      splitOn,
+      horizon,
+      id,
+    );
+    assertNoConflicts(conflicts);
+
+    const successor = await tx.recurringCourseSchedule.create({
+      data: successorValues,
+      select: { id: true },
+    });
+    // §4.4: without this the teacher silently disappears from every future
+    // session of the successor.
+    if (existing.staff.length > 0) {
+      await tx.courseScheduleStaff.createMany({
+        data: existing.staff.map((s) => ({
+          scheduleId: successor.id,
+          userId: s.userId,
+          position: s.position,
+        })),
+      });
+    }
+
+    // The predecessor's occurrences from the split date onward now belong to the
+    // successor — except the protected ones, which stay exactly where they are.
+    // **The same predicate every other scheduling path asks** (R43.6): a session
+    // someone overrode, held, or attached work to is not the split's to move.
+    const future = await tx.session.findMany({
+      where: { scheduleId: id, deletedAt: null, date: { gte: splitOn } },
+      select: SELECT_PROTECTABLE,
+    });
+    const reasons = await protectionReasons(tx, future);
+    const removable = future.filter((s) => !reasons.has(s.id));
+    if (removable.length > 0) {
+      await tx.session.updateMany({
+        where: { id: { in: removable.map((s) => s.id) } },
+        data: { deletedAt: new Date(), deletedById: actor.userId },
+      });
+    }
+
+    const loaded = await loadSchedule(tx, successor.id);
+    if (!loaded) throw new AppError('INTERNAL', 'successor vanished mid-transaction');
+    const materialized = await materializeSchedule(tx, loaded, splitOn, horizon);
+
+    await audit.write(tx, {
+      actorUserId: actor.userId,
+      actionType: 'courseschedule.update',
+      targetEntity: 'RecurringCourseSchedule',
+      targetId: id,
+      detail: {
+        scope: 'this_and_future',
+        split_on: splitOn.toISOString().slice(0, 10),
+        successor_id: successor.id,
+        sessions_created: materialized.created,
+        // What the split MOVED and what it refused to move — the same pair every
+        // other scheduling write reports (§4.4).
+        sessions_released: removable.length,
+        sessions_left_alone: future.length - removable.length,
+      },
+    });
+
+    return { id, successorId: successor.id, materialized };
+  });
+}
+
 export async function deleteCourseSchedule(
   prisma: PrismaClient,
   actor: Actor,

@@ -100,8 +100,31 @@ export const updateCourseScheduleSchema = z
     day_of_month: z.number().int().min(1).max(31).nullable().optional(),
     month_of_year: z.number().int().min(1).max(12).nullable().optional(),
     anchor_date: calendarDate.nullable().optional(),
+    /**
+     * **SRS Revision 50 — which occurrences this edit applies to.**
+     *
+     * Absent or `all_sessions` is the behaviour that predates R50: future
+     * un-overridden Sessions are rewritten. `this_and_future` **splits the
+     * schedule** and requires `from_date`.
+     *
+     * *This session only* is deliberately **not** a value here — it is
+     * `PATCH /sessions/{id}`, a different endpoint on a different resource,
+     * because it edits one occurrence rather than the rule that produced it.
+     */
+    scope: z.enum(['all_sessions', 'this_and_future']).optional(),
+    /** The occurrence the split begins at. Refused without the scope, so a
+     *  stray date can never silently split a series. */
+    from_date: calendarDate.optional(),
   })
-  .strict();
+  .strict()
+  .refine((v) => v.scope !== 'this_and_future' || v.from_date !== undefined, {
+    path: ['from_date'],
+    message: 'this_and_future requires from_date (§4.4, Revision 50)',
+  })
+  .refine((v) => v.from_date === undefined || v.scope === 'this_and_future', {
+    path: ['from_date'],
+    message: 'from_date is only meaningful with scope this_and_future',
+  });
 
 /** Not `.strict()`: TD-10's `page`/`page_size` share the query object. */
 export const listCourseSchedulesQuerySchema = z.object({

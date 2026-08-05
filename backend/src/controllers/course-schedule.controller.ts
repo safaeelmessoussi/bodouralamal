@@ -88,10 +88,21 @@ export function update(prisma: PrismaClient) {
         ...(body.day_of_month !== undefined ? { dayOfMonth: body.day_of_month } : {}),
         ...(body.month_of_year !== undefined ? { monthOfYear: body.month_of_year } : {}),
         ...(body.anchor_date !== undefined ? { anchorDate: body.anchor_date } : {}),
+        ...(body.scope !== undefined ? { scope: body.scope } : {}),
+        ...(body.from_date !== undefined ? { fromDate: body.from_date } : {}),
       },
     );
-    const row = await reload(prisma, updated.id);
-    res.json(courseScheduleWriteDto(row, updated.materialized));
+    // **R50: a split answers with the SUCCESSOR, not the closed predecessor.**
+    // The caller edited "this and all future", so the schedule they are now
+    // looking at is the new one — returning the closed half would show them the
+    // values they just replaced.
+    const row = await reload(prisma, updated.successorId ?? updated.id);
+    res.json({
+      ...courseScheduleWriteDto(row, updated.materialized),
+      // Named only when a split happened, so a client can tell that its list
+      // now holds two rows where it held one.
+      ...(updated.successorId ? { split_from_schedule_id: updated.id } : {}),
+    });
   };
 }
 

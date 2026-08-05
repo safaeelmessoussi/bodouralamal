@@ -387,6 +387,20 @@ deliberately is not.
 taught, to whom, or where, while the Sessions already materialized against the old answer
 remain — silently re-pointing a term of history. Those are re-creations, not edits.
 
+**Editing asks which occurrences it applies to (§4.4, Revision 50).** `PATCH` takes `scope`:
+`all_sessions` (default — future un-overridden Sessions are rewritten) or `this_and_future`,
+which requires `from_date` and **splits the schedule**. The current one is closed at
+`from_date − 1 day` via `effective_until`; a **successor** carrying the new values is anchored
+at `from_date`, **with its staff copied** — without that the teacher silently disappears from
+every future Session. Past Sessions are untouched and overridden ones keep their overrides,
+because the split asks the same protection predicate every other scheduling path asks (R43.6).
+
+**The response is the successor**, plus `split_from_schedule_id` naming the closed half, so a
+client can tell its list now holds two rows where it held one.
+
+**"This session only" is not a scope here** — it is `PATCH /sessions/{id}`, a different endpoint
+on a different resource, because it edits one occurrence rather than the rule that produced it.
+
 ### Sessions — the individual occurrence
 
 A Session is the materialization of a schedule on one date. **These routes are deliberately not

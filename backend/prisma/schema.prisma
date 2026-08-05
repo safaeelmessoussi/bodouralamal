@@ -876,6 +876,14 @@ model RecurringCourseSchedule {
   /// is undefined and the two halves of the alternation are indistinguishable.
   anchorDate DateTime? @map("anchor_date") @db.Date
 
+  /// The last date this recurrence produces occurrences for (SRS Revision 50).
+  /// **NULL is open-ended**, which every schedule created before R50 is. Set
+  /// when a schedule is SPLIT for a "this and all future" edit: the current
+  /// schedule is closed here and a successor is anchored at the split date.
+  /// With `anchor_date` it bounds one series. A calendar date, not an instant
+  /// (TD-11) — a schedule ends after a day's classes.
+  effectiveUntil DateTime? @map("effective_until") @db.Date
+
   academicYearId String       @map("academic_year_id") @db.Uuid
   academicYear   AcademicYear @relation(fields: [academicYearId], references: [id], onDelete: Restrict)
 
