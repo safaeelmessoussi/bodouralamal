@@ -10,8 +10,11 @@ import {
   backfillCandidates,
   createEvent,
   deleteEvent,
+  listEvents,
   updateEvent,
 } from '../services/event.service.js';
+import { eventDefinitionDto, pageOf } from './dto.js';
+import { parse } from './parse.js';
 import type { Actor } from '../policies/actor.js';
 
 /**
@@ -94,6 +97,14 @@ function pathId(req: Request): string {
   if (!parsed.success) throw new AppError('NOT_FOUND', 'not found');
   return parsed.data;
 }
+
+/** R56: the List view's window and branch narrowing. Not `.strict()` — TD-10's
+ *  `page`/`page_size` share the query object. */
+const listEventsQuerySchema = z.object({
+  branch_id: z.uuid().optional(),
+  from: z.coerce.date().optional(),
+  to: z.coerce.date().optional(),
+});
 
 export function create(prisma: PrismaClient) {
   return async (req: Request, res: Response): Promise<void> => {
@@ -197,5 +208,26 @@ export function applyBackfill(prisma: PrismaClient) {
       parsed.data.event_ids,
     );
     res.json({ attached });
+  };
+}
+
+/**
+ * `GET /events` (TD-3.4, R56) — the stored **definitions**, for the List view of
+ * the unified Scheduling screen.
+ *
+ * Not `GET /calendar`: that returns the *expansion*, which is right for a
+ * calendar and wrong for a management table. See `listEvents` for why the two
+ * halves of one screen have to answer the same kind of question.
+ */
+export function list(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const q = parse(listEventsQuerySchema, req.query);
+    const result = await listEvents(prisma, actorOf(req), {
+      ...(q.branch_id !== undefined ? { branchId: q.branch_id } : {}),
+      ...(q.from !== undefined ? { from: q.from } : {}),
+      ...(q.to !== undefined ? { to: q.to } : {}),
+      ...pageParamsFrom(req.query),
+    });
+    res.json(pageOf(result, eventDefinitionDto));
   };
 }

@@ -518,3 +518,80 @@ export async function backfillAttach(
     return attached;
   });
 }
+
+/**
+ * `GET /events` — the stored event **definitions** (TD-3.4, R56).
+ *
+ * ## Why this exists, and why it is not `GET /calendar`
+ *
+ * Reads of events had always gone through the calendar, which returns their
+ * **expansion**: a weekly event appears there as forty dated occurrences. That
+ * is right for a calendar and wrong for a management list — the administrator
+ * created **one rule**, and a table offering forty *edit* buttons for it would
+ * be offering to edit something that does not exist as a row.
+ *
+ * So this returns the rule, exactly as `GET /admin/course-schedules` does for
+ * the other half of the unified Scheduling screen. The two lists have to answer
+ * the same *kind* of question or the screen showing them together is incoherent
+ * — which is precisely what the two former pages did, one listing rules and the
+ * other listing occurrences.
+ *
+ * **The date window filters by overlap, not by start.** An event that began in
+ * September and runs to June belongs in a January window; filtering on
+ * `start_date` alone would hide exactly the long-running items an administrator
+ * is most likely to be looking for. `recurrence_end_date`/`end_date` bound it,
+ * and a null bound means open-ended and therefore always current.
+ */
+export async function listEvents(
+  prisma: PrismaClient,
+  actor: Actor,
+  filters: { branchId?: string; from?: Date; to?: Date } & PageParams,
+): Promise<Page<Event & { branchScopes: { branchId: string }[] }>> {
+  // TD-2: the same audience that may read the admin schedule list. A teacher
+  // reaches events through the calendar at their own tier, not through this.
+  if (!isAdmin(actor) && !isTeacher(actor)) {
+    throw new AppError('FORBIDDEN', 'listing event definitions requires staff');
+  }
+
+  const reachable = scope.reachableBranches(actor.roleScopes, [MANAGING_ROLE]);
+
+  const where: Prisma.EventWhereInput = {
+    deletedAt: null,
+    ...(filters.branchId ? { branchScopes: { some: { branchId: filters.branchId } } } : {}),
+    // Overlap, both ends optional: `start <= to` AND (`end` is null OR `end >= from`).
+    ...(filters.to ? { startDate: { lte: filters.to } } : {}),
+    ...(filters.from
+      ? {
+          OR: [
+            { recurrenceEndDate: { gte: filters.from } },
+            { endDate: { gte: filters.from } },
+            // Neither bound set: a one-off on its own start date, or an
+            // open-ended recurrence. Both are current for any later window.
+            { AND: [{ recurrenceEndDate: null }, { endDate: null }, { startDate: { gte: filters.from } }] },
+            { AND: [{ recurrenceEndDate: null }, { endDate: null }, { recurrenceType: { not: 'none' } }] },
+          ],
+        }
+      : {}),
+    // **Applied last so an explicit filter NARROWS a scoped caller's reach and
+    // never widens it** — the same discipline `listCourseSchedules` uses. A
+    // Global event (no branch join at all) is visible to everyone, because it
+    // belongs to every branch rather than to none (§4.4).
+    ...(reachable === null
+      ? {}
+      : { OR: [{ branchScopes: { none: {} } }, { branchScopes: { some: { branchId: { in: reachable } } } }] }),
+  };
+
+  const window = pageWindow(filters);
+  const [rows, total] = await Promise.all([
+    prisma.event.findMany({
+      where,
+      skip: window.skip,
+      take: window.take,
+      // Soonest first: a scheduling list is read forwards from today.
+      orderBy: [{ startDate: 'asc' }, { startTime: 'asc' }, { id: 'asc' }],
+      include: { branchScopes: { select: { branchId: true } } },
+    }),
+    prisma.event.count({ where }),
+  ]);
+  return page(rows, window, total);
+}

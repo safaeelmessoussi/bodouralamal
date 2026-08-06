@@ -768,6 +768,55 @@
       }
     },
     "/events": {
+      "get": {
+        "summary": "List event definitions",
+        "description": "TD-3.4 (R56), §4.4. **The stored event RULES, never their expansion** — a weekly event is one row here and forty occurrences on `GET /calendar`. That distinction is the point: the unified Scheduling screen manages the definitions an administrator created, and a table offering forty *edit* buttons for one rule would be offering to edit something that does not exist as a row. Mirrors `GET /admin/course-schedules` deliberately: the two halves of one screen must answer the same **kind** of question, and the former pages did not — one listed rules, the other occurrences, which is the reason beneath every visual difference that they never read as one feature. `?branch_id=` `?from=` `?to=` `?page=` `?page_size=`, paginated (TD-10). **The date window filters by OVERLAP, not by start**: an event running September to June belongs in a January window, and filtering on `start_date` alone would hide exactly the long-running items an administrator is most likely to be looking for; a null bound is open-ended and therefore always current. **Branch narrowing is applied last**, so an explicit `branch_id` narrows a scoped caller's reach and never widens it — and a **Global** event (no branch join at all) is visible to everyone, because it belongs to every branch rather than to none (§4.4). Staff only (TD-2); a teacher reaches events through the calendar at their own tier. The DTO carries no subject, room or staff: an Event has none, and inventing them would be the conflation §20 rule 22 forbids.",
+        "responses": {
+          "200": {
+            "description": "A page of event definitions in the TD-10 envelope."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a malformed filter.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN for a non-staff caller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
       "post": {
         "summary": "Create an event",
         "description": "§4.4's exception layer — holidays, one-off activities, exams, ceremonies. The recurring weekly timetable belongs to Groups, so an Event never duplicates it. **Scope reach is materialised into the four join tables at creation** (`EventBranch`/`EventCategory`/`EventLevel`/`EventGroup`), *never* evaluated at read time: a wildcard would be re-interpreted on every calendar read and its meaning would silently change as branches are added. **Only branches whose `operational_start_date` has already occurred are attached** — a branch opening later is deliberately excluded, and the manual backfill action is how it joins, so the gap is neither auto-filled nor ignored. The response reports what was ACTUALLY attached, which may be fewer branches than requested. All five recurrence types are supported including biweekly-alternating; a recurring event **must** carry `recurrence_end_date`, since an unbounded recurrence would expand forever in every calendar query. Dates are `YYYY-MM-DD` and times `HH:MM`, local wall-clock (TD-11). TD-2: Admin and Super Admin may schedule any scope; a **Teacher may schedule only for their own groups** (hidden allowed) and cannot pair a group with a wider branch/level/global scope.",

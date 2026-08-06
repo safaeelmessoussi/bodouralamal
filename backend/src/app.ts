@@ -145,6 +145,9 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
   guarded.get('/admin/approvals', approvals.list(prisma));
   guarded.post('/admin/approvals/:id/approve', approvals.approve(prisma));
   guarded.post('/admin/approvals/:id/reject', approvals.reject(prisma));
+  // R56 — the stored event DEFINITIONS for the unified Scheduling list. `GET
+  // /calendar` returns their expansion and remains the calendar's read.
+  guarded.get('/events', events.list(prisma));
   guarded.post('/events', events.create(prisma));
   guarded.patch('/events/:id', events.update(prisma));
 

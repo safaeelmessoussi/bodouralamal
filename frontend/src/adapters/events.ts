@@ -66,6 +66,16 @@ export async function createEvent(input: EventInput, token: string | null): Prom
  */
 export async function updateEvent(
   id: string,
+  /**
+   * **TD-15's version, and it was missing.** The server has always required it
+   * on this route, and this adapter had no parameter for it — so **every edit
+   * from the admin calendar returned `400 VALIDATION_FAILED`.** The cause was
+   * structural rather than an oversight: that page listed calendar
+   * *occurrences*, and an occurrence carries no `version` because it is not a
+   * row. There was nothing to send. R56's definitions list publishes it, which
+   * is what makes editing possible at all.
+   */
+  version: number,
   input: Omit<EventInput, 'global' | 'branch_ids' | 'category_ids' | 'level_ids' | 'group_ids'> & {
     visibility?: EventVisibility;
     recurrence_type?: EventRecurrence;
@@ -73,7 +83,7 @@ export async function updateEvent(
   },
   token: string | null,
 ): Promise<EventRow> {
-  return api<EventRow>(`/events/${id}`, { method: 'PATCH', token, body: input });
+  return api<EventRow>(`/events/${id}`, { method: 'PATCH', token, body: { version, ...input } });
 }
 
 /** TD-5 soft delete. Its occurrences leave the calendar on the next read. */

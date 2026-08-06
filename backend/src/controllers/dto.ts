@@ -1259,3 +1259,65 @@ export function trashEntryDto(row: {
     restore_blocked_reason: row.restoreBlockedReason,
   };
 }
+
+/**
+ * One stored event **definition** (TD-3.4, R56) — the rule, never its expansion.
+ *
+ * Deliberately close in shape to `CourseScheduleDto`: the unified Scheduling
+ * list shows both side by side, and two lists answering the same *kind* of
+ * question must publish the same *kind* of row. The fields each has no source
+ * for are simply absent rather than invented — an Event has no subject, room or
+ * staff, which is exactly what §4.4 says about it.
+ */
+export interface EventDefinitionDto {
+  id: string;
+  title: string;
+  description: string | null;
+  visibility: string;
+  /** TD-11 calendar dates and wall-clock times — never instants. `null` times
+   *  mean an ALL-DAY event, which is a real state and not a missing value. */
+  start_date: string;
+  end_date: string | null;
+  start_time: string | null;
+  end_time: string | null;
+  recurrence: string;
+  /** The bound. `null` is open-ended, exactly as `effective_until` is for a
+   *  schedule — one vocabulary across the two halves of the screen. */
+  recurrence_end_date: string | null;
+  /** Empty means the **Global** scope (§4.4): the event belongs to every branch
+   *  rather than to none, which is why it is a list and not a nullable id. */
+  branch_ids: string[];
+  version: number;
+}
+
+export function eventDefinitionDto(row: {
+  id: string;
+  title: string;
+  description: string | null;
+  visibility: string;
+  startDate: Date;
+  endDate: Date | null;
+  startTime: Date | null;
+  endTime: Date | null;
+  recurrenceType: string;
+  recurrenceEndDate: Date | null;
+  branchScopes: { branchId: string }[];
+  version: number;
+}): EventDefinitionDto {
+  return {
+    id: row.id,
+    title: row.title,
+    description: row.description,
+    visibility: String(row.visibility),
+    start_date: dateOnly(row.startDate)!,
+    end_date: dateOnly(row.endDate),
+    // `null` is ALL-DAY, a real state — so the guard is here rather than in
+    // `timeOnly`, whose other caller has a non-null column.
+    start_time: row.startTime ? timeOnly(row.startTime) : null,
+    end_time: row.endTime ? timeOnly(row.endTime) : null,
+    recurrence: String(row.recurrenceType),
+    recurrence_end_date: dateOnly(row.recurrenceEndDate),
+    branch_ids: row.branchScopes.map((b) => b.branchId),
+    version: row.version,
+  };
+}
