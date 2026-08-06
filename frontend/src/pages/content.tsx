@@ -227,7 +227,15 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
   }
 
   return (
-    <Layout title={t(`${portal}.nav.content`)} lede={t('content.lede')}>
+    <Layout
+      title={t(`${portal}.nav.content`)}
+      lede={t('content.lede')}
+      actions={
+        <Button variant="primary" onClick={() => setUploading(true)}>
+          {t('content.upload.action')}
+        </Button>
+      }
+    >
       {notice ? (
         <p className="admin-notice" role="status" aria-live="polite">
           {notice}
@@ -264,9 +272,6 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
                 isAdmin ? { branchId: [{ value: GLOBAL, label: t('content.globalScope') }] } : {}
               }
             />
-            <Button variant="primary" onClick={() => setUploading(true)}>
-              {t('content.upload.action')}
-            </Button>
           </>
         }
         pagination={{ page, pageSize: 25, total, onPage: setPage }}

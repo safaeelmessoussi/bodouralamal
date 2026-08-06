@@ -102,3 +102,24 @@
   color: var(--color-text-muted);
   font-variant-numeric: tabular-nums;
 }
+
+/*
+ * A dialog whose whole content is a list — conflicts, a roster, a set the
+ * server answered with. Shared so the two scheduling dialogs stop being bare
+ * `<ul>` elements inheriting whatever the browser gives them.
+ */
+.dialog__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.dialog__list li {
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-raised);
+}

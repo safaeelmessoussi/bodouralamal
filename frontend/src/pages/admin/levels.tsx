@@ -114,8 +114,17 @@ export function LevelsPage(): ReactNode {
       key: 'subjects',
       header: t('admin.levels.colSubjects'),
       numeric: true,
-      secondary: true,
-      cell: (r) => r.subject_count as ReactNode,
+      // **The count IS the way in.** The screen that assigns Subjects to a Level
+      // existed and was reachable only through a row-action menu labelled
+      // «المواد» — so an administrator told *this level teaches no subjects* had
+      // no obvious next click, and the number they were reading was the exact
+      // thing they needed to change. A zero here is the most actionable cell on
+      // the page, and it now behaves like it.
+      cell: (r) => (
+        <a href={`/admin/levels/${r.id}/subjects`}>
+          {r.subject_count === 0 ? t('admin.levels.noSubjectsYet') : r.subject_count}
+        </a>
+      ),
     },
     {
       key: 'students',

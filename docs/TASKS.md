@@ -644,7 +644,9 @@
 - [x] Users table: `email` + the Branch scope column §14.2 already required
 - [x] Sessions: Arabic weekdays, `anchor_date` and `effective_until` in the shared recurrence editor, one primary teacher + assistants
 - [ ] **Backfill the curriculum data.** `level_subject` is empty on the live database, so no Level teaches anything and no content can be attached anywhere. Assign subjects per Level from *المستويات ← مواد المستوى* — a data task, not a code one, and the reason the upload appeared broken
-- [ ] Sweep the remaining screens for raw `<select>`/`<label>` pairs — الحلقات was found and fixed; approvals, levels and users still build their own filter rows rather than going through the shared components
+- [x] الأنشطة / الحصص parity — one `FormDialog`, one `ListDialog`, one action placement, one notice style; pinned structurally by `scheduling-parity.test.tsx`
+- [x] مواد المستوى made findable — the screen existed; the count column is now the link to it
+- [ ] Sweep the remaining screens for raw `<select>`/`<label>` pairs — الحلقات, الحصص and الأنشطة are done; **approvals, levels and users still build their own filter rows** rather than going through `SelectField`/`ScopeSelectors`
 
 ## M6 — Content, Consent & Storage
 - [x] Upload initiate/complete/abort: single-shot presigned PUT, branch-scope validation, Teacher Global rejection (§4.9, TD-3.5)

@@ -12,8 +12,8 @@ import {
 import { AdminLayout } from '../../components/admin/admin-layout.js';
 import { Button } from '../../components/ui/button.js';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
+import { FormDialog } from '../../components/ui/form-dialog.js';
 import { DataTable, type Column, type RowAction, type TableStatus } from '../../components/ui/data-table.js';
-import { Dialog } from '../../components/ui/dialog.js';
 import {
   RecurrenceEditor,
   SchedulingTimes,
@@ -354,14 +354,46 @@ function EventFormDialog({
   const scopeOptions =
     form.scope === 'branch' ? branches : form.scope === 'category' ? categories : levels;
 
+  /** The payload, named rather than inlined into a button — the dialog owns the
+   *  button now, and a form's save logic reads better beside its state anyway. */
+  function submit(): void {
+    const blank = (v: string): string | null => (v.trim() === '' ? null : v.trim());
+    onSave({
+      title: form.title.trim(),
+      description: blank(form.description),
+      visibility: form.visibility,
+      start_date: form.startDate,
+      end_date: blank(form.endDate),
+      start_time: blank(form.startTime),
+      end_time: blank(form.endTime),
+      recurrence_type: form.recurrence,
+      recurrence_end_date: form.recurrence === 'none' ? null : blank(form.recurrenceEnd),
+      ...(event
+        ? {}
+        : form.scope === 'global'
+          ? { global: true }
+          : form.scope === 'branch'
+            ? { branch_ids: [form.scopeId] }
+            : form.scope === 'category'
+              ? { category_ids: [form.scopeId] }
+              : { level_ids: [form.scopeId] }),
+    });
+  }
+
   return (
-    <Dialog
+    <FormDialog
       open
-      onClose={onCancel}
       title={t(event ? 'admin.calendar.editTitle' : 'admin.calendar.create')}
       wide
+      busy={busy}
+      onCancel={onCancel}
+      onSubmit={() => {
+        setTouched(true);
+        if (!valid) return;
+        submit();
+      }}
     >
-      <div className="form">
+      <>
         <TextField
           label={t('admin.calendar.colTitle')}
           value={form.title}
@@ -461,44 +493,8 @@ function EventFormDialog({
           </div>
         )}
 
-        <div className="form__actions">
-          <Button variant="secondary" onClick={onCancel}>
-            {t('common.cancel')}
-          </Button>
-          <Button
-            variant="primary"
-            disabled={busy}
-            onClick={() => {
-              setTouched(true);
-              if (!valid) return;
-              const blank = (v: string): string | null => (v.trim() === '' ? null : v.trim());
-              onSave({
-                title: form.title.trim(),
-                description: blank(form.description),
-                visibility: form.visibility,
-                start_date: form.startDate,
-                end_date: blank(form.endDate),
-                start_time: blank(form.startTime),
-                end_time: blank(form.endTime),
-                recurrence_type: form.recurrence,
-                recurrence_end_date:
-                  form.recurrence === 'none' ? null : blank(form.recurrenceEnd),
-                ...(event
-                  ? {}
-                  : form.scope === 'global'
-                    ? { global: true }
-                    : form.scope === 'branch'
-                      ? { branch_ids: [form.scopeId] }
-                      : form.scope === 'category'
-                        ? { category_ids: [form.scopeId] }
-                        : { level_ids: [form.scopeId] }),
-              });
-            }}
-          >
-            {t('common.save')}
-          </Button>
-        </div>
-      </div>
-    </Dialog>
+      </>
+    </FormDialog>
   );
+
 }

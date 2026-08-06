@@ -220,7 +220,21 @@ export function GroupsPage(): ReactNode {
   }
 
   return (
-    <AdminLayout title={t('admin.nav.groups')} lede={t('admin.groups.lede')}>
+    <AdminLayout
+      title={t('admin.nav.groups')}
+      lede={t('admin.groups.lede')}
+      // **The page's primary action lives in the layout's slot, not in the
+      // table's toolbar.** The toolbar is for narrowing what is listed; creating
+      // a record is not a filter, and mixing the two put the same button in two
+      // different places depending on which screen you were on.
+      actions={
+        canWrite ? (
+          <Button variant="primary" onClick={() => setEditing('new')}>
+            {t('admin.groups.create')}
+          </Button>
+        ) : null
+      }
+    >
       {/* The shared notice style every other back-office screen uses. This one
           rendered a bare `<p role="status">`, which carried none of the spacing
           or colour the rest of the platform gives a result message. */}
@@ -252,11 +266,6 @@ export function GroupsPage(): ReactNode {
                 It is also why the filters were independent: a raw control has
                 nowhere for a dependency to live. */}
             <ScopeSelectors scope={scope} fields={GROUP_SCOPE} mode="filter" />
-            {canWrite ? (
-              <Button variant="primary" onClick={() => setEditing('new')}>
-                {t('admin.groups.create')}
-              </Button>
-            ) : null}
           </>
         }
         pagination={{ page, pageSize: 25, total, onPage: setPage }}

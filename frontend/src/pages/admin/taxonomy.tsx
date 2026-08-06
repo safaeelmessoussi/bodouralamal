@@ -209,7 +209,17 @@ export function TaxonomyPage({ kind }: { kind: TaxonomyKind }): ReactNode {
     : [];
 
   return (
-    <AdminLayout title={t(spec.navKey)} lede={t(spec.ledeKey)}>
+    <AdminLayout
+      title={t(spec.navKey)}
+      lede={t(spec.ledeKey)}
+      actions={
+        canWrite ? (
+          <Button variant="primary" onClick={() => setEditing('new')}>
+            {t(spec.createKey)}
+          </Button>
+        ) : null
+      }
+    >
       {notice ? (
         <p className="admin-notice" role="status" aria-live="polite">
           {notice}
@@ -224,13 +234,6 @@ export function TaxonomyPage({ kind }: { kind: TaxonomyKind }): ReactNode {
         status={status}
         actions={actions}
         onRetry={() => void load()}
-        toolbar={
-          canWrite ? (
-            <Button variant="primary" onClick={() => setEditing('new')}>
-              {t(spec.createKey)}
-            </Button>
-          ) : null
-        }
       />
 
       {editing ? (

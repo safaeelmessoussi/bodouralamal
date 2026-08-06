@@ -508,6 +508,52 @@ would mint permission checks for content nobody opened.
 > the client should refresh pre-emptively is a Document Owner decision, not an implementation
 > detail.
 
+## The scheduling pages are one feature family
+
+`الأنشطة` (`/admin/calendar`) and `الحصص` (`/admin/schedules`) drifted three
+separate times, and never in a way either page looked wrong for on its own. What
+was wrong was always **the difference**:
+
+| | Events | Sessions (before) |
+|---|---|---|
+| Page lede | layout prop | a `<p className="lede">` in the body, so the first line sat at a different height |
+| Create button | `variant="primary"` in the layout's action slot | no variant — the page's main action was not the emphasised one |
+| Result message | shared `.admin-notice` | bare `<p role="status">`, carrying no spacing or colour |
+| Filter row | present | **none**, though the endpoint accepts branch, subject and year |
+| Form fields | wrapped in `.form` | **no wrapper** — every field's spacing differed |
+| Save button | `variant="primary"` | default, so *cancel* and *save* looked equally weighted |
+| List dialogs | — | two hand-written `<Dialog>` + `<ul>` blocks |
+
+**The frame was shared and the contents were not**, which is the whole story:
+`Dialog` gave the outline, and each form assembled the rest by hand.
+`components/ui/form-dialog.tsx` closes that — a form supplies its **fields**, and
+the component owns the wrapper, the notice, and the two buttons that end every
+form the same way. `ListDialog` beside it does the same for a dialog whose whole
+content is a set, and owns the part worth sharing: **an empty list means *there
+are none***, which for conflicts is a reassuring answer and must not render as an
+empty `<ul>` a reader mistakes for a failure to load.
+
+### Where the primary action lives
+
+**In the layout's `actions` slot, never the table's toolbar.** The toolbar is for
+narrowing what is listed; creating a record is not a filter. Mixing them put the
+same button in two places depending on which screen you were on.
+
+### What genuinely differs, and why it should
+
+Only the **fields the domain requires**: a class has a Subject, a Room, a primary
+teacher and assistants; an Event has a visibility and a four-way scope. The
+recurrence control is one component with two variants because `lib/recurrence.ts`
+states the shapes are *deliberately not merged* — an Event is anchored on a start
+date, a class happens **on Tuesdays**. The control is identical, which is what an
+administrator notices; the fields differ, because the models do.
+
+`scheduling-parity.test.tsx` pins this **structurally** rather than
+per-difference: it asserts both files reach for the same primitives and that
+neither contains the hand-rolled equivalents. A per-difference test would have to
+be remembered for each new divergence, which is the discipline that already
+failed three times.
+
 ## Every selector is dependent, and one module says how
 
 **The defect this exists for.** Each screen's selectors were independent: a form offered all 21

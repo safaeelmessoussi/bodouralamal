@@ -26,6 +26,7 @@ import { SelectField } from '../../components/ui/field.js';
 import { ApiError } from '../../lib/api.js';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
+import { FormDialog, ListDialog } from '../../components/ui/form-dialog.js';
 import {
   DataTable,
   type Column,
@@ -103,18 +104,26 @@ export function SchedulesPage(): ReactNode {
   const [written, setWritten] = useState<Materialization | null>(null);
   const [roster, setRoster] = useState<ScheduleRosterEntry[] | null>(null);
   const [deleting, setDeleting] = useState<CourseSchedule | null>(null);
+  /** The same graph the form uses, and the same one every other screen uses. */
+  const listScope = useScopeOptions({ token: accessToken, fields: LIST_SCOPE });
 
   const load = useCallback(async () => {
     setStatus('loading');
     try {
-      const result = await listCourseSchedules(accessToken, page);
+      const result = await listCourseSchedules(accessToken, page, {
+        ...(listScope.value.branchId ? { branch_id: listScope.value.branchId } : {}),
+        ...(listScope.value.subjectId ? { subject_id: listScope.value.subjectId } : {}),
+        ...(listScope.value.academicYearId
+          ? { academic_year_id: listScope.value.academicYearId }
+          : {}),
+      });
       setRows(result.data);
       setTotal(result.meta.total);
       setStatus('ready');
     } catch {
       setStatus('error');
     }
-  }, [accessToken, page]);
+  }, [accessToken, page, listScope.value.branchId, listScope.value.subjectId, listScope.value.academicYearId]);
 
   useEffect(() => {
     void load();
@@ -213,10 +222,21 @@ export function SchedulesPage(): ReactNode {
   return (
     <AdminLayout
       title={t('admin.nav.schedules')}
-      actions={<Button onClick={() => setEditing('new')}>{t('admin.schedules.create')}</Button>}
+      // **The lede is a layout prop, not a paragraph in the body.** الأنشطة
+      // passed it here and الحصص rendered its own `<p className="lede">` after
+      // the heading, which put the two pages' first line at different heights.
+      lede={t('admin.schedules.lede')}
+      actions={
+        <Button variant="primary" onClick={() => setEditing('new')}>
+          {t('admin.schedules.create')}
+        </Button>
+      }
     >
-      <p className="lede">{t('admin.schedules.lede')}</p>
-      {notice ? <p role="status">{notice}</p> : null}
+      {notice ? (
+        <p className="admin-notice" role="status" aria-live="polite">
+          {notice}
+        </p>
+      ) : null}
 
       <DataTable
         caption={t('admin.schedules.caption')}
@@ -226,44 +246,45 @@ export function SchedulesPage(): ReactNode {
         status={status}
         actions={actions}
         onRetry={() => void load()}
+        filtered={listScope.value.branchId !== '' || listScope.value.subjectId !== ''}
+        onClearFilters={() => {
+          listScope.setMany({ branchId: '', levelId: '', subjectId: '', academicYearId: '' });
+          setPage(1);
+        }}
+        toolbar={
+          // الأنشطة has always had a filter row; الحصص had none at all, even
+          // though `GET /admin/course-schedules` accepts branch, subject and
+          // academic year. The same component renders both.
+          <ScopeSelectors scope={listScope} fields={LIST_SCOPE} mode="filter" />
+        }
         pagination={{ page, pageSize: 25, total, onPage: setPage }}
       />
 
-      <Dialog
+      <ListDialog
         open={conflicts !== null}
-        onClose={() => setConflicts(null)}
         title={t('admin.schedules.conflictsTitle')}
-      >
-        <p className="lede">{t('admin.schedules.conflictsLede')}</p>
-        {conflicts && conflicts.length === 0 ? (
-          <p>{t('admin.schedules.conflictsEmpty')}</p>
-        ) : (
-          <ul>
-            {(conflicts ?? []).map((c) => (
-              <li key={`${c.session_id}-${c.kind}-${c.resource_id}`}>
-                <time dateTime={c.date}>{c.date}</time> — {t(`admin.schedules.conflictKind_${c.kind}`)}
-              </li>
-            ))}
-          </ul>
+        lede={t('admin.schedules.conflictsLede')}
+        emptyLabel={t('admin.schedules.conflictsEmpty')}
+        items={conflicts}
+        itemKey={(c) => `${c.session_id}-${c.kind}-${c.resource_id}`}
+        renderItem={(c) => (
+          <>
+            <time dateTime={c.date}>{c.date}</time> — {t(`admin.schedules.conflictKind_${c.kind}`)}
+          </>
         )}
-      </Dialog>
+        onClose={() => setConflicts(null)}
+      />
 
-      <Dialog
+      <ListDialog
         open={roster !== null}
-        onClose={() => setRoster(null)}
         title={t('admin.schedules.rosterTitle')}
-      >
-        <p className="lede">{t('admin.schedules.rosterLede')}</p>
-        {roster && roster.length === 0 ? (
-          <p>{t('admin.schedules.rosterEmpty')}</p>
-        ) : (
-          <ul>
-            {(roster ?? []).map((s) => (
-              <li key={s.student_id}>{s.name ?? s.student_id}</li>
-            ))}
-          </ul>
-        )}
-      </Dialog>
+        lede={t('admin.schedules.rosterLede')}
+        emptyLabel={t('admin.schedules.rosterEmpty')}
+        items={roster}
+        itemKey={(s) => s.student_id}
+        renderItem={(s) => s.name ?? s.student_id}
+        onClose={() => setRoster(null)}
+      />
 
       <ScheduleDialog
         open={editing !== null}
@@ -299,6 +320,10 @@ export function SchedulesPage(): ReactNode {
  * Branch and Level come first because they narrow everything after them — the
  * Groups at that premises, and the Subjects that Level actually teaches.
  */
+/** What the LIST filters by — the three the endpoint accepts. Level is carried
+ *  because Subject depends on it (§4.4b); it is not sent as a filter. */
+const LIST_SCOPE = ['branchId', 'levelId', 'subjectId', 'academicYearId'] as const;
+
 const SCHEDULE_SCOPE = [
   'branchId',
   'levelId',
@@ -493,21 +518,16 @@ function ScheduleDialog({
   }
 
   return (
-    <Dialog
+    <FormDialog
       open={open}
-      onClose={onCancel}
       title={t(schedule ? 'admin.schedules.editTitle' : 'admin.schedules.create')}
       wide
+      notice={notice}
+      busy={busy}
+      disabled={!complete}
+      onCancel={onCancel}
+      onSubmit={() => void submit()}
     >
-      {notice ? <p role="status">{notice}</p> : null}
-
-      {/* **The shared field primitives, exactly as the Events form uses them.**
-          These were six hand-rolled `<label><select>` blocks, which is why the
-          two scheduling screens looked like different products: a raw control
-          carries no label association, no hint slot and no error slot, so it
-          spaces and behaves differently from every other form in the platform
-          (constitution §4.3). The MODEL fields below stay different — that is
-          the honest part — while the way they are asked no longer does. */}
       {/* **The dependency graph, shared with every other screen.** Branch and
           Level narrow the Groups; the Level decides which Subjects exist at all
           (`LevelSubject`, R43). The server refuses a pair the curriculum does
@@ -632,15 +652,7 @@ function ScheduleDialog({
         <p className="field__hint">{t('admin.schedules.assistantsHint')}</p>
       </fieldset>
 
-      <div className="form__actions">
-        <Button variant="secondary" onClick={onCancel}>
-          {t('common.cancel')}
-        </Button>
-        <Button disabled={!complete || busy} onClick={() => void submit()}>
-          {t('common.save')}
-        </Button>
-      </div>
-    </Dialog>
+    </FormDialog>
   );
 }
 
