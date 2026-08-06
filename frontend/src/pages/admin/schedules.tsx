@@ -12,23 +12,16 @@ import {
   type ScheduleConflict,
   type ScheduleRosterEntry,
 } from '../../adapters/course-schedules.js';
-import {
-  listAdministrativeGroups,
-  type AdministrativeGroup,
-} from '../../adapters/administrative-groups.js';
-import { fetchCalendarBootstrap, type BranchRef, type LevelRef } from '../../adapters/calendar.js';
-import {
-  listAcademicYears,
-  listSubjects,
-  type AcademicYearRef,
-  type SubjectRef,
-} from '../../adapters/reference-data.js';
+// Levels, Subjects, Branches, Groups and Academic Years are no longer fetched
+// here: `useScopeOptions` owns that graph for every screen (§4.4b, §4.4c).
 import { searchUsers, type UserSummary } from '../../adapters/users.js';
 import { Button } from '../../components/ui/button.js';
 import {
   RecurrenceEditor,
   SchedulingTimes,
 } from '../../components/scheduling/recurrence-editor.js';
+import { ScopeSelectors } from '../../components/scope/scope-selectors.js';
+import { useScopeOptions } from '../../hooks/use-scope-options.js';
 import { SelectField } from '../../components/ui/field.js';
 import { ApiError } from '../../lib/api.js';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
@@ -78,11 +71,22 @@ export function timeLabel(schedule: Pick<CourseSchedule, 'start_time' | 'end_tim
   return `${schedule.start_time} – ${schedule.end_time}`;
 }
 
-/** The weekday list when there is one, otherwise the recurrence rule's own name. */
+/**
+ * The weekday list when there is one, otherwise the recurrence rule's own name —
+ * **in Arabic**.
+ *
+ * The column rendered `weekdays.join('، ')` straight from the wire, so an
+ * Arabic-only interface (§6) showed `monday، wednesday`. The enum values are
+ * the contract's vocabulary and are never what a reader sees; the catalog that
+ * translates them is the one the recurrence editor's checkboxes already use, so
+ * the table and the form now say the same word for the same day.
+ */
 export function recurrenceLabel(
   schedule: Pick<CourseSchedule, 'weekdays' | 'recurrence'>,
 ): string {
-  return schedule.weekdays.length > 0 ? schedule.weekdays.join('، ') : schedule.recurrence;
+  return schedule.weekdays.length > 0
+    ? schedule.weekdays.map((d) => t(`scheduling.weekday.${d}`)).join('، ')
+    : t(`calendar.recurrence.${schedule.recurrence}`);
 }
 
 export function SchedulesPage(): ReactNode {
@@ -289,6 +293,20 @@ export function SchedulesPage(): ReactNode {
   );
 }
 
+/**
+ * The scope this form selects on.
+ *
+ * Branch and Level come first because they narrow everything after them — the
+ * Groups at that premises, and the Subjects that Level actually teaches.
+ */
+const SCHEDULE_SCOPE = [
+  'branchId',
+  'levelId',
+  'groupId',
+  'subjectId',
+  'academicYearId',
+] as const;
+
 const MODES = ['entire_level', 'administrative_group', 'teaching_group'] as const;
 // The recurrence vocabulary and the weekday list moved to
 // `components/scheduling/recurrence-editor.tsx`, which both scheduling screens
@@ -327,71 +345,88 @@ function ScheduleDialog({
   onDone: (report: Materialization) => void;
   onCancel: () => void;
 }): ReactNode {
-  const [subjects, setSubjects] = useState<SubjectRef[]>([]);
-  const [years, setYears] = useState<AcademicYearRef[]>([]);
-  const [levels, setLevels] = useState<LevelRef[]>([]);
-  const [branches, setBranches] = useState<BranchRef[]>([]);
-  const [groups, setGroups] = useState<AdministrativeGroup[]>([]);
   const [teachers, setTeachers] = useState<UserSummary[]>([]);
 
-  const [subjectId, setSubjectId] = useState('');
+  /** One graph, shared with the content screen and every filter bar. */
+  const scope = useScopeOptions({
+    token,
+    fields: SCHEDULE_SCOPE,
+    defaultCurrentYear: true,
+  });
+  const { branchId, levelId, subjectId, groupId, academicYearId: yearId } = scope.value;
+
   const [mode, setMode] = useState<string>('administrative_group');
-  const [targetId, setTargetId] = useState('');
-  const [branchId, setBranchId] = useState('');
-  const [yearId, setYearId] = useState('');
+  /** An existing schedule's target is fixed after creation, whatever kind it is
+   *  — including `teaching_group`, which the create form does not offer. */
+  const [existingTargetId, setExistingTargetId] = useState('');
   const [start, setStart] = useState('09:00');
   const [end, setEnd] = useState('10:00');
   const [recurrence, setRecurrence] = useState('weekly');
   const [weekdays, setWeekdays] = useState<string[]>(['monday']);
+  // §7: `anchor_date` starts the series and, for a fortnightly rule, decides
+  // which fortnight is *on*. The form never asked for it.
+  const [startDate, setStartDate] = useState('');
+  // R50's `effective_until`, on the contract since R55.
+  const [endDate, setEndDate] = useState('');
   const [teacherId, setTeacherId] = useState('');
+  /** §4.4c — zero or more, and their reach over students equals the teacher's. */
+  const [assistantIds, setAssistantIds] = useState<string[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     void (async () => {
-      const today = new Date().toISOString().slice(0, 10);
-      const [s, y, g, u] = await Promise.all([
-        listSubjects(token),
-        listAcademicYears(token),
-        listAdministrativeGroups(token, 1),
-        searchUsers(token, { role: 'teacher' }),
-      ]);
-      setSubjects(s);
-      setYears(y);
-      setGroups(g.data);
-      setTeachers(u.data);
-      try {
-        const bootstrap = await fetchCalendarBootstrap({ from: today, to: today });
-        setLevels(bootstrap.levels);
-        setBranches(bootstrap.branches);
-      } catch {
-        // Pickers stay empty; the dialog still functions for the rest.
-      }
-      // Default to the live year rather than asking an administrator which it
-      // is — the single reason `is_current` is on the selector contract.
-      setYearId((current) => current || (y.find((x) => x.is_current)?.id ?? ''));
+      // **Only what the scope graph does not own.** Levels, Subjects, Branches,
+      // Groups and Academic Years all come from `useScopeOptions`; the teacher
+      // list is this form's alone.
+      setTeachers((await searchUsers(token, { role: 'teacher' })).data);
     })();
   }, [open, token]);
 
   useEffect(() => {
     if (!schedule) return;
-    setSubjectId(schedule.subject_id);
     setMode(schedule.teaching_mode);
-    setTargetId(schedule.target_id);
-    setBranchId(schedule.branch_id);
-    setYearId(schedule.academic_year_id);
+    setExistingTargetId(schedule.target_id);
+    // Seeded rather than chosen: an edit opens on values the graph must accept
+    // as given, and `setMany` writes them without triggering the cascade that
+    // choosing a parent does.
+    scope.setMany({
+      subjectId: schedule.subject_id,
+      branchId: schedule.branch_id,
+      academicYearId: schedule.academic_year_id,
+      ...(schedule.teaching_mode === 'entire_level'
+        ? { levelId: schedule.target_id }
+        : { groupId: schedule.target_id }),
+    });
     setStart(schedule.start_time);
     setEnd(schedule.end_time);
     setRecurrence(schedule.recurrence);
     setWeekdays(schedule.weekdays);
+    setStartDate(schedule.anchor_date ?? '');
+    setEndDate(schedule.effective_until ?? '');
+    setTeacherId(schedule.staff.find((s) => s.position === 'teacher')?.user_id ?? '');
+    setAssistantIds(
+      schedule.staff.filter((s) => s.position === 'assistant').map((s) => s.user_id),
+    );
   }, [schedule]);
 
   const fixed = schedule !== null;
-  const targets =
-    mode === 'entire_level'
-      ? levels.map((l) => ({ id: l.id, name: l.name }))
-      : groups.map((g) => ({ id: g.id, name: g.name }));
+
+  /**
+   * **The target is one of the scope values, chosen by the mode** (§4.4c) — not
+   * a separate list of mixed entity kinds. *Entire level* delivers to the Level
+   * already chosen; *administrative group* to the roster at that Level and
+   * Branch. `teaching_group` is not offered on creation (it needs a split first)
+   * and is preserved unchanged on an existing row.
+   */
+  const targetId = fixed
+    ? existingTargetId
+    : mode === 'entire_level'
+      ? levelId
+      : mode === 'administrative_group'
+        ? groupId
+        : '';
 
   const complete =
     subjectId !== '' && targetId !== '' && branchId !== '' && yearId !== '' && start !== '' && end !== '';
@@ -404,7 +439,14 @@ function ScheduleDialog({
         ? await updateCourseSchedule(
             schedule.id,
             schedule.version,
-            { start_time: start, end_time: end, recurrence, weekdays },
+            {
+              start_time: start,
+              end_time: end,
+              recurrence,
+              weekdays,
+              anchor_date: startDate === '' ? null : startDate,
+              effective_until: endDate === '' ? null : endDate,
+            },
             token,
           )
         : await createCourseSchedule(
@@ -418,7 +460,18 @@ function ScheduleDialog({
               end_time: end,
               recurrence,
               weekdays,
-              ...(teacherId ? { staff: [{ user_id: teacherId, position: 'teacher' }] } : {}),
+              anchor_date: startDate === '' ? null : startDate,
+              effective_until: endDate === '' ? null : endDate,
+              // **One primary teacher and any number of assistants** (§4.4c),
+              // written as one `staff` array because that is one table with one
+              // rule — a parallel "assistants" field would be a second model of
+              // the same relationship.
+              staff: [
+                ...(teacherId
+                  ? [{ user_id: teacherId, position: 'teacher' as const }]
+                  : []),
+                ...assistantIds.map((id) => ({ user_id: id, position: 'assistant' as const })),
+              ],
             },
             token,
           );
@@ -455,15 +508,17 @@ function ScheduleDialog({
           spaces and behaves differently from every other form in the platform
           (constitution §4.3). The MODEL fields below stay different — that is
           the honest part — while the way they are asked no longer does. */}
-      <SelectField
-        label={t('admin.schedules.subject')}
-        value={subjectId}
-        onChange={setSubjectId}
-        disabled={fixed}
-        options={[
-          { value: '', label: t('common.choose') },
-          ...subjects.map((s) => ({ value: s.id, label: s.name })),
-        ]}
+      {/* **The dependency graph, shared with every other screen.** Branch and
+          Level narrow the Groups; the Level decides which Subjects exist at all
+          (`LevelSubject`, R43). The server refuses a pair the curriculum does
+          not contain — `policies/curriculum.ts`, one rule for scheduling,
+          teaching-group splits and content alike — so a form that offered every
+          Subject was offering combinations that could only be rejected. */}
+      <ScopeSelectors
+        scope={scope}
+        fields={['branchId', 'levelId']}
+        mode="form"
+        locked={fixed ? ['branchId', 'levelId'] : []}
       />
 
       <SelectField
@@ -474,7 +529,6 @@ function ScheduleDialog({
           setMode(v);
           // The target belongs to the mode; keeping the old id would submit an
           // entity of the wrong kind.
-          setTargetId('');
         }}
         options={MODES.filter((m) => m !== 'teaching_group' || fixed).map((m) => ({
           value: m,
@@ -482,37 +536,32 @@ function ScheduleDialog({
         }))}
       />
 
-      <SelectField
-        label={t('admin.schedules.target')}
-        value={targetId}
-        onChange={setTargetId}
-        disabled={fixed}
-        options={[
-          { value: '', label: t('common.choose') },
-          ...targets.map((x) => ({ value: x.id, label: x.name })),
-        ]}
+      {/* **The target IS one of the scope values**, chosen by the mode (§4.4c):
+          *entire level* delivers to the Level already selected above, so it asks
+          nothing further; *administrative group* asks which roster at that
+          Level and Branch. Rendering a generic "target" list of mixed entity
+          kinds was what let a group from another branch be chosen. */}
+      {mode === 'administrative_group' ? (
+        <ScopeSelectors
+          scope={scope}
+          fields={['groupId']}
+          mode="form"
+          locked={fixed ? ['groupId'] : []}
+        />
+      ) : null}
+
+      <ScopeSelectors
+        scope={scope}
+        fields={['subjectId']}
+        mode="form"
+        locked={fixed ? ['subjectId'] : []}
       />
 
-      <SelectField
-        label={t('admin.schedules.branch')}
-        value={branchId}
-        onChange={setBranchId}
-        disabled={fixed}
-        options={[
-          { value: '', label: t('common.choose') },
-          ...branches.map((b) => ({ value: b.id, label: b.name })),
-        ]}
-      />
-
-      <SelectField
-        label={t('admin.schedules.year')}
-        value={yearId}
-        onChange={setYearId}
-        disabled={fixed}
-        options={[
-          { value: '', label: t('common.choose') },
-          ...years.map((y) => ({ value: y.id, label: y.label })),
-        ]}
+      <ScopeSelectors
+        scope={scope}
+        fields={['academicYearId']}
+        mode="form"
+        locked={fixed ? ['academicYearId'] : []}
       />
 
       {fixed ? <p className="muted">{t('admin.schedules.fixedAfterCreate')}</p> : null}
@@ -528,24 +577,60 @@ function ScheduleDialog({
       <SchedulingTimes startTime={start} endTime={end} onStart={setStart} onEnd={setEnd} />
 
       <RecurrenceEditor
-        value={{ variant: 'weekday_set', type: recurrence, weekdays }}
+        value={{ variant: 'weekday_set', type: recurrence, weekdays, startDate, endDate }}
         onChange={(next) => {
           setRecurrence(next.type);
-          if (next.variant === 'weekday_set') setWeekdays(next.weekdays);
+          if (next.variant === 'weekday_set') {
+            setWeekdays(next.weekdays);
+            setStartDate(next.startDate);
+            setEndDate(next.endDate);
+          }
         }}
       />
 
-      {!fixed ? (
-        <SelectField
-          label={t('admin.schedules.teacher')}
-          value={teacherId}
-          onChange={setTeacherId}
-          options={[
-            { value: '', label: t('common.choose') },
-            ...teachers.map((x) => ({ value: x.id, label: x.name_arabic })),
-          ]}
-        />
-      ) : null}
+      {/* §4.4c — **one primary teacher and zero or more assistants.** Both are
+          `CourseScheduleStaff` rows differing only in `position`, and both reach
+          the schedule's students identically; what the distinction records is
+          which of them the class is *taught by*. Rendered as one selector plus a
+          checklist rather than two lists of people, so the asymmetry the model
+          states is the asymmetry the form shows. */}
+      <SelectField
+        label={t('admin.schedules.teacher')}
+        value={teacherId}
+        onChange={setTeacherId}
+        options={[
+          { value: '', label: t('common.choose') },
+          ...teachers.map((x) => ({ value: x.id, label: x.name_arabic })),
+        ]}
+      />
+
+      <fieldset className="field">
+        <legend className="field__label">{t('admin.schedules.assistants')}</legend>
+        <div className="field__choices">
+          {teachers
+            // The primary teacher is not offered as their own assistant: one
+            // person holds one position on one schedule, and the pair would be
+            // refused by the server as a duplicate assignment.
+            .filter((x) => x.id !== teacherId)
+            .map((x) => (
+              <label key={x.id} className="field field--choice">
+                <input
+                  type="checkbox"
+                  checked={assistantIds.includes(x.id)}
+                  onChange={(e) =>
+                    setAssistantIds((current) =>
+                      e.target.checked
+                        ? [...current, x.id]
+                        : current.filter((id) => id !== x.id),
+                    )
+                  }
+                />
+                <span>{x.name_arabic}</span>
+              </label>
+            ))}
+        </div>
+        <p className="field__hint">{t('admin.schedules.assistantsHint')}</p>
+      </fieldset>
 
       <div className="form__actions">
         <Button variant="secondary" onClick={onCancel}>

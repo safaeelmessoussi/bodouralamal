@@ -120,6 +120,15 @@ export function UsersPage(): ReactNode {
   const columns: Column<UserSummary>[] = [
     { key: 'name', header: t('admin.users.colName'), cell: (r) => r.name_arabic },
     {
+      key: 'email',
+      header: t('admin.users.colEmail'),
+      // The identifier an administrator actually recognises a person by, and
+      // the one they are given when somebody reports a problem. Absent for a
+      // minor student, who has no account of their own (§4.3) — rendered as a
+      // stated absence rather than a blank cell.
+      cell: (r) => r.email ?? <span className="muted">{t('admin.users.noEmail')}</span>,
+    },
+    {
       key: 'nickname',
       header: t('admin.users.colNickname'),
       secondary: true,
@@ -137,6 +146,24 @@ export function UsersPage(): ReactNode {
         ) : (
           r.roles.map((a) => roleLabel(a)).join('، ')
         ),
+    },
+    {
+      key: 'branches',
+      header: t('admin.users.colBranches'),
+      // **§14.2 lists Branch scope as a column of this table and it was
+      // missing.** The data was already on every row — each assignment carries
+      // its branch — so the screen was hiding the answer to *where does this
+      // person work*, which is the question a scoped Admin opens the list with.
+      cell: (r) => {
+        if (r.roles.length === 0) return <span className="muted">{t('common.notSet')}</span>;
+        // `branch_id: null` is **all branches for that assignment** (§7, R24),
+        // never *no branch* — collapsing the two is how an unscoped Super Admin
+        // reads as having no access at all.
+        const names = [
+          ...new Set(r.roles.map((a) => a.branch_name ?? t('admin.users.allBranches'))),
+        ];
+        return names.join('، ');
+      },
     },
     {
       key: 'status',

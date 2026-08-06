@@ -24,6 +24,8 @@ This is a standalone, self-contained specification. It does not reference extern
 * **§19 — Environments, Deployment Pipeline & Testing Strategy.**
 * **§20 — AI Implementation Rules:** hard guardrails for any autonomous coding agent. §20 closes the document deliberately: it is the last thing an agent reads before writing code.
 
+**Revision 55 (Document Owner decisions — dependent selection, split taxonomy nodes, Users columns, recurrence bounds, 2026-08-06):** **(1) Every selector in the platform is dependent** (§14.4): it offers only values valid for the current selection, changing one refreshes those below it, and **a selection no longer offered is cleared rather than kept** — the interface must not be able to express a combination the server will refuse. **Academic Year is exempt**, because the platform's years are global (§4.10) and inventing a dependency to make the set look uniform would misdescribe the model. **(2) §14.1's single *Categories & Subjects* node becomes two**, `/admin/categories` (الفئات) and `/admin/subjects` (المواد); **the implementation stays single** — they are the same kind of record, so the entity is a parameter and the screen is written once. **(3) §14.2's Users table gains `email`** — the bound `UserIdentity` address, or `pre_provisioned_email` for an account not yet claimed (R15), and `null` for a login-less minor student, which is a fact rather than a gap (§4.3) — together with its already-specified **Branch scope** column, which had never been rendered. This is **not** a display identity: §20 rule 21 governs the name shown to the public, while this is an administrative identifier on a staff-only screen (TD-2). **(4) `effective_until` (R50) and `anchor_date` join the course-schedule write contract.** The column existed from R50 and could only be set as a side effect of *splitting* a schedule, so a class running for one term could not be described as running for one term — while an Event, the other half of the same scheduling module, has carried a recurrence end since it shipped; and without `anchor_date` a `biweekly_alternating` class could not say which fortnight was *on* (§7). **Recorded as a defect fixed rather than a decision taken:** `LevelSubject` (§4.4b) — what a Level teaches — was enforced by teaching-group splits and by content uploads but **not by course-schedule creation**, and the two that did enforce it used different reason codes. The live database consequently held Course Schedules whose Levels officially taught nothing, and to which no content could then be attached. One policy now governs all three surfaces, raising **`SUBJECT_NOT_IN_LEVEL`**.
+
 **Revision 53 (content replacement and deletion get a contract, 2026-08-06):** TD-3.5 defined creation and no lifecycle, while TD-9 already specified how replacement must behave and TD-5/BR-15 how deletion must — mechanics with no endpoint to reach them, though §5.5 and §5.6 both list the actions. **Replacement extends the upload flow**: `content_meta` gains an optional `replaces_content_id`, and completion updates that record rather than creating one — **a new key with a new hash segment, the previous object quarantined, `version` incremented**, exactly as TD-9 requires. It is deliberately **not** a route of its own: a replacement *is* an upload, needing the same presigned PUT, the same whitelist and cap checks, the same magic-byte verification and the same quota, and a second route would be that flow written twice. **Deletion is its own route**, `DELETE /content/{id}`, because it moves no bytes in: soft delete, `Trash` snapshot, and **the object moved to `quarantine/…` rather than destroyed**, so BR-15's ninety-day window means for a recording what it means everywhere else. **No permanent-delete route**, consistent with Revision 52.
 
 **Revision 52 (Document Owner decision — the Trash page ships now, with per-entity restore, 2026-08-05):** Revision 6 deferred `/admin/trash` in full and Revision 7 marked that deferral as intentional. **The browsing page returns to the MVP**, and **restore returns per entity type rather than universally** — the Owner's direction: *"do not delay the entire feature because some entity types are more complex; the UI can support different capabilities per entity type."*
@@ -1215,7 +1217,9 @@ DELETE /admin/teaching-groups/{id}/members/{studentId}
 
 # Recurring Course Schedules (§4.4) — the unit of delivery
 GET    /admin/course-schedules?branch_id=&level_id=&subject_id=&teacher_id=&page=
-POST   /admin/course-schedules   → { subject_id, teaching_mode, target_id, branch_id, room_id,
+POST   /admin/course-schedules   (R55: optional `anchor_date` starts the series — for
+                                 biweekly_alternating it fixes WHICH fortnight is "on" (§7);
+                                 optional `effective_until` is R50's bound, null = open-ended)   → { subject_id, teaching_mode, target_id, branch_id, room_id,
                                      start_time, end_time, recurrence, academic_year_id,
                                      staff: [{ user_id, position }] }
                  `teaching_mode` ∈ entire_level | administrative_group | teaching_group, and
@@ -1726,7 +1730,7 @@ AUTHENTICATED (role-gated; header: account switcher incl. child context, languag
 │   │   (Course Schedules moved to الجدولة / Scheduling — Revision 51; /teacher/schedules is unchanged)
 │   ├── Levels ........................ /admin/levels
 │   ├── Subject Organisation .......... /admin/levels/{id}/subjects/{subjectId} (Teaching Groups, R43)
-│   ├── Subjects ...................... /admin/taxonomy (subjects tab)
+│   ├── Subjects ...................... /admin/subjects (R55 — its own node)
 │   ├── Exams ......................... /teacher/exams (author/grade) · /dashboard/student/grades (take/view)
 │   └── Quran Progress ................ /teacher/students/{id}/quran · /dashboard/student/quran
 ├── People
@@ -1746,7 +1750,8 @@ AUTHENTICATED (role-gated; header: account switcher incl. child context, languag
 │   └── Content Library ............... /admin/content
 ├── Administration
 │   ├── Branches & Rooms .............. /admin/branches (read: Admin · write: Super Admin, R26)
-│   ├── Categories & Subjects ......... /admin/taxonomy (read: Admin · write: Super Admin, R26)
+│   ├── الفئات / Categories ............ /admin/categories (read: Admin · write: Super Admin, R26/R55)
+│   ├── المواد / Subjects .............. /admin/subjects (read: Admin · write: Super Admin, R26/R55)
 │   ├── System Settings ............... /superadmin/settings (Super Admin only)
 │   └── Hijri Calendar Management ..... /superadmin/hijri-calendar (Super Admin only, Revision 31)
 └── Profile ........................... /profile
@@ -1762,7 +1767,7 @@ AUTHENTICATED (role-gated; header: account switcher incl. child context, languag
 | Screen | Columns | Row actions | Filters |
 |---|---|---|---|
 | Groups (`/admin/groups`) | Name, Level, Branch, Room, Day+Time, Teacher(s), Enrolled/Capacity | Edit, Roster, Delete (guarded TD-5) | Branch, Level, Teacher |
-| Users (`/admin/users`) | Arabic name, Nickname, Role(s), Branch scope, Status, Phone | Edit, Approve/Reject (if pending), Deactivate, Consents | Role, Branch, Status |
+| Users (`/admin/users`) | Arabic name, **Email (R55)**, Nickname, Role(s), Branch scope, Status, Phone | Edit, Approve/Reject (if pending), Deactivate, Consents | Role, Branch, Status |
 | Approvals (`/admin/approvals`) | Type (registration/link), Applicant(s), Submitted date, Bundle contents, **Branch requested (Revision 39)** | Approve, Reject (reason) | Type, Branch |
 | Exams (`/teacher/exams`) | Title, Level, Subject/Surah, Date, Round, Policy, Status | Edit, Publish, Grade submissions | Level, Round, Status |
 | Content Library (`/admin/content`) | Title, Level, Branch (or Global), Year, Visibility, Consent-forced flag | Change visibility (gated), Move scope, Delete | Level, Branch, Year, Visibility |

@@ -508,6 +508,55 @@ would mint permission checks for content nobody opened.
 > the client should refresh pre-emptively is a Document Owner decision, not an implementation
 > detail.
 
+## Every selector is dependent, and one module says how
+
+**The defect this exists for.** Each screen's selectors were independent: a form offered all 21
+Levels and all 3 Subjects and let an administrator pick any pair, while a Subject reaches a Level
+only through `LevelSubject` (§4.4b, R43). The interface was offering combinations the domain does
+not contain, and then reporting them as the user's mistake.
+
+`hooks/use-scope-options.ts` states the graph once:
+
+```
+Category ──< Level ──< LevelSubject >── Subject
+                │
+                └──< AdministrativeGroup >── Branch
+```
+
+Two rules a screen must never re-implement:
+
+1. **Changing a parent reloads every child** — not just the next one. A Level change invalidates
+   Subjects *and* Groups.
+2. **A selection no longer offered is cleared, not kept.** A stale id left in state is precisely
+   what reaches the server as an impossible pair; clearing it is what makes *"the UI cannot
+   express an invalid combination"* true rather than aspirational.
+
+**Why one module and not one chain per screen.** Six screens ask overlapping versions of the
+same question, and six copies of *"when the Level changes, reload the Subjects and clear the
+stale one"* is exactly the duplication that drifts here — the copy that forgets to clear still
+passes its own tests.
+
+**Academic Year is deliberately unchained.** The platform's years are global (§4.10). Inventing
+a dependency so the set looks uniform would be a lie about the model.
+
+### An empty list is never a bare empty dropdown
+
+`components/scope/scope-selectors.tsx` owns *how they look and what they say*, and three states
+are worded differently because they are different:
+
+| State | What it says |
+|---|---|
+| Parent not chosen | *choose a level first* — an instruction |
+| List loading | the field is `busy`; the label does not flicker |
+| Genuinely empty | *this level teaches no subjects* — a fact about the curriculum, naming the screen that changes it |
+
+The third is the one that mattered: it is the state that used to reach the server as
+`SUBJECT_NOT_IN_LEVEL`.
+
+**Global / بدون فرع is passed in, not built in.** `branch_id = null` is a real scope (§4.9) that
+no branch list can contain, so it travels as `extraOptions` from the screens that mean it —
+rather than teaching a shared component why a branch selector sometimes offers a non-branch.
+
 ## Content upload, and why one screen serves two portals
 
 `/admin/content` (§5.6) and `/teacher/content` (§5.5) render **the same component**. The

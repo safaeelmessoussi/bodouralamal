@@ -29,6 +29,8 @@ const SCHEDULE_KEYS = [
   'anchor_date',
   'branch_id',
   'day_of_month',
+  // R55 — R50's bound reaches the contract; `null` is open-ended.
+  'effective_until',
   'end_time',
   'id',
   'month_of_year',

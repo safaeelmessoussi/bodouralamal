@@ -195,14 +195,14 @@ describe('the Level/Subject pairing the screen must respect (R43)', () => {
     // picker offering every Subject in the platform can only ever produce this.
     const res = await initiate(payload({ subject_id: untaughtSubjectId }));
     expect(res.status).toBe(409);
-    expect(res.body.error?.details?.['reason']).toBe('SUBJECT_NOT_AT_LEVEL');
+    expect(res.body.error?.details?.['reason']).toBe('SUBJECT_NOT_IN_LEVEL');
   });
 
   it('refuses every Subject once the Level teaches none — the observed database state', async () => {
     await prisma.levelSubject.deleteMany({ where: { levelId } });
     for (const subject of [taughtSubjectId, untaughtSubjectId]) {
       const res = await initiate(payload({ subject_id: subject }));
-      expect(res.body.error?.details?.['reason']).toBe('SUBJECT_NOT_AT_LEVEL');
+      expect(res.body.error?.details?.['reason']).toBe('SUBJECT_NOT_IN_LEVEL');
     }
   });
 });

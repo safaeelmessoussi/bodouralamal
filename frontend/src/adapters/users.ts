@@ -34,6 +34,12 @@ export interface UserSummary {
   name_arabic: string;
   nickname: string | null;
   phone: string | null;
+  /**
+   * The bound Google address, or the pre-provisioned one for an account not yet
+   * claimed (R15). **`null` is a fact, not a gap**: a minor student is a
+   * login-less row with no address at all (§4.3).
+   */
+  email: string | null;
   account_status: string;
   roles: RoleAssignment[];
   /**

@@ -4851,7 +4851,7 @@
             }
           },
           "409": {
-            "description": "Error envelope (TD-3.8). STATE_CONFLICT with details.reason SUBJECT_NOT_AT_LEVEL.",
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT with details.reason SUBJECT_NOT_IN_LEVEL — the one code all three curriculum surfaces raise (scheduling, teaching-group splits, content).",
             "content": {
               "application/json": {
                 "schema": {

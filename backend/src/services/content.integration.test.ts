@@ -264,7 +264,10 @@ describe('the two-phase upload (TD-3.5)', () => {
       }),
     );
     expect(e.code).toBe('STATE_CONFLICT');
-    expect(e.details?.['reason']).toBe('SUBJECT_NOT_AT_LEVEL');
+    // One code across all three surfaces (`policies/curriculum.ts`): scheduling
+    // and teaching-group splits raise the same one, and the older spelling wins
+    // because clients render it.
+    expect(e.details?.['reason']).toBe('SUBJECT_NOT_IN_LEVEL');
   });
 });
 

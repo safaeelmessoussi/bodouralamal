@@ -1,5 +1,6 @@
 import type { Prisma, PrismaClient, TeachingGroup } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
+import { assertSubjectTaughtAtLevel } from '../policies/curriculum.js';
 import * as scope from '../policies/branch-scope.js';
 import * as audit from '../repositories/audit.repository.js';
 import * as trash from '../repositories/trash.repository.js';
@@ -128,18 +129,10 @@ export async function createTeachingGroup(
 
     // The Subject must actually be taught at this Level. Splitting a Subject a
     // Level does not offer would create groups nothing can ever schedule, and
-    // they would sit in the taxonomy looking legitimate.
-    const assigned = await tx.levelSubject.findFirst({
-      where: { levelId: input.levelId, subjectId: input.subjectId, deletedAt: null },
-      select: { id: true },
-    });
-    if (!assigned) {
-      throw new AppError('STATE_CONFLICT', 'subject is not assigned to this level', {
-        reason: 'SUBJECT_NOT_IN_LEVEL',
-        level_id: input.levelId,
-        subject_id: input.subjectId,
-      });
-    }
+    // they would sit in the taxonomy looking legitimate. **The rule lives in
+    // `policies/curriculum.ts`** — it governs scheduling and content too, and
+    // this was one of the three copies that had already diverged.
+    await assertSubjectTaughtAtLevel(tx, input.levelId, input.subjectId);
 
     const group = await tx.teachingGroup.create({
       data: {

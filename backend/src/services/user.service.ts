@@ -267,6 +267,16 @@ export async function listUsers(
         phone: true,
         accountStatus: true,
         version: true,
+        // **The two places an address can live, and both are needed** (R15,
+        // TD-10). A pre-provisioned account has no `UserIdentity` row until its
+        // first Google sign-in, so reading only the identity would leave exactly
+        // the accounts staff most need to find showing no address at all —
+        // which is the same reasoning TD-10 gives for searching both columns.
+        preProvisionedEmail: true,
+        // TD-5 **deactivates** an identity rather than deleting it, so the
+        // filter is `is_active` — a soft-deleted account's address must not be
+        // presented as a live one.
+        identities: { where: { isActive: true }, select: { email: true }, take: 1 },
         branchRoles: {
           where: { deletedAt: null },
           select: { branchId: true, role: { select: { name: true } }, branch: { select: { name: true } } },
@@ -289,6 +299,11 @@ export async function listUsers(
       publicDisplayName: u.publicDisplayName,
       phone: u.phone,
       accountStatus: u.accountStatus,
+      // The bound Google address where one exists, the pre-provisioned one
+      // otherwise (R15). `null` for a minor student, who has neither and is
+      // reached through their parent — an absent address here is a fact about
+      // the person, not a gap in the row.
+      email: u.identities[0]?.email ?? u.preProvisionedEmail,
       roles: u.branchRoles.map((r) => ({
         role: r.role.name,
         branchId: r.branchId,

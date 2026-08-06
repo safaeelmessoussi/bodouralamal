@@ -8,6 +8,7 @@ import { AppError } from '../lib/errors.js';
 import { page, pageWindow, type Page, type PageParams } from '../lib/pagination.js';
 import { addDays, atMidnightUtc, expandSchedule, timesOverlap } from '../lib/recurrence.js';
 import * as scope from '../policies/branch-scope.js';
+import { assertSubjectTaughtAtLevel } from '../policies/curriculum.js';
 import { resolveAudience } from '../policies/roster-resolution.js';
 import * as audit from '../repositories/audit.repository.js';
 import * as trash from '../repositories/trash.repository.js';
@@ -124,6 +125,7 @@ export interface CourseScheduleInput {
   dayOfMonth?: number | null;
   monthOfYear?: number | null;
   anchorDate?: Date | null;
+  effectiveUntil?: Date | null;
   academicYearId: string;
   staff?: ScheduleStaffInput[];
 }
@@ -150,7 +152,21 @@ async function resolveTarget(
   mode: TeachingMode,
   targetId: string,
   branchId: string,
-): Promise<{ levelId: string | null; administrativeGroupId: string | null; teachingGroupId: string | null }> {
+): Promise<{
+  levelId: string | null;
+  administrativeGroupId: string | null;
+  teachingGroupId: string | null;
+  /**
+   * **The Level this schedule actually delivers to**, whichever of the three
+   * modes named the target (§4.4c).
+   *
+   * Distinct from `levelId` above, which is the *column* and is populated only
+   * in `entire_level` mode. The curriculum check needs the Level in all three
+   * modes, and deriving it here — beside the resolution that already knows it —
+   * is what keeps the derivation from being repeated by every caller that asks.
+   */
+  effectiveLevelId: string;
+}> {
   switch (mode) {
     case 'entire_level': {
       const level = await tx.level.findFirst({
@@ -158,12 +174,17 @@ async function resolveTarget(
         select: { id: true },
       });
       if (!level) throw new AppError('NOT_FOUND', 'no such level');
-      return { levelId: targetId, administrativeGroupId: null, teachingGroupId: null };
+      return {
+        levelId: targetId,
+        administrativeGroupId: null,
+        teachingGroupId: null,
+        effectiveLevelId: targetId,
+      };
     }
     case 'administrative_group': {
       const group = await tx.administrativeGroup.findFirst({
         where: { id: targetId, deletedAt: null },
-        select: { id: true, branchId: true },
+        select: { id: true, branchId: true, levelId: true },
       });
       if (!group) throw new AppError('NOT_FOUND', 'no such administrative group');
       // §4.4: "The schedule's branch must match its target's branch wherever the
@@ -176,18 +197,28 @@ async function resolveTarget(
           schedule_branch_id: branchId,
         });
       }
-      return { levelId: null, administrativeGroupId: targetId, teachingGroupId: null };
+      return {
+        levelId: null,
+        administrativeGroupId: targetId,
+        teachingGroupId: null,
+        effectiveLevelId: group.levelId,
+      };
     }
     case 'teaching_group': {
       const group = await tx.teachingGroup.findFirst({
         where: { id: targetId, deletedAt: null },
-        select: { id: true },
+        select: { id: true, levelId: true },
       });
       if (!group) throw new AppError('NOT_FOUND', 'no such teaching group');
       // A Teaching Group has no branch (§4.4c, R43.3), so there is nothing to
       // match here — the branch is the schedule's own statement of where it
       // meets.
-      return { levelId: null, administrativeGroupId: null, teachingGroupId: targetId };
+      return {
+        levelId: null,
+        administrativeGroupId: null,
+        teachingGroupId: targetId,
+        effectiveLevelId: group.levelId,
+      };
     }
   }
 }
@@ -212,6 +243,10 @@ export async function findConflicts(
     dayOfMonth: number | null;
     monthOfYear: number | null;
     anchorDate: Date | null;
+    /** R50 — the conflict check must respect the bound, or a schedule that ends
+     *  in December would be reported as clashing with one that starts in
+     *  January. `expandSchedule` applies it and nothing else does. */
+    effectiveUntil?: Date | null;
     staff: ScheduleStaffInput[];
   },
   from: Date,
@@ -324,6 +359,21 @@ export async function createCourseSchedule(
 
     const target = await resolveTarget(tx, input.teachingMode, input.targetId, input.branchId);
 
+    // **The rule this surface was missing entirely.** Teaching Groups and
+    // content both refused a Subject the Level does not teach; scheduling did
+    // not, which is how the live database came to hold three schedules while
+    // `level_subject` held none — classes delivering a Subject their Level
+    // officially does not offer, and to which no content could then be attached.
+    // One policy, all three surfaces (`policies/curriculum.ts`).
+    await assertSubjectTaughtAtLevel(tx, target.effectiveLevelId, input.subjectId);
+
+    // **`effectiveLevelId` is derived, not a column.** Separated here because
+    // the row below is built by spreading `target`, and a derived field carried
+    // into a `create` is an invalid-argument error rather than anything the type
+    // system catches through a spread.
+    const { effectiveLevelId: _derived, ...targetColumns } = target;
+    void _derived;
+
     if (input.roomId) {
       const room = await tx.room.findFirst({
         where: { id: input.roomId, deletedAt: null },
@@ -353,6 +403,7 @@ export async function createCourseSchedule(
         dayOfMonth: input.dayOfMonth ?? null,
         monthOfYear: input.monthOfYear ?? null,
         anchorDate: input.anchorDate ?? null,
+        effectiveUntil: input.effectiveUntil ?? null,
         staff,
       },
       now,
@@ -364,7 +415,7 @@ export async function createCourseSchedule(
       data: {
         subjectId: input.subjectId,
         teachingMode: input.teachingMode,
-        ...target,
+        ...targetColumns,
         branchId: input.branchId,
         roomId: input.roomId ?? null,
         startTime: input.startTime,
@@ -374,6 +425,7 @@ export async function createCourseSchedule(
         dayOfMonth: input.dayOfMonth ?? null,
         monthOfYear: input.monthOfYear ?? null,
         anchorDate: input.anchorDate ?? null,
+        effectiveUntil: input.effectiveUntil ?? null,
         academicYearId: input.academicYearId,
       },
       select: { id: true },
@@ -444,6 +496,7 @@ export async function updateCourseSchedule(
     dayOfMonth?: number | null;
     monthOfYear?: number | null;
     anchorDate?: Date | null;
+  effectiveUntil?: Date | null;
     version: number;
     /**
      * **SRS Revision 50 — which occurrences this edit applies to.**
@@ -481,6 +534,7 @@ export async function updateCourseSchedule(
       dayOfMonth: true,
       monthOfYear: true,
       anchorDate: true,
+      effectiveUntil: true,
       staff: { where: { deletedAt: null }, select: { userId: true, position: true } },
     },
   });
@@ -591,6 +645,7 @@ async function splitCourseSchedule(
     dayOfMonth?: number | null;
     monthOfYear?: number | null;
     anchorDate?: Date | null;
+  effectiveUntil?: Date | null;
     version: number;
   },
   now: Date,
@@ -934,6 +989,7 @@ export async function previewConflicts(
       dayOfMonth: true,
       monthOfYear: true,
       anchorDate: true,
+      effectiveUntil: true,
       staff: { where: { deletedAt: null }, select: { userId: true, position: true } },
     },
   });

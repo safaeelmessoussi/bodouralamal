@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
+import { t } from '../../i18n/index.js';
+
 import type { CourseSchedule } from '../../adapters/course-schedules.js';
 import { recurrenceLabel, timeLabel } from './schedules.js';
 
@@ -31,6 +33,7 @@ const WIRE: CourseSchedule = {
   day_of_month: null,
   month_of_year: null,
   anchor_date: null,
+  effective_until: null,
   academic_year_id: '00000000-0000-4000-8000-000000000005',
   staff: [{ user_id: '00000000-0000-4000-8000-000000000006', position: 'teacher' }],
   version: 0,
@@ -43,6 +46,7 @@ describe('the adapter type matches the wire contract', () => {
       'anchor_date',
       'branch_id',
       'day_of_month',
+      'effective_until',
       'end_time',
       'id',
       'month_of_year',
@@ -84,13 +88,27 @@ describe('TD-11: the time cell renders the wall clock verbatim', () => {
 });
 
 describe('the recurrence cell', () => {
-  it('lists the weekdays when there are any', () => {
-    expect(recurrenceLabel(WIRE)).toBe('tuesday');
+  it('lists the weekdays IN ARABIC, never the wire enum', () => {
+    // The column rendered `weekdays.join()` straight from the contract, so an
+    // Arabic-only interface (§6) showed `tuesday`. The enum is the contract's
+    // vocabulary and is never what a reader sees.
+    expect(recurrenceLabel(WIRE)).toBe(t('scheduling.weekday.tuesday'));
+    expect(recurrenceLabel(WIRE)).not.toContain('tuesday');
   });
 
-  it('falls back to the rule name when there are none', () => {
+  it('translates the rule name when there are no weekdays', () => {
     // `recurrence: 'none'` with no weekdays is a real state — a one-off
     // occurrence — and an empty cell would read as missing data.
-    expect(recurrenceLabel({ ...WIRE, weekdays: [], recurrence: 'monthly' })).toBe('monthly');
+    expect(recurrenceLabel({ ...WIRE, weekdays: [], recurrence: 'monthly' })).toBe(
+      t('calendar.recurrence.monthly'),
+    );
+  });
+
+  it('uses the SAME day names the recurrence editor checkboxes use', () => {
+    // One catalog for one concept: the table and the form must not disagree
+    // about what Tuesday is called.
+    for (const day of ['monday', 'tuesday', 'saturday']) {
+      expect(recurrenceLabel({ ...WIRE, weekdays: [day] })).toBe(t(`scheduling.weekday.${day}`));
+    }
   });
 });

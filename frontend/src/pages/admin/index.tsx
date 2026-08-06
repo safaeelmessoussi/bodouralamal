@@ -49,7 +49,8 @@ export const IMPLEMENTED_ADMIN_PATHS: readonly string[] = [
   '/admin/schedules',
   '/admin/groups',
   '/admin/levels',
-  '/admin/taxonomy',
+  '/admin/categories',
+  '/admin/subjects',
   '/admin/users',
   '/admin/calendar',
   '/admin/content',
@@ -125,8 +126,12 @@ export function AdminRouter(): ReactNode {
       return <GroupsPage />;
     case '/admin/levels':
       return <LevelsPage />;
-    case '/admin/taxonomy':
-      return <TaxonomyPage />;
+    // R55: two nodes, one implementation — the entity is a parameter, so the
+    // two screens cannot drift apart the way duplicated CRUD always has here.
+    case '/admin/categories':
+      return <TaxonomyPage kind="category" />;
+    case '/admin/subjects':
+      return <TaxonomyPage kind="subject" />;
     case '/admin/users':
       return <UsersPage />;
     case '/admin/calendar':

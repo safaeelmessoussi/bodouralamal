@@ -197,7 +197,7 @@ export function uploadErrorMessage(error: unknown): string {
   const reason = error.details?.['reason'];
   if (reason === 'GLOBAL_SCOPE_FORBIDDEN') return t('content.upload.globalForbidden');
   if (reason === 'BRANCH_OUT_OF_SCOPE') return t('content.upload.branchForbidden');
-  if (reason === 'SUBJECT_NOT_AT_LEVEL') return t('content.upload.subjectNotAtLevel');
+  if (reason === 'SUBJECT_NOT_IN_LEVEL') return t('content.upload.subjectNotAtLevel');
   switch (error.code) {
     case 'PAYLOAD_TOO_LARGE':
       return t('content.upload.tooLarge');

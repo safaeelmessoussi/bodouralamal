@@ -1,11 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 
-import { fetchBranches } from '../adapters/branches.js';
-import { listBranches } from '../adapters/branches-admin.js';
-import { listCourseSchedules } from '../adapters/course-schedules.js';
 import { kindOf, type ContentKind } from '../adapters/content.js';
-import { listAcademicYears, type AcademicYearRef, type SubjectRef } from '../adapters/reference-data.js';
-import { listLevelSubjects, listLevels, type Level } from '../adapters/taxonomy.js';
 import { deleteContent } from '../adapters/uploads.js';
 import { AdminLayout } from '../components/admin/admin-layout.js';
 import { FileUploader } from '../components/content/file-uploader.js';
@@ -14,7 +9,8 @@ import { ConfirmDialog } from '../components/ui/confirm-dialog.js';
 import { DataTable, type Column, type RowAction, type TableStatus } from '../components/ui/data-table.js';
 import { Button } from '../components/ui/button.js';
 import { Dialog } from '../components/ui/dialog.js';
-import { SelectField } from '../components/ui/field.js';
+import { ScopeSelectors } from '../components/scope/scope-selectors.js';
+import { useScopeOptions } from '../hooks/use-scope-options.js';
 import { useSession } from '../contexts/session.js';
 import { t } from '../i18n/index.js';
 import { api } from '../lib/api.js';
@@ -61,21 +57,35 @@ interface LibraryRow {
 
 /** `null` branch is the Global scope (§4.9) and needs a value a `<select>` can
  *  carry — `''` already means "no filter", so the two cannot share it. */
+/**
+ * The scope this screen selects on — and uploads into.
+ *
+ * **The filters and the upload target are deliberately the same four values**:
+ * what you are looking at is what you are adding to, which removes the whole
+ * class of mistake where a form's defaults disagree with the list behind it.
+ */
+const SCOPE_FIELDS = ['levelId', 'subjectId', 'academicYearId', 'branchId'] as const;
+
+/** `branch_id = null` — a real scope (§4.9), and the one value a branch list can
+ *  never contain. `''` already means *no filter*, so the two cannot share it. */
 const GLOBAL = '__global__';
 
 export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactNode {
   const { accessToken, me } = useSession();
   const Layout = portal === 'admin' ? AdminLayout : TeacherLayout;
 
-  const [levels, setLevels] = useState<Level[]>([]);
-  const [subjects, setSubjects] = useState<SubjectRef[]>([]);
-  const [years, setYears] = useState<AcademicYearRef[]>([]);
-  const [branches, setBranches] = useState<{ id: string; name: string }[]>([]);
-
-  const [levelId, setLevelId] = useState('');
-  const [subjectId, setSubjectId] = useState('');
-  const [yearId, setYearId] = useState('');
-  const [branchId, setBranchId] = useState('');
+  /**
+   * **One dependency graph, shared with every other screen** — not a chain
+   * re-implemented here. Choosing a Level reloads the Subjects it actually
+   * teaches (`LevelSubject`, R43) and clears a stale choice, so the pair this
+   * page sends can never be one the server has to refuse.
+   */
+  const scope = useScopeOptions({
+    token: accessToken,
+    fields: SCOPE_FIELDS,
+    defaultCurrentYear: true,
+  });
+  const { levelId, subjectId, academicYearId, branchId } = scope.value;
 
   const [rows, setRows] = useState<LibraryRow[]>([]);
   const [status, setStatus] = useState<TableStatus>('loading');
@@ -90,73 +100,12 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
 
   const isAdmin = (me?.roles ?? []).some((r) => r === 'admin' || r === 'super_admin');
 
-  useEffect(() => {
-    void (async () => {
-      const [lv, yr] = await Promise.all([listLevels(accessToken), listAcademicYears(accessToken)]);
-      setLevels(lv);
-      setYears(yr);
-      // The live year is the one nearly every upload belongs to; making someone
-      // recall which it is would be asking the screen's own question back.
-      setYearId(yr.find((y) => y.is_current)?.id ?? '');
-      if (isAdmin) {
-        setBranches((await listBranches(accessToken)).data.map((b) => ({ id: b.id, name: b.name })));
-      } else {
-        // **A Teacher's branches are derived exactly as §4.9 derives them** —
-        // from the schedules they staff (§4.4c), which is the same set the
-        // server will accept. Offering them the admin branch list would show
-        // branches every upload would then be refused for, and Revision 30
-        // forbids a teacher browsing reference data anyway; the *names* come
-        // from the public branch list, which the landing page already serves to
-        // anonymous visitors.
-        const [mine, all] = await Promise.all([
-          listCourseSchedules(accessToken),
-          fetchBranches(),
-        ]);
-        const reachable = new Set(mine.data.map((s) => s.branch_id));
-        setBranches(all.filter((b) => reachable.has(b.id)).map((b) => ({ id: b.id, name: b.name })));
-      }
-    })();
-  }, [accessToken, isAdmin]);
-
-  /**
-   * **The Subject list is the Level's, never the platform's.**
-   *
-   * `EducationalContent` carries a Level *and* a Subject, and the server refuses
-   * a pair that `LevelSubject` does not join (R43) — so offering every Subject
-   * would let someone pick a combination that can only ever be rejected. That is
-   * not hypothetical: it is what the upload did, and on a database with no
-   * `LevelSubject` rows at all **every** choice failed.
-   *
-   * An empty list is therefore a real and informative state — *this level teaches
-   * no subjects yet* — and it points at the screen that fixes it (§14.1's
-   * Subject Organisation node), rather than at a failed upload.
-   */
-  useEffect(() => {
-    if (levelId === '') {
-      setSubjects([]);
-      return;
-    }
-    let cancelled = false;
-    void (async () => {
-      const taught = await listLevelSubjects(levelId, accessToken);
-      if (cancelled) return;
-      setSubjects(taught);
-      // A subject chosen under a previous level is very unlikely to be taught
-      // under this one, and silently keeping it is how an impossible pair
-      // reaches the server.
-      setSubjectId((current) => (taught.some((s) => s.id === current) ? current : ''));
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [levelId, accessToken]);
-
   const load = useCallback(async () => {
     setStatus('loading');
     const params = new URLSearchParams({ page: String(page), page_size: '25' });
     if (levelId) params.set('level_id', levelId);
     if (subjectId) params.set('subject_id', subjectId);
-    if (yearId) params.set('academic_year_id', yearId);
+    if (academicYearId) params.set('academic_year_id', academicYearId);
     try {
       const body = await api<{ data: LibraryRow[]; meta: { total: number } }>(
         `/library?${params.toString()}`,
@@ -179,11 +128,17 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
     } catch {
       setStatus('error');
     }
-  }, [accessToken, levelId, subjectId, yearId, branchId, page]);
+  }, [accessToken, levelId, subjectId, academicYearId, branchId, page]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Any narrowing re-queries from page 1: staying on page 3 of a smaller result
+  // shows an empty table that reads as "there is no content".
+  useEffect(() => {
+    setPage(1);
+  }, [levelId, subjectId, academicYearId, branchId]);
 
   function refilter(apply: () => void): void {
     apply();
@@ -195,10 +150,10 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
     () => ({
       level_id: levelId,
       subject_id: subjectId,
-      academic_year_id: yearId,
-      branch_id: branchId === GLOBAL ? null : branchId === '' ? null : branchId,
+      academic_year_id: academicYearId,
+      branch_id: branchId === '' || branchId === GLOBAL ? null : branchId,
     }),
-    [levelId, subjectId, yearId, branchId],
+    [levelId, subjectId, academicYearId, branchId],
   );
 
   /**
@@ -208,16 +163,15 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
    * §14.4 wants the reason visible, and "choose a level first" is a smaller
    * thing to read than a validation error after filling in a title.
    */
-  const scopeProblem =
-    levelId !== '' && subjects.length === 0
-      ? // Actionable rather than merely refusing: the fix is an assignment on
-        // another screen, and naming it is what turns a dead end into a next step.
-        t('content.upload.levelTeachesNothing')
-      : levelId === '' || subjectId === '' || yearId === ''
-        ? t('content.upload.chooseScope')
-        : !isAdmin && (branchId === '' || branchId === GLOBAL)
-          ? t('content.upload.teacherNeedsBranch')
-          : null;
+  const scopeProblem = scope.levelTeachesNothing
+    ? // Actionable rather than merely refusing: the fix is an assignment on
+      // another screen, and naming it is what turns a dead end into a next step.
+      t('scope.assignSubjectsHint')
+    : levelId === '' || subjectId === '' || academicYearId === ''
+      ? t('content.upload.chooseScope')
+      : !isAdmin && (branchId === '' || branchId === GLOBAL)
+        ? t('content.upload.teacherNeedsBranch')
+        : null;
 
   const columns: Column<LibraryRow>[] = [
     { key: 'title', header: t('content.col.title'), cell: (r) => r.title },
@@ -291,58 +245,24 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
         filtered={levelId !== '' || subjectId !== '' || branchId !== ''}
         onClearFilters={() =>
           refilter(() => {
-            setLevelId('');
-            setSubjectId('');
-            setBranchId('');
+            scope.setMany({ levelId: '', subjectId: '', branchId: '' });
           })
         }
         toolbar={
           <>
-            <SelectField
-              label={t('content.col.level')}
-              value={levelId}
-              onChange={(v) => refilter(() => setLevelId(v))}
-              options={[
-                { value: '', label: t('content.allLevels') },
-                ...levels.map((l) => ({ value: l.id, label: l.name })),
-              ]}
-            />
-            <SelectField
-              label={t('content.col.subject')}
-              value={subjectId}
-              onChange={(v) => refilter(() => setSubjectId(v))}
-              disabled={levelId === ''}
-              options={[
-                {
-                  value: '',
-                  label:
-                    levelId === ''
-                      ? t('content.chooseLevelFirst')
-                      : subjects.length === 0
-                        ? t('content.levelTeachesNothing')
-                        : t('content.allSubjects'),
-                },
-                ...subjects.map((s) => ({ value: s.id, label: s.name })),
-              ]}
-            />
-            <SelectField
-              label={t('content.col.year')}
-              value={yearId}
-              onChange={(v) => refilter(() => setYearId(v))}
-              options={years.map((y) => ({ value: y.id, label: y.label }))}
-            />
-            <SelectField
-              label={t('content.col.branch')}
-              value={branchId}
-              onChange={(v) => refilter(() => setBranchId(v))}
-              options={[
-                { value: '', label: t('content.allBranches') },
-                // **Global is offered only to those who may assign it** (§4.9):
-                // a Teacher choosing it would be refused by the server, and an
-                // option that always fails is worse than no option.
-                ...(isAdmin ? [{ value: GLOBAL, label: t('content.globalScope') }] : []),
-                ...branches.map((b) => ({ value: b.id, label: b.name })),
-              ]}
+            {/* The same four selectors, with the same dependency rules, as every
+                other screen in the platform — the page states WHICH it needs and
+                nothing about how they relate. */}
+            <ScopeSelectors
+              scope={scope}
+              fields={SCOPE_FIELDS}
+              mode="filter"
+              // **Offered only to those who may assign it** (§4.9): a Teacher
+              // choosing Global would be refused by the server, and an option
+              // that always fails is worse than no option.
+              extraOptions={
+                isAdmin ? { branchId: [{ value: GLOBAL, label: t('content.globalScope') }] } : {}
+              }
             />
             <Button variant="primary" onClick={() => setUploading(true)}>
               {t('content.upload.action')}

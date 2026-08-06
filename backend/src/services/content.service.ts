@@ -29,6 +29,7 @@ import { issueUploadTicket, verifyUploadTicket, type UploadTicketClaims } from '
 import { resolveActingStudent } from '../middleware/child-context.js';
 import type { Actor } from '../policies/actor.js';
 import * as scope from '../policies/branch-scope.js';
+import { assertSubjectTaughtAtLevel } from '../policies/curriculum.js';
 import { assertFreshActive } from '../policies/freshness.policy.js';
 import { teacherBranchIds } from '../policies/roster-resolution.js';
 import * as audit from '../repositories/audit.repository.js';
@@ -261,27 +262,12 @@ export async function initiateUpload(
   // the pair still has to be one that exists, or the library would group an item
   // under a heading no Level ever offers. `LevelSubject` is where that lives
   // (Revision 43) and is not restated here.
-  const [taught, year] = await Promise.all([
-    prisma.levelSubject.findFirst({
-      where: {
-        levelId: input.meta.levelId,
-        subjectId: input.meta.subjectId,
-        deletedAt: null,
-        level: { deletedAt: null },
-        subject: { deletedAt: null },
-      },
-      select: { id: true },
-    }),
-    prisma.academicYear.findFirst({
-      where: { id: input.meta.academicYearId },
-      select: { id: true },
-    }),
-  ]);
-  if (!taught) {
-    throw new AppError('STATE_CONFLICT', 'that subject is not assigned to that level (R43)', {
-      reason: 'SUBJECT_NOT_AT_LEVEL',
-    });
-  }
+  await assertSubjectTaughtAtLevel(prisma, input.meta.levelId, input.meta.subjectId);
+
+  const year = await prisma.academicYear.findFirst({
+    where: { id: input.meta.academicYearId },
+    select: { id: true },
+  });
   if (!year) throw new AppError('NOT_FOUND', 'no such academic year');
 
   const visibility =

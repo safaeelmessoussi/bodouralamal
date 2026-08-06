@@ -104,8 +104,8 @@ describe('the registry and the router agree', () => {
     expect([...ready].sort()).toEqual([...IMPLEMENTED_ADMIN_PATHS].sort());
   });
 
-  it('Levels and Categories & Subjects are both live', () => {
-    for (const path of ['/admin/levels', '/admin/taxonomy']) {
+  it('Levels, الفئات and المواد are all live', () => {
+    for (const path of ['/admin/levels', '/admin/categories', '/admin/subjects']) {
       expect(ADMIN_MODULES.find((m) => m.path === path)?.status).toBe('ready');
     }
   });
@@ -114,7 +114,7 @@ describe('the registry and the router agree', () => {
     // TD-2 R26: an Admin READS reference data because operational work depends
     // on it. The write controls inside are gated separately, and the server
     // enforces the matrix regardless — the menu is not the boundary.
-    for (const path of ['/admin/levels', '/admin/taxonomy']) {
+    for (const path of ['/admin/levels', '/admin/categories', '/admin/subjects']) {
       expect(ADMIN_MODULES.find((m) => m.path === path)?.roles).toContain('admin');
     }
   });

@@ -26,6 +26,7 @@ const WIRE: UserSummary = {
   name_arabic: 'فاطمة الزهراء',
   nickname: null,
   phone: null,
+  email: 'fatima@example.com',
   account_status: 'active',
   roles: [ASSIGNMENT],
   version: 0,
@@ -57,6 +58,10 @@ describe('the adapter type matches the wire contract', () => {
   it('carries exactly the keys the staff list publishes', () => {
     expect(Object.keys(WIRE).sort()).toEqual([
       'account_status',
+      // R55: the administrative identifier a staff screen recognises a person
+      // by. **Not** a display identity (§20 rule 21) — that rule governs the
+      // name shown to the public, and this list is staff-only (TD-2).
+      'email',
       'id',
       'name_arabic',
       'nickname',

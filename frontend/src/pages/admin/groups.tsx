@@ -26,6 +26,8 @@ import { Dialog } from '../../components/ui/dialog.js';
 import { NumberField, SearchInput, TextField } from '../../components/ui/field.js';
 import { useSession } from '../../contexts/session.js';
 import { t } from '../../i18n/index.js';
+import { ScopeSelectors } from '../../components/scope/scope-selectors.js';
+import { useScopeOptions } from '../../hooks/use-scope-options.js';
 import { ApiError } from '../../lib/api.js';
 
 /**
@@ -51,6 +53,9 @@ import { ApiError } from '../../lib/api.js';
  * contract (§20 rule 16). When `/admin/levels` ships, this picker changes source
  * and nothing else.
  */
+/** A group is a roster **at a premises** (§4.4c), so both narrow the list. */
+const GROUP_SCOPE = ['branchId', 'levelId'] as const;
+
 export function GroupsPage(): ReactNode {
   const { me, accessToken } = useSession();
   const canWrite = (me?.roles ?? []).some((r) => ['admin', 'super_admin'].includes(r));
@@ -61,8 +66,10 @@ export function GroupsPage(): ReactNode {
   const [total, setTotal] = useState(0);
   const [levels, setLevels] = useState<LevelRef[]>([]);
   const [branches, setBranches] = useState<BranchRef[]>([]);
-  const [levelFilter, setLevelFilter] = useState('');
-  const [branchFilter, setBranchFilter] = useState('');
+  /** One graph, shared with the schedules and content screens. */
+  const scope = useScopeOptions({ token: accessToken, fields: GROUP_SCOPE });
+  const levelFilter = scope.value.levelId;
+  const branchFilter = scope.value.branchId;
   const [editing, setEditing] = useState<AdministrativeGroup | 'new' | null>(null);
   const [deleting, setDeleting] = useState<AdministrativeGroup | null>(null);
   const [rosterOf, setRosterOf] = useState<AdministrativeGroup | null>(null);
@@ -213,16 +220,15 @@ export function GroupsPage(): ReactNode {
   }
 
   return (
-    <AdminLayout
-      title={t('admin.nav.groups')}
-      lede={t('admin.groups.lede')}
-      actions={
-        canWrite ? (
-          <Button onClick={() => setEditing('new')}>{t('admin.groups.create')}</Button>
-        ) : null
-      }
-    >
-      {notice ? <p role="status">{notice}</p> : null}
+    <AdminLayout title={t('admin.nav.groups')} lede={t('admin.groups.lede')}>
+      {/* The shared notice style every other back-office screen uses. This one
+          rendered a bare `<p role="status">`, which carried none of the spacing
+          or colour the rest of the platform gives a result message. */}
+      {notice ? (
+        <p className="admin-notice" role="status" aria-live="polite">
+          {notice}
+        </p>
+      ) : null}
 
       <DataTable
         caption={t('admin.groups.caption')}
@@ -234,47 +240,24 @@ export function GroupsPage(): ReactNode {
         onRetry={() => void load()}
         filtered={levelFilter !== '' || branchFilter !== ''}
         onClearFilters={() => {
-          setLevelFilter('');
-          setBranchFilter('');
+          scope.setMany({ levelId: '', branchId: '' });
           setPage(1);
         }}
         toolbar={
-          <div className="toolbar">
-            <label>
-              <span>{t('admin.groups.colLevel')}</span>
-              <select
-                value={levelFilter}
-                onChange={(e) => {
-                  setLevelFilter(e.target.value);
-                  setPage(1);
-                }}
-              >
-                <option value="">{t('common.all')}</option>
-                {levels.map((l) => (
-                  <option key={l.id} value={l.id}>
-                    {l.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
-              <span>{t('admin.groups.colBranch')}</span>
-              <select
-                value={branchFilter}
-                onChange={(e) => {
-                  setBranchFilter(e.target.value);
-                  setPage(1);
-                }}
-              >
-                <option value="">{t('common.all')}</option>
-                {branches.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
+          <>
+            {/* **The same selectors, in the same components, as every other
+                screen.** This toolbar was hand-rolled `<label><select>` pairs in
+                a bespoke `.toolbar` div — no label association, no hint or error
+                slot, and spacing that matched nothing else (constitution §4.3).
+                It is also why the filters were independent: a raw control has
+                nowhere for a dependency to live. */}
+            <ScopeSelectors scope={scope} fields={GROUP_SCOPE} mode="filter" />
+            {canWrite ? (
+              <Button variant="primary" onClick={() => setEditing('new')}>
+                {t('admin.groups.create')}
+              </Button>
+            ) : null}
+          </>
         }
         pagination={{ page, pageSize: 25, total, onPage: setPage }}
       />

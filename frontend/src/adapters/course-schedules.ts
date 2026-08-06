@@ -42,6 +42,8 @@ export interface CourseSchedule {
   month_of_year: number | null;
   /** TD-11 calendar date, `YYYY-MM-DD`. */
   anchor_date: string | null;
+  /** R50's bound, on the contract since R55. `null` is open-ended. */
+  effective_until: string | null;
   academic_year_id: string;
   staff: ScheduleStaff[];
   /** TD-15: loaded with the row, sent back on edit; a stale one is a `409`. */
@@ -151,8 +153,18 @@ export interface CourseScheduleInput {
   end_time: string;
   recurrence: string;
   weekdays?: string[];
+  /** TD-11 calendar date. For `biweekly_alternating` it also fixes **which**
+   *  fortnight is *on* — without it the two halves are indistinguishable (§7). */
+  anchor_date?: string | null;
+  /** R50's bound, on the contract since R55. Omitted or null is open-ended. */
+  effective_until?: string | null;
   academic_year_id: string;
-  staff?: { user_id: string; position: string }[];
+  /**
+   * §4.4c — **one primary teacher and any number of assistants**, one table and
+   * one rule. An assistant's reach over students is identical to a teacher's;
+   * what differs is which of them the schedule calls its own.
+   */
+  staff?: { user_id: string; position: 'teacher' | 'assistant' }[];
 }
 
 export interface ScheduleWriteResult {
@@ -195,7 +207,18 @@ export async function updateCourseSchedule(
   id: string,
   version: number,
   input: Partial<
-    Pick<CourseScheduleInput, 'room_id' | 'start_time' | 'end_time' | 'recurrence' | 'weekdays'>
+    Pick<
+      CourseScheduleInput,
+      | 'room_id'
+      | 'start_time'
+      | 'end_time'
+      | 'recurrence'
+      | 'weekdays'
+      // The rule's own bounds are part of the rule, so an edit that may change
+      // *when* a class recurs must be able to change *between which dates*.
+      | 'anchor_date'
+      | 'effective_until'
+    >
   > & { scope?: 'all_sessions' | 'this_and_future'; from_date?: string },
   token: string | null,
 ): Promise<ScheduleWriteResult & { split_from_schedule_id?: string }> {

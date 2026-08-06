@@ -63,6 +63,7 @@ export function create(prisma: PrismaClient) {
       ...(body.day_of_month !== undefined ? { dayOfMonth: body.day_of_month } : {}),
       ...(body.month_of_year !== undefined ? { monthOfYear: body.month_of_year } : {}),
       ...(body.anchor_date !== undefined ? { anchorDate: body.anchor_date } : {}),
+      ...(body.effective_until !== undefined ? { effectiveUntil: body.effective_until } : {}),
       ...(body.staff !== undefined
         ? { staff: body.staff.map((s) => ({ userId: s.user_id, position: s.position })) }
         : {}),
@@ -89,6 +90,8 @@ export function update(prisma: PrismaClient) {
         ...(body.day_of_month !== undefined ? { dayOfMonth: body.day_of_month } : {}),
         ...(body.month_of_year !== undefined ? { monthOfYear: body.month_of_year } : {}),
         ...(body.anchor_date !== undefined ? { anchorDate: body.anchor_date } : {}),
+        ...(body.effective_until !== undefined ? { effectiveUntil: body.effective_until } : {}),
+      ...(body.effective_until !== undefined ? { effectiveUntil: body.effective_until } : {}),
         ...(body.scope !== undefined ? { scope: body.scope } : {}),
         ...(body.from_date !== undefined ? { fromDate: body.from_date } : {}),
       },

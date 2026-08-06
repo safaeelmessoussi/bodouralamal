@@ -101,8 +101,19 @@ export const ADMIN_MODULES: readonly AdminModule[] = [
     status: 'ready',
   },
   {
-    path: '/admin/taxonomy',
-    labelKey: 'admin.nav.taxonomy',
+    // R55: الفئات and المواد are two navigation nodes. They were one screen with
+    // two tables; the Owner separated the navigation, and the **implementation
+    // stays single** — `taxonomy.tsx` takes the entity as a parameter, so the
+    // two cannot drift apart the way duplicated CRUD always has here.
+    path: '/admin/categories',
+    labelKey: 'admin.nav.categories',
+    section: 'academic',
+    roles: STAFF,
+    status: 'ready',
+  },
+  {
+    path: '/admin/subjects',
+    labelKey: 'admin.nav.subjects',
     section: 'academic',
     roles: STAFF,
     status: 'ready',

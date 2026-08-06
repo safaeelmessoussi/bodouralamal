@@ -637,6 +637,15 @@
 - [ ] LevelSurah/LevelSubject auto-draft components incl. the Adult-stage dual generation (BR-9, §4.6)
 - [ ] §18 Exams & Grading checklist green (incl. both race tests)
 
+### R55 cross-cutting (2026-08-06)
+- [x] **Every selector is dependent** (§14.4, R55) — one module (`hooks/use-scope-options.ts`) owns the graph; screens declare which fields they need and never how they relate
+- [x] **`LevelSubject` enforced on all three surfaces** — scheduling did not check at all, and the two that did used different reason codes (`policies/curriculum.ts`, `SUBJECT_NOT_IN_LEVEL`)
+- [x] الفئات / المواد split into two §14.1 nodes, one implementation
+- [x] Users table: `email` + the Branch scope column §14.2 already required
+- [x] Sessions: Arabic weekdays, `anchor_date` and `effective_until` in the shared recurrence editor, one primary teacher + assistants
+- [ ] **Backfill the curriculum data.** `level_subject` is empty on the live database, so no Level teaches anything and no content can be attached anywhere. Assign subjects per Level from *المستويات ← مواد المستوى* — a data task, not a code one, and the reason the upload appeared broken
+- [ ] Sweep the remaining screens for raw `<select>`/`<label>` pairs — الحلقات was found and fixed; approvals, levels and users still build their own filter rows rather than going through the shared components
+
 ## M6 — Content, Consent & Storage
 - [x] Upload initiate/complete/abort: single-shot presigned PUT, branch-scope validation, Teacher Global rejection (§4.9, TD-3.5)
   - ✓ `upload_id` is a **signed ticket, not a table** — §7 defines no pending-upload entity, so `upload.gc` reaps objects no content row claims rather than reconciling a table against a bucket. The ticket binds every phase-one authorization decision so `/complete` cannot restate them

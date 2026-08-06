@@ -73,6 +73,16 @@ export const createCourseScheduleSchema = z
     day_of_month: z.number().int().min(1).max(31).nullable().optional(),
     month_of_year: z.number().int().min(1).max(12).nullable().optional(),
     anchor_date: calendarDate.nullable().optional(),
+    /**
+     * **The last date the rule produces occurrences for** (R50's
+     * `effective_until`, exposed on the contract by R55).
+     *
+     * The column has existed since R50 and could only be set as a *side effect*
+     * of splitting a schedule, so a class that runs for one term had no way to
+     * say so — while an Event, the other half of the same scheduling module, has
+     * carried a recurrence end since it shipped. Null is open-ended.
+     */
+    effective_until: calendarDate.nullable().optional(),
     academic_year_id: uuid,
     staff: staff.optional(),
   })
@@ -100,6 +110,7 @@ export const updateCourseScheduleSchema = z
     day_of_month: z.number().int().min(1).max(31).nullable().optional(),
     month_of_year: z.number().int().min(1).max(12).nullable().optional(),
     anchor_date: calendarDate.nullable().optional(),
+    effective_until: calendarDate.nullable().optional(),
     /**
      * **SRS Revision 50 — which occurrences this edit applies to.**
      *

@@ -387,6 +387,8 @@ export interface CourseScheduleDto {
   month_of_year: number | null;
   /** TD-11 calendar date, `YYYY-MM-DD`. */
   anchor_date: string | null;
+  /** R50's bound, published by R55. `null` is open-ended. */
+  effective_until: string | null;
   academic_year_id: string;
   staff: { user_id: string; position: string }[];
   /** TD-15: the client sends this back on edit; a stale one is a `409`. */
@@ -433,6 +435,7 @@ export function courseScheduleDto(row: {
   dayOfMonth: number | null;
   monthOfYear: number | null;
   anchorDate: Date | null;
+  effectiveUntil: Date | null;
   academicYearId: string;
   staff: { userId: string; position: string }[];
   version: number;
@@ -451,6 +454,9 @@ export function courseScheduleDto(row: {
     day_of_month: row.dayOfMonth,
     month_of_year: row.monthOfYear,
     anchor_date: dateOnly(row.anchorDate),
+    // R50's bound, published by R55 so a client can render *until when* rather
+    // than presenting an open-ended class that is not one.
+    effective_until: dateOnly(row.effectiveUntil),
     academic_year_id: row.academicYearId,
     staff: row.staff.map((s) => ({ user_id: s.userId, position: s.position })),
     version: row.version,
@@ -1061,6 +1067,17 @@ export interface UserDto {
   public_display_name: string | null;
   phone: string | null;
   account_status: string;
+  /**
+   * The bound Google address, or the pre-provisioned one for an account not yet
+   * claimed (R15). **`null` is a fact, not a gap**: minor students are
+   * login-less `User` rows with no address at all (§4.3), and showing an empty
+   * cell for them is correct.
+   *
+   * Not a *display identity* and therefore outside §20 rule 21: that rule
+   * governs the name shown to the public, and this is an administrative
+   * identifier on a staff-only screen (TD-2).
+   */
+  email: string | null;
   roles: { role: string; branch_id: string | null; branch_name: string | null }[];
   /** TD-15 — what the edit dialog sends back. Its presence here is why there is
    *  no separate single-user read. */
@@ -1074,6 +1091,7 @@ export function userDto(row: {
   publicDisplayName: string | null;
   phone: string | null;
   accountStatus: string;
+  email?: string | null;
   roles: { role: string; branchId: string | null; branchName: string | null }[];
   version: number;
 }): UserDto {
@@ -1084,6 +1102,7 @@ export function userDto(row: {
     public_display_name: row.publicDisplayName,
     phone: row.phone,
     account_status: row.accountStatus,
+    email: row.email ?? null,
     roles: row.roles.map((r) => ({
       role: r.role,
       branch_id: r.branchId,

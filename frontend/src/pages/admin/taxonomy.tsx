@@ -23,83 +23,137 @@ import { t } from '../../i18n/index.js';
 import { ApiError } from '../../lib/api.js';
 
 /**
- * `/admin/taxonomy` — الفئات والمواد (§5.6 *"Categories & Subjects"*, §14.1).
+ * `/admin/categories` (الفئات) and `/admin/subjects` (المواد) — **two navigation
+ * nodes, one implementation** (§5.6, §14.1 as amended by Revision 55).
  *
- * **Two vocabularies on one screen because they are one job.** A Category groups
- * Levels; a Subject is what a Level teaches. Neither is large, both are edited in
- * the same sitting when a curriculum is set up, and splitting them across two
- * navigation nodes would add a node §14.1 does not list (§20 rule 16).
+ * ## Why one component rather than two pages
+ *
+ * A Category and a Subject are the same *kind* of record — a name and an
+ * optional display order, Super-Admin-writable, refused deletion while anything
+ * references them. They were one screen with two tables until the Document Owner
+ * separated them; **separating the navigation must not separate the code**, or
+ * the two would drift exactly as every other duplicated CRUD on this project
+ * has. So the entity is a parameter and the screen is written once.
+ *
+ * What genuinely differs is declared in `KINDS` below and nowhere else: the
+ * Category table carries a Levels count (what makes its deletion refusable and
+ * therefore worth showing before the attempt), and the Category form carries the
+ * Revision 27 warning.
  *
  * **Categories must never encode sex** (Revision 27). They are generic
  * educational stages — طفل، يافع، بالغ — and who a Level admits lives on the
  * Level's own `gender_restriction`, where a query can read it. The form says so
  * rather than relying on whoever types the name to remember.
  *
- * **Writing is Super Admin; an Admin reads** (TD-2 R26). The controls are hidden
+ * **Writing is Super Admin; an Admin reads** (TD-2, R26). The controls are hidden
  * for an Admin rather than shown disabled — §14.2 gates by role and a dead
  * control teaches nothing — and the server enforces the matrix regardless.
- *
- * **The Subjects table is fed by `GET /admin/subjects`**, the same selector every
- * form uses. That endpoint publishes `version` precisely so this screen could
- * reuse it instead of a second read over the same table.
  */
-export function TaxonomyPage(): ReactNode {
+export type TaxonomyKind = 'category' | 'subject';
+
+/** A row either table can hold. `level_count` exists only on a Category, which
+ *  is why the column that reads it is declared per kind. */
+type Row = Category | SubjectRef;
+
+interface KindSpec {
+  navKey: string;
+  ledeKey: string;
+  createKey: string;
+  editKey: string;
+  deleteTitleKey: string;
+  deleteBodyKey: string;
+  blockedKey: string;
+  /** Revision 27's warning, on Categories only. */
+  formHintKey?: string;
+  list: (token: string | null) => Promise<Row[]>;
+  create: (input: TaxonomyInput, token: string | null) => Promise<unknown>;
+  update: (
+    id: string,
+    version: number,
+    input: TaxonomyInput,
+    token: string | null,
+  ) => Promise<unknown>;
+  remove: (id: string, token: string | null) => Promise<void>;
+  extraColumns: Column<Row>[];
+}
+
+const KINDS: Record<TaxonomyKind, KindSpec> = {
+  category: {
+    navKey: 'admin.nav.categories',
+    ledeKey: 'admin.taxonomy.categoriesLede',
+    createKey: 'admin.taxonomy.createCategory',
+    editKey: 'admin.taxonomy.editCategory',
+    deleteTitleKey: 'admin.taxonomy.deleteCategoryTitle',
+    deleteBodyKey: 'admin.taxonomy.deleteCategoryBody',
+    blockedKey: 'admin.taxonomy.categoryBlocked',
+    formHintKey: 'admin.taxonomy.categoryNameHint',
+    list: (token) => listCategories(token),
+    create: createCategory,
+    update: updateCategory,
+    remove: deleteCategory,
+    extraColumns: [
+      {
+        key: 'levels',
+        header: 'admin.taxonomy.colLevels',
+        numeric: true,
+        // Shown because it is what makes deletion refusable (TD-5): an
+        // administrator learns the constraint from the table, before the click.
+        cell: (r) => ((r as Category).level_count ?? 0) as ReactNode,
+      },
+    ],
+  },
+  subject: {
+    navKey: 'admin.nav.subjects',
+    ledeKey: 'admin.taxonomy.subjectsLede',
+    createKey: 'admin.taxonomy.createSubject',
+    editKey: 'admin.taxonomy.editSubject',
+    deleteTitleKey: 'admin.taxonomy.deleteSubjectTitle',
+    deleteBodyKey: 'admin.taxonomy.deleteSubjectBody',
+    blockedKey: 'admin.taxonomy.subjectBlocked',
+    // `GET /admin/subjects` is the same endpoint every selector reads. It
+    // publishes `version` precisely so this screen could reuse it rather than
+    // add a second read over the same table.
+    list: (token) => listSubjects(token),
+    create: createSubject,
+    update: updateSubject,
+    remove: deleteSubject,
+    extraColumns: [],
+  },
+};
+
+export function TaxonomyPage({ kind }: { kind: TaxonomyKind }): ReactNode {
+  const spec = KINDS[kind];
   const { me, accessToken } = useSession();
   const canWrite = (me?.roles ?? []).includes('super_admin');
 
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [subjects, setSubjects] = useState<SubjectRef[]>([]);
+  const [rows, setRows] = useState<Row[]>([]);
   const [status, setStatus] = useState<TableStatus>('loading');
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-
-  const [editingCategory, setEditingCategory] = useState<Category | 'new' | null>(null);
-  const [deletingCategory, setDeletingCategory] = useState<Category | null>(null);
-  const [editingSubject, setEditingSubject] = useState<SubjectRef | 'new' | null>(null);
-  const [deletingSubject, setDeletingSubject] = useState<SubjectRef | null>(null);
+  const [editing, setEditing] = useState<Row | 'new' | null>(null);
+  const [deleting, setDeleting] = useState<Row | null>(null);
 
   const load = useCallback(async () => {
     setStatus('loading');
     try {
-      const [cats, subs] = await Promise.all([
-        listCategories(accessToken),
-        listSubjects(accessToken),
-      ]);
-      setCategories(cats);
-      setSubjects(subs);
+      setRows(await spec.list(accessToken));
       setStatus('ready');
     } catch {
       setStatus('error');
     }
-  }, [accessToken]);
+  }, [accessToken, spec]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
-  /**
-   * One save path for both tables.
-   *
-   * The two entities have the same shape — a name and an optional order — so a
-   * second copy of this would be a duplicate that drifts, not a specialisation.
-   */
-  async function save(
-    kind: 'category' | 'subject',
-    input: TaxonomyInput,
-    existing: { id: string; version: number } | null,
-  ): Promise<void> {
+  async function save(input: TaxonomyInput, existing: Row | null): Promise<void> {
     setBusy(true);
     setNotice(null);
     try {
-      if (kind === 'category') {
-        if (existing) await updateCategory(existing.id, existing.version, input, accessToken);
-        else await createCategory(input, accessToken);
-      } else {
-        if (existing) await updateSubject(existing.id, existing.version, input, accessToken);
-        else await createSubject(input, accessToken);
-      }
-      setEditingCategory(null);
-      setEditingSubject(null);
+      if (existing) await spec.update(existing.id, existing.version, input, accessToken);
+      else await spec.create(input, accessToken);
+      setEditing(null);
       await load();
       setNotice(t(existing ? 'common.saved' : 'common.created'));
     } catch (error) {
@@ -109,8 +163,7 @@ export function TaxonomyPage(): ReactNode {
       const conflict = error instanceof ApiError && error.status === 409;
       setNotice(t(conflict ? 'common.conflict' : 'common.saveFailed'));
       if (conflict) {
-        setEditingCategory(null);
-        setEditingSubject(null);
+        setEditing(null);
         await load();
       }
     } finally {
@@ -118,11 +171,10 @@ export function TaxonomyPage(): ReactNode {
     }
   }
 
-  async function remove(kind: 'category' | 'subject', id: string): Promise<void> {
+  async function remove(id: string): Promise<void> {
     setBusy(true);
     try {
-      if (kind === 'category') await deleteCategory(id, accessToken);
-      else await deleteSubject(id, accessToken);
+      await spec.remove(id, accessToken);
       await load();
       setNotice(t('common.deleted'));
     } catch (error) {
@@ -130,30 +182,16 @@ export function TaxonomyPage(): ReactNode {
       // reference blocks it is more useful than "failed" — the administrator's
       // next action differs completely.
       const blocked = error instanceof ApiError && error.status === 409;
-      setNotice(
-        t(
-          blocked
-            ? kind === 'category'
-              ? 'admin.taxonomy.categoryBlocked'
-              : 'admin.taxonomy.subjectBlocked'
-            : 'common.deleteFailed',
-        ),
-      );
+      setNotice(t(blocked ? spec.blockedKey : 'common.deleteFailed'));
     } finally {
       setBusy(false);
-      setDeletingCategory(null);
-      setDeletingSubject(null);
+      setDeleting(null);
     }
   }
 
-  const categoryColumns: Column<Category>[] = [
+  const columns: Column<Row>[] = [
     { key: 'name', header: t('admin.taxonomy.colName'), cell: (r) => r.name },
-    {
-      key: 'levels',
-      header: t('admin.taxonomy.colLevels'),
-      numeric: true,
-      cell: (r) => r.level_count as ReactNode,
-    },
+    ...spec.extraColumns.map((c) => ({ ...c, header: t(c.header) })),
     {
       key: 'order',
       header: t('admin.taxonomy.colOrder'),
@@ -163,132 +201,58 @@ export function TaxonomyPage(): ReactNode {
     },
   ];
 
-  const subjectColumns: Column<SubjectRef>[] = [
-    { key: 'name', header: t('admin.taxonomy.colName'), cell: (r) => r.name },
-    {
-      key: 'order',
-      header: t('admin.taxonomy.colOrder'),
-      numeric: true,
-      secondary: true,
-      cell: (r) => (r.display_order ?? '—') as ReactNode,
-    },
-  ];
-
-  const categoryActions: RowAction<Category>[] = canWrite
+  const actions: RowAction<Row>[] = canWrite
     ? [
-        { label: t('common.edit'), onSelect: (r) => setEditingCategory(r) },
-        { label: t('common.delete'), danger: true, onSelect: (r) => setDeletingCategory(r) },
-      ]
-    : [];
-
-  const subjectActions: RowAction<SubjectRef>[] = canWrite
-    ? [
-        { label: t('common.edit'), onSelect: (r) => setEditingSubject(r) },
-        { label: t('common.delete'), danger: true, onSelect: (r) => setDeletingSubject(r) },
+        { label: t('common.edit'), onSelect: (r) => setEditing(r) },
+        { label: t('common.delete'), danger: true, onSelect: (r) => setDeleting(r) },
       ]
     : [];
 
   return (
-    <AdminLayout title={t('admin.nav.taxonomy')} lede={t('admin.taxonomy.lede')}>
+    <AdminLayout title={t(spec.navKey)} lede={t(spec.ledeKey)}>
       {notice ? (
         <p className="admin-notice" role="status" aria-live="polite">
           {notice}
         </p>
       ) : null}
 
-      <section>
-        <div className="admin-section-head">
-          <h2>{t('admin.taxonomy.categoriesTitle')}</h2>
-          {canWrite ? (
-            <Button variant="primary" onClick={() => setEditingCategory('new')}>
-              {t('admin.taxonomy.createCategory')}
+      <DataTable
+        caption={t(spec.navKey)}
+        columns={columns}
+        rows={rows}
+        rowKey={(r) => r.id}
+        status={status}
+        actions={actions}
+        onRetry={() => void load()}
+        toolbar={
+          canWrite ? (
+            <Button variant="primary" onClick={() => setEditing('new')}>
+              {t(spec.createKey)}
             </Button>
-          ) : null}
-        </div>
-        <p className="lede">{t('admin.taxonomy.categoriesLede')}</p>
-        <DataTable
-          caption={t('admin.taxonomy.categoriesTitle')}
-          columns={categoryColumns}
-          rows={categories}
-          rowKey={(r) => r.id}
-          status={status}
-          actions={categoryActions}
-          onRetry={() => void load()}
-        />
-      </section>
-
-      <section>
-        <div className="admin-section-head">
-          <h2>{t('admin.taxonomy.subjectsTitle')}</h2>
-          {canWrite ? (
-            <Button variant="primary" onClick={() => setEditingSubject('new')}>
-              {t('admin.taxonomy.createSubject')}
-            </Button>
-          ) : null}
-        </div>
-        <p className="lede">{t('admin.taxonomy.subjectsLede')}</p>
-        <DataTable
-          caption={t('admin.taxonomy.subjectsTitle')}
-          columns={subjectColumns}
-          rows={subjects}
-          rowKey={(r) => r.id}
-          status={status}
-          actions={subjectActions}
-          onRetry={() => void load()}
-        />
-      </section>
-
-      {editingCategory ? (
-        <TaxonomyFormDialog
-          title={t(
-            editingCategory === 'new'
-              ? 'admin.taxonomy.createCategory'
-              : 'admin.taxonomy.editCategory',
-          )}
-          hint={t('admin.taxonomy.categoryNameHint')}
-          initial={editingCategory === 'new' ? null : editingCategory}
-          busy={busy}
-          onCancel={() => setEditingCategory(null)}
-          onSave={(input) =>
-            void save('category', input, editingCategory === 'new' ? null : editingCategory)
-          }
-        />
-      ) : null}
-
-      {editingSubject ? (
-        <TaxonomyFormDialog
-          title={t(
-            editingSubject === 'new' ? 'admin.taxonomy.createSubject' : 'admin.taxonomy.editSubject',
-          )}
-          initial={editingSubject === 'new' ? null : editingSubject}
-          busy={busy}
-          onCancel={() => setEditingSubject(null)}
-          onSave={(input) =>
-            void save('subject', input, editingSubject === 'new' ? null : editingSubject)
-          }
-        />
-      ) : null}
-
-      <ConfirmDialog
-        open={deletingCategory !== null}
-        title={t('admin.taxonomy.deleteCategoryTitle')}
-        body={t('admin.taxonomy.deleteCategoryBody').replace('{name}', deletingCategory?.name ?? '')}
-        confirmLabel={t('common.delete')}
-        danger
-        busy={busy}
-        onConfirm={() => void remove('category', deletingCategory!.id)}
-        onCancel={() => setDeletingCategory(null)}
+          ) : null
+        }
       />
 
+      {editing ? (
+        <TaxonomyFormDialog
+          title={t(editing === 'new' ? spec.createKey : spec.editKey)}
+          {...(spec.formHintKey ? { hint: t(spec.formHintKey) } : {})}
+          initial={editing === 'new' ? null : editing}
+          busy={busy}
+          onCancel={() => setEditing(null)}
+          onSave={(input) => void save(input, editing === 'new' ? null : editing)}
+        />
+      ) : null}
+
       <ConfirmDialog
-        open={deletingSubject !== null}
-        title={t('admin.taxonomy.deleteSubjectTitle')}
-        body={t('admin.taxonomy.deleteSubjectBody').replace('{name}', deletingSubject?.name ?? '')}
+        open={deleting !== null}
+        title={t(spec.deleteTitleKey)}
+        body={t(spec.deleteBodyKey).replace('{name}', deleting?.name ?? '')}
         confirmLabel={t('common.delete')}
         danger
         busy={busy}
-        onConfirm={() => void remove('subject', deletingSubject!.id)}
-        onCancel={() => setDeletingSubject(null)}
+        onConfirm={() => void remove(deleting!.id)}
+        onCancel={() => setDeleting(null)}
       />
     </AdminLayout>
   );

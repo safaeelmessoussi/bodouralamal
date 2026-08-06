@@ -449,6 +449,9 @@ describe('§14.2 / TD-10 — user list, filters and search', () => {
       expect(Object.keys(row).sort()).toEqual(
         [
           'accountStatus',
+          // R55 — the administrative identifier §14.2 now lists. NOT a display
+          // identity (§20 rule 21), which governs the PUBLIC name only.
+          'email',
           'id',
           'nameArabic',
           'nickname',

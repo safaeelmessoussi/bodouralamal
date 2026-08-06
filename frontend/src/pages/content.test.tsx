@@ -42,7 +42,7 @@ describe('what the uploader tells someone when the server refuses', () => {
   });
 
   it('names the subject/level mismatch, which is a data problem and not a permission', () => {
-    expect(uploadErrorMessage(envelope('STATE_CONFLICT', { reason: 'SUBJECT_NOT_AT_LEVEL' }))).toBe(
+    expect(uploadErrorMessage(envelope('STATE_CONFLICT', { reason: 'SUBJECT_NOT_IN_LEVEL' }))).toBe(
       t('content.upload.subjectNotAtLevel'),
     );
   });

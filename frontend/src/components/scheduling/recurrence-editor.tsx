@@ -56,6 +56,24 @@ export interface WeekdaySetRecurrence {
   variant: 'weekday_set';
   type: string;
   weekdays: string[];
+  /**
+   * **When the series starts**, and — for `biweekly_alternating` — which week
+   * counts as *on*. `anchor_date` in the contract.
+   *
+   * Without it, §7's own words: *"'week on' is undefined and the two halves of
+   * the alternation are indistinguishable."* The form omitted it entirely, so a
+   * fortnightly class had no way to say which fortnight it meant.
+   */
+  startDate: string;
+  /**
+   * **The last date the rule produces occurrences for** — `effective_until`
+   * (R50). Empty is open-ended, which every schedule created before R50 is.
+   *
+   * The column has existed since R50 and no contract exposed it: it could only
+   * be set as a side effect of splitting a schedule, so a class that runs for
+   * one term could not be *described* as running for one term.
+   */
+  endDate: string;
 }
 
 export type RecurrenceValue = AnchoredRecurrence | WeekdaySetRecurrence;
@@ -128,6 +146,31 @@ export function RecurrenceEditor({
           <p className="field__hint">{t('scheduling.weekdaysHint')}</p>
         </fieldset>
       )}
+
+      {/* **Both variants bound their series here, in the same place, with the
+          same words.** A weekday set says *which days*; it still has to say
+          *between which dates*, and asking that question in one form and not
+          the other is what made the two scheduling screens feel unrelated. */}
+      {value.variant === 'weekday_set' ? (
+        <div className="form__row">
+          <DateField
+            label={t('scheduling.startDate')}
+            value={value.startDate}
+            onChange={(startDate) => onChange({ ...value, startDate })}
+            hint={
+              value.type === 'biweekly_alternating'
+                ? t('scheduling.startDateAnchorHint')
+                : t('scheduling.startDateHint')
+            }
+          />
+          <DateField
+            label={t('scheduling.recurrenceEnd')}
+            value={value.endDate}
+            onChange={(endDate) => onChange({ ...value, endDate })}
+            hint={t('scheduling.recurrenceEndHint')}
+          />
+        </div>
+      ) : null}
     </>
   );
 }
