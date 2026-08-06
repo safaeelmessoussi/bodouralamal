@@ -76,6 +76,13 @@ async function clear(): Promise<void> {
   await prisma.auditLog.deleteMany({
     where: { OR: [{ actorUserId: { in: userIds } }, { targetId: { in: ids } }] },
   });
+  // **Deleting an event now leaves a Trash snapshot** (TD-5), and `deleted_by`
+  // is `Restrict` — so a suite that deletes events and then its own users is
+  // refused by the database. Ordering, again: the tombstone goes before the
+  // person who wrote it.
+  await prisma.trash.deleteMany({
+    where: { OR: [{ deletedById: { in: userIds } }, { targetId: { in: ids } }] },
+  });
   await prisma.userBranchRole.deleteMany({ where: { userId: { in: userIds } } });
   await prisma.user.deleteMany({ where: { id: { in: userIds } } });
   await prisma.branch.deleteMany({ where: { name: { startsWith: TAG } } });

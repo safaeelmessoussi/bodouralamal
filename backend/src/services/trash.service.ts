@@ -64,11 +64,19 @@ const BLOCKED_REASON: Record<string, string> = {
   Level: 'CASCADE_CHILDREN',
   AdministrativeGroup: 'CASCADE_CHILDREN',
   TeachingGroup: 'CASCADE_CHILDREN',
+  // Deleting a schedule takes its unprotected future occurrences with it, and a
+  // restore has to decide which of them to bring back — `session.materialize`
+  // would regenerate them, but not the ones protection deliberately spared.
   RecurringCourseSchedule: 'CASCADE_CHILDREN',
   Session: 'CASCADE_CHILDREN',
+  // An Event's scope joins are HARD deleted, so restoring the row alone would
+  // produce an event with no audience — visible to nobody, which is worse than
+  // absent because it looks restored.
+  Event: 'CASCADE_RELATIONSHIPS',
   Enrollment: 'CASCADE_RELATIONSHIPS',
   StudentTeachingGroup: 'CASCADE_RELATIONSHIPS',
   FamilyLink: 'CASCADE_RELATIONSHIPS',
+  EducationalContent: 'CASCADE_RELATIONSHIPS',
 };
 
 /** TD-2: the Trash is Super Admin only. It exposes every entity in the platform

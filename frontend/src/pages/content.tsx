@@ -4,8 +4,8 @@ import { fetchBranches } from '../adapters/branches.js';
 import { listBranches } from '../adapters/branches-admin.js';
 import { listCourseSchedules } from '../adapters/course-schedules.js';
 import { kindOf, type ContentKind } from '../adapters/content.js';
-import { listAcademicYears, listSubjects, type AcademicYearRef, type SubjectRef } from '../adapters/reference-data.js';
-import { listLevels, type Level } from '../adapters/taxonomy.js';
+import { listAcademicYears, type AcademicYearRef, type SubjectRef } from '../adapters/reference-data.js';
+import { listLevelSubjects, listLevels, type Level } from '../adapters/taxonomy.js';
 import { deleteContent } from '../adapters/uploads.js';
 import { AdminLayout } from '../components/admin/admin-layout.js';
 import { FileUploader } from '../components/content/file-uploader.js';
@@ -92,13 +92,8 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
 
   useEffect(() => {
     void (async () => {
-      const [lv, sb, yr] = await Promise.all([
-        listLevels(accessToken),
-        listSubjects(accessToken),
-        listAcademicYears(accessToken),
-      ]);
+      const [lv, yr] = await Promise.all([listLevels(accessToken), listAcademicYears(accessToken)]);
       setLevels(lv);
-      setSubjects(sb);
       setYears(yr);
       // The live year is the one nearly every upload belongs to; making someone
       // recall which it is would be asking the screen's own question back.
@@ -122,6 +117,39 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
       }
     })();
   }, [accessToken, isAdmin]);
+
+  /**
+   * **The Subject list is the Level's, never the platform's.**
+   *
+   * `EducationalContent` carries a Level *and* a Subject, and the server refuses
+   * a pair that `LevelSubject` does not join (R43) — so offering every Subject
+   * would let someone pick a combination that can only ever be rejected. That is
+   * not hypothetical: it is what the upload did, and on a database with no
+   * `LevelSubject` rows at all **every** choice failed.
+   *
+   * An empty list is therefore a real and informative state — *this level teaches
+   * no subjects yet* — and it points at the screen that fixes it (§14.1's
+   * Subject Organisation node), rather than at a failed upload.
+   */
+  useEffect(() => {
+    if (levelId === '') {
+      setSubjects([]);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const taught = await listLevelSubjects(levelId, accessToken);
+      if (cancelled) return;
+      setSubjects(taught);
+      // A subject chosen under a previous level is very unlikely to be taught
+      // under this one, and silently keeping it is how an impossible pair
+      // reaches the server.
+      setSubjectId((current) => (taught.some((s) => s.id === current) ? current : ''));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [levelId, accessToken]);
 
   const load = useCallback(async () => {
     setStatus('loading');
@@ -181,11 +209,15 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
    * thing to read than a validation error after filling in a title.
    */
   const scopeProblem =
-    levelId === '' || subjectId === '' || yearId === ''
-      ? t('content.upload.chooseScope')
-      : !isAdmin && (branchId === '' || branchId === GLOBAL)
-        ? t('content.upload.teacherNeedsBranch')
-        : null;
+    levelId !== '' && subjects.length === 0
+      ? // Actionable rather than merely refusing: the fix is an assignment on
+        // another screen, and naming it is what turns a dead end into a next step.
+        t('content.upload.levelTeachesNothing')
+      : levelId === '' || subjectId === '' || yearId === ''
+        ? t('content.upload.chooseScope')
+        : !isAdmin && (branchId === '' || branchId === GLOBAL)
+          ? t('content.upload.teacherNeedsBranch')
+          : null;
 
   const columns: Column<LibraryRow>[] = [
     { key: 'title', header: t('content.col.title'), cell: (r) => r.title },
@@ -279,8 +311,17 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
               label={t('content.col.subject')}
               value={subjectId}
               onChange={(v) => refilter(() => setSubjectId(v))}
+              disabled={levelId === ''}
               options={[
-                { value: '', label: t('content.allSubjects') },
+                {
+                  value: '',
+                  label:
+                    levelId === ''
+                      ? t('content.chooseLevelFirst')
+                      : subjects.length === 0
+                        ? t('content.levelTeachesNothing')
+                        : t('content.allSubjects'),
+                },
                 ...subjects.map((s) => ({ value: s.id, label: s.name })),
               ]}
             />

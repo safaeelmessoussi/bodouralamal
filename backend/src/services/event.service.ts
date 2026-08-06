@@ -5,6 +5,7 @@ import { teacherEventScope } from '../policies/roster-resolution.js';
 import { page, pageWindow, type Page, type PageParams } from '../lib/pagination.js';
 import * as audit from '../repositories/audit.repository.js';
 import { updateWithVersion } from '../repositories/optimistic-lock.js';
+import * as trash from '../repositories/trash.repository.js';
 import type { Actor } from '../policies/actor.js';
 
 /**
@@ -383,6 +384,21 @@ export async function deleteEvent(
     const event = await tx.event.findFirst({ where: { id, deletedAt: null } });
     if (!event) throw new AppError('NOT_FOUND', 'no such event');
 
+    // **Captured BEFORE the joins are removed**, because they are hard-deleted
+    // rather than soft-deleted: after this point the event's audience is not
+    // merely hidden, it is gone. §4.10's runbook rule is that a snapshot must
+    // carry the relationship rows the cascade removes, or a restore produces a
+    // record that exists and reaches nobody.
+    const [branches, categories, levels, groups] = await Promise.all([
+      tx.eventBranch.findMany({ where: { eventId: id }, select: { branchId: true } }),
+      tx.eventCategory.findMany({ where: { eventId: id }, select: { categoryId: true } }),
+      tx.eventLevel.findMany({ where: { eventId: id }, select: { levelId: true } }),
+      tx.eventAdministrativeGroup.findMany({
+        where: { eventId: id },
+        select: { administrativeGroupId: true },
+      }),
+    ]);
+
     await tx.eventBranch.deleteMany({ where: { eventId: id } });
     await tx.eventCategory.deleteMany({ where: { eventId: id } });
     await tx.eventLevel.deleteMany({ where: { eventId: id } });
@@ -391,6 +407,24 @@ export async function deleteEvent(
     await tx.event.update({
       where: { id },
       data: { deletedAt: new Date(), deletedById: actor.userId },
+    });
+    // TD-5/BR-15: a soft delete without a snapshot is a row nobody can find and
+    // nobody can restore — the Trash is where a deletion becomes answerable, and
+    // an entity that skips it is invisible to the one screen that exists to
+    // report it.
+    await trash.snapshot(tx, {
+      targetEntity: 'Event',
+      targetId: id,
+      snapshot: {
+        ...event,
+        scope: {
+          branch_ids: branches.map((r) => r.branchId),
+          category_ids: categories.map((r) => r.categoryId),
+          level_ids: levels.map((r) => r.levelId),
+          administrative_group_ids: groups.map((r) => r.administrativeGroupId),
+        },
+      },
+      deletedById: actor.userId,
     });
     await audit.write(tx, {
       actorUserId: actor.userId,

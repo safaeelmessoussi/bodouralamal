@@ -22,6 +22,7 @@ const ENTITIES = [
   'RecurringCourseSchedule',
   'Session',
   'Event',
+  'EducationalContent',
   'User',
 ] as const;
 
