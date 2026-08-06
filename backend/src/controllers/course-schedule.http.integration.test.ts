@@ -28,6 +28,9 @@ const SCHEDULE_KEYS = [
   'academic_year_id',
   'anchor_date',
   'branch_id',
+  // R55.1 — resolved labels, so a timetable can be rendered without five
+  // further requests. Labels only; the ids above stay the identifiers.
+  'branch_name',
   'day_of_month',
   // R55 — R50's bound reaches the contract; `null` is open-ended.
   'effective_until',
@@ -36,10 +39,13 @@ const SCHEDULE_KEYS = [
   'month_of_year',
   'recurrence',
   'room_id',
+  'room_name',
   'staff',
   'start_time',
   'subject_id',
+  'subject_name',
   'target_id',
+  'target_name',
   'teaching_mode',
   'version',
   'weekdays',

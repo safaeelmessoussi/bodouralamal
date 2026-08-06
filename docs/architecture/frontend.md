@@ -533,6 +533,25 @@ content is a set, and owns the part worth sharing: **an empty list means *there
 are none***, which for conflicts is a reassuring answer and must not render as an
 empty `<ul>` a reader mistakes for a failure to load.
 
+### A table shows names, and that is a contract property
+
+The sessions table looked foreign long after its shell matched, because it led
+with a clock time and printed a **raw UUID** for the room. No component could
+have fixed that: `CourseScheduleDto` published five ids and no labels, so no
+client could render a timetable without five further requests.
+
+The DTO now resolves `subject_name`, `target_name`, `branch_name` and
+`room_name` — the precedent `libraryItemDto` set, for the reason it states:
+**labels, never identifiers**, with the ids remaining what a client filters and
+links by. `target_name` is whichever of the three the mode names (§4.4c), so a
+reader is not asked to resolve *who this class is for* from three nullable ids.
+
+**Presence is not absence.** The first parity test asserted the shared
+components were *used*, which a page can satisfy while still carrying custom UI
+beside them — and one did, for a whole revision. The guard now also asserts what
+must not be there: no bare `<Dialog>`, no raw `<ul>`, no raw `<select>`, no
+`r.*_id` in a table cell.
+
 ### Where the primary action lives
 
 **In the layout's `actions` slot, never the table's toolbar.** The toolbar is for

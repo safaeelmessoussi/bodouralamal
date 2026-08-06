@@ -1,6 +1,10 @@
-import { readFileSync } from 'node:fs';
-
 import { describe, expect, it } from 'vitest';
+
+// Read as raw text through Vite rather than `node:fs`: the production build
+// typechecks this file too, and pulling Node's types in for one test would put
+// them on the whole application's type surface.
+import EVENTS from './calendar.tsx?raw';
+import SESSIONS from './schedules.tsx?raw';
 
 /**
  * **الأنشطة and الحصص are one feature family, and this keeps them one.**
@@ -22,9 +26,6 @@ import { describe, expect, it } from 'vitest';
  * per-difference test would have to be remembered for each new divergence,
  * which is the discipline that already failed here.
  */
-const EVENTS = readFileSync(new URL('./calendar.tsx', import.meta.url), 'utf8');
-const SESSIONS = readFileSync(new URL('./schedules.tsx', import.meta.url), 'utf8');
-
 const PAGES: [string, string][] = [
   ['الأنشطة (calendar.tsx)', EVENTS],
   ['الحصص (schedules.tsx)', SESSIONS],
@@ -99,6 +100,37 @@ describe('both scheduling pages are built from the same components', () => {
   it('both offer a filter row, because both list something worth narrowing', () => {
     for (const [name, source] of PAGES) {
       expect(source.includes('toolbar='), `${name} has no filter row`).toBe(true);
+    }
+  });
+
+  it('neither renders a bare Dialog — every dialog is a shared kind', () => {
+    // **The gap the first version of this file missed.** It asserted the shared
+    // components were PRESENT, which a page can satisfy while still carrying
+    // custom UI alongside them: the sessions page used `FormDialog` and kept a
+    // hand-built `<Dialog>` for its materialization report, with a raw `<ul>`
+    // and untranslated codes inside. Presence is not absence.
+    for (const [name, source] of PAGES) {
+      expect(/<Dialog[\s>]/.test(source), `${name} still builds a bare Dialog`).toBe(false);
+    }
+  });
+
+  it('neither renders a bare list where a dialog shows a set', () => {
+    for (const [name, source] of PAGES) {
+      // A raw `<ul>` inherits no styling and, worse, renders empty when the set
+      // is empty — which for conflicts is the reassuring answer, not a blank.
+      expect(/<ul>/.test(source), `${name} renders an unstyled list`).toBe(false);
+    }
+  });
+
+  it('neither prints a raw identifier where a name belongs', () => {
+    for (const [name, source] of PAGES) {
+      // `r.room_id` in a cell rendered a UUID in the timetable. Ids are what a
+      // client links by; **names are what it shows** — the same rule the library
+      // DTO states, and the reason the schedule DTO now resolves its labels.
+      expect(
+        /cell: \(r\) =>\s*\n?\s*r\.\w+_id\b/.test(source),
+        `${name} renders a raw id in a table cell`,
+      ).toBe(false);
     }
   });
 

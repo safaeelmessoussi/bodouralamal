@@ -33,7 +33,6 @@ import {
   type RowAction,
   type TableStatus,
 } from '../../components/ui/data-table.js';
-import { Dialog } from '../../components/ui/dialog.js';
 import { useSession } from '../../contexts/session.js';
 import { t } from '../../i18n/index.js';
 
@@ -131,6 +130,22 @@ export function SchedulesPage(): ReactNode {
 
   const columns: Column<CourseSchedule>[] = [
     {
+      // **Every other CRUD table in the back office leads with a name**, and
+      // this one led with a clock time and then showed a raw UUID for the room.
+      // A timetable read as `09:00 · administrative_group · <uuid>` is not a
+      // different visual language by choice — it is a table with no subject.
+      key: 'subject',
+      header: t('admin.schedules.subject'),
+      cell: (r) => r.subject_name ?? <span className="muted">{t('common.notSet')}</span>,
+    },
+    {
+      key: 'target',
+      header: t('admin.schedules.target'),
+      // Whichever of the three the mode names (§4.4c) — *who this class is for*
+      // is the second thing a reader wants, and the mode alone does not say it.
+      cell: (r) => r.target_name ?? <span className="muted">{t('common.notSet')}</span>,
+    },
+    {
       key: 'time',
       header: t('admin.schedules.time'),
       // Wall-clock, rendered exactly as the API sends it (TD-11). Reformatting
@@ -139,22 +154,22 @@ export function SchedulesPage(): ReactNode {
       cell: (r) => timeLabel(r),
     },
     {
-      key: 'mode',
-      header: t('admin.schedules.mode'),
-      cell: (r) => t(`admin.schedules.mode_${r.teaching_mode}`),
-    },
-    {
       key: 'recurrence',
       header: t('admin.schedules.recurrence'),
       secondary: true,
       cell: (r) => recurrenceLabel(r),
     },
     {
+      key: 'branch',
+      header: t('admin.schedules.branch'),
+      secondary: true,
+      cell: (r) => r.branch_name ?? <span className="muted">{t('common.notSet')}</span>,
+    },
+    {
       key: 'room',
       header: t('admin.schedules.room'),
       secondary: true,
-      cell: (r) =>
-        r.room_id ?? <span className="muted">{t('admin.schedules.noRoom')}</span>,
+      cell: (r) => r.room_name ?? <span className="muted">{t('admin.schedules.noRoom')}</span>,
     },
     {
       key: 'staff',
@@ -673,28 +688,31 @@ function MaterializationDialog({
   onClose: () => void;
 }): ReactNode {
   return (
-    <Dialog open={report !== null} onClose={onClose} title={t('admin.schedules.writeTitle')}>
-      {report ? (
-        <>
-          <p>
-            {t('admin.schedules.writeSummary')
+    <ListDialog
+      open={report !== null}
+      title={t('admin.schedules.writeTitle')}
+      lede={
+        report
+          ? t('admin.schedules.writeSummary')
               .replace('{created}', String(report.created))
-              .replace('{resynced}', String(report.resynced))}
-          </p>
-          {report.protected_sessions.length > 0 ? (
-            <>
-              <p className="lede">{t('admin.schedules.protectedLede')}</p>
-              <ul>
-                {report.protected_sessions.map((p) => (
-                  <li key={p.id}>
-                    <time dateTime={p.date}>{p.date}</time> — {p.reasons.join('، ')}
-                  </li>
-                ))}
-              </ul>
-            </>
-          ) : null}
+              .replace('{resynced}', String(report.resynced))
+          : ''
+      }
+      // An empty list here is the ordinary, reassuring outcome: nothing was
+      // spared because nothing needed sparing.
+      emptyLabel={t('admin.schedules.protectedNone')}
+      items={report?.protected_sessions ?? null}
+      itemKey={(p) => p.id}
+      renderItem={(p) => (
+        <>
+          <time dateTime={p.date}>{p.date}</time> —{' '}
+          {/* The reasons were rendered as raw R43.6 codes. They are the
+              contract's vocabulary, never what a reader sees — and the sessions
+              screen already translates the same set. */}
+          {p.reasons.map((c) => t(`admin.sessions.protection.${c}`)).join('، ')}
         </>
-      ) : null}
-    </Dialog>
+      )}
+      onClose={onClose}
+    />
   );
 }

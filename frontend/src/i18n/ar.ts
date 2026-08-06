@@ -799,6 +799,8 @@ export const ar = {
       writeTitle: 'أثر الحفظ على الحصص',
       writeSummary: 'حصص مُنشأة: {created} — حصص محدَّثة: {resynced}.',
       protectedLede: 'حصص لم تُمَس لأنها تحمل عملاً فعلياً:',
+      // القائمة الفارغة هنا نتيجة عادية ومطمئنة: لم يُستثنَ شيء لأن لا شيء احتاج استثناء.
+      protectedNone: 'لم تُستثنَ أي حصة — لم تكن أي منها تحمل عملاً فعلياً.',
       recurrence_weekly: 'أسبوعي',
       recurrence_multiple_weekdays: 'عدة أيام في الأسبوع',
       recurrence_biweekly_alternating: 'كل أسبوعين',

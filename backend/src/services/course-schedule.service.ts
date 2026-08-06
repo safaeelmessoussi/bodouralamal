@@ -1051,7 +1051,20 @@ export async function listCourseSchedules(
       // A timetable reads by day then by time; `startTime` is a wall-clock
       // column (TD-11), so this is a clock ordering and not an instant one.
       orderBy: [{ startTime: 'asc' }, { endTime: 'asc' }],
-      include: { staff: { where: { deletedAt: null }, select: { userId: true, position: true } } },
+      include: {
+        staff: { where: { deletedAt: null }, select: { userId: true, position: true } },
+        // **The labels the ids stand for**, resolved here for the same reason
+        // `libraryItemDto` resolves its own (TD-3.13): a client cannot render a
+        // timetable from ids, and this list was showing raw UUIDs where every
+        // other screen in the back office shows a name. One join each, on a
+        // page of at most 25 rows.
+        subject: { select: { name: true } },
+        branch: { select: { name: true } },
+        room: { select: { name: true } },
+        level: { select: { name: true } },
+        administrativeGroup: { select: { name: true } },
+        teachingGroup: { select: { name: true } },
+      },
     }),
     prisma.recurringCourseSchedule.count({ where }),
   ]);

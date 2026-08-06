@@ -369,6 +369,20 @@ export interface CourseScheduleDto {
   id: string;
   subject_id: string;
   /**
+   * **Labels, never identifiers** — the ids remain what a client filters and
+   * links by. Resolved server-side for the same reason `libraryItemDto` resolves
+   * its own: a timetable cannot be rendered from ids, and this list was showing
+   * raw UUIDs where every other back-office screen shows a name.
+   *
+   * `null` on a **write** response, which is built from a narrower projection
+   * and whose caller already knows the names it just submitted.
+   */
+  subject_name: string | null;
+  /** Whichever of the three the mode names (§4.4c). */
+  target_name: string | null;
+  branch_name: string | null;
+  room_name: string | null;
+  /**
    * **One mode, one target** (§4.4c). The three nullable columns behind this are
    * deliberately not exposed as three fields: a response carrying two of them
    * would have no correct reading, and the pair below cannot express that state
@@ -439,14 +453,33 @@ export function courseScheduleDto(row: {
   academicYearId: string;
   staff: { userId: string; position: string }[];
   version: number;
+  /**
+   * **The labels the ids stand for**, resolved server-side — optional because
+   * the write paths build their response from a narrower projection, and a
+   * write's caller already knows the names it just submitted.
+   */
+  subject?: { name: string } | null;
+  branch?: { name: string } | null;
+  room?: { name: string } | null;
+  level?: { name: string } | null;
+  administrativeGroup?: { name: string } | null;
+  teachingGroup?: { name: string } | null;
 }): CourseScheduleDto {
   return {
     id: row.id,
     subject_id: row.subjectId,
+    subject_name: row.subject?.name ?? null,
     teaching_mode: row.teachingMode,
     target_id: targetOf(row),
+    // Whichever of the three the mode names (§4.4c) — the timetable reads *who
+    // this class is for*, and the caller should not have to resolve that from
+    // three nullable ids.
+    target_name:
+      row.level?.name ?? row.administrativeGroup?.name ?? row.teachingGroup?.name ?? null,
     branch_id: row.branchId,
+    branch_name: row.branch?.name ?? null,
     room_id: row.roomId,
+    room_name: row.room?.name ?? null,
     start_time: timeOnly(row.startTime),
     end_time: timeOnly(row.endTime),
     recurrence: row.recurrence,

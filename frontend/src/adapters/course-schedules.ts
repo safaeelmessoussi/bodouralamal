@@ -27,6 +27,14 @@ export interface ScheduleStaff {
 export interface CourseSchedule {
   id: string;
   subject_id: string;
+  /**
+   * **Labels, never identifiers** — resolved server-side so a timetable can be
+   * read. `null` on a write response, whose caller already knows them.
+   */
+  subject_name: string | null;
+  target_name: string | null;
+  branch_name: string | null;
+  room_name: string | null;
   /** One mode, one target (§4.4c) — never three nullable target columns. */
   teaching_mode: string;
   target_id: string;
