@@ -133,7 +133,19 @@ export function SchedulingPage(): ReactNode {
       header: t('scheduling.itemType'),
       cell: (r) => t(`scheduling.type.${r.type}`),
     },
-    { key: 'title', header: t('scheduling.title'), cell: (r) => r.title },
+    {
+      key: 'title',
+      header: t('scheduling.title'),
+      // A class is named by its Subject and an activity by its title; either can
+      // be absent, and the fallback is a localized word rather than a blank cell
+      // or — worse — an internal value standing in for a name.
+      cell: (r) =>
+        r.title.trim() !== '' ? (
+          r.title
+        ) : (
+          <span className="muted">{t('scheduling.untitled')}</span>
+        ),
+    },
     {
       key: 'audience',
       header: t('admin.schedules.target'),
@@ -444,15 +456,55 @@ function SchedulingDialog({
   const targetId =
     mode === 'entire_level' ? scope.value.levelId : scope.value.groupId;
 
-  const complete =
-    type === 'class'
-      ? scope.value.subjectId !== '' &&
-        targetId !== '' &&
-        scope.value.branchId !== '' &&
-        scope.value.academicYearId !== ''
-      : title.trim() !== '' && recurrence.startDate !== '';
+  /**
+   * **What is missing, in the person's words — not a disabled button.**
+   *
+   * The form used to disable Save until everything was set, which is why it
+   * "did nothing": a class needs four scope values chosen in order (branch →
+   * level → group → subject), and until the last one landed the button was
+   * inert with nothing on screen explaining why. A control that refuses without
+   * saying why teaches nothing (§14.4).
+   *
+   * So Save is always clickable and validation answers **here**, naming the
+   * first thing to fix. The order matches the form's own order, so the message
+   * points at the next field rather than the last one.
+   */
+  function validationError(): string | null {
+    if (recurrence.startDate === '') return t('scheduling.invalid.startDate');
+    if (type === 'class') {
+      if (scope.value.branchId === '') return t('scheduling.invalid.branch');
+      if (scope.value.levelId === '') return t('scheduling.invalid.level');
+      if (targetId === '') return t('scheduling.invalid.target');
+      // **Points at the fix, not at the empty box.** With no `LevelSubject`
+      // rows a Level teaches nothing, so *choose a subject* is unanswerable —
+      // the remedy is on another screen, and naming it turns a dead end into a
+      // next step (R43, R55).
+      if (scope.levelTeachesNothing) return t('scope.assignSubjectsHint');
+      if (scope.value.subjectId === '') return t('scheduling.invalid.subject');
+      if (scope.value.academicYearId === '') return t('scheduling.invalid.year');
+      if (startTime === '' || endTime === '') return t('scheduling.invalid.times');
+      // A weekday-set pattern IS its days (§4.4) — an empty set produces a
+      // schedule that materializes nothing, which looks like a silent failure.
+      if (
+        (recurrence.type === 'multiple_weekdays' ||
+          (recurrence.type === 'biweekly_alternating' && recurrence.weekdays.length === 0)) &&
+        recurrence.weekdays.length === 0
+      ) {
+        return t('scheduling.invalid.weekdays');
+      }
+      return null;
+    }
+    if (title.trim() === '') return t('scheduling.invalid.title');
+    return null;
+  }
 
   async function submit(): Promise<void> {
+    const invalid = validationError();
+    if (invalid !== null) {
+      // The whole point: say what is wrong instead of doing nothing.
+      setNotice(invalid);
+      return;
+    }
     setBusy(true);
     setNotice(null);
     try {
@@ -515,7 +567,6 @@ function SchedulingDialog({
       wide
       notice={notice}
       busy={busy}
-      disabled={!complete}
       onCancel={onCancel}
       onSubmit={() => void submit()}
     >

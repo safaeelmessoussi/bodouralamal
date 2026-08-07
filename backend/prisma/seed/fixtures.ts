@@ -376,8 +376,22 @@ async function main(): Promise<void> {
     RecurrenceType.biweekly_alternating,
     RecurrenceType.yearly,
   ];
+  /** Arabic names for the demo rows, so no fixture puts an enum on a screen. */
+  const RECURRENCE_LABEL_AR: Record<string, string> = {
+    [RecurrenceType.daily]: 'حصة تقوية يومية',
+    [RecurrenceType.weekly]: 'لقاء أسبوعي',
+    [RecurrenceType.biweekly_alternating]: 'ورشة كل أسبوعين',
+    [RecurrenceType.yearly]: 'حفل نهاية السنة',
+  };
+
   for (const [index, recurrence] of recurrences.entries()) {
-    const title = `${FIXTURE_TAG} حدث ${recurrence}`;
+    // **An Arabic name, not the enum value.** These titles are what the
+    // scheduling list renders, and embedding `daily`/`yearly` in them put an
+    // internal value on screen as if it were something somebody had typed.
+    // The recurrence is still one per row — the fixture's purpose — it is
+    // simply no longer the row's *name*.
+    const label = RECURRENCE_LABEL_AR[recurrence] ?? 'نشاط';
+    const title = `${FIXTURE_TAG} ${label}`;
     const existing = await prisma.event.findFirst({ where: { title, deletedAt: null } });
     if (!existing) {
       const event = await prisma.event.create({

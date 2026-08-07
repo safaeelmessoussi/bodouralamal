@@ -653,7 +653,7 @@
 - [x] الفئات / المواد split into two §14.1 nodes, one implementation
 - [x] Users table: `email` + the Branch scope column §14.2 already required
 - [x] Sessions: Arabic weekdays, `anchor_date` and `effective_until` in the shared recurrence editor, one primary teacher + assistants
-- [ ] **Backfill the curriculum data.** `level_subject` is empty on the live database, so no Level teaches anything and no content can be attached anywhere. Assign subjects per Level from *المستويات ← مواد المستوى* — a data task, not a code one, and the reason the upload appeared broken
+- [ ] **Backfill the curriculum data — now blocking class scheduling too, not just uploads.** `level_subject` is empty on the live database, so no Level teaches anything and no content can be attached anywhere. Assign subjects per Level from *المستويات ← مواد المستوى* — a data task, not a code one, and the reason the upload appeared broken
 - [x] الأنشطة / الحصص parity — one `FormDialog`, one `ListDialog`, one action placement, one notice style; pinned structurally by `scheduling-parity.test.tsx`
   - ✓ **The table's CONTENT was the last difference**, not its wrapper: `CourseScheduleDto` published five ids and no labels, so the timetable led with a clock time and printed a raw UUID for the room. The DTO now resolves `subject_name`, `target_name`, `branch_name`, `room_name` — `libraryItemDto`'s precedent
   - ✓ `MaterializationDialog` was the last bare `<Dialog>`, and printed R43.6 codes untranslated

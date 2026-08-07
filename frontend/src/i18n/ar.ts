@@ -383,6 +383,20 @@ export const ar = {
     deleteBody: 'سيتم حذف «{title}». الحصص المستقبلية غير المحمية تُحذف معه؛ ما يحمل عملاً فعلياً يبقى.',
     // الحد مذكور لا مخفي: دمج مصدرين مرقّمين لا ينتج صفحة صحيحة دون قراءتهما.
     truncated: 'المعروض هو أول 100 عنصر من كل نوع. صفّي حسب النوع لتصفّح قائمة أطول.',
+    // بدل زرّ معطّل بلا تفسير: تُذكر أول خانة ناقصة بترتيب النموذج نفسه.
+    invalid: {
+      startDate: 'اختاري تاريخ البداية.',
+      branch: 'اختاري الفرع.',
+      level: 'اختاري المستوى.',
+      target: 'اختاري الحلقة المعنية.',
+      subject: 'اختاري المادة.',
+      year: 'اختاري السنة الدراسية.',
+      times: 'أدخلي وقت البداية والنهاية.',
+      weekdays: 'اختاري يوماً واحداً على الأقل لهذا النمط من التكرار.',
+      title: 'أدخلي عنوان العنصر.',
+    },
+    // عنوان فارغ حالة واردة — يُذكر بالعربية ولا يُترك فراغاً ولا قيمة داخلية.
+    untitled: 'بدون عنوان',
     // مفردات الجدولة الموحّدة (R56): نوع العنصر ثم الحقول المشتركة ثم حقول النوع.
     itemType: 'نوع العنصر',
     typeFixed: 'النوع يُحدَّد عند الإنشاء — تغييره يعني نقل السجل إلى جدول آخر.',
@@ -925,6 +939,10 @@ export const ar = {
       colBundle: 'ما سيتغيّر عند الموافقة',
       // Revision 39 — what the applicant ASKED FOR, not where they are placed.
       colBranch: 'المقر المطلوب',
+      // R49 — the stage the applicant asked for. The key was used by the table
+      // and the filter and was never in the catalog, so `t()` fell back to
+      // returning the PATH and both rendered `admin.approvals.colRequested`.
+      colRequested: 'المرحلة المطلوبة',
       branchNone: 'غير مذكور',
       filterBranch: 'المقر',
       filterAllBranches: 'كل المقرات',
