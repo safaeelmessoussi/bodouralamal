@@ -7,6 +7,7 @@ import {
   type CourseSchedule,
 } from './course-schedules.js';
 import { createEvent, deleteEvent, updateEvent, type EventInput } from './events.js';
+import { WEEKDAYS } from '../components/scheduling/recurrence-editor.js';
 
 /**
  * **The one place that knows there are separate models** (SRS Revision 56).
@@ -235,6 +236,28 @@ export interface SchedulingInput {
   staff?: { user_id: string; position: 'teacher' | 'assistant' }[];
 }
 
+/**
+ * **Makes "weekly" mean one thing.**
+ *
+ * `expandEvent` reads plain `weekly` as *every seven days from the start date*
+ * and ignores weekdays; `expandSchedule` reads it as *on the weekdays listed*.
+ * The two agree exactly when the set is the start date's own weekday — so a
+ * class scheduled with a non-weekday-based pattern gets that set filled in here,
+ * and the editor above can offer one vocabulary without either expander lying.
+ *
+ * Returns the set unchanged when the pattern is weekday-based: there the person
+ * chose the days and their choice is the rule.
+ */
+export function weekdaysForClass(recurrence: string, weekdays: string[], startDate: string): string[] {
+  if (weekdays.length > 0) return weekdays;
+  if (recurrence === 'daily' || recurrence === 'monthly' || recurrence === 'yearly') return [];
+  if (startDate === '') return [];
+  // `getUTCDay()` is 0=Sunday; `WEEKDAYS` is Monday-first (BR-17).
+  const day = new Date(`${startDate}T00:00:00Z`).getUTCDay();
+  const name = WEEKDAYS[(day + 6) % 7];
+  return name ? [name] : [];
+}
+
 export async function saveSchedulingItem(
   input: SchedulingInput,
   existing: { id: string; version: number } | null,
@@ -252,7 +275,7 @@ export async function saveSchedulingItem(
           start_time: input.startTime ?? '',
           end_time: input.endTime ?? '',
           recurrence: input.recurrence,
-          weekdays: input.weekdays,
+          weekdays: weekdaysForClass(input.recurrence, input.weekdays, input.startDate),
           anchor_date: input.startDate || null,
           effective_until: input.repeatUntil,
           ...(input.roomId !== undefined ? { room_id: input.roomId } : {}),
@@ -270,7 +293,7 @@ export async function saveSchedulingItem(
         start_time: input.startTime ?? '',
         end_time: input.endTime ?? '',
         recurrence: input.recurrence,
-        weekdays: input.weekdays,
+        weekdays: weekdaysForClass(input.recurrence, input.weekdays, input.startDate),
         anchor_date: input.startDate || null,
         effective_until: input.repeatUntil,
         ...(input.roomId ? { room_id: input.roomId } : {}),

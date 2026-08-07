@@ -4,7 +4,6 @@ import { fetchCalendarBootstrap, fetchOccurrences, type Occurrence } from '../..
 import {
   createEvent,
   deleteEvent,
-  updateEvent,
   type EventInput,
   type EventRecurrence,
   type EventVisibility,
@@ -149,7 +148,6 @@ export function AdminCalendarPage(): ReactNode {
   ];
 
   const actions: RowAction<EventRowView>[] = [
-    { label: t('common.edit'), onSelect: (r) => setEditing(r) },
     { label: t('common.delete'), danger: true, onSelect: (r) => setDeleting(r) },
   ];
 
@@ -165,7 +163,14 @@ export function AdminCalendarPage(): ReactNode {
         void category_ids;
         void level_ids;
         void group_ids;
-        await updateEvent(existing.id, own, accessToken);
+        // **This page cannot edit, and never could.** `PATCH /events` requires
+        // TD-15's `version`, and this list shows calendar *occurrences*, which
+        // carry none because they are not rows — so every edit from here has
+        // returned `400 VALIDATION_FAILED`. The unified Scheduling page (R56)
+        // lists definitions, which do carry it. Until this page is retired the
+        // action is withdrawn rather than left to fail silently (§14.2).
+        throw new ApiError(400, null);
+        void own;
       } else {
         await createEvent(input, accessToken);
       }
@@ -425,15 +430,19 @@ function EventFormDialog({
             genuinely differ. */}
         <RecurrenceEditor
           value={{
-            variant: 'anchored',
             type: form.recurrence,
+            // An Event's rule carries no weekday set; the editor keeps the key
+            // and simply never shows the checkboxes for these patterns.
+            weekdays: [],
+            startDate: form.startDate,
             endDate: form.recurrenceEnd,
           }}
           onChange={(next) =>
             setForm((f) => ({
               ...f,
               recurrence: next.type as EventRecurrence,
-              recurrenceEnd: next.variant === 'anchored' ? next.endDate : f.recurrenceEnd,
+              startDate: next.startDate,
+              recurrenceEnd: next.endDate,
             }))
           }
         />

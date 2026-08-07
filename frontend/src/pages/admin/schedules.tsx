@@ -612,14 +612,15 @@ function ScheduleDialog({
       <SchedulingTimes startTime={start} endTime={end} onStart={setStart} onEnd={setEnd} />
 
       <RecurrenceEditor
-        value={{ variant: 'weekday_set', type: recurrence, weekdays, startDate, endDate }}
+        value={{ type: recurrence, weekdays, startDate, endDate }}
+        // §4.4: the database refuses `none` on a schedule — a non-recurring
+        // occurrence is an Event, not a class that happens once.
+        allowOnce={false}
         onChange={(next) => {
           setRecurrence(next.type);
-          if (next.variant === 'weekday_set') {
-            setWeekdays(next.weekdays);
-            setStartDate(next.startDate);
-            setEndDate(next.endDate);
-          }
+          setWeekdays(next.weekdays);
+          setStartDate(next.startDate);
+          setEndDate(next.endDate);
         }}
       />
 
