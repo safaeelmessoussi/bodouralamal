@@ -222,6 +222,32 @@ or out-of-scope branch is refused.
 This prevents a single-branch teacher from accidentally publishing a file platform-wide
 ([`BR-20`](../reference/business-rules.md#br-20)).
 
+## Why stored objects allow same-origin framing
+
+`/storage/` responses carry `frame-ancestors 'self'`; **everything else keeps
+`'none'`.**
+
+`frame-ancestors` applies to the response *being framed*. Inherited from the
+server-level CSP, `'none'` forbade **any** page — including our own — from
+embedding a stored object, so §14.6's inline PDF preview rendered blank while the
+identical URL opened correctly in a tab and `<audio>` played fine. Those two work
+because a top-level navigation is not framing and media loading is governed by
+`media-src`; only the `<iframe>` was affected, which is what made it look like a
+viewer bug.
+
+**§3.1 scopes its CSP to *client responses*** and names only media/img/connect
+sources for `/storage/`. It never asks stored objects to refuse framing — that
+was an artefact of `add_header` inheritance, and it contradicted §14.6.
+
+**Clickjacking protection is unchanged**: that threat is a hostile page framing
+*our interface*, and the app shell still answers `frame-ancestors 'none'`. This
+says only that our origin may embed its own documents.
+
+One nginx trap worth knowing: **`add_header` in a location replaces the inherited
+set entirely**, so the storage block restates `X-Content-Type-Options` too —
+declaring only the CSP would have silently dropped `nosniff` from every stored
+object.
+
 ## Nginx directives that decide whether uploads work
 
 Scoped to `/storage/` only:
