@@ -9,13 +9,12 @@ import { moduleForPath, visibleModules } from '../../lib/admin-modules.js';
 import { ApprovalsPage } from './approvals.js';
 import { BranchesPage } from './branches.js';
 import { ContentPage } from '../content.js';
-import { AdminCalendarPage } from './calendar.js';
 import { GroupsPage } from './groups.js';
 import { HijriCalendarPage } from './hijri-calendar.js';
 import { LevelSubjectsPage } from './level-subjects.js';
 import { LevelsPage } from './levels.js';
 import { ScheduleSessionsPage } from './schedule-sessions.js';
-import { SchedulesPage } from './schedules.js';
+import { SchedulingPage } from './scheduling.js';
 import { SettingsPage } from './settings.js';
 import { SubjectOrganisationPage } from './subject-organisation.js';
 import { TaxonomyPage } from './taxonomy.js';
@@ -52,7 +51,6 @@ export const IMPLEMENTED_ADMIN_PATHS: readonly string[] = [
   '/admin/categories',
   '/admin/subjects',
   '/admin/users',
-  '/admin/calendar',
   '/admin/content',
   '/admin/trash',
   '/superadmin/hijri-calendar',
@@ -120,8 +118,9 @@ export function AdminRouter(): ReactNode {
       return <BranchesPage />;
     case '/admin/approvals':
       return <ApprovalsPage />;
+    // R56 — one screen for everything that appears on the calendar.
     case '/admin/schedules':
-      return <SchedulesPage />;
+      return <SchedulingPage />;
     case '/admin/groups':
       return <GroupsPage />;
     case '/admin/levels':
@@ -134,8 +133,6 @@ export function AdminRouter(): ReactNode {
       return <TaxonomyPage kind="subject" />;
     case '/admin/users':
       return <UsersPage />;
-    case '/admin/calendar':
-      return <AdminCalendarPage />;
     case '/admin/content':
       // The same screen the teacher portal renders (§5.5/§5.6). One capability,
       // two chromes — the difference between the audiences is what the SERVER

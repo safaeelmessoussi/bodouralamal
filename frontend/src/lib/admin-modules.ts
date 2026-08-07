@@ -82,13 +82,13 @@ export const ADMIN_MODULES: readonly AdminModule[] = [
     status: 'ready',
   },
   {
-    // §14.1 Academic → "Course Schedules ... /admin/schedules (staff, R43)".
-    // The node was missing from this registry while §14.1 listed it, so the
-    // sitemap the registry claims to hold as data was not the sitemap it held.
+    // **R56 — one node for everything that appears on the calendar.** R51 put
+    // Events and Course Schedules in one section; this makes them one screen,
+    // with the type as a field on the form rather than a navigation decision.
+    // The MODELS are unchanged (§4.4, §20 rule 22) — only what a person is
+    // asked, and when.
     path: '/admin/schedules',
-    labelKey: 'admin.nav.schedules',
-    // R51 — with Events, under Scheduling. The MODELS are unchanged (§4.4,
-    // §20 r22); only where a person looks for them.
+    labelKey: 'admin.nav.scheduling',
     section: 'scheduling',
     roles: STAFF,
     status: 'ready',
@@ -135,14 +135,6 @@ export const ADMIN_MODULES: readonly AdminModule[] = [
     status: 'ready',
   },
 
-  // ── Calendar ──────────────────────────────────────────────────────────────
-  {
-    path: '/admin/calendar',
-    labelKey: 'admin.nav.calendar',
-    section: 'scheduling',
-    roles: STAFF,
-    status: 'ready',
-  },
 
   // ── Content ───────────────────────────────────────────────────────────────
   {

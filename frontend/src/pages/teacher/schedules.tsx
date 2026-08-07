@@ -16,7 +16,7 @@ import { Dialog } from '../../components/ui/dialog.js';
 import { TeacherLayout } from '../../components/teacher/teacher-layout.js';
 import { useSession } from '../../contexts/session.js';
 import { t } from '../../i18n/index.js';
-import { recurrenceLabel, timeLabel } from '../admin/schedules.js';
+import { recurrenceLabel, timeLabel } from '../../components/scheduling/labels.js';
 
 /**
  * `/teacher/schedules` — My Teaching (§14.1, §5.6 line 753).

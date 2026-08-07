@@ -3,142 +3,99 @@ import { describe, expect, it } from 'vitest';
 // Read as raw text through Vite rather than `node:fs`: the production build
 // typechecks this file too, and pulling Node's types in for one test would put
 // them on the whole application's type surface.
-import EVENTS from './calendar.tsx?raw';
-import SESSIONS from './schedules.tsx?raw';
+import SCHEDULING from './scheduling.tsx?raw';
+import FORM from '../../components/scheduling/scheduling-form.tsx?raw';
+import SECTIONS from '../../components/scheduling/class-section.tsx?raw';
 
 /**
- * **الأنشطة and الحصص are one feature family, and this keeps them one.**
+ * **الجدولة is one screen built from shared parts** (SRS Revision 56).
  *
- * ## Why a source-level test rather than a rendering one
+ * ## What this guard became, and why
  *
- * The two pages drifted three times, and never in a way either page looked
- * wrong for on its own. What was wrong was always *the difference*: one passed
- * its lede to the layout and the other rendered a paragraph; one emphasised its
- * save button and the other did not; one wrapped its fields in `.form` and the
- * other left them to their own margins.
+ * It used to compare two pages against each other. R56 retired the second one,
+ * so comparison is no longer the property — **composition** is: one screen, one
+ * form shell, sections injected per type, and no custom UI anywhere in it.
  *
- * A rendering test cannot see that — it would assert each page against itself.
- * The property that matters is **that both reach for the same components**, so
- * that is what is asserted: the shared primitives appear in both files, and the
- * hand-rolled equivalents appear in neither.
- *
- * This is deliberately a *structural* guard, like the Trash-snapshot one. A
- * per-difference test would have to be remembered for each new divergence,
- * which is the discipline that already failed here.
+ * The lesson carried forward from the version before this one is that
+ * **presence is not absence**. Asserting the shared components are *used* is
+ * satisfied by a page that uses them and keeps hand-rolled UI beside them —
+ * which one did, for a whole revision. So both directions are asserted.
  */
-const PAGES: [string, string][] = [
-  ['الأنشطة (calendar.tsx)', EVENTS],
-  ['الحصص (schedules.tsx)', SESSIONS],
+/**
+ * **Comments are not code, and this guard is about code.**
+ *
+ * The first run of the two assertions below failed on this file's own prose —
+ * a docstring explaining why a `type === 'class'` ladder would be wrong was
+ * read as one. Stripping comments is what makes the assertion mean what it says
+ * rather than merely pass.
+ */
+function code(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+}
+
+const FILES: [string, string][] = [
+  ['scheduling.tsx', SCHEDULING],
+  ['scheduling-form.tsx', FORM],
+  ['class-section.tsx', SECTIONS],
 ];
 
-/** The page's own lede key, as opposed to a dialog's — a dialog lede is a
- *  legitimate paragraph and must not be caught by the assertion below. */
-const PAGE_LEDE: Record<string, string> = {
-  'الأنشطة (calendar.tsx)': 'admin.calendar.lede',
-  'الحصص (schedules.tsx)': 'admin.schedules.lede',
-};
-
-describe('both scheduling pages are built from the same components', () => {
+describe('the screen is composed from the shared admin components', () => {
   it.each([
     ['AdminLayout', 'the page frame'],
     ['DataTable', 'the table, its states and its toolbar'],
     ['FormDialog', 'the form frame, its spacing and its two buttons'],
     ['ConfirmDialog', 'destructive confirmation'],
-    ['RecurrenceEditor', 'the recurrence rule (§4.4)'],
-    ['SchedulingTimes', 'the wall-clock fields (TD-11)'],
-  ])('both use %s — %s', (component) => {
-    for (const [name, source] of PAGES) {
-      expect(source.includes(component), `${name} does not use ${component}`).toBe(true);
-    }
+    ['ScopeSelectors', 'the dependent curriculum selectors (R55)'],
+    ['CalendarGrid', 'the occurrence view — the same grid the public calendar renders'],
+  ])('uses %s — %s', (component) => {
+    expect(SCHEDULING.includes(component), `scheduling.tsx does not use ${component}`).toBe(true);
   });
 
-  it('neither page hand-rolls a form dialog', () => {
-    for (const [name, source] of PAGES) {
-      // `form__actions` written out by hand is how the two save buttons ended
-      // up with different variants: one emphasised, one not.
+  it('renders the recurrence control through the one shared editor', () => {
+    // The form shell renders it; the page must not reach for it separately, or
+    // there would be two places deciding what a recurrence form looks like.
+    expect(FORM.includes('RecurrenceEditor')).toBe(true);
+    expect(SCHEDULING.includes('<RecurrenceEditor')).toBe(false);
+  });
+});
+
+describe('no custom UI survives anywhere in the screen', () => {
+  it('hand-rolls no dialog, list, select or actions row', () => {
+    for (const [name, source] of FILES) {
+      expect(/<Dialog[\s>]/.test(source), `${name} builds a bare Dialog`).toBe(false);
+      expect(/<ul>/.test(source), `${name} renders an unstyled list`).toBe(false);
+      expect(/<select[\s>]/.test(source), `${name} hand-rolls a select`).toBe(false);
       expect(source.includes('form__actions'), `${name} builds its own actions row`).toBe(false);
-      // A form whose fields are not inside `.form` inherits no spacing, which is
-      // exactly what made the sessions form look unrelated to the events form.
       expect(source.includes('className="form"'), `${name} builds its own form wrapper`).toBe(
         false,
       );
     }
   });
 
-  it('neither page renders a bare status paragraph', () => {
-    for (const [name, source] of PAGES) {
-      // The shared notice carries the spacing and colour; a bare
-      // `<p role="status">` carries neither, and one page had exactly that.
-      expect(
-        /<p role="status">/.test(source),
-        `${name} renders an unstyled notice`,
-      ).toBe(false);
-    }
+  it('renders no bare status paragraph and no raw identifier in a cell', () => {
+    expect(/<p role="status">/.test(SCHEDULING)).toBe(false);
+    // Ids are what a client links by; names are what it shows.
+    expect(/cell: \(r\) =>\s*\n?\s*r\.\w+_id\b/.test(SCHEDULING)).toBe(false);
+  });
+});
+
+describe('the form shell stays generic', () => {
+  it('branches on no specific type — sections are composed in', () => {
+    // The property that makes Exams a new section rather than a new `if`. A
+    // `type === 'class'` ladder here is how a "generic" form quietly becomes
+    // three forms sharing a wrapper.
+    expect(
+      /type === '(class|activity|exam)'/.test(code(FORM)),
+      'scheduling-form.tsx branches on a type',
+    ).toBe(false);
+    expect(FORM.includes('children'), 'the shell accepts no injected section').toBe(true);
   });
 
-  it('both put the page lede in the layout, not in the body', () => {
-    for (const [name, source] of PAGES) {
-      expect(source.includes('lede={t('), `${name} does not pass its lede to the layout`).toBe(
-        true,
-      );
-      expect(
-        source.includes(`<p className="lede">{t('${PAGE_LEDE[name]!}')`),
-        `${name} renders its PAGE lede as a body paragraph`,
-      ).toBe(false);
-    }
-  });
-
-  it('both emphasise their primary action in the layout action slot', () => {
-    for (const [name, source] of PAGES) {
-      expect(
-        /actions=\{[\s\S]{0,200}variant="primary"/.test(source),
-        `${name} does not put an emphasised create action in the layout slot`,
-      ).toBe(true);
-    }
-  });
-
-  it('both offer a filter row, because both list something worth narrowing', () => {
-    for (const [name, source] of PAGES) {
-      expect(source.includes('toolbar='), `${name} has no filter row`).toBe(true);
-    }
-  });
-
-  it('neither renders a bare Dialog — every dialog is a shared kind', () => {
-    // **The gap the first version of this file missed.** It asserted the shared
-    // components were PRESENT, which a page can satisfy while still carrying
-    // custom UI alongside them: the sessions page used `FormDialog` and kept a
-    // hand-built `<Dialog>` for its materialization report, with a raw `<ul>`
-    // and untranslated codes inside. Presence is not absence.
-    for (const [name, source] of PAGES) {
-      expect(/<Dialog[\s>]/.test(source), `${name} still builds a bare Dialog`).toBe(false);
-    }
-  });
-
-  it('neither renders a bare list where a dialog shows a set', () => {
-    for (const [name, source] of PAGES) {
-      // A raw `<ul>` inherits no styling and, worse, renders empty when the set
-      // is empty — which for conflicts is the reassuring answer, not a blank.
-      expect(/<ul>/.test(source), `${name} renders an unstyled list`).toBe(false);
-    }
-  });
-
-  it('neither prints a raw identifier where a name belongs', () => {
-    for (const [name, source] of PAGES) {
-      // `r.room_id` in a cell rendered a UUID in the timetable. Ids are what a
-      // client links by; **names are what it shows** — the same rule the library
-      // DTO states, and the reason the schedule DTO now resolves its labels.
-      expect(
-        /cell: \(r\) =>\s*\n?\s*r\.\w+_id\b/.test(source),
-        `${name} renders a raw id in a table cell`,
-      ).toBe(false);
-    }
-  });
-
-  it('neither builds a raw select — the shared field components own that', () => {
-    for (const [name, source] of PAGES) {
-      // A raw `<select>` carries no label association, no hint slot and no error
-      // slot, and it is where the dependent-selector rules have nowhere to live.
-      expect(/<select[\s>]/.test(source), `${name} hand-rolls a select`).toBe(false);
-    }
+  it('reimplements no recurrence or date/time logic', () => {
+    // It renders the shared controls and knows nothing about what
+    // `biweekly_alternating` means — the property that makes the editor a
+    // single source of truth rather than merely a shared component.
+    expect(code(FORM).includes('biweekly')).toBe(false);
+    expect(FORM.includes('SchedulingTimes')).toBe(true);
   });
 });

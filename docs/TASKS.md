@@ -637,6 +637,16 @@
 - [ ] LevelSurah/LevelSubject auto-draft components incl. the Adult-stage dual generation (BR-9, §4.6)
 - [ ] §18 Exams & Grading checklist green (incl. both race tests)
 
+### R56 — unified scheduling (2026-08-07)
+- [x] One `/admin/schedules` screen replacing `/admin/calendar` and the old schedules page; type is a field, not a destination
+- [x] `GET /events` — definitions, so the List view manages rules rather than occurrences
+- [x] List view (definitions) + Calendar view (occurrences), one query parameter, no second navigation node
+- [x] One `RecurrenceEditor` — the two `weekly` semantics reconciled without a backend change
+- [x] `SchedulingForm` shell with composable type sections; Exams become a third section when M5 ships
+- [x] `/admin/schedules/{id}/sessions` unchanged, keeping R50's three scopes
+- [ ] **`RoomDto` publishes no `capacity`** — BR-23 makes it informational and enforced nowhere, so the form's capacity hint renders nothing. Publishing it is a small contract change, recorded rather than taken unilaterally
+- [ ] Sweep `approvals`, `levels` and `users` for hand-rolled filter rows (unchanged from R55)
+
 ### R55 cross-cutting (2026-08-06)
 - [x] **Every selector is dependent** (§14.4, R55) — one module (`hooks/use-scope-options.ts`) owns the graph; screens declare which fields they need and never how they relate
 - [x] **`LevelSubject` enforced on all three surfaces** — scheduling did not check at all, and the two that did used different reason codes (`policies/curriculum.ts`, `SUBJECT_NOT_IN_LEVEL`)

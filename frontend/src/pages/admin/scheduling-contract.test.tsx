@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { t } from '../../i18n/index.js';
 
 import type { CourseSchedule } from '../../adapters/course-schedules.js';
-import { recurrenceLabel, timeLabel } from './schedules.js';
+import { recurrenceLabel, timeLabel } from '../../components/scheduling/labels.js';
 
 /**
  * `/admin/schedules` — the client half of the contract guard.
@@ -109,7 +109,10 @@ describe('the recurrence cell', () => {
     // `recurrence: 'none'` with no weekdays is a real state — a one-off
     // occurrence — and an empty cell would read as missing data.
     expect(recurrenceLabel({ ...WIRE, weekdays: [], recurrence: 'monthly' })).toBe(
-      t('calendar.recurrence.monthly'),
+      // R56 — one recurrence vocabulary. The label resolves through the same
+      // pattern catalog the editor's own control uses, so a table and a form
+      // cannot disagree about what a rule is called.
+      t('scheduling.pattern.monthly'),
     );
   });
 

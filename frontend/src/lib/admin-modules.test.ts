@@ -31,10 +31,11 @@ describe('the registry matches §14.1', () => {
         '/admin',
         '/admin/approvals',
         '/admin/branches',
-        '/admin/calendar',
         '/admin/content',
         '/admin/groups',
         '/admin/levels',
+        // R56 — one node for everything on the calendar. `/admin/calendar` is
+        // gone: the type is a field on the form, not a navigation decision.
         '/admin/schedules',
         // R55 — §14.1's single "Categories & Subjects" node became two, on the
         // Owner's instruction. One implementation still serves both.

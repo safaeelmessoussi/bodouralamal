@@ -508,10 +508,74 @@ would mint permission checks for content nobody opened.
 > the client should refresh pre-emptively is a Document Owner decision, not an implementation
 > detail.
 
-## The scheduling pages are one feature family
+## Scheduling is one screen (R56)
 
-`الأنشطة` (`/admin/calendar`) and `الحصص` (`/admin/schedules`) drifted three
-separate times, and never in a way either page looked wrong for on its own. What
+`الجدولة` (`/admin/schedules`) is the single scheduling entry point. An
+administrator schedules *something* and picks its kind on the form; they never
+have to know whether it is stored as an `Event` or a `RecurringCourseSchedule`.
+
+**The models are not merged** (§20 rule 22): Events are computed on read while
+Sessions are materialized as rows (TD-4.6c), which is what lets §4.4 compute
+conflicts against real occurrences and lets R50 split a schedule. The divergence
+lives in `adapters/scheduling.ts` and nowhere else — every screen above that line
+deals in `SchedulingItem` and `SchedulingType`.
+
+### Two views, one question each
+
+* **List** — the *definitions*. One weekly class is **one row**, not forty,
+  because that is what an administrator created and what edit and delete act on.
+* **Calendar** — the *occurrences*, from `GET /calendar`, rendered by the same
+  `CalendarGrid` the public calendar uses.
+
+**That distinction is the substantive one.** The two former pages listed *rules*
+and *expanded occurrences* respectively — not two styles of one screen but two
+different questions, which is why no amount of restyling made them feel alike.
+The view is a query parameter, not a second navigation node (§20 rule 16).
+
+### The form is a shell, and that is what makes Exams cheap
+
+`SchedulingForm` owns **only what every schedulable item has** — a name, an
+optional description, when it starts and ends, and how it repeats. The
+type-specific fields arrive as `children`: `ClassSection` (§4.4c — subject,
+target, room, teacher, assistants) or `ActivitySection` (§4.4 — visibility and
+scope). When M5 ships, `امتحان` contributes a third section and a third arm in
+the adapter's router; nothing in the shell moves. A `type === 'class'` ladder
+inside it would be how a "generic" form quietly becomes three forms sharing a
+wrapper, and the parity guard asserts there is none.
+
+### One recurrence editor, and how the two `weekly`s were reconciled
+
+The editor carried two variants because the expanders disagreed: `expandEvent`
+repeats **every seven days from the start date** and ignores weekdays;
+`expandSchedule` repeats **on the weekdays listed**.
+
+**They describe the same rule** whenever `weekdays = [the start date's weekday]`.
+The divergence was never in the domain — it was in what each caller sent. One
+editor emits one meaning and the adapter fills the weekday set for a class, so
+no backend change was needed: the schedule expander already produces the event's
+behaviour given that set.
+
+Eight patterns map onto the `RecurrenceType` enum **in one place**. *Every two
+weeks* and *every two weeks on chosen days* share an enum value and are told
+apart by whether a weekday set was given — a distinction the interface must make
+because they are different questions, and the database need not because they are
+one rule with a fuller argument. A round-trip test pins that a chosen pattern
+reopens as itself.
+
+**`allowOnce={false}` for classes**: the database refuses `none` on a schedule,
+because a non-recurring occurrence *is* an Event.
+
+### Capacity is shown, never enforced
+
+BR-23 and §20 rule 22 forbid enforcing room capacity. The form has a slot for it
+as a **read-only hint** beside the room — but `RoomDto` publishes no `capacity`,
+so it renders nothing today; putting it on that wire is a further contract change
+and is recorded rather than smuggled in.
+
+### Historical: how the two pages drifted before R56 merged them
+
+*(Retained because the failure mode generalises. `/admin/calendar` no longer
+exists.)* `الأنشطة` and `الحصص` drifted three separate times, and never in a way either page looked wrong for on its own. What
 was wrong was always **the difference**:
 
 | | Events | Sessions (before) |
