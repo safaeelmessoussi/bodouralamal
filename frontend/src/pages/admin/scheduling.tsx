@@ -69,6 +69,10 @@ type View = 'list' | 'calendar';
 
 const MODES = ['administrative_group', 'entire_level'] as const;
 const SCOPE_FIELDS = ['branchId', 'levelId', 'groupId', 'subjectId', 'academicYearId'] as const;
+/** What the LIST filters by. A module constant like every other caller's —
+ *  the hook no longer depends on identity, but a stable list is still the
+ *  clearer way to say "these fields, always". */
+const LIST_SCOPE = ['branchId', 'levelId', 'subjectId', 'academicYearId'] as const;
 
 function startOfMonth(d: Date): Date {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
@@ -92,10 +96,7 @@ export function SchedulingPage(): ReactNode {
   const [editing, setEditing] = useState<SchedulingItem | 'new' | null>(null);
   const [deleting, setDeleting] = useState<SchedulingItem | null>(null);
 
-  const listScope = useScopeOptions({
-    token: accessToken,
-    fields: ['branchId', 'levelId', 'subjectId', 'academicYearId'],
-  });
+  const listScope = useScopeOptions({ token: accessToken, fields: LIST_SCOPE });
 
   const load = useCallback(async () => {
     setStatus('loading');
@@ -255,11 +256,7 @@ export function SchedulingPage(): ReactNode {
                     { value: 'activity', label: t('scheduling.type.activity') },
                   ]}
                 />
-                <ScopeSelectors
-                  scope={listScope}
-                  fields={['branchId', 'levelId', 'subjectId', 'academicYearId']}
-                  mode="filter"
-                />
+                <ScopeSelectors scope={listScope} fields={LIST_SCOPE} mode="filter" />
               </>
             }
           />

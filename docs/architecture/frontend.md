@@ -668,6 +668,27 @@ passes its own tests.
 **Academic Year is deliberately unchained.** The platform's years are global (§4.10). Inventing
 a dependency so the set looks uniform would be a lie about the model.
 
+### The field list is a dependency by content, never by identity
+
+`useScopeOptions` takes the fields a screen wants. That list is keyed by
+**content** (`scopeFieldKey`), not by array identity, and the reason is a defect:
+
+a page passed the list as an inline literal → a new reference every render →
+`wants` was keyed on it → the loading effects were keyed on `wants` → those
+effects set state → re-render. Four steps, closed loop. The requests then
+started failing, which looked like a server fault and was the **rate limiter
+working correctly** against a client defect (TD-13).
+
+**Every other caller happened to pass a module constant**, which is exactly why
+it survived review: the convention concealed a hook that punished anyone who did
+the obvious thing. So the fix is not *"always pass a constant"* — that is the
+convention that already failed. Identity simply cannot matter now.
+
+**A hook that takes an array or object prop must key on its content**, or
+document why the caller is required to memoise it. The test asserts both halves:
+that the key is content-based, and that the hook *uses* it — the second because
+the first alone would pass while the bug was back.
+
 ### An empty list is never a bare empty dropdown
 
 `components/scope/scope-selectors.tsx` owns *how they look and what they say*, and three states

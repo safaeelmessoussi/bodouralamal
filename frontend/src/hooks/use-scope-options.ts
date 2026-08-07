@@ -111,13 +111,52 @@ export interface UseScopeOptionsInput {
   defaultCurrentYear?: boolean;
 }
 
+/**
+ * A **content** key for a field list, so two arrays holding the same fields are
+ * the same dependency however they were constructed.
+ *
+ * Sorted, because `['a','b']` and `['b','a']` request the same data and must not
+ * re-fetch; exported so the property can be tested directly rather than
+ * inferred from a render count.
+ */
+export function scopeFieldKey(fields: readonly ScopeField[]): string {
+  return [...fields].sort().join(',');
+}
+
 export function useScopeOptions({
   token,
   fields,
   initial,
   defaultCurrentYear = false,
 }: UseScopeOptionsInput): ScopeOptions {
-  const wants = useCallback((field: ScopeField) => fields.includes(field), [fields]);
+  /**
+   * **The field list is depended on by CONTENT, never by identity.**
+   *
+   * This is the bug that took `/admin/schedules` down, and it is worth stating
+   * in full because the shape recurs:
+   *
+   * 1. a caller passed `fields` as an inline array literal, so it was a new
+   *    reference on every render;
+   * 2. `wants` was a `useCallback` keyed on that array, so it too was new;
+   * 3. the loading effects below depend on `wants`, so they re-ran;
+   * 4. they called `setCategories`/`setLevels`/`setBranches`/`setYears`, which
+   *    re-rendered — back to 1, forever.
+   *
+   * The requests then failed, which looked like a server fault and was not:
+   * the loop tripped Nginx's per-IP edge limit (TD-13, 120 r/m with burst 20),
+   * so the rate limiter was working correctly against a client defect.
+   *
+   * **Every other caller happened to pass a module constant**, which is exactly
+   * why this survived review — the convention hid a hook that was a landmine
+   * for anyone who did the obvious thing. Keying on the *content* removes the
+   * question: an inline literal and a shared constant now behave identically,
+   * so a caller cannot get this wrong.
+   */
+  const fieldKey = scopeFieldKey(fields);
+  const wants = useCallback(
+    (field: ScopeField) => fieldKey.split(',').includes(field),
+    [fieldKey],
+  );
 
   const [value, setValue] = useState<ScopeValue>({ ...EMPTY_SCOPE, ...initial });
 
