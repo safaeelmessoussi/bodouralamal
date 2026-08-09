@@ -486,6 +486,8 @@ function SchedulingDialog({
    * points at the next field rather than the last one.
    */
   function validationError(): string | null {
+    // R57 — required for every kind, so it is checked before anything specific.
+    if (title.trim() === '') return t('scheduling.invalid.title');
     if (recurrence.startDate === '') return t('scheduling.invalid.startDate');
     if (type === 'class') {
       if (scope.value.branchId === '') return t('scheduling.invalid.branch');
@@ -510,7 +512,6 @@ function SchedulingDialog({
       }
       return null;
     }
-    if (title.trim() === '') return t('scheduling.invalid.title');
     return null;
   }
 
@@ -592,12 +593,14 @@ function SchedulingDialog({
         typeLocked={editing}
         title={title}
         onTitle={setTitle}
-        // A class is named by its Subject (§4.4c) and has no title column;
-        // a free-text one would be a second way to say the same thing.
-        showTitle={type !== 'class'}
+        // **R57 — every schedulable item is named by something a person typed.**
+        // A class used to borrow its name from its Subject, which identifies it
+        // and does not name it: two classes in one Subject for one group were
+        // indistinguishable at a glance.
+        showTitle
         description={description}
         onDescription={setDescription}
-        showDescription={type !== 'class'}
+        showDescription
         showAllDay={type !== 'class'}
         allDay={allDay}
         onAllDay={setAllDay}

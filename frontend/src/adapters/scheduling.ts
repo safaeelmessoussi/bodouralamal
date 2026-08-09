@@ -56,8 +56,7 @@ export const AVAILABLE_TYPES: readonly SchedulingType[] = ['class', 'activity'];
 export interface SchedulingItem {
   type: SchedulingType;
   id: string;
-  /** For a class this is the Subject — what names it (§4.4c). A class has no
-   *  title column, and adding one would be a second way to say the same thing. */
+  /** What the item is CALLED — its own stored name for both kinds (R57). */
   title: string;
   description: string | null;
   /** TD-11 calendar dates and wall-clock times; `null` times mean all-day. */
@@ -98,8 +97,10 @@ function fromSchedule(row: CourseSchedule): SchedulingItem {
   return {
     type: 'class',
     id: row.id,
-    title: row.subject_name ?? '',
-    description: null,
+    // R57 — the schedule's own name. The Subject is still shown, in its own
+    // column: it identifies the class, the title names it.
+    title: row.title,
+    description: row.description,
     startDate: row.anchor_date,
     endDate: null,
     startTime: row.start_time,
@@ -272,6 +273,8 @@ export async function saveSchedulingItem(
         existing.id,
         existing.version,
         {
+          title: input.title,
+          description: input.description,
           start_time: input.startTime ?? '',
           end_time: input.endTime ?? '',
           recurrence: input.recurrence,
@@ -285,6 +288,8 @@ export async function saveSchedulingItem(
     }
     return createCourseSchedule(
       {
+        title: input.title,
+        description: input.description,
         subject_id: input.subjectId!,
         teaching_mode: input.teachingMode!,
         target_id: input.targetId!,

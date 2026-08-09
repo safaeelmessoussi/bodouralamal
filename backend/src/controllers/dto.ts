@@ -367,6 +367,10 @@ function timeOnly(value: Date): string {
 
 export interface CourseScheduleDto {
   id: string;
+  /** R57 — what the class is CALLED. A label, never an identifier: not unique,
+   *  and no part of scheduling logic. `subject_id` remains the identifier. */
+  title: string;
+  description: string | null;
   subject_id: string;
   /**
    * **Labels, never identifiers** — the ids remain what a client filters and
@@ -435,6 +439,8 @@ function targetOf(row: {
 
 export function courseScheduleDto(row: {
   id: string;
+  title: string;
+  description: string | null;
   subjectId: string;
   teachingMode: string;
   levelId: string | null;
@@ -467,6 +473,8 @@ export function courseScheduleDto(row: {
 }): CourseScheduleDto {
   return {
     id: row.id,
+    title: row.title,
+    description: row.description,
     subject_id: row.subjectId,
     subject_name: row.subject?.name ?? null,
     teaching_mode: row.teachingMode,

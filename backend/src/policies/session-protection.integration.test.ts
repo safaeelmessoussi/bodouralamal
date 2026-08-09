@@ -49,6 +49,7 @@ beforeAll(async () => {
 
   const schedule = await prisma.recurringCourseSchedule.create({
     data: {
+title: `${TAG} حلقة`,
       subjectId: subject.id,
       teachingMode: 'entire_level',
       levelId: level.id,

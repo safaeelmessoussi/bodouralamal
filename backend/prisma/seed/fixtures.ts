@@ -213,6 +213,7 @@ async function main(): Promise<void> {
           });
           await prisma.recurringCourseSchedule.create({
             data: {
+              title: `${FIXTURE_TAG} حلقة`,
               subjectId,
               teachingMode: 'administrative_group',
               administrativeGroupId: group.id,

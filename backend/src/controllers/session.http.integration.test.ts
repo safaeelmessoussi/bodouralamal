@@ -186,6 +186,8 @@ beforeAll(async () => {
   // creates one through the API it already trusts rather than hand-rolling rows
   // the real path would never produce.
   const created = await call('POST', '/admin/course-schedules', superAdmin, {
+    // R57 — a class carries its own name.
+    title: `${TAG} حلقة`,
     subject_id: subjectId,
     teaching_mode: 'administrative_group',
     target_id: groupA,

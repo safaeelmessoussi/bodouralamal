@@ -234,7 +234,7 @@ model User {
   /// `ar-x-icu` ordering (BR-19), the display-identity fallback, the §14.2
   /// queue — and is a derived column of the same kind as the normalized shadow
   /// columns below. It is a defect for them to disagree.
-  nameArabic String  @map("name_arabic") @db.VarChar(120)
+  nameArabic String @map("name_arabic") @db.VarChar(120)
 
   /// الاسم الشخصي / الاسم العائلي (Revision 40) — the COLLECTED facts, written
   /// in the same transaction that creates the person. Nullable with no
@@ -254,7 +254,7 @@ model User {
   /// failure, because half a name is not a name.
   firstNameFrench String? @map("first_name_french") @db.VarChar(60)
   lastNameFrench  String? @map("last_name_french") @db.VarChar(60)
-  nickname   String? @db.VarChar(60)
+  nickname        String? @db.VarChar(60)
 
   /// Revision 36.1 — the name shown on every PUBLIC surface when set;
   /// otherwise `nameArabic` is used. The backend resolves it and clients
@@ -263,11 +263,11 @@ model User {
   /// leaks a legal name. Distinct from `nickname`, which is an internal search
   /// convenience (TD-10).
   publicDisplayName String? @map("public_display_name") @db.VarChar(120)
-  phone      String? @db.VarChar(20)
+  phone             String? @db.VarChar(20)
   /// Captured at registration (§4.1b step 5, Revision 27) — never patched on
   /// afterwards, because the registration exists before the User does.
-  sex        Sex?    @map("sex")
-  notes      String? @db.VarChar(2000)
+  sex               Sex?    @map("sex")
+  notes             String? @db.VarChar(2000)
 
   /// Revision 39 — THE BRANCH THE APPLICANT ASKED FOR at registration.
   ///
@@ -342,9 +342,9 @@ model User {
   deletedBy    User?   @relation("UserDeletedBy", fields: [deletedById], references: [id], onDelete: Restrict)
   deletedUsers User[]  @relation("UserDeletedBy")
 
-  identities        UserIdentity[]
-  branchRoles       UserBranchRole[]
-  socialProfile     StudentSocialProfile?
+  identities    UserIdentity[]
+  branchRoles   UserBranchRole[]
+  socialProfile StudentSocialProfile?
 
   // Revision 43 (expand phase) — see the educational-model block below.
   levelEnrollments   Enrollment[]
@@ -463,16 +463,16 @@ model Branch {
   /// predating the revision need no invented address (the treatment
   /// `User.sex` received in Revision 27); *required* is enforced at the write
   /// boundary by TD-9, which is where a real value can be demanded.
-  address            String? @db.VarChar(300)
-  phone              String? @db.VarChar(20)
-  email              String? @db.VarChar(254)
+  address        String? @db.VarChar(300)
+  phone          String? @db.VarChar(20)
+  email          String? @db.VarChar(254)
   /// Free multiline Arabic text, displayed verbatim and NEVER parsed (§7).
   /// Ramadan and exceptional weeks change the hours; free text lets the person
   /// who knows edit them without a schema conversation.
-  openingHoursAr     String? @map("opening_hours_ar") @db.VarChar(500)
+  openingHoursAr String? @map("opening_hours_ar") @db.VarChar(500)
   /// Absolute https:// URL only (TD-9) — it becomes an outbound link on a
   /// public page, where a relative or javascript: value is an injection vector.
-  googleMapsUrl      String? @map("google_maps_url") @db.VarChar(500)
+  googleMapsUrl  String? @map("google_maps_url") @db.VarChar(500)
 
   version Int @default(0)
 
@@ -481,17 +481,17 @@ model Branch {
   deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
   deletedById String?   @map("deleted_by") @db.Uuid
 
-  rooms       Room[]
+  rooms Room[]
 
   // Revision 43 (expand phase) — see the educational-model block below.
   administrativeGroups AdministrativeGroup[]
   courseSchedules      RecurringCourseSchedule[]
-  branchRoles UserBranchRole[]
-  content     EducationalContent[]
-  eventScopes EventBranch[]
+  branchRoles          UserBranchRole[]
+  content              EducationalContent[]
+  eventScopes          EventBranch[]
   /// Revision 39 — applicants who REQUESTED this branch at registration. Not
   /// the people placed here; that is `groups → StudentGroup`.
-  intendedBy  User[]               @relation("UserIntendedBranch")
+  intendedBy           User[]                    @relation("UserIntendedBranch")
 
   @@index([displayOrder])
   @@map("branch")
@@ -515,7 +515,6 @@ model Room {
   updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
   deletedById String?   @map("deleted_by") @db.Uuid
-
 
   // Revision 43 (expand phase) — see the educational-model block below.
   courseSchedules RecurringCourseSchedule[]
@@ -578,8 +577,8 @@ model Level {
   deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
   deletedById String?   @map("deleted_by") @db.Uuid
 
-  subjects    LevelSubject[]
-  surahs      LevelSurah[]
+  subjects LevelSubject[]
+  surahs   LevelSurah[]
 
   // Revision 43 (expand phase) — see the educational-model block below.
   administrativeGroups AdministrativeGroup[]
@@ -587,9 +586,9 @@ model Level {
   enrollments          Enrollment[]
   courseSchedules      RecurringCourseSchedule[]
   teachingGroupSeats   StudentTeachingGroup[]
-  exams       Exam[]
-  content     EducationalContent[]
-  eventScopes EventLevel[]
+  exams                Exam[]
+  content              EducationalContent[]
+  eventScopes          EventLevel[]
 
   @@index([categoryId, displayOrder])
   @@map("level")
@@ -611,14 +610,14 @@ model Subject {
   deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
   deletedById String?   @map("deleted_by") @db.Uuid
 
-  levels  LevelSubject[]
+  levels LevelSubject[]
 
   // Revision 43 (expand phase) — see the educational-model block below.
   teachingGroups     TeachingGroup[]
   courseSchedules    RecurringCourseSchedule[]
   teachingGroupSeats StudentTeachingGroup[]
-  exams   Exam[]
-  content EducationalContent[]
+  exams              Exam[]
+  content            EducationalContent[]
 
   @@index([displayOrder])
   @@map("subject")
@@ -837,6 +836,13 @@ model Enrollment {
 /// second row does not, while forcing the roster query, the conflict check and
 /// the consent gate each to take a set where a single value suffices (§4.4c).
 model RecurringCourseSchedule {
+  /// R57 — what the class is CALLED, as opposed to what identifies it.
+  /// Collated `ar-x-icu` in SQL (TD-6a). A label, never an identifier: not
+  /// unique, and no part of conflict detection, recurrence, materialization,
+  /// the R50 split or audience resolution.
+  title       String  @db.VarChar(120)
+  description String? @db.VarChar(2000)
+
   id        String  @id @default(uuid()) @db.Uuid
   subjectId String  @map("subject_id") @db.Uuid
   subject   Subject @relation(fields: [subjectId], references: [id], onDelete: Restrict)
@@ -868,13 +874,13 @@ model RecurringCourseSchedule {
 
   /// Used by weekly / multiple_weekdays / biweekly_alternating. One element for
   /// `weekly`, several for `multiple_weekdays`.
-  weekdays DayOfWeek[] @map("weekdays")
+  weekdays    DayOfWeek[] @map("weekdays")
   /// Used by monthly / yearly.
-  dayOfMonth  Int? @map("day_of_month")
-  monthOfYear Int? @map("month_of_year")
+  dayOfMonth  Int?        @map("day_of_month")
+  monthOfYear Int?        @map("month_of_year")
   /// The week `biweekly_alternating` counts from — without an anchor, "week on"
   /// is undefined and the two halves of the alternation are indistinguishable.
-  anchorDate DateTime? @map("anchor_date") @db.Date
+  anchorDate  DateTime?   @map("anchor_date") @db.Date
 
   /// The last date this recurrence produces occurrences for (SRS Revision 50).
   /// **NULL is open-ended**, which every schedule created before R50 is. Set

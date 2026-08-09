@@ -32,6 +32,8 @@ const SCHEDULE_KEYS = [
   // further requests. Labels only; the ids above stay the identifiers.
   'branch_name',
   'day_of_month',
+  // R57 — the class's own name and note. Labels, never identifiers.
+  'description',
   // R55 — R50's bound reaches the contract; `null` is open-ended.
   'effective_until',
   'end_time',
@@ -47,6 +49,7 @@ const SCHEDULE_KEYS = [
   'target_id',
   'target_name',
   'teaching_mode',
+  'title',
   'version',
   'weekdays',
 ];
@@ -241,6 +244,8 @@ function slot(): { start_time: string; end_time: string } {
 
 function scheduleBody(over: Record<string, unknown> = {}): Record<string, unknown> {
   return {
+    // R57 — a class carries its own name.
+    title: `${TAG} حلقة`,
     subject_id: subjectId,
     teaching_mode: 'administrative_group',
     target_id: groupA,
@@ -424,6 +429,7 @@ describe('the routes are mounted and guarded (TD-2)', () => {
   it('a branch-scoped Admin sees their own branch only', async () => {
     await prisma.recurringCourseSchedule.create({
       data: {
+title: `${TAG} حلقة`,
         subjectId,
         teachingMode: 'administrative_group',
         administrativeGroupId: groupB,

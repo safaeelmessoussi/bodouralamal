@@ -80,6 +80,7 @@ async function schedule(
 ): Promise<string> {
   const row = await prisma.recurringCourseSchedule.create({
     data: {
+title: `${TAG} حلقة`,
       subjectId,
       teachingMode: spec.teachingMode,
       levelId: spec.levelId ?? null,

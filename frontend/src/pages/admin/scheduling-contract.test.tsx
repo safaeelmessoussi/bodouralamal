@@ -21,6 +21,9 @@ import { recurrenceLabel, timeLabel } from '../../components/scheduling/labels.j
  */
 const WIRE: CourseSchedule = {
   id: '00000000-0000-4000-8000-000000000001',
+  // R57 — the class's own name, distinct from the Subject that identifies it.
+  title: 'حلقة تحفيظ المتقدمين',
+  description: null,
   subject_id: '00000000-0000-4000-8000-000000000002',
   // R55.1 — resolved labels, so a timetable can be read without ids.
   subject_name: 'تفسير',
@@ -52,6 +55,7 @@ describe('the adapter type matches the wire contract', () => {
       'branch_id',
       'branch_name',
       'day_of_month',
+      'description',
       'effective_until',
       'end_time',
       'id',
@@ -66,6 +70,7 @@ describe('the adapter type matches the wire contract', () => {
       'target_id',
       'target_name',
       'teaching_mode',
+      'title',
       'version',
       'weekdays',
     ]);

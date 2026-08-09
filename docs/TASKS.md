@@ -637,6 +637,13 @@
 - [ ] LevelSurah/LevelSubject auto-draft components incl. the Adult-stage dual generation (BR-9, §4.6)
 - [ ] §18 Exams & Grading checklist green (incl. both race tests)
 
+### R57 — a class carries its own name (2026-08-09)
+- [x] `title` (required, 1–120, `ar-x-icu`) and `description` (optional) on `RecurringCourseSchedule`
+- [x] TD-6b expand → backfill from the Subject's name → contract to `NOT NULL`; DB CHECK refuses a blank title
+- [x] Both editable after creation, unlike the scope fields §4.4 freezes; a split successor inherits the name
+- [x] **Two silently-dropped fields fixed on the update path**: `title` and — since R55 — `effective_until`. The regression tests read the ROW, never the status code
+- [ ] The remaining fixture titles from before the seed fix still read `[تجريبي] حدث …`; they are data and were not rewritten. Say the word and they can be cleaned
+
 ### R56 — unified scheduling (2026-08-07)
 - [x] One `/admin/schedules` screen replacing `/admin/calendar` and the old schedules page; type is a field, not a destination
 - [x] `GET /events` — definitions, so the List view manages rules rather than occurrences

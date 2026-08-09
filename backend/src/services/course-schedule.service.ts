@@ -112,6 +112,8 @@ export interface ScheduleStaffInput {
 }
 
 export interface CourseScheduleInput {
+  title: string;
+  description?: string | null;
   subjectId: string;
   teachingMode: TeachingMode;
   /** Exactly one entity, of the kind the mode names (§4.4c). */
@@ -413,6 +415,8 @@ export async function createCourseSchedule(
 
     const schedule = await tx.recurringCourseSchedule.create({
       data: {
+        title: input.title,
+        description: input.description ?? null,
         subjectId: input.subjectId,
         teachingMode: input.teachingMode,
         ...targetColumns,
@@ -488,6 +492,8 @@ export async function updateCourseSchedule(
   actor: Actor,
   id: string,
   data: {
+    title?: string;
+    description?: string | null;
     roomId?: string | null;
     startTime?: Date;
     endTime?: Date;
@@ -566,7 +572,14 @@ export async function updateCourseSchedule(
       id,
       expectedVersion: data.version,
       requireNotDeleted: true,
+      // **Every editable field is listed here or it is silently dropped.** The
+      // validator accepting a key and this block omitting it produces the worst
+      // possible outcome: `200 OK`, a bumped version, and nothing changed —
+      // which is exactly what `effective_until` did from R55 until R57 found it,
+      // because that revision was only ever tested through the CREATE path.
       data: {
+        ...(data.title === undefined ? {} : { title: data.title }),
+        ...(data.description === undefined ? {} : { description: data.description }),
         ...(data.roomId === undefined ? {} : { roomId: data.roomId }),
         ...(data.startTime === undefined ? {} : { startTime: data.startTime }),
         ...(data.endTime === undefined ? {} : { endTime: data.endTime }),
@@ -575,6 +588,7 @@ export async function updateCourseSchedule(
         ...(data.dayOfMonth === undefined ? {} : { dayOfMonth: data.dayOfMonth }),
         ...(data.monthOfYear === undefined ? {} : { monthOfYear: data.monthOfYear }),
         ...(data.anchorDate === undefined ? {} : { anchorDate: data.anchorDate }),
+        ...(data.effectiveUntil === undefined ? {} : { effectiveUntil: data.effectiveUntil }),
       },
     });
 
@@ -637,6 +651,8 @@ async function splitCourseSchedule(
   id: string,
   fromDate: Date,
   data: {
+    title?: string;
+    description?: string | null;
     roomId?: string | null;
     startTime?: Date;
     endTime?: Date;
@@ -653,6 +669,8 @@ async function splitCourseSchedule(
   const existing = await prisma.recurringCourseSchedule.findFirst({
     where: { id, deletedAt: null },
     select: {
+      title: true,
+      description: true,
       subjectId: true,
       teachingMode: true,
       levelId: true,
@@ -688,6 +706,10 @@ async function splitCourseSchedule(
 
   return prisma.$transaction(async (tx) => {
     const successorValues = {
+      // **The successor IS the same class**, split at a date (R50) — so it keeps
+      // its name, and an edit that renames it renames both halves' successor.
+      title: data.title ?? existing.title,
+      description: data.description === undefined ? existing.description : data.description,
       subjectId: existing.subjectId,
       teachingMode: existing.teachingMode,
       levelId: existing.levelId,

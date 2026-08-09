@@ -50,6 +50,8 @@ export function create(prisma: PrismaClient) {
   return async (req: Request, res: Response): Promise<void> => {
     const body = parse(createCourseScheduleSchema, req.body ?? {});
     const created = await schedules.createCourseSchedule(prisma, requireActor(req), {
+      title: body.title,
+      ...(body.description !== undefined ? { description: body.description } : {}),
       subjectId: body.subject_id,
       teachingMode: body.teaching_mode,
       targetId: body.target_id,
@@ -89,6 +91,8 @@ export function update(prisma: PrismaClient) {
         ...(body.weekdays !== undefined ? { weekdays: body.weekdays } : {}),
         ...(body.day_of_month !== undefined ? { dayOfMonth: body.day_of_month } : {}),
         ...(body.month_of_year !== undefined ? { monthOfYear: body.month_of_year } : {}),
+        ...(body.title !== undefined ? { title: body.title } : {}),
+        ...(body.description !== undefined ? { description: body.description } : {}),
         ...(body.anchor_date !== undefined ? { anchorDate: body.anchor_date } : {}),
         ...(body.effective_until !== undefined ? { effectiveUntil: body.effective_until } : {}),
       ...(body.effective_until !== undefined ? { effectiveUntil: body.effective_until } : {}),

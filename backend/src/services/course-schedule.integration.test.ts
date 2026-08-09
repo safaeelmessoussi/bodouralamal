@@ -82,6 +82,8 @@ async function person(label: string): Promise<string> {
 }
 
 const baseInput = (over: Partial<CourseScheduleInput> = {}): CourseScheduleInput => ({
+  // R57 — a class carries its own name.
+  title: `${TAG} حلقة`,
   subjectId,
   teachingMode: 'administrative_group',
   targetId: groupId,
@@ -1236,5 +1238,70 @@ describe('listing a schedule\'s occurrences (§4.4, Revision 50)', () => {
     const { id } = await createCourseSchedule(prisma, superAdmin(), baseInput(), NOW);
     const e = await failure(() => listScheduleSessions(prisma, admin([otherBranchId]), id, {}));
     expect(e.code).toBe('NOT_FOUND');
+  });
+});
+
+/**
+ * **R57 — the name, and the class of bug it exposed.**
+ *
+ * Renaming answered `200 OK`, bumped the version and changed nothing, because
+ * the validator accepted `title` while the update's `data` block did not list
+ * it. That is the worst shape a bug can take — every signal says success — and
+ * it had already happened once: `effective_until` was accepted from R55 and
+ * silently dropped on edit for two revisions, because that revision was only
+ * ever exercised through the CREATE path.
+ *
+ * So this asserts **persistence**, never the status code.
+ */
+describe('a schedule carries its own name (R57)', () => {
+  it('stores the title and description it was given', async () => {
+    const created = await createCourseSchedule(
+      prisma,
+      superAdmin(),
+      baseInput({ title: `${TAG} حلقة التحفيظ`, description: 'وصف أولي' }),
+    );
+    const row = await prisma.recurringCourseSchedule.findUniqueOrThrow({
+      where: { id: created.id },
+    });
+    expect(row.title).toBe(`${TAG} حلقة التحفيظ`);
+    expect(row.description).toBe('وصف أولي');
+  });
+
+  it('APPLIES a rename rather than reporting one', async () => {
+    const created = await createCourseSchedule(prisma, superAdmin(), baseInput());
+    await updateCourseSchedule(prisma, superAdmin(), created.id, {
+      version: 0,
+      title: `${TAG} الاسم الجديد`,
+      description: 'وصف معدَّل',
+    });
+    const row = await prisma.recurringCourseSchedule.findUniqueOrThrow({
+      where: { id: created.id },
+    });
+    // Reading the ROW, not the response: a handler that echoes its input would
+    // satisfy an assertion on the response while persisting nothing.
+    expect(row.title).toBe(`${TAG} الاسم الجديد`);
+    expect(row.description).toBe('وصف معدَّل');
+  });
+
+  it('APPLIES effective_until on edit — the same defect, found with it', async () => {
+    const created = await createCourseSchedule(prisma, superAdmin(), baseInput());
+    await updateCourseSchedule(prisma, superAdmin(), created.id, {
+      version: 0,
+      effectiveUntil: new Date('2027-01-31'),
+    });
+    const row = await prisma.recurringCourseSchedule.findUniqueOrThrow({
+      where: { id: created.id },
+    });
+    expect(row.effectiveUntil?.toISOString().slice(0, 10)).toBe('2027-01-31');
+  });
+
+  it('refuses a blank title at the database, not only at the boundary', async () => {
+    // TD-9's bound enforced where it cannot drift from the application.
+    await expect(
+      prisma.recurringCourseSchedule.update({
+        where: { id: (await createCourseSchedule(prisma, superAdmin(), baseInput())).id },
+        data: { title: '   ' },
+      }),
+    ).rejects.toThrow();
   });
 });

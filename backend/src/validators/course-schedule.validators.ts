@@ -59,8 +59,15 @@ const staff = z
   .array(z.object({ user_id: uuid, position: z.enum(['teacher', 'assistant']) }).strict())
   .max(20);
 
+/** R57 — TD-9's bounds for a class's own name. The same limits `Event` takes,
+ *  because they are the same kind of field. */
+const scheduleTitle = z.string().trim().min(1).max(120);
+const scheduleDescription = z.string().trim().max(2000).nullable().optional();
+
 export const createCourseScheduleSchema = z
   .object({
+    title: scheduleTitle,
+    description: scheduleDescription,
     subject_id: uuid,
     teaching_mode: teachingMode,
     target_id: uuid,
@@ -102,6 +109,11 @@ export const createCourseScheduleSchema = z
 export const updateCourseScheduleSchema = z
   .object({
     version,
+    // **Editable, unlike the scope fields below.** Renaming a class changes
+    // nothing about what was taught, to whom or when — which is exactly why
+    // §4.4 freezes subject/target/branch/year and does not freeze this (R57).
+    title: scheduleTitle.optional(),
+    description: scheduleDescription,
     room_id: uuid.nullable().optional(),
     start_time: wallClock.optional(),
     end_time: wallClock.optional(),

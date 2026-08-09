@@ -70,6 +70,7 @@ export async function createTeachingContext(
   const academicYear = await prisma.academicYear.findFirstOrThrow({ select: { id: true } });
   const schedule = await prisma.recurringCourseSchedule.create({
     data: {
+title: `${tag} حلقة`,
       subjectId: subject.id,
       teachingMode: 'administrative_group',
       administrativeGroupId: group.id,

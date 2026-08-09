@@ -166,6 +166,7 @@ beforeAll(async () => {
   const teacherId = await makeUser('أستاذ');
   const schedule = await prisma.recurringCourseSchedule.create({
     data: {
+title: `${TAG} حلقة`,
       subjectId,
       teachingMode: 'administrative_group',
       administrativeGroupId: group.id,

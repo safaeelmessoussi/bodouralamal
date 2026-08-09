@@ -26,6 +26,9 @@ export interface ScheduleStaff {
 
 export interface CourseSchedule {
   id: string;
+  /** R57 — what the class is CALLED. A label, never an identifier. */
+  title: string;
+  description: string | null;
   subject_id: string;
   /**
    * **Labels, never identifiers** — resolved server-side so a timetable can be
@@ -150,6 +153,8 @@ export async function deleteCourseSchedule(
 }
 
 export interface CourseScheduleInput {
+  title: string;
+  description?: string | null;
   subject_id: string;
   teaching_mode: string;
   /** Exactly one target, of the kind the mode names (§4.4c). */
@@ -217,6 +222,9 @@ export async function updateCourseSchedule(
   input: Partial<
     Pick<
       CourseScheduleInput,
+      // R57 — editable, unlike the scope fields §4.4 freezes.
+      | 'title'
+      | 'description'
       | 'room_id'
       | 'start_time'
       | 'end_time'
