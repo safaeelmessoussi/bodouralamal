@@ -97,8 +97,14 @@ async function assertCoherent(
   // branch is one the students cannot reach — the rule §4.4 already applies to
   // a course schedule's target.
   if (room.branchId !== input.branchId) {
+    // `ROOM_BRANCH_MISMATCH`, the name `session.service.ts` already uses for
+    // this exact refusal — NOT a third spelling. `BRANCH_MISMATCH` is taken and
+    // means the *audience* is elsewhere; two rules under one code is how a
+    // client ends up showing the wrong remedy.
     throw new AppError('VALIDATION_FAILED', 'room is at a different branch', {
-      reason: 'BRANCH_MISMATCH',
+      reason: 'ROOM_BRANCH_MISMATCH',
+      room_branch_id: room.branchId,
+      exam_branch_id: input.branchId,
     });
   }
 
@@ -110,9 +116,22 @@ async function assertCoherent(
     if (!group) throw new AppError('NOT_FOUND', 'no such administrative group');
     // The narrower target must be a roster OF this Level AT this branch, or the
     // exam would be sat by people it was not written for.
-    if (group.levelId !== input.levelId || group.branchId !== input.branchId) {
-      throw new AppError('STATE_CONFLICT', 'that group is not at this level and branch', {
-        reason: 'TARGET_MISMATCH',
+    // Same rule and same code as a course schedule's target (§4.4): the
+    // audience must be at the branch the thing happens at.
+    if (group.branchId !== input.branchId) {
+      throw new AppError('VALIDATION_FAILED', 'group is at a different branch', {
+        reason: 'BRANCH_MISMATCH',
+        target_branch_id: group.branchId,
+        exam_branch_id: input.branchId,
+      });
+    }
+    // Distinct from the above: the roster exists at the right branch but sits a
+    // different Level, so it was not written for this paper.
+    if (group.levelId !== input.levelId) {
+      throw new AppError('VALIDATION_FAILED', 'that group does not sit this level', {
+        reason: 'GROUP_LEVEL_MISMATCH',
+        group_level_id: group.levelId,
+        exam_level_id: input.levelId,
       });
     }
   }

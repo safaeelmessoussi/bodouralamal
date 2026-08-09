@@ -56,7 +56,13 @@ export interface CalendarQuery {
 }
 
 export interface Occurrence {
-  kind: 'session' | 'event';
+  /**
+   * R58 — `exam` joins the two. A physical sitting is one dated occurrence on
+   * the same grid as everything else, and the interface must be able to mark it
+   * out: it is the one item on a timetable somebody must not mistake for an
+   * ordinary class.
+   */
+  kind: 'session' | 'event' | 'exam';
   id: string;
   title: string;
   /** Local calendar date, `YYYY-MM-DD` (TD-11) — never an instant. */
@@ -453,6 +459,81 @@ export async function readCalendar(
         ...hijri(date, monthStarts),
       });
     }
+  }
+
+  // ── Exams: physical sittings (§4.6 as amended by R58).
+  //
+  // **Read, not expanded.** An exam is one dated occurrence — it produces no
+  // Sessions and follows no recurrence rule — so there is nothing to expand and
+  // the date on the row is the date on the grid.
+  //
+  // `online` is excluded: it has no place and no clock window, so it is not a
+  // thing that happens *somewhere at a time* and has no business on a room-and-
+  // date timetable. When the mode is built, whether it belongs here is its own
+  // decision rather than a consequence of this one.
+  //
+  // The same subject/year filters that narrow the grid to Sessions apply: an
+  // exam carries both, so it answers them honestly rather than being dropped.
+  const exams = query.teacherId !== undefined ? [] : await prisma.exam.findMany({
+    where: {
+      deletedAt: null,
+      mode: 'physical',
+      date: { gte: from, lte: query.to },
+      ...(query.branchId ? { branchId: query.branchId } : {}),
+      ...(query.levelId ? { levelId: query.levelId } : {}),
+      ...(query.subjectId ? { subjectId: query.subjectId } : {}),
+      ...(query.academicYearId ? { academicYearId: query.academicYearId } : {}),
+      // A Category narrows an exam through its Level — the same question the
+      // grid asks of a session, answered rather than ignored.
+      ...(query.categoryId ? { level: { categoryId: query.categoryId } } : {}),
+    },
+    include: {
+      // The category NAME travels with its id, as it does for a session: an id
+      // with no name is unreadable on a grid, and the filter chip beside the
+      // calendar is drawn from exactly this pair (R55.1).
+      level: { select: { id: true, name: true, category: { select: { id: true, name: true } } } },
+      subject: { select: { id: true, name: true } },
+      branch: { select: { id: true, name: true } },
+      room: { select: { name: true } },
+      administrativeGroup: { select: { name: true } },
+    },
+  });
+
+  for (const exam of exams) {
+    out.push({
+      kind: 'exam',
+      id: exam.id,
+      title: exam.title,
+      date: iso(exam.date),
+      startTime: hhmm(exam.startTime),
+      endTime: hhmm(exam.endTime),
+      // An exam has no visibility tier of its own (§4.6): it is staff-scheduled
+      // and appears to the audience that can see the level it belongs to.
+      visibility: null,
+      branchId: exam.branchId,
+      description: exam.description,
+      // Not a recurrence — one sitting, one date. `null` rather than `'none'`,
+      // which would imply a rule that simply does not repeat.
+      recurrence: null,
+      branchName: exam.branch?.name ?? null,
+      roomName: exam.room?.name ?? null,
+      categoryId: exam.level.category.id,
+      categoryName: exam.level.category.name,
+      levelId: exam.levelId,
+      levelName: exam.level.name,
+      subjectId: exam.subjectId,
+      subjectName: exam.subject?.name ?? null,
+      teachingMode: null,
+      // Who sits it: the narrower group where one was chosen, the Level
+      // otherwise — the same question `audienceLabel` answers for a session.
+      audienceLabel: exam.administrativeGroup?.name ?? exam.level.name,
+      status: null,
+      // §4.6 exam staff are supervisors, not instructors. The calendar's
+      // `instructors` slot means *who teaches this*, and nobody teaches an
+      // exam — inventing a value here would misstate what the row is.
+      instructors: [],
+      ...hijri(exam.date, monthStarts),
+    });
   }
 
   // ── Sessions: the materialized occurrences of a Recurring Course Schedule

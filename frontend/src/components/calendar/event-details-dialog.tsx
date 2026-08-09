@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 
 import type { Occurrence } from '../../adapters/calendar.js';
+import { OCCURRENCE_KIND_BADGE, OCCURRENCE_KIND_LABEL } from '../../adapters/calendar.js';
 import { t, tList } from '../../i18n/index.js';
 import { Dialog } from '../ui/dialog.js';
 
@@ -85,7 +86,11 @@ export function EventDetailsDialog({
             ) : null}
 
             <dt>{t('calendar.detailsKind')}</dt>
-            <dd>{t(occurrence.kind === 'session' ? 'calendar.kindSession' : 'calendar.kindEvent')}</dd>
+            <dd>
+              <span className={`badge badge--${OCCURRENCE_KIND_BADGE[occurrence.kind]}`}>
+                {t(OCCURRENCE_KIND_LABEL[occurrence.kind])}
+              </span>
+            </dd>
 
             {/* Recurrence is meaningful only when there is one; `none` is the
                 default every event carries, so printing "لا يتكرر" on every

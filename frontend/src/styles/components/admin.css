@@ -208,6 +208,27 @@
   color: var(--color-accent);
 }
 
+/* R58 — the scheduling kinds, as badge modifiers on the badge that already
+   exists. They are separate from `--ok`/`--warn` because those mean a *state*;
+   these name *what a thing is*, and colouring a kind with a status word is how
+   the two meanings start drifting. Each reads the same token its calendar chip
+   does, so the list and the grid cannot disagree. */
+.badge--class {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+}
+.badge--activity {
+  background: color-mix(in srgb, var(--color-accent) 16%, var(--color-surface));
+  color: var(--color-accent);
+}
+/* The exam is the loud one on purpose: it carries a ring as well as a wash, so
+   it is still the odd one out for a reader who cannot separate the hues. */
+.badge--exam {
+  background: var(--color-exam-soft);
+  color: var(--color-exam);
+  box-shadow: inset 0 0 0 1px var(--color-exam);
+}
+
 @media (max-width: 44rem) {
   .admin {
     width: min(100% - var(--space-4), 96rem);

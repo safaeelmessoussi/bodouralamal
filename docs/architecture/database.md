@@ -228,6 +228,29 @@ dominant variant classes; genuine misspellings are a data-entry problem, not a
 search-engine problem. Revisiting this is an explicit decision, not an implementer's
 initiative.
 
+## A model with no `@@map` silently targets a different table
+
+Every table on this project is `snake_case` and every Prisma model is
+`PascalCase`, so **the mapping is what connects them**. Drop `@@map("exam")`
+while editing a model and Prisma does not complain: it generates a client that
+queries `"Exam"`, a table that does not exist, and the schema still *validates*
+because a mapping is optional.
+
+The failure surfaces far from the cause — `The table public.Exam does not exist`
+from whatever runs first, which reads as an unapplied migration. It cost a slice
+here: R58's model block was rewritten by hand after `prisma format` mangled it,
+and the rewrite lost the `@@map` **and** the `@@index`. The migration was correct
+and applied; the endpoints were unreachable anyway.
+
+Two habits, both cheap:
+
+* **Rewriting a model block means re-checking its trailing `@@` lines** — they
+  sit at the bottom, which is exactly where a hand-written replacement stops.
+* **Run something that touches the table before believing the model.** A
+  typecheck cannot see this; one integration test can. It is the general rule of
+  [measure, don't infer](../development/engineering-efficiency.md) in its
+  cheapest form.
+
 ## Migrations
 
 ### Hand-written SQL

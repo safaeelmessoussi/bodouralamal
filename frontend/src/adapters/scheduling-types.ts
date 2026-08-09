@@ -82,26 +82,31 @@ export const SCHEDULING_TYPE_SPECS: Record<SchedulingType, SchedulingTypeSpec> =
     hasOccurrences: false,
   },
   exam: {
-    // §4.6's Exam is a first-class entity with its own questions, submissions
-    // and grading, and `POST /exams` ships with M5 (TD-3.6). The option is
-    // offered and refused rather than hidden, so the roadmap is visible exactly
-    // where somebody looks for it (§14.4).
-    available: false,
-    unavailableReasonKey: 'scheduling.typeSoon',
+    // R58 — the **physical** sitting is built. The `عن بُعد` mode is offered
+    // inside the exam section, disabled, with its reason stated (§14.4); the
+    // server refuses it too, so the block is not merely a client courtesy.
+    available: true,
     hasTitle: true,
     hasDescription: true,
-    // **Provisional, and NOT a design decision.** These follow §4.6 as it
-    // stands — a digital exam with a date, no room and no sitting — and the
-    // fields an exam actually needs are the subject of a proposal awaiting the
-    // Document Owner (`SRS-PROPOSAL-R58.md`), because the request for a room,
-    // invigilators and target groups describes a PHYSICAL sitting, which §4.6
-    // (Revision 12) places outside the platform in the MVP.
+    // A sitting happens at a time — an exam with no clock window is one nobody
+    // can attend, which is why the database refuses a half-specified place.
     hasAllDay: false,
+    // One dated sitting: bounded by nothing, because it does not repeat.
     hasEndDate: false,
+    // `once` is the ONLY honest pattern here. An exam produces no Sessions and
+    // follows no rule; offering *weekly* would describe something the model
+    // cannot represent.
     allowsOnce: true,
+    // No materialized rows to drill into — R50's scopes have nothing to act on.
     hasOccurrences: false,
   },
 };
+
+/** The kinds an administrator can actually create today, in picker order.
+ *  Derived, so a filter or a picker can never fall behind the registry. */
+export const AVAILABLE_TYPES: SchedulingType[] = (
+  Object.keys(SCHEDULING_TYPE_SPECS) as SchedulingType[]
+).filter((k) => SCHEDULING_TYPE_SPECS[k].available);
 
 export function specOfType(type: SchedulingType): SchedulingTypeSpec {
   return SCHEDULING_TYPE_SPECS[type];

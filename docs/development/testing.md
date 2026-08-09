@@ -14,7 +14,7 @@ Four layers, each testing something the others structurally cannot.
 **Coverage: ≥ 80 % on services and policies.** No coverage gate on generated or boilerplate
 code — a coverage number that counts generated clients measures nothing.
 
-Current totals: **797 backend across 43 files · 266 frontend across 19**. The backend figure
+Current totals: **893 backend across 49 files · 345 frontend across 27**. The backend figure
 is the integration sweep, which is what `scripts/dev/test-integration.sh` runs and what CI
 gates on; the unit suite is a subset of it rather than a separate number.
 
@@ -109,7 +109,7 @@ Rename a field in the adapter and the **typecheck** fails here. That is the chec
 cannot perform. `pages/admin/hijri-calendar.test.tsx` is the worked example — written after a
 type mismatch rendered a whole admin screen blank white with nothing red anywhere.
 
-## Two environment traps the integration suite sets
+## Four environment traps the integration suite sets
 
 **Running the full suite repeatedly hits the real Nginx rate limits.** The stack
 under test is the production one, limits included, so a second or third full run
@@ -127,6 +127,16 @@ unexplained empty result rather than an error. Rebuild `api` before running
 those suites. (Health lives at the **origin root**, `/healthz`, not under
 `/api/v1/` — a `401` there means you asked the guarded router, not that the API
 is unwell.)
+
+**Run the suite through `scripts/dev/test-integration.sh`, never `vitest` directly.**
+`.env` is canonical and **container-shaped** (TD-13): `DATABASE_URL` names the
+`db` service and `MINIO_ENDPOINT` names `minio`, hostnames that resolve only
+inside the compose network. The script rewrites both to the loopback ports the
+dev overlay publishes. Sourcing `.env` and calling `vitest` yourself rewrites
+neither — or, worse, rewrites only the database, which is the confusing case:
+**48 suites pass and the storage suite fails twelve times** with `no object at
+the initiated key`, which reads as a broken presigned-upload implementation and
+is a hostname that does not resolve.
 
 **A queue must be registered before anything can be enqueued into it.**
 `pgboss.job` is partitioned by queue name, so adding a job to the TD-7 catalogue

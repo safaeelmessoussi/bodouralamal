@@ -358,6 +358,16 @@ tr:last-child .cal-cell {
   background: color-mix(in srgb, var(--color-accent) 10%, var(--color-surface));
   color: var(--color-accent);
 }
+/* R58 — an exam is the one item on a timetable somebody must not mistake for an
+   ordinary class, so it is the only chip carrying a full-strength edge as well
+   as a wash: colour alone is not the signal, the weight is part of it. */
+.event-chip--exam {
+  background: var(--color-exam-soft);
+  color: var(--color-exam);
+  box-shadow: inset 2px 0 0 var(--color-exam);
+  font-weight: 600;
+}
+
 .event-chip--interactive {
   cursor: pointer;
   transition: filter var(--transition-fast);

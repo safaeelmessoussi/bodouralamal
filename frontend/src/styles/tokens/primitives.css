@@ -56,4 +56,13 @@
 
   --red-50: #fdeeed;
   --red-600: #a81f18;
+
+  /* R58 — the exam hue. A THIRD colour, deliberately: zellij green already
+     means "class" and brass means "activity", so an exam that borrowed either
+     would be the one thing on a timetable a reader must not misread. Violet is
+     far from both on the wheel and from the red that means danger — an exam is
+     significant, not an error. Measured 8.6:1 on `--neutral-0`, so it carries
+     as TEXT and not only as a fill. */
+  --violet-50: #f6eefb;
+  --violet-700: #6b2496;
 }

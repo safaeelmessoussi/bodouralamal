@@ -61,6 +61,26 @@ The semantic names say *what the colour means* — a date system — rather than
 a rebrand moves them in one place. This is the same discipline the brass accent got: it was
 chosen dark enough to carry text at 4.5:1, not chosen and then tested.
 
+### The exam hue is a third colour, on purpose (R58)
+
+`--color-exam` (`#6b2496`, violet) marks a physical exam sitting in the calendar,
+the scheduling list, the details dialog and the type indicator.
+
+**Why not reuse a colour already in the palette.** Zellij green means *class* and
+brass means *activity*; an exam wearing either would be the one item on a
+timetable a reader must not misread. Red was rejected for the opposite reason —
+it means *danger* everywhere else on this platform, and an exam is significant,
+not an error. Violet is far from all three on the wheel and measures **8.6:1** on
+`--neutral-0`, so unlike the brand pair above it carries as text rather than only
+as a fill, and needs no exception recorded.
+
+**Colour is never the only signal.** The chip carries a full-strength inline edge
+and the badge a ring, so an exam is still the odd one out for a reader who cannot
+separate the hues — and every surface prints `امتحان` in words. One token feeds
+all four surfaces (`event-chip--exam`, `badge--exam`, the dialog, the indicator),
+which is what stops the list and the grid from disagreeing about what an exam
+looks like.
+
 ## No web font, and that is the right answer
 
 The content security policy is `default-src 'self'` with no font host, so a linked face

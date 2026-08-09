@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 
 import type { Occurrence } from '../../adapters/calendar.js';
+import { OCCURRENCE_KIND_LABEL } from '../../adapters/calendar.js';
 import { t } from '../../i18n/index.js';
 
 /**
@@ -21,7 +22,9 @@ export function EventChip({
   occurrence: Occurrence;
   onOpen?: (occurrence: Occurrence) => void;
 }): ReactNode {
-  const kindKey = occurrence.kind === 'session' ? 'calendar.kindSession' : 'calendar.kindEvent';
+  // The label is announced to assistive technology, so an exam is identifiable
+  // without relying on the colour that marks it.
+  const kindKey = OCCURRENCE_KIND_LABEL[occurrence.kind];
   // Title first, time second — the priority order that matters when a cell is
   // scanned. Both live on ONE line: a two-line chip halves how many activities
   // a cell can show, and the time is short enough to sit beside the title.

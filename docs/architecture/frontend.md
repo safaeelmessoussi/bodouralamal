@@ -537,11 +537,56 @@ The view is a query parameter, not a second navigation node (§20 rule 16).
 `SchedulingForm` owns **only what every schedulable item has** — a name, an
 optional description, when it starts and ends, and how it repeats. The
 type-specific fields arrive as `children`: `ClassSection` (§4.4c — subject,
-target, room, teacher, assistants) or `ActivitySection` (§4.4 — visibility and
-scope). When M5 ships, `امتحان` contributes a third section and a third arm in
-the adapter's router; nothing in the shell moves. A `type === 'class'` ladder
-inside it would be how a "generic" form quietly becomes three forms sharing a
-wrapper, and the parity guard asserts there is none.
+target, room, teacher, assistants), `ActivitySection` (§4.4 — visibility and
+scope) or `ExamSection` (§4.6 — see below). A `type === 'class'` ladder inside it
+would be how a "generic" form quietly becomes three forms sharing a wrapper, and
+the parity guard asserts there is none.
+
+**The claim was tested by cashing it.** R58 added Exams, and the shell, the
+recurrence editor, the list and the calendar grid were unchanged: what moved was
+one registry entry (`SCHEDULING_TYPE_SPECS.exam`), one section component and one
+arm in `saveSchedulingItem`. That is the whole cost of a third kind.
+
+### Physical exams (R58)
+
+`ExamSection` asks `نوع الامتحان` first. `حضوري` is built; `عن بُعد` is **offered
+and disabled with its reason stated** (§14.4) — and the server refuses it too,
+with `STATE_CONFLICT` / `ONLINE_NOT_AVAILABLE`, so the block is not a client
+courtesy that a curl request walks past. **No online field is rendered at all,
+disabled or otherwise**: that mode needs an exam link, a selected-student
+audience, an open/close window and submission rules, and drawing any of them now
+would promise a shape nobody has decided.
+
+The physical fields reuse the shared dependent selectors (R55): branch → level →
+subject → year, with the room narrowed to the chosen branch and the group to that
+Level at that branch. **An empty group means the whole Level sits together** — it
+is an answer, not a gap, and the DTO carries the `null` rather than omitting it.
+
+**Editing is arrangements only.** Date, time, room, group, staff, title and
+description change; `mode`, `level_id`, `subject_id`, `academic_year_id` and
+`branch_id` are refused by a `.strict()` schema, because each would change *what
+is examined, for whom, or where* while keeping the grades already recorded
+against the old answer. Moving an exam to another Level is a new exam.
+
+> **`SchedulingItem.ids` exists because of this.** `PATCH /exams` sends the group
+> and the staff unconditionally, so an edit form that opened with them blank
+> would silently clear the audience of every exam anybody merely re-titled. The
+> list row already carries the ids beside the names, so the form seeds itself
+> with no second request.
+
+### The exam colour
+
+An exam is the one item on a timetable a reader must not mistake for an ordinary
+class, so it gets a **third hue** — `--color-exam`, violet — rather than
+borrowing the zellij green that means *class* or the brass that means *activity*.
+It is deliberately far from the red that means *danger*: an exam is significant,
+not an error.
+
+One token, four surfaces: the calendar chip (`event-chip--exam`), the list badge
+(`badge--exam`), the details dialog and the type indicator all read it, so they
+cannot drift. **Colour is never the only signal** — the chip carries a
+full-strength edge and the badge a ring, and every surface prints `امتحان` in
+words.
 
 ### One recurrence editor, and how the two `weekly`s were reconciled
 

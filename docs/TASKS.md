@@ -644,12 +644,23 @@
 - [x] **Two silently-dropped fields fixed on the update path**: `title` and — since R55 — `effective_until`. The regression tests read the ROW, never the status code
 - [ ] The remaining fixture titles from before the seed fix still read `[تجريبي] حدث …`; they are data and were not rewritten. Say the word and they can be cleaned
 
+### R58 — physical exam scheduling (2026-08-09)
+- [x] `Exam.mode` discriminator; `physical` carries date, wall-clock window, branch, room, optional group and supervising staff. Migration + boot-time CHECK ("all four place columns or none", so one legacy row survives without inventing a room)
+- [x] `POST/GET/PATCH/DELETE /exams` — TD-15 versioning, TD-5 soft delete with a Trash snapshot, identity fields **refused** on edit rather than dropped
+- [x] `عن بُعد` offered disabled with its reason, and refused by the server (`STATE_CONFLICT` / `ONLINE_NOT_AVAILABLE`). **No online endpoint, field or screen exists**
+- [x] `kind: 'exam'` in `GET /calendar` — read, not expanded; physical only
+- [x] `ExamSection` composed into the unified form; the shell, the recurrence editor, the list and the grid were unchanged — one registry entry, one section, one adapter arm
+- [x] `--color-exam` violet on all four surfaces (chip, badge, details, indicator), with weight and words as well as hue
+- [x] `SchedulingItem.ids` — the edit form seeds itself from the row it already has, so a re-title cannot silently clear the audience
+- [x] 16 HTTP integration tests + the client contract guard; full flow exercised against the real API and database
+- [ ] Exams are **not restorable from Trash** (`NOT_YET_SUPPORTED`) — part of the standing restorable-set gap, not specific to R58
+
 ### R56 — unified scheduling (2026-08-07)
 - [x] One `/admin/schedules` screen replacing `/admin/calendar` and the old schedules page; type is a field, not a destination
 - [x] `GET /events` — definitions, so the List view manages rules rather than occurrences
 - [x] List view (definitions) + Calendar view (occurrences), one query parameter, no second navigation node
 - [x] One `RecurrenceEditor` — the two `weekly` semantics reconciled without a backend change
-- [x] `SchedulingForm` shell with composable type sections; Exams become a third section when M5 ships
+- [x] `SchedulingForm` shell with composable type sections — **cashed by R58**: Exams became a third section with nothing in the shell moving
 - [x] `/admin/schedules/{id}/sessions` unchanged, keeping R50's three scopes
 - [ ] **`RoomDto` publishes no `capacity`** — BR-23 makes it informational and enforced nowhere, so the form's capacity hint renders nothing. Publishing it is a small contract change, recorded rather than taken unilaterally
 - [ ] Sweep `approvals`, `levels` and `users` for hand-rolled filter rows (unchanged from R55)

@@ -5146,6 +5146,246 @@
         }
       }
     },
+    "/exams": {
+      "get": {
+        "summary": "List scheduled exams",
+        "description": "TD-3.6 (R58), §4.6. **The stored exam definitions**, paginated (TD-10), staff only (TD-2). `?branch_id=` `?level_id=` `?from=` `?to=` `?page=`. **Branch narrowing is applied last**, so an explicit `branch_id` narrows a scoped caller and never widens them — the discipline every list here uses. **Every id is accompanied by its name** (`level_name`, `subject_name`, `branch_name`, `room_name`, `administrative_group_name`): a timetable cannot be read from ids, and this list sits beside classes and activities on one screen. `administrative_group_id: null` means **the whole Level**, never \"no target\".",
+        "responses": {
+          "200": {
+            "description": "A page of exams in the TD-10 envelope."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a malformed filter.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN for a caller who is not staff.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Schedule an exam",
+        "description": "TD-3.6 (R58), §4.6. **A physical sitting**: `{ mode, title, description?, date, start_time, end_time, level_id, subject_id, academic_year_id, branch_id, room_id, administrative_group_id?, staff[] }`. **`mode` accepts `physical` and `online`, and `online` is REFUSED** with `409 STATE_CONFLICT` and `details.reason = ONLINE_NOT_AVAILABLE` — the interface offers it disabled (§14.4) and the schema names it, so a client learns *which* capability is missing rather than receiving a generic validation error. **No online endpoint exists**, deliberately: a route with nothing behind it appears in the contract as a capability that exists. **R58 supersedes §4.6's \"digital exams only in MVP\"**: a sitting is organised here — branch, room, date, clock window and staff — while the **paper** (questions, print layout, marking) stays outside the platform. Times are TD-11 **wall-clock**, never instants. The place fields are **required here** though the columns are nullable: §7's standing division, nullable for rows predating the requirement and required where a person is asked. **The Level/Subject pairing goes through the shared curriculum policy** — the same assertion scheduling, teaching-group splits and content use, so `SUBJECT_NOT_IN_LEVEL` means the same thing on all four. A room must belong to the chosen branch (`ROOM_BRANCH_MISMATCH`, the name sessions already use), and a narrower `administrative_group_id` must be a roster of that Level at that branch (`BRANCH_MISMATCH` / `GROUP_LEVEL_MISMATCH`), or the exam would be sat by people it was not written for. **Each refusal reuses the code the platform already gives that rule** — a second spelling is how a client ends up showing the wrong remedy. **Staff are supervisors, not instructors** — one `supervisor` and any number of `assistant`s, the shape `CourseScheduleStaff` already uses.",
+        "responses": {
+          "201": {
+            "description": "Created; `{ id }`."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a malformed body, a room at another branch (ROOM_BRANCH_MISMATCH), a group at another branch (BRANCH_MISMATCH) or one sitting another Level (GROUP_LEVEL_MISMATCH).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN — scheduling an exam requires Admin (TD-2), or the branch is out of scope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an unknown level, subject, year, room or group.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT — ONLINE_NOT_AVAILABLE, or SUBJECT_NOT_IN_LEVEL from the shared curriculum policy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/exams/{id}": {
+      "patch": {
+        "summary": "Edit a scheduled exam",
+        "description": "TD-3.6 (R58). **The arrangements are editable; the identity is not.** `title`, `description`, `date`, `start_time`, `end_time`, `room_id`, `administrative_group_id` and `staff` may change — those are arrangements, and arrangements change. **`mode`, `level_id`, `subject_id`, `academic_year_id` and `branch_id` are refused** by a `.strict()` schema rather than dropped: each would change *what is examined, for whom, or where* while keeping the grades and submissions already recorded against the old answer, which is the reasoning §4.4 applies to a course schedule's scope. Moving an exam to another level is a new exam. **TD-15**: a stale `version` is `409 VERSION_CONFLICT`, never a silent overwrite. **Staff are REPLACED, not merged** — one call is one decision, and there is no window in which the exam holds half of an intended change.",
+        "responses": {
+          "204": {
+            "description": "Updated."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a malformed body, or a key the boundary refuses.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an unknown exam or one out of the caller's branch scope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). VERSION_CONFLICT (TD-15), or STATE_CONFLICT with ONLINE_NOT_AVAILABLE for an online row.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete a scheduled exam",
+        "description": "TD-3.6 (R58), TD-5, BR-15. **Soft delete plus a `Trash` snapshot**, and the staff rows are tombstoned in the same transaction — a soft delete without a snapshot is a row nobody can find and nobody can restore, which is exactly the defect found in Events and Course Schedules once already. The ninety-day window then applies as it does to every other entity.",
+        "responses": {
+          "204": {
+            "description": "Deleted; the Trash carries the snapshot."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an unknown exam or one out of scope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/healthz": {
       "servers": [
         {

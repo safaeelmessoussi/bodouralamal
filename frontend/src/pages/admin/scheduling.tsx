@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import {
   fetchCalendarBootstrap,
@@ -8,7 +8,7 @@ import {
   type Occurrence,
 } from '../../adapters/calendar.js';
 import { listRooms } from '../../adapters/branches-admin.js';
-import { specOfType } from '../../adapters/scheduling-types.js';
+import { AVAILABLE_TYPES, specOfType } from '../../adapters/scheduling-types.js';
 import {
   deleteSchedulingItem,
   listSchedulingItems,
@@ -23,6 +23,7 @@ import { CalendarNav } from '../../components/calendar/calendar-nav.js';
 import { CalendarTitle } from '../../components/calendar/calendar-title.js';
 import { DayEventsDialog } from '../../components/calendar/day-events-dialog.js';
 import { ActivitySection, ClassSection } from '../../components/scheduling/class-section.js';
+import { ExamSection, examStaffOf } from '../../components/scheduling/exam-section.js';
 import { SchedulingForm } from '../../components/scheduling/scheduling-form.js';
 import { patternOf, type RecurrenceValue } from '../../components/scheduling/recurrence-editor.js';
 import { ScopeSelectors } from '../../components/scope/scope-selectors.js';
@@ -140,7 +141,9 @@ export function SchedulingPage(): ReactNode {
     {
       key: 'type',
       header: t('scheduling.itemType'),
-      cell: (r) => t(`scheduling.type.${r.type}`),
+      // The badge carries the same colour the calendar chip does, from the same
+      // token — an exam is recognisable at a glance on either surface.
+      cell: (r) => <span className={`badge badge--${r.type}`}>{t(`scheduling.type.${r.type}`)}</span>,
     },
     {
       key: 'title',
@@ -275,8 +278,10 @@ export function SchedulingPage(): ReactNode {
                   onChange={(v) => setTypeFilter(v as SchedulingType | '')}
                   options={[
                     { value: '', label: t('scheduling.allTypes') },
-                    { value: 'class', label: t('scheduling.type.class') },
-                    { value: 'activity', label: t('scheduling.type.activity') },
+                    // Derived from the registry, not listed again: R56's promise
+                    // is that a new kind is ONE entry, and a hand-written filter
+                    // is exactly the copy that silently omits it.
+                    ...AVAILABLE_TYPES.map((k) => ({ value: k, label: t(`scheduling.type.${k}`) })),
                   ]}
                 />
                 <ScopeSelectors scope={listScope} fields={LIST_SCOPE} mode="filter" />
@@ -440,14 +445,23 @@ function SchedulingDialog({
   });
 
   const [mode, setMode] = useState<string>('administrative_group');
-  const [roomId, setRoomId] = useState('');
+  const [roomId, setRoomId] = useState(item?.ids.roomId ?? '');
   const [rooms, setRooms] = useState<{ id: string; name: string; capacity: number | null }[]>([]);
   // `RoomDto` publishes no `capacity` — BR-23 makes it informational and it is
   // enforced nowhere, so putting it on this wire is a further contract change
   // and is recorded as such rather than smuggled in here.
   const [teachers, setTeachers] = useState<UserSummary[]>([]);
-  const [teacherId, setTeacherId] = useState('');
-  const [assistantIds, setAssistantIds] = useState<string[]>([]);
+  const [teacherId, setTeacherId] = useState(
+    item?.ids.staff.find((x) => x.position === 'teacher')?.user_id ?? '',
+  );
+  const [assistantIds, setAssistantIds] = useState<string[]>(
+    (item?.ids.staff ?? []).filter((x) => x.position === 'assistant').map((x) => x.user_id),
+  );
+  // An exam already saved is physical: `online` cannot be stored (§4.6, R58).
+  const [examMode, setExamMode] = useState<'physical' | 'online'>('physical');
+  const [supervisorId, setSupervisorId] = useState(
+    item?.ids.staff.find((x) => x.position === 'supervisor')?.user_id ?? '',
+  );
   const [visibility, setVisibility] = useState('public');
   const [scopeKind, setScopeKind] = useState('global');
   const [scopeId, setScopeId] = useState('');
@@ -455,6 +469,28 @@ function SchedulingDialog({
   const [busy, setBusy] = useState(false);
 
   const scope = useScopeOptions({ token, fields: SCOPE_FIELDS, defaultCurrentYear: true });
+
+  /**
+   * **Seed the scope from the row being edited.**
+   *
+   * Not cosmetic: `PATCH /exams` sends the group unconditionally, so a form that
+   * opened with an empty group would clear the audience of every exam anybody
+   * merely re-titled. The row already carries its ids, so this needs no fetch.
+   *
+   * Runs once per opened row — the selectors own the value afterwards.
+   */
+  const seeded = useRef<string | null>(null);
+  useEffect(() => {
+    if (item === null || seeded.current === item.id) return;
+    seeded.current = item.id;
+    scope.setMany({
+      ...(item.ids.branchId !== null ? { branchId: item.ids.branchId } : {}),
+      ...(item.ids.levelId !== null ? { levelId: item.ids.levelId } : {}),
+      ...(item.ids.groupId !== null ? { groupId: item.ids.groupId } : {}),
+      ...(item.ids.subjectId !== null ? { subjectId: item.ids.subjectId } : {}),
+      ...(item.ids.academicYearId !== null ? { academicYearId: item.ids.academicYearId } : {}),
+    });
+  }, [item, scope]);
   /** Everything the interface needs to know about this kind, declared once. */
   const spec = specOfType(type);
 
@@ -494,6 +530,20 @@ function SchedulingDialog({
     // R57 — required for every kind, so it is checked before anything specific.
     if (title.trim() === '') return t('scheduling.invalid.title');
     if (recurrence.startDate === '') return t('scheduling.invalid.startDate');
+    if (type === 'exam') {
+      // The mode is refused by the server too; saying so here is the courtesy,
+      // not the guarantee.
+      if (examMode === 'online') return t('scheduling.exam.onlineSoon');
+      if (scope.value.branchId === '') return t('scheduling.invalid.branch');
+      if (scope.value.levelId === '') return t('scheduling.invalid.level');
+      if (scope.levelTeachesNothing) return t('scope.assignSubjectsHint');
+      if (scope.value.subjectId === '') return t('scheduling.invalid.subject');
+      if (scope.value.academicYearId === '') return t('scheduling.invalid.year');
+      if (roomId === '') return t('scheduling.invalid.room');
+      if (startTime === '' || endTime === '') return t('scheduling.invalid.times');
+      if (supervisorId === '') return t('scheduling.invalid.supervisor');
+      return null;
+    }
     if (type === 'class') {
       if (scope.value.branchId === '') return t('scheduling.invalid.branch');
       if (scope.value.levelId === '') return t('scheduling.invalid.level');
@@ -552,6 +602,10 @@ function SchedulingDialog({
                   ? { categoryIds: [scopeId] }
                   : { levelIds: [scopeId] },
           subjectId: scope.value.subjectId,
+          levelId: scope.value.levelId,
+          // `null` is the whole Level sitting together (R58), not a gap.
+          examGroupId: scope.value.groupId || null,
+          examStaff: examStaffOf(supervisorId, assistantIds),
           teachingMode: mode,
           targetId,
           branchId: scope.value.branchId,
@@ -633,6 +687,21 @@ function SchedulingDialog({
             teachers={teachers}
             teacherId={teacherId}
             onTeacher={setTeacherId}
+            assistantIds={assistantIds}
+            onAssistants={setAssistantIds}
+          />
+        ) : type === 'exam' ? (
+          <ExamSection
+            mode={examMode}
+            onMode={setExamMode}
+            scope={scope}
+            locked={editing}
+            rooms={rooms}
+            roomId={roomId}
+            onRoom={setRoomId}
+            staff={teachers}
+            supervisorId={supervisorId}
+            onSupervisor={setSupervisorId}
             assistantIds={assistantIds}
             onAssistants={setAssistantIds}
           />

@@ -1487,8 +1487,13 @@ model Exam {
 
   submissions StudentExamSubmission[]
   grades      Grade[]
-}
 
+  @@index([levelId, date])
+  /// R58 — a physical sitting is read by *when and where*: the calendar asks
+  /// for a date window at a branch, and the scheduling list asks the same.
+  @@index([branchId, date])
+  @@map("exam")
+}
 
 model StudentExamSubmission {
   id        String @id @default(uuid()) @db.Uuid

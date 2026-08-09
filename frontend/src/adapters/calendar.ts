@@ -10,6 +10,31 @@ import { api } from '../lib/api.js';
  * The shape is the contract's, so a field the API stops sending becomes a type
  * error here rather than a blank line on the page.
  */
+/**
+ * **What kind of thing an occurrence is.** R58 adds `exam` to the two: a
+ * physical sitting is one dated occurrence on the same grid.
+ */
+export type OccurrenceKind = 'session' | 'event' | 'exam';
+
+/**
+ * How each kind is named and coloured — **declared once**, because the chip and
+ * the details dialog were already carrying two copies of the same ternary and
+ * the exam would have made it three. The badge modifier deliberately names the
+ * *scheduling type* (`class`/`activity`/`exam`), so a kind wears the same colour
+ * in the calendar as it does in the list.
+ */
+export const OCCURRENCE_KIND_LABEL: Record<OccurrenceKind, string> = {
+  session: 'calendar.kindSession',
+  event: 'calendar.kindEvent',
+  exam: 'calendar.kindExam',
+};
+
+export const OCCURRENCE_KIND_BADGE: Record<OccurrenceKind, string> = {
+  session: 'class',
+  event: 'activity',
+  exam: 'exam',
+};
+
 export interface Occurrence {
   /**
    * **`'session'`, not `'group'`** — Revision 43 replaced the retired Group with
@@ -18,7 +43,7 @@ export interface Occurrence {
    * literal compiled, every `=== 'group'` comparison quietly returned false, and
    * **every session rendered as an Event** in the chip and the details dialog.
    */
-  kind: 'session' | 'event';
+  kind: OccurrenceKind;
   id: string;
   title: string;
   /** Local calendar date `YYYY-MM-DD` (TD-11) — never an instant. */

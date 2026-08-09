@@ -27,6 +27,11 @@
   --color-danger: var(--red-600);
   --color-danger-soft: var(--red-50);
 
+  /* R58 — an exam's own colour, used identically in the calendar, the list, the
+     details dialog and the type indicator. One token, so the four cannot drift. */
+  --color-exam: var(--violet-700);
+  --color-exam-soft: var(--violet-50);
+
   /* The two date systems, named for what they MEAN rather than for a hue, so a
      rebrand moves them here and nowhere else.
 

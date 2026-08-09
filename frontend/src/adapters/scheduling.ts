@@ -7,6 +7,7 @@ import {
   type CourseSchedule,
 } from './course-schedules.js';
 import { createEvent, deleteEvent, updateEvent, type EventInput } from './events.js';
+import { createExam, deleteExam, listExams, updateExam, type Exam } from './exams.js';
 import { WEEKDAYS } from '../components/scheduling/recurrence-editor.js';
 import { SCHEDULING_TYPE_SPECS } from './scheduling-types.js';
 
@@ -78,6 +79,32 @@ export interface SchedulingItem {
   audienceLabel: string | null;
   staffCount: number | null;
   version: number;
+  /** @see SchedulingIds */
+  ids: SchedulingIds;
+}
+
+/**
+ * **The identifiers behind the names.**
+ *
+ * The list shows names because a timetable cannot be read from ids; the *edit
+ * form* needs the ids, and re-fetching the row it already has in hand would be
+ * a second round trip for data that travelled with the first. `null` where the
+ * kind has no such column, on the same rule as the names above: an Event has no
+ * room and no subject, and an invented id is worse than an empty select.
+ *
+ * This is what stops an edit from **silently clearing** what it did not show —
+ * `PATCH /exams` sends the group and the staff unconditionally, so a form that
+ * opened with them blank would erase them on save.
+ */
+export interface SchedulingIds {
+  branchId: string | null;
+  roomId: string | null;
+  levelId: string | null;
+  subjectId: string | null;
+  academicYearId: string | null;
+  /** The narrower audience where one was chosen; `null` is the whole Level. */
+  groupId: string | null;
+  staff: { user_id: string; position: string }[];
 }
 
 /* ── Reading ─────────────────────────────────────────────────────────────── */
@@ -96,6 +123,16 @@ interface EventDefinitionWire {
   branch_ids: string[];
   version: number;
 }
+
+const EMPTY_IDS: SchedulingIds = {
+  branchId: null,
+  roomId: null,
+  levelId: null,
+  groupId: null,
+  subjectId: null,
+  academicYearId: null,
+  staff: [],
+};
 
 function fromSchedule(row: CourseSchedule): SchedulingItem {
   return {
@@ -117,6 +154,17 @@ function fromSchedule(row: CourseSchedule): SchedulingItem {
     audienceLabel: row.target_name,
     staffCount: row.staff.length,
     version: row.version,
+    ids: {
+      branchId: row.branch_id,
+      roomId: row.room_id,
+      // §4.4c — ONE target of the kind the mode names, so exactly one of these
+      // is set and reading the other from `target_id` would be a guess.
+      levelId: row.teaching_mode === 'entire_level' ? row.target_id : null,
+      groupId: row.teaching_mode === 'administrative_group' ? row.target_id : null,
+      subjectId: row.subject_id,
+      academicYearId: row.academic_year_id,
+      staff: row.staff.map((x) => ({ user_id: x.user_id, position: x.position })),
+    },
   };
 }
 
@@ -140,6 +188,48 @@ function fromEvent(row: EventDefinitionWire): SchedulingItem {
     audienceLabel: null,
     staffCount: null,
     version: row.version,
+    // An Event genuinely has none of these columns (§4.4). Null is the truth
+    // about it, not a gap waiting to be filled.
+    ids: EMPTY_IDS,
+  };
+}
+
+/**
+ * A physical exam as the unified list sees it (§4.6, R58).
+ *
+ * **`repeatUntil` is null and `recurrence` is `none`, and both are facts.** An
+ * exam is one dated sitting, not a rule that repeats — so there is nothing to
+ * bound, and saying so is more honest than omitting the fields and letting a
+ * reader wonder.
+ */
+function fromExam(row: Exam): SchedulingItem {
+  return {
+    type: 'exam',
+    id: row.id,
+    title: row.title,
+    description: row.description,
+    startDate: row.date,
+    endDate: null,
+    startTime: row.start_time,
+    endTime: row.end_time,
+    recurrence: 'none',
+    weekdays: [],
+    repeatUntil: null,
+    branchName: row.branch_name,
+    roomName: row.room_name,
+    // Who sits it: the narrower group where one was chosen, the Level otherwise.
+    audienceLabel: row.administrative_group_name ?? row.level_name,
+    staffCount: row.staff.length,
+    version: row.version,
+    ids: {
+      branchId: row.branch_id,
+      roomId: row.room_id,
+      levelId: row.level_id,
+      groupId: row.administrative_group_id,
+      subjectId: row.subject_id,
+      academicYearId: row.academic_year_id,
+      staff: row.staff.map((x) => ({ user_id: x.user_id, position: x.position })),
+    },
   };
 }
 
@@ -166,11 +256,12 @@ export async function listSchedulingItems(
   token: string | null,
   filters: SchedulingFilters = {},
 ): Promise<{ items: SchedulingItem[]; truncated: boolean }> {
-  const wantsClasses = filters.type === '' || filters.type === undefined || filters.type === 'class';
-  const wantsActivities =
-    filters.type === '' || filters.type === undefined || filters.type === 'activity';
+  const all = filters.type === '' || filters.type === undefined;
+  const wantsClasses = all || filters.type === 'class';
+  const wantsActivities = all || filters.type === 'activity';
+  const wantsExams = all || filters.type === 'exam';
 
-  const [classes, activities] = await Promise.all([
+  const [classes, activities, exams] = await Promise.all([
     wantsClasses
       ? listCourseSchedules(token, 1, {
           ...(filters.branchId ? { branch_id: filters.branchId } : {}),
@@ -189,6 +280,11 @@ export async function listSchedulingItems(
           { token },
         )
       : Promise.resolve({ data: [], meta: { total: 0 } }),
+    wantsExams
+      ? listExams(token, {
+          ...(filters.branchId ? { branch_id: filters.branchId } : {}),
+        })
+      : Promise.resolve({ data: [] as Exam[], meta: { total: 0 } }),
   ]);
 
   // A class filtered by subject or year excludes activities entirely — the
@@ -196,7 +292,14 @@ export async function listSchedulingItems(
   const activityRows =
     filters.subjectId || filters.academicYearId ? [] : activities.data.map(fromEvent);
 
-  const items = [...classes.data.map(fromSchedule), ...activityRows].sort((a, b) =>
+  // An exam carries a subject and a year, so those filters narrow it honestly
+  // rather than excluding it the way they must exclude an activity.
+  const examRows = exams.data
+    .filter((e) => !filters.subjectId || e.subject_id === filters.subjectId)
+    .filter((e) => !filters.academicYearId || e.academic_year_id === filters.academicYearId)
+    .map(fromExam);
+
+  const items = [...classes.data.map(fromSchedule), ...activityRows, ...examRows].sort((a, b) =>
     // Soonest first, then by clock — a scheduling list is read forwards.
     (a.startDate ?? '').localeCompare(b.startDate ?? '') ||
     (a.startTime ?? '').localeCompare(b.startTime ?? ''),
@@ -206,7 +309,8 @@ export async function listSchedulingItems(
     items,
     truncated:
       classes.data.length >= MERGED_SOURCE_LIMIT ||
-      activities.data.length >= MERGED_SOURCE_LIMIT,
+      activities.data.length >= MERGED_SOURCE_LIMIT ||
+      exams.data.length >= MERGED_SOURCE_LIMIT,
   };
 }
 
@@ -231,6 +335,12 @@ export interface SchedulingInput {
   /** Activity only. */
   visibility?: string;
   scope?: { global?: boolean; branchIds?: string[]; categoryIds?: string[]; levelIds?: string[] };
+  /** Exam only (§4.6, R58) — the Level it examines, and who sits it. */
+  levelId?: string;
+  /** `null` is the whole Level, never "no target". */
+  examGroupId?: string | null;
+  examStaff?: { user_id: string; position: 'supervisor' | 'assistant' }[];
+
   /** Class only (§4.4c). */
   subjectId?: string;
   teachingMode?: string;
@@ -313,10 +423,46 @@ export async function saveSchedulingItem(
   }
 
   if (input.type === 'exam') {
-    // §4.6's Exam ships with M5 (TD-3.6). The type is offered and disabled, so
-    // this is unreachable from the interface; throwing rather than silently
-    // doing nothing is what keeps it that way.
-    throw new Error('exam scheduling arrives with M5');
+    if (existing) {
+      // **Arrangements only.** The server refuses the identity fields rather
+      // than dropping them, so they are not sent — see `updateExam`.
+      return updateExam(
+        existing.id,
+        existing.version,
+        {
+          title: input.title,
+          description: input.description,
+          date: input.startDate,
+          start_time: input.startTime ?? '',
+          end_time: input.endTime ?? '',
+          ...(input.roomId ? { room_id: input.roomId } : {}),
+          administrative_group_id: input.examGroupId ?? null,
+          ...(input.examStaff ? { staff: input.examStaff } : {}),
+        },
+        token,
+      );
+    }
+    return createExam(
+      {
+        // Sent explicitly: `online` must be refused by the SERVER with a coded
+        // reason, not silently prevented here, so a client learns which
+        // capability is missing rather than why a button did nothing.
+        mode: 'physical',
+        title: input.title,
+        description: input.description,
+        date: input.startDate,
+        start_time: input.startTime ?? '',
+        end_time: input.endTime ?? '',
+        level_id: input.levelId!,
+        subject_id: input.subjectId!,
+        academic_year_id: input.academicYearId!,
+        branch_id: input.branchId!,
+        room_id: input.roomId!,
+        administrative_group_id: input.examGroupId ?? null,
+        ...(input.examStaff ? { staff: input.examStaff } : {}),
+      },
+      token,
+    );
   }
 
   const payload: EventInput = {
@@ -340,7 +486,7 @@ export async function deleteSchedulingItem(
   item: Pick<SchedulingItem, 'type' | 'id'>,
   token: string | null,
 ): Promise<unknown> {
-  return item.type === 'class'
-    ? deleteCourseSchedule(item.id, token)
-    : deleteEvent(item.id, token);
+  if (item.type === 'class') return deleteCourseSchedule(item.id, token);
+  if (item.type === 'exam') return deleteExam(item.id, token);
+  return deleteEvent(item.id, token);
 }
