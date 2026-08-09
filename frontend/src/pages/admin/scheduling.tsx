@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 
-import { fetchOccurrences, type Occurrence } from '../../adapters/calendar.js';
+import {
+  fetchCalendarBootstrap,
+  fetchOccurrences,
+  type CalendarBootstrap,
+  type HijriDay,
+  type Occurrence,
+} from '../../adapters/calendar.js';
 import { listRooms } from '../../adapters/branches-admin.js';
 import {
   deleteSchedulingItem,
@@ -12,6 +18,8 @@ import {
 import { searchUsers, type UserSummary } from '../../adapters/users.js';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
 import { CalendarGrid } from '../../components/calendar/calendar-grid.js';
+import { CalendarNav } from '../../components/calendar/calendar-nav.js';
+import { CalendarTitle } from '../../components/calendar/calendar-title.js';
 import { DayEventsDialog } from '../../components/calendar/day-events-dialog.js';
 import { ActivitySection, ClassSection } from '../../components/scheduling/class-section.js';
 import { SchedulingForm } from '../../components/scheduling/scheduling-form.js';
@@ -319,6 +327,7 @@ function CalendarView(): ReactNode {
   const today = useMemo(() => new Date(), []);
   const [month, setMonth] = useState(() => startOfMonth(today));
   const [occurrences, setOccurrences] = useState<Occurrence[]>([]);
+  const [bootstrap, setBootstrap] = useState<CalendarBootstrap | null>(null);
   const [openDay, setOpenDay] = useState<Date | null>(null);
 
   useEffect(() => {
@@ -330,7 +339,21 @@ function CalendarView(): ReactNode {
     void fetchOccurrences({ from: iso(from), to: iso(to) })
       .then((r) => setOccurrences(r.occurrences))
       .catch(() => setOccurrences([]));
+    // **The Hijri overlay comes from the same bootstrap the public calendar
+    // reads** (R31–32): recorded Ministry announcements, never a computation.
+    // This view passed an empty map, so the back office was the one calendar in
+    // the platform showing no Hijri date at all — a regression, not a decision.
+    void fetchCalendarBootstrap({ from: iso(from), to: iso(to) })
+      .then(setBootstrap)
+      .catch(() => setBootstrap(null));
   }, [month]);
+
+  /** Recorded official Hijri days, keyed for O(1) lookup per cell. */
+  const hijriByDate = useMemo(() => {
+    const map = new Map<string, HijriDay>();
+    for (const day of bootstrap?.hijri.days ?? []) map.set(day.date, day);
+    return map;
+  }, [bootstrap]);
 
   const byDate = useMemo(() => {
     const map = new Map<string, Occurrence[]>();
@@ -342,34 +365,27 @@ function CalendarView(): ReactNode {
 
   return (
     <div aria-live="polite">
+      {/* **The same header and the same navigation the public calendar uses.**
+          The dual title is where the Gregorian month is named beside its Hijri
+          month (R31, R36) — rebuilding it here with plain buttons, as this view
+          first did, left the back office without the Hijri side entirely. */}
       <div className="cal-toolbar">
-        <Button
-          variant="ghost"
-          onClick={() =>
-            setMonth((m) => new Date(Date.UTC(m.getUTCFullYear(), m.getUTCMonth() - 1, 1)))
-          }
-        >
-          {t('calendar.previousMonth')}
-        </Button>
-        <Button variant="ghost" onClick={() => setMonth(startOfMonth(today))}>
-          {t('calendar.today')}
-        </Button>
-        <Button
-          variant="ghost"
-          onClick={() =>
-            setMonth((m) => new Date(Date.UTC(m.getUTCFullYear(), m.getUTCMonth() + 1, 1)))
-          }
-        >
-          {t('calendar.nextMonth')}
-        </Button>
+        <CalendarTitle
+          gregorianMonths={bootstrap?.gregorian_months ?? []}
+          hijriMonths={bootstrap?.hijri.months ?? []}
+          month={month}
+        />
+        <CalendarNav
+          onPrevious={() => setMonth((m) => new Date(Date.UTC(m.getUTCFullYear(), m.getUTCMonth() - 1, 1)))}
+          onToday={() => setMonth(startOfMonth(today))}
+          onNext={() => setMonth((m) => new Date(Date.UTC(m.getUTCFullYear(), m.getUTCMonth() + 1, 1)))}
+        />
       </div>
 
       <CalendarGrid
         month={month}
         byDate={byDate}
-        // The Hijri overlay is decorative and read from recorded official
-        // announcements (R31–32); the back office does not need it to schedule.
-        hijriByDate={new Map()}
+        hijriByDate={hijriByDate}
         today={today}
         selected={openDay}
         onSelect={setOpenDay}

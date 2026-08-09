@@ -175,7 +175,12 @@
      activities are visible before anything is hidden. */
   height: 13.5rem;
 }
-.cal-cell:last-child {
+/* **The OUTER edge, not an internal one.** `border-inline-start` is each cell's
+   LEADING edge, which in RTL is its right — so the cell that duplicates the
+   table's own border is the FIRST, not the last. Dropping it from `:last-child`
+   removed the separator *between the final two columns* instead, which is why
+   the two left-hand columns ran together while every other pair was ruled. */
+.cal-cell:first-child {
   border-inline-start: 0;
 }
 tr:last-child .cal-cell {
@@ -270,7 +275,10 @@ tr:last-child .cal-cell {
    month the Ministry has not announced (Revision 31). It renders NOTHING — no
    dash, no placeholder, no computed guess. */
 .cal-day__hijri--absent {
-  min-width: 1.5ch;
+  /* The box above already reserves the space; this stays as the explicit
+     statement that an unannounced month renders NOTHING — no dash, no
+     placeholder, no computed guess (Revision 31, §20 rule 14). */
+  min-width: 2.1rem;
 }
 
 /* ── Today ───────────────────────────────────────────────────────────────────
@@ -282,11 +290,23 @@ tr:last-child .cal-cell {
    Now: a ring in the number's OWN colour, plus a soft wash on the cell. The
    familiar "today circle" convention is kept, the colour survives, and nothing
    is filled — so it stays light even beside a busy day. */
-.cal-day.is-today .cal-day__gregorian {
+/* **The ring's box is reserved on EVERY day, not added on one.**
+
+   Sizing the numeral only when it is today made today's header row ~1.1rem
+   taller than its neighbours, so the rule beneath it — and with it the whole
+   cell's internal grid — sat lower in that one column. The marker was changing
+   the layout it was supposed to annotate.
+
+   The box now exists always and today merely paints a ring inside it, so the
+   only thing that changes between an ordinary day and today is colour. */
+.cal-day__gregorian,
+.cal-day__hijri {
   display: inline-grid;
   place-items: center;
   min-width: 2.1rem;
   height: 2.1rem;
+}
+.cal-day.is-today .cal-day__gregorian {
   border-radius: var(--radius-full);
   /* `currentColor`, so the ring is the Gregorian orange by construction and
      cannot drift from the numeral it encircles. */

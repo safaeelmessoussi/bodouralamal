@@ -1,5 +1,4 @@
 import { api } from '../lib/api.js';
-import { fetchCalendarBootstrap } from './calendar.js';
 
 /**
  * The educational-content adapter (§4.9, §5.2, TD-3.13).
@@ -26,15 +25,18 @@ import { fetchCalendarBootstrap } from './calendar.js';
  * keeps that true without a column that would have to be kept in step with the
  * MIME allow-list.
  *
- * ## Why the level index has no counts
+ * ## The level index lists only Levels that HOLD content
  *
- * §5.2 describes a *drilling folder system*, and its card design asked for a
- * content count and a year count per Level. **`GET /library` is a flat,
- * paginated, filtered list** (TD-3.13) and publishes no aggregate, so those
- * numbers cannot be obtained without fetching every page of every Level on a
- * public screen. They are therefore **omitted rather than approximated** — a
- * card without a count is honest; a card with a count derived from page one is
- * not. Reported rather than resolved: an aggregate would be a new contract.
+ * It used to list every Level the calendar bootstrap publishes, so the index
+ * offered a card for each of the twenty-one whether or not any held an item, and
+ * every empty one opened onto nothing. A directory that lists what does not
+ * exist is worse than a short directory: it spends the reader's attention on
+ * doors that do not open.
+ *
+ * The index is now **derived from the library rows themselves**. `GET /library`
+ * carries the §5.2 headings on every row, so grouping them *is* the index — and
+ * the counts §5.2's cards asked for come with it rather than being approximated
+ * or omitted. The read is paged and bounded; see `fetchAllLibraryRows`.
  */
 
 /* ── The contract shape ──────────────────────────────────────────────────── */
@@ -98,8 +100,14 @@ export interface LevelSummary {
   category_id: string;
   category_name: string;
   description: string | null;
-  /** `null` where no aggregate exists — see the note at the top of this file.
-   *  An absent count is honest; one derived from page one is not. */
+  /**
+   * Real counts, from the rows the index is built out of.
+   *
+   * They were `null` while the index came from the calendar bootstrap, where no
+   * aggregate existed and page-one arithmetic would have been a guess. Counting
+   * the content the index is *derived from* is not a guess — and a Level with a
+   * count of zero never appears at all, because it is not in the library.
+   */
   content_count: number | null;
   academic_year_count: number | null;
 }
@@ -126,24 +134,77 @@ export interface LevelContent {
  * exists.
  */
 export async function fetchContentLevels(): Promise<LevelSummary[]> {
-  // The PUBLIC calendar bootstrap already publishes every live Category and
-  // Level, anonymously and ordered — the same list this index needs. Nothing is
-  // added to that payload; a second public surface reads what it already has.
-  const today = new Date().toISOString().slice(0, 10);
-  const bootstrap = await fetchCalendarBootstrap({ from: today, to: today });
-  const categoryName = new Map(bootstrap.categories.map((c) => [c.id, c.name]));
+  // **Derived from the content itself, not from the curriculum.**
+  //
+  // This used to list every Level the calendar bootstrap publishes, so the index
+  // offered a card for each of the twenty-one Levels whether or not any held a
+  // single item — and every empty one opened onto nothing. A directory that
+  // lists what does not exist is worse than a short directory: it spends the
+  // reader's attention on doors that do not open.
+  //
+  // `GET /library` already carries the §5.2 headings on every row
+  // (`level_name`, `category_id`, `category_name`), so grouping the rows *is*
+  // the index, and the counts come with it rather than being approximated. The
+  // server still decides what exists — the tier rules, the BR-2 consent gate
+  // and the §5.2 ordering are all applied before this sees a row.
+  const rows = await fetchAllLibraryRows();
 
-  return bootstrap.levels.map((level) => ({
-    level_id: level.id,
-    level_name: level.name,
-    category_id: level.category_id,
-    category_name: categoryName.get(level.category_id) ?? '',
-    description: null,
-    // See the note at the top of this file: no aggregate exists, and an
-    // approximation would be worse than an absence.
-    content_count: null,
-    academic_year_count: null,
+  const byLevel = new Map<string, LevelSummary & { years: Set<string> }>();
+  for (const row of rows) {
+    let entry = byLevel.get(row.level_id);
+    if (!entry) {
+      entry = {
+        level_id: row.level_id,
+        level_name: row.level_name,
+        category_id: row.category_id,
+        category_name: row.category_name,
+        description: null,
+        content_count: 0,
+        academic_year_count: 0,
+        years: new Set<string>(),
+      };
+      byLevel.set(row.level_id, entry);
+    }
+    entry.content_count = (entry.content_count ?? 0) + 1;
+    entry.years.add(row.academic_year_id);
+  }
+
+  return [...byLevel.values()].map(({ years, ...level }) => ({
+    ...level,
+    // **Real counts now, not `null`.** The earlier note said no aggregate
+    // existed and an approximation would be worse than an absence — true while
+    // the index came from the bootstrap. Counting the rows the index is built
+    // from is not an approximation.
+    academic_year_count: years.size,
   }));
+}
+
+/**
+ * Every library row the caller may see, paged through.
+ *
+ * **Bounded, and the bound is stated rather than hidden.** TD-10 caps a page at
+ * 100, and the index must not miss a Level merely because its content sorts
+ * late — so this follows `meta.total` rather than reading one page and hoping.
+ * The ceiling exists because an unbounded loop on a public screen is a denial of
+ * service waiting for a large library; at that size the index becomes a server
+ * aggregate, which is a contract change and is recorded rather than guessed at.
+ */
+const MAX_INDEX_PAGES = 10;
+
+async function fetchAllLibraryRows(): Promise<LibraryItemWire[]> {
+  const rows: LibraryItemWire[] = [];
+  let page = 1;
+  let total = Infinity;
+  while (rows.length < total && page <= MAX_INDEX_PAGES) {
+    const body = await api<{ data: LibraryItemWire[]; meta: { total: number } }>(
+      `/library?page=${String(page)}&page_size=${String(MAX_PAGE_SIZE)}`,
+    );
+    total = body.meta.total;
+    rows.push(...body.data);
+    if (body.data.length === 0) break;
+    page += 1;
+  }
+  return rows;
 }
 
 /** TD-10 caps a page at 100. The library is filtered to one Level here, so this
