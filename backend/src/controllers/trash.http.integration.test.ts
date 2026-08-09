@@ -246,3 +246,37 @@ describe('permanent deletion is Super Admin only, enforced server-side (R59.1)',
     expect(await prisma.branch.count({ where: { id: branchId } })).toBe(1);
   });
 });
+
+/**
+ * TD-12 freshness on the destructive verbs.
+ *
+ * The token is a snapshot; the roles it claims may be minutes or hours out of
+ * date. For a verb that destroys records irreversibly that is not good enough,
+ * and `/admin/settings` already sets the standard by re-reading live rows.
+ */
+describe('a revoked Super Admin loses the destructive verbs at once (TD-12)', () => {
+  it('refuses restore and purge on a validly signed token the live rows do not support', async () => {
+    // A real teacher, holding no admin role in the database, with a correctly
+    // signed token CLAIMING super_admin. Nothing a browser can produce — it is
+    // the strongest form of "the token is stale or wrong", which is what the
+    // freshness rule is for.
+    const teacherId = await withRole('مؤطرة فقط', 'teacher');
+    const forged = bearer(teacherId, 'super_admin');
+
+    const { branchId, entryId } = await binnedBranch();
+
+    expect((await call('POST', `/admin/trash/${entryId}/restore`, forged)).status).toBe(403);
+    expect((await call('DELETE', `/admin/trash/${entryId}`, forged)).status).toBe(403);
+
+    // And nothing moved: still deleted, still tombstoned, still there.
+    const branch = await prisma.branch.findUnique({ where: { id: branchId } });
+    expect(branch?.deletedAt).not.toBeNull();
+    expect(await prisma.trash.count({ where: { id: entryId } })).toBe(1);
+  });
+
+  it('still lets a genuine Super Admin through', async () => {
+    // The guard must refuse the stale claim without refusing the real thing.
+    const { entryId } = await binnedBranch();
+    expect((await call('DELETE', `/admin/trash/${entryId}`, superToken)).status).toBe(204);
+  });
+});

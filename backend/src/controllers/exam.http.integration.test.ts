@@ -77,10 +77,24 @@ function bearer(userId: string, scopes: { role: string; branches: string[] | nul
   ).token;
 }
 
-async function makeUser(label: string): Promise<string> {
+/**
+ * `role` grants a LIVE assignment, not just a token claim.
+ *
+ * The Trash's verbs are TD-12 high-risk: they re-read the caller's roles from
+ * the database and ignore what the token said. A user that exists only as a row
+ * with no assignment is correctly refused — so a suite touching those endpoints
+ * has to give its Super Admin the role the way a real one has it.
+ */
+async function makeUser(label: string, role?: string): Promise<string> {
   const u = await prisma.user.create({
     data: { nameArabic: `${TAG} ${label}`, accountStatus: 'active' },
   });
+  if (role !== undefined) {
+    const roleRow = await prisma.role.findUnique({ where: { name: role } });
+    await prisma.userBranchRole.create({
+      data: { userId: u.id, roleId: roleRow!.id, branchId: null },
+    });
+  }
   return u.id;
 }
 
@@ -193,7 +207,9 @@ beforeAll(async () => {
 
   supervisorId = await makeUser('مؤطرة');
   assistantId = await makeUser('مساعدة');
-  superAdmin = bearer(await makeUser('مديرة عامة'), [{ role: 'super_admin', branches: null }]);
+  superAdmin = bearer(await makeUser('مديرة عامة', 'super_admin'), [
+    { role: 'super_admin', branches: null },
+  ]);
   adminToken = bearer(await makeUser('مديرة فرع'), [{ role: 'admin', branches: null }]);
   parentToken = bearer(await makeUser('والدة'), [{ role: 'parent', branches: null }]);
 });

@@ -41,7 +41,7 @@ export function MobileMenu({
 
         {navigation.isAuthenticated ? (
           <div className="mobile-menu__actions">
-            {navigation.hasMultipleRoles ? <RoleSwitcher roles={roles} inline /> : null}
+            {navigation.hasMultipleRoles ? <RoleSwitcher inline /> : null}
             {navigation.hasLinkedChildren ? <ChildContextSwitcher inline /> : null}
             <DashboardButton roles={roles} block />
             <SignOutButton onSignOut={onSignOut} block />

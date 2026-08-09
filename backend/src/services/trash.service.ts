@@ -2,6 +2,7 @@ import type { Prisma, PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
 import { page, pageWindow, type Page, type PageParams } from '../lib/pagination.js';
 import * as scope from '../policies/branch-scope.js';
+import { assertFreshActive } from '../policies/freshness.policy.js';
 import * as audit from '../repositories/audit.repository.js';
 import type { Actor } from '../policies/actor.js';
 
@@ -249,6 +250,28 @@ function assertSuperAdmin(actor: Actor): void {
   }
 }
 
+/**
+ * **The two write verbs are TD-12 high-risk, and the token is not enough.**
+ *
+ * `assertSuperAdmin` above reads the JWT, which is a snapshot taken when the
+ * token was minted. That is fine for reading the list, and it is *not* fine for
+ * restore and permanent delete: a Super Admin whose role is revoked would go on
+ * destroying records irreversibly until their access token expired — the exact
+ * window TD-12's freshness rule exists to close, on the most destructive verb
+ * the platform has.
+ *
+ * Measured, not assumed: `/admin/settings` already refuses a validly signed
+ * token claiming `super_admin` for a user who does not hold it, because it
+ * re-reads live rows. `/admin/trash` answered `200` to the same request. Same
+ * platform, same claim, two answers — and the weaker one guarded the deletions.
+ *
+ * One indexed read on a low-frequency endpoint, exactly as the policy describes.
+ */
+async function assertFreshSuperAdmin(prisma: PrismaClient, actor: Actor): Promise<void> {
+  assertSuperAdmin(actor);
+  await assertFreshActive(prisma, actor.userId, [scope.SUPER_ADMIN]);
+}
+
 export interface TrashRow {
   id: string;
   targetEntity: string;
@@ -305,7 +328,13 @@ export async function listTrash(
   actor: Actor,
   filters: TrashFilters = {},
 ): Promise<Page<TrashRow>> {
-  assertSuperAdmin(actor);
+  // The read gets freshness too. It is not a mutation, but it is the one list in
+  // the platform that spans **every entity across every branch** (§5.6), so a
+  // revoked Super Admin browsing it on a still-valid token is a real disclosure
+  // rather than a theoretical one — and leaving the read on the token while the
+  // writes re-read live rows is the kind of inconsistency somebody later
+  // "tidies" in the wrong direction. One indexed read, on a low-frequency page.
+  await assertFreshSuperAdmin(prisma, actor);
 
   const where: Prisma.TrashWhereInput = {
     ...(filters.entity ? { targetEntity: filters.entity } : {}),
@@ -388,7 +417,7 @@ export async function restoreEntry(
   actor: Actor,
   id: string,
 ): Promise<{ targetEntity: string; targetId: string }> {
-  assertSuperAdmin(actor);
+  await assertFreshSuperAdmin(prisma, actor);
 
   const entry = await prisma.trash.findUnique({ where: { id } });
   if (!entry) throw new AppError('NOT_FOUND', 'no such trash entry');
@@ -523,7 +552,7 @@ export async function purgeEntry(
   actor: Actor,
   id: string,
 ): Promise<{ targetEntity: string; targetId: string; alreadyPurged: boolean }> {
-  assertSuperAdmin(actor);
+  await assertFreshSuperAdmin(prisma, actor);
 
   const entry = await prisma.trash.findUnique({ where: { id } });
   if (!entry) throw new AppError('NOT_FOUND', 'no such trash entry');

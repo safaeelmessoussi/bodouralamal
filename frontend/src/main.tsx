@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 
 import { PendingGuard } from './components/pending-guard.js';
 import { ActiveChildProvider } from './contexts/active-child.js';
+import { ActiveRoleProvider } from './contexts/active-role.js';
 import { SessionProvider } from './contexts/session.js';
 import { resolveRoute } from './lib/route.js';
 import { AdminRouter } from './pages/admin/index.js';
@@ -104,12 +105,17 @@ if (rootElement) {
   createRoot(rootElement).render(
     <StrictMode>
       <SessionProvider>
-        {/* §4.3: the active child is per-session client state, and every
-            request carries it as a header. It wraps the app because the header
-            renders the switcher on every page. */}
-        <ActiveChildProvider>
-          <App />
-        </ActiveChildProvider>
+        {/* §2.1: which of several held roles the person is currently working
+            as. Outside the child provider because a parent's child context is
+            meaningful only while the parent role is the active one. */}
+        <ActiveRoleProvider>
+          {/* §4.3: the active child is per-session client state, and every
+              request carries it as a header. It wraps the app because the
+              header renders the switcher on every page. */}
+          <ActiveChildProvider>
+            <App />
+          </ActiveChildProvider>
+        </ActiveRoleProvider>
       </SessionProvider>
     </StrictMode>,
   );

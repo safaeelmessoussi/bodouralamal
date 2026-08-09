@@ -644,6 +644,15 @@
 - [x] **Two silently-dropped fields fixed on the update path**: `title` and — since R55 — `effective_until`. The regression tests read the ROW, never the status code
 - [ ] The remaining fixture titles from before the seed fix still read `[تجريبي] حدث …`; they are data and were not rewritten. Say the word and they can be cleaned
 
+### Role switching (§2.1) — 2026-08-09
+- [x] Active-role context, defaulting to the most privileged role held, persisted and validated against `/me`
+- [x] Switching redirects to that role's home; the back office resolves modules from the active role
+- [x] A portal the active role does not own renders a named state offering the switch, never a blank page
+- [x] A role the person does not hold cannot be selected — the list comes from the server-issued token
+- [x] Trash restore, purge and list made TD-12 fresh: a revoked Super Admin loses them at once
+- [ ] **Server authority does NOT narrow to the active role** — a Super Admin acting as مؤطِّرة still holds Super Admin authority on every endpoint. Making the server honour the active role is a new normative concept; Owner decision required (draft R60)
+- [ ] Roles come from the JWT, so a newly assigned role appears only after re-login. Worth stating on the Users screen
+
 ### R59 — deletion authority across the platform (2026-08-09)
 - [x] **Permanent delete exists**: `DELETE /admin/trash/{id}`, Super Admin only, one transaction, `trash.permanent_delete` audit row retained indefinitely. Cascade children **declared per type**; anything else refuses with `DEPENDENTS_EXIST` naming the constraint
 - [x] Four deliberate deletions now reach the Trash: `Enrollment`, `StudentTeachingGroup`, `LevelSubject`, `SessionContent` — each with a composed label, since a join row has no name

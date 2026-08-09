@@ -38,5 +38,17 @@ export function roleHomePath(roles: readonly string[]): string | null {
   return null;
 }
 
+/**
+ * Where **one** role's portal lives.
+ *
+ * `roleHomePath` answers *"where does this person go"* from their whole role
+ * set; this answers *"where does this ROLE go"*, which is what a switch needs.
+ * `null` for a role with no home declared — the caller decides what to do about
+ * it rather than being sent somewhere that does not exist.
+ */
+export function homeForRole(role: string): string | null {
+  return ROLE_HOMES.find((entry) => entry.role === role)?.path ?? null;
+}
+
 /** Every path `roleHomePath` can return — the set the router must serve. */
 export const ROLE_HOME_PATHS: readonly string[] = [...new Set(ROLE_HOMES.map((r) => r.path))];

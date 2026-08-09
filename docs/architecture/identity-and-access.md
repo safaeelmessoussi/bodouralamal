@@ -269,6 +269,57 @@ pointless churn.
 
 ---
 
+## Active role
+
+A person may hold several roles at once (§2.1), and the header carries an
+**account switcher** for choosing between them.
+
+**The active role is a context, not a permission.** It selects which portal,
+navigation and home page the interface presents. It does **not** change what the
+server will accept: §4.2 resolves scope per role from the JWT, which carries
+every role held, so a Super Admin acting as مؤطِّرة still *is* a Super Admin to
+every endpoint. Narrowing server authority to the selected role would be a new
+normative concept and needs its own SRS revision — it is deliberately not
+implied by the switcher.
+
+| Question | Answer |
+|---|---|
+| Where does it live? | `contexts/active-role.tsx`, client-side, mirroring the active-child context |
+| How is it persisted? | `sessionStorage`, **validated against `/me` on every read** |
+| Does switching re-issue a token? | **No.** The token already carries every role; re-issuing would buy nothing and would make switching slow |
+| Can a person select a role they lack? | No. The list comes from `/me`, which is derived from the server-issued token, and `setActiveRole` refuses anything outside it |
+| What happens on switch? | The context changes and the browser navigates to that role's home (`homeForRole`) |
+| A role with no portal? | `/dashboard/parent` and `/dashboard/student` resolve to the **`screen-pending`** state — "not built yet" is a different fact from "does not exist" and gets a different page |
+
+### Why it persists when the active child does not
+
+`ActiveChildProvider` stores nothing deliberately: a stale child would silently
+change *whose data* a page requests after a link is revoked. A role selects a
+portal rather than a person — and switching **navigates**, which in this
+application is a full page load, so an in-memory selection would be destroyed by
+the very navigation it causes. Persistence is validated on every read, which
+gives the same freshness property by a different route.
+
+> **The defect this replaced.** `RoleSwitcher` held its selection in local
+> component state and did nothing with it: picking a role re-labelled the trigger
+> and changed nothing else. The control was documented as *"presentation only"*,
+> and it was not even that. The old tests asserted that the switcher *appeared* —
+> which it did — so nothing failed.
+
+### The Trash is TD-12 fresh
+
+Restore and permanent delete re-read the caller's roles from the database and
+ignore the token (`assertFreshSuperAdmin`). A Super Admin whose role is revoked
+would otherwise go on destroying records irreversibly until their access token
+expired.
+
+Found by probing, not by reading: `/admin/settings` already refused a validly
+signed token claiming `super_admin` for a user who did not hold it, while
+`/admin/trash` answered `200` to the identical request. Same platform, same
+claim, two answers — and the weaker one guarded the deletions. The list read
+takes the same check, because it is the one surface spanning every entity in
+every branch (§5.6).
+
 ## Child context
 
 The safeguarding gate. A parent acting for a minor asserts which child on **every** request.

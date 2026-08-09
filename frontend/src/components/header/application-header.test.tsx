@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
+import { ActiveRoleProvider } from '../../contexts/active-role.js';
 import { ActiveChildProvider } from '../../contexts/active-child.js';
 import { SessionContext } from '../../contexts/session.js';
 import type { Me } from '../../contexts/session.js';
@@ -19,9 +20,14 @@ function render(state: 'anonymous' | 'authenticated', me: Me | null): string {
     <SessionContext.Provider
       value={{ status: state, me, accessToken: null, setAccessToken: () => undefined }}
     >
-      <ActiveChildProvider>
-        <ApplicationHeader />
-      </ActiveChildProvider>
+      {/* The switcher reads the active role from context now — rendering the
+          header without the provider throws, which is the point: a control that
+          reports a role must be given one. */}
+      <ActiveRoleProvider>
+        <ActiveChildProvider>
+          <ApplicationHeader />
+        </ActiveChildProvider>
+      </ActiveRoleProvider>
     </SessionContext.Provider>,
   );
 }

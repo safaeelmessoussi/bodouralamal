@@ -56,6 +56,7 @@ async function clear(): Promise<void> {
   const ids = users.map((u) => u.id);
   await prisma.trash.deleteMany({ where: { OR: [{ deletedById: { in: ids } }] } });
   await prisma.auditLog.deleteMany({ where: { actorUserId: { in: ids } } });
+  await prisma.userBranchRole.deleteMany({ where: { userId: { in: ids } } });
   await prisma.room.deleteMany({ where: { name: { startsWith: TAG } } });
   await prisma.branch.deleteMany({ where: { name: { startsWith: TAG } } });
   await prisma.subject.deleteMany({ where: { name: { startsWith: TAG } } });
@@ -67,6 +68,15 @@ beforeEach(async () => {
   actorUserId = (
     await prisma.user.create({ data: { nameArabic: `${TAG} مديرة`, accountStatus: 'active' } })
   ).id;
+  // **A LIVE role assignment, not just a claim in a synthetic actor.** Restore
+  // and permanent delete are TD-12 high-risk: they re-read the caller's roles
+  // from the database and ignore what the token said, so an actor that exists
+  // only in memory is correctly refused. That is the guard working, and this
+  // fixture has to satisfy it the way a real Super Admin does.
+  const role = await prisma.role.findUnique({ where: { name: 'super_admin' } });
+  await prisma.userBranchRole.create({
+    data: { userId: actorUserId, roleId: role!.id, branchId: null },
+  });
 });
 
 afterAll(async () => {

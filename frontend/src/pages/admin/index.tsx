@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
 import { Icon } from '../../components/ui/icon.js';
 import { ModulePending } from '../../components/portal/nav-item.js';
-import { useSession } from '../../contexts/session.js';
+import { useActiveRole } from '../../contexts/active-role.js';
 import { t } from '../../i18n/index.js';
 import { moduleForPath, visibleModules } from '../../lib/admin-modules.js';
 import { ApprovalsPage } from './approvals.js';
@@ -85,6 +85,7 @@ const SUBJECT_ORG = /^\/admin\/levels\/([^/]+)\/subjects(?:\/([^/]+))?\/?$/;
 const SCHEDULE_SESSIONS = /^\/admin\/schedules\/([^/]+)\/sessions\/?$/;
 
 export function AdminRouter(): ReactNode {
+  const { activeRole } = useActiveRole();
   const scheduleSessions = SCHEDULE_SESSIONS.exec(window.location.pathname);
   if (scheduleSessions) return <ScheduleSessionsPage scheduleId={scheduleSessions[1]!} />;
 
@@ -100,6 +101,22 @@ export function AdminRouter(): ReactNode {
 
   const module = moduleForPath(window.location.pathname);
   if (!module) return <AdminNotFound />;
+
+  // **§2.1 — the portal follows the ACTIVE role, not the role set.** A Super
+  // Admin acting as مؤطِّرة who follows a bookmark into the back office is told
+  // which role the page needs and offered the switch, rather than being shown a
+  // back office they are not currently working in.
+  //
+  // This is presentation. TD-2 is enforced server-side from the JWT, which
+  // carries every role held, so nothing here grants or removes authority — it
+  // decides which surface the person is currently using.
+  if (activeRole !== null && !module.roles.includes(activeRole)) {
+    return (
+      <AdminLayout title={t(module.labelKey)}>
+        <WrongRole module={module} activeRole={activeRole} />
+      </AdminLayout>
+    );
+  }
 
   // One decision, in one place: an unavailable module renders the SAME named
   // state whether the reader arrived from the sidebar, a bookmark or a link.
@@ -167,8 +184,12 @@ export function AdminRouter(): ReactNode {
  * there is something true to count.
  */
 function AdminDashboard(): ReactNode {
-  const { me } = useSession();
-  const modules = visibleModules(me?.roles ?? []).filter((m) => m.section !== null);
+  const { activeRole } = useActiveRole();
+  // The role being worked as, not every role held: a Super Admin acting as
+  // مؤطِّرة is offered the مؤطِّرة's modules.
+  const modules = visibleModules(activeRole === null ? [] : [activeRole]).filter(
+    (m) => m.section !== null,
+  );
 
   return (
     <AdminLayout title={t('admin.dashboard.title')} lede={t('admin.dashboard.lede')}>
@@ -198,6 +219,55 @@ function AdminDashboard(): ReactNode {
  * the person who can act on it — and because "coming soon" tells nobody whether
  * the wait is a day or a milestone.
  */
+
+/**
+ * **You are working as a different role.**
+ *
+ * §14.4 forbids a blank page and forbids an unexplained refusal: this names the
+ * role the page belongs to, names the role currently active, and offers the
+ * switch — so the reader learns what to do rather than that something went
+ * wrong. It is *not* a permission error, and it deliberately does not look like
+ * one: the person may well hold the role, and telling them they may not is the
+ * one thing that would be false.
+ */
+function WrongRole({
+  module,
+  activeRole,
+}: {
+  module: { labelKey: string; roles: readonly string[] };
+  activeRole: string;
+}): ReactNode {
+  const { roles, setActiveRole } = useActiveRole();
+  // Only a role they actually hold is offered — the switcher's own rule.
+  const target = module.roles.find((role) => roles.includes(role));
+
+  return (
+    <div className="admin-empty">
+      <h2>{t('roles.wrongRoleTitle')}</h2>
+      <p>
+        {t('roles.wrongRoleBody')
+          .replace('{module}', t(module.labelKey))
+          .replace('{active}', t(`roles.${activeRole}`))}
+      </p>
+      {target === undefined ? (
+        // They hold no role that opens it. Stated plainly rather than offering
+        // a switch that would do nothing.
+        <p className="muted">{t('roles.wrongRoleNoRole')}</p>
+      ) : (
+        <button
+          type="button"
+          className="btn btn--primary"
+          onClick={() => {
+            setActiveRole(target);
+            window.location.reload();
+          }}
+        >
+          {t('roles.wrongRoleSwitch').replace('{role}', t(`roles.${target}`))}
+        </button>
+      )}
+    </div>
+  );
+}
 
 function AdminNotFound(): ReactNode {
   return (
