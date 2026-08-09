@@ -1231,6 +1231,16 @@ export interface TrashEntryDto {
   /** A stable code when `restorable` is false — rendered, so renaming one
    *  changes what an administrator is told about their own data. */
   restore_blocked_reason: string | null;
+  /**
+   * **R59.1 — whether a Super Admin may destroy it.** Server-decided for the
+   * same reason `restorable` is, and more sharply: this action is irreversible,
+   * so a client guessing would offer a button that destroys what it should not.
+   * Publishing it is a *rendering* aid only — the authority is asserted again on
+   * the endpoint, so a caller who ignores this field is still refused.
+   */
+  purgeable: boolean;
+  /** A stable code when `purgeable` is false. */
+  purge_blocked_reason: string | null;
 }
 
 /**
@@ -1253,6 +1263,8 @@ export function trashEntryDto(row: {
   purgeAfter: Date;
   restorable: boolean;
   restoreBlockedReason: string | null;
+  purgeable: boolean;
+  purgeBlockedReason: string | null;
 }): TrashEntryDto {
   return {
     id: row.id,
@@ -1265,6 +1277,8 @@ export function trashEntryDto(row: {
     purge_after: row.purgeAfter.toISOString(),
     restorable: row.restorable,
     restore_blocked_reason: row.restoreBlockedReason,
+    purgeable: row.purgeable,
+    purge_blocked_reason: row.purgeBlockedReason,
   };
 }
 

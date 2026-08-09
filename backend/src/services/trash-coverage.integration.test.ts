@@ -198,13 +198,83 @@ describe('the structural guard', () => {
       if (tombstones && !snapshots) offenders.push(file);
     }
 
-    expect(offenders, `soft-delete without a Trash snapshot: ${offenders.join(', ')}`).toEqual([
-      // `enrollment.service.ts` is the one deliberate exception, and TD-5 states
-      // it: un-enrolment is a **membership** ending, not a record being deleted.
-      // §4.10 keeps the grades and submissions, the student is untouched, and
-      // there is nothing to restore that re-enrolling does not do properly —
-      // through the roster screen, with its own audit row (`enrollment.delete`).
-      'enrollment.service.ts',
-    ]);
+    // **The `enrollment.service.ts` exemption was removed by R59.2**, and the
+    // reasoning it carried is kept here rather than deleted. It read:
+    // *un-enrolment is a membership ending, not a record being deleted; there is
+    // nothing to restore that re-enrolling does not do properly.* That was a
+    // defensible reading of TD-5, which soft-deletes the enrolment row and
+    // leaves every academic record intact.
+    //
+    // The Document Owner has since ruled that **anything soft-deleted by any
+    // role appears in the Trash** — and §7's restore runbook already named
+    // `Enrollment` among the rows a restoration must reinstate, rows it could
+    // not have found. The list is empty now, which is the only state that needs
+    // no defending.
+    expect(offenders, `soft-delete without a Trash snapshot: ${offenders.join(', ')}`).toEqual([]);
+  });
+});
+
+/**
+ * **A deleted row never appears in an ordinary read.**
+ *
+ * The Trash is not a frontend filter: a soft-deleted record has to be absent
+ * from lists, selectors, the calendar, the library and every scope query, and
+ * absent *at the database boundary* rather than dropped on the way out. This
+ * scans every read of a soft-deletable model and requires a `deletedAt`
+ * constraint on it — either inline or in the `where` object built above it.
+ *
+ * Two reads are exempt and each says why. An exemption is a statement about the
+ * code, not a way to quiet the check.
+ */
+const READS_TOMBSTONES_DELIBERATELY: Record<string, string> = {
+  // R59 — reconciling exam staff must SEE tombstoned rows: the unique pair is
+  // not filtered on `deleted_at`, so a returning supervisor is revived rather
+  // than inserted, and an insert would be refused.
+  'exam.service.ts': 'revives tombstoned ExamStaff rows',
+};
+
+describe('a soft-deleted row is excluded at the database boundary', () => {
+  it('constrains deletedAt on every read of a soft-deletable model', () => {
+    const schema = readFileSync(new URL('../../prisma/schema.prisma', import.meta.url), 'utf8');
+    const softDeletable = new Set(
+      [...schema.matchAll(/^model (\w+) \{([\s\S]*?)^\}/gm)]
+        .filter(([, , body]) => body!.includes('deletedAt'))
+        .map(([, name]) => name![0]!.toLowerCase() + name!.slice(1)),
+    );
+
+    const unfiltered: string[] = [];
+    const dir = new URL('.', import.meta.url).pathname;
+
+    for (const file of readdirSync(dir).filter((f) => f.endsWith('.ts') && !f.includes('.test.'))) {
+      if (READS_TOMBSTONES_DELIBERATELY[file]) continue;
+      const source = readFileSync(`${dir}${file}`, 'utf8');
+      const lines = source.split('\n');
+
+      for (const match of source.matchAll(/\b(?:tx|prisma)\.(\w+)\.(findMany|findFirst|count)\(/g)) {
+        if (!softDeletable.has(match[1]!)) continue;
+
+        // The call's own argument block, then the forty lines above it — the
+        // `where` is often a named object, which is idiomatic here and not a gap.
+        const start = match.index! + match[0]!.length - 1;
+        let depth = 0;
+        let end = start;
+        while (end < source.length) {
+          if ('({['.includes(source[end]!)) depth += 1;
+          else if (')}]'.includes(source[end]!)) {
+            depth -= 1;
+            if (depth === 0) break;
+          }
+          end += 1;
+        }
+        if (source.slice(start, end).includes('deletedAt')) continue;
+
+        const lineNo = source.slice(0, match.index).split('\n').length;
+        if (lines.slice(Math.max(0, lineNo - 40), lineNo).join('\n').includes('deletedAt')) continue;
+
+        unfiltered.push(`${file}:${lineNo} ${match[1]}.${match[2]}`);
+      }
+    }
+
+    expect(unfiltered).toEqual([]);
   });
 });

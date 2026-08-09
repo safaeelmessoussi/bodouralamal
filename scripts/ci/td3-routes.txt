@@ -40,6 +40,7 @@ GET /me                                       # TD-3.1, TD-1
 POST /registrations                           # TD-3.2, §4.1b step 5; R49 optional requested_role (hint only, grants nothing)
 GET /admin/trash                              # §7/TD-5/BR-15 (R52) — soft-deleted records; Super Admin only; read-only
 POST /admin/trash/{id}/restore                # §7 (R52) — only where the TD-5 cascade does not arise; refused loudly otherwise
+DELETE /admin/trash/{id}                      # §7 (R59.1) — permanent delete; Super Admin only; declared cascade children; DEPENDENTS_EXIST otherwise
 GET /admin/settings                           # TD-3.11, §5.6 (R42) — Super Admin only
 PUT /admin/settings/{key}                     # TD-3.11 (R42) — allow-listed keys, audited
 GET /admin/approvals                          # TD-3.2, §5.6
@@ -70,6 +71,7 @@ GET /admin/branches/{id}/event-backfill       # §4.4 "listing applicable global
 # ── Official Moroccan Hijri calendar (TD-3.4, Revision 31)
 GET /admin/hijri-calendar                     # TD-3.4 R31, ?year=
 PUT /admin/hijri-calendar/{year}/{month}      # TD-3.4 R31, TD-15
+DELETE /admin/hijri-calendar/{year}/{month}   # §5.7 (R59.5) — withdraw a recorded month; Super Admin only; last month only
 POST /admin/hijri-calendar/{year}/publish     # TD-3.4 R31
 GET /admin/hijri-calendar/{year}/history      # TD-3.4 R31, TD-8
 # (No import route: Revision 32 removed it from the MVP — no machine-readable

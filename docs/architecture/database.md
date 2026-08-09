@@ -363,9 +363,70 @@ Cascade rules are per entity and mostly *prohibitive*:
 | Branch, Room, Category, Level, Group | **Deletion prohibited** while dependents reference them → `409` |
 | User | **Soft delete only.** Anonymize sensitive fields in the live row (full snapshot in Trash), deactivate identities, **revoke every live refresh token in the same transaction**, cascade-remove family links and group assignments. Grades and progress logs are **retained** as historical record |
 | Un-enrolment | Soft-deletes the enrolment row **only**. Never touches grades, submissions, or progress logs — a transferred student keeps their history |
-| Content | Soft delete moves the object to a quarantine prefix pending the 90-day window |
+| Content | Soft delete moves the object to a quarantine prefix pending the 90-day window. A **purge** removes the quarantined object too — a destroyed row beside surviving bytes is an orphan, not a deletion |
+| Hijri month | **Only the last recorded month may be withdrawn** (R59.5). The months are a contiguous sequence §5.7's conversion walks, so a hole would reach a reader as *missing Ministry data* rather than as the deletion that caused it |
+| Exam | Soft delete cascades to `ExamStaff` only, which is why it is the first cascading type that **restore** reinstates (R59.3) |
 
-Hard deletion happens only through the quarantine-purge job after 90 days.
+### What gets a Trash entry, and what does not (R59.2)
+
+The rule BR-15 states is *every deletion is soft with a restorable snapshot*. What it did
+not state — and what four deletions shipped without — is the **test for whether a write is
+a deletion at all**:
+
+> A deletion **a person deliberately performed** gets its own Trash entry. Rows removed
+> **as a consequence** of that deletion do not; the parent's snapshot describes them.
+
+So un-enrolling a student, removing a Teaching Group member, unassigning a Subject from a
+Level and unlinking content from a Session each get an entry — every one of them a
+deliberate act that was previously audited and **invisible on the one screen that answers
+*what was deleted and by whom***. Whereas `SessionStaff` reconciliation during a session
+edit and `UserBranchRole` revocation during a role change get none: each is one field of an
+*update* wearing a tombstone, and an entry apiece would fill the screen with rows nobody
+deleted.
+
+`services/trash-coverage.test.ts` enforces this by **scanning the source**, not the
+behaviour. None of the four gaps would have been caught by a functional test, because the
+behaviour under test was the un-enrolment and it worked — what was missing was a second
+write nobody was looking for.
+
+### Restoring children: one timestamp per deletion
+
+Where a restore reinstates declared children (R59.3), it identifies *the rows this deletion
+removed* by comparing their tombstone against **the record's own** `deleted_at`. That works
+only if the deleting service stamps the record and its children from **one** `new Date()`.
+
+`deleteExam` called `new Date()` twice, four milliseconds apart, and wrote the Trash entry
+from a third reading. The restore compared against the entry's timestamp, the staff rows
+fell before it, and **a restored exam came back with nobody supervising it** — a clean `200`,
+a row on every screen, and a silent half-restore of exactly the kind §7 describes. It was
+found by exercising the flow, not by any test that existed.
+
+Two rules follow, and both are cheap:
+
+* **One `now` per deletion**, passed to every statement in it including the snapshot.
+* **The restore keys on the record's tombstone, never the Trash entry's** — the entry is
+  written after the rows it describes, so it is always the later reading.
+
+### Hard deletion
+
+Two paths, and only two:
+
+* **`DELETE /admin/trash/{id}`** (R59.1) — a Super Admin destroying a record deliberately.
+  The children it removes are **declared per entity type** in `PURGEABLE`, never inferred;
+  anything else that references the row is a record in its own right, and the `Restrict`
+  foreign key makes PostgreSQL refuse. *The database is the authority on what still points
+  at a row* — a hand-maintained list of blockers would be a second copy of the schema.
+* **The quarantine-purge job after 90 days** — except that **this job does not exist**
+  (R59.4). `purge_after` is written on every tombstone and nothing has ever read it, so
+  BR-15's window is documented, depended on by two revisions, and not in force.
+
+> **A `RESTRICT` violation is not `P2003`.** `P2003` is *foreign key constraint failed*,
+> PostgreSQL `23503`. A relation declared `onDelete: Restrict` — which is how essentially
+> every relation on this schema is declared — raises **`23001` `restrict_violation`**, and
+> the Prisma 7 driver adapter surfaces it as **`P2039`** with the SQLSTATE buried in
+> `meta.driverAdapterError.cause.code`. Matching only `P2003` therefore lets the raw error
+> escape as a `500` for the single most likely refusal a purge endpoint has. Match the
+> SQLSTATE, not the Prisma code.
 
 ## Connection budget
 

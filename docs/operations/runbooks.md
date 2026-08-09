@@ -49,8 +49,42 @@ The runbook must explicitly capture and reinstate:
 
 The Trash snapshot contains them. The script's job is to put them back.
 
-> The Trash restoration **UI** is post-MVP. The snapshot and the 90-day window are not — they
-> are non-negotiable ([`BR-15`](../reference/business-rules.md#br-15)).
+> The Trash restoration **UI shipped** (R52), and **permanent deletion with it** (R59.1).
+> The snapshot and the 90-day window remain non-negotiable
+> ([`BR-15`](../reference/business-rules.md#br-15)).
+
+### When to use this runbook rather than the screen
+
+The screen handles the types whose reinstatement is **written and tested** — today
+`Branch`, `Category`, `Subject`, `Room`, `Exam` (R59.3) and `HijriMonthStart` (R59.5). It
+refuses everything else loudly, with the reason on the row, because clearing `deleted_at` is
+the easy tenth of the problem and every failure of the other nine is silent.
+
+This runbook is for the refused ones. A `User` is the case it was written for and remains
+the hardest: six relationship types, listed above.
+
+### Permanent deletion, and what it will not do
+
+`DELETE /admin/trash/{id}` (Super Admin only) destroys a record, its **declared** cascade
+children and its tombstone in one transaction, and writes a `trash.permanent_delete` audit
+row that is retained indefinitely — it is deliberately absent from the `audit.purge`
+allowlist, so the record of an irreversible act outlives the audit horizon.
+
+It refuses, rather than cascading, when a live row still references the record
+(`DEPENDENTS_EXIST`, naming the constraint). **Clear the dependants first, deliberately** —
+the refusal is the safeguard, and there is no force flag by design.
+
+Two types have no destruction plan at all:
+
+| Type | Reason | What to do instead |
+|---|---|---|
+| `User` | `ACCOUNTABILITY_RECORD` — a person's row is referenced by `AuditLog` and `Trash` themselves, so destroying it takes the record of who deleted what | The account stays soft-deleted with its fields anonymised. Erasure of a person's data is R54's decision, and it is about anonymisation, not row destruction |
+| `RecurringCourseSchedule` | `CASCADE_CHILDREN` — its Sessions are materialized rows other records reference, so destroying it destroys a timetable's history | Purge the Sessions that block it first, or leave it to BR-15 |
+
+> **BR-15's 90-day window is not enforced by anything.** Revisions 52 and 53 both state that
+> `content.quarantine-purge` (TD-7) closes it. **That job was never built** (R59.4):
+> `purge_after` is written on every tombstone and nothing has ever read it. Until it ships,
+> the only permanent deletion on this platform is the deliberate Super Admin action above.
 
 ---
 

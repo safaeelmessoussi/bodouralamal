@@ -348,6 +348,67 @@
         }
       }
     },
+    "/admin/trash/{id}": {
+      "delete": {
+        "summary": "Permanently delete a soft-deleted record",
+        "description": "**Revision 59.1 — the *further revision* Revision 52 required before this could exist.** Destroys the record, its **declared** cascade children and its Trash entry in ONE transaction, then writes a `trash.permanent_delete` audit row that is retained indefinitely (it is deliberately absent from the `audit.purge` allowlist). **Super Admin only** (TD-2), asserted in the service against live role rows — the `/admin/` prefix is a URL, not a boundary, and a hidden button secures nothing. Revision 52 forbade a manual *delete now* as a bypass of a retention rule; Revision 59 supersedes that because **\"wait ninety days\" is not an answer to a safeguarding erasure request**, and what the rule protects against is *accidental and unaccountable* destruction — which an audited, confirmed, single-role action is not. **BR-15's ninety-day window is unchanged** and remains the default path for everything nobody acts on. **Children are DECLARED per entity type, never inferred**: only rows that exist as part of the record are destroyed (an Event's four scope joins, a Schedule's staffing, an Exam's supervisors). Anything else that references it is a record in its own right, and the `Restrict` foreign key makes PostgreSQL refuse — reported as `DEPENDENTS_EXIST` with the constraint. **An `EducationalContent` purge also removes its quarantined object**, after the transaction commits: a destroyed row beside surviving bytes is an orphan, not a deletion.",
+        "responses": {
+          "204": {
+            "description": "Destroyed. Also the answer when only the tombstone remained (`ALREADY_PURGED` state), because removing it is exactly what was asked."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN — Super Admin only. An Admin, Teacher or Student receives this whether or not a client showed them the action.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an unknown trash entry.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT — DEPENDENTS_EXIST (a live row still references it, with the constraint named), NOT_DELETED (it was restored since, so the tombstone is stale), or NOT_YET_SUPPORTED / ACCOUNTABILITY_RECORD for a type with no destruction plan.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/admin/settings": {
       "get": {
         "summary": "Platform settings",
@@ -1088,6 +1149,75 @@
           },
           "409": {
             "description": "Error envelope (TD-3.8). VERSION_CONFLICT.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Withdraw a recorded Hijri month",
+        "description": "**Revision 59.5.** `HijriMonthStart` was the only entity a Super Admin can create through the platform with **no deletion at all** — the column existed, every read filtered on it, and nothing could ever set it, so a month entered by mistake was permanent. Soft delete with a `Trash` snapshot, like every other deletion (TD-5, BR-15). **Super Admin only**, asserted in the service. **TD-15: `version` is REQUIRED**, as a query parameter rather than a body — withdrawing a month somebody else has just corrected is the identical hazard a correction guards against, and a `DELETE` with a body is refused by proxies. **Only the LAST recorded month may be withdrawn** (`LATER_MONTH_RECORDED`, naming the month that blocks it): the months are a contiguous sequence and §5.7's conversion walks it, so a hole would surface to a reader as *missing Ministry data* rather than as the deletion that caused it. **Publication is not a second obstacle** — §5.7 already treats a correction as returning a month to `draft`, so a withdrawal is the stronger form of something the specification permits; what is refused is the hole, visible or not.",
+        "responses": {
+          "204": {
+            "description": "Withdrawn."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — an invalid year/month, or a missing version.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN — Super Admin only.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND when no such month is recorded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT with LATER_MONTH_RECORDED, or VERSION_CONFLICT (TD-15).",
             "content": {
               "application/json": {
                 "schema": {

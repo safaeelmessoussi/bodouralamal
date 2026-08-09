@@ -4,6 +4,7 @@ import { atMidnightUtc } from '../lib/recurrence.js';
 import * as scope from '../policies/branch-scope.js';
 import { audienceSize, staffsSession } from '../policies/roster-resolution.js';
 import * as audit from '../repositories/audit.repository.js';
+import * as trash from '../repositories/trash.repository.js';
 import { updateWithVersion } from '../repositories/optimistic-lock.js';
 import { protectionReasonsFor, SELECT_PROTECTABLE } from '../policies/session-protection.js';
 import type { Actor } from '../policies/actor.js';
@@ -400,13 +401,30 @@ export async function unlinkContent(
   await prisma.$transaction(async (tx) => {
     const row = await tx.sessionContent.findFirst({
       where: { sessionId, contentId, deletedAt: null },
-      select: { id: true },
     });
     if (!row) throw new AppError('NOT_FOUND', 'content is not linked to this session');
 
     await tx.sessionContent.update({
       where: { id: row.id },
       data: { deletedAt: new Date(), deletedById: actor.userId },
+    });
+    // R59.2 — a Teacher unlinking material from a lesson is a deliberate
+    // deletion. The content itself is untouched; what was removed is the link,
+    // and the link is what the entry describes.
+    await trash.snapshot(tx, {
+      targetEntity: 'SessionContent',
+      targetId: row.id,
+      snapshot: JSON.parse(
+        JSON.stringify({
+          ...row,
+          label:
+            (await tx.educationalContent.findUnique({
+              where: { id: contentId },
+              select: { title: true },
+            }))?.title ?? null,
+        }),
+      ) as object,
+      deletedById: actor.userId,
     });
     await audit.write(tx, {
       actorUserId: actor.userId,

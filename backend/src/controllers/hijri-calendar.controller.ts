@@ -6,6 +6,7 @@ import { AppError } from '../lib/errors.js';
 import { MAX_HIJRI_YEAR, MIN_HIJRI_YEAR, MONTHS_IN_YEAR } from '../lib/hijri.js';
 import { requireActor } from '../middleware/authenticate.js';
 import {
+  deleteMonthStart,
   listYear,
   publishYear,
   recordMonthStart,
@@ -34,6 +35,11 @@ const calendarDate = z
 
 const yearParam = z.coerce.number().int().min(MIN_HIJRI_YEAR).max(MAX_HIJRI_YEAR);
 const monthParam = z.coerce.number().int().min(1).max(MONTHS_IN_YEAR);
+
+/** TD-15 — withdrawing a month somebody else just corrected is the same hazard
+ *  a correction guards against, so the version is REQUIRED here rather than
+ *  optional. `query`, not a body: a DELETE with a body is refused by proxies. */
+const deleteSchema = z.object({ version: z.coerce.number().int().min(0) }).strict();
 
 const recordSchema = z
   .object({
@@ -140,5 +146,24 @@ export function history(prisma: PrismaClient) {
         detail: e.detail,
       })),
     });
+  };
+}
+
+/**
+ * `DELETE /admin/hijri-calendar/{year}/{month}` — withdraws a recorded month
+ * (R59.5). Super Admin only, asserted in the service; soft delete with a Trash
+ * snapshot, and refused when a later month would be left dangling behind a hole.
+ */
+export function deleteMonth(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const year = pathYear(req);
+    const month = monthParam.safeParse(req.params['month']);
+    if (!month.success) throw new AppError('VALIDATION_FAILED', 'invalid hijri month');
+
+    const parsed = deleteSchema.safeParse(req.query);
+    if (!parsed.success) throw new AppError('VALIDATION_FAILED', 'version is required (TD-15)');
+
+    await deleteMonthStart(prisma, actorOf(req), year, month.data, parsed.data.version);
+    res.status(204).end();
   };
 }

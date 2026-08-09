@@ -286,6 +286,7 @@ export async function addMember(
   return prisma.$transaction(async (tx) => {
     const group = await tx.teachingGroup.findFirst({
       where: { id: teachingGroupId, deletedAt: null },
+      // `name` is read for the Trash label (R59.2), not for the membership rule.
       select: { id: true, levelId: true, subjectId: true },
     });
     if (!group) throw new AppError('NOT_FOUND', 'no such teaching group');
@@ -366,7 +367,8 @@ export async function removeMember(
   await prisma.$transaction(async (tx) => {
     const group = await tx.teachingGroup.findFirst({
       where: { id: teachingGroupId, deletedAt: null },
-      select: { id: true, levelId: true, subjectId: true },
+      // `name` is read for the Trash label (R59.2), not for the membership rule.
+      select: { id: true, levelId: true, subjectId: true, name: true },
     });
     if (!group) throw new AppError('NOT_FOUND', 'no such teaching group');
 
@@ -375,7 +377,6 @@ export async function removeMember(
 
     const row = await tx.studentTeachingGroup.findFirst({
       where: { teachingGroupId, studentId, deletedAt: null },
-      select: { id: true },
     });
     if (!row) throw new AppError('NOT_FOUND', 'student is not in this teaching group');
 
@@ -384,6 +385,21 @@ export async function removeMember(
     await tx.studentTeachingGroup.update({
       where: { id: row.id },
       data: { deletedAt: new Date(), deletedById: actor.userId },
+    });
+    // R59.2 — a deliberate removal by an Admin, and one of the six relationship
+    // types §7's runbook must reinstate. It was audited and absent from the
+    // Trash, which is where a restoration would go looking for it.
+    await trash.snapshot(tx, {
+      targetEntity: 'StudentTeachingGroup',
+      targetId: row.id,
+      snapshot: JSON.parse(
+        JSON.stringify({
+          ...row,
+          // A join row has no name of its own — composed, or the entry is a UUID.
+          label: `${(await tx.user.findUnique({ where: { id: studentId }, select: { nameArabic: true } }))?.nameArabic ?? '—'} — ${group.name}`,
+        }),
+      ) as object,
+      deletedById: actor.userId,
     });
     await audit.write(tx, {
       actorUserId: actor.userId,

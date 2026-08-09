@@ -240,11 +240,42 @@ export async function updatePhysicalExam(
     if (input.staff !== undefined) {
       // Replaced, not merged: one call is one decision, and there is no window
       // in which the exam holds half of an intended change.
-      await tx.examStaff.deleteMany({ where: { examId: id } });
+      //
+      // **Soft, not hard** (R59): these rows carry `deleted_at`, and TD-5 means
+      // a row with that column is never destroyed by an ordinary write. It is
+      // also what makes the R59.3 restore correct — a hard delete here would
+      // leave a restored exam unable to say who had been supervising it.
+      // `sessionStaff` and `userBranchRole` reconcile the same way, and the
+      // vocabulary is deliberately theirs rather than a third one.
+      const existingStaff = await tx.examStaff.findMany({ where: { examId: id } });
+      const wanted = new Map(input.staff.map((p) => [p.userId, p.position]));
+
+      for (const row of existingStaff) {
+        const position = wanted.get(row.userId);
+        if (position === undefined) {
+          if (row.deletedAt === null) {
+            await tx.examStaff.update({
+              where: { id: row.id },
+              data: { deletedAt: new Date(), deletedById: actor.userId },
+            });
+          }
+        } else {
+          // Revived rather than re-inserted: `@@unique([examId, userId])` is not
+          // filtered on `deleted_at`, so a tombstoned row still occupies the pair
+          // and an insert would be refused.
+          await tx.examStaff.update({
+            where: { id: row.id },
+            data: { position, deletedAt: null, deletedById: null },
+          });
+        }
+      }
+
       for (const person of input.staff) {
-        await tx.examStaff.create({
-          data: { examId: id, userId: person.userId, position: person.position },
-        });
+        if (!existingStaff.some((row) => row.userId === person.userId)) {
+          await tx.examStaff.create({
+            data: { examId: id, userId: person.userId, position: person.position },
+          });
+        }
       }
     }
 
@@ -274,13 +305,21 @@ export async function deleteExam(prisma: PrismaClient, actor: Actor, id: string)
 
   await prisma.$transaction(async (tx) => {
     const row = await tx.exam.findUnique({ where: { id } });
+    // **ONE timestamp for the whole deletion**, not one per statement.
+    //
+    // Each `new Date()` is a few milliseconds apart, and the restore identifies
+    // *the rows this deletion removed* by comparing their tombstone against the
+    // record's. Two clocks meant the staff were stamped 4 ms before the exam,
+    // fell outside the window, and a restored exam came back with nobody
+    // supervising it — silently, which is the failure §7 describes.
+    const now = new Date();
     await tx.examStaff.updateMany({
       where: { examId: id, deletedAt: null },
-      data: { deletedAt: new Date(), deletedById: actor.userId },
+      data: { deletedAt: now, deletedById: actor.userId },
     });
     await tx.exam.update({
       where: { id },
-      data: { deletedAt: new Date(), deletedById: actor.userId },
+      data: { deletedAt: now, deletedById: actor.userId },
     });
     // TD-5/BR-15: a soft delete without a snapshot is a row nobody can find and
     // nobody can restore — the defect M3b-46 found in Events and Schedules.

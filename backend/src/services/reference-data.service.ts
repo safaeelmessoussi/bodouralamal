@@ -2,6 +2,7 @@ import type { PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
 import * as scope from '../policies/branch-scope.js';
 import * as audit from '../repositories/audit.repository.js';
+import * as trash from '../repositories/trash.repository.js';
 import type { SubjectRef } from './taxonomy.service.js';
 import type { Actor } from '../policies/actor.js';
 
@@ -189,7 +190,6 @@ export async function unassignSubjectFromLevel(
   await prisma.$transaction(async (tx) => {
     const row = await tx.levelSubject.findFirst({
       where: { levelId, subjectId, deletedAt: null },
-      select: { id: true },
     });
     if (!row) throw new AppError('NOT_FOUND', 'subject is not assigned to this level');
 
@@ -204,6 +204,20 @@ export async function unassignSubjectFromLevel(
     await tx.levelSubject.update({
       where: { id: row.id },
       data: { deletedAt: new Date(), deletedById: actor.userId },
+    });
+    // R59.2 — a deliberate Super Admin act with real curriculum consequences:
+    // the pairing gates every Teaching Group and every schedule at that Level,
+    // so its removal belongs on the screen that answers what was deleted.
+    await trash.snapshot(tx, {
+      targetEntity: 'LevelSubject',
+      targetId: row.id,
+      snapshot: JSON.parse(
+        JSON.stringify({
+          ...row,
+          label: `${(await tx.level.findUnique({ where: { id: levelId }, select: { name: true } }))?.name ?? '—'} — ${(await tx.subject.findUnique({ where: { id: subjectId }, select: { name: true } }))?.name ?? '—'}`,
+        }),
+      ) as object,
+      deletedById: actor.userId,
     });
     await audit.write(tx, {
       actorUserId: actor.userId,

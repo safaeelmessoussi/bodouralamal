@@ -20,6 +20,9 @@ const WIRE: TrashEntry = {
   purge_after: '2026-11-03T10:00:00.000Z',
   restorable: true,
   restore_blocked_reason: null,
+  // R59.1 — a second server decision, on the same footing as `restorable`.
+  purgeable: true,
+  purge_blocked_reason: null,
 };
 
 describe('the adapter type matches the wire contract', () => {
@@ -31,6 +34,8 @@ describe('the adapter type matches the wire contract', () => {
       'id',
       'label',
       'purge_after',
+      'purge_blocked_reason',
+      'purgeable',
       'restorable',
       'restore_blocked_reason',
       'target_entity',
@@ -97,5 +102,34 @@ describe('the module is live and Super Admin only', () => {
     // TD-2: the list spans every entity regardless of branch, so a
     // branch-scoped Admin would see other branches' records.
     expect(module?.roles).toEqual(['super_admin']);
+  });
+});
+
+describe('R59.1 — the screen never decides who may destroy a record', () => {
+  it('reads purgeability from the wire rather than from the entity type', () => {
+    // The failure this prevents: a client that decided for itself which types
+    // are safe to destroy would offer an irreversible action the server has not
+    // written a destruction plan for.
+    const blocked: TrashEntry = {
+      ...WIRE,
+      target_entity: 'User',
+      purgeable: false,
+      purge_blocked_reason: 'ACCOUNTABILITY_RECORD',
+    };
+    expect(blocked.purgeable).toBe(false);
+    // And the reason is renderable — a missing action with no explanation is
+    // the thing §14.4 forbids.
+    expect(ar.admin.trash.purgeBlocked).toHaveProperty(blocked.purge_blocked_reason!);
+  });
+
+  it('has Arabic copy for every purge outcome the screen can reach', () => {
+    for (const key of ['purge', 'purgeTitle', 'purgeBody', 'purged', 'purgeFailed', 'dependentsExist']) {
+      expect(ar.admin.trash, key).toHaveProperty(key);
+    }
+    // The confirmation names the record and warns it cannot be undone — an
+    // irreversible action confirmed by a generic "are you sure?" is not
+    // confirmed at all.
+    expect(ar.admin.trash.purgeBody).toContain('{record}');
+    expect(ar.admin.trash.purgeBody).toContain('لا يمكن التراجع');
   });
 });

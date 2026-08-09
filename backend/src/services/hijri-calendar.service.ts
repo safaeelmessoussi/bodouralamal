@@ -4,6 +4,7 @@ import { MAX_HIJRI_YEAR, MIN_HIJRI_YEAR, MONTHS_IN_YEAR, hijriMonthNameArabic } 
 import * as scope from '../policies/branch-scope.js';
 import * as audit from '../repositories/audit.repository.js';
 import { updateWithVersion } from '../repositories/optimistic-lock.js';
+import * as trash from '../repositories/trash.repository.js';
 import type { Actor } from '../policies/actor.js';
 
 /**
@@ -396,4 +397,102 @@ export async function yearHistory(
     actionType: r.actionType,
     detail: r.detail,
   }));
+}
+
+/**
+ * **Withdraws a recorded month** (SRS Revision 59.5).
+ *
+ * `HijriMonthStart` was the only entity a Super Admin could create through the
+ * platform with no deletion at all: the column existed, every read filtered on
+ * it, and nothing could ever set it — a month entered by mistake was permanent.
+ *
+ * ## Only the last recorded month, and that is a domain rule
+ *
+ * The months are a **contiguous sequence** and §5.7's conversion walks it.
+ * Removing one from the middle would leave a span the platform cannot convert,
+ * which surfaces to a reader as *missing Ministry data* rather than as the
+ * deletion that caused it — the wrong story about the wrong thing. This is
+ * `assertOrdered`'s invariant, which the write path already enforces, applied to
+ * removal instead of insertion.
+ *
+ * Publication is deliberately **not** a second obstacle: §5.7 already treats a
+ * correction as returning a month to `draft`, so withdrawal is the stronger form
+ * of something the specification permits. What is refused is the hole, whether or
+ * not anybody could see the month.
+ */
+export async function deleteMonthStart(
+  prisma: PrismaClient,
+  actor: Actor,
+  year: number,
+  month: number,
+  expectedVersion: number,
+): Promise<void> {
+  assertSuperAdmin(actor);
+  assertValidCoordinates(year, month);
+
+  await prisma.$transaction(async (tx) => {
+    const row = await tx.hijriMonthStart.findFirst({
+      where: { hijriYear: year, hijriMonth: month, deletedAt: null },
+    });
+    if (!row) throw new AppError('NOT_FOUND', 'no such recorded month');
+
+    const ordinal = year * MONTHS_IN_YEAR + month;
+    const later = await tx.hijriMonthStart.findFirst({
+      where: {
+        deletedAt: null,
+        OR: [
+          { hijriYear: { gt: year } },
+          { hijriYear: year, hijriMonth: { gt: month } },
+        ],
+      },
+      orderBy: [{ hijriYear: 'asc' }, { hijriMonth: 'asc' }],
+      select: { hijriYear: true, hijriMonth: true },
+    });
+    if (later) {
+      throw new AppError('STATE_CONFLICT', 'a later month is recorded — withdraw that one first', {
+        reason: 'LATER_MONTH_RECORDED',
+        // Named, so the remedy is the next click rather than a search.
+        later_hijri_year: later.hijriYear,
+        later_hijri_month: later.hijriMonth,
+        ordinal,
+      });
+    }
+
+    // TD-15 through the shared helper: the same optimistic lock a correction
+    // uses, because withdrawing a month somebody else just corrected is the
+    // identical hazard.
+    await updateWithVersion<HijriMonthStart>({
+      delegate: tx.hijriMonthStart,
+      id: row.id,
+      expectedVersion,
+      requireNotDeleted: true,
+      data: { deletedAt: new Date(), deletedById: actor.userId },
+    });
+
+    await trash.snapshot(tx, {
+      targetEntity: 'HijriMonthStart',
+      targetId: row.id,
+      snapshot: JSON.parse(
+        JSON.stringify({
+          ...row,
+          // A month has no name column; without this the entry is a UUID.
+          label: `${hijriMonthNameArabic(month)} ${year}`,
+        }),
+      ) as object,
+      deletedById: actor.userId,
+    });
+
+    await audit.write(tx, {
+      actorUserId: actor.userId,
+      actionType: 'hijri.month_start.delete',
+      targetEntity: 'HijriMonthStart',
+      targetId: row.id,
+      detail: {
+        hijri_year: year,
+        hijri_month: month,
+        start_date: row.gregorianStartDate.toISOString().slice(0, 10),
+        status: row.status,
+      },
+    });
+  });
 }

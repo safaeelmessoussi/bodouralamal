@@ -62,6 +62,13 @@ async function withRole(label: string, role: string): Promise<string> {
 }
 
 async function clear(): Promise<void> {
+  const months = await prisma.hijriMonthStart.findMany({
+    where: { hijriYear: { in: [YEAR - 1, YEAR, YEAR + 1] } },
+    select: { id: true },
+  });
+  // R59.5 — a withdrawn month leaves a tombstone, and `deleted_by` is RESTRICT:
+  // the snapshot goes before the person who wrote it (TD-5).
+  await prisma.trash.deleteMany({ where: { targetId: { in: months.map((m) => m.id) } } });
   await prisma.hijriMonthStart.deleteMany({ where: { hijriYear: { in: [YEAR - 1, YEAR, YEAR + 1] } } });
   const users = await prisma.user.findMany({
     where: { nameArabic: { startsWith: TAG } },
@@ -69,6 +76,7 @@ async function clear(): Promise<void> {
   });
   const ids = users.map((u) => u.id);
   await prisma.auditLog.deleteMany({ where: { actorUserId: { in: ids } } });
+  await prisma.trash.deleteMany({ where: { deletedById: { in: ids } } });
   await prisma.userBranchRole.deleteMany({ where: { userId: { in: ids } } });
   await prisma.user.deleteMany({ where: { id: { in: ids } } });
 }
@@ -244,5 +252,98 @@ describe('GET /admin/hijri-calendar/{year}/history', () => {
     expect(latest.action_type).toBe('hijri.month_start.record');
     expect(latest.detail['previous_start_date']).toBe('2026-06-17');
     expect(latest.detail['new_start_date']).toBe('2026-06-18');
+  });
+});
+
+/**
+ * Withdrawing a recorded month (SRS Revision 59.5).
+ *
+ * `HijriMonthStart` was the only entity a Super Admin can create through the
+ * platform with **no deletion at all**. Everything here reads the month back
+ * rather than trusting a status code: the failure this guards against is a `204`
+ * that changed nothing, which this project has shipped twice.
+ */
+describe('DELETE /admin/hijri-calendar/{year}/{month}', () => {
+  const monthsOf = async (): Promise<Row[]> =>
+    (await call('GET', `/admin/hijri-calendar?year=${YEAR}`, superToken)).body.data!;
+
+  it('withdraws the last recorded month, and the month reads as unrecorded after', async () => {
+    await recordMonth(1, '2026-06-17');
+    const before = (await monthsOf())[0]!;
+    expect(before.gregorian_start_date).toBe('2026-06-17');
+
+    const res = await call(
+      'DELETE',
+      `/admin/hijri-calendar/${YEAR}/1?version=${before.version}`,
+      superToken,
+    );
+    expect(res.status).toBe(204);
+
+    // The ROW, not the status code.
+    const after = (await monthsOf())[0]!;
+    expect(after.gregorian_start_date).toBeNull();
+    expect(after.status).toBeNull();
+  });
+
+  it('leaves a Trash entry a Super Admin can find, labelled in Arabic', async () => {
+    await recordMonth(1, '2026-06-17');
+    const version = (await monthsOf())[0]!.version;
+    await call('DELETE', `/admin/hijri-calendar/${YEAR}/1?version=${version}`, superToken);
+
+    const trash = await call('GET', '/admin/trash?entity=HijriMonthStart&page_size=100', superToken);
+    const entry = (trash.body as unknown as { data: Record<string, unknown>[] }).data.find(
+      (r) => String(r['label']).includes(String(YEAR)),
+    );
+    expect(entry, 'the withdrawal is invisible in the Trash').toBeDefined();
+    // A month has no name column — the label is composed, or the row is a UUID.
+    expect(String(entry!['label'])).toContain('محرم');
+    // R59.5 — nothing cascades, so both actions are offered.
+    expect(entry!['restorable']).toBe(true);
+    expect(entry!['purgeable']).toBe(true);
+  });
+
+  it('REFUSES to punch a hole in the run, and names the month that blocks it', async () => {
+    await recordMonth(1, '2026-06-17');
+    await recordMonth(2, '2026-07-16');
+    const first = (await monthsOf())[0]!;
+
+    const res = await call(
+      'DELETE',
+      `/admin/hijri-calendar/${YEAR}/1?version=${first.version}`,
+      superToken,
+    );
+
+    expect(res.status).toBe(409);
+    expect(res.body.error?.details?.['reason']).toBe('LATER_MONTH_RECORDED');
+    expect(res.body.error?.details?.['later_hijri_month']).toBe(2);
+    // And it really did not happen.
+    expect((await monthsOf())[0]!.gregorian_start_date).toBe('2026-06-17');
+  });
+
+  it('requires the TD-15 version, and refuses a stale one', async () => {
+    await recordMonth(1, '2026-06-17');
+    const version = (await monthsOf())[0]!.version!;
+
+    expect((await call('DELETE', `/admin/hijri-calendar/${YEAR}/1`, superToken)).status).toBe(400);
+    const stale = await call(
+      'DELETE',
+      `/admin/hijri-calendar/${YEAR}/1?version=${version + 1}`,
+      superToken,
+    );
+    expect(stale.status).toBe(409);
+    expect((await monthsOf())[0]!.gregorian_start_date).toBe('2026-06-17');
+  });
+
+  it('refuses an Admin and an anonymous caller', async () => {
+    await recordMonth(1, '2026-06-17');
+    const version = (await monthsOf())[0]!.version;
+
+    expect(
+      (await call('DELETE', `/admin/hijri-calendar/${YEAR}/1?version=${version}`, adminToken)).status,
+    ).toBe(403);
+    expect(
+      (await call('DELETE', `/admin/hijri-calendar/${YEAR}/1?version=${version}`)).status,
+    ).toBe(401);
+    expect((await monthsOf())[0]!.gregorian_start_date).toBe('2026-06-17');
   });
 });

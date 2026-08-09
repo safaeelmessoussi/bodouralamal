@@ -85,6 +85,7 @@ async function makeUser(label: string): Promise<string> {
 }
 
 let superAdmin: string;
+let adminToken: string;
 let parentToken: string;
 let branchA: string;
 let branchB: string;
@@ -193,6 +194,7 @@ beforeAll(async () => {
   supervisorId = await makeUser('مؤطرة');
   assistantId = await makeUser('مساعدة');
   superAdmin = bearer(await makeUser('مديرة عامة'), [{ role: 'super_admin', branches: null }]);
+  adminToken = bearer(await makeUser('مديرة فرع'), [{ role: 'admin', branches: null }]);
   parentToken = bearer(await makeUser('والدة'), [{ role: 'parent', branches: null }]);
 });
 
@@ -484,5 +486,45 @@ describe('GET /calendar', () => {
     );
     const rows = (inside.body.data ?? []) as Record<string, unknown>[];
     expect(rows.some((r) => r['id'] === id)).toBe(true);
+  });
+});
+
+describe('an exam is restorable, and comes back whole (R59.3)', () => {
+  it('reinstates the supervising staff removed with it', async () => {
+    const id = await createExam();
+    const before = await fetchExam(id);
+    expect((before['staff'] as unknown[]).length).toBe(2);
+
+    expect((await call('DELETE', `/exams/${id}`, superAdmin)).status).toBe(204);
+
+    const trash = await call('GET', '/admin/trash?entity=Exam&page_size=100', superAdmin);
+    const entry = (trash.body.data ?? []).find((r) => r['target_id'] === id);
+    expect(entry, 'the exam is missing from the Trash').toBeDefined();
+    // R59.3 moved it out of NOT_YET_SUPPORTED, and the server says so per row.
+    expect(entry!['restorable']).toBe(true);
+
+    expect((await call('POST', `/admin/trash/${entry!['id']}/restore`, superAdmin)).status).toBe(200);
+
+    const after = await fetchExam(id);
+    // **The assertion this test exists for.** The exam itself came back on the
+    // first attempt; the staff did not, because the child rows were tombstoned a
+    // few milliseconds before the Trash entry and fell outside the window. A
+    // restored exam with nobody supervising it is precisely the half-restore §7
+    // warns about, and it is invisible unless something reads the staff back.
+    expect(after['staff']).toEqual(before['staff']);
+  });
+
+  it('refuses an Admin restoring or destroying it — the Trash is Super Admin only', async () => {
+    const id = await createExam();
+    await call('DELETE', `/exams/${id}`, superAdmin);
+    const trash = await call('GET', '/admin/trash?entity=Exam&page_size=100', superAdmin);
+    const entry = (trash.body.data ?? []).find((r) => r['target_id'] === id)!;
+
+    // The exam's own DELETE is an Admin capability; the Trash's verbs are not.
+    expect((await call('POST', `/admin/trash/${entry['id']}/restore`, adminToken)).status).toBe(403);
+    expect((await call('DELETE', `/admin/trash/${entry['id']}`, adminToken)).status).toBe(403);
+
+    const row = await prisma.exam.findUnique({ where: { id } });
+    expect(row?.deletedAt).not.toBeNull();
   });
 });

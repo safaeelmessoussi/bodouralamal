@@ -41,9 +41,44 @@ import type { Actor } from '../policies/actor.js';
  */
 /** The delegate names on a transaction client — `keyof PrismaClient` would
  *  include `$connect` and friends, which are not models. */
-type ModelName = 'branch' | 'category' | 'subject' | 'room';
+type ModelName = 'branch' | 'category' | 'subject' | 'room' | 'exam' | 'hijriMonthStart';
 
-const RESTORABLE: Record<string, { model: ModelName; parent?: { field: string; model: ModelName } }> = {
+/** Delegates a purge plan may destroy. Separate from `ModelName` because the
+ *  restorable set and the purgeable set are different questions. */
+type PurgeModel =
+  | ModelName
+  | 'event'
+  | 'recurringCourseSchedule'
+  | 'session'
+  | 'educationalContent'
+  | 'administrativeGroup'
+  | 'teachingGroup'
+  | 'level'
+  | 'enrollment'
+  | 'studentTeachingGroup'
+  | 'levelSubject'
+  | 'sessionContent'
+  | 'familyLink'
+  | 'examStaff'
+  | 'courseScheduleStaff'
+  | 'sessionStaff'
+  | 'eventBranch'
+  | 'eventCategory'
+  | 'eventLevel'
+  | 'eventAdministrativeGroup'
+  | 'levelSurah'
+  | 'hijriMonthStart';
+
+const RESTORABLE: Record<
+  string,
+  {
+    model: ModelName;
+    parent?: { field: string; model: ModelName };
+    /** Rows soft-deleted WITH the record, un-deleted with it. Only where the
+     *  reinstatement is a single well-defined statement (R59.3). */
+    children?: { model: PurgeModel; fk: string }[];
+  }
+> = {
   // No parent: nothing above them can be missing.
   Branch: { model: 'branch' },
   Category: { model: 'category' },
@@ -51,6 +86,20 @@ const RESTORABLE: Record<string, { model: ModelName; parent?: { field: string; m
   // A Room belongs to a Branch, and restoring one into a deleted Branch would
   // produce a room nobody can reach — see `restoreEntry`.
   Room: { model: 'room', parent: { field: 'branchId', model: 'branch' } },
+  /**
+   * **R59.3 — the first CASCADING type to join the set**, and it qualifies for
+   * the reason the standard has always named: its reinstatement is *written and
+   * tested*, not assumed. Deleting an exam soft-deletes exactly one child table,
+   * `ExamStaff`, and bringing those rows back is one statement — unlike a `User`,
+   * whose six relationship types are the hazard §7 describes.
+   */
+  Exam: { model: 'exam', children: [{ model: 'examStaff', fk: 'examId' }] },
+  /**
+   * R59.5 — nothing cascades, so restoration is the tombstone and nothing else.
+   * The withdrawal rule means the run is contiguous when it is put back: only
+   * the last month can be withdrawn, so restoring it appends rather than fills.
+   */
+  HijriMonthStart: { model: 'hijriMonthStart' },
 };
 
 /**
@@ -79,6 +128,118 @@ const BLOCKED_REASON: Record<string, string> = {
   EducationalContent: 'CASCADE_RELATIONSHIPS',
 };
 
+/**
+ * **What destroying a record actually removes** (R59.1).
+ *
+ * A purge is irreversible, so the plan is **declared per entity type rather than
+ * inferred**, on exactly the reasoning `RESTORABLE` uses above: a generic
+ * "delete the row and let the database sort it out" would either fail on a
+ * foreign key nobody anticipated, or — worse, if any relation were ever
+ * `Cascade` — silently take rows the entry does not describe.
+ *
+ * ## Owned children versus independent referrers
+ *
+ * Every plan below lists only the rows that **exist as part of** the record and
+ * were removed with it: an Event's four scope joins, a Schedule's staffing and
+ * its Sessions, an Exam's supervisors. They have no life of their own, and a
+ * purge that left them would leave rows pointing at nothing.
+ *
+ * Everything else that references the record is a **record in its own right**,
+ * and the purge does not touch it. It does not need to enumerate them either:
+ * the foreign keys are `Restrict`, so PostgreSQL refuses, and `purgeEntry`
+ * turns that refusal into `DEPENDENTS_EXIST`. **The database is the authority on
+ * what still points at a row** — a hand-maintained list of blockers would be a
+ * second copy of the schema, and it would drift.
+ *
+ * ## Why `User` has no plan, and is not an oversight
+ *
+ * A person's row is referenced by `AuditLog` and `Trash` themselves. Destroying
+ * it would take the accountability record BR-15 exists to preserve — *who
+ * deleted what, and when* — which is the one thing a safeguarding platform may
+ * not lose. Account deletion needs its own decision about anonymisation versus
+ * destruction, and that decision is R54's, not this one's.
+ */
+const PURGEABLE: Record<string, { model: PurgeModel; children?: { model: PurgeModel; fk: string }[] }> = {
+  // No owned children: a Branch's rooms, groups and schedules are all records of
+  // their own, so a Branch with any of them left is refused rather than emptied.
+  Branch: { model: 'branch', children: [{ model: 'eventBranch', fk: 'branchId' }] },
+  Category: { model: 'category', children: [{ model: 'eventCategory', fk: 'categoryId' }] },
+  Subject: { model: 'subject' },
+  Room: { model: 'room' },
+
+  // The Level's curriculum mapping and calendar scope join go with it; its
+  // groups, schedules and enrolments are records of their own and block.
+  Level: {
+    model: 'level',
+    children: [
+      { model: 'levelSurah', fk: 'levelId' },
+      { model: 'eventLevel', fk: 'levelId' },
+    ],
+  },
+  AdministrativeGroup: {
+    model: 'administrativeGroup',
+    children: [{ model: 'eventAdministrativeGroup', fk: 'administrativeGroupId' }],
+  },
+  // Its members ARE the group (§4.4c) — a split with nobody in it is not a
+  // record somebody would want kept.
+  TeachingGroup: {
+    model: 'teachingGroup',
+    children: [{ model: 'studentTeachingGroup', fk: 'teachingGroupId' }],
+  },
+
+  // An Event IS its audience: the four scope joins carry no information apart
+  // from the event they scope.
+  Event: {
+    model: 'event',
+    children: [
+      { model: 'eventBranch', fk: 'eventId' },
+      { model: 'eventCategory', fk: 'eventId' },
+      { model: 'eventLevel', fk: 'eventId' },
+      { model: 'eventAdministrativeGroup', fk: 'eventId' },
+    ],
+  },
+
+  // A Session's staffing and content links belong to the occurrence. The
+  // Sessions themselves belong to the schedule that materialized them (TD-4.6c).
+  Session: {
+    model: 'session',
+    children: [
+      { model: 'sessionStaff', fk: 'sessionId' },
+      { model: 'sessionContent', fk: 'sessionId' },
+    ],
+  },
+
+  // R58 — supervisors belong to the sitting. A `Grade` or a submission against
+  // the exam is academic record and blocks the purge, which is correct: those
+  // outlive the arrangements, exactly as §4.6 says.
+  Exam: { model: 'exam', children: [{ model: 'examStaff', fk: 'examId' }] },
+
+  // The link rows belong to the content; the bytes are handled separately by the
+  // caller, because they live outside the transaction (R59.1).
+  EducationalContent: {
+    model: 'educationalContent',
+    children: [{ model: 'sessionContent', fk: 'educationalContentId' }],
+  },
+
+  // Join rows with nothing beneath them.
+  HijriMonthStart: { model: 'hijriMonthStart' },
+  Enrollment: { model: 'enrollment' },
+  StudentTeachingGroup: { model: 'studentTeachingGroup' },
+  LevelSubject: { model: 'levelSubject' },
+  SessionContent: { model: 'sessionContent' },
+  FamilyLink: { model: 'familyLink' },
+};
+
+/** Why a type cannot be purged. Stable codes: a screen renders them. */
+const PURGE_BLOCKED_REASON: Record<string, string> = {
+  // Destroying a person takes the audit trail that says what they did — the one
+  // record a safeguarding platform may not lose. R54's decision, not this one's.
+  User: 'ACCOUNTABILITY_RECORD',
+  // Its Sessions are materialized rows other records reference; destroying a
+  // schedule is destroying a timetable's history, which needs its own decision.
+  RecurringCourseSchedule: 'CASCADE_CHILDREN',
+};
+
 /** TD-2: the Trash is Super Admin only. It exposes every entity in the platform
  *  regardless of branch, so a branch-scoped Admin would see other branches'
  *  records — which no other surface allows. */
@@ -104,6 +265,14 @@ export interface TrashRow {
   restorable: boolean;
   /** `null` when restorable; otherwise a stable code saying why not. */
   restoreBlockedReason: string | null;
+  /**
+   * R59.1 — whether a Super Admin may destroy it. Decided by the SERVER for the
+   * same reason `restorable` is: a client cannot know which destructions are
+   * written, and one that guessed would offer an irreversible button.
+   */
+  purgeable: boolean;
+  /** `null` when purgeable; otherwise a stable code saying why not. */
+  purgeBlockedReason: string | null;
 }
 
 export interface TrashFilters extends PageParams {
@@ -167,6 +336,7 @@ export async function listTrash(
 
   const mapped = rows.map((row) => {
     const restorable = RESTORABLE[row.targetEntity] !== undefined;
+    const purgeable = PURGEABLE[row.targetEntity] !== undefined;
     return {
       id: row.id,
       targetEntity: row.targetEntity,
@@ -180,6 +350,10 @@ export async function listTrash(
       restoreBlockedReason: restorable
         ? null
         : (BLOCKED_REASON[row.targetEntity] ?? 'NOT_YET_SUPPORTED'),
+      purgeable,
+      purgeBlockedReason: purgeable
+        ? null
+        : (PURGE_BLOCKED_REASON[row.targetEntity] ?? 'NOT_YET_SUPPORTED'),
     };
   });
 
@@ -269,6 +443,31 @@ export async function restoreEntry(
       where: { id: entry.targetId },
       data: { deletedAt: null, deletedById: null },
     });
+
+    // **The children come back with it, or the restore is the half-restore §7
+    // warns about** (R59.3). Only declared reinstatements run: a type whose
+    // cascade is not written stays out of `RESTORABLE` entirely rather than
+    // being restored partially here.
+    // **The record's OWN tombstone is the reference, not the Trash entry's.**
+    // The service stamps the record and its children from one `new Date()`
+    // inside the transaction; the Trash row is written a few milliseconds later
+    // from a different clock reading. Comparing against the entry therefore
+    // excluded the very children it was meant to include — measured, not
+    // supposed: the staff were 4 ms early and a restored exam came back with
+    // nobody supervising it.
+    const deletedAt = row['deletedAt'] as Date;
+    for (const child of plan.children ?? []) {
+      const childDelegate = tx[child.model] as unknown as {
+        updateMany: (a: unknown) => Promise<{ count: number }>;
+      };
+      await childDelegate.updateMany({
+        // Scoped to the rows removed BY this deletion: a supervisor taken off
+        // the exam a week earlier stays off it, because that was a different
+        // decision by a different person.
+        where: { [child.fk]: entry.targetId, deletedAt: { gte: deletedAt } },
+        data: { deletedAt: null, deletedById: null },
+      });
+    }
     // The tombstone goes with the restoration: the record is no longer deleted,
     // so leaving it listed would make the Trash disagree with the platform. The
     // audit row below is what keeps the event answerable afterwards.
@@ -287,4 +486,177 @@ export async function restoreEntry(
 
     return { targetEntity: entry.targetEntity, targetId: entry.targetId };
   });
+}
+
+/**
+ * **Destroys a soft-deleted record permanently** (SRS Revision 59.1).
+ *
+ * Super Admin only, asserted here against the actor's live role scopes — the
+ * `/admin/` prefix is not the boundary (TD-2), and a client that hides a button
+ * has secured nothing.
+ *
+ * ## Why this exists at all
+ *
+ * Revision 52 forbade it: *a manual "delete now" would bypass a retention rule
+ * that exists for legal and safeguarding reasons*. Revision 59 supersedes that
+ * for one reason — **"wait ninety days" is not an answer to a safeguarding
+ * erasure request**. What the retention rule protects against is *accidental and
+ * unaccountable* destruction, and an audited, confirmed, Super-Admin-only action
+ * is neither. BR-15's window is unchanged and remains the default path for
+ * everything nobody acts on.
+ *
+ * ## It is complete or it does not happen
+ *
+ * Children, then the record, then the tombstone, then the audit row — one
+ * transaction. A partial destruction is the single outcome that would leave the
+ * platform unable to say what was removed, which is worse than either extreme.
+ *
+ * ## The database decides what still depends on it
+ *
+ * Every foreign key into these tables is `Restrict`, so a live referrer makes
+ * PostgreSQL refuse and that refusal becomes `DEPENDENTS_EXIST`. Enumerating
+ * blockers in TypeScript would be a second copy of the schema, and the copy is
+ * the one that drifts.
+ */
+export async function purgeEntry(
+  prisma: PrismaClient,
+  actor: Actor,
+  id: string,
+): Promise<{ targetEntity: string; targetId: string; alreadyPurged: boolean }> {
+  assertSuperAdmin(actor);
+
+  const entry = await prisma.trash.findUnique({ where: { id } });
+  if (!entry) throw new AppError('NOT_FOUND', 'no such trash entry');
+
+  const plan = PURGEABLE[entry.targetEntity];
+  if (!plan) {
+    throw new AppError('STATE_CONFLICT', 'destroying this entity type is not supported', {
+      reason: PURGE_BLOCKED_REASON[entry.targetEntity] ?? 'NOT_YET_SUPPORTED',
+      target_entity: entry.targetEntity,
+    });
+  }
+
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const delegate = tx[plan.model] as unknown as {
+        findUnique: (a: unknown) => Promise<Record<string, unknown> | null>;
+        delete: (a: unknown) => Promise<unknown>;
+      };
+
+      const row = await delegate.findUnique({ where: { id: entry.targetId } });
+
+      // **The record is already gone and only the tombstone remains.** Removing
+      // the entry is exactly what the caller asked for, so it succeeds and says
+      // which of the two happened rather than raising over a state that is not
+      // an error.
+      if (!row) {
+        await tx.trash.delete({ where: { id } });
+        await audit.write(tx, {
+          actorUserId: actor.userId,
+          actionType: 'trash.permanent_delete',
+          targetEntity: entry.targetEntity,
+          targetId: entry.targetId,
+          detail: { already_purged: true, deleted_at: entry.deletedAt.toISOString() },
+        });
+        return { targetEntity: entry.targetEntity, targetId: entry.targetId, alreadyPurged: true };
+      }
+
+      // **A live record is never destroyed through the Trash.** Somebody
+      // restored it since, and the tombstone is stale — destroying it now would
+      // remove a record in active use with no deletion behind it.
+      if (row['deletedAt'] === null) {
+        throw new AppError('STATE_CONFLICT', 'that record is not deleted', { reason: 'NOT_DELETED' });
+      }
+
+      for (const child of plan.children ?? []) {
+        const childDelegate = tx[child.model] as unknown as {
+          deleteMany: (a: unknown) => Promise<{ count: number }>;
+        };
+        await childDelegate.deleteMany({ where: { [child.fk]: entry.targetId } });
+      }
+
+      await delegate.delete({ where: { id: entry.targetId } });
+      await tx.trash.delete({ where: { id } });
+
+      // Retained indefinitely: `trash.permanent_delete` is deliberately absent
+      // from `PURGEABLE_ACTION_TYPES`, so the record of an irreversible act
+      // outlives the audit-purge horizon.
+      await audit.write(tx, {
+        actorUserId: actor.userId,
+        actionType: 'trash.permanent_delete',
+        targetEntity: entry.targetEntity,
+        targetId: entry.targetId,
+        detail: {
+          already_purged: false,
+          deleted_at: entry.deletedAt.toISOString(),
+          deleted_by: entry.deletedById,
+          label: labelOf(entry.snapshot),
+        },
+      });
+
+      return { targetEntity: entry.targetEntity, targetId: entry.targetId, alreadyPurged: false };
+    });
+  } catch (error) {
+    // P2003: a foreign key still points at the row. That is the answer, not a
+    // failure — a record in use is not destroyed, and the caller is told which
+    // constraint held it.
+    if (isForeignKeyViolation(error)) {
+      throw new AppError('STATE_CONFLICT', 'something still references this record', {
+        reason: 'DEPENDENTS_EXIST',
+        target_entity: entry.targetEntity,
+        constraint: constraintOf(error),
+      });
+    }
+    throw error;
+  }
+}
+
+/**
+ * **A `RESTRICT` violation does not arrive as `P2003`.**
+ *
+ * Measured rather than assumed, and the assumption was wrong. `P2003` is
+ * Prisma's *foreign key constraint failed* — PostgreSQL `23503`. A column
+ * declared `onDelete: Restrict`, which is how every relation on this schema is
+ * declared, raises **`23001` `restrict_violation`** instead, and the driver
+ * adapter surfaces it as **`P2039`** with the SQLSTATE buried in a nested
+ * `driverAdapterError.cause`.
+ *
+ * Matching only `P2003` therefore let the raw Prisma error escape to the client
+ * as a 500 for the single most likely refusal this endpoint has. Both codes are
+ * accepted, and the SQLSTATE is what is actually checked.
+ */
+const FK_SQLSTATES = new Set(['23001', '23503']);
+
+function isForeignKeyViolation(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  const code = (error as { code?: unknown }).code;
+  if (code === 'P2003') return true;
+  return FK_SQLSTATES.has(sqlStateOf(error) ?? '');
+}
+
+function sqlStateOf(error: unknown): string | null {
+  const cause = (error as { meta?: { driverAdapterError?: { cause?: { code?: unknown } } } }).meta
+    ?.driverAdapterError?.cause;
+  return typeof cause?.code === 'string' ? cause.code : null;
+}
+
+/** The constraint that held the row — the useful half of the message, so an
+ *  administrator learns WHICH relationship is in the way. */
+function constraintOf(error: unknown): string | null {
+  const meta = (error as {
+    meta?: {
+      field_name?: unknown;
+      constraint?: unknown;
+      driverAdapterError?: { cause?: { message?: unknown } };
+    };
+  }).meta;
+
+  for (const value of [meta?.constraint, meta?.field_name]) {
+    if (typeof value === 'string') return value;
+  }
+  const message = meta?.driverAdapterError?.cause?.message;
+  if (typeof message === 'string') {
+    return /foreign key constraint "([^"]+)"/.exec(message)?.[1] ?? null;
+  }
+  return null;
 }

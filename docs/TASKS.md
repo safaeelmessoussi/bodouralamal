@@ -644,6 +644,19 @@
 - [x] **Two silently-dropped fields fixed on the update path**: `title` and — since R55 — `effective_until`. The regression tests read the ROW, never the status code
 - [ ] The remaining fixture titles from before the seed fix still read `[تجريبي] حدث …`; they are data and were not rewritten. Say the word and they can be cleaned
 
+### R59 — deletion authority across the platform (2026-08-09)
+- [x] **Permanent delete exists**: `DELETE /admin/trash/{id}`, Super Admin only, one transaction, `trash.permanent_delete` audit row retained indefinitely. Cascade children **declared per type**; anything else refuses with `DEPENDENTS_EXIST` naming the constraint
+- [x] Four deliberate deletions now reach the Trash: `Enrollment`, `StudentTeachingGroup`, `LevelSubject`, `SessionContent` — each with a composed label, since a join row has no name
+- [x] `HijriMonthStart` gains a deletion (R59.5) — it was the only Super-Admin-creatable entity with none. Last month only, TD-15 versioned
+- [x] Exam staff replacement made a **soft** delete + revive, matching `SessionStaff`/`UserBranchRole` — it was hard-deleting rows that carry `deleted_at`
+- [x] `Exam` and `HijriMonthStart` join the **restorable** set; restore reinstates declared children
+- [x] Server-side authority proven against crafted requests from admin/teacher/student/parent, for read, restore and purge
+- [x] Structural guards: every soft-deleting service writes a snapshot; every read of a soft-deletable model filters `deletedAt` — folded into the guard that already existed rather than shipped beside it
+- [x] Fixed a silent half-restore: one timestamp per deletion, and the restore keys on the record's own tombstone rather than the Trash entry's
+- [ ] **A branch created after Levels exist cannot be deleted** — TD-4.6d backfills `المجموعة 1` per Level, and a Level must keep its last group (`LAST_GROUP_IN_LEVEL`). Pre-existing interaction between two rules, not introduced here; recorded for the Owner
+- [ ] **`content.quarantine-purge` was never built** (R59.4) — BR-15's 90-day window is documented, depended on by two revisions, and not in force. Quarantine is currently permanent storage. Owner decision: switch on automatic destruction, or leave purging manual
+- [ ] `User` and `RecurringCourseSchedule` are not purgeable — `ACCOUNTABILITY_RECORD` and `CASCADE_CHILDREN`. The first is R54's decision and is about anonymisation, not row destruction
+
 ### R58 — physical exam scheduling (2026-08-09)
 - [x] `Exam.mode` discriminator; `physical` carries date, wall-clock window, branch, room, optional group and supervising staff. Migration + boot-time CHECK ("all four place columns or none", so one legacy row survives without inventing a room)
 - [x] `POST/GET/PATCH/DELETE /exams` — TD-15 versioning, TD-5 soft delete with a Trash snapshot, identity fields **refused** on edit rather than dropped

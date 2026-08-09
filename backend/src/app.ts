@@ -134,11 +134,18 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
   // re-asserts the caller's live status against the database per request.
   // Platform settings (TD-3.11, §5.6, Revision 42). Super Admin only, asserted
   // in the service against live rows — the `/admin/` prefix is not the boundary.
-  // §7/TD-5/BR-15 (R52) — soft-deleted records. Super Admin only, asserted in
-  // the service. No permanent-delete route: BR-15's window is enforced by the
-  // purge job, and a manual override is its own retention decision.
+  // Created before the Trash routes because a permanent delete of content must
+  // reap its object as well as its row (R59.1) — the upload routes below use the
+  // same clients.
+  const storage = createStorageClients(config);
+
+  // §7/TD-5/BR-15 (R52, R59) — soft-deleted records. Super Admin only, asserted
+  // in the SERVICE against live role rows: the `/admin/` prefix is a URL, not a
+  // boundary, and both write verbs here are irreversible or nearly so.
   guarded.get('/admin/trash', trash.list(prisma));
   guarded.post('/admin/trash/:id/restore', trash.restore(prisma));
+  // R59.1 — the permanent delete Revision 52 forbade until a revision existed.
+  guarded.delete('/admin/trash/:id', trash.purge(prisma, storage));
 
   guarded.get('/admin/settings', settings.list(prisma));
   guarded.put('/admin/settings/:key', settings.update(prisma));
@@ -158,6 +165,8 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
   guarded.get('/admin/hijri-calendar', hijri.list(prisma));
   guarded.put('/admin/hijri-calendar/:year/:month', hijri.recordMonth(prisma));
   guarded.post('/admin/hijri-calendar/:year/publish', hijri.publish(prisma));
+  // R59.5 — the one Super-Admin-creatable entity that had no deletion at all.
+  guarded.delete('/admin/hijri-calendar/:year/:month', hijri.deleteMonth(prisma));
   guarded.get('/admin/hijri-calendar/:year/history', hijri.history(prisma));
   guarded.delete('/events/:id', events.remove(prisma));
   guarded.get('/admin/branches/:id/event-backfill', events.listBackfill(prisma));
@@ -296,7 +305,6 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
   // so the file never passes through this process (§2.3) — these routes decide
   // and verify, they do not carry bytes. `:uploadId` is the signed ticket itself
   // (`lib/upload-token.ts`), which is why no pending-upload table exists.
-  const storage = createStorageClients(config);
   guarded.post('/uploads/initiate', contentCtl.initiate(prisma, storage, config));
   guarded.post('/uploads/:uploadId/complete', contentCtl.complete(prisma, storage, config));
   guarded.post('/uploads/:uploadId/abort', contentCtl.abort(storage, config));

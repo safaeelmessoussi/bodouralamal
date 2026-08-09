@@ -10,9 +10,11 @@ import { api } from '../lib/api.js';
  * the screen renders the flag it is given and offers the action only where the
  * server says the operation behind it is complete.
  *
- * **There is no permanent-delete call, and its absence is deliberate.** BR-15's
- * 90-day window is enforced by the purge job; a manual *delete now* would bypass
- * a retention rule that exists for legal and safeguarding reasons.
+ * **Permanent deletion is a Super Admin action** (R59.1), and `purgeable` is a
+ * server decision on exactly the same footing as `restorable`. Rendering it is a
+ * courtesy to the reader; the authority is asserted again on the endpoint, so a
+ * crafted request from any other role is refused whether or not a screen ever
+ * showed the action.
  */
 
 export interface TrashEntry {
@@ -30,6 +32,10 @@ export interface TrashEntry {
   restorable: boolean;
   /** A stable code when `restorable` is false — the screen explains it. */
   restore_blocked_reason: string | null;
+  /** R59.1 — whether a Super Admin may destroy it. Server-decided. */
+  purgeable: boolean;
+  /** A stable code when `purgeable` is false — the screen explains it. */
+  purge_blocked_reason: string | null;
 }
 
 export interface Page<T> {
@@ -67,4 +73,15 @@ export async function restoreTrashEntry(
     method: 'POST',
     token,
   });
+}
+
+/**
+ * **Destroys the record permanently** (R59.1). Irreversible.
+ *
+ * Offered only where the server said `purgeable`, and refused by the server for
+ * any caller who is not a Super Admin — the confirmation dialog in front of it
+ * is for the *reader*, never for the security.
+ */
+export async function purgeTrashEntry(id: string, token: string | null): Promise<void> {
+  await api<void>(`/admin/trash/${id}`, { method: 'DELETE', token });
 }

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 
-import { listTrash, restoreTrashEntry, type TrashEntry } from '../../adapters/trash.js';
+import { listTrash, purgeTrashEntry, restoreTrashEntry, type TrashEntry } from '../../adapters/trash.js';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
 import { DataTable, type Column, type RowAction, type TableStatus } from '../../components/ui/data-table.js';
@@ -65,6 +65,7 @@ export function TrashPage(): ReactNode {
   const [to, setTo] = useState('');
   const [query, setQuery] = useState('');
   const [restoring, setRestoring] = useState<TrashEntry | null>(null);
+  const [purging, setPurging] = useState<TrashEntry | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -132,6 +133,21 @@ export function TrashPage(): ReactNode {
       cell: (r) => <time dateTime={r.purge_after}>{r.purge_after.slice(0, 10)}</time>,
     },
     {
+      key: 'purgeable',
+      header: t('admin.trash.colPurgeable'),
+      secondary: true,
+      // Stated for the same reason `restorable` is: an administrator who cannot
+      // destroy a record deserves the reason rather than a missing menu item.
+      cell: (r) =>
+        r.purgeable ? (
+          t('admin.trash.canPurge')
+        ) : (
+          <span className="muted">
+            {t(`admin.trash.purgeBlocked.${r.purge_blocked_reason ?? 'NOT_YET_SUPPORTED'}`)}
+          </span>
+        ),
+    },
+    {
       key: 'restorable',
       header: t('admin.trash.colRestorable'),
       // Stated rather than implied by a missing button: an administrator who
@@ -154,7 +170,41 @@ export function TrashPage(): ReactNode {
       // The server's decision, rendered — never the client's guess.
       available: (r) => r.restorable,
     },
+    {
+      // R59.1 — irreversible, so it is the one action on this screen behind a
+      // `danger` confirmation. Hiding it is a courtesy to the reader and NOT the
+      // security: the endpoint refuses any caller who is not a Super Admin, and
+      // this whole page already answers 403 for them.
+      label: t('admin.trash.purge'),
+      danger: true,
+      onSelect: (r) => setPurging(r),
+      available: (r) => r.purgeable,
+    },
   ];
+
+  async function confirmPurge(): Promise<void> {
+    if (!purging) return;
+    setBusy(true);
+    setNotice(null);
+    try {
+      await purgeTrashEntry(purging.id, accessToken);
+      await load();
+      setNotice(t('admin.trash.purged'));
+    } catch (error) {
+      const reason =
+        error instanceof ApiError ? (error.details?.['reason'] as string | undefined) : undefined;
+      setNotice(
+        reason === 'DEPENDENTS_EXIST'
+          ? t('admin.trash.dependentsExist')
+          : reason === 'NOT_DELETED'
+            ? t('admin.trash.notDeleted')
+            : t('admin.trash.purgeFailed'),
+      );
+    } finally {
+      setBusy(false);
+      setPurging(null);
+    }
+  }
 
   async function confirmRestore(): Promise<void> {
     if (!restoring) return;
@@ -241,9 +291,26 @@ export function TrashPage(): ReactNode {
         pagination={{ page, pageSize: 25, total, onPage: setPage }}
       />
 
-      {/* Says plainly why there is no permanent-delete control, rather than
-          leaving its absence to be read as an oversight. */}
+      {/* BR-15's window is unchanged and is still the default path — the
+          action above is the deliberate exception, not a replacement for it. */}
       <p className="muted">{t('admin.trash.retentionNote')}</p>
+
+      {/* Deliberately separate from the restore dialog rather than one dialog
+          with a mode: the two ask for opposite decisions, and a shared shell
+          whose copy changes is how somebody confirms the wrong one. */}
+      <ConfirmDialog
+        open={purging !== null}
+        danger
+        title={t('admin.trash.purgeTitle')}
+        body={t('admin.trash.purgeBody').replace(
+          '{record}',
+          purging?.label ?? purging?.target_id.slice(0, 8) ?? '',
+        )}
+        confirmLabel={t('admin.trash.purge')}
+        busy={busy}
+        onConfirm={() => void confirmPurge()}
+        onCancel={() => setPurging(null)}
+      />
 
       <ConfirmDialog
         open={restoring !== null}

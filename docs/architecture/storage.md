@@ -262,12 +262,22 @@ The API location stays at `2m`. **Never raise the body limit globally to "fix" u
 ## Deletion and quarantine
 
 `DELETE /content/{id}` (R53) soft-deletes the row, writes a `Trash` snapshot, and moves the
-object to a **quarantine prefix**, pending the 90-day window. A daily job permanently removes
-objects past it.
+object to a **quarantine prefix**, pending the 90-day window.
 
-That job is the only path to hard deletion — matching the audit log's design, where one job
-is the only sanctioned deletion route, and matching Revision 52's ruling that the Trash has no
-permanent-delete action either.
+**Two paths lead out of quarantine, and one of them does not exist yet.**
+
+* **A Super Admin purge** (R59.1) — `DELETE /admin/trash/{id}` destroys the row and
+  **removes the quarantined object with it**, after the transaction commits. A destroyed
+  row beside surviving bytes is an orphan nobody can find, reach or account for, in the one
+  entity where the data is largest. The ordering is the safe one: if the object removal
+  fails, the row is gone and the bytes remain, which is a reapable leftover rather than a
+  record pointing at nothing.
+* **The daily `content.quarantine-purge` job** — which Revisions 52 and 53 both name as the
+  enforcement of BR-15's window, and which **was never built** (R59.4). Nothing reads
+  `purge_after`. Objects placed in quarantine stay there indefinitely.
+
+That second point is worth stating plainly rather than leaving implied: **quarantine is
+currently permanent storage**, and its growth is unbounded until the job ships.
 
 **The object is moved rather than destroyed, and that is the whole point.** A deletion that
 removed the file immediately would make BR-15's window a promise the platform keeps for every

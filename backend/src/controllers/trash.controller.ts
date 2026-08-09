@@ -3,7 +3,9 @@ import { z } from 'zod';
 
 import type { PrismaClient } from '../generated/prisma/client.js';
 import { requireActor } from '../middleware/authenticate.js';
-import { listTrash, restoreEntry } from '../services/trash.service.js';
+import type { StorageClients } from '../lib/storage.js';
+import { purgeQuarantinedObject } from '../services/content.service.js';
+import { listTrash, purgeEntry, restoreEntry } from '../services/trash.service.js';
 import { pageOf, trashEntryDto } from './dto.js';
 import { idParam, parse } from './parse.js';
 
@@ -14,11 +16,16 @@ import { idParam, parse } from './parse.js';
  * the platform regardless of branch, so a branch-scoped Admin would see other
  * branches' records — which no other surface allows.
  *
- * **There is no permanent-delete route, deliberately.** BR-15's 90-day window is
- * enforced by `content.quarantine-purge` (TD-7), and a manual *delete now* would
- * bypass a retention rule that exists for legal and safeguarding reasons. Adding
- * one is a data-retention decision and needs its own revision — not a button
- * because Trash pages conventionally have one.
+ * **Permanent deletion is a Super Admin action** (Revision 59.1, which is the
+ * *further revision* Revision 52 required before one could exist). It stays
+ * restricted to the single role holding the platform's data authority, it is
+ * audited indefinitely, and BR-15's ninety-day window remains the default path
+ * for everything nobody acts on.
+ *
+ * **Authority is asserted in the service, not here and not in the client.** The
+ * `/admin/` prefix is a URL, and a hidden button is a decoration — a Teacher
+ * calling this endpoint directly receives the same refusal as one who never saw
+ * a screen.
  */
 const listSchema = z.object({
   entity: z.string().trim().max(60).optional(),
@@ -53,5 +60,42 @@ export function restore(prisma: PrismaClient) {
   return async (req: Request, res: Response): Promise<void> => {
     const result = await restoreEntry(prisma, requireActor(req), idParam(req, 'id'));
     res.json({ target_entity: result.targetEntity, target_id: result.targetId });
+  };
+}
+
+/**
+ * `DELETE /admin/trash/{id}` — destroys a soft-deleted record permanently
+ * (R59.1). Super Admin only, asserted in the service.
+ *
+ * **The object reaping happens after the transaction commits.** An S3 call
+ * cannot join a database transaction, and this ordering is the safe one: a
+ * destroyed row beside a surviving object is a reapable leftover, while the
+ * reverse would be a record pointing at bytes that no longer exist.
+ */
+export function purge(prisma: PrismaClient, storage: StorageClients) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const id = idParam(req, 'id');
+
+    // Read BEFORE the purge: the snapshot is the only place the storage key
+    // still exists once both the row and the entry are gone.
+    const entry = await prisma.trash.findUnique({ where: { id } });
+    const snapshot = (entry?.snapshot ?? null) as Record<string, unknown> | null;
+
+    const result = await purgeEntry(prisma, requireActor(req), id);
+
+    if (
+      result.targetEntity === 'EducationalContent' &&
+      typeof snapshot?.['storageBucket'] === 'string' &&
+      typeof snapshot['storageKey'] === 'string'
+    ) {
+      await purgeQuarantinedObject(
+        storage,
+        result.targetId,
+        snapshot['storageBucket'],
+        snapshot['storageKey'],
+      );
+    }
+
+    res.status(204).end();
   };
 }

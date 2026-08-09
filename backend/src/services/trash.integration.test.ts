@@ -3,7 +3,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { loadConfig } from '../lib/config.js';
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
 import type { Actor } from '../policies/actor.js';
-import { listTrash, restoreEntry } from './trash.service.js';
+import { listTrash, purgeEntry, restoreEntry } from './trash.service.js';
 
 /**
  * The Trash (§7, TD-5, BR-15, Revision 52).
@@ -186,5 +186,116 @@ describe('restore is offered only where it is COMPLETE (§7)', () => {
     });
     const entryId = await bin('Subject', subject.id, { name: `${TAG} مادة` });
     expect((await failure(() => restoreEntry(prisma, admin(), entryId))).code).toBe('FORBIDDEN');
+  });
+});
+
+/**
+ * **Permanent deletion** (SRS Revision 59.1).
+ *
+ * The property under test is authority and irreversibility, not "a row went
+ * away": nothing below trusts a status code, because the whole point of a purge
+ * is that the record is gone — so every assertion reads the database afterwards.
+ */
+describe('permanent deletion is Super Admin only and irreversible (R59.1)', () => {
+  it('REFUSES an Admin, a Teacher and a Student — server-side, not by a hidden button', async () => {
+    const branch = await prisma.branch.create({ data: { name: `${TAG} فرع`, deletedAt: new Date() } });
+    const entry = await bin('Branch', branch.id, branch);
+
+    for (const role of ['admin', 'teacher', 'student', 'parent']) {
+      const err = await failure(() =>
+        purgeEntry(prisma, actorOf([{ role, branches: null }]), entry),
+      );
+      expect(err.code, `${role} must not be able to purge`).toBe('FORBIDDEN');
+    }
+
+    // The refusal is real: the row and its tombstone are both still there.
+    expect(await prisma.branch.count({ where: { id: branch.id } })).toBe(1);
+    expect(await prisma.trash.count({ where: { id: entry } })).toBe(1);
+  });
+
+  it('destroys the record AND its tombstone, and writes an audit row that outlives both', async () => {
+    const branch = await prisma.branch.create({ data: { name: `${TAG} فرع`, deletedAt: new Date() } });
+    const entry = await bin('Branch', branch.id, branch);
+
+    const result = await purgeEntry(prisma, superAdmin(), entry);
+    expect(result.alreadyPurged).toBe(false);
+
+    expect(await prisma.branch.count({ where: { id: branch.id } })).toBe(0);
+    expect(await prisma.trash.count({ where: { id: entry } })).toBe(0);
+
+    // `trash.permanent_delete` is deliberately absent from the audit-purge
+    // allowlist, so the record of an irreversible act is retained indefinitely.
+    const log = await prisma.auditLog.findFirst({
+      where: { actionType: 'trash.permanent_delete', targetId: branch.id },
+    });
+    expect(log).not.toBeNull();
+    expect((log?.detail as Record<string, unknown>)['label']).toContain('فرع');
+  });
+
+  it('refuses while a live row still references it, and names the constraint', async () => {
+    const branch = await prisma.branch.create({ data: { name: `${TAG} فرع`, deletedAt: new Date() } });
+    // A room at that branch, NOT deleted: the branch's tombstone does not
+    // describe it, so destroying the branch would orphan a live record.
+    await prisma.room.create({ data: { name: `${TAG} قاعة`, branchId: branch.id } });
+    const entry = await bin('Branch', branch.id, branch);
+
+    const err = await failure(() => purgeEntry(prisma, superAdmin(), entry));
+    expect(err.code).toBe('STATE_CONFLICT');
+    expect(err.details?.['reason']).toBe('DEPENDENTS_EXIST');
+    // Named, so an administrator learns WHICH relationship is in the way. A
+    // `RESTRICT` violation arrives as P2039/23001, not P2003 — matching only
+    // P2003 let the raw Prisma error escape as a 500 for this exact case.
+    expect(err.details?.['constraint']).toBe('room_branch_id_fkey');
+
+    // Nothing partial: the branch survives intact rather than half-destroyed.
+    expect(await prisma.branch.count({ where: { id: branch.id } })).toBe(1);
+    expect(await prisma.trash.count({ where: { id: entry } })).toBe(1);
+  });
+
+  it('refuses a type with no destruction plan, with the reason', async () => {
+    const entry = await bin('User', actorUserId, { nameArabic: `${TAG} شخص` });
+    const err = await failure(() => purgeEntry(prisma, superAdmin(), entry));
+    expect(err.code).toBe('STATE_CONFLICT');
+    // Destroying a person takes the audit trail that says what they did.
+    expect(err.details?.['reason']).toBe('ACCOUNTABILITY_RECORD');
+  });
+
+  it('will not destroy a record somebody restored since — the tombstone is stale', async () => {
+    // Live row, stale entry: the record is in active use and no deletion stands
+    // behind the tombstone.
+    const branch = await prisma.branch.create({ data: { name: `${TAG} فرع حي` } });
+    const entry = await bin('Branch', branch.id, branch);
+    const err = await failure(() => purgeEntry(prisma, superAdmin(), entry));
+
+    expect(err.details?.['reason']).toBe('NOT_DELETED');
+    expect(await prisma.branch.count({ where: { id: branch.id } })).toBe(1);
+  });
+
+  it('removes a tombstone whose record BR-15 already took, and says which happened', async () => {
+    const entry = await bin('Branch', '00000000-0000-4000-8000-0000000000ff', { name: 'gone' });
+
+    const result = await purgeEntry(prisma, superAdmin(), entry);
+
+    // Not an error: removing the entry is exactly what was asked for.
+    expect(result.alreadyPurged).toBe(true);
+    expect(await prisma.trash.count({ where: { id: entry } })).toBe(0);
+  });
+});
+
+describe('restore reinstates the children it declares (R59.3)', () => {
+  it('publishes purgeability per row, decided by the server', async () => {
+    const branch = await prisma.branch.create({ data: { name: `${TAG} فرع`, deletedAt: new Date() } });
+    await bin('Branch', branch.id, branch);
+    await bin('User', actorUserId, { nameArabic: `${TAG} شخص` });
+
+    const rows = await listTrash(prisma, superAdmin(), { pageSize: 100 });
+    const branchRow = rows.data.find((r) => r.targetEntity === 'Branch');
+    const userRow = rows.data.find((r) => r.targetEntity === 'User');
+
+    expect(branchRow?.purgeable).toBe(true);
+    expect(branchRow?.purgeBlockedReason).toBeNull();
+    // A client cannot know this, which is why the server says it.
+    expect(userRow?.purgeable).toBe(false);
+    expect(userRow?.purgeBlockedReason).toBe('ACCOUNTABILITY_RECORD');
   });
 });

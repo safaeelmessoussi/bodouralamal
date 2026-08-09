@@ -3,6 +3,7 @@ import { AppError } from '../lib/errors.js';
 import { page, pageWindow, type Page, type PageParams } from '../lib/pagination.js';
 import * as scope from '../policies/branch-scope.js';
 import * as audit from '../repositories/audit.repository.js';
+import * as trash from '../repositories/trash.repository.js';
 import { enqueue, JOB_QUEUES } from '../repositories/jobs.repository.js';
 import type { Actor } from '../policies/actor.js';
 
@@ -363,6 +364,23 @@ export async function enrolStudent(
  * a place in a subject split inside a Level the student has left is a roster
  * entry for a class they no longer attend.
  */
+/** `اسم الطالبة — اسم المجموعة`, so the Trash entry is readable. */
+async function labelFor(
+  tx: Prisma.TransactionClient,
+  studentId: string,
+  administrativeGroupId: string,
+): Promise<string | null> {
+  const [student, group] = await Promise.all([
+    tx.user.findUnique({ where: { id: studentId }, select: { nameArabic: true } }),
+    tx.administrativeGroup.findUnique({
+      where: { id: administrativeGroupId },
+      select: { name: true },
+    }),
+  ]);
+  if (!student && !group) return null;
+  return `${student?.nameArabic ?? '—'} — ${group?.name ?? '—'}`;
+}
+
 export async function unenrolStudent(
   prisma: PrismaClient,
   actor: Actor,
@@ -381,7 +399,6 @@ export async function unenrolStudent(
 
     const row = await tx.enrollment.findFirst({
       where: { administrativeGroupId, studentId, deletedAt: null },
-      select: { id: true },
     });
     if (!row) throw new AppError('NOT_FOUND', 'student is not enrolled in this group');
 
@@ -397,9 +414,31 @@ export async function unenrolStudent(
       data: { deletedAt: now, deletedById: actor.userId },
     });
 
+    // Removed BECAUSE the enrolment was, so they are read before the write and
+    // carried inside the enrolment's snapshot rather than given tombstones of
+    // their own: R59 gives an entry to the deletion a person performed, and
+    // describes its consequences in that entry (§7's reinstatement list).
+    const seatRows = await tx.studentTeachingGroup.findMany({
+      where: { studentId, levelId: group.levelId, deletedAt: null },
+    });
     const seats = await tx.studentTeachingGroup.updateMany({
       where: { studentId, levelId: group.levelId, deletedAt: null },
       data: { deletedAt: now, deletedById: actor.userId },
+    });
+
+    // R59.2 — un-enrolling is a deliberate act by an Admin, so it reaches the
+    // one screen that answers *what was deleted and by whom*. It was audited and
+    // invisible there, which is precisely the row §7's runbook has to reinstate.
+    await trash.snapshot(tx, {
+      targetEntity: 'Enrollment',
+      targetId: row.id,
+      // **A join row has no name**, so the label is composed here from the two
+      // things it joins. Without it these entries are a page of UUIDs, which is
+      // the failure `labelOf` exists to prevent.
+      snapshot: JSON.parse(
+        JSON.stringify({ ...row, teachingGroupSeats: seatRows, label: await labelFor(tx, studentId, administrativeGroupId) }),
+      ) as object,
+      deletedById: actor.userId,
     });
 
     await audit.write(tx, {
