@@ -8,6 +8,7 @@ import {
 } from './course-schedules.js';
 import { createEvent, deleteEvent, updateEvent, type EventInput } from './events.js';
 import { WEEKDAYS } from '../components/scheduling/recurrence-editor.js';
+import { SCHEDULING_TYPE_SPECS } from './scheduling-types.js';
 
 /**
  * **The one place that knows there are separate models** (SRS Revision 56).
@@ -41,10 +42,13 @@ import { WEEKDAYS } from '../components/scheduling/recurrence-editor.js';
  *  entity the item is, which the SRS already distinguishes (§4.4). */
 export type SchedulingType = 'class' | 'activity' | 'exam';
 
-/** `exam` is offered and disabled until M5 (§4.6, TD-3.6). §14.4 requires a
- *  blocked capability to say why rather than to vanish. */
 export const SCHEDULING_TYPES: readonly SchedulingType[] = ['class', 'activity', 'exam'];
-export const AVAILABLE_TYPES: readonly SchedulingType[] = ['class', 'activity'];
+
+/** Derived from the registry, so a kind becomes available by flipping one flag
+ *  beside its declaration rather than by editing a second list here. */
+export const AVAILABLE_TYPES: readonly SchedulingType[] = SCHEDULING_TYPES.filter(
+  (k) => SCHEDULING_TYPE_SPECS[k].available,
+);
 
 /**
  * One scheduled thing, as every screen above this module sees it.

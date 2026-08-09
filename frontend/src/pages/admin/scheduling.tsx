@@ -8,6 +8,7 @@ import {
   type Occurrence,
 } from '../../adapters/calendar.js';
 import { listRooms } from '../../adapters/branches-admin.js';
+import { specOfType } from '../../adapters/scheduling-types.js';
 import {
   deleteSchedulingItem,
   listSchedulingItems,
@@ -191,7 +192,9 @@ export function SchedulingPage(): ReactNode {
       onSelect: (r) => {
         window.location.href = `/admin/schedules/${r.id}/sessions`;
       },
-      available: (r) => r.type === 'class',
+      // R50's scopes act on materialized rows; a kind whose occurrences are
+      // computed on read has nothing to open (§4.4).
+      available: (r) => specOfType(r.type).hasOccurrences,
     },
     { label: t('common.edit'), onSelect: (r) => setEditing(r) },
     { label: t('common.delete'), danger: true, onSelect: (r) => setDeleting(r) },
@@ -452,6 +455,8 @@ function SchedulingDialog({
   const [busy, setBusy] = useState(false);
 
   const scope = useScopeOptions({ token, fields: SCOPE_FIELDS, defaultCurrentYear: true });
+  /** Everything the interface needs to know about this kind, declared once. */
+  const spec = specOfType(type);
 
   useEffect(() => {
     void searchUsers(token, { role: 'teacher' }).then((p) => setTeachers(p.data));
@@ -532,8 +537,8 @@ function SchedulingDialog({
           description: description.trim() || null,
           startDate: recurrence.startDate,
           endDate: endDate || null,
-          startTime: allDay && type !== 'class' ? null : startTime,
-          endTime: allDay && type !== 'class' ? null : endTime,
+          startTime: allDay && spec.hasAllDay ? null : startTime,
+          endTime: allDay && spec.hasAllDay ? null : endTime,
           recurrence: recurrence.type,
           weekdays: recurrence.weekdays,
           repeatUntil: recurrence.endDate || null,
@@ -597,22 +602,23 @@ function SchedulingDialog({
         // A class used to borrow its name from its Subject, which identifies it
         // and does not name it: two classes in one Subject for one group were
         // indistinguishable at a glance.
-        showTitle
+        showTitle={spec.hasTitle}
         description={description}
         onDescription={setDescription}
-        showDescription
-        showAllDay={type !== 'class'}
+        showDescription={spec.hasDescription}
+        showAllDay={spec.hasAllDay}
         allDay={allDay}
         onAllDay={setAllDay}
         startTime={startTime}
         endTime={endTime}
         onStartTime={setStartTime}
         onEndTime={setEndTime}
-        showEndDate={type !== 'class'}
+        showEndDate={spec.hasEndDate}
         endDate={endDate}
         onEndDate={setEndDate}
         recurrence={recurrence}
         onRecurrence={setRecurrence}
+        allowOnce={spec.allowsOnce}
       >
         {type === 'class' ? (
           <ClassSection

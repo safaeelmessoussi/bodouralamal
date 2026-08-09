@@ -75,6 +75,10 @@ export interface SchedulingFormProps {
 
   recurrence: RecurrenceValue;
   onRecurrence: (next: RecurrenceValue) => void;
+  /** Declared per kind in `scheduling-types.ts`, never inferred here — the
+   *  database refuses `none` on a schedule, and that is a fact about the
+   *  entity rather than something this form should know (§4.4). */
+  allowOnce: boolean;
 
   /** The type-specific section. Composed in, never branched on here. */
   children?: ReactNode;
@@ -103,6 +107,7 @@ export function SchedulingForm({
   onEndDate,
   recurrence,
   onRecurrence,
+  allowOnce,
   children,
 }: SchedulingFormProps): ReactNode {
   return (
@@ -167,7 +172,7 @@ export function SchedulingForm({
       {/* The start date lives in the recurrence editor, beside *repeat until* —
           the two bounds of one rule belong together, and for an alternating
           pattern the start date IS part of the rule (§7). */}
-      <RecurrenceEditor value={recurrence} onChange={onRecurrence} />
+      <RecurrenceEditor value={recurrence} onChange={onRecurrence} allowOnce={allowOnce} />
 
       {showEndDate && recurrence.type === 'none' ? (
         <DateField
