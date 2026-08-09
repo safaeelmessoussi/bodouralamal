@@ -169,7 +169,10 @@ DELETE /content/{id}                          # TD-3.5 (R53), TD-5, BR-15
 GET /content/{id}/download-url                # TD-3.5, TD-12
 
 # ── Exams, grading & Quran (TD-3.6)
+GET /exams                                    # TD-3.6 (R58) — scheduled exams
 POST /exams                                   # TD-3.6, §4.6
+PATCH /exams/{id}                             # TD-3.6 (R58)
+DELETE /exams/{id}                            # TD-3.6 (R58), TD-5
 POST /exams/{id}/publish                      # TD-3.6, BR-8
 POST /exams/{id}/submissions                  # TD-3.6, TD-1
 PATCH /submissions/{id}                       # TD-3.6, §4.6

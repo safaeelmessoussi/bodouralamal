@@ -1329,3 +1329,84 @@ export function eventDefinitionDto(row: {
     version: row.version,
   };
 }
+
+/**
+ * One scheduled exam (§4.6, SRS Revision 58).
+ *
+ * **Names beside every id**, for the reason `libraryItemDto` states and R55.1
+ * applied to schedules: a timetable cannot be rendered from ids, and the exam
+ * list sits beside classes and activities on one screen.
+ *
+ * `mode` is published so a client can render the distinction without inferring
+ * it from which columns happen to be null.
+ */
+export interface ExamDto {
+  id: string;
+  mode: string;
+  title: string;
+  description: string | null;
+  /** TD-11 calendar date and wall-clock times — never instants. */
+  date: string;
+  start_time: string | null;
+  end_time: string | null;
+  level_id: string;
+  level_name: string | null;
+  subject_id: string | null;
+  subject_name: string | null;
+  academic_year_id: string | null;
+  branch_id: string | null;
+  branch_name: string | null;
+  room_id: string | null;
+  room_name: string | null;
+  /** `null` is **the whole Level** (R58), never "no target". */
+  administrative_group_id: string | null;
+  administrative_group_name: string | null;
+  staff: { user_id: string; position: string }[];
+  version: number;
+}
+
+export function examDto(row: {
+  id: string;
+  mode: string;
+  title: string;
+  description: string | null;
+  date: Date;
+  startTime: Date | null;
+  endTime: Date | null;
+  levelId: string;
+  level?: { name: string } | null;
+  subjectId: string | null;
+  subject?: { name: string } | null;
+  academicYearId: string | null;
+  branchId: string | null;
+  branch?: { name: string } | null;
+  roomId: string | null;
+  room?: { name: string } | null;
+  administrativeGroupId: string | null;
+  administrativeGroup?: { name: string } | null;
+  staff: { userId: string; position: string }[];
+  version: number;
+}): ExamDto {
+  return {
+    id: row.id,
+    mode: String(row.mode),
+    title: row.title,
+    description: row.description,
+    date: dateOnly(row.date)!,
+    start_time: row.startTime ? timeOnly(row.startTime) : null,
+    end_time: row.endTime ? timeOnly(row.endTime) : null,
+    level_id: row.levelId,
+    level_name: row.level?.name ?? null,
+    subject_id: row.subjectId,
+    subject_name: row.subject?.name ?? null,
+    academic_year_id: row.academicYearId,
+    branch_id: row.branchId,
+    branch_name: row.branch?.name ?? null,
+    room_id: row.roomId,
+    room_name: row.room?.name ?? null,
+    administrative_group_id: row.administrativeGroupId,
+    administrative_group_name: row.administrativeGroup?.name ?? null,
+    staff: row.staff.map((s) => ({ user_id: s.userId, position: String(s.position) })),
+    version: row.version,
+  };
+}

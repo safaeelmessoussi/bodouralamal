@@ -22,6 +22,7 @@ import * as referenceData from './controllers/reference-data.controller.js';
 import * as taxonomy from './controllers/taxonomy.controller.js';
 import * as trash from './controllers/trash.controller.js';
 import * as contentCtl from './controllers/content.controller.js';
+import * as exams from './controllers/exam.controller.js';
 import { createRegistration } from './controllers/registration.controller.js';
 import { healthController } from './controllers/health.controller.js';
 import type { PrismaClient } from './generated/prisma/client.js';
@@ -305,6 +306,15 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
   // TD-12: minting is one of the high-risk operations where an unexpired token
   // is not sufficient — the service re-asserts the caller against live rows.
   guarded.get('/content/:id/download-url', contentCtl.downloadUrl(prisma, storage));
+
+  // TD-3.6 (R58) — exams as SCHEDULED SITTINGS. Only `physical` exists; the
+  // online mode is refused with a coded reason rather than given an endpoint
+  // that does nothing, because a route with nothing behind it appears in the
+  // contract as a capability that exists.
+  guarded.get('/exams', exams.list(prisma));
+  guarded.post('/exams', exams.create(prisma));
+  guarded.patch('/exams/:id', exams.update(prisma));
+  guarded.delete('/exams/:id', exams.remove(prisma));
 
   api.use(guarded);
 

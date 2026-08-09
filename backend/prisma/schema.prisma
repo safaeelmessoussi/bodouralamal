@@ -182,6 +182,25 @@ enum QuranLogCategory {
   @@map("quran_log_category")
 }
 
+/// R58 — the discriminator, not a flag. Each mode carries exactly the columns
+/// its own reality has: a physical sitting has a room and no questions, an
+/// online one has questions and no room. CHECK constraints enforce that.
+enum ExamMode {
+  physical
+  online
+
+  @@map("exam_mode")
+}
+
+/// R58 — one supervisor and any number of assistants, mirroring
+/// `ScheduleStaffPosition` (§4.4c): one table, one rule.
+enum ExamStaffPosition {
+  supervisor
+  assistant
+
+  @@map("exam_staff_position")
+}
+
 enum ExamAccessPolicy {
   single_submission
   save_and_resume
@@ -222,6 +241,7 @@ enum ConsumedTokenPurpose {
 /// they are login-less and reached only through an approved FamilyLink
 /// (§4.3, BR-5).
 model User {
+  examStaff     ExamStaff[]
   id            String        @id @default(uuid()) @db.Uuid
   accountStatus AccountStatus @default(pending) @map("account_status")
 
@@ -452,6 +472,7 @@ model UserBranchRole {
 // ---------------------------------------------------------------------------
 
 model Branch {
+  exams                Exam[]
   id                   String    @id @default(uuid()) @db.Uuid
   name                 String    @db.VarChar(120)
   operationalStartDate DateTime? @map("operational_start_date") @db.Date
@@ -498,6 +519,7 @@ model Branch {
 }
 
 model Room {
+  exams    Exam[]
   id       String @id @default(uuid()) @db.Uuid
   name     String @db.VarChar(120)
   branchId String @map("branch_id") @db.Uuid
@@ -682,6 +704,7 @@ model LevelSurah {
 /// for (§4.1). Staff branch scoping, the §4.9 Global-content rule, and the
 /// §5.2 library ordering all resolve through it.
 model AdministrativeGroup {
+  exams    Exam[]
   id       String @id @default(uuid()) @db.Uuid
   /// Collated `ar-x-icu` in SQL (TD-6a) — BR-19 ordering is not a per-query concern.
   name     String @db.VarChar(120)
@@ -1413,17 +1436,43 @@ model Exam {
   surahId   Int?        @map("surah_id")
   surah     QuranSurah? @relation(fields: [surahId], references: [surahId], onDelete: Restrict)
 
-  /// Local wall-clock date (TD-11).
+  /// R58 — the discriminator, not a flag. `physical` is organised in the
+  /// platform; `online` is declared and refused until it is planned as its own
+  /// feature. Fixed after creation: changing it would discard every column the
+  /// other mode does not have.
+  mode ExamMode @default(physical)
+
+  description String? @db.VarChar(2000)
+
+  /// R58 — a gap independent of the mode: content and course schedules both
+  /// carry a year, and grades aggregate per year, yet an exam did not.
+  academicYearId String?       @map("academic_year_id") @db.Uuid
+  academicYear   AcademicYear? @relation(fields: [academicYearId], references: [id], onDelete: Restrict)
+
   date DateTime @db.Date
 
-  /// Optional, non-restricting logical selector used only for sorting on
-  /// transcripts and dashboards (§4.6). §7 defines no Round entity, so this is
-  /// a plain nullable ordinal — see the CHANGES.log note.
+  /// R58, physical only — where it is sat and when. Wall-clock times (TD-11),
+  /// never instants: an exam at 09:00 is at 09:00 at its branch.
+  branchId  String?   @map("branch_id") @db.Uuid
+  branch    Branch?   @relation(fields: [branchId], references: [id], onDelete: Restrict)
+  roomId    String?   @map("room_id") @db.Uuid
+  room      Room?     @relation(fields: [roomId], references: [id], onDelete: Restrict)
+  startTime DateTime? @map("start_time") @db.Time(0)
+  endTime   DateTime? @map("end_time") @db.Time(0)
+
+  /// R58 — **NULL is the whole Level**, not "no target". A narrower audience
+  /// when one group sits separately. The §4.4c three-mode target is deliberately
+  /// not reused: an exam is sat by a roster at a premises, and the Teaching
+  /// Group split has no bearing on who sits a paper.
+  administrativeGroupId String?              @map("administrative_group_id") @db.Uuid
+  administrativeGroup   AdministrativeGroup? @relation(fields: [administrativeGroupId], references: [id], onDelete: Restrict)
+
+  staff ExamStaff[]
+
   round Int?
 
   accessPolicy ExamAccessPolicy @default(save_and_resume) @map("access_policy")
 
-  /// Structured question array; each element carries its immutable UUID.
   questions Json @db.JsonB
 
   isPublished Boolean   @default(false) @map("is_published")
@@ -1438,10 +1487,8 @@ model Exam {
 
   submissions StudentExamSubmission[]
   grades      Grade[]
-
-  @@index([levelId, date])
-  @@map("exam")
 }
+
 
 model StudentExamSubmission {
   id        String @id @default(uuid()) @db.Uuid
@@ -1516,6 +1563,7 @@ model Grade {
 // ---------------------------------------------------------------------------
 
 model AcademicYear {
+  exams     Exam[]
   id        String  @id @default(uuid()) @db.Uuid
   /// Validated `YYYY-YYYY`; free-text year strings are prohibited (§4.10).
   label     String  @unique @db.VarChar(9)
@@ -1589,6 +1637,27 @@ model EducationalContent {
 
 /// Append-only accountability record (TD-8). No update or delete path exists
 /// in the application. Distinct from `Trash`, which exists for restoration.
+/// R58 — who supervises a physical sitting. The shape `CourseScheduleStaff`
+/// already uses (§4.4c): one row per person, a position, soft-deletable.
+model ExamStaff {
+  id     String @id @default(uuid()) @db.Uuid
+  examId String @map("exam_id") @db.Uuid
+  exam   Exam   @relation(fields: [examId], references: [id], onDelete: Restrict)
+  userId String @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  position ExamStaffPosition
+
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  deletedById String?   @map("deleted_by") @db.Uuid
+
+  /// One person holds one position on one exam.
+  @@unique([examId, userId])
+  @@index([userId])
+  @@map("exam_staff")
+}
+
 model AuditLog {
   id          String  @id @default(uuid()) @db.Uuid
   actorUserId String? @map("actor_user_id") @db.Uuid
