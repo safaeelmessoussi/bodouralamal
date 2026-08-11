@@ -192,18 +192,69 @@ export const adultRegistrationSchema = z
     message: 'a staff request is not admitted to a Level, so it takes no category_id',
   });
 
-/** Unified Parent + Child registration (§4.1). Both records or neither. */
+/**
+ * One child on a registration request (SRS Revision 62).
+ *
+ * **Deliberately narrower than `personCore`.** A `ChildApplication` carries
+ * names, sex and schooling stage — and nothing else — so the fields
+ * `personCore` offers that a child has no use for simply have nowhere to go:
+ *
+ * * **`phone`** — a minor reached only through a `FamilyLink` has no telephone
+ *   of their own, and the parent's is already on the request;
+ * * **`notes`** — free text about a child, with no stated purpose and no reader,
+ *   is where a diagnosis or a custody arrangement gets written in good faith.
+ *
+ * Both were flagged in the personal-data audit. Neither is *removed* here —
+ * `User` still carries them for adults and staff — they are simply absent from
+ * the shape R62.1 declared, which is the honest way for a field to stop being
+ * collected.
+ */
+const childCore = z
+  .object({
+    first_name_arabic: namePart,
+    last_name_arabic: namePart,
+    first_name_french: namePart.optional(),
+    last_name_french: namePart.optional(),
+    nickname: nickname.optional(),
+    sex: z.enum(['female', 'male']),
+    /**
+     * R62.6 — **informs placement and gates nothing.** No validation here or
+     * anywhere may refuse a category because of it: a student older than the
+     * usual high-school age still belongs in اليافعون if she is still in high
+     * school.
+     */
+    schooling_stage: z
+      .enum(['pre_primary', 'primary', 'middle', 'high', 'post_secondary', 'not_in_school'])
+      .optional(),
+    /**
+     * R62.3b — **per child.** A parent may permit photographs of one child and
+     * refuse for another, so this cannot live on the request beside
+     * `data_processing`.
+     */
+    consent_media_release: z.boolean(),
+  })
+  .strict();
+
+/**
+ * Unified Parent + Child registration (§4.1, as amended by Revision 62).
+ *
+ * **One request, one or more children.** The children arrive as
+ * `ChildApplication` rows and their `User` records are created **at approval**,
+ * one child at a time — so a refused child leaves no account behind and an
+ * approver can accept one sibling while refusing another.
+ */
 export const parentChildRegistrationSchema = z
   .object({
     kind: z.literal('parent_child'),
     parent: personCore,
-    child: personCore,
+    /** R62 — one or more. Twelve is a bound, not an expectation. */
+    children: z.array(childCore).min(1).max(12),
     branch_id: branchId,
     /**
-     * **The CHILD's stage, and required.** The child is the one who enrols; the
-     * parent's access comes through the family link. Like `branch_id` it is
-     * top-level and recorded once — the parent makes one choice for the
-     * application, not one per person.
+     * **The CHILDREN's stage, and required.** The children are the ones who
+     * enrol; the parent's access comes through the family link. Like
+     * `branch_id` it is top-level and recorded once — the parent makes one
+     * choice for the application, not one per person.
      */
     category_id: categoryId,
     consents,

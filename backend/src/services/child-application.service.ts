@@ -265,6 +265,16 @@ export async function decideChildApplication(
             method: 'online_form',
             grantedAt: application.consentGivenAt,
             grantedByUserId: application.parentId,
+            // **A refusal is a decision and carries its stamp** (BR-1, §4.1a).
+            // Absence would also mean "no consent", but a decision must leave a
+            // record with an actor and a time so the history is auditable — and
+            // the time is when the parent decided, not when staff approved.
+            ...(granted
+              ? {}
+              : {
+                  revokedAt: application.consentGivenAt,
+                  revokedByUserId: application.parentId,
+                }),
           },
         });
       }

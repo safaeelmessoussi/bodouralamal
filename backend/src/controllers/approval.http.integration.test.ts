@@ -73,7 +73,11 @@ async function makeStaff(role: string): Promise<string> {
 }
 
 let counter = 0;
-async function submitBundle(intoBranchId?: string): Promise<{ parentId: string; childId: string }> {
+/** R62 — produces a pending parent and a `ChildApplication`; no child exists
+ *  until the application is approved on its own. */
+async function submitBundle(
+  intoBranchId?: string,
+): Promise<{ parentId: string; applicationId: string }> {
   counter += 1;
   const stamp = `${Date.now()}-${counter}`;
   const { token } = issueOnboardingToken(
@@ -86,7 +90,14 @@ async function submitBundle(intoBranchId?: string): Promise<{ parentId: string; 
     {
       kind: 'parent_child',
       parent: { first_name_arabic: `${TAG}`, last_name_arabic: `والدة`, sex: 'female' as const },
-      child: { first_name_arabic: `${TAG}`, last_name_arabic: `طفلة`, sex: 'female' as const },
+      children: [
+        {
+          first_name_arabic: `${TAG}`,
+          last_name_arabic: `طفلة`,
+          sex: 'female' as const,
+          consent_media_release: true,
+        },
+      ],
       branch_id: intoBranchId ?? branchId,
       // R49 — the stage the parent chose for the child, which §4.1 step 1
       // preselects the first Level from. The fixture's placement Category, so
@@ -96,7 +107,7 @@ async function submitBundle(intoBranchId?: string): Promise<{ parentId: string; 
     },
     config.ONBOARDING_TOKEN_KEY,
   );
-  return { parentId: result.applicantId, childId: result.childId! };
+  return { parentId: result.applicantId, applicationId: result.childApplicationIds[0]! };
 }
 
 async function clear(): Promise<void> {
@@ -119,6 +130,19 @@ async function clear(): Promise<void> {
   await prisma.enrollment.deleteMany({ where: { studentId: { in: ids } } });
   await prisma.userIdentity.deleteMany({ where: { userId: { in: ids } } });
   await prisma.userBranchRole.deleteMany({ where: { userId: { in: ids } } });
+  // R62 — a parent_child registration now writes `child_application` rows, and
+  // they reference the parent, the child and the deciding admin under RESTRICT.
+  // A teardown that sweeps only what the previous shape wrote is blocked here.
+  await prisma.childApplication.deleteMany({
+    where: {
+      OR: [
+        { parentId: { in: ids } },
+        { childUserId: { in: ids } },
+        { decidedById: { in: ids } },
+        { matchedExistingUserId: { in: ids } },
+      ],
+    },
+  });
   await prisma.user.deleteMany({ where: { id: { in: ids } } });
   await prisma.consumedToken.deleteMany({ where: { purpose: 'onboarding' } });
   // After the users: `intended_branch_id` is ON DELETE RESTRICT.
@@ -298,20 +322,23 @@ describe('GET /api/v1/admin/approvals', () => {
 
 describe('POST /api/v1/admin/approvals/{id}/approve|reject', () => {
   it('approves a bundle end to end and reports what changed', async () => {
-    const { parentId, childId } = await submitBundle();
+    const { parentId, applicationId } = await submitBundle();
     // §4.1 (R43): the placement IS the approval. The child is the student; the
     // parent's access comes through the family link.
     const res = await call('POST', `/admin/approvals/${parentId}/approve`, admin, {
-      enrollments: [{ user_id: childId, administrative_group_id: placement.groupId }],
+      // **R62 narrowed this.** The parent's approval no longer places a child;
+      // the placement moved onto the child's own decision.
     });
 
     expect(res.status).toBe(200);
     expect(res.body.type).toBe('registration');
     expect((await prisma.user.findUnique({ where: { id: parentId } }))?.accountStatus).toBe('active');
-    expect((await prisma.user.findUnique({ where: { id: childId } }))?.accountStatus).toBe('active');
+    // Untouched, and still decidable through its own endpoint.
+    expect((await prisma.childApplication.findUnique({ where: { id: applicationId } }))?.status).toBe(
+      'pending',
+    );
 
     const second = await call('POST', `/admin/approvals/${parentId}/approve`, admin, {
-      enrollments: [{ user_id: childId, administrative_group_id: placement.groupId }],
     });
     expect(second.status).toBe(409);
     expect(second.body.error?.code).toBe('STATE_CONFLICT');
@@ -369,8 +396,10 @@ describe('POST /api/v1/admin/approvals/{id}/approve|reject', () => {
     // prove: a missing body reaches the validator, not the error middleware.
     const { parentId } = await submitBundle();
     const res = await call('POST', `/admin/approvals/${parentId}/approve`, admin);
-    expect(res.status).toBe(400);
-    expect(res.body.error?.code).toBe('VALIDATION_FAILED');
+    // R62 changed the STATUS, not the point: a parent registering children
+    // enrols nobody at approval, so a bodyless approve is now well-formed.
+    expect(res.status).toBe(200);
+    expect(res.status).not.toBe(500);
   });
 
   it('TD-12: suspending the admin revokes approval power without touching the token', async () => {

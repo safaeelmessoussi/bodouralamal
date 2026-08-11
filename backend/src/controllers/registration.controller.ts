@@ -32,7 +32,9 @@ export function createRegistration(prisma: PrismaClient, config: AppConfig) {
     const result = await register(prisma, token, parsed.data, config.ONBOARDING_TOKEN_KEY);
     res.status(201).json({
       applicant_id: result.applicantId,
-      child_id: result.childId,
+      // R62 — no child account exists yet; these identify the applications an
+      // approver will decide, one at a time.
+      child_application_ids: result.childApplicationIds,
       account_status: result.accountStatus,
     });
   };

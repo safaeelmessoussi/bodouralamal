@@ -45,7 +45,7 @@ interface Res {
   body: {
     error?: { code?: string; details?: Record<string, unknown>; request_id?: string };
     applicant_id?: string;
-    child_id?: string | null;
+    child_application_ids?: string[];
     account_status?: string;
   };
 }
@@ -91,6 +91,11 @@ async function clear(): Promise<void> {
   await prisma.consentRecord.deleteMany({ where: { studentId: { in: ids } } });
   await prisma.familyLink.deleteMany({
     where: { OR: [{ parentId: { in: ids } }, { studentId: { in: ids } }] },
+  });
+  // R62 — a parent_child registration now writes `child_application` rows,
+  // which reference the parent under RESTRICT.
+  await prisma.childApplication.deleteMany({
+    where: { OR: [{ parentId: { in: ids } }, { childUserId: { in: ids } }] },
   });
   await prisma.userIdentity.deleteMany({ where: { userId: { in: ids } } });
   await prisma.user.deleteMany({ where: { id: { in: ids } } });
@@ -163,8 +168,14 @@ describe('a well-formed submission succeeds end to end', () => {
 
     expect(res.status).toBe(201);
     expect(res.body.account_status).toBe('pending');
-    expect(res.body.child_id).toBeNull();
-    expect(Object.keys(res.body).sort()).toEqual(['account_status', 'applicant_id', 'child_id']);
+    // R62 — an adult registration names no children; the field is present and
+    // empty rather than absent, so a client never has to distinguish the two.
+    expect(res.body.child_application_ids).toEqual([]);
+    expect(Object.keys(res.body).sort()).toEqual([
+      'account_status',
+      'applicant_id',
+      'child_application_ids',
+    ]);
   });
 
   it('§7 R40: stores both name parts and composes name_arabic server-side', async () => {
@@ -173,7 +184,7 @@ describe('a well-formed submission succeeds end to end', () => {
         {
           kind: 'parent_child',
           parent: person('أمينة', 'بنعلي'),
-          child: person('سارة', 'بنعلي'),
+          children: [{ ...person('سارة', 'بنعلي'), consent_media_release: false }],
           branch_id: branchId,
           category_id: categoryId,
           consents: { data_processing: true, media_release: false },
@@ -190,7 +201,16 @@ describe('a well-formed submission succeeds end to end', () => {
 
     // The child too — a composition applied to only the applicant would leave
     // half a family with a broken display name.
-    const child = await prisma.user.findUnique({ where: { id: res.body.child_id! } });
+    // R62 — no child `User` exists until approval, so the composition this
+    // test is about is asserted on the application that will produce it.
+    const application = await prisma.childApplication.findUnique({
+      where: { id: res.body.child_application_ids![0]! },
+    });
+    const child = {
+      firstNameArabic: application?.firstNameArabic,
+      lastNameArabic: application?.lastNameArabic,
+      nameArabic: `${application?.firstNameArabic} ${application?.lastNameArabic}`,
+    };
     expect(child?.nameArabic).toBe(`${TAG} سارة بنعلي`);
   });
 });

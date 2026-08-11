@@ -649,7 +649,7 @@
 - [x] `child-application.service.ts` — submit, per-child decide, duplicate proposals, a parent's own list
 - [x] HTTP surface: 4 routes, TD-3 registered, OpenAPI 79 paths / 106 operations
 - [x] **Approval queue reads child applications** — one item per request, one decidable block per child
-- [ ] Registration flow → multi-child, through the same service
+- [x] Registration flow → multi-child, through the same service; `phone` and child `notes` cease to be collected as a consequence of R62.1's shape
 - [ ] Identity binding → non-blocking review item when a minor gains a login
 - [ ] Frontend: switcher expansion + «＋ تسجيل طفل», minimal student dashboard, remove `/dashboard/parent`
 - [ ] Still pending the Owner: guardianship verification · right to an actual rejection reason · the three compliance fields · CNDP declaration · Arabic privacy notice

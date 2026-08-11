@@ -130,6 +130,14 @@ export async function listApprovals(
       where,
       include: {
         parentLinks: { where: { deletedAt: null }, include: { student: true } },
+        // R62 — the children this applicant asked for. A registration now
+        // produces APPLICATIONS rather than pending links, and showing them on
+        // the parent's own item is what keeps one family as one queue entry:
+        // the parent is decided here, each child through its own endpoint.
+        childApplicationsAsParent: {
+          where: { status: 'pending', deletedAt: null },
+          orderBy: [{ createdAt: 'asc' }],
+        },
         // Only what the DTO publishes (§16.2): the branch's id and name, never
         // the whole row.
         intendedBranch: { select: { id: true, name: true } },
@@ -154,14 +162,26 @@ export async function listApprovals(
           })),
         ],
         submittedAt: applicant.createdAt,
-        bundle: { childCount: pendingLinks.length, linkCount: pendingLinks.length },
+        // R62 — a new registration bundles APPLICATIONS; a pre-R62 one bundled
+        // pending links. Counting both keeps the column truthful across the
+        // transition instead of reading zero for every new family.
+        bundle: {
+          childCount: pendingLinks.length + applicant.childApplicationsAsParent.length,
+          linkCount: pendingLinks.length + applicant.childApplicationsAsParent.length,
+        },
         branch: applicant.intendedBranch
           ? { id: applicant.intendedBranch.id, name: applicant.intendedBranch.name }
           : null,
         requestedRole: applicant.requestedRole,
-        // A legacy registration bundles children as pending LINKS, not
-        // applications (R62 changed the shape; the old rows remain).
-        children: [],
+        // R62 — the children applied for with this registration. Empty on a
+        // pre-R62 request, which bundled them as pending LINKS instead; those
+        // rows remain and are still counted by `bundle` above.
+        children: applicant.childApplicationsAsParent.map((c) => ({
+          applicationId: c.id,
+          nameArabic: `${c.firstNameArabic} ${c.lastNameArabic}`,
+          status: c.status,
+          schoolingStage: c.schoolingStage,
+        })),
         category: applicant.intendedCategory
           ? { id: applicant.intendedCategory.id, name: applicant.intendedCategory.name }
           : null,
@@ -223,7 +243,17 @@ export async function listApprovals(
   // one would silently drop every family rather than narrowing them.
   if ((!type || type === 'child-application') && !branchId) {
     const pending = await prisma.childApplication.findMany({
-      where: { status: 'pending', deletedAt: null },
+      where: {
+        status: 'pending',
+        deletedAt: null,
+        // **Not the ones already shown on their parent's registration item.**
+        // A non-student parent registering produces both a pending applicant
+        // and applications; listing them twice would invite an approver to
+        // decide the same family from two places. This branch is therefore
+        // exactly the requests from adults who are ALREADY approved — an adult
+        // student registering their children, or a parent adding another.
+        parent: { accountStatus: { not: 'pending' } },
+      },
       include: {
         parent: { select: { id: true, nameArabic: true } },
         requestedCategory: { select: { id: true, name: true } },
@@ -364,7 +394,12 @@ export async function decide(
 
     const applicant = await tx.user.findFirst({
       where: { id, accountStatus: 'pending', deletedAt: null, childLinks: { none: {} } },
-      include: { parentLinks: { where: { deletedAt: null, status: 'pending' } } },
+      include: {
+        parentLinks: { where: { deletedAt: null, status: 'pending' } },
+        // R62 — needed to tell a parent registering children (who enrols
+        // nobody here) from a lone applicant (who is the student).
+        childApplicationsAsParent: { where: { status: 'pending', deletedAt: null } },
+      },
     });
 
     if (applicant) {
@@ -446,12 +481,19 @@ export async function decide(
       // Level.
       if (decision.approve) {
         const children = applicant.parentLinks.map((l) => l.studentId);
+        // **R62 — a parent registering children enrols nobody here.** The
+        // children arrive as applications and are placed on their own
+        // decisions, so this applicant is a parent rather than a student and
+        // demanding a placement for them would refuse every family registration
+        // made since the revision. A PRE-R62 bundle still carries pending
+        // links, and those children still enrol here.
+        const appliedFor = applicant.childApplicationsAsParent.length;
         const mustEnrol =
           children.length > 0
             ? children
-            : applicant.requestedRole === null
-              ? [applicant.id]
-              : [];
+            : appliedFor > 0 || applicant.requestedRole !== null
+              ? []
+              : [applicant.id];
         const placed = new Set(enrollments.map((e) => e.userId));
         const missing = mustEnrol.filter((id) => !placed.has(id));
         if (missing.length > 0) {

@@ -3,6 +3,7 @@ import { ConsentMethod, ConsentType } from '../generated/prisma/enums.js';
 import { AppError, uniqueViolationFields } from '../lib/errors.js';
 import { verifyOnboardingToken } from '../lib/onboarding-token.js';
 import * as audit from '../repositories/audit.repository.js';
+import { submitChildApplications } from './child-application.service.js';
 import type { RegistrationInput } from '../validators/registration.validators.js';
 
 /**
@@ -75,7 +76,8 @@ function composeFrenchName(first?: string, last?: string): string | null {
 
 export interface RegistrationResult {
   applicantId: string;
-  childId: string | null;
+  /** R62 — the applications this request created; `[]` on an adult registration. */
+  childApplicationIds: string[];
   accountStatus: 'pending';
 }
 
@@ -259,63 +261,36 @@ export async function register(
         },
       });
 
-      let child: User | null = null;
+      // ── R62 — the children arrive as APPLICATIONS, not as accounts ────────
+      //
+      // Before this revision the child `User`, its `FamilyLink(pending)` and its
+      // consent records were all created here. That is precisely what forced
+      // approval to be all-or-nothing: a refused child would otherwise have left
+      // an orphan account behind.
+      //
+      // Now the request records what was asked for, and **the child is created
+      // at approval, one at a time** — so an approver can accept one sibling and
+      // refuse another, and a refusal leaves no `User`, no link and no consent.
+      //
+      // The applicant's OWN consent records are written above, unchanged: they
+      // belong to a person who exists.
+      let childApplications: { requestId: string; applicationIds: string[] } | null = null;
       if (input.kind === 'parent_child') {
-        // Minor students are login-less: NO UserIdentity and NO
-        // pre_provisioned_email (§4.3, BR-5).
-        child = await tx.user.create({
-          data: {
-            firstNameArabic: input.child.first_name_arabic,
-            lastNameArabic: input.child.last_name_arabic,
-            nameArabic: composeArabicName(
-              input.child.first_name_arabic,
-              input.child.last_name_arabic,
-            ),
-            firstNameFrench: input.child.first_name_french ?? null,
-            lastNameFrench: input.child.last_name_french ?? null,
-            nameFrench: composeFrenchName(
-              input.child.first_name_french,
-              input.child.last_name_french,
-            ),
-            nickname: input.child.nickname ?? null,
-            phone: input.child.phone ?? null,
-            notes: input.child.notes ?? null,
-            sex: input.child.sex,
-            accountStatus: 'pending',
-          },
-        });
-
-        // Pending link — grants zero visibility until approved (BR-4).
-        await tx.familyLink.create({
-          data: { parentId: applicant.id, studentId: child.id, status: 'pending' },
-        });
-
-        // The child's own data-processing consent, granted by the parent.
-        await tx.consentRecord.create({
-          data: {
-            studentId: child.id,
-            consentType: ConsentType.data_processing,
-            granted: true,
-            method: ConsentMethod.online_form,
-            consentTextVersion: textVersion,
-            grantedByUserId: applicant.id,
-          },
-        });
-
-        // Media release: the parent's decision either way is recorded, so the
-        // effective status is derived from a real record rather than inferred
-        // from absence (BR-1, §4.1a).
-        const mediaGranted = input.consents.media_release === true;
-        await tx.consentRecord.create({
-          data: {
-            studentId: child.id,
-            consentType: ConsentType.media_release,
-            granted: mediaGranted,
-            method: ConsentMethod.online_form,
-            consentTextVersion: textVersion,
-            grantedByUserId: applicant.id,
-            ...(mediaGranted ? {} : { revokedAt: now, revokedByUserId: applicant.id }),
-          },
+        childApplications = await submitChildApplications(tx, applicant.id, {
+          consentDataProcessing: true,
+          // R62.3b — the version in force NOW. Approval must never substitute
+          // the current value for the one this parent actually saw.
+          consentTextVersion: textVersion,
+          children: input.children.map((c) => ({
+            firstNameArabic: c.first_name_arabic,
+            lastNameArabic: c.last_name_arabic,
+            sex: c.sex,
+            ...(c.schooling_stage ? { schoolingStage: c.schooling_stage } : {}),
+            // One stage for the family, chosen once (§4.1) — the approver may
+            // place each child differently, which is R62.7's whole point.
+            requestedCategoryId: input.category_id,
+            consentMediaRelease: c.consent_media_release,
+          })),
         });
       }
 
@@ -329,13 +304,19 @@ export async function register(
           provider: 'google',
           account_status: 'pending',
           registration_kind: input.kind,
-          ...(child ? { child_created: true } : {}),
+          // R62 — how many children were APPLIED for; none exists yet.
+          ...(childApplications
+            ? { child_applications: childApplications.applicationIds.length }
+            : {}),
         },
       });
 
       return {
         applicantId: applicant.id,
-        childId: child?.id ?? null,
+        // R62 — a request may name several children and none of them exists
+        // yet. The ids identify the APPLICATIONS, which is what an approver
+        // acts on.
+        childApplicationIds: childApplications?.applicationIds ?? [],
         accountStatus: 'pending' as const,
       };
     });
