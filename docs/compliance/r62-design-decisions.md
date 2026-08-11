@@ -14,6 +14,11 @@ remove child free-text notes · bounded accessibility model · `familySituation`
 and `homeAddress` blocked pending legal review · parent-as-discriminator ·
 admin-decided matching · read-only parent.
 
+**Updated 2026-08-11 after the Owner's placement clarification:** a
+`schoolingStage` enum replaces date of birth as the placement signal, and
+placement itself stays an explicit administrative decision. See **Decision D**
+in the resolved section.
+
 ---
 
 ## Decision 1 — Can one child have multiple approved parents?
@@ -336,15 +341,166 @@ own identity block — so the flow is walkable.
 
 ---
 
+# RESOLVED — the final design
+
+Owner decisions of 2026-08-11. This section supersedes the open questions below,
+which are kept for the reasoning behind each answer.
+
+## A — A minor who gains their own login: **flag for admin review**
+
+**Decided: do not auto-revoke.** Existing parent links stay live until an
+administrator decides.
+
+**[INFER] Proposed mechanism**, chosen so it adds no new machinery: when a
+student account that has approved `FamilyLink` rows binds a `UserIdentity` for
+the first time, the binding transaction raises a **review item in the existing
+approvals queue**. It is **non-blocking** — the links keep working, the student
+keeps their new login, and an administrator decides in their own time.
+
+**[INFER]** Non-blocking is the right default: the alternative locks a family
+out at the exact moment a teenager first signs in, which would read as a bug.
+
+**[CONFIRM]** Whether Moroccan law compels revocation at majority. Flagged, not
+assumed — see the compliance register below.
+
+## B — The parent's own application: **decided explicitly and separately**
+
+**Decided: never inferred from the children's outcomes.**
+
+Consequence for the approval screen: **one parent decision plus N child
+decisions, each independent.** A parent may be approved with every child
+rejected, or rejected with children approved — the second being the case where a
+child is admitted while the adult who applied is not, which the association may
+genuinely need.
+
+**[INFER]** This is also the simpler implementation: no state machine inferring
+one outcome from others, and nothing to explain in an interface.
+
+## C — R62 includes a **minimal Student Dashboard**
+
+**Decided, scoped to:**
+
+* student identity block — name, **reference code**, category/level, branch
+* today's and upcoming sessions
+* basic student information
+
+**Explicitly out:** Quran progress, grades, exams — future milestones.
+
+**[INFER]** This is what makes the parent/child flow walkable end to end, which
+is the only way the R62 security boundary can actually be tested rather than
+asserted.
+
+## D — Placement: **schooling stage, not date of birth**
+
+The Owner's clarification established that the three programs map to schooling
+stage and that **age is only approximate** — with a concrete case where age
+misleads and schooling stage does not.
+
+**Decided: add `schoolingStage` as a bounded enum. Do not add date of birth.**
+Full reasoning in [the data-collection decision](data-collection-decision.md)
+§2.1, including my correction of an earlier wrong verdict.
+
+**Placement remains an explicit administrative decision.** The field *informs*
+the administrator; it never gates, filters or auto-assigns. **[INFER] That must
+be stated in the revision**, or a future contributor will add validation that
+refuses the Owner's own example — the older student still in high school.
+
+---
+
+# Compliance register — how flagged items are tracked
+
+**The Owner has not filed a CNDP declaration and intends to complete the
+formalities after the MVP, based on what the finished system actually
+processes.**
+
+**[INFER] That order is defensible and this document does not argue with it.**
+What it changes is the discipline required in the meantime: no field may be
+justified by *"we will declare it later"*, and every compliance-sensitive
+decision must be **recorded as it is taken**, not reconstructed afterwards.
+
+**These three documents are that register.** Every **[CONFIRM]** in them is an
+open item for the eventual legal review. As of today:
+
+| Item | Where |
+|---|---|
+| `healthCondition` · `familySituation` · `homeAddress` for minors | audit A.2, decision 5 |
+| `sex` as a protected characteristic | decision §1 |
+| Audio recordings of minors | audit A.5 |
+| Google OAuth as a foreign transfer | audit H.1 |
+| Retention for a minor's educational record | audit F.5 |
+| Erasure vs backup retention | audit H.4 |
+| Guardianship verification | this document, Decision 9 |
+| Right to the actual rejection reason | this document, Decision 8 |
+| Parent link at majority | this document, Decision A |
+| Birth date on certificates | data-collection §2.1 |
+
+**[INFER] Recommendation: keep this table current as R62 and later work add to
+it.** Reaching the declaration with a maintained register is a materially
+different exercise from reconstructing one from a finished codebase.
+
+---
+
+# Final R62 scope — for approval
+
+**Data model**
+
+1. `ChildApplication` — one request, many children, **per-child status**
+2. `FamilyLink.relationshipType` — `mother` · `father` · `legal_guardian`
+3. `User.referenceCode` — random, unique, non-secret, students only
+4. `User.schoolingStage` — bounded enum, informs placement, gates nothing
+5. `ChildApplication.rejectionReason` (enum) + `internalNote` (staff-only)
+
+**Specification**
+
+6. **TD-4.2 narrowed** — atomicity becomes *per child*
+7. §5.4 / §14.1 — Family Dashboard removed; a parent's home is their child's dashboard
+8. Linking restricted to accounts **with no login identity**
+9. **Multi-parent permitted** — documenting what the model already does
+10. `parent` role granted automatically on first approval
+11. Placement is **explicitly administrative** — no age or stage rule may gate it
+
+**Behaviour**
+
+12. Adult student requests children from the student area
+13. Non-student parent requests children in the registration flow
+14. Switcher: ولي الأمر expands to approved children + «＋ تسجيل طفل»
+15. Selecting a child → parent + child context → the student dashboard
+16. **Minimal student dashboard** (Decision C)
+17. Rejection: bounded reason to the parent, internal note never shared;
+    resubmission creates a **new** application
+18. Minor gaining a login → **non-blocking admin review item**
+
+**Explicitly NOT in R62**
+
+Date of birth · emergency contact *(own decision)* · `familySituation` /
+`homeAddress` changes *(blocked)* · the accessibility redesign *(own revision —
+different table, different legal question)* · any new parent capability ·
+Quran progress, grades, exams · staff HR data
+
+**Parent permissions: read-only**, per TD-2 as it stands. Online exams — the
+only parent write TD-2 grants — remain disabled by R58.
+
+---
+
 # Decisions still needed from you
 
 | # | Question |
 |---|---|
-| **A** | **Decision 4a** — a minor who gains their own login: auto-revoke, flag for review, or leave? *(I recommend flag)* |
-| **B** | **Decision 7** — is the parent's own account decided explicitly, or inferred from the children? *(I recommend explicit)* |
-| **C** | **Scope** — does R62 include a minimal student dashboard, or ship against the placeholder? *(I recommend include)* |
+| ~~**A**~~ | ~~a minor who gains their own login~~ — **RESOLVED: flag for review** |
+| ~~**B**~~ | ~~parent's own account~~ — **RESOLVED: explicit and separate** |
+| ~~**C**~~ | ~~minimal student dashboard~~ — **RESOLVED: included** |
 | **D** | **[CONFIRM]** Guardianship verification — must the association verify, and must the platform record that it did? |
 | **E** | **[CONFIRM]** Must a rejected applicant be told the actual reason? *(Changes Decision 8)* |
-| **F** | Confirm the three legal items from the previous document are in motion: `healthCondition` / `familySituation` / `homeAddress` review, the CNDP declaration status, and the Arabic privacy notice |
+| **F** | ~~CNDP declaration status~~ — **RESOLVED: deferred to post-MVP by decision.** The compliance register above is how flagged items reach that review |
 
-Nothing will be drafted or implemented until you answer A–C and confirm F.
+**A, B, C and F are resolved.** D and E remain open and are **[CONFIRM]** items
+for the eventual legal review — neither blocks drafting R62, because neither
+changes the data model:
+
+* **D** — guardianship verification: if it is later required, it adds one date
+  column, not a redesign.
+* **E** — the right to an actual rejection reason: if required, the bounded enum
+  becomes a bounded enum *plus* a shared free-text field. The internal note
+  stays either way.
+
+**R62 is ready to draft on your approval of the scope above.**

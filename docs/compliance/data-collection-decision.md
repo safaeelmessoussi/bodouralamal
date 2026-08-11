@@ -112,25 +112,78 @@ platform's staff profile to what *teaching* needs.**
 
 # 2. The proposed fields, judged individually
 
-## 2.1 Date of birth — **REJECT**
+## 2.1 Date of birth — **REVISED after the Owner's clarification**
 
-**[CODE] This is the decisive finding.** The educational stage
-(الكبار / اليافعون / الطفل) is **chosen at registration**, never derived:
-`registration.service.ts:188` takes `category_id` from the applicant, validates
-it exists, and stores it. **No code path computes or consumes an age.**
+**My earlier verdict was REJECT, on the ground that no code consumes an age.
+That reasoning was incomplete, and the Owner has supplied what was missing.**
 
-So a birth date would be collected for a purpose the platform does not have.
+**The stated purpose (Owner, 2026-08-11):** the institute's three programs map
+to *schooling stage*, approximately —
 
-* **For deduplication** — disproportionate, and it does not even work: siblings,
-  twins and data-entry errors defeat it. See §3 for what does work.
-* **For age-appropriate placement** — that feature does not exist. If you want
-  it, **a birth *year* is sufficient** to warn *"this child is 7 and you selected
-  الكبار"*, and a year is far less identifying than a full date.
-* **For certificates** — **[CONFIRM]** if certificates must state a birth date,
-  that is a genuine purpose and changes this answer.
+| Category | Who it is for |
+|---|---|
+| الطفل | One year before first primary, through primary school |
+| اليافعون | Middle and high school |
+| الكبار | After high school |
 
-**[INFER] Recommendation: do not collect. Revisit only with a stated purpose,
-and then prefer birth year.**
+**"Age is only approximate."** The Owner's own example: *a girl older than the
+usual high-school age can still be accepted into the teens program if she is
+still in high school, or if the admin considers it appropriate.* Placement
+remains an explicit administrative decision.
+
+### That example is the argument against date of birth, not for it
+
+**[INFER] It shows age is a proxy — and an unreliable one — for the variable
+that actually decides placement: what stage of schooling the student is in.**
+The Categories are *defined* by schooling stage. Age merely correlates with it,
+and the Owner has given a concrete case where the correlation breaks.
+
+**So collect the signal, not its proxy.**
+
+### Recommendation: add `schoolingStage`, not date of birth
+
+```
+schoolingStage : enum   pre_primary · primary · middle · high ·
+                        post_secondary · not_in_school
+```
+
+| | Date of birth | Schooling stage |
+|---|---|---|
+| Answers "which program?" | Indirectly, unreliably | **Directly** |
+| Handles the Owner's edge case | **No** — flags her as an adult | **Yes** — "high" |
+| Identifying power | Precise, permanent, matches civil records | Low; a current status |
+| Civil-registry lookup | Possible in combination | **No** |
+| Ages out | Never — permanent | Naturally, as status changes |
+
+**[INFER]** Schooling stage is *better for the institute and less risky at the
+same time*. That combination is rare enough to be worth acting on.
+
+**[CODE]** No such field exists today, and `Category` is chosen freely at
+registration with no supporting information at all — so this also gives the
+administrator something to decide *with*, which is the Owner's stated need.
+
+### Birth year — available, not recommended yet
+
+If administrators later report that schooling stage alone is insufficient, a
+**birth year** is the proportionate next step: one integer, useless for identity
+lookup, enough to distinguish a 9-year-old from a 15-year-old.
+
+**[INFER] Do not add it pre-emptively.** Ship schooling stage; add a year only if
+a real placement decision proves impossible without one.
+
+### Full date of birth — still not recommended
+
+* **For placement** — superseded by schooling stage.
+* **For deduplication** — rejected earlier and unchanged: siblings, twins and
+  typos defeat it, and §3 solves the problem without it.
+* **For certificates** — **[CONFIRM]** the one open purpose. If certificates
+  must state a birth date, that is a genuine need and changes this answer *for
+  that purpose only*.
+
+**Correction recorded plainly:** my first verdict rested on "no code consumes
+it", which was true but not the whole question. The purpose existed in the
+institute's practice and not in the code. The verdict survives — but for a
+better reason, and with a field the earlier document wrongly dismissed (§2.6).
 
 ## 2.2 Birth city — **REJECT**
 
@@ -179,9 +232,15 @@ accessibilityNote  : VarChar(200)   — an accommodation, never a condition
 is a design that discourages a medical entry. It does not prevent one, which is
 why **[CONFIRM]** is still needed on whether this suffices.
 
-## 2.6 Education level (prior schooling) — **REJECT**
+## 2.6 Education level (schooling stage) — **REVERSED: ADD**
 
-No purpose. The platform's own Levels are assigned by staff at approval **[SRS]**.
+**I rejected this earlier as having "no purpose". That was wrong**, and the
+Owner's clarification is what shows it: schooling stage is precisely how the
+institute decides which program a student belongs in. See §2.1.
+
+**[INFER]** The error is worth naming: I judged purpose by what the *code*
+consumed, and a purpose that lives in staff practice but not yet in code is
+still a purpose. Asking would have found it.
 
 ## 2.7 Phone — **KEEP for adults, forbid for minors**
 
