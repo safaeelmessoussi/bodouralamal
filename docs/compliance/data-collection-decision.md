@@ -4,6 +4,8 @@
 
 **Date:** 2026-08-11 · **Companion to:** [the personal-data audit](personal-data-audit.md)
 **Status:** for the Document Owner's decision. Nothing implemented; R62 still paused.
+**Followed by:** [the R62 design decisions](r62-design-decisions.md), which
+resolve the architectural questions once these data choices are settled.
 
 Tags carry the same meaning as in the audit: **[SRS]** the specification says
 so · **[CODE]** verified in the codebase · **[INFER]** my reasoning · **[CONFIRM]**
