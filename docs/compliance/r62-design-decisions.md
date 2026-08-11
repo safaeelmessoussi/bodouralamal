@@ -503,4 +503,13 @@ changes the data model:
   becomes a bounded enum *plus* a shared free-text field. The internal note
   stays either way.
 
-**R62 is ready to draft on your approval of the scope above.**
+**Scope approved 2026-08-11. R62 is drafted at
+[`docs/SRS-PROPOSAL-R62.md`](../SRS-PROPOSAL-R62.md) and audited against the
+live architecture in its §62.13 — not applied.**
+
+**The audit changed the draft once:** deferring the child's `User` to approval
+silently breaks the consent flow, because `ConsentRecord.student_id` cannot be
+written before the student exists. §62.3b is the result — consent is captured on
+the application at submission, including the **text version in force then**, and
+materialised at approval with the submission's values. Without it, a parent
+could be recorded as consenting to text they never saw.
