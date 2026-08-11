@@ -90,6 +90,11 @@ The technical core. Written for an engineer who has never seen the repository.
 | [Internationalization](architecture/internationalization.md) | Arabic-only launch, RTL, native collation, i18n keys |
 | [Performance and scale](architecture/performance-and-scale.md) | Targets, the design envelope, caching, what not to build |
 
+### [Compliance](compliance/personal-data-audit.md) — personal data and the law
+| | |
+|---|---|
+| [Personal data & CNDP readiness audit](compliance/personal-data-audit.md) | Every personal-data field: purpose, necessity, access, retention, and what needs a lawyer rather than an engineer |
+
 ### [Operations](operations/README.md) — running it
 | | |
 |---|---|
