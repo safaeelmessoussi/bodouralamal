@@ -269,7 +269,7 @@ function assertSuperAdmin(actor: Actor): void {
  */
 async function assertFreshSuperAdmin(prisma: PrismaClient, actor: Actor): Promise<void> {
   assertSuperAdmin(actor);
-  await assertFreshActive(prisma, actor.userId, [scope.SUPER_ADMIN]);
+  await assertFreshActive(prisma, actor.userId, [scope.SUPER_ADMIN], actor.activeRole);
 }
 
 export interface TrashRow {

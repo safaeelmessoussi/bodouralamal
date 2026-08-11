@@ -1,4 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { actorFor } from '../test-support/actor.js';
 
 import { loadConfig } from '../lib/config.js';
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
@@ -79,7 +80,7 @@ describe('§4.3 Revision 16 — revoking an approved link', () => {
     await expect(resolveActingStudent(prisma, { userId: p, roles: ['parent'] }, c)).resolves
       .toMatchObject({ studentId: c });
 
-    await revokeLink(prisma, admin, linkId, 'انتقال الحضانة');
+    await revokeLink(prisma, await actorFor(prisma, admin), linkId, 'انتقال الحضانة');
 
     // Nothing about the parent's session changed — only the link row.
     await expect(
@@ -93,7 +94,7 @@ describe('§4.3 Revision 16 — revoking an approved link', () => {
     const c = await makeUser('طفلة');
     const linkId = await approvedLink(p, c);
 
-    await revokeLink(prisma, admin, linkId, 'بناء على طلب الأسرة');
+    await revokeLink(prisma, await actorFor(prisma, admin), linkId, 'بناء على طلب الأسرة');
 
     const link = await prisma.familyLink.findUnique({ where: { id: linkId } });
     expect(link?.deletedAt).toBeInstanceOf(Date);
@@ -131,7 +132,7 @@ describe('§4.3 Revision 16 — revoking an approved link', () => {
     const p = await makeUser('والدة');
     const c = await makeUser('طفلة');
     const linkId = await approvedLink(p, c);
-    await revokeLink(prisma, admin, linkId, 'خطأ إداري');
+    await revokeLink(prisma, await actorFor(prisma, admin), linkId, 'خطأ إداري');
 
     // The partial unique index covers non-deleted rows only, so this must not
     // collide with the revoked row.
@@ -151,7 +152,7 @@ describe('§4.3 Revision 16 — revoking an approved link', () => {
     const c = await makeUser('طفلة');
     const linkId = await approvedLink(p, c);
 
-    await expect(revokeLink(prisma, admin, linkId, '   ')).rejects.toMatchObject({
+    await expect(revokeLink(prisma, await actorFor(prisma, admin), linkId, '   ')).rejects.toMatchObject({
       code: 'VALIDATION_FAILED',
     });
     // Nothing revoked — the parent still has access.
@@ -165,8 +166,8 @@ describe('§4.3 Revision 16 — revoking an approved link', () => {
     const c = await makeUser('طفلة');
     const linkId = await approvedLink(p, c);
 
-    await revokeLink(prisma, admin, linkId, 'مرة واحدة');
-    await expect(revokeLink(prisma, admin, linkId, 'مرة ثانية')).rejects.toMatchObject({
+    await revokeLink(prisma, await actorFor(prisma, admin), linkId, 'مرة واحدة');
+    await expect(revokeLink(prisma, await actorFor(prisma, admin), linkId, 'مرة ثانية')).rejects.toMatchObject({
       code: 'NOT_FOUND',
     });
     expect(
@@ -182,7 +183,7 @@ describe('§4.3 Revision 16 — revoking an approved link', () => {
       data: { parentId: p, studentId: c, status: 'pending' },
     });
 
-    await expect(revokeLink(prisma, admin, pending.id, 'خطأ')).rejects.toMatchObject({
+    await expect(revokeLink(prisma, await actorFor(prisma, admin), pending.id, 'خطأ')).rejects.toMatchObject({
       code: 'STATE_CONFLICT',
     });
     expect((await prisma.familyLink.findUnique({ where: { id: pending.id } }))?.deletedAt).toBeNull();
@@ -194,10 +195,10 @@ describe('§4.3 Revision 16 — revoking an approved link', () => {
     const c = await makeUser('طفلة');
     const linkId = await approvedLink(p, c);
 
-    await expect(revokeLink(prisma, teacher, linkId, 'محاولة')).rejects.toMatchObject({
+    await expect(revokeLink(prisma, await actorFor(prisma, teacher), linkId, 'محاولة')).rejects.toMatchObject({
       code: 'FORBIDDEN',
     });
-    await expect(revokeLink(prisma, p, linkId, 'محاولة')).rejects.toMatchObject({
+    await expect(revokeLink(prisma, await actorFor(prisma, p), linkId, 'محاولة')).rejects.toMatchObject({
       code: 'FORBIDDEN',
     });
     expect((await prisma.familyLink.findUnique({ where: { id: linkId } }))?.deletedAt).toBeNull();
@@ -211,7 +212,7 @@ describe('§4.3 Revision 16 — revoking an approved link', () => {
 
     await prisma.user.update({ where: { id: admin }, data: { accountStatus: 'suspended' } });
 
-    await expect(revokeLink(prisma, admin, linkId, 'محاولة')).rejects.toMatchObject({
+    await expect(revokeLink(prisma, await actorFor(prisma, admin), linkId, 'محاولة')).rejects.toMatchObject({
       code: 'FORBIDDEN',
     });
     expect((await prisma.familyLink.findUnique({ where: { id: linkId } }))?.deletedAt).toBeNull();
@@ -225,7 +226,7 @@ describe('§4.3 Revision 16 — revoking an approved link', () => {
     const link1 = await approvedLink(p, c1);
     await approvedLink(p, c2);
 
-    await revokeLink(prisma, admin, link1, 'حالة واحدة فقط');
+    await revokeLink(prisma, await actorFor(prisma, admin), link1, 'حالة واحدة فقط');
 
     await expect(
       resolveActingStudent(prisma, { userId: p, roles: ['parent'] }, c1),
@@ -242,7 +243,7 @@ describe('§4.3 Revision 16 — revoking an approved link', () => {
     const link1 = await approvedLink(p1, c);
     await approvedLink(p2, c);
 
-    await revokeLink(prisma, admin, link1, 'أحد الوالدين فقط');
+    await revokeLink(prisma, await actorFor(prisma, admin), link1, 'أحد الوالدين فقط');
 
     await expect(
       resolveActingStudent(prisma, { userId: p1, roles: ['parent'] }, c),
@@ -258,7 +259,7 @@ describe('§4.3 Revision 23 — POST /family-links is staff-mediated', () => {
     const p = await makeUser('والدة');
     const c = await makeUser('طفلة');
 
-    const link = await createLink(prisma, admin, p, c);
+    const link = await createLink(prisma, await actorFor(prisma, admin), p, c);
 
     // Pending even though STAFF created it: §4.3 retains that rule without
     // exception, which is also what keeps the queue's family-link type reachable.
@@ -274,7 +275,7 @@ describe('§4.3 Revision 23 — POST /family-links is staff-mediated', () => {
     const p = await makeUser('والدة');
     const c = await makeUser('طفلة');
 
-    const link = await createLink(prisma, admin, p, c);
+    const link = await createLink(prisma, await actorFor(prisma, admin), p, c);
 
     const row = await prisma.auditLog.findFirst({
       where: { targetId: link.id, actionType: 'familylink.create' },
@@ -291,10 +292,10 @@ describe('§4.3 Revision 23 — POST /family-links is staff-mediated', () => {
 
     // This is the whole point of Revision 23: a parent has no route to link
     // themselves to an existing child.
-    await expect(createLink(prisma, parentCaller, parentCaller, c)).rejects.toMatchObject({
+    await expect(createLink(prisma, await actorFor(prisma, parentCaller), parentCaller, c)).rejects.toMatchObject({
       code: 'FORBIDDEN',
     });
-    await expect(createLink(prisma, parentCaller, parentCaller, c)).rejects.toMatchObject({
+    await expect(createLink(prisma, await actorFor(prisma, parentCaller), parentCaller, c)).rejects.toMatchObject({
       code: 'FORBIDDEN',
     });
     expect(await prisma.familyLink.count({ where: { studentId: c } })).toBe(0);
@@ -304,7 +305,7 @@ describe('§4.3 Revision 23 — POST /family-links is staff-mediated', () => {
     const teacher = await makeStaff('teacher');
     const p = await makeUser('والدة');
     const c = await makeUser('طفلة');
-    await expect(createLink(prisma, teacher, p, c)).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await expect(createLink(prisma, await actorFor(prisma, teacher), p, c)).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 
   it('TD-12: an admin suspended mid-session cannot create a link', async () => {
@@ -313,7 +314,7 @@ describe('§4.3 Revision 23 — POST /family-links is staff-mediated', () => {
     const c = await makeUser('طفلة');
     await prisma.user.update({ where: { id: admin }, data: { accountStatus: 'suspended' } });
 
-    await expect(createLink(prisma, admin, p, c)).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await expect(createLink(prisma, await actorFor(prisma, admin), p, c)).rejects.toMatchObject({ code: 'FORBIDDEN' });
     expect(await prisma.familyLink.count({ where: { studentId: c } })).toBe(0);
   });
 
@@ -321,12 +322,12 @@ describe('§4.3 Revision 23 — POST /family-links is staff-mediated', () => {
     const admin = await makeStaff('admin');
     const p = await makeUser('والدة');
     const c = await makeUser('طفلة');
-    await createLink(prisma, admin, p, c);
+    await createLink(prisma, await actorFor(prisma, admin), p, c);
 
     // TD-3.8 restricts FAMILY_LINK_PENDING to own-resource contexts; this caller
     // is staff acting on someone else's relationship, so the review state of the
     // existing link must not be disclosed through the error code.
-    await expect(createLink(prisma, admin, p, c)).rejects.toMatchObject({ code: 'DUPLICATE' });
+    await expect(createLink(prisma, await actorFor(prisma, admin), p, c)).rejects.toMatchObject({ code: 'DUPLICATE' });
     expect(await prisma.familyLink.count({ where: { parentId: p, studentId: c } })).toBe(1);
   });
 
@@ -335,9 +336,9 @@ describe('§4.3 Revision 23 — POST /family-links is staff-mediated', () => {
     const p = await makeUser('والدة');
     const c = await makeUser('طفلة');
     const first = await approvedLink(p, c);
-    await revokeLink(prisma, admin, first, 'انتقال الحضانة');
+    await revokeLink(prisma, await actorFor(prisma, admin), first, 'انتقال الحضانة');
 
-    const again = await createLink(prisma, admin, p, c);
+    const again = await createLink(prisma, await actorFor(prisma, admin), p, c);
     expect(again.status).toBe('pending');
   });
 
@@ -348,15 +349,15 @@ describe('§4.3 Revision 23 — POST /family-links is staff-mediated', () => {
     await prisma.user.update({ where: { id: gone }, data: { deletedAt: new Date() } });
 
     await expect(
-      createLink(prisma, admin, p, '11111111-2222-4333-8444-555555555555'),
+      createLink(prisma, await actorFor(prisma, admin), p, '11111111-2222-4333-8444-555555555555'),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
-    await expect(createLink(prisma, admin, p, gone)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(createLink(prisma, await actorFor(prisma, admin), p, gone)).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 
   it('refuses a user as their own parent', async () => {
     const admin = await makeStaff('admin');
     const self = await makeUser('نفسها');
-    await expect(createLink(prisma, admin, self, self)).rejects.toMatchObject({
+    await expect(createLink(prisma, await actorFor(prisma, admin), self, self)).rejects.toMatchObject({
       code: 'VALIDATION_FAILED',
     });
   });
@@ -365,7 +366,7 @@ describe('§4.3 Revision 23 — POST /family-links is staff-mediated', () => {
     const admin = await makeStaff('admin');
     const p = await makeUser('والدة');
     const c = await makeUser('طفلة');
-    const link = await createLink(prisma, admin, p, c);
+    const link = await createLink(prisma, await actorFor(prisma, admin), p, c);
 
     // Approve it the way the §5.6 queue does.
     await prisma.familyLink.update({
@@ -375,7 +376,7 @@ describe('§4.3 Revision 23 — POST /family-links is staff-mediated', () => {
     await expect(resolveActingStudent(prisma, { userId: p, roles: ['parent'] }, c)).resolves
       .toMatchObject({ studentId: c });
 
-    await revokeLink(prisma, admin, link.id, 'انتهت الحاجة');
+    await revokeLink(prisma, await actorFor(prisma, admin), link.id, 'انتهت الحاجة');
     await expect(
       resolveActingStudent(prisma, { userId: p, roles: ['parent'] }, c),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });

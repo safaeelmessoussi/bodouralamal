@@ -5,7 +5,7 @@ import { issueAccessToken } from '../lib/access-token.js';
 import { postLoginDestination } from '../lib/role-home.js';
 import { clearCookie, parseCookies, serializeCookie } from '../lib/cookies.js';
 import type { AppConfig } from '../lib/config.js';
-import { toRoleScopes } from '../policies/branch-scope.js';
+import { narrowToRole, toRoleScopes } from '../policies/branch-scope.js';
 import { AppError } from '../lib/errors.js';
 import {
   buildAuthorizationUrl,
@@ -196,6 +196,52 @@ export function oauthCallback(prisma: PrismaClient, config: AppConfig) {
   };
 }
 
+/**
+ * The role the client is asking to work as, from the request body.
+ *
+ * A body rather than a header: this is a POST that already carries CSRF
+ * protection, and a header would be a second convention for one idea.
+ */
+function requestedRole(req: Request): string | undefined {
+  const body = req.body as { active_role?: unknown } | undefined;
+  return typeof body?.active_role === 'string' && body.active_role !== ''
+    ? body.active_role
+    : undefined;
+}
+
+/**
+ * **Fail safe, never fail open** (§60.4, Document Owner decision).
+ *
+ * Three cases, and the middle one is the decision that matters:
+ *
+ *   * **No role requested** → `null`, an un-narrowed token. The honest reading
+ *     of *"the client did not ask to be narrowed"*, and the pre-R60 behaviour.
+ *   * **Requested role still assigned** → that role.
+ *   * **Requested role revoked** → **the most privileged role still held**, not
+ *     an un-narrowed token. Silently restoring full multi-role authority because
+ *     one role disappeared is the failure mode this rule exists to prevent: the
+ *     caller asked to be limited, and losing the limit is not a safe default.
+ *     Returning `null` here would do exactly that.
+ *
+ * Precedence matches the login default and the client's switcher ordering, so
+ * *"most privileged"* means the same thing everywhere.
+ */
+const ROLE_PRECEDENCE = ['super_admin', 'admin', 'teacher', 'parent', 'student'] as const;
+
+export function resolveActiveRole(
+  liveScopes: readonly { role: string }[],
+  requested: string | undefined,
+): string | null {
+  if (requested === undefined) return null;
+  const held = new Set(liveScopes.map((s) => s.role));
+  if (held.has(requested)) return requested;
+
+  const fallback = ROLE_PRECEDENCE.find((role) => held.has(role));
+  // An account with no assignments at all: nothing to fall back to, and an
+  // un-narrowed token of no roles is the same thing.
+  return fallback ?? null;
+}
+
 /** `POST /auth/refresh` — TD-12's sole cookie-authenticated route. */
 export function refresh(prisma: PrismaClient, config: AppConfig) {
   return async (req: Request, res: Response): Promise<void> => {
@@ -228,10 +274,18 @@ export function refresh(prisma: PrismaClient, config: AppConfig) {
       where: { userId: outcome.userId, deletedAt: null },
       include: { role: true },
     });
+    // **R60 — refresh is what makes an active role persist.** The client holds
+    // the access token in memory only, and a role switch navigates by full page
+    // load, so the token is discarded and re-acquired here on the very next
+    // page. This endpoint, not `/auth/switch-role`, is the load-bearing one.
+    const liveScopes = toRoleScopes(assignments);
+    const active = resolveActiveRole(liveScopes, requestedRole(req));
+
     const { token, expiresAt } = issueAccessToken(
       {
         userId: account.id,
-        roleScopes: toRoleScopes(assignments),
+        roleScopes: active === null ? liveScopes : narrowToRole(liveScopes, active) ?? liveScopes,
+        ...(active !== null ? { activeRole: active } : {}),
         accountStatus: account.accountStatus,
       },
       config.JWT_SIGNING_KEY,
@@ -241,7 +295,14 @@ export function refresh(prisma: PrismaClient, config: AppConfig) {
     // already holds, so the cookie is deliberately left untouched (T3).
     if (outcome.kind === 'rotated') setRefreshCookie(res, outcome.rawToken);
 
-    res.json({ access_token: token, expires_at: expiresAt.toISOString() });
+    // **Returned explicitly** (§60.4): the client must never have to guess what
+    // authority it holds, and when a requested role has been revoked this is how
+    // it learns which role it fell back to.
+    res.json({
+      access_token: token,
+      expires_at: expiresAt.toISOString(),
+      active_role: active,
+    });
   };
 }
 

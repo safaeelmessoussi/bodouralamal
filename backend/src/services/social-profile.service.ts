@@ -1,5 +1,6 @@
 import type { PrismaClient, StudentSocialProfile } from '../generated/prisma/client.js';
 import { assertFreshActive } from '../policies/freshness.policy.js';
+import type { Actor } from '../policies/actor.js';
 import { assertCanAccessStudent } from '../policies/roster-resolution.js';
 import * as audit from '../repositories/audit.repository.js';
 
@@ -83,21 +84,33 @@ function toView(studentId: string, row: StudentSocialProfile | null): ProfileVie
  */
 async function authorize(
   prisma: PrismaClient,
-  actorUserId: string,
+  /**
+   * R60 — the full caller, not a bare id. The **active role** has to reach
+   * `assertFreshActive` (which rebuilds from live rows and would otherwise hand
+   * back this account's full authority) and the audit row (§60.8). Threading the
+   * `Actor` rather than a second `activeRole` parameter keeps the two from
+   * drifting apart, which is why the id alone is no longer enough.
+   */
+  caller: Actor,
   studentId: string,
 ): Promise<{ userId: string; roles: string[] }> {
-  const actor = await assertFreshActive(prisma, actorUserId, PROFILE_ROLES);
-  await assertCanAccessStudent(prisma, actor, studentId);
+  // R60 — the FRESH, narrowed roles are returned, not the token's. A caller
+  // acting as مؤطِّرة must be audited and evaluated as مؤطِّرة even when the
+  // account also holds Admin.
+  const actor = await assertFreshActive(prisma, caller.userId, PROFILE_ROLES, caller.activeRole);
+  // The narrowed scopes, so §4.2's per-role resolution runs on the role being
+  // exercised rather than on every role the account holds.
+  await assertCanAccessStudent(prisma, { userId: actor.userId, roleScopes: actor.roleScopes }, studentId);
   return { userId: actor.userId, roles: actor.roles };
 }
 
 /** `GET /students/{id}/social-profile` — audited read (TD-8 R28). */
 export async function readProfile(
   prisma: PrismaClient,
-  actorUserId: string,
+  caller: Actor,
   studentId: string,
 ): Promise<ProfileView> {
-  const actor = await authorize(prisma, actorUserId, studentId);
+  const acting = await authorize(prisma, caller, studentId);
 
   const row = await prisma.studentSocialProfile.findFirst({
     where: { studentId, deletedAt: null },
@@ -105,11 +118,11 @@ export async function readProfile(
 
   // Audited even when no profile exists yet: the attempt to look is the event.
   await audit.write(prisma, {
-    actorUserId: actor.userId,
+    actorUserId: acting.userId,
     actionType: 'socialprofile.view',
     targetEntity: 'StudentSocialProfile',
     targetId: row?.id ?? studentId,
-    detail: { student_id: studentId, actor_roles: actor.roles, existed: row !== null },
+    detail: { student_id: studentId, actor_roles: acting.roles, existed: row !== null },
   });
 
   return toView(studentId, row);
@@ -124,11 +137,11 @@ export async function readProfile(
  */
 export async function writeProfile(
   prisma: PrismaClient,
-  actorUserId: string,
+  caller: Actor,
   studentId: string,
   input: ProfileInput,
 ): Promise<ProfileView> {
-  const actor = await authorize(prisma, actorUserId, studentId);
+  const acting = await authorize(prisma, caller, studentId);
 
   return prisma.$transaction(async (tx) => {
     const existing = await tx.studentSocialProfile.findFirst({
@@ -146,7 +159,7 @@ export async function writeProfile(
       : await tx.studentSocialProfile.create({ data: { ...data, studentId } });
 
     await audit.write(tx, {
-      actorUserId: actor.userId,
+      actorUserId: acting.userId,
       actionType: 'socialprofile.update',
       targetEntity: 'StudentSocialProfile',
       targetId: row.id,

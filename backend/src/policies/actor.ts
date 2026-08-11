@@ -29,4 +29,16 @@ export interface Actor {
    * everything or nothing by accident.
    */
   roleScopes: RoleScope[];
+  /**
+   * **R60 — the capacity this person is acting in.** `undefined` means every
+   * role held, which is the pre-R60 behaviour and the truth for a single-role
+   * account.
+   *
+   * `roleScopes` above is **already narrowed to it**, so no authorization check
+   * reads this field — they read the array, as they always have. It exists for
+   * the audit trail (§60.8: *"the Super Admin deleted it"* and *"the Super
+   * Admin, working as مؤطِّرة, deleted it"* describe different events) and for
+   * `/me`.
+   */
+  activeRole?: string;
 }

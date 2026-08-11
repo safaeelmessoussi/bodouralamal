@@ -674,13 +674,14 @@ export async function mintDownloadUrl(
   contentId: string,
   activeChildHeader: string | undefined,
 ): Promise<MintResult> {
-  const fresh = await assertFreshActive(prisma, actor.userId, [
-    'super_admin',
-    'admin',
-    'teacher',
-    'student',
-    'parent',
-  ]);
+  const fresh = await assertFreshActive(
+    prisma,
+    actor.userId,
+    ['super_admin', 'admin', 'teacher', 'student', 'parent'],
+    // R60 — the narrowed roles come back, so §4.9's tier is evaluated for the
+    // role being exercised rather than for every role the account holds.
+    actor.activeRole,
+  );
 
   // A Parent who is not also a Student is acting for a child, and §4.3 requires
   // the link to be verified on this very request. `via: 'family_link'` narrows

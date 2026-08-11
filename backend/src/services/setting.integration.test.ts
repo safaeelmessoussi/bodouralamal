@@ -1,4 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { actorFor } from '../test-support/actor.js';
 
 import { loadConfig } from '../lib/config.js';
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
@@ -71,8 +72,8 @@ afterAll(async () => {
 describe('TD-2 / §5.6 — Super Admin only', () => {
   it('lets a Super Admin read and write', async () => {
     const su = await makeUser('super_admin');
-    expect(await listSettings(prisma, su)).toHaveLength(1);
-    const saved = await updateSetting(prisma, su, CONSENT_TEXT_VERSION_KEY, '2026-08-v1', 0);
+    expect(await listSettings(prisma, await actorFor(prisma, su))).toHaveLength(1);
+    const saved = await updateSetting(prisma, await actorFor(prisma, su), CONSENT_TEXT_VERSION_KEY, '2026-08-v1', 0);
     expect(saved.value).toBe('2026-08-v1');
   });
 
@@ -80,15 +81,15 @@ describe('TD-2 / §5.6 — Super Admin only', () => {
     // A consent text version decides what every future applicant is recorded
     // as having agreed to. §5.6 puts System Settings under Super Admin alone.
     const admin = await makeUser('admin');
-    await expect(listSettings(prisma, admin)).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await expect(listSettings(prisma, await actorFor(prisma, admin))).rejects.toMatchObject({ code: 'FORBIDDEN' });
     await expect(
-      updateSetting(prisma, admin, CONSENT_TEXT_VERSION_KEY, 'x', 0),
+      updateSetting(prisma, await actorFor(prisma, admin), CONSENT_TEXT_VERSION_KEY, 'x', 0),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 
   it('refuses an account with no role at all', async () => {
     const nobody = await makeUser(null);
-    await expect(listSettings(prisma, nobody)).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await expect(listSettings(prisma, await actorFor(prisma, nobody))).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 });
 
@@ -97,7 +98,7 @@ describe('the writable surface is an allow-list', () => {
     // Omitting it would hide exactly the row an operator is looking for — the
     // one whose absence stops registration.
     const su = await makeUser('super_admin');
-    const rows = await listSettings(prisma, su);
+    const rows = await listSettings(prisma, await actorFor(prisma, su));
     expect(rows[0]!.key).toBe(CONSENT_TEXT_VERSION_KEY);
     expect(rows[0]!.value).toBeNull();
     expect(rows[0]!.version).toBe(0);
@@ -108,9 +109,9 @@ describe('the writable surface is an allow-list', () => {
     // key exists somewhere, and a typo must create nothing.
     const su = await makeUser('super_admin');
     await expect(
-      updateSetting(prisma, su, 'grading.display_scale', '20', 0),
+      updateSetting(prisma, await actorFor(prisma, su), 'grading.display_scale', '20', 0),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
-    await expect(updateSetting(prisma, su, 'made.up.key', 'x', 0)).rejects.toMatchObject({
+    await expect(updateSetting(prisma, await actorFor(prisma, su), 'made.up.key', 'x', 0)).rejects.toMatchObject({
       code: 'NOT_FOUND',
     });
   });
@@ -123,7 +124,7 @@ describe('validation — a value may never be empty', () => {
     const su = await makeUser('super_admin');
     for (const bad of ['', '   ', '\t\n']) {
       await expect(
-        updateSetting(prisma, su, CONSENT_TEXT_VERSION_KEY, bad, 0),
+        updateSetting(prisma, await actorFor(prisma, su), CONSENT_TEXT_VERSION_KEY, bad, 0),
       ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
     }
     expect(await prisma.systemSetting.count({ where: { key: CONSENT_TEXT_VERSION_KEY } })).toBe(0);
@@ -131,17 +132,17 @@ describe('validation — a value may never be empty', () => {
 
   it('refuses a non-string and an over-long value', async () => {
     const su = await makeUser('super_admin');
-    await expect(updateSetting(prisma, su, CONSENT_TEXT_VERSION_KEY, 42, 0)).rejects.toMatchObject({
+    await expect(updateSetting(prisma, await actorFor(prisma, su), CONSENT_TEXT_VERSION_KEY, 42, 0)).rejects.toMatchObject({
       code: 'VALIDATION_FAILED',
     });
     await expect(
-      updateSetting(prisma, su, CONSENT_TEXT_VERSION_KEY, 'v'.repeat(101), 0),
+      updateSetting(prisma, await actorFor(prisma, su), CONSENT_TEXT_VERSION_KEY, 'v'.repeat(101), 0),
     ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
   });
 
   it('trims before storing, so a padded value is not a different version', async () => {
     const su = await makeUser('super_admin');
-    const saved = await updateSetting(prisma, su, CONSENT_TEXT_VERSION_KEY, '  v1  ', 0);
+    const saved = await updateSetting(prisma, await actorFor(prisma, su), CONSENT_TEXT_VERSION_KEY, '  v1  ', 0);
     expect(saved.value).toBe('v1');
   });
 });
@@ -149,8 +150,8 @@ describe('validation — a value may never be empty', () => {
 describe('TD-8 audit — the previous value is part of the record', () => {
   it('writes setting.update carrying OLD and NEW', async () => {
     const su = await makeUser('super_admin');
-    await updateSetting(prisma, su, CONSENT_TEXT_VERSION_KEY, 'v1', 0);
-    await updateSetting(prisma, su, CONSENT_TEXT_VERSION_KEY, 'v2', 1);
+    await updateSetting(prisma, await actorFor(prisma, su), CONSENT_TEXT_VERSION_KEY, 'v1', 0);
+    await updateSetting(prisma, await actorFor(prisma, su), CONSENT_TEXT_VERSION_KEY, 'v2', 1);
 
     const rows = await prisma.auditLog.findMany({
       where: { actorUserId: su, actionType: 'setting.update' },
@@ -173,14 +174,14 @@ describe('TD-8 audit — the previous value is part of the record', () => {
 describe('TD-15 — a stale write is refused, never silently applied', () => {
   it('answers VERSION_CONFLICT and leaves the value untouched', async () => {
     const su = await makeUser('super_admin');
-    await updateSetting(prisma, su, CONSENT_TEXT_VERSION_KEY, 'v1', 0);
+    await updateSetting(prisma, await actorFor(prisma, su), CONSENT_TEXT_VERSION_KEY, 'v1', 0);
 
     // Two Super Admins with the form open; the second read version 0.
     await expect(
-      updateSetting(prisma, su, CONSENT_TEXT_VERSION_KEY, 'v-stale', 0),
+      updateSetting(prisma, await actorFor(prisma, su), CONSENT_TEXT_VERSION_KEY, 'v-stale', 0),
     ).rejects.toMatchObject({ code: 'VERSION_CONFLICT' });
 
-    const rows = await listSettings(prisma, su);
+    const rows = await listSettings(prisma, await actorFor(prisma, su));
     expect(rows[0]!.value).toBe('v1');
   });
 });
@@ -190,7 +191,7 @@ describe('§4.1a — changing the setting never rewrites a stored consent', () =
     // The normative half of Revision 42. Restamping would assert that people
     // agreed to text they never saw.
     const su = await makeUser('super_admin');
-    await updateSetting(prisma, su, CONSENT_TEXT_VERSION_KEY, 'v1', 0);
+    await updateSetting(prisma, await actorFor(prisma, su), CONSENT_TEXT_VERSION_KEY, 'v1', 0);
 
     const student = await prisma.user.create({
       data: { nameArabic: `${TAG} موافِقة`, accountStatus: 'active' },
@@ -206,7 +207,7 @@ describe('§4.1a — changing the setting never rewrites a stored consent', () =
       },
     });
 
-    await updateSetting(prisma, su, CONSENT_TEXT_VERSION_KEY, 'v2', 1);
+    await updateSetting(prisma, await actorFor(prisma, su), CONSENT_TEXT_VERSION_KEY, 'v2', 1);
 
     const record = await prisma.consentRecord.findFirst({ where: { studentId: student.id } });
     expect(record?.consentTextVersion).toBe('v1');

@@ -1,5 +1,6 @@
 import type { PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
+import type { Actor } from '../policies/actor.js';
 import { assertFreshActive } from '../policies/freshness.policy.js';
 import * as audit from '../repositories/audit.repository.js';
 import { CONSENT_TEXT_VERSION_KEY } from './registration.service.js';
@@ -74,9 +75,16 @@ export interface SettingRow {
 /** `GET /admin/settings` — the writable settings and their current values. */
 export async function listSettings(
   prisma: PrismaClient,
-  actorUserId: string,
+  /**
+   * R60 — the full caller, not a bare id. The **active role** has to reach
+   * `assertFreshActive` (which rebuilds from live rows and would otherwise hand
+   * back this account's full authority) and the audit row (§60.8). Threading the
+   * `Actor` rather than a second `activeRole` parameter keeps the two from
+   * drifting apart, which is why the id alone is no longer enough.
+   */
+  caller: Actor,
 ): Promise<SettingRow[]> {
-  await assertFreshActive(prisma, actorUserId, SETTING_ROLES);
+  await assertFreshActive(prisma, caller.userId, SETTING_ROLES, caller.activeRole);
 
   const rows = await prisma.systemSetting.findMany({
     where: { key: { in: WRITABLE_SETTINGS.map((s) => s.key) } },
@@ -109,12 +117,12 @@ export async function listSettings(
  */
 export async function updateSetting(
   prisma: PrismaClient,
-  actorUserId: string,
+  caller: Actor,
   key: string,
   value: unknown,
   expectedVersion: number,
 ): Promise<SettingRow> {
-  const actor = await assertFreshActive(prisma, actorUserId, SETTING_ROLES);
+  const actor = await assertFreshActive(prisma, caller.userId, SETTING_ROLES, caller.activeRole);
 
   const definition = WRITABLE_SETTINGS.find((s) => s.key === key);
   // §20 rule 17: an unreachable key is NOT_FOUND, never a 403 that would

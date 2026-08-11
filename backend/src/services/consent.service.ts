@@ -1,6 +1,7 @@
 import { ConsentMethod, ConsentType } from '../generated/prisma/enums.js';
 import type { PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
+import type { Actor } from '../policies/actor.js';
 import { assertFreshActive } from '../policies/freshness.policy.js';
 import { assertCanAccessStudent } from '../policies/roster-resolution.js';
 import * as audit from '../repositories/audit.repository.js';
@@ -86,10 +87,17 @@ export async function effectiveConsent(
 /** Reading a student's consent state — same audience as recording it. */
 export async function readConsent(
   prisma: PrismaClient,
-  actorUserId: string,
+  /**
+   * R60 — the full caller, not a bare id. The **active role** has to reach
+   * `assertFreshActive` (which rebuilds from live rows and would otherwise hand
+   * back this account's full authority) and the audit row (§60.8). Threading the
+   * `Actor` rather than a second `activeRole` parameter keeps the two from
+   * drifting apart, which is why the id alone is no longer enough.
+   */
+  caller: Actor,
   studentId: string,
 ): Promise<Record<string, ConsentStateEntry | null>> {
-  const actor = await assertFreshActive(prisma, actorUserId, CONSENT_ROLES);
+  const actor = await assertFreshActive(prisma, caller.userId, CONSENT_ROLES, caller.activeRole);
   await assertCanAccessStudent(prisma, actor, studentId);
   return effectiveConsent(prisma, studentId);
 }
@@ -103,11 +111,11 @@ export async function readConsent(
  */
 export async function recordStaffConsent(
   prisma: PrismaClient,
-  actorUserId: string,
+  caller: Actor,
   studentId: string,
   decision: ConsentDecision,
 ): Promise<{ recordId: string; reevaluatedSessions: string[] }> {
-  const actor = await assertFreshActive(prisma, actorUserId, CONSENT_ROLES);
+  const actor = await assertFreshActive(prisma, caller.userId, CONSENT_ROLES, caller.activeRole);
   await assertCanAccessStudent(prisma, actor, studentId);
 
   // §2.3/§4.1a: the versioned text is what the family agreed to. Without a

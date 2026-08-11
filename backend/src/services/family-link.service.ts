@@ -1,5 +1,6 @@
 import type { PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
+import type { Actor } from '../policies/actor.js';
 import { assertFreshActive } from '../policies/freshness.policy.js';
 import * as audit from '../repositories/audit.repository.js';
 import * as trash from '../repositories/trash.repository.js';
@@ -40,11 +41,18 @@ const LINKER_ROLES = REVOKER_ROLES;
  */
 export async function createLink(
   prisma: PrismaClient,
-  actorUserId: string,
+  /**
+   * R60 — the full caller, not a bare id. The **active role** has to reach
+   * `assertFreshActive` (which rebuilds from live rows and would otherwise hand
+   * back this account's full authority) and the audit row (§60.8). Threading the
+   * `Actor` rather than a second `activeRole` parameter keeps the two from
+   * drifting apart, which is why the id alone is no longer enough.
+   */
+  caller: Actor,
   parentId: string,
   studentId: string,
 ): Promise<{ id: string; status: string }> {
-  const actor = await assertFreshActive(prisma, actorUserId, LINKER_ROLES);
+  const actor = await assertFreshActive(prisma, caller.userId, LINKER_ROLES, caller.activeRole);
 
   if (parentId === studentId) {
     throw new AppError('VALIDATION_FAILED', 'a user cannot be their own parent');
@@ -108,11 +116,11 @@ export async function createLink(
  */
 export async function revokeLink(
   prisma: PrismaClient,
-  actorUserId: string,
+  caller: Actor,
   linkId: string,
   reason: string,
 ): Promise<{ parentId: string; studentId: string }> {
-  const actor = await assertFreshActive(prisma, actorUserId, REVOKER_ROLES);
+  const actor = await assertFreshActive(prisma, caller.userId, REVOKER_ROLES, caller.activeRole);
 
   if (!reason.trim()) {
     // TD-8 requires the reason on `familylink.revoke`: cutting a parent off from

@@ -4,6 +4,7 @@ import { pageWindow, type Page } from '../lib/pagination.js';
 import { MIN_QUERY_LENGTH, normalizePhone, normalizeSearchText } from '../lib/search-normalize.js';
 import { branchesForRole } from '../policies/branch-scope.js';
 import { assertFreshActive } from '../policies/freshness.policy.js';
+import type { Actor } from '../policies/actor.js';
 import * as audit from '../repositories/audit.repository.js';
 import { revokeAllSessions } from './refresh-token.service.js';
 
@@ -53,12 +54,19 @@ export interface PreProvisionInput {
 
 export async function preProvision(
   prisma: PrismaClient,
-  actorUserId: string,
+  /**
+   * R60 — the full caller, not a bare id. The **active role** has to reach
+   * `assertFreshActive` (which rebuilds from live rows and would otherwise hand
+   * back this account's full authority) and the audit row (§60.8). Threading the
+   * `Actor` rather than a second `activeRole` parameter keeps the two from
+   * drifting apart, which is why the id alone is no longer enough.
+   */
+  caller: Actor,
   input: PreProvisionInput,
 ): Promise<{ id: string; accountStatus: string; preProvisionedEmail: string | null }> {
   // TD-12: user-management mutations are a high-risk surface, so the caller's
   // status and role are re-read from live rows rather than trusted from a token.
-  const actor = await assertFreshActive(prisma, actorUserId, USER_ADMIN_ROLES);
+  const actor = await assertFreshActive(prisma, caller.userId, USER_ADMIN_ROLES, caller.activeRole);
 
   const email = input.email.trim().toLowerCase();
   const nameArabic = input.nameArabic.trim();
@@ -186,12 +194,12 @@ export interface UserListItem {
 /** TD-10: default 25, max 100. */
 export async function listUsers(
   prisma: PrismaClient,
-  actorUserId: string,
+  caller: Actor,
   filters: UserListFilters = {},
 ): Promise<Page<UserListItem>> {
   // TD-12: browsing beneficiary records is a user-management surface, so the
   // caller's status and role are re-read from live rows on every request.
-  const actor = await assertFreshActive(prisma, actorUserId, USER_ADMIN_ROLES);
+  const actor = await assertFreshActive(prisma, caller.userId, USER_ADMIN_ROLES, caller.activeRole);
 
   const { skip, take, page, pageSize } = pageWindow({ page: filters.page, pageSize: filters.pageSize });
 
@@ -374,12 +382,12 @@ async function loadManageable(
 
 export async function updateUser(
   prisma: PrismaClient,
-  actorUserId: string,
+  caller: Actor,
   id: string,
   expectedVersion: number,
   input: UserProfileInput,
 ): Promise<UserListItem> {
-  const actor = await assertFreshActive(prisma, actorUserId, USER_ADMIN_ROLES);
+  const actor = await assertFreshActive(prisma, caller.userId, USER_ADMIN_ROLES, caller.activeRole);
 
   await prisma.$transaction(async (tx) => {
     await loadManageable(tx, actor, id);
@@ -432,12 +440,12 @@ export async function updateUser(
  */
 export async function suspendUser(
   prisma: PrismaClient,
-  actorUserId: string,
+  caller: Actor,
   id: string,
   expectedVersion: number,
   reason: string,
 ): Promise<UserListItem> {
-  const actor = await assertFreshActive(prisma, actorUserId, USER_ADMIN_ROLES);
+  const actor = await assertFreshActive(prisma, caller.userId, USER_ADMIN_ROLES, caller.activeRole);
   if (id === actor.userId) {
     // Not paternalism: an administrator who suspends themselves is locked out
     // by their own next request, and the recovery path is a VPS shell.
@@ -484,11 +492,11 @@ export async function suspendUser(
  *  the person signs in again, which is the only way the new state is proven. */
 export async function reactivateUser(
   prisma: PrismaClient,
-  actorUserId: string,
+  caller: Actor,
   id: string,
   expectedVersion: number,
 ): Promise<UserListItem> {
-  const actor = await assertFreshActive(prisma, actorUserId, USER_ADMIN_ROLES);
+  const actor = await assertFreshActive(prisma, caller.userId, USER_ADMIN_ROLES, caller.activeRole);
 
   await prisma.$transaction(async (tx) => {
     const target = await loadManageable(tx, actor, id);
@@ -713,11 +721,11 @@ export async function applyRoleAssignments(
  */
 export async function setUserRoles(
   prisma: PrismaClient,
-  actorUserId: string,
+  caller: Actor,
   id: string,
   assignments: RoleAssignmentInput[],
 ): Promise<UserListItem> {
-  const actor = await assertFreshActive(prisma, actorUserId, USER_ADMIN_ROLES);
+  const actor = await assertFreshActive(prisma, caller.userId, USER_ADMIN_ROLES, caller.activeRole);
 
   await prisma.$transaction(async (tx) => {
     // Visibility is asserted here rather than inside the shared core: approval

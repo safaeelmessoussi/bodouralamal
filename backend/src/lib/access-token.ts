@@ -31,6 +31,18 @@ export interface AccessTokenClaims {
   sub: string;
   roles: string[];
   role_scopes: RoleScope[];
+  /**
+   * **R60 — the role this session is working as.** Absent means *every role
+   * held*, which is both the pre-R60 behaviour and the honest answer for a
+   * single-role account.
+   *
+   * When present, `roles[]` and `role_scopes[]` above are **already narrowed to
+   * it**. Nothing downstream re-derives authority from this string: it is
+   * carried so `/me`, the audit trail and the client can *name* the active role,
+   * while the narrowing itself is done by the two arrays every authorization
+   * check already reads.
+   */
+  active_role?: string;
   account_status: string;
   iat: number;
   exp: number;
@@ -45,6 +57,14 @@ export interface IssueParams {
    * token whose roles and scopes disagree.
    */
   roleScopes: RoleScope[];
+  /**
+   * R60. **The caller must have already narrowed `roleScopes`** — pass the
+   * output of `narrowToRole`. This function does not filter, deliberately: the
+   * one place that decides *whether the role is held at all* is the one that
+   * re-read the live rows, and doing it here as well would put that decision in
+   * two places with only one of them able to refuse.
+   */
+  activeRole?: string;
   accountStatus: string;
 }
 
@@ -69,6 +89,7 @@ export function issueAccessToken(
     // Derived, so the two can never disagree (TD-12 Revision 24).
     roles: rolesOf(params.roleScopes),
     role_scopes: params.roleScopes,
+    ...(params.activeRole !== undefined ? { active_role: params.activeRole } : {}),
     account_status: params.accountStatus,
     iat,
     exp,

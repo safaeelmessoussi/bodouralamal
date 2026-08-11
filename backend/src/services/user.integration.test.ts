@@ -1,4 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { actorFor } from '../test-support/actor.js';
 
 import { loadConfig } from '../lib/config.js';
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
@@ -69,7 +70,7 @@ describe('§4.1b step 4b — staff pre-provisioning', () => {
     const admin = await makeStaff('admin');
     const email = addr();
 
-    const created = await preProvision(prisma, admin, { nameArabic: `${TAG} معلمة`, email });
+    const created = await preProvision(prisma, await actorFor(prisma, admin), { nameArabic: `${TAG} معلمة`, email });
 
     expect(created.accountStatus).toBe('pending');
     expect(created.preProvisionedEmail).toBe(email);
@@ -81,7 +82,7 @@ describe('§4.1b step 4b — staff pre-provisioning', () => {
   it('is findable by the LOGIN path\'s own lookup, which is what makes it claimable', async () => {
     const admin = await makeStaff('admin');
     const email = addr();
-    const created = await preProvision(prisma, admin, { nameArabic: `${TAG} معلمة`, email });
+    const created = await preProvision(prisma, await actorFor(prisma, admin), { nameArabic: `${TAG} معلمة`, email });
 
     // Exercised through the repository §4.1b step 3.2 actually calls.
     const resolved = await userRepo.findByPreProvisionedEmail(prisma, email);
@@ -91,7 +92,7 @@ describe('§4.1b step 4b — staff pre-provisioning', () => {
   it('binds on first login and then resolves by identity forever after (TD-4.10)', async () => {
     const admin = await makeStaff('admin');
     const email = addr();
-    const created = await preProvision(prisma, admin, { nameArabic: `${TAG} معلمة`, email });
+    const created = await preProvision(prisma, await actorFor(prisma, admin), { nameArabic: `${TAG} معلمة`, email });
     const subject = `preprov-sub-${Date.now()}`;
 
     // First login: the fallback finds it, then the binding is created.
@@ -111,14 +112,14 @@ describe('§4.1b step 4b — staff pre-provisioning', () => {
     const after = await prisma.user.findUnique({ where: { id: created.id } });
     expect(after?.preProvisionedEmail).toBe(email);
     await expect(
-      preProvision(prisma, admin, { nameArabic: `${TAG} منتحلة`, email }),
+      preProvision(prisma, await actorFor(prisma, admin), { nameArabic: `${TAG} منتحلة`, email }),
     ).rejects.toMatchObject({ code: 'DUPLICATE' });
   });
 
   it('lowercases the address, so a capitalised entry is still claimable (TD-12)', async () => {
     const admin = await makeStaff('admin');
     const email = addr();
-    const created = await preProvision(prisma, admin, {
+    const created = await preProvision(prisma, await actorFor(prisma, admin), {
       nameArabic: `${TAG} معلمة`,
       email: `  ${email.toUpperCase()}  `,
     });
@@ -131,10 +132,10 @@ describe('§4.1b step 4b — staff pre-provisioning', () => {
   it('refuses a second account for the same address (TD-6 partial unique index)', async () => {
     const admin = await makeStaff('admin');
     const email = addr();
-    await preProvision(prisma, admin, { nameArabic: `${TAG} الأولى`, email });
+    await preProvision(prisma, await actorFor(prisma, admin), { nameArabic: `${TAG} الأولى`, email });
 
     await expect(
-      preProvision(prisma, admin, { nameArabic: `${TAG} الثانية`, email }),
+      preProvision(prisma, await actorFor(prisma, admin), { nameArabic: `${TAG} الثانية`, email }),
     ).rejects.toMatchObject({ code: 'DUPLICATE' });
     expect(await prisma.user.count({ where: { preProvisionedEmail: email } })).toBe(1);
   });
@@ -142,13 +143,13 @@ describe('§4.1b step 4b — staff pre-provisioning', () => {
   it('will not silently reclaim a SOFT-DELETED account\'s address', async () => {
     const admin = await makeStaff('admin');
     const email = addr();
-    const first = await preProvision(prisma, admin, { nameArabic: `${TAG} مغادرة`, email });
+    const first = await preProvision(prisma, await actorFor(prisma, admin), { nameArabic: `${TAG} مغادرة`, email });
     await prisma.user.update({ where: { id: first.id }, data: { deletedAt: new Date() } });
 
     // The TD-6 index spans deleted rows, so the address stays spoken for —
     // §4.1 forbids a deleted person being silently re-created.
     await expect(
-      preProvision(prisma, admin, { nameArabic: `${TAG} أخرى`, email }),
+      preProvision(prisma, await actorFor(prisma, admin), { nameArabic: `${TAG} أخرى`, email }),
     ).rejects.toMatchObject({ code: 'DUPLICATE' });
   });
 
@@ -158,7 +159,7 @@ describe('§4.1b step 4b — staff pre-provisioning', () => {
       data: { name: `${TAG} فرع`, operationalStartDate: new Date('2026-01-01') },
     });
 
-    const created = await preProvision(prisma, admin, {
+    const created = await preProvision(prisma, await actorFor(prisma, admin), {
       nameArabic: `${TAG} معلمة`,
       email: addr(),
       role: 'teacher',
@@ -182,7 +183,7 @@ describe('§4.1b step 4b — staff pre-provisioning', () => {
     const email = addr();
 
     await expect(
-      preProvision(prisma, admin, {
+      preProvision(prisma, await actorFor(prisma, admin), {
         nameArabic: `${TAG} معلمة`,
         email,
         role: 'teacher',
@@ -196,8 +197,8 @@ describe('§4.1b step 4b — staff pre-provisioning', () => {
 
   it('§4.1b 4b: pre_approved yields Active, default yields Pending', async () => {
     const admin = await makeStaff('admin');
-    const pending = await preProvision(prisma, admin, { nameArabic: `${TAG} أ`, email: addr() });
-    const active = await preProvision(prisma, admin, {
+    const pending = await preProvision(prisma, await actorFor(prisma, admin), { nameArabic: `${TAG} أ`, email: addr() });
+    const active = await preProvision(prisma, await actorFor(prisma, admin), {
       nameArabic: `${TAG} ب`,
       email: addr(),
       preApproved: true,
@@ -211,7 +212,7 @@ describe('§4.1b step 4b — staff pre-provisioning', () => {
     const teacher = await makeStaff('teacher');
     const email = addr();
     await expect(
-      preProvision(prisma, teacher, { nameArabic: `${TAG} معلمة`, email }),
+      preProvision(prisma, await actorFor(prisma, teacher), { nameArabic: `${TAG} معلمة`, email }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
     expect(await prisma.user.count({ where: { preProvisionedEmail: email } })).toBe(0);
   });
@@ -221,10 +222,10 @@ describe('§4.1b step 4b — staff pre-provisioning', () => {
     const superAdmin = await makeStaff('super_admin');
 
     await expect(
-      preProvision(prisma, admin, { nameArabic: `${TAG} مشرفة`, email: addr(), role: 'admin' }),
+      preProvision(prisma, await actorFor(prisma, admin), { nameArabic: `${TAG} مشرفة`, email: addr(), role: 'admin' }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
 
-    const created = await preProvision(prisma, superAdmin, {
+    const created = await preProvision(prisma, await actorFor(prisma, superAdmin), {
       nameArabic: `${TAG} مشرفة`,
       email: addr(),
       role: 'admin',
@@ -238,7 +239,7 @@ describe('§4.1b step 4b — staff pre-provisioning', () => {
     await prisma.user.update({ where: { id: admin }, data: { accountStatus: 'suspended' } });
 
     await expect(
-      preProvision(prisma, admin, { nameArabic: `${TAG} معلمة`, email }),
+      preProvision(prisma, await actorFor(prisma, admin), { nameArabic: `${TAG} معلمة`, email }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
     expect(await prisma.user.count({ where: { preProvisionedEmail: email } })).toBe(0);
   });
@@ -246,7 +247,7 @@ describe('§4.1b step 4b — staff pre-provisioning', () => {
   it('writes an attributable audit row', async () => {
     const admin = await makeStaff('admin');
     const email = addr();
-    const created = await preProvision(prisma, admin, {
+    const created = await preProvision(prisma, await actorFor(prisma, admin), {
       nameArabic: `${TAG} معلمة`,
       email,
       role: 'teacher',
@@ -290,7 +291,7 @@ describe('§14.2 / TD-10 — user list, filters and search', () => {
     const admin = await makeStaff('admin');
     const target = await person({ nameArabic: 'أم سعاد' });
 
-    const page = await listUsers(prisma, admin, { q: 'سعاد' });
+    const page = await listUsers(prisma, await actorFor(prisma, admin), { q: 'سعاد' });
     expect(idsOf(page)).toContain(target);
   });
 
@@ -301,17 +302,17 @@ describe('§14.2 / TD-10 — user list, filters and search', () => {
     const muhammad = await person({ nameArabic: 'مُحَمَّد' });
 
     // Typed without the hamza, without the ta-marbuta, without diacritics.
-    expect(idsOf(await listUsers(prisma, admin, { q: 'احمد' }))).toContain(ahmed);
-    expect(idsOf(await listUsers(prisma, admin, { q: 'فاطمه' }))).toContain(fatima);
-    expect(idsOf(await listUsers(prisma, admin, { q: 'محمد' }))).toContain(muhammad);
+    expect(idsOf(await listUsers(prisma, await actorFor(prisma, admin), { q: 'احمد' }))).toContain(ahmed);
+    expect(idsOf(await listUsers(prisma, await actorFor(prisma, admin), { q: 'فاطمه' }))).toContain(fatima);
+    expect(idsOf(await listUsers(prisma, await actorFor(prisma, admin), { q: 'محمد' }))).toContain(muhammad);
   });
 
   it('TD-10: French names fold accents and ignore case', async () => {
     const admin = await makeStaff('admin');
     const aicha = await person({ nameArabic: 'عائشة', nameFrench: 'Aïcha' });
 
-    expect(idsOf(await listUsers(prisma, admin, { q: 'aicha' }))).toContain(aicha);
-    expect(idsOf(await listUsers(prisma, admin, { q: 'AICHA' }))).toContain(aicha);
+    expect(idsOf(await listUsers(prisma, await actorFor(prisma, admin), { q: 'aicha' }))).toContain(aicha);
+    expect(idsOf(await listUsers(prisma, await actorFor(prisma, admin), { q: 'AICHA' }))).toContain(aicha);
   });
 
   it('TD-10: nickname and phone are searchable, phone ignoring spaces and +', async () => {
@@ -322,15 +323,15 @@ describe('§14.2 / TD-10 — user list, filters and search', () => {
       phone: '+212 612 345 678',
     });
 
-    expect(idsOf(await listUsers(prisma, admin, { q: 'يوسف' }))).toContain(target);
-    expect(idsOf(await listUsers(prisma, admin, { q: '0612345678'.slice(1) }))).toContain(target);
-    expect(idsOf(await listUsers(prisma, admin, { q: '+212612345678' }))).toContain(target);
+    expect(idsOf(await listUsers(prisma, await actorFor(prisma, admin), { q: 'يوسف' }))).toContain(target);
+    expect(idsOf(await listUsers(prisma, await actorFor(prisma, admin), { q: '0612345678'.slice(1) }))).toContain(target);
+    expect(idsOf(await listUsers(prisma, await actorFor(prisma, admin), { q: '+212612345678' }))).toContain(target);
   });
 
   it('TD-10 Revision 15: email search spans BOTH channels', async () => {
     const admin = await makeStaff('admin');
     // An unclaimed account: no identity row exists yet.
-    const unclaimed = await preProvision(prisma, admin, {
+    const unclaimed = await preProvision(prisma, await actorFor(prisma, admin), {
       nameArabic: `${TAG} غير مرتبطة`,
       email: 'findme-unclaimed@example.com',
     });
@@ -347,8 +348,8 @@ describe('§14.2 / TD-10 — user list, filters and search', () => {
 
     // Searching only UserIdentity would hide exactly the accounts staff most
     // need to find — the ones nobody has claimed yet.
-    expect(idsOf(await listUsers(prisma, admin, { q: 'findme-unclaimed' }))).toContain(unclaimed.id);
-    expect(idsOf(await listUsers(prisma, admin, { q: 'findme-bound' }))).toContain(bound);
+    expect(idsOf(await listUsers(prisma, await actorFor(prisma, admin), { q: 'findme-unclaimed' }))).toContain(unclaimed.id);
+    expect(idsOf(await listUsers(prisma, await actorFor(prisma, admin), { q: 'findme-bound' }))).toContain(bound);
   });
 
   it("TD-10: a child is findable by their linked PARENT's name", async () => {
@@ -359,13 +360,13 @@ describe('§14.2 / TD-10 — user list, filters and search', () => {
       data: { parentId: parent, studentId: child, status: 'approved' },
     });
 
-    const page = await listUsers(prisma, admin, { q: 'بديعة' });
+    const page = await listUsers(prisma, await actorFor(prisma, admin), { q: 'بديعة' });
     expect(idsOf(page)).toContain(child);
   });
 
   it('TD-10: a one-character query is refused', async () => {
     const admin = await makeStaff('admin');
-    await expect(listUsers(prisma, admin, { q: 'س' })).rejects.toMatchObject({
+    await expect(listUsers(prisma, await actorFor(prisma, admin), { q: 'س' })).rejects.toMatchObject({
       code: 'VALIDATION_FAILED',
     });
   });
@@ -375,7 +376,7 @@ describe('§14.2 / TD-10 — user list, filters and search', () => {
     const branch = await prisma.branch.create({
       data: { name: `${TAG} فرع`, operationalStartDate: new Date('2026-01-01') },
     });
-    const teacher = await preProvision(prisma, admin, {
+    const teacher = await preProvision(prisma, await actorFor(prisma, admin), {
       nameArabic: `${TAG} معلمة مرشحة`,
       email: addr(),
       role: 'teacher',
@@ -384,14 +385,14 @@ describe('§14.2 / TD-10 — user list, filters and search', () => {
     });
     const plain = await person({ nameArabic: 'بدون دور', status: 'pending' });
 
-    const byRole = await listUsers(prisma, admin, { role: 'teacher' });
+    const byRole = await listUsers(prisma, await actorFor(prisma, admin), { role: 'teacher' });
     expect(idsOf(byRole)).toContain(teacher.id);
     expect(idsOf(byRole)).not.toContain(plain);
 
-    const byBranch = await listUsers(prisma, admin, { branchId: branch.id });
+    const byBranch = await listUsers(prisma, await actorFor(prisma, admin), { branchId: branch.id });
     expect(idsOf(byBranch)).toEqual([teacher.id]);
 
-    const byStatus = await listUsers(prisma, admin, { status: 'pending' });
+    const byStatus = await listUsers(prisma, await actorFor(prisma, admin), { status: 'pending' });
     expect(idsOf(byStatus)).toContain(plain);
     expect(idsOf(byStatus)).not.toContain(teacher.id);
 
@@ -402,18 +403,18 @@ describe('§14.2 / TD-10 — user list, filters and search', () => {
 
   it('a REVOKED role no longer keeps someone in a role-filtered list', async () => {
     const admin = await makeStaff('admin');
-    const teacher = await preProvision(prisma, admin, {
+    const teacher = await preProvision(prisma, await actorFor(prisma, admin), {
       nameArabic: `${TAG} معلمة سابقة`,
       email: addr(),
       role: 'teacher',
     });
-    expect(idsOf(await listUsers(prisma, admin, { role: 'teacher' }))).toContain(teacher.id);
+    expect(idsOf(await listUsers(prisma, await actorFor(prisma, admin), { role: 'teacher' }))).toContain(teacher.id);
 
     await prisma.userBranchRole.updateMany({
       where: { userId: teacher.id },
       data: { deletedAt: new Date() },
     });
-    expect(idsOf(await listUsers(prisma, admin, { role: 'teacher' }))).not.toContain(teacher.id);
+    expect(idsOf(await listUsers(prisma, await actorFor(prisma, admin), { role: 'teacher' }))).not.toContain(teacher.id);
   });
 
   it('soft-deleted people are not listed', async () => {
@@ -421,13 +422,13 @@ describe('§14.2 / TD-10 — user list, filters and search', () => {
     const gone = await person({ nameArabic: 'مغادرة تماما' });
     await prisma.user.update({ where: { id: gone }, data: { deletedAt: new Date() } });
 
-    expect(idsOf(await listUsers(prisma, admin, { q: 'مغادرة' }))).not.toContain(gone);
+    expect(idsOf(await listUsers(prisma, await actorFor(prisma, admin), { q: 'مغادرة' }))).not.toContain(gone);
   });
 
   it('§4.10: the list never carries StudentSocialProfile fields', async () => {
     const admin = await makeStaff('admin');
     await person({ nameArabic: 'طالبة' });
-    const page = await listUsers(prisma, admin, {});
+    const page = await listUsers(prisma, await actorFor(prisma, admin), {});
 
     // §14.2 fixes the columns; anything §4.10 restricts to assigned teachers
     // must not ride along on a list every Admin can call.
@@ -466,21 +467,21 @@ describe('§14.2 / TD-10 — user list, filters and search', () => {
 
   it('TD-10 envelope: default 25, max 100, stable ordering', async () => {
     const admin = await makeStaff('admin');
-    const page = await listUsers(prisma, admin, {});
+    const page = await listUsers(prisma, await actorFor(prisma, admin), {});
     expect(page.meta.page_size).toBe(25);
     expect(page.meta.page).toBe(1);
 
-    expect((await listUsers(prisma, admin, { pageSize: 500 })).meta.page_size).toBe(100);
+    expect((await listUsers(prisma, await actorFor(prisma, admin), { pageSize: 500 })).meta.page_size).toBe(100);
 
     // Same query twice must return the same order (id tiebreaker).
-    const a = await listUsers(prisma, admin, { pageSize: 10 });
-    const b = await listUsers(prisma, admin, { pageSize: 10 });
+    const a = await listUsers(prisma, await actorFor(prisma, admin), { pageSize: 10 });
+    const b = await listUsers(prisma, await actorFor(prisma, admin), { pageSize: 10 });
     expect(idsOf(a)).toEqual(idsOf(b));
   });
 
   it('TD-2: a teacher cannot browse the user list', async () => {
     const teacher = await makeStaff('teacher');
-    await expect(listUsers(prisma, teacher, {})).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await expect(listUsers(prisma, await actorFor(prisma, teacher), {})).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 });
 
@@ -533,7 +534,7 @@ describe('§4.2 Revision 25 — user-list visibility is branch-scoped', () => {
     const theirs = await memberOf(casablanca);
     const admin = await scopedAdmin([marrakesh]);
 
-    const ids = idsOf(await listUsers(prisma, admin, {}));
+    const ids = idsOf(await listUsers(prisma, await actorFor(prisma, admin), {}));
     expect(ids).toContain(mine);
     expect(ids).not.toContain(theirs);
   });
@@ -545,12 +546,12 @@ describe('§4.2 Revision 25 — user-list visibility is branch-scoped', () => {
     const parent = await prisma.user.create({
       data: { nameArabic: `${TAG} والدة`, accountStatus: 'active' },
     });
-    const preprov = await preProvision(prisma, admin, {
+    const preprov = await preProvision(prisma, await actorFor(prisma, admin), {
       nameArabic: `${TAG} غير منتسبة`,
       email: addr(),
     });
 
-    const ids = idsOf(await listUsers(prisma, admin, {}));
+    const ids = idsOf(await listUsers(prisma, await actorFor(prisma, admin), {}));
     expect(ids).not.toContain(parent.id);
     expect(ids).not.toContain(preprov.id);
   });
@@ -563,8 +564,8 @@ describe('§4.2 Revision 25 — user-list visibility is branch-scoped', () => {
       data: { nameArabic: `${TAG} والدة`, accountStatus: 'active' },
     });
 
-    expect(idsOf(await listUsers(prisma, branchAdmin, {}))).not.toContain(parent.id);
-    expect(idsOf(await listUsers(prisma, superAdmin, {}))).toContain(parent.id);
+    expect(idsOf(await listUsers(prisma, await actorFor(prisma, branchAdmin), {}))).not.toContain(parent.id);
+    expect(idsOf(await listUsers(prisma, await actorFor(prisma, superAdmin), {}))).toContain(parent.id);
   });
 
   it('an all-branches (NULL) Admin sees everyone, assigned or not', async () => {
@@ -575,7 +576,7 @@ describe('§4.2 Revision 25 — user-list visibility is branch-scoped', () => {
     });
     const admin = await scopedAdmin([]); // branch_id NULL = all branches
 
-    const ids = idsOf(await listUsers(prisma, admin, {}));
+    const ids = idsOf(await listUsers(prisma, await actorFor(prisma, admin), {}));
     expect(ids).toContain(assigned);
     expect(ids).toContain(unassigned.id);
   });
@@ -589,7 +590,7 @@ describe('§4.2 Revision 25 — user-list visibility is branch-scoped', () => {
     const c = await memberOf(rabat);
     const admin = await scopedAdmin([marrakesh, casablanca]);
 
-    const ids = idsOf(await listUsers(prisma, admin, {}));
+    const ids = idsOf(await listUsers(prisma, await actorFor(prisma, admin), {}));
     expect(ids).toEqual(expect.arrayContaining([a, b]));
     expect(ids).not.toContain(c);
   });
@@ -601,7 +602,7 @@ describe('§4.2 Revision 25 — user-list visibility is branch-scoped', () => {
     const admin = await scopedAdmin([marrakesh]);
 
     // Asking explicitly for another branch must narrow, never widen.
-    const ids = idsOf(await listUsers(prisma, admin, { branchId: casablanca }));
+    const ids = idsOf(await listUsers(prisma, await actorFor(prisma, admin), { branchId: casablanca }));
     expect(ids).not.toContain(theirs);
     expect(ids).toEqual([]);
   });
@@ -619,7 +620,7 @@ describe('§4.2 Revision 25 — user-list visibility is branch-scoped', () => {
     const admin = await scopedAdmin([marrakesh]);
 
     // A name search must not become a way around the scope.
-    expect(idsOf(await listUsers(prisma, admin, { q: 'سعاد' }))).not.toContain(outsider.id);
+    expect(idsOf(await listUsers(prisma, await actorFor(prisma, admin), { q: 'سعاد' }))).not.toContain(outsider.id);
   });
 
   it('a REVOKED assignment removes the user from that branch Admin\'s view', async () => {
@@ -630,14 +631,14 @@ describe('§4.2 Revision 25 — user-list visibility is branch-scoped', () => {
     const member = await memberOf(marrakesh);
     const admin = await scopedAdmin([marrakesh]);
 
-    expect(idsOf(await listUsers(prisma, admin, {}))).toContain(member);
+    expect(idsOf(await listUsers(prisma, await actorFor(prisma, admin), {}))).toContain(member);
 
     await prisma.userBranchRole.updateMany({
       where: { userId: member },
       data: { deletedAt: new Date() },
     });
 
-    expect(idsOf(await listUsers(prisma, admin, {}))).not.toContain(member);
+    expect(idsOf(await listUsers(prisma, await actorFor(prisma, admin), {}))).not.toContain(member);
   });
 
   it('scope comes from the ADMIN role only, not from another role the caller holds', async () => {
@@ -659,6 +660,6 @@ describe('§4.2 Revision 25 — user-list visibility is branch-scoped', () => {
       data: { userId: dual.id, roleId: teacherRole!.id, branchId: casablanca },
     });
 
-    expect(idsOf(await listUsers(prisma, dual.id, {}))).not.toContain(casaMember);
+    expect(idsOf(await listUsers(prisma, await actorFor(prisma, dual.id), {}))).not.toContain(casaMember);
   });
 });

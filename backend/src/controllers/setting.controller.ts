@@ -26,7 +26,7 @@ const updateSchema = z.object({
 /** `GET /admin/settings` — the writable settings and their current values. */
 export function list(prisma: PrismaClient) {
   return async (req: Request, res: Response): Promise<void> => {
-    const rows = await listSettings(prisma, requireActor(req).userId);
+    const rows = await listSettings(prisma, requireActor(req));
     res.json({ data: rows.map(settingDto) });
   };
 }
@@ -45,7 +45,7 @@ export function update(prisma: PrismaClient) {
 
     const saved = await updateSetting(
       prisma,
-      requireActor(req).userId,
+      requireActor(req),
       key.data,
       parsed.data.value,
       parsed.data.version,

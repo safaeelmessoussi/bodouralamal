@@ -58,7 +58,7 @@ export function list(prisma: PrismaClient) {
   return async (req: Request, res: Response): Promise<void> => {
     const parsed = listSchema.safeParse(req.query);
     if (!parsed.success) throw new AppError('VALIDATION_FAILED', 'bad query');
-    const result = await listApprovals(prisma, requireActor(req).userId, {
+    const result = await listApprovals(prisma, requireActor(req), {
       ...(parsed.data.type ? { type: parsed.data.type as ApprovalType } : {}),
       ...(parsed.data.branch_id ? { branchId: parsed.data.branch_id } : {}),
       ...(parsed.data.page ? { page: parsed.data.page } : {}),
@@ -75,7 +75,7 @@ function decision(prisma: PrismaClient, approve: boolean) {
     const id = z.uuid().safeParse(req.params['id']);
     if (!id.success) throw new AppError('VALIDATION_FAILED', 'bad id');
 
-    const result = await decide(prisma, requireActor(req).userId, id.data, {
+    const result = await decide(prisma, requireActor(req), id.data, {
       approve,
       ...(parsed.data.reason ? { reason: parsed.data.reason } : {}),
       ...(parsed.data.assignments

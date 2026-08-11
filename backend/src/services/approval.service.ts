@@ -1,5 +1,6 @@
 import type { PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
+import type { Actor } from '../policies/actor.js';
 import { pageWindow, type Page } from '../lib/pagination.js';
 import { assertFreshActive } from '../policies/freshness.policy.js';
 import * as audit from '../repositories/audit.repository.js';
@@ -65,12 +66,19 @@ export interface ApprovalItem {
 
 export async function listApprovals(
   prisma: PrismaClient,
-  actorUserId: string,
+  /**
+   * R60 — the full caller, not a bare id. The **active role** has to reach
+   * `assertFreshActive` (which rebuilds from live rows and would otherwise hand
+   * back this account's full authority) and the audit row (§60.8). Threading the
+   * `Actor` rather than a second `activeRole` parameter keeps the two from
+   * drifting apart, which is why the id alone is no longer enough.
+   */
+  caller: Actor,
   options: { type?: ApprovalType; branchId?: string; page?: number; pageSize?: number } = {},
 ): Promise<Page<ApprovalItem>> {
   // TD-12: approvals are a high-risk surface, so even listing re-asserts the
   // caller's live status rather than trusting the token.
-  await assertFreshActive(prisma, actorUserId, APPROVER_ROLES);
+  await assertFreshActive(prisma, caller.userId, APPROVER_ROLES, caller.activeRole);
 
   const { skip, take, page, pageSize } = pageWindow({ page: options.page, pageSize: options.pageSize });
   const type = options.type;
@@ -238,11 +246,11 @@ interface Decision {
  */
 export async function decide(
   prisma: PrismaClient,
-  actorUserId: string,
+  caller: Actor,
   id: string,
   decision: Decision,
 ): Promise<{ type: ApprovalType; activated: number }> {
-  const actor = await assertFreshActive(prisma, actorUserId, APPROVER_ROLES);
+  const actor = await assertFreshActive(prisma, caller.userId, APPROVER_ROLES, caller.activeRole);
 
   if (!decision.approve && !decision.reason?.trim()) {
     // §5.6/§14.2: rejection carries a reason. Rejecting a family's application

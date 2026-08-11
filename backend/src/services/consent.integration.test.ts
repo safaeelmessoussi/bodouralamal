@@ -1,4 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { actorFor } from '../test-support/actor.js';
 
 import { loadConfig } from '../lib/config.js';
 import {
@@ -175,7 +176,7 @@ async function scenario() {
 describe('§4.1a — recording a decision declared in person', () => {
   it('records a grant with method staff_recorded and the active text version', async () => {
     const { admin, student } = await scenario();
-    const result = await recordStaffConsent(prisma, admin, student, {
+    const result = await recordStaffConsent(prisma, await actorFor(prisma, admin), student, {
       consentType: 'media_release',
       granted: true,
     });
@@ -190,11 +191,11 @@ describe('§4.1a — recording a decision declared in person', () => {
 
   it('a revocation is a NEW row — history is never erased (§7 append-only)', async () => {
     const { admin, student } = await scenario();
-    await recordStaffConsent(prisma, admin, student, {
+    await recordStaffConsent(prisma, await actorFor(prisma, admin), student, {
       consentType: 'media_release',
       granted: true,
     });
-    await recordStaffConsent(prisma, admin, student, {
+    await recordStaffConsent(prisma, await actorFor(prisma, admin), student, {
       consentType: 'media_release',
       granted: false,
     });
@@ -207,7 +208,7 @@ describe('§4.1a — recording a decision declared in person', () => {
 
   it('a revocation records who revoked it and when', async () => {
     const { admin, student } = await scenario();
-    const { recordId } = await recordStaffConsent(prisma, admin, student, {
+    const { recordId } = await recordStaffConsent(prisma, await actorFor(prisma, admin), student, {
       consentType: 'media_release',
       granted: false,
     });
@@ -222,7 +223,7 @@ describe('§4.1a — recording a decision declared in person', () => {
 
     // A decision that cannot be tied to a wording is not a record of consent.
     await expect(
-      recordStaffConsent(prisma, admin, student, { consentType: 'media_release', granted: true }),
+      recordStaffConsent(prisma, await actorFor(prisma, admin), student, { consentType: 'media_release', granted: true }),
     ).rejects.toMatchObject({ code: 'SERVICE_UNAVAILABLE' });
     expect(await prisma.consentRecord.count({ where: { studentId: student } })).toBe(0);
   });
@@ -238,12 +239,12 @@ describe('BR-1 — effective status', () => {
 
   it('the MOST RECENT record wins, not the first', async () => {
     const { admin, student } = await scenario();
-    await recordStaffConsent(prisma, admin, student, {
+    await recordStaffConsent(prisma, await actorFor(prisma, admin), student, {
       consentType: 'media_release',
       granted: true,
     });
     await new Promise((r) => setTimeout(r, 5));
-    await recordStaffConsent(prisma, admin, student, {
+    await recordStaffConsent(prisma, await actorFor(prisma, admin), student, {
       consentType: 'media_release',
       granted: false,
     });
@@ -253,11 +254,11 @@ describe('BR-1 — effective status', () => {
 
   it('consent types are tracked independently', async () => {
     const { admin, student } = await scenario();
-    await recordStaffConsent(prisma, admin, student, {
+    await recordStaffConsent(prisma, await actorFor(prisma, admin), student, {
       consentType: 'media_release',
       granted: false,
     });
-    await recordStaffConsent(prisma, admin, student, {
+    await recordStaffConsent(prisma, await actorFor(prisma, admin), student, {
       consentType: 'data_processing',
       granted: true,
     });
@@ -273,7 +274,7 @@ describe('§4.1a + TD-4 — the re-evaluation enqueue', () => {
     const { admin, student, groupId } = await scenario();
     expect(await queuedFor(groupId)).toBe(0);
 
-    const result = await recordStaffConsent(prisma, admin, student, {
+    const result = await recordStaffConsent(prisma, await actorFor(prisma, admin), student, {
       consentType: 'media_release',
       granted: true,
     });
@@ -289,7 +290,7 @@ describe('§4.1a + TD-4 — the re-evaluation enqueue', () => {
     const second = await makeGroupInOwnLevel(branchId, 'مستوى ثانٍ');
     await enrol(second, student);
 
-    const result = await recordStaffConsent(prisma, admin, student, {
+    const result = await recordStaffConsent(prisma, await actorFor(prisma, admin), student, {
       consentType: 'media_release',
       granted: false,
     });
@@ -306,7 +307,7 @@ describe('§4.1a + TD-4 — the re-evaluation enqueue', () => {
     const superAdmin = await staff('مشرف عام', 'super_admin', null);
     const unenrolled = await person('غير مسجلة');
 
-    const result = await recordStaffConsent(prisma, superAdmin, unenrolled, {
+    const result = await recordStaffConsent(prisma, await actorFor(prisma, superAdmin), unenrolled, {
       consentType: 'media_release',
       granted: true,
     });
@@ -320,7 +321,7 @@ describe('§4.1a + TD-4 — the re-evaluation enqueue', () => {
     const unplaced = await person('غير معينة');
 
     await expect(
-      recordStaffConsent(prisma, admin, unplaced, {
+      recordStaffConsent(prisma, await actorFor(prisma, admin), unplaced, {
         consentType: 'media_release',
         granted: true,
       }),
@@ -339,7 +340,7 @@ describe('§4.1a + TD-4 — the re-evaluation enqueue', () => {
       data: { deletedAt: new Date() },
     });
 
-    const result = await recordStaffConsent(prisma, admin, student, {
+    const result = await recordStaffConsent(prisma, await actorFor(prisma, admin), student, {
       consentType: 'media_release',
       granted: true,
     });
@@ -356,7 +357,7 @@ describe('§4.1a + TD-4 — the re-evaluation enqueue', () => {
     // mid-flight is impractical; instead assert the paired invariant — a refused
     // decision writes neither a record nor a job.
     await prisma.systemSetting.deleteMany({ where: { key: CONSENT_TEXT_VERSION_KEY } });
-    await recordStaffConsent(prisma, admin, student, {
+    await recordStaffConsent(prisma, await actorFor(prisma, admin), student, {
       consentType: 'media_release',
       granted: true,
     }).catch(() => undefined);
@@ -374,7 +375,7 @@ describe('TD-2 / TD-12 — who may record', () => {
 
     // TD-2 marks the row ⊘ for Teacher even though they may view the student.
     await expect(
-      recordStaffConsent(prisma, teacher, student, {
+      recordStaffConsent(prisma, await actorFor(prisma, teacher), student, {
         consentType: 'media_release',
         granted: true,
       }),
@@ -390,7 +391,7 @@ describe('TD-2 / TD-12 — who may record', () => {
     const admin = await staff('مشرفة أخرى', 'admin', elsewhere.id);
 
     await expect(
-      recordStaffConsent(prisma, admin, student, { consentType: 'media_release', granted: true }),
+      recordStaffConsent(prisma, await actorFor(prisma, admin), student, { consentType: 'media_release', granted: true }),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 
@@ -399,7 +400,7 @@ describe('TD-2 / TD-12 — who may record', () => {
     await prisma.user.update({ where: { id: admin }, data: { accountStatus: 'suspended' } });
 
     await expect(
-      recordStaffConsent(prisma, admin, student, { consentType: 'media_release', granted: true }),
+      recordStaffConsent(prisma, await actorFor(prisma, admin), student, { consentType: 'media_release', granted: true }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 
@@ -407,7 +408,7 @@ describe('TD-2 / TD-12 — who may record', () => {
     const { student } = await scenario();
     const superAdmin = await staff('مشرف عام', 'super_admin', null);
     await expect(
-      recordStaffConsent(prisma, superAdmin, student, {
+      recordStaffConsent(prisma, await actorFor(prisma, superAdmin), student, {
         consentType: 'media_release',
         granted: true,
       }),
@@ -418,8 +419,8 @@ describe('TD-2 / TD-12 — who may record', () => {
     const { admin, student } = await scenario();
     const teacher = await staff('معلمة', 'teacher', null);
 
-    await expect(readConsent(prisma, admin, student)).resolves.toBeTruthy();
-    await expect(readConsent(prisma, teacher, student)).rejects.toMatchObject({
+    await expect(readConsent(prisma, await actorFor(prisma, admin), student)).resolves.toBeTruthy();
+    await expect(readConsent(prisma, await actorFor(prisma, teacher), student)).rejects.toMatchObject({
       code: 'FORBIDDEN',
     });
   });
@@ -428,7 +429,7 @@ describe('TD-2 / TD-12 — who may record', () => {
 describe('TD-8 — audit', () => {
   it('a grant writes consent.grant naming the on-behalf actor and text version', async () => {
     const { admin, student } = await scenario();
-    await recordStaffConsent(prisma, admin, student, {
+    await recordStaffConsent(prisma, await actorFor(prisma, admin), student, {
       consentType: 'media_release',
       granted: true,
       note: 'صرحت الأم شخصيا',
@@ -446,7 +447,7 @@ describe('TD-8 — audit', () => {
 
   it('a revocation writes consent.revoke', async () => {
     const { admin, student } = await scenario();
-    await recordStaffConsent(prisma, admin, student, {
+    await recordStaffConsent(prisma, await actorFor(prisma, admin), student, {
       consentType: 'media_release',
       granted: false,
     });

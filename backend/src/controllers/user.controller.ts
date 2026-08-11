@@ -52,7 +52,7 @@ export function create(prisma: PrismaClient) {
     }
     const { name_arabic, email, role, branch_id, pre_approved } = parsed.data;
 
-    const user = await preProvision(prisma, requireActor(req).userId, {
+    const user = await preProvision(prisma, requireActor(req), {
       nameArabic: name_arabic,
       email,
       ...(role ? { role } : {}),
@@ -84,7 +84,7 @@ export function list(prisma: PrismaClient) {
     if (!parsed.success) throw new AppError('VALIDATION_FAILED', 'bad query parameters');
     const { q, role, branch_id, status, page, page_size } = parsed.data;
 
-    const result = await listUsers(prisma, requireActor(req).userId, {
+    const result = await listUsers(prisma, requireActor(req), {
       ...(q ? { q } : {}),
       ...(role ? { role } : {}),
       ...(branch_id ? { branchId: branch_id } : {}),
@@ -113,7 +113,7 @@ export function update(prisma: PrismaClient) {
     const body = parse(updateUserSchema, req.body ?? {});
     const user = await updateUser(
       prisma,
-      requireActor(req).userId,
+      requireActor(req),
       idParam(req, 'id'),
       body.version,
       {
@@ -133,7 +133,7 @@ export function suspend(prisma: PrismaClient) {
     const body = parse(suspendUserSchema, req.body ?? {});
     const user = await suspendUser(
       prisma,
-      requireActor(req).userId,
+      requireActor(req),
       idParam(req, 'id'),
       body.version,
       body.reason,
@@ -148,7 +148,7 @@ export function reactivate(prisma: PrismaClient) {
     const body = parse(reactivateUserSchema, req.body ?? {});
     const user = await reactivateUser(
       prisma,
-      requireActor(req).userId,
+      requireActor(req),
       idParam(req, 'id'),
       body.version,
     );
@@ -169,7 +169,7 @@ export function setRoles(prisma: PrismaClient) {
     const body = parse(setUserRolesSchema, req.body ?? {});
     const user = await setUserRoles(
       prisma,
-      requireActor(req).userId,
+      requireActor(req),
       idParam(req, 'id'),
       body.assignments.map((a) => ({ role: a.role, branchId: a.branch_id })),
     );

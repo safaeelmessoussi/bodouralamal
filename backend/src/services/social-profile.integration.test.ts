@@ -1,4 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { actorFor } from '../test-support/actor.js';
 
 import { loadConfig } from '../lib/config.js';
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
@@ -118,27 +119,27 @@ describe('TD-2 R28 — who MAY reach a case file', () => {
   it('an assigned teacher reads and writes their own student', async () => {
     const { teacher, student } = await scenario();
 
-    await writeProfile(prisma, teacher, student, { healthCondition: 'ربو خفيف' });
-    const profile = await readProfile(prisma, teacher, student);
+    await writeProfile(prisma, await actorFor(prisma, teacher), student, { healthCondition: 'ربو خفيف' });
+    const profile = await readProfile(prisma, await actorFor(prisma, teacher), student);
     expect(profile.healthCondition).toBe('ربو خفيف');
   });
 
   it('a Super Admin reaches any student', async () => {
     const { student } = await scenario();
     const superAdmin = await staff('مشرف عام', 'super_admin', null);
-    await expect(readProfile(prisma, superAdmin, student)).resolves.toBeTruthy();
+    await expect(readProfile(prisma, await actorFor(prisma, superAdmin), student)).resolves.toBeTruthy();
   });
 
   it('an Admin reaches a student inside their branch scope', async () => {
     const { branchId, student } = await scenario();
     const admin = await staff('مشرفة', 'admin', branchId);
-    await expect(writeProfile(prisma, admin, student, { homeAddress: 'حي السلام' })).resolves
+    await expect(writeProfile(prisma, await actorFor(prisma, admin), student, { homeAddress: 'حي السلام' })).resolves
       .toBeTruthy();
   });
 
   it('returns nulls, not an error, when no profile exists yet', async () => {
     const { teacher, student } = await scenario();
-    const profile = await readProfile(prisma, teacher, student);
+    const profile = await readProfile(prisma, await actorFor(prisma, teacher), student);
     expect(profile.studentId).toBe(student);
     expect(profile.healthCondition).toBeNull();
   });
@@ -149,11 +150,11 @@ describe('BR-16 — who MUST NOT reach a case file', () => {
     const { student } = await scenario();
     const outsider = await staff('معلمة أخرى', 'teacher', null);
 
-    await expect(readProfile(prisma, outsider, student)).rejects.toMatchObject({
+    await expect(readProfile(prisma, await actorFor(prisma, outsider), student)).rejects.toMatchObject({
       code: 'NOT_FOUND',
     });
     await expect(
-      writeProfile(prisma, outsider, student, { healthCondition: 'محاولة' }),
+      writeProfile(prisma, await actorFor(prisma, outsider), student, { healthCondition: 'محاولة' }),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 
@@ -162,7 +163,7 @@ describe('BR-16 — who MUST NOT reach a case file', () => {
     const elsewhere = await makeBranch('الدار البيضاء');
     const admin = await staff('مشرفة أخرى', 'admin', elsewhere);
 
-    await expect(readProfile(prisma, admin, student)).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    await expect(readProfile(prisma, await actorFor(prisma, admin), student)).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 
   it('BR-16 R28: the child\'s OWN approved parent is refused', async () => {
@@ -174,7 +175,7 @@ describe('BR-16 — who MUST NOT reach a case file', () => {
       data: { parentId: parent, studentId: student, status: 'approved', decidedAt: new Date() },
     });
 
-    await expect(readProfile(prisma, parent, student)).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await expect(readProfile(prisma, await actorFor(prisma, parent), student)).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 
   it('a student is refused their own profile', async () => {
@@ -184,7 +185,7 @@ describe('BR-16 — who MUST NOT reach a case file', () => {
       data: { userId: student, roleId: roleRow!.id, branchId: null },
     });
 
-    await expect(readProfile(prisma, student, student)).rejects.toMatchObject({
+    await expect(readProfile(prisma, await actorFor(prisma, student), student)).rejects.toMatchObject({
       code: 'FORBIDDEN',
     });
   });
@@ -193,10 +194,10 @@ describe('BR-16 — who MUST NOT reach a case file', () => {
     const { student } = await scenario();
     const outsider = await staff('معلمة أخرى', 'teacher', null);
 
-    const outOfScope = await readProfile(prisma, outsider, student).catch((e: unknown) => e);
+    const outOfScope = await readProfile(prisma, await actorFor(prisma, outsider), student).catch((e: unknown) => e);
     const nonexistent = await readProfile(
       prisma,
-      outsider,
+      await actorFor(prisma, outsider),
       '11111111-2222-4333-8444-555555555555',
     ).catch((e: unknown) => e);
 
@@ -210,14 +211,14 @@ describe('BR-16 — who MUST NOT reach a case file', () => {
     await prisma.user.update({ where: { id: teacher }, data: { accountStatus: 'suspended' } });
 
     // The token is untouched; only the database row changed.
-    await expect(readProfile(prisma, teacher, student)).rejects.toMatchObject({
+    await expect(readProfile(prisma, await actorFor(prisma, teacher), student)).rejects.toMatchObject({
       code: 'FORBIDDEN',
     });
   });
 
   it('revoking the group assignment ends access on the very next call', async () => {
     const { groupId, teacher, student } = await scenario();
-    await expect(readProfile(prisma, teacher, student)).resolves.toBeTruthy();
+    await expect(readProfile(prisma, await actorFor(prisma, teacher), student)).resolves.toBeTruthy();
 
     // Revocation now means un-staffing the schedule (§4.4c) — the reach ends
     // on the very next call, exactly as revoking a GroupTeacher row once did.
@@ -226,7 +227,7 @@ describe('BR-16 — who MUST NOT reach a case file', () => {
       data: { deletedAt: new Date() },
     });
 
-    await expect(readProfile(prisma, teacher, student)).rejects.toMatchObject({
+    await expect(readProfile(prisma, await actorFor(prisma, teacher), student)).rejects.toMatchObject({
       code: 'NOT_FOUND',
     });
   });
@@ -235,7 +236,7 @@ describe('BR-16 — who MUST NOT reach a case file', () => {
 describe('TD-8 R28 — reads and writes are both audited', () => {
   it('a READ writes socialprofile.view naming the actor and student', async () => {
     const { teacher, student } = await scenario();
-    await readProfile(prisma, teacher, student);
+    await readProfile(prisma, await actorFor(prisma, teacher), student);
 
     const row = await prisma.auditLog.findFirst({
       where: { actorUserId: teacher, actionType: 'socialprofile.view' },
@@ -246,7 +247,7 @@ describe('TD-8 R28 — reads and writes are both audited', () => {
 
   it('a read is audited even when no profile exists — the attempt is the event', async () => {
     const { teacher, student } = await scenario();
-    await readProfile(prisma, teacher, student);
+    await readProfile(prisma, await actorFor(prisma, teacher), student);
 
     const row = await prisma.auditLog.findFirst({
       where: { actorUserId: teacher, actionType: 'socialprofile.view' },
@@ -256,7 +257,7 @@ describe('TD-8 R28 — reads and writes are both audited', () => {
 
   it('a WRITE records which fields changed but NEVER their values (§14 no PII)', async () => {
     const { teacher, student } = await scenario();
-    await writeProfile(prisma, teacher, student, {
+    await writeProfile(prisma, await actorFor(prisma, teacher), student, {
       healthCondition: 'حالة حساسة جدا',
       homeAddress: 'عنوان سري',
     });
@@ -277,7 +278,7 @@ describe('TD-8 R28 — reads and writes are both audited', () => {
   it('a refused attempt writes NO audit row (nothing was viewed)', async () => {
     const { student } = await scenario();
     const outsider = await staff('معلمة أخرى', 'teacher', null);
-    await readProfile(prisma, outsider, student).catch(() => undefined);
+    await readProfile(prisma, await actorFor(prisma, outsider), student).catch(() => undefined);
 
     expect(
       await prisma.auditLog.count({ where: { actorUserId: outsider } }),
@@ -286,7 +287,7 @@ describe('TD-8 R28 — reads and writes are both audited', () => {
 
   it('socialprofile actions are NOT purgeable (R19 allowlist)', async () => {
     const { teacher, student } = await scenario();
-    await readProfile(prisma, teacher, student);
+    await readProfile(prisma, await actorFor(prisma, teacher), student);
     const { purgeExpiredAuthRows } = await import('../repositories/audit.repository.js');
 
     // Far-future horizon: age alone must not remove a safeguarding-access row.
@@ -303,29 +304,29 @@ describe('TD-8 R28 — reads and writes are both audited', () => {
 describe('§4.10 — write semantics', () => {
   it('a partial update never blanks a colleague\'s entry by omission', async () => {
     const { teacher, student } = await scenario();
-    await writeProfile(prisma, teacher, student, {
+    await writeProfile(prisma, await actorFor(prisma, teacher), student, {
       healthCondition: 'ربو',
       fatherName: 'محمد',
     });
-    await writeProfile(prisma, teacher, student, { fatherName: 'أحمد' });
+    await writeProfile(prisma, await actorFor(prisma, teacher), student, { fatherName: 'أحمد' });
 
-    const after = await readProfile(prisma, teacher, student);
+    const after = await readProfile(prisma, await actorFor(prisma, teacher), student);
     expect(after.fatherName).toBe('أحمد');
     expect(after.healthCondition).toBe('ربو'); // untouched, not blanked
   });
 
   it('an explicit null clears a field', async () => {
     const { teacher, student } = await scenario();
-    await writeProfile(prisma, teacher, student, { healthCondition: 'ربو' });
-    await writeProfile(prisma, teacher, student, { healthCondition: null });
+    await writeProfile(prisma, await actorFor(prisma, teacher), student, { healthCondition: 'ربو' });
+    await writeProfile(prisma, await actorFor(prisma, teacher), student, { healthCondition: null });
 
-    expect((await readProfile(prisma, teacher, student)).healthCondition).toBeNull();
+    expect((await readProfile(prisma, await actorFor(prisma, teacher), student)).healthCondition).toBeNull();
   });
 
   it('writing twice upserts rather than creating a second record', async () => {
     const { teacher, student } = await scenario();
-    await writeProfile(prisma, teacher, student, { healthCondition: 'أ' });
-    await writeProfile(prisma, teacher, student, { healthCondition: 'ب' });
+    await writeProfile(prisma, await actorFor(prisma, teacher), student, { healthCondition: 'أ' });
+    await writeProfile(prisma, await actorFor(prisma, teacher), student, { healthCondition: 'ب' });
 
     expect(await prisma.studentSocialProfile.count({ where: { studentId: student } })).toBe(1);
   });

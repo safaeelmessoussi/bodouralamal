@@ -56,7 +56,7 @@ function studentId(req: Request): string {
 
 export function read(prisma: PrismaClient) {
   return async (req: Request, res: Response): Promise<void> => {
-    const profile = await readProfile(prisma, requireActor(req).userId, studentId(req));
+    const profile = await readProfile(prisma, requireActor(req), studentId(req));
     res.json(view(profile));
   };
 }
@@ -67,7 +67,7 @@ export function write(prisma: PrismaClient) {
     if (!parsed.success) throw new AppError('VALIDATION_FAILED', 'invalid social profile payload');
     const b = parsed.data;
 
-    const profile = await writeProfile(prisma, requireActor(req).userId, studentId(req), {
+    const profile = await writeProfile(prisma, requireActor(req), studentId(req), {
       ...(b.health_condition !== undefined ? { healthCondition: b.health_condition } : {}),
       ...(b.family_situation !== undefined ? { familySituation: b.family_situation } : {}),
       ...(b.home_address !== undefined ? { homeAddress: b.home_address } : {}),

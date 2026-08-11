@@ -58,6 +58,43 @@ export function toRoleScopes(
   }));
 }
 
+/**
+ * **The Active Role narrowing** (SRS Revision 60).
+ *
+ * Returns the caller's scopes reduced to the single role they are working as —
+ * or `null` when they do not hold it at all, which the caller must treat as a
+ * refusal rather than as "no restrictions".
+ *
+ * ## Why narrowing happens here and not at each decision
+ *
+ * Every authorization decision in the platform reads `RoleScope[]`: 103
+ * references across 28 files, through the helpers below. Narrowing the array
+ * once, at the point the token is minted, makes all of them correct with no
+ * edits — and, more importantly, makes the wrong thing **unreachable**: a
+ * service cannot consult an un-narrowed array because none exists in that
+ * request.
+ *
+ * ## The entry keeps its own branches, and that is what preserves §4.2
+ *
+ * *"Scope resolves per role, never as a flat union"* is unchanged; the array
+ * simply has one entry. A مؤطِّرة scoped to Marrakesh stays scoped to Marrakesh,
+ * because her own assignment travels with her.
+ *
+ * ## What disappears, deliberately
+ *
+ * `isSuperAdmin` returns false for a narrowed non-admin array, so
+ * `branchesForRole`'s Super Admin short-circuit stops applying. **That is the
+ * mechanism by which Super Admin authority actually goes away** — not a special
+ * case anywhere, just an absent entry.
+ */
+export function narrowToRole(
+  scopes: readonly RoleScope[],
+  role: string,
+): RoleScope[] | null {
+  const entry = scopes.find((s) => s.role === role);
+  return entry ? [entry] : null;
+}
+
 /** The role names a user holds; `roles[]` is derived so it cannot disagree. */
 export function rolesOf(scopes: readonly RoleScope[]): string[] {
   return [...new Set(scopes.map((s) => s.role))];

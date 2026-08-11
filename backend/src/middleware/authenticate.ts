@@ -43,8 +43,13 @@ export function authenticate(config: AppConfig) {
 
     req.actor = {
       userId: verified.claims.sub,
+      // R60: already narrowed at issue when an active role is set, so nothing
+      // here filters — the middleware carries what the token says.
       roles: verified.claims.roles,
       roleScopes: verified.claims.role_scopes,
+      ...(verified.claims.active_role !== undefined
+        ? { activeRole: verified.claims.active_role }
+        : {}),
       accountStatus: verified.claims.account_status,
     };
     next();
@@ -95,6 +100,9 @@ export function optionalAuthenticate(config: AppConfig) {
       userId: verified.claims.sub,
       roles: verified.claims.roles,
       roleScopes: verified.claims.role_scopes,
+      ...(verified.claims.active_role !== undefined
+        ? { activeRole: verified.claims.active_role }
+        : {}),
       accountStatus: verified.claims.account_status,
     };
     next();

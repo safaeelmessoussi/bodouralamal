@@ -23,7 +23,7 @@ export function create(prisma: PrismaClient) {
     }
     const link = await createLink(
       prisma,
-      requireActor(req).userId,
+      requireActor(req),
       parsed.data.parent_id,
       parsed.data.student_id,
     );
@@ -50,7 +50,7 @@ export function revoke(prisma: PrismaClient) {
       throw new AppError('VALIDATION_FAILED', 'a reason of 1–500 characters is required');
     }
 
-    const result = await revokeLink(prisma, requireActor(req).userId, id.data, parsed.data.reason);
+    const result = await revokeLink(prisma, requireActor(req), id.data, parsed.data.reason);
     res.json({ revoked: true, parent_id: result.parentId, student_id: result.studentId });
   };
 }

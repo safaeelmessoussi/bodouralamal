@@ -1,4 +1,5 @@
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { actorFor } from '../test-support/actor.js';
 
 import { loadConfig } from '../lib/config.js';
 import { issueOnboardingToken } from '../lib/onboarding-token.js';
@@ -155,7 +156,7 @@ describe('§5.6 / TD-4.2 approval queue', () => {
     const admin = await makeAdmin();
     const { parentId, childId } = await submitBundle();
 
-    const page = await listApprovals(prisma, admin, { type: 'registration' });
+    const page = await listApprovals(prisma, await actorFor(prisma, admin), { type: 'registration' });
     const item = page.data.find((i) => i.id === parentId);
 
     expect(item).toBeDefined();
@@ -170,7 +171,7 @@ describe('§5.6 / TD-4.2 approval queue', () => {
     const admin = await makeAdmin();
     const { parentId, childId } = await submitBundle();
 
-    const result = await decide(prisma, admin, parentId, { approve: true, ...admit(childId) });
+    const result = await decide(prisma, await actorFor(prisma, admin), parentId, { approve: true, ...admit(childId) });
     expect(result.type).toBe('registration');
 
     expect((await prisma.user.findUnique({ where: { id: parentId } }))?.accountStatus).toBe('active');
@@ -190,7 +191,7 @@ describe('§5.6 / TD-4.2 approval queue', () => {
     const admin = await makeAdmin();
     const { parentId, childId } = await submitBundle();
 
-    await decide(prisma, admin, parentId, { approve: false, reason: 'بيانات غير مكتملة' });
+    await decide(prisma, await actorFor(prisma, admin), parentId, { approve: false, reason: 'بيانات غير مكتملة' });
 
     // A rejected parent with a still-pending child would be a half-decided
     // family — TD-4.2's atomicity applies to both directions.
@@ -204,7 +205,7 @@ describe('§5.6 / TD-4.2 approval queue', () => {
   it('rejection without a reason is refused (§5.6, §14.2)', async () => {
     const admin = await makeAdmin();
     const { parentId } = await submitBundle();
-    await expect(decide(prisma, admin, parentId, { approve: false })).rejects.toMatchObject({
+    await expect(decide(prisma, await actorFor(prisma, admin), parentId, { approve: false })).rejects.toMatchObject({
       code: 'VALIDATION_FAILED',
     });
     // Nothing decided.
@@ -215,9 +216,9 @@ describe('§5.6 / TD-4.2 approval queue', () => {
     const admin = await makeAdmin();
     const { parentId, childId } = await submitBundle();
 
-    await decide(prisma, admin, parentId, { approve: true, ...admit(childId) });
+    await decide(prisma, await actorFor(prisma, admin), parentId, { approve: true, ...admit(childId) });
     await expect(
-      decide(prisma, admin, parentId, { approve: true, ...admit(childId) }),
+      decide(prisma, await actorFor(prisma, admin), parentId, { approve: true, ...admit(childId) }),
     ).rejects.toMatchObject({ code: 'STATE_CONFLICT' });
   });
 
@@ -226,7 +227,7 @@ describe('§5.6 / TD-4.2 approval queue', () => {
     const here = await submitBundle(branchId);
     const elsewhere = await submitBundle(otherBranchId);
 
-    const filtered = await listApprovals(prisma, admin, { branchId });
+    const filtered = await listApprovals(prisma, await actorFor(prisma, admin), { branchId });
     const ids = filtered.data.map((i) => i.id);
     expect(ids).toContain(here.parentId);
     expect(ids).not.toContain(elsewhere.parentId);
@@ -245,7 +246,7 @@ describe('§5.6 / TD-4.2 approval queue', () => {
     // one the family asked for — that is the whole distinction R39 draws
     // between a request and a placement, and it must survive Revision 43
     // making placement part of approval.
-    await decide(prisma, admin, parentId, { approve: true, ...admit(childId) });
+    await decide(prisma, await actorFor(prisma, admin), parentId, { approve: true, ...admit(childId) });
 
     expect((await prisma.user.findUnique({ where: { id: parentId } }))?.accountStatus).toBe('active');
     expect(await prisma.userBranchRole.count({ where: { userId: parentId } })).toBe(0);
@@ -282,7 +283,7 @@ describe('§5.6 / TD-4.2 approval queue', () => {
     // The token is still perfectly valid; only the database row changed.
     await prisma.user.update({ where: { id: admin }, data: { accountStatus: 'suspended' } });
 
-    await expect(decide(prisma, admin, parentId, { approve: true })).rejects.toMatchObject({
+    await expect(decide(prisma, await actorFor(prisma, admin), parentId, { approve: true })).rejects.toMatchObject({
       code: 'FORBIDDEN',
     });
     expect((await prisma.user.findUnique({ where: { id: parentId } }))?.accountStatus).toBe('pending');
@@ -296,7 +297,7 @@ describe('§5.6 / TD-4.2 approval queue', () => {
     // assignment to still exist, not merely to have existed at token issue.
     await prisma.userBranchRole.deleteMany({ where: { userId: admin } });
 
-    await expect(decide(prisma, admin, parentId, { approve: true })).rejects.toMatchObject({
+    await expect(decide(prisma, await actorFor(prisma, admin), parentId, { approve: true })).rejects.toMatchObject({
       code: 'FORBIDDEN',
     });
   });
@@ -305,8 +306,8 @@ describe('§5.6 / TD-4.2 approval queue', () => {
     const teacher = await makeAdmin('teacher');
     const { parentId } = await submitBundle();
 
-    await expect(listApprovals(prisma, teacher, {})).rejects.toMatchObject({ code: 'FORBIDDEN' });
-    await expect(decide(prisma, teacher, parentId, { approve: true })).rejects.toMatchObject({
+    await expect(listApprovals(prisma, await actorFor(prisma, teacher), {})).rejects.toMatchObject({ code: 'FORBIDDEN' });
+    await expect(decide(prisma, await actorFor(prisma, teacher), parentId, { approve: true })).rejects.toMatchObject({
       code: 'FORBIDDEN',
     });
   });
@@ -314,14 +315,14 @@ describe('§5.6 / TD-4.2 approval queue', () => {
   it('an unknown id is NOT_FOUND, not a 500 or a silent success', async () => {
     const admin = await makeAdmin();
     await expect(
-      decide(prisma, admin, '11111111-2222-4333-8444-555555555555', { approve: true }),
+      decide(prisma, await actorFor(prisma, admin), '11111111-2222-4333-8444-555555555555', { approve: true }),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
   });
 
   it('TD-10: pagination envelope with default 25 and max 100', async () => {
     const admin = await makeAdmin();
     await submitBundle();
-    const page = await listApprovals(prisma, admin, { pageSize: 500 });
+    const page = await listApprovals(prisma, await actorFor(prisma, admin), { pageSize: 500 });
     expect(page.meta.page_size).toBe(100);
     expect(page.meta.page).toBe(1);
     expect(typeof page.meta.total).toBe('number');

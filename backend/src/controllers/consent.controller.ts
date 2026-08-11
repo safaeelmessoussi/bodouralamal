@@ -29,7 +29,7 @@ function studentId(req: Request): string {
 
 export function read(prisma: PrismaClient) {
   return async (req: Request, res: Response): Promise<void> => {
-    const state = await readConsent(prisma, requireActor(req).userId, studentId(req));
+    const state = await readConsent(prisma, requireActor(req), studentId(req));
     res.json({ student_id: req.params['id'], consents: state });
   };
 }
@@ -40,7 +40,7 @@ export function record(prisma: PrismaClient) {
     if (!parsed.success) throw new AppError('VALIDATION_FAILED', 'invalid consent decision');
     const { consent_type, granted, note } = parsed.data;
 
-    const result = await recordStaffConsent(prisma, requireActor(req).userId, studentId(req), {
+    const result = await recordStaffConsent(prisma, requireActor(req), studentId(req), {
       consentType: consent_type,
       granted,
       ...(note ? { note } : {}),
