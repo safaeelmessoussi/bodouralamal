@@ -154,3 +154,53 @@ describe('the sidebar promises exactly what the router delivers', () => {
     }
   });
 });
+
+/**
+ * **The `الإدارة` section is Super Admin only, as a section** (SRS R61).
+ *
+ * Not four separate assertions about four modules: the rule is that *placement
+ * in this section is what makes a node Super-Admin-only*, so the guard has to
+ * hold for modules that do not exist yet.
+ *
+ * That distinction is the whole reason it exists. Three of the four nodes were
+ * already `SUPER_ONLY` and `/admin/branches` was not — a divergence nothing
+ * caught, because every module carried its own independent decision and no rule
+ * connected them.
+ */
+describe('R61 — administration is Super Admin only by placement', () => {
+  it('gives every node in the section Super-Admin-only roles', () => {
+    const section = ADMIN_MODULES.filter((m) => m.section === 'administration');
+
+    // A guard over an empty set proves nothing.
+    expect(section.length).toBeGreaterThanOrEqual(4);
+    for (const module of section) {
+      expect([...module.roles], module.path).toEqual(['super_admin']);
+    }
+  });
+
+  it('shows an Admin none of them', () => {
+    const forAdmin = visibleModules(['admin']).map((m) => m.path);
+    for (const module of ADMIN_MODULES.filter((m) => m.section === 'administration')) {
+      expect(forAdmin, module.path).not.toContain(module.path);
+    }
+    // …including الفروع والقاعات, the node this revision moved.
+    expect(forAdmin).not.toContain('/admin/branches');
+  });
+
+  it('still shows them all to a Super Admin', () => {
+    const forSuper = visibleModules(['super_admin']).map((m) => m.path);
+    expect(forSuper).toContain('/admin/branches');
+    expect(forSuper).toContain('/admin/trash');
+    expect(forSuper).toContain('/superadmin/settings');
+  });
+
+  it('leaves the Admin\'s operational sections untouched', () => {
+    // R61 withdraws a screen, not an Admin's work. Groups, users, approvals and
+    // scheduling all still belong to them — and all still read branches through
+    // the selector feed the endpoint keeps serving (R61.2).
+    const forAdmin = visibleModules(['admin']).map((m) => m.path);
+    expect(forAdmin).toContain('/admin/groups');
+    expect(forAdmin).toContain('/admin/users');
+    expect(forAdmin).toContain('/admin/approvals');
+  });
+});

@@ -146,11 +146,29 @@ export const ADMIN_MODULES: readonly AdminModule[] = [
   },
 
   // ── Administration ────────────────────────────────────────────────────────
+  //
+  // **Super Admin only, as a SECTION** (R61). Every node here carries
+  // `SUPER_ONLY`, and `admin-modules.test.ts` asserts it — written as four
+  // independent decisions, the fifth module added here would inherit nothing and
+  // the divergence would return silently, which is precisely how
+  // `/admin/branches` came to be the odd one out.
   {
+    /**
+     * R61 — was `STAFF`, because Revision 26 let an Admin *read* this screen.
+     *
+     * **The endpoint is unchanged.** `GET /admin/branches` stays Admin-readable,
+     * branch-scoped, because `use-scope-options.ts` feeds `/admin/groups`,
+     * `/admin/schedules`, `/admin/content` and every scope selector from it —
+     * withdrawing it would leave a branch Admin unable to create a group or
+     * schedule a class, with empty selectors and no error saying why (R61.2).
+     *
+     * What changes is who may *manage* branches and rooms, and who sees the
+     * node. Writes were already Super Admin only.
+     */
     path: '/admin/branches',
     labelKey: 'admin.nav.branches',
     section: 'administration',
-    roles: STAFF,
+    roles: SUPER_ONLY,
     status: 'ready',
   },
   {

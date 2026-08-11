@@ -644,6 +644,12 @@
 - [x] **Two silently-dropped fields fixed on the update path**: `title` and — since R55 — `effective_until`. The regression tests read the ROW, never the status code
 - [ ] The remaining fixture titles from before the seed fix still read `[تجريبي] حدث …`; they are data and were not rewritten. Say the word and they can be cleaned
 
+### R61 — الإدارة is Super Admin only (2026-08-11)
+- [x] Section rule, enforced by a test over `section: 'administration'` rather than per module
+- [x] `/admin/branches` joins the other three; writes were already Super Admin only
+- [x] `GET /admin/branches` stays Admin-readable as a selector feed — verified that groups, scheduling and content depend on it
+- [ ] **Open for the Owner:** this is a visibility boundary, not a data one. An Admin can still *see* branch names through selectors. Withholding the data too means re-feeding every branch selector in the back office — a larger decision, not a consequence of this one
+
 ### R60 follow-up — the active role drives the interface (2026-08-11)
 - [x] `useActiveRole().activeRoles` is what presentation reads; `me.roles` is for the switcher's menu only
 - [x] `لوحة التحكم` opens the active role's home — teacher → `/teacher`, admin → `/admin`
