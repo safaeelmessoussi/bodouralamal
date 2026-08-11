@@ -661,6 +661,17 @@ function PlacementDialog({
           }
         />
 
+        {/* The whole point of excluding unassignable Levels is that the
+            approver is never left pressing a dead button — so when the
+            exclusion empties the list, the screen says why and where to fix
+            it rather than showing an empty dropdown. */}
+        {levels.length > 0 && !levels.some((l) => groups.some((g) => g.level_id === l.id)) ? (
+          <p className="state" role="alert">
+            {t('admin.approvals.placeNoAssignableLevels')}{' '}
+            <a href="/admin/groups">{t('admin.nav.groups')}</a>
+          </p>
+        ) : null}
+
         {students.map((s) => {
           const picked = choice[s.id];
           const inLevel = picked ? groups.filter((g) => g.level_id === picked.levelId) : [];
@@ -677,8 +688,30 @@ function PlacementDialog({
                   // Ordered by Category server-side (§2.2 scopes a Level's
                   // order within its Category), so the list reads as curricula
                   // rather than as one flat run.
+                  /**
+                   * **Levels with no live Administrative Group are excluded,
+                   * not offered and then refused.**
+                   *
+                   * They used to be listed. Picking one left `groupId` empty,
+                   * which left the confirm button `disabled` — so pressing
+                   * موافقة produced **no network request at all** and no
+                   * explanation beyond a line of small print. An approver with
+                   * a queue full of applicants had no way to tell a dead
+                   * control from a broken page.
+                   *
+                   * §4.1 is the reason it cannot be assigned: approval IS the
+                   * enrolment, and an enrolment needs a group. TD-4.6b makes
+                   * `createLevel` produce a first group precisely so this state
+                   * cannot arise — but it does arise for Levels that entered
+                   * any other way (seeds, fixtures, a group later deleted),
+                   * and 18 of 20 live Levels are in it today.
+                   *
+                   * Excluding them keeps every offered choice completable. The
+                   * notice below says what to do about the ones that are gone.
+                   */
                   ...levels
                     .filter((l) => categoryFilter === '' || l.category_id === categoryFilter)
+                    .filter((l) => groups.some((g) => g.level_id === l.id))
                     .map((l) => ({ value: l.id, label: `${l.category_name} — ${l.name}` })),
                 ]}
               />
@@ -697,8 +730,8 @@ function PlacementDialog({
                 />
               ) : null}
               {picked && inLevel.length === 0 ? (
-                // A Level with no live group cannot admit anybody — saying so
-                // here is cheaper than a refusal after the fact.
+                // Only reachable for a Level whose last group was deleted
+                // between this dialog loading and the choice being made.
                 <p className="state" role="status">
                   {t('admin.approvals.placeNoGroups')}
                 </p>

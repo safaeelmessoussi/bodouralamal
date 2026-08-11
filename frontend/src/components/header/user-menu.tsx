@@ -32,9 +32,11 @@ export function UserMenu({
           <a className="menu__option" href="/profile">
             <span className="menu__label">{t('profile.title')}</span>
           </a>
-          <a className="menu__option" href="/profile/register-child">
-            <span className="menu__label">{t('child.register')}</span>
-          </a>
+          {/* «＋ تسجيل طفل» is NOT repeated here. The personal section is one
+              click away and carries the action with the context that explains
+              it — who may use it, and the status of requests already made. A
+              second entry point to the same page is a second thing to keep in
+              step, and the header is where that goes unnoticed. */}
           <div className="menu__sep" />
           <SignOutButton onSignOut={onSignOut} block />
         </>

@@ -60,11 +60,6 @@ export const SCHOOLING_STAGES: NonNullable<ChildInput['schooling_stage']>[] = [
   'not_in_school',
 ];
 
-/** Arabic-Indic digits, matching how the rest of the interface reads. */
-export function toArabicDigits(value: number): string {
-  return String(value).replace(/\d/g, (d) => '٠١٢٣٤٥٦٧٨٩'[Number(d)] ?? d);
-}
-
 /**
  * The name inputs every person has, wherever they appear (§2.1 — one component
  * per *concept*).
@@ -233,7 +228,7 @@ export function ChildrenFieldset({
           <legend>
             {children.length === 1
               ? t('register.child')
-              : `${t('register.child')} ${toArabicDigits(index + 1)}`}
+              : `${t('register.child')} ${index + 1}`}
           </legend>
           <ChildFields
             value={entry}

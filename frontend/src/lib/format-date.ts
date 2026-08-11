@@ -13,6 +13,13 @@ import { tList } from '../i18n/index.js';
  * **The month names come from the i18n catalogue the calendar already uses**, so
  * the two can never disagree about what to call a month.
  *
+ * **Western digits, always** — `12 يونيو 2026`, never `١٢ يونيو ٢٠٢٦`. The
+ * interface is Arabic; its NUMERALS are not. Arabic-Indic digits went in with
+ * the first version of this file and came straight back out: a platform that
+ * shows a reference code, a page number and a year in one script and a phone
+ * number in another is inconsistent with itself, and every value here is also
+ * read back into a form, copied into a message, or quoted down a telephone.
+ *
  * **This is presentation only.** TD-11 keeps calendar dates as `YYYY-MM-DD`
  * strings on the wire and in the database, and nothing here changes what is
  * stored, sent or parsed — `<time dateTime={iso}>` still carries the machine
@@ -28,7 +35,7 @@ export function formatDate(value: string | null | undefined): string {
   // A value this cannot parse is returned untouched rather than blanked — an
   // unexpected shape should be visible, not silently erased.
   if (!year || !month || !day) return value;
-  return `${toArabicDigits(day)} ${months[month - 1] ?? ''} ${toArabicDigits(year)}`;
+  return `${day} ${months[month - 1] ?? ''} ${year}`;
 }
 
 /**
@@ -40,10 +47,13 @@ export function formatDateNumeric(value: string | null | undefined): string {
   const iso = value.slice(0, 10);
   const [year, month, day] = iso.split('-');
   if (!year || !month || !day) return value;
-  return toArabicDigits(`${day}/${month}/${year}`);
+  return `${day}/${month}/${year}`;
 }
 
-/** Arabic-Indic digits, matching how the rest of the interface reads. */
-export function toArabicDigits(value: string | number): string {
-  return String(value).replace(/\d/g, (d) => '٠١٢٣٤٥٦٧٨٩'[Number(d)] ?? d);
-}
+/**
+ * **There is deliberately no digit-conversion helper here.**
+ *
+ * An earlier version of this module exported `toArabicDigits`, and the platform
+ * standard is the opposite: **Arabic text, Western numerals.** If you are
+ * reaching for a converter, the answer is that numbers are printed as they are.
+ */

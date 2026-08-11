@@ -68,6 +68,33 @@
   font-weight: 700;
   color: var(--color-danger);
 }
+/*
+ * A checkbox or radio and its label, on ONE line.
+ *
+ * `.field--choice` is used in five places and **had no rule at all**, so it
+ * inherited `.field`'s `display: grid` — which stacks a control above its label
+ * and stretches the box to the column width. That is what put «يوم كامل (بدون
+ * توقيت)» out of line with its checkbox.
+ *
+ * `flex` rather than a grid template because the two are a phrase, not a
+ * layout: they wrap together and the control keeps its intrinsic size.
+ * Direction-agnostic — `row` follows `dir`, so RTL puts the box on the right
+ * with no separate rule, and `gap` never becomes a wrong-side margin.
+ */
+.field--choice {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--space-2);
+  cursor: pointer;
+}
+.field--choice input {
+  /* A flex child would otherwise stretch to the line's height; the native box
+     has an intrinsic size and should keep it. */
+  flex: 0 0 auto;
+  margin: 0;
+}
+
 .field--search {
   min-width: 15rem;
   flex: 1 1 15rem;
