@@ -11,8 +11,9 @@ import {
 } from './administrative-group.service.js';
 import type { Actor } from '../policies/actor.js';
 import { createBranch } from './branch.service.js';
-import { createLevel, FIRST_GROUP_NAME, levelsWithoutGroups } from './level.service.js';
+import { createLevel, levelsWithoutGroups } from './level.service.js';
 import {
+  enrolInLevel,
   enrolStudent,
   levelsForStudent,
   listGroupRoster,
@@ -83,13 +84,18 @@ async function level(
   branchId: string,
   genderRestriction: 'any' | 'girls_only' | 'boys_only' = 'any',
 ): Promise<{ levelId: string; firstGroupId: string }> {
+  // R66 — `createLevel` creates ONLY the Level now (TD-4.6b retired). Suites
+  // that need a group make one explicitly, which is also how an administrator
+  // does it: create the Level, subdivide it when there is a reason to.
   const created = await createLevel(prisma, superAdmin(), {
     name: `${TAG} ${label}`,
     categoryId,
     genderRestriction,
-    branchId,
   });
-  return { levelId: created.level.id, firstGroupId: created.firstGroup.id };
+  const group = await prisma.administrativeGroup.create({
+    data: { name: `${TAG} ${label} مجموعة`, levelId: created.level.id, branchId, displayOrder: 0 },
+  });
+  return { levelId: created.level.id, firstGroupId: group.id };
 }
 
 async function subject(label: string, levelId: string): Promise<string> {
@@ -153,171 +159,85 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 
-describe('TD-4.6b — a Level is never created without its first group', () => {
-  it('creates المجموعة 1 at the supplied branch, in the same transaction', async () => {
+describe('R66 — a Level is created ALONE; a Group is a subdivision', () => {
+  it('creates only the Level, and asks for no branch', async () => {
+    // TD-4.6b created المجموعة 1 in the same transaction, which is why the
+    // input carried a branch — a Level has never had one of its own. R66
+    // retires it: a Level nobody has subdivided needs no group, exactly as a
+    // Subject with no Teaching Groups is taught to the whole Level.
     const created = await createLevel(prisma, superAdmin(), {
-      name: `${TAG} المستوى 1`,
+      name: `${TAG} مستوى وحده`,
       categoryId,
       genderRestriction: 'any',
-      branchId: amerchich,
     });
-
-    expect(created.firstGroup.name).toBe(FIRST_GROUP_NAME);
-    expect(created.firstGroup.branchId).toBe(amerchich);
-
-    const groups = await prisma.administrativeGroup.findMany({
-      where: { levelId: created.level.id, deletedAt: null },
-    });
-    expect(groups).toHaveLength(1);
+    expect(created.level.id).toBeTruthy();
+    expect(created).not.toHaveProperty('firstGroup');
+    expect(
+      await prisma.administrativeGroup.count({
+        where: { levelId: created.level.id, deletedAt: null },
+      }),
+    ).toBe(0);
   });
 
-  it('leaves NO level without a group — the state TD-4.6b exists to prevent', async () => {
-    await level('المستوى 1', amerchich);
-    await level('المستوى 2', targa);
-    const orphans = (await levelsWithoutGroups(prisma)).filter((l) => l.name.startsWith(TAG));
-    expect(orphans).toEqual([]);
-  });
-
-  it('the branch is an INPUT, never a column on Level', async () => {
+  it('the Level still stores no branch — it never did', async () => {
     const created = await createLevel(prisma, superAdmin(), {
-      name: `${TAG} المستوى 1`,
+      name: `${TAG} مستوى بلا فرع`,
       categoryId,
       genderRestriction: 'any',
-      branchId: amerchich,
     });
-    // A Level stays branch-independent (§4.4b) — it may later hold groups at
-    // several branches, which `entire_level` teaching mode depends on.
-    expect(Object.keys(created.level)).not.toContain('branchId');
-
-    await createAdministrativeGroup(prisma, superAdmin(), {
-      name: `${TAG} المجموعة 2`,
-      levelId: created.level.id,
-      branchId: targa,
-    });
-    const branches = await prisma.administrativeGroup.findMany({
-      where: { levelId: created.level.id, deletedAt: null },
-      select: { branchId: true },
-    });
-    expect(new Set(branches.map((b) => b.branchId))).toEqual(new Set([amerchich, targa]));
+    const row = await prisma.level.findUniqueOrThrow({ where: { id: created.level.id } });
+    expect(row).not.toHaveProperty('branchId');
   });
 
-  it('rolls BOTH rows back when the branch does not exist', async () => {
-    const before = await prisma.level.count({ where: { name: { startsWith: TAG } } });
-    const err = await failure(() =>
-      createLevel(prisma, superAdmin(), {
-        name: `${TAG} المستوى الشبح`,
-        categoryId,
-        genderRestriction: 'any',
-        branchId: '00000000-0000-0000-0000-000000000000',
-      }),
+  it('a student is enrolled DIRECTLY in an unsubdivided Level (R66)', async () => {
+    // The capability the revision exists for, and the one the old invariant
+    // made unreachable.
+    const created = await createLevel(prisma, superAdmin(), {
+      name: `${TAG} مستوى مباشر`,
+      categoryId,
+      genderRestriction: 'any',
+    });
+    const pupil = await student('طالبة مباشرة');
+    const row = await prisma.$transaction((tx) =>
+      enrolInLevel(tx, superAdmin(), created.level.id, amerchich, pupil, 'roster_edit'),
     );
-    expect(err.code).toBe('NOT_FOUND');
-    // A Level committed without its group is exactly the outcome the
-    // transaction exists to prevent.
-    expect(await prisma.level.count({ where: { name: { startsWith: TAG } } })).toBe(before);
+    expect(row.administrativeGroupId).toBeNull();
+    // The branch is on the ENROLMENT — the whole point of R66, and what makes
+    // every branch-scoped rule keep working for an ungrouped student.
+    expect(row.branchId).toBe(amerchich);
   });
 
-  it('is Super Admin only — Levels are reference data (R26)', async () => {
-    const err = await failure(() =>
-      createLevel(prisma, admin([amerchich]), {
-        name: `${TAG} المستوى المرفوض`,
-        categoryId,
-        genderRestriction: 'any',
-        branchId: amerchich,
-      }),
+  it('BR-21 still refuses a second placement in the same Level', async () => {
+    const created = await createLevel(prisma, superAdmin(), {
+      name: `${TAG} مستوى مكرر`,
+      categoryId,
+      genderRestriction: 'any',
+    });
+    const pupil = await student('طالبة مكررة');
+    await prisma.$transaction((tx) =>
+      enrolInLevel(tx, superAdmin(), created.level.id, amerchich, pupil, 'roster_edit'),
     );
-    expect(err.code).toBe('FORBIDDEN');
+    await expect(
+      prisma.$transaction((tx) =>
+        enrolInLevel(tx, superAdmin(), created.level.id, amerchich, pupil, 'roster_edit'),
+      ),
+    ).rejects.toMatchObject({ details: { reason: 'ALREADY_ENROLLED_IN_LEVEL' } });
   });
 });
 
-describe('TD-4.6d — the first-branch bootstrap backfill', () => {
-  /** A seeded Level: written directly, exactly as §15.1's seed does, because no
-   *  Branch exists at seed time and `createLevel` requires one. */
-  async function seededLevel(label: string): Promise<string> {
-    const l = await prisma.level.create({
-      data: { name: `${TAG} ${label}`, categoryId, genderRestriction: 'any' },
+describe('R66 — `levelsWithoutGroups` is a report, not an invariant', () => {
+  it('lists Levels with no group WITHOUT treating them as broken', async () => {
+    // It existed for TD-4.6d's bootstrap backfill and to assert that the set
+    // was always empty. R66 retires the backfill: a group-less Level is an
+    // ordinary Level nobody has subdivided, and the helper now answers a
+    // question rather than policing a rule.
+    const created = await createLevel(prisma, superAdmin(), {
+      name: `${TAG} مستوى بلا مجموعة`,
+      categoryId,
+      genderRestriction: 'any',
     });
-    return l.id;
-  }
-
-  it('gives EVERY group-less Level its المجموعة 1 when a Branch first appears', async () => {
-    const a = await seededLevel('مستوى مزروع 1');
-    const b = await seededLevel('مستوى مزروع 2');
-
-    // Deliberately not scoped to this suite's fixtures. The developer database
-    // carries the §15.1 production seed — 21 Levels created before any Branch
-    // existed — and those ARE the bootstrap case this transaction was written
-    // for. Asserting only the two tagged Levels would have passed while leaving
-    // the real ones untouched.
-    const orphansBefore = await levelsWithoutGroups(prisma);
-    expect(orphansBefore.map((l) => l.id)).toEqual(expect.arrayContaining([a, b]));
-    expect(orphansBefore.length).toBeGreaterThanOrEqual(2);
-
-    const created = await createBranch(prisma, superAdmin(), { name: `${TAG} الفرع الأول` });
-
-    expect(await levelsWithoutGroups(prisma)).toEqual([]);
-    const groups = await prisma.administrativeGroup.findMany({
-      where: { branchId: created.id, deletedAt: null },
-      select: { name: true, levelId: true },
-    });
-    expect(groups).toHaveLength(orphansBefore.length);
-    expect(groups.every((g) => g.name === FIRST_GROUP_NAME)).toBe(true);
-    expect(groups.map((g) => g.levelId)).toEqual(
-      expect.arrayContaining(orphansBefore.map((l) => l.id)),
-    );
-  });
-
-  it('is a NO-OP on every subsequent branch — it is keyed on the condition, not on "first"', async () => {
-    await seededLevel('مستوى مزروع');
-    const first = await createBranch(prisma, superAdmin(), { name: `${TAG} فرع أ` });
-    const atFirst = await prisma.administrativeGroup.count({ where: { branchId: first.id } });
-    expect(atFirst).toBeGreaterThan(0);
-
-    const second = await createBranch(prisma, superAdmin(), { name: `${TAG} فرع ب` });
-
-    // Nothing is left to backfill, so the second branch gets no groups at all.
-    // Keying on "every Level with no live group" is what makes that automatic —
-    // an explicit "is this the first branch?" test would have been a second,
-    // weaker way of asking the same question.
-    expect(await prisma.administrativeGroup.count({ where: { branchId: second.id } })).toBe(0);
-  });
-
-  it('is idempotent when re-entered directly', async () => {
-    const l = await seededLevel('مستوى مزروع');
-    await prisma.$transaction(async (tx) => {
-      await backfillFirstGroups(tx, amerchich, actorUserId);
-      // A re-entry after a partial failure must complete, never duplicate.
-      await backfillFirstGroups(tx, amerchich, actorUserId);
-    });
-    expect(
-      await prisma.administrativeGroup.count({ where: { levelId: l, deletedAt: null } }),
-    ).toBe(1);
-  });
-
-  it('commits the Branch and the groups it enabled together', async () => {
-    await seededLevel('مستوى مزروع');
-    const expected = (await levelsWithoutGroups(prisma)).length;
-    const b = await createBranch(prisma, superAdmin(), { name: `${TAG} فرع ذري` });
-    // Same transaction: a Branch that committed without them would leave every
-    // Level unadmittable while looking successfully created.
-    expect(
-      await prisma.administrativeGroup.count({ where: { branchId: b.id, deletedAt: null } }),
-    ).toBe(expected);
-  });
-
-  it('writes ONE audit row for the whole backfill, not one per group', async () => {
-    await seededLevel('مستوى مزروع 1');
-    await seededLevel('مستوى مزروع 2');
-    const expected = (await levelsWithoutGroups(prisma)).length;
-    const b = await createBranch(prisma, superAdmin(), { name: `${TAG} فرع مدقّق` });
-
-    const rows = await prisma.auditLog.findMany({
-      where: { actionType: 'administrativegroup.bootstrap_backfill', targetId: b.id },
-    });
-    // It was one operator action with one cause; N rows would misrepresent it
-    // as N decisions (§7 attribution invariant).
-    expect(rows).toHaveLength(1);
-    expect((rows[0]?.detail as { levels?: number }).levels).toBe(expected);
+    const listed = await levelsWithoutGroups(prisma);
+    expect(listed.map((l) => l.id)).toContain(created.level.id);
   });
 });
 
@@ -534,42 +454,22 @@ describe('un-enrolment (TD-5)', () => {
   });
 });
 
-describe('a Level may never be left with no group', () => {
-  it('refuses deletion of the last group in a Level', async () => {
-    const { firstGroupId } = await level('المستوى 1', amerchich);
-    const err = await failure(() =>
-      deleteAdministrativeGroup(prisma, superAdmin(), firstGroupId),
+describe('R66 — a Level MAY be left with no group', () => {
+  it('deleting an empty last group is allowed; the Level stays enrollable', async () => {
+    // `LAST_GROUP_IN_LEVEL` retired. It only ever stopped a Level reaching the
+    // state TD-4.6b prevented at creation, and that state is now ordinary.
+    const { levelId, firstGroupId } = await level('المستوى للحذف', amerchich);
+    await deleteAdministrativeGroup(prisma, superAdmin(), firstGroupId);
+    expect(
+      await prisma.administrativeGroup.count({ where: { levelId, deletedAt: null } }),
+    ).toBe(0);
+
+    // And the Level still admits students — directly.
+    const pupil = await student('طالبة بعد الحذف');
+    const row = await prisma.$transaction((tx) =>
+      enrolInLevel(tx, superAdmin(), levelId, amerchich, pupil, 'roster_edit'),
     );
-    expect(err.code).toBe('STATE_CONFLICT');
-    // The state TD-4.6b prevents at creation, reached from the other side.
-    expect(err.details?.['reason']).toBe('LAST_GROUP_IN_LEVEL');
-  });
-
-  it('refuses deletion while students are enrolled', async () => {
-    const { levelId, firstGroupId } = await level('المستوى 1', amerchich);
-    await createAdministrativeGroup(prisma, superAdmin(), {
-      name: `${TAG} المجموعة 2`,
-      levelId,
-      branchId: amerchich,
-    });
-    await enrolStudent(prisma, superAdmin(), firstGroupId, await student('هدى'));
-
-    const err = await failure(() =>
-      deleteAdministrativeGroup(prisma, superAdmin(), firstGroupId),
-    );
-    expect(err.details?.['reason']).toBe('ENROLMENTS_EXIST');
-  });
-
-  it('deletes a spare, empty group', async () => {
-    const { levelId } = await level('المستوى 1', amerchich);
-    const spare = await createAdministrativeGroup(prisma, superAdmin(), {
-      name: `${TAG} المجموعة 2`,
-      levelId,
-      branchId: amerchich,
-    });
-    await expect(
-      deleteAdministrativeGroup(prisma, superAdmin(), spare.id),
-    ).resolves.toBeUndefined();
+    expect(row.administrativeGroupId).toBeNull();
   });
 });
 

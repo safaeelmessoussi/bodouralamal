@@ -45,15 +45,15 @@ export interface CreateLevelInput {
   genderRestriction: 'any' | 'girls_only' | 'boys_only';
   displayOrder?: number | null;
   /**
-   * **Required (Revision 43.1).** Where المجموعة 1 sits. Not stored on the
-   * Level — see the note above.
+   * ~~**Required (Revision 43.1).** Where المجموعة 1 sits.~~ **Removed by
+   * Revision 66.** A Level belongs to a Category and to no Branch, and it no
+   * longer creates a group, so there is nothing here for a branch to describe.
+   * A branch is chosen when a Level is actually subdivided, on the group.
    */
-  branchId: string;
 }
 
 export interface CreatedLevel {
   level: Level;
-  firstGroup: { id: string; name: string; branchId: string };
 }
 
 function assertCanManageReferenceData(actor: Actor): void {
@@ -278,10 +278,17 @@ export async function deleteLevel(prisma: PrismaClient, actor: Actor, id: string
 }
 
 /**
- * Creates a Level **and** its first Administrative Group, atomically (TD-4.6b).
+ * Creates a Level. **Just the Level (Revision 66).**
  *
- * Both rows commit or neither does. A partial commit here is the one outcome
- * this transaction exists to prevent.
+ * It used to create the Level *and* a first Administrative Group atomically
+ * (TD-4.6b), which is why the form asked for a branch — the branch was never a
+ * property of a Level, it was the first group's. **TD-4.6b is retired**: a Level
+ * that needs no subdivision needs no group, and students are enrolled in it
+ * directly, exactly as a Subject with no Teaching Groups is taught to the whole
+ * Level.
+ *
+ * Nothing is lost by dropping the transaction's second write. The atomicity
+ * argument stood while two rows had to commit together; there is now one.
  */
 export async function createLevel(
   prisma: PrismaClient,
@@ -297,17 +304,6 @@ export async function createLevel(
     });
     if (!category) throw new AppError('NOT_FOUND', 'no such category');
 
-    // Validated live: a Level created against a soft-deleted branch would give
-    // its first group a home nobody can reach. `operational_start_date` is
-    // deliberately NOT checked — a branch that has not opened yet is a
-    // legitimate place to prepare groups for (§7, the same rule R39 applies to
-    // `intended_branch_id`).
-    const branch = await tx.branch.findFirst({
-      where: { id: input.branchId, deletedAt: null },
-      select: { id: true },
-    });
-    if (!branch) throw new AppError('NOT_FOUND', 'no such branch');
-
     const level = await tx.level.create({
       data: {
         name: input.name,
@@ -315,16 +311,6 @@ export async function createLevel(
         genderRestriction: input.genderRestriction,
         displayOrder: input.displayOrder ?? null,
       },
-    });
-
-    const firstGroup = await tx.administrativeGroup.create({
-      data: {
-        name: FIRST_GROUP_NAME,
-        levelId: level.id,
-        branchId: input.branchId,
-        displayOrder: 0,
-      },
-      select: { id: true, name: true, branchId: true },
     });
 
     await audit.write(tx, {
@@ -337,14 +323,10 @@ export async function createLevel(
         name: level.name,
         category_id: level.categoryId,
         gender_restriction: level.genderRestriction,
-        // The group is part of the same decision, so it belongs in the same
-        // record — otherwise "where did this group come from" is unanswerable.
-        first_group_id: firstGroup.id,
-        first_group_branch_id: firstGroup.branchId,
       },
     });
 
-    return { level, firstGroup };
+    return { level };
   });
 }
 

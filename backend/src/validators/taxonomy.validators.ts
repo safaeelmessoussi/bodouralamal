@@ -47,13 +47,24 @@ const genderRestriction = z.enum(['any', 'girls_only', 'boys_only']);
  * and branch-independent — see `level.service.ts` for why putting a branch on
  * the Level itself would break `entire_level` teaching mode.
  */
-export const createLevelSchema = z.object({
-  name: entityName,
-  category_id: uuid,
-  gender_restriction: genderRestriction.default('any'),
-  display_order: displayOrder.optional(),
-  branch_id: uuid,
-});
+/**
+ * **No `branch_id` (Revision 66).** A Level belongs to a Category and to no
+ * Branch; the field existed because creation also made a first Administrative
+ * Group, and TD-4.6b is retired. A branch is chosen when a Level is actually
+ * subdivided — on the group, where it belongs.
+ */
+export const createLevelSchema = z
+  .object({
+    name: entityName,
+    category_id: uuid,
+    gender_restriction: genderRestriction.default('any'),
+    display_order: displayOrder.optional(),
+  })
+  // **`.strict()`, and for the reason the update schema already is:** stripping
+  // `branch_id` would let a client send one, receive `201`, and believe a group
+  // had been created at that branch. The field does not exist on this operation
+  // at all, so refusing it loudly is the honest answer.
+  .strict();
 
 /**
  * `category_id` is absent deliberately — a Level does not move between

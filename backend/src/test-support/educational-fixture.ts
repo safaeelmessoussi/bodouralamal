@@ -110,7 +110,7 @@ title: `${tag} حلقة`,
 /** Enrols a student in the fixture's group — and thereby in its Level (§4.4c). */
 export async function enrol(
   prisma: PrismaClient,
-  fixture: Pick<TeachingFixture, 'administrativeGroupId' | 'levelId'>,
+  fixture: Pick<TeachingFixture, 'administrativeGroupId' | 'levelId' | 'branchId'>,
   studentId: string,
 ): Promise<string> {
   const row = await prisma.enrollment.create({
@@ -118,6 +118,9 @@ export async function enrol(
       studentId,
       administrativeGroupId: fixture.administrativeGroupId,
       levelId: fixture.levelId,
+      // R66 — the enrolment carries the branch. Taken from the fixture's own
+      // group so the composite FK `(administrative_group_id, branch_id)` holds.
+      branchId: fixture.branchId,
     },
   });
   return row.id;

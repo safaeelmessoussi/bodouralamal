@@ -362,6 +362,8 @@ async function main(): Promise<void> {
           studentId: student.id,
           administrativeGroupId: group.id,
           levelId: group.levelId,
+          // R66 — from the group, which the composite FK then proves.
+          branchId: group.branchId,
         },
       });
     }

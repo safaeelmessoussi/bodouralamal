@@ -675,7 +675,7 @@ export async function prefilledFilters(
     select: {
       levelId: true,
       level: { select: { categoryId: true } },
-      administrativeGroup: { select: { branchId: true } },
+      branchId: true,
     },
   });
 
@@ -688,7 +688,8 @@ export async function prefilledFilters(
     categoryId: only(enrolments.map((e) => e.level.categoryId)),
     levelId: only(enrolments.map((e) => e.levelId)),
     branchId: only([
-      ...enrolments.map((e) => e.administrativeGroup.branchId),
+      // R66 — the enrolment's own branch.
+      ...enrolments.map((e) => e.branchId),
       ...staffed.map((x) => x.schedule.branchId),
       ...scopedBranches,
     ]),

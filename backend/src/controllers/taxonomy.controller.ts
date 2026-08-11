@@ -154,10 +154,9 @@ export function createLevelHandler(prisma: PrismaClient) {
       name: body.name,
       categoryId: body.category_id,
       genderRestriction: body.gender_restriction,
-      branchId: body.branch_id,
       ...(body.display_order !== undefined ? { displayOrder: body.display_order } : {}),
     });
-    res.status(201).json({ data: createdLevelDto(created.level, created.firstGroup) });
+    res.status(201).json({ data: createdLevelDto(created.level) });
   };
 }
 

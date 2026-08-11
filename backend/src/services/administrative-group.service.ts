@@ -216,18 +216,19 @@ export async function deleteAdministrativeGroup(
       });
     }
 
-    // A Level must never be left with no group (§4.4b) — the state TD-4.6b
-    // exists to prevent would otherwise be reachable by deletion instead of by
-    // creation, which is the same broken state arrived at from the other side.
-    const siblings = await tx.administrativeGroup.count({
-      where: { levelId: group.levelId, deletedAt: null, id: { not: id } },
-    });
-    if (siblings === 0) {
-      throw new AppError('STATE_CONFLICT', 'a level must keep at least one group', {
-        reason: 'LAST_GROUP_IN_LEVEL',
-        level_id: group.levelId,
-      });
-    }
+    /**
+     * **`LAST_GROUP_IN_LEVEL` retired by Revision 66.**
+     *
+     * It existed only to stop a Level reaching the group-less state TD-4.6b
+     * prevented at creation — the same broken state arrived at from the other
+     * side. R66 makes that state ordinary: a Level nobody has subdivided needs
+     * no group, and students are enrolled in it directly.
+     *
+     * **The rule that actually protects people is unchanged**: a group holding
+     * students is still refused above by `ENROLMENTS_EXIST`. What may now be
+     * deleted is an EMPTY last group, which leaves the Level directly
+     * enrollable rather than leaving anybody stranded.
+     */
 
     await tx.administrativeGroup.update({
       where: { id },

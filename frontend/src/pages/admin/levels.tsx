@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 
-import { listBranches, type Branch } from '../../adapters/branches-admin.js';
 import {
   createLevel,
   deleteLevel,
@@ -56,7 +55,6 @@ export function LevelsPage(): ReactNode {
 
   const [rows, setRows] = useState<Level[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
-  const [branches, setBranches] = useState<Branch[]>([]);
   const [categoryFilter, setCategoryFilter] = useState('');
   const [status, setStatus] = useState<TableStatus>('loading');
   const [editing, setEditing] = useState<Level | 'new' | null>(null);
@@ -83,14 +81,9 @@ export function LevelsPage(): ReactNode {
       // The two selectors the create form needs. Failing to load them must not
       // blank the table — the list is still readable without them, and only
       // creation is unavailable.
-      const [cats, brs] = await Promise.all([
-        listCategories(accessToken).catch(() => []),
-        listBranches(accessToken, 1)
-          .then((p) => p.data)
-          .catch(() => []),
-      ]);
-      setCategories(cats);
-      setBranches(brs);
+      // R66 — branches are no longer loaded here: creating a Level asks for
+      // one no more, because a Level belongs to a Category and to no Branch.
+      setCategories(await listCategories(accessToken).catch(() => []));
     })();
   }, [accessToken]);
 
@@ -183,15 +176,11 @@ export function LevelsPage(): ReactNode {
         );
         setNotice(t('common.saved'));
       } else {
-        const created = await createLevel(input, accessToken);
-        // TD-4.6b created a group this administrator did not explicitly ask
-        // for. Saying so is the difference between a system that did something
-        // helpful and one that did something unexplained.
-        setNotice(
-          t('admin.levels.createdWithGroup')
-            .replace('{group}', created.first_group.name)
-            .replace('{branch}', branches.find((b) => b.id === input.branch_id)?.name ?? ''),
-        );
+        await createLevel(input, accessToken);
+        // R66 — a Level is created alone now. It used to arrive with a
+        // المجموعة 1 nobody asked for, which had to be explained; there is
+        // nothing left to explain, and the notice says what to do next instead.
+        setNotice(t('admin.levels.created'));
       }
       setEditing(null);
       await load();
@@ -272,7 +261,6 @@ export function LevelsPage(): ReactNode {
         <LevelFormDialog
           level={editing === 'new' ? null : editing}
           categories={categories}
-          branches={branches}
           busy={busy}
           onCancel={() => setEditing(null)}
           onSave={(input) => void save(input, editing === 'new' ? null : editing)}
@@ -310,14 +298,12 @@ export function LevelsPage(): ReactNode {
 function LevelFormDialog({
   level,
   categories,
-  branches,
   busy,
   onSave,
   onCancel,
 }: {
   level: Level | null;
   categories: Category[];
-  branches: Branch[];
   busy: boolean;
   onSave: (input: CreateLevelInput) => void;
   onCancel: () => void;
@@ -326,7 +312,6 @@ function LevelFormDialog({
     name: level?.name ?? '',
     categoryId: level?.category_id ?? categories[0]?.id ?? '',
     gender: (level?.gender_restriction ?? 'any') as GenderRestriction,
-    branchId: branches[0]?.id ?? '',
     order:
       level?.display_order !== null && level?.display_order !== undefined
         ? String(level.display_order)
@@ -337,7 +322,6 @@ function LevelFormDialog({
   const errors = {
     name: form.name.trim() === '' ? t('common.required') : null,
     category: !level && form.categoryId === '' ? t('common.required') : null,
-    branch: !level && form.branchId === '' ? t('admin.levels.branchRequired') : null,
   };
   const valid = Object.values(errors).every((e) => e === null);
 
@@ -376,20 +360,11 @@ function LevelFormDialog({
           hint={t('admin.levels.genderHint')}
         />
 
-        {level ? null : (
-          <SelectField
-            label={t('admin.levels.firstGroupBranch')}
-            value={form.branchId}
-            onChange={(v) => setForm((f) => ({ ...f, branchId: v }))}
-            required
-            error={touched ? errors.branch : null}
-            options={branches.map((b) => ({ value: b.id, label: b.name }))}
-            // The one field on this form that is not a property of the thing
-            // being created. Saying why, on the form, is cheaper than an
-            // administrator wondering what a Level has to do with a branch.
-            hint={t('admin.levels.firstGroupHint')}
-          />
-        )}
+        {/* **No branch (Revision 66).** It was here because creating a Level
+            also created its المجموعة 1, and the form had to say so — the one
+            field that was not a property of the thing being created. A Level
+            belongs to a Category and to no Branch; a branch is chosen when the
+            Level is actually subdivided, on the group. */}
 
         <NumberField
           label={t('admin.levels.colOrder')}
@@ -413,7 +388,6 @@ function LevelFormDialog({
                 name: form.name.trim(),
                 category_id: form.categoryId,
                 gender_restriction: form.gender,
-                branch_id: form.branchId,
                 display_order: form.order.trim() === '' ? null : Number(form.order),
               });
             }}

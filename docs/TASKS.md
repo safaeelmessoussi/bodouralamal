@@ -679,6 +679,16 @@
 - [x] `ولي الأمر` untouched: about already-approved children, and no registration action inside it
 - [ ] **OWNER DECISION — account deletion (R54).** §4.10 says "two-step account self-deletion"; `docs/SRS-PROPOSAL-R54.md` is drafted and unapproved because it reverses R52's prohibition on permanent deletion. The personal section deliberately ships **no** deletion control. When the decision is taken, its screen belongs at `/profile`
 
+### R66 — a student is enrolled in a Level; a Group is a subdivision (2026-08-11)
+- [x] SRS drafted, applied. §7 Enrollment amended; §5.2 and R43.3 corrected to `Enrollment.branch_id`
+- [x] Migration `20260811210000` — TD-6b expand → backfill → contract, derived values, fails loudly rather than relaxing the column
+- [x] `administrative_group_id` nullable; composite FK `(administrative_group_id, branch_id)` null-safe by construction
+- [x] TD-4.6b, TD-4.6d and `LAST_GROUP_IN_LEVEL` retired; `ENROLMENTS_EXIST` untouched
+- [x] `enrolInLevel` — direct enrolment in an unsubdivided Level; 13 branch reads moved off the join
+- [x] Level creation drops the branch end to end (service, validator with `.strict()`, DTO, controller, adapter, form)
+- [x] 995 backend tests green; the ten encoding retired rules rewritten to the new rule, not deleted
+- [ ] **Approval placement into a group-less Level** — `enrolInLevel` exists and is tested, but `decide()`'s `enrollments[]` still takes only `administrative_group_id`, so the queue's dialog cannot yet place into the 18 Levels this revision legalises. It currently filters them out (the item-4 fix). Next slice: widen the placement contract to `{ user_id, level_id, branch_id }`
+
 ### UI/product pass 2 (2026-08-11)
 - [x] Arabic-Indic digits removed platform-wide + `check-western-digits.sh` (14th guard). **Arabic text, Western numerals**
 - [x] Approval button traced: the DATA violates TD-4.6b's invariant — 18 of 20 Levels have no group, so `complete` could never be true and the control was disabled. Unassignable Levels are now excluded, with a route to fix

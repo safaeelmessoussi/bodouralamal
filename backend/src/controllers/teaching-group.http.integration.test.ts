@@ -5,6 +5,16 @@ import { loadConfig } from '../lib/config.js';
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
 import { httpCall } from '../test-support/http-client.js';
 
+/** R66 — an enrolment carries its own branch, taken from the group so the
+ *  composite FK `(administrative_group_id, branch_id)` holds. */
+async function branchOf(groupId: string): Promise<string> {
+  const g = await prisma.administrativeGroup.findUniqueOrThrow({
+    where: { id: groupId },
+    select: { branchId: true },
+  });
+  return g.branchId;
+}
+
 /**
  * Teaching Groups over real HTTP (TD-3.12, §4.4c, BR-22, Revision 43).
  *
@@ -91,7 +101,9 @@ let studentB: string;
 
 /** Enrols a student into the Level, which is the precondition for placement. */
 async function enrol(studentId: string, administrativeGroupId: string): Promise<void> {
-  await prisma.enrollment.create({ data: { studentId, administrativeGroupId, levelId } });
+  await prisma.enrollment.create({
+    data: { studentId, administrativeGroupId, levelId, branchId: await branchOf(administrativeGroupId) },
+  });
 }
 
 async function clear(): Promise<void> {

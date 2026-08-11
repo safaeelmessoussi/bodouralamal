@@ -5,6 +5,16 @@ import { loadConfig } from '../lib/config.js';
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
 import { httpCall } from '../test-support/http-client.js';
 
+/** R66 — an enrolment carries its own branch, taken from the group so the
+ *  composite FK `(administrative_group_id, branch_id)` holds. */
+async function branchOf(groupId: string): Promise<string> {
+  const g = await prisma.administrativeGroup.findUniqueOrThrow({
+    where: { id: groupId },
+    select: { branchId: true },
+  });
+  return g.branchId;
+}
+
 /**
  * `GET /library` over real HTTP (TD-3.13, §5.2, §4.9, Revision 43).
  *
@@ -220,7 +230,7 @@ beforeAll(async () => {
   // the private item for that Level is theirs to see.
   const studentId = await makeUser('طالبة');
   await prisma.enrollment.create({
-    data: { studentId, administrativeGroupId: groupA.id, levelId },
+    data: { studentId, administrativeGroupId: groupA.id, levelId, branchId: await branchOf(groupA.id) },
   });
   studentToken = bearer(studentId, []);
 

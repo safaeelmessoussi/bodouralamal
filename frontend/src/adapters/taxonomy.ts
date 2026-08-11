@@ -121,7 +121,13 @@ export interface Level {
 }
 
 /**
- * `branch_id` is **required and is not stored on the Level** (TD-4.6b): it says
+ * ~~`branch_id` is **required and is not stored on the Level** (TD-4.6b)~~
+ * **Removed by Revision 66.** A Level belongs to a Category and to no Branch,
+ * and creating one no longer creates a group, so there is nothing here for a
+ * branch to describe — the server now **refuses** the field rather than
+ * ignoring it. A branch is chosen when a Level is actually subdivided, on the
+ * group. The original note follows because it explains what the field was for:
+ * `branch_id` said
  * where المجموعة 1 goes. A Level is Category-scoped and branch-independent —
  * it may hold groups at several branches later.
  */
@@ -129,7 +135,6 @@ export interface CreateLevelInput {
   name: string;
   category_id: string;
   gender_restriction: GenderRestriction;
-  branch_id: string;
   display_order?: number | null;
 }
 
@@ -156,9 +161,9 @@ export async function listLevels(
 export async function createLevel(
   input: CreateLevelInput,
   token: string | null,
-): Promise<Level & { first_group: { id: string; name: string; branch_id: string } }> {
+): Promise<Level> {
   const body = await api<{
-    data: Level & { first_group: { id: string; name: string; branch_id: string } };
+    data: Level;
   }>('/admin/levels', { method: 'POST', token, body: input });
   return body.data;
 }

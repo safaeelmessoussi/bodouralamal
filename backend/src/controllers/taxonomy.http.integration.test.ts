@@ -5,6 +5,16 @@ import { loadConfig } from '../lib/config.js';
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
 import { httpCall } from '../test-support/http-client.js';
 
+/** R66 — an enrolment carries its own branch, taken from the group so the
+ *  composite FK `(administrative_group_id, branch_id)` holds. */
+async function branchOf(groupId: string): Promise<string> {
+  const g = await prisma.administrativeGroup.findUniqueOrThrow({
+    where: { id: groupId },
+    select: { branchId: true },
+  });
+  return g.branchId;
+}
+
 /**
  * Curriculum taxonomy CRUD over HTTP — Categories, Subjects and Levels
  * (§5.6, §14.1, TD-2 R26, TD-4.6b, TD-5, TD-15).
@@ -211,39 +221,49 @@ describe('Subjects (§5.6 الفئات والمواد)', () => {
 describe('Levels (§5.6 مستويات, TD-4.6b)', () => {
   let levelId = '';
 
-  it('creates the Level and its المجموعة 1 in one act, and reports the group', async () => {
+  it('R66: creates ONLY the Level — no group, and no branch to ask for', async () => {
+    // TD-4.6b created a first group in the same transaction, which is why this
+    // endpoint used to demand a branch. R66 retires it: a Level belongs to a
+    // Category and to no Branch, and a Level nobody has subdivided needs no
+    // group — students are enrolled in it directly.
     const res = await call('POST', '/admin/levels', superAdmin, {
       name: `${TAG} مستوى`,
       category_id: categoryId,
       gender_restriction: 'girls_only',
-      branch_id: branchId,
     });
     expect(res.status).toBe(201);
     const row = res.body.data as unknown as Record<string, unknown>;
     levelId = String(row['id']);
 
-    // A Level with no group is a Level nobody can be admitted to (TD-4.6b), so
-    // the group is created here rather than left to a later step — and it is
-    // REPORTED, or an administrator cannot tell where it went.
-    const group = row['first_group'] as Record<string, unknown>;
-    expect(group['name']).toBe('المجموعة 1');
-    expect(group['branch_id']).toBe(branchId);
+    // No group, and none reported: creating a Level creates a Level.
+    expect(row).not.toHaveProperty('first_group');
     expect(
       await prisma.administrativeGroup.count({ where: { levelId, deletedAt: null } }),
-    ).toBe(1);
+    ).toBe(0);
   });
 
-  it('never stores the branch on the Level itself (§4.4b)', async () => {
-    // A Level is Category-scoped and branch-independent; `branch_id` says where
-    // المجموعة 1 goes and nothing else. Putting it on the Level would break
-    // entire_level teaching mode, which resolves across the groups at a branch.
+  it('R66: REFUSES a branch on level creation rather than ignoring it', async () => {
+    // Refused, not stripped: a client that still sends one would otherwise get
+    // `201` and believe a group had been created somewhere.
+    const res = await call('POST', '/admin/levels', superAdmin, {
+      name: `${TAG} مستوى بفرع`,
+      category_id: categoryId,
+      branch_id: branchId,
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('R66: still stores no branch on the Level — and no longer takes one', async () => {
+    // A Level is Category-scoped and branch-independent. It never had a branch
+    // column; R66 removes the last reason it was ever ASKED for one.
     const res = await call('GET', '/admin/levels', superAdmin);
     const row = (res.body.data as unknown as Record<string, unknown>[]).find(
       (r) => r['id'] === levelId,
     )!;
     expect(row).not.toHaveProperty('branch_id');
     expect(row['category_name']).toBe(`${TAG} فئة`);
-    expect(row['group_count']).toBe(1);
+    // Zero, and that is a legitimate Level — not a broken one.
+    expect(row['group_count']).toBe(0);
     expect(row['gender_restriction']).toBe('girls_only');
   });
 
@@ -277,10 +297,14 @@ describe('Levels (§5.6 مستويات, TD-4.6b)', () => {
   });
 
   it('refuses deletion while a student is enrolled', async () => {
-    const group = await prisma.administrativeGroup.findFirstOrThrow({ where: { levelId } });
+    // R66 — the Level has no group unless this test makes one, and this test is
+    // about the enrolment guard, so it makes one.
+    const group = await prisma.administrativeGroup.create({
+      data: { name: `${TAG} مجموعة`, levelId, branchId, displayOrder: 0 },
+    });
     const student = await makeUser('طالبة');
     await prisma.enrollment.create({
-      data: { studentId: student, administrativeGroupId: group.id, levelId },
+      data: { studentId: student, administrativeGroupId: group.id, levelId, branchId: await branchOf(group.id) },
     });
 
     const res = await call('DELETE', `/admin/levels/${levelId}`, superAdmin);
@@ -291,11 +315,10 @@ describe('Levels (§5.6 مستويات, TD-4.6b)', () => {
     await prisma.enrollment.deleteMany({ where: { levelId } });
   });
 
-  it('deletes an empty Level, taking the group TD-4.6b created with it', async () => {
-    // The inverse of TD-4.6b, and the reason a group count is NOT a blocker:
-    // every Level owns at least one group by construction, so a guard counting
-    // them would make deletion unreachable. The guards above have already
-    // established the group holds nothing.
+  it('deletes an empty Level, cascading whatever groups it has', async () => {
+    // A group count is NOT a blocker, and R66 does not change that: the guards
+    // above have already established nothing is enrolled, and an empty
+    // subdivision is not a reason to refuse deleting what it subdivides.
     const res = await call('DELETE', `/admin/levels/${levelId}`, superAdmin);
     expect(res.status).toBe(204);
     expect(
@@ -314,7 +337,6 @@ describe('Levels (§5.6 مستويات, TD-4.6b)', () => {
     const res = await call('POST', '/admin/levels', admin, {
       name: `${TAG} مستوى مرفوض`,
       category_id: categoryId,
-      branch_id: branchId,
     });
     expect(res.status).toBe(403);
   });

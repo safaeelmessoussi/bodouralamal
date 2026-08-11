@@ -109,6 +109,8 @@ beforeAll(async () => {
     data: {
       studentId: childId,
       administrativeGroupId: placement.groupId,
+      // R66 — the enrolment's own branch, from the same placement fixture.
+      branchId: placement.branchId,
       levelId: placement.levelId,
     },
   });

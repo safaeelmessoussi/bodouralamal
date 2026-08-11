@@ -18,7 +18,7 @@ import * as scope from './branch-scope.js';
  *
  * | Mode                   | Target                | Audience                                              |
  * |------------------------|-----------------------|-------------------------------------------------------|
- * | `entire_level`         | one `Level`           | that Level's students **whose group is at the schedule's branch** |
+ * | `entire_level`         | one `Level`           | that Level's students **enrolled at the schedule's branch** (R66) |
  * | `administrative_group` | one `AdministrativeGroup` | that group's enrolled students                    |
  * | `teaching_group`       | one `TeachingGroup`   | that teaching group's members                          |
  *
@@ -71,7 +71,11 @@ export function audienceWhere(spec: AudienceSpec): Prisma.UserWhereInput {
             deletedAt: null,
             levelId: spec.levelId,
             // Branch-bound: the Level spans branches, this class does not.
-            administrativeGroup: { deletedAt: null, branchId: spec.branchId },
+            // R66 — the enrolment's branch, not the group's. Same meaning
+            // (*that Level's students at this schedule's branch*), and it now
+            // includes students in a Level nobody has subdivided instead of
+            // silently omitting them.
+            branchId: spec.branchId,
           },
         },
       };
@@ -331,7 +335,12 @@ export async function teacherEventScope(
       },
     });
     for (const seat of seats) {
-      for (const e of seat.student.levelEnrollments) groupIds.add(e.administrativeGroupId);
+      // R66 — a student in an unsubdivided Level has no group to add. Skipping
+      // the null is correct rather than defensive: there is no administrative
+      // group behind them, so no event scoped to one can concern them.
+      for (const e of seat.student.levelEnrollments) {
+        if (e.administrativeGroupId) groupIds.add(e.administrativeGroupId);
+      }
     }
   }
 

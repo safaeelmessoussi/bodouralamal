@@ -5,6 +5,16 @@ import { loadConfig } from '../lib/config.js';
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
 import { httpCall } from '../test-support/http-client.js';
 
+/** R66 — an enrolment carries its own branch, taken from the group so the
+ *  composite FK `(administrative_group_id, branch_id)` holds. */
+async function branchOf(groupId: string): Promise<string> {
+  const g = await prisma.administrativeGroup.findUniqueOrThrow({
+    where: { id: groupId },
+    select: { branchId: true },
+  });
+  return g.branchId;
+}
+
 /**
  * Administrative Groups over real HTTP (TD-3.12, §4.4c, Revision 43).
  *
@@ -411,19 +421,22 @@ describe('the routes are mounted and guarded (TD-2)', () => {
 });
 
 describe('deletion is guarded (TD-5, §4.4b)', () => {
-  it('refuses to remove the LAST group of a Level', async () => {
-    // §4.4b: the state TD-4.6b prevents at creation is otherwise reachable by
-    // deletion — the same broken state arrived at from the other side.
-    const res = await call('DELETE', `/admin/administrative-groups/${soloGroupId}`, superAdmin);
-    expect(res.status).toBe(409);
-    expect(res.body.error?.code).toBe('STATE_CONFLICT');
-    expect(res.body.error?.details?.['reason']).toBe('LAST_GROUP_IN_LEVEL');
-
-    const still = await prisma.administrativeGroup.findUniqueOrThrow({
-      where: { id: soloGroupId },
-      select: { deletedAt: true },
+  it('R66: an EMPTY last group may be removed — the Level stays directly enrollable', async () => {
+    // `LAST_GROUP_IN_LEVEL` retired with Revision 66. It existed only to keep a
+    // Level from reaching the group-less state TD-4.6b prevented at creation,
+    // and that state is now ordinary: a Level nobody has subdivided needs no
+    // group, and students are enrolled in it directly.
+    //
+    // The rule that actually protects people is unchanged and tested below:
+    // a group holding students is still refused with `ENROLMENTS_EXIST`.
+    const solo = await call('POST', '/admin/administrative-groups', superAdmin, {
+      name: `${TAG} وحيدة`,
+      level_id: soloLevelId,
+      branch_id: branchA,
     });
-    expect(still.deletedAt).toBeNull();
+    expect(solo.status).toBe(201);
+    const res = await call('DELETE', `/admin/administrative-groups/${solo.body.id as string}`, superAdmin);
+    expect(res.status).toBe(204);
   });
 
   it('removes a group that is neither last nor referenced', async () => {
@@ -456,6 +469,7 @@ describe('deletion is guarded (TD-5, §4.4b)', () => {
       data: {
         studentId: student.id,
         administrativeGroupId: group.body.id as string,
+        branchId: await branchOf(group.body.id as string),
         levelId: soloLevelId,
       },
     });
@@ -471,8 +485,18 @@ describe('deletion is guarded (TD-5, §4.4b)', () => {
 /* ── Roster (TD-3.12, §5.6) ──────────────────────────────────────────────── */
 
 const ROSTER_KEYS = ['enrolled_at', 'id', 'name', 'student_id'];
+/**
+ * §16.2's exact key set for an enrolment.
+ *
+ * **`branch_id` joined it with Revision 66**, and the argument is written into
+ * the pin rather than left in a commit message: a student's branch used to be
+ * reachable only by following `administrative_group_id`, which is exactly why
+ * that column could not be nullable. The enrolment now carries it, so a client
+ * can ask *where is this student* of someone in a Level nobody has subdivided.
+ */
 const ENROLMENT_KEYS = [
   'administrative_group_id',
+  'branch_id',
   'enrolled_at',
   'id',
   'level_id',
@@ -507,6 +531,8 @@ describe('the roster is a contract DTO too', () => {
     // how the client learns which Level the student is now in.
     expect(res.body.level_id).toBe(levelId);
     expect(res.body.administrative_group_id).toBe(group.body.id);
+    // R66 — read from the group, which the composite FK then proves.
+    expect(res.body.branch_id).toBe(branchA);
   });
 
   it('GET returns the roster in the TD-10 envelope with exactly the documented keys', async () => {

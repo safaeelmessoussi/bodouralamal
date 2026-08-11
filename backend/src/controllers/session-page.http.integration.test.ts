@@ -5,6 +5,16 @@ import { loadConfig } from '../lib/config.js';
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
 import { httpCall } from '../test-support/http-client.js';
 
+/** R66 — an enrolment carries its own branch, taken from the group so the
+ *  composite FK `(administrative_group_id, branch_id)` holds. */
+async function branchOf(groupId: string): Promise<string> {
+  const g = await prisma.administrativeGroup.findUniqueOrThrow({
+    where: { id: groupId },
+    select: { branchId: true },
+  });
+  return g.branchId;
+}
+
 /**
  * `GET /calendar/sessions/{id}` over real HTTP — the §5.2 Session page (TD-3.4).
  *
@@ -202,7 +212,7 @@ title: `${TAG} حلقة`,
 
   const studentId = await makeUser('طالبة');
   await prisma.enrollment.create({
-    data: { studentId, administrativeGroupId: group.id, levelId },
+    data: { studentId, administrativeGroupId: group.id, levelId, branchId: await branchOf(group.id) },
   });
   studentToken = bearer(studentId, []);
   teacherToken = bearer(await makeUser('أستاذة'), [{ role: 'teacher', branches: [branchA] }]);

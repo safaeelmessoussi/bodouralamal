@@ -25,6 +25,16 @@ import {
   unlinkContent,
 } from './session.service.js';
 
+/** R66 — an enrolment carries its own branch, taken from the group so the
+ *  composite FK `(administrative_group_id, branch_id)` holds. */
+async function branchOf(groupId: string): Promise<string> {
+  const g = await prisma.administrativeGroup.findUniqueOrThrow({
+    where: { id: groupId },
+    select: { branchId: true },
+  });
+  return g.branchId;
+}
+
 /**
  * Course schedules, materialization, and the session lifecycle — SRS §4.4,
  * §4.4c, TD-1, TD-4.6c, TD-7, TD-15.2, BR-23, §20 rule 24.
@@ -154,10 +164,14 @@ beforeEach(async () => {
     name: `${TAG} المستوى 1`,
     categoryId,
     genderRestriction: 'any',
-    branchId,
   });
   levelId = created.level.id;
-  groupId = created.firstGroup.id;
+  // R66 — the group is made explicitly; creating a Level no longer makes one.
+  groupId = (
+    await prisma.administrativeGroup.create({
+      data: { name: `${TAG} المجموعة 1`, levelId, branchId, displayOrder: 0 },
+    })
+  ).id;
 
   roomA = (await prisma.room.create({ data: { name: `${TAG} قاعة أ`, branchId } })).id;
   roomB = (await prisma.room.create({ data: { name: `${TAG} قاعة ب`, branchId } })).id;
@@ -504,7 +518,7 @@ describe('session lifecycle (TD-1)', () => {
   it('records the audience size on cancellation — unanswerable later', async () => {
     const student = await person('طالبة');
     await prisma.enrollment.create({
-      data: { studentId: student, administrativeGroupId: groupId, levelId },
+      data: { studentId: student, administrativeGroupId: groupId, levelId, branchId: await branchOf(groupId) },
     });
     const s = await oneSession();
     await cancelSession(prisma, superAdmin(), s.id, 'عطلة', s.version);

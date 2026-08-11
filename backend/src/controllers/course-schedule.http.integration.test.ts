@@ -202,7 +202,8 @@ beforeAll(async () => {
   teacherId = await makeUser('أستاذ');
   studentA = await makeUser('طالبة أ', 'female');
   await prisma.enrollment.create({
-    data: { studentId: studentA, administrativeGroupId: groupA, levelId },
+    // R66 — the enrolment carries its own branch.
+    data: { studentId: studentA, administrativeGroupId: groupA, levelId, branchId: branchA },
   });
 
   superAdmin = bearer(await makeUser('مدير عام'), [{ role: 'super_admin', branches: null }]);

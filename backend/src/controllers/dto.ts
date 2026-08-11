@@ -199,7 +199,9 @@ export interface EnrollmentDto {
   id: string;
   student_id: string;
   level_id: string;
-  administrative_group_id: string;
+  /** R66 — `null` when the student is enrolled directly in a Level. */
+  administrative_group_id: string | null;
+  branch_id: string;
   enrolled_at: string;
 }
 
@@ -207,7 +209,8 @@ export function enrollmentDto(row: {
   id: string;
   studentId: string;
   levelId: string;
-  administrativeGroupId: string;
+  administrativeGroupId: string | null;
+  branchId: string;
   enrolledAt: Date;
 }): EnrollmentDto {
   return {
@@ -215,6 +218,10 @@ export function enrollmentDto(row: {
     student_id: row.studentId,
     level_id: row.levelId,
     administrative_group_id: row.administrativeGroupId,
+    // R66 — where the student actually is. It used to be reachable only by
+    // following the group, so a client had no way to ask it of a student in a
+    // Level nobody had subdivided.
+    branch_id: row.branchId,
     enrolled_at: row.enrolledAt.toISOString(),
   };
 }
@@ -279,14 +286,15 @@ export interface UnassignedStudentDto {
   student_id: string;
   /** Staff-facing legal name, as on the roster — not a public display identity. */
   name: string | null;
-  administrative_group_id: string;
+  administrative_group_id: string | null;
   branch_id: string;
 }
 
 export function unassignedStudentDto(row: {
   studentId: string;
   nameArabic: string | null;
-  administrativeGroupId: string;
+  /** R66 — `null` for a student enrolled directly in an unsubdivided Level. */
+  administrativeGroupId: string | null;
   branchId: string;
 }): UnassignedStudentDto {
   return {
@@ -944,21 +952,18 @@ export function levelDto(row: {
  * this request, at a branch the caller named, and a client that never sees it
  * cannot tell an administrator where their new Level's first group went.
  */
-export interface CreatedLevelDto extends LevelCoreDto {
-  first_group: { id: string; name: string; branch_id: string };
-}
+/** Revision 66 — no `first_group`: creating a Level creates only a Level. */
+export type CreatedLevelDto = LevelCoreDto;
 
-export function createdLevelDto(
-  level: {
-    id: string;
-    name: string;
-    categoryId: string;
-    genderRestriction: string;
-    displayOrder: number | null;
-    version: number;
-  },
-  firstGroup: { id: string; name: string; branchId: string },
-): CreatedLevelDto {
+/** Revision 66 — no `first_group`: creating a Level creates only a Level. */
+export function createdLevelDto(level: {
+  id: string;
+  name: string;
+  categoryId: string;
+  genderRestriction: string;
+  displayOrder: number | null;
+  version: number;
+}): CreatedLevelDto {
   return {
     id: level.id,
     name: level.name,
@@ -966,7 +971,6 @@ export function createdLevelDto(
     gender_restriction: level.genderRestriction,
     display_order: level.displayOrder,
     version: level.version,
-    first_group: { id: firstGroup.id, name: firstGroup.name, branch_id: firstGroup.branchId },
   };
 }
 

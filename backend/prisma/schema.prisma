@@ -589,6 +589,8 @@ model Branch {
   intendedBy           User[]                    @relation("UserIntendedBranch")
   /// Revision 64 — the branch a child-registration request asked for.
   childApplications    ChildApplication[]
+  /// Revision 66 — where each enrolled student actually is.
+  enrollments          Enrollment[]
 
   @@index([displayOrder])
   @@map("branch")
@@ -813,6 +815,13 @@ model AdministrativeGroup {
   // makes `Enrollment.level_id` a CONSTRAINT rather than a copy that drifts.
   // Never remove it to "tidy up" (§20 rule 22).
   @@unique([id, levelId], map: "administrative_group_id_level_id_key")
+  /// Revision 66 — redundant against the primary key ON PURPOSE, exactly as the
+  /// pair above is: PostgreSQL requires a unique constraint on the referenced
+  /// columns before `Enrollment` can declare its composite FK
+  /// `(administrative_group_id, branch_id)`. That FK is what makes the
+  /// enrolment's branch provably the group's rather than a copy that drifts.
+  /// Never remove it to "tidy up" (§20 rule 22).
+  @@unique([id, branchId], map: "administrative_group_id_branch_id_key")
   @@index([levelId, deletedAt])
   @@index([branchId, deletedAt])
   @@map("administrative_group")
@@ -914,11 +923,31 @@ model Enrollment {
   id                    String              @id @default(uuid()) @db.Uuid
   studentId             String              @map("student_id") @db.Uuid
   student               User                @relation(fields: [studentId], references: [id], onDelete: Restrict)
-  administrativeGroupId String              @map("administrative_group_id") @db.Uuid
-  administrativeGroup   AdministrativeGroup @relation(fields: [administrativeGroupId], references: [id], onDelete: Restrict)
+  /// Revision 66 — NULLABLE. A Level that needs no subdivision needs no group,
+  /// and a student may be enrolled in it directly. A Group is required only
+  /// when the Level is actually subdivided, exactly as a Teaching Group is
+  /// required only when a Subject is split.
+  administrativeGroupId String?              @map("administrative_group_id") @db.Uuid
+  administrativeGroup   AdministrativeGroup? @relation(fields: [administrativeGroupId], references: [id], onDelete: Restrict)
   /// Kept honest by the composite FK above — never written independently.
-  levelId               String              @map("level_id") @db.Uuid
-  level                 Level               @relation(fields: [levelId], references: [id], onDelete: Restrict)
+  levelId               String               @map("level_id") @db.Uuid
+  level                 Level                @relation(fields: [levelId], references: [id], onDelete: Restrict)
+
+  /// Revision 66 — **the single answer to *where is this student*.**
+  ///
+  /// It used to be reached through the group (`Enrollment →
+  /// AdministrativeGroup.branch_id`), which is exactly why the group could not
+  /// be optional: an ungrouped student would have had no branch, and Admin
+  /// scoping, Teaching-Group placement (R43.3), the library's own-branch
+  /// ordering and `entire_level` audiences all require one.
+  ///
+  /// The enrolment IS the operational assignment, and that is where a branch
+  /// belongs — a Level spans branches, a placement does not. Agreement with a
+  /// group's own branch is a CONSTRAINT rather than an intention: the composite
+  /// FK `(administrative_group_id, branch_id)`, which PostgreSQL leaves
+  /// unenforced when the group is NULL.
+  branchId String @map("branch_id") @db.Uuid
+  branch   Branch @relation(fields: [branchId], references: [id], onDelete: Restrict)
 
   enrolledAt  DateTime  @default(now()) @map("enrolled_at") @db.Timestamptz(6)
   deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
@@ -928,6 +957,7 @@ model Enrollment {
   @@index([administrativeGroupId, deletedAt])
   @@index([levelId, deletedAt])
   @@index([studentId, deletedAt])
+  @@index([branchId, deletedAt])
   @@map("enrollment")
 }
 

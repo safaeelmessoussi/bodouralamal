@@ -52,7 +52,10 @@ export async function getStudentIdentity(
           // `(administrative_group_id, level_id)` is what keeps the two halves
           // from disagreeing (§7).
           level: { select: { id: true, name: true, category: { select: { id: true, name: true } } } },
-          administrativeGroup: { select: { branch: { select: { id: true, name: true } } } },
+          // R66 — the enrolment's own branch. It used to be read through the
+          // Administrative Group, so a student in an unsubdivided Level would
+          // have shown no branch at all on their own dashboard.
+          branch: { select: { id: true, name: true } },
         },
         // §2.2 ordering. Deterministic rather than incidental: the screen
         // renders the first, so which one is first must not depend on the plan
@@ -74,7 +77,7 @@ export async function getStudentIdentity(
     enrollments: student.levelEnrollments.map((enrollment) => ({
       category: enrollment.level.category,
       level: { id: enrollment.level.id, name: enrollment.level.name },
-      branch: enrollment.administrativeGroup.branch,
+      branch: enrollment.branch,
     })),
   };
 }

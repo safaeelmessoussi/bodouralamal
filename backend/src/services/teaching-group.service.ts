@@ -80,7 +80,10 @@ async function studentBranchInLevel(
       deletedAt: null,
       administrativeGroup: { deletedAt: null },
     },
-    select: { administrativeGroup: { select: { branchId: true } } },
+    // R66 — R43.3 scoped this by `Enrollment → AdministrativeGroup.branch_id`,
+    // calling it "a referent that does exist". It is now the enrolment's own
+    // column, which exists for an ungrouped student too.
+    select: { branchId: true },
   });
   if (!enrolment) {
     throw new AppError('STATE_CONFLICT', 'student is not enrolled in this level', {
@@ -88,7 +91,7 @@ async function studentBranchInLevel(
       level_id: levelId,
     });
   }
-  return enrolment.administrativeGroup.branchId;
+  return enrolment.branchId;
 }
 
 export async function listTeachingGroups(
@@ -424,7 +427,7 @@ export async function removeMember(
 export interface UnassignedStudent {
   studentId: string;
   nameArabic: string | null;
-  administrativeGroupId: string;
+  administrativeGroupId: string | null;
   branchId: string;
 }
 
@@ -484,7 +487,7 @@ export async function listUnassignedStudents(
       studentId: true,
       administrativeGroupId: true,
       student: { select: { nameArabic: true } },
-      administrativeGroup: { select: { branchId: true } },
+      branchId: true,
     },
     orderBy: { student: { nameArabic: 'asc' } },
   });
@@ -495,7 +498,7 @@ export async function listUnassignedStudents(
       studentId: r.studentId,
       nameArabic: r.student.nameArabic,
       administrativeGroupId: r.administrativeGroupId,
-      branchId: r.administrativeGroup.branchId,
+      branchId: r.branchId,
     })),
   };
 }

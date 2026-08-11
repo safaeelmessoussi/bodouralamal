@@ -12,6 +12,16 @@ import {
   type AudienceSpec,
 } from './roster-resolution.js';
 
+/** R66 — an enrolment carries its own branch, taken from the group so the
+ *  composite FK `(administrative_group_id, branch_id)` holds. */
+async function branchOf(groupId: string): Promise<string> {
+  const g = await prisma.administrativeGroup.findUniqueOrThrow({
+    where: { id: groupId },
+    select: { branchId: true },
+  });
+  return g.branchId;
+}
+
 /**
  * Roster resolution — SRS §4.4c, the single definition every other rule cites.
  *
@@ -62,7 +72,7 @@ async function person(label: string): Promise<string> {
 
 async function enrol(studentId: string, groupId: string, lvl: string): Promise<string> {
   const row = await prisma.enrollment.create({
-    data: { studentId, administrativeGroupId: groupId, levelId: lvl },
+    data: { studentId, administrativeGroupId: groupId, levelId: lvl, branchId: await branchOf(groupId) },
   });
   return row.id;
 }

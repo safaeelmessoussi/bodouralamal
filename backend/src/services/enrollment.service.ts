@@ -113,22 +113,22 @@ export async function enqueueConsentReevaluationForStudent(
   });
   if (schedules.length === 0) return [];
 
-  // An entire-level schedule only covers the student if their group is at that
-  // schedule's branch (§4.4c, the branch bound). Prisma cannot correlate the
-  // two sibling relations in the query above, so the check lands here — the
-  // same compromise, and the same reason, as `studentsTaughtBy`.
-  const groupBranches = new Set(
+  // An entire-level schedule only covers the student if they are ENROLLED at
+  // that schedule's branch (§4.4c, the branch bound). R66 — this used to reach
+  // through the Administrative Group, which meant a student in an unsubdivided
+  // Level matched nothing at all.
+  const enrolmentBranches = new Set(
     (
       await tx.enrollment.findMany({
         where: { studentId, deletedAt: null },
-        select: { levelId: true, administrativeGroup: { select: { branchId: true } } },
+        select: { levelId: true, branchId: true },
       })
-    ).map((e) => `${e.levelId}:${e.administrativeGroup.branchId}`),
+    ).map((e) => `${e.levelId}:${e.branchId}`),
   );
   const covering = schedules.filter(
     (s) =>
       s.teachingMode !== 'entire_level' ||
-      (s.levelId !== null && groupBranches.has(`${s.levelId}:${s.branchId}`)),
+      (s.levelId !== null && enrolmentBranches.has(`${s.levelId}:${s.branchId}`)),
   );
   if (covering.length === 0) return [];
 
@@ -174,7 +174,10 @@ export interface EnrollmentRow {
   id: string;
   studentId: string;
   levelId: string;
-  administrativeGroupId: string;
+  /** R66 — `null` when the Level needs no subdivision. */
+  administrativeGroupId: string | null;
+  /** R66 — always present: the single answer to *where is this student*. */
+  branchId: string;
   enrolledAt: Date;
 }
 
@@ -307,14 +310,19 @@ export async function enrolInGroup(
       data: {
         studentId,
         administrativeGroupId,
-        // From the group, not the caller — see the note above.
+        // Both from the group, not the caller — see the note above. R66 makes
+        // the branch a column on the enrolment, and taking it from the group
+        // here is what the composite FK `(administrative_group_id, branch_id)`
+        // then proves rather than trusts.
         levelId: group.levelId,
+        branchId: group.branchId,
       },
       select: {
         id: true,
         studentId: true,
         levelId: true,
         administrativeGroupId: true,
+        branchId: true,
         enrolledAt: true,
       },
     });
@@ -337,6 +345,105 @@ export async function enrolInGroup(
     });
     return row;
   }
+}
+
+/**
+ * **Enrols a student DIRECTLY in a Level (Revision 66).**
+ *
+ * The counterpart of `enrolInGroup`, for a Level nobody has subdivided. It is a
+ * separate function rather than a nullable parameter on the other one because
+ * the two validate genuinely different things: `enrolInGroup` starts from a
+ * group and takes the Level and the branch **from it**, which is what the
+ * composite FK then proves; this one is given a Level and a branch and must
+ * check both itself.
+ *
+ * Everything they share is shared: the sex eligibility rule (§4.4b), BR-21's
+ * one-place-per-Level refusal, the consent re-evaluation, and the audit row.
+ *
+ * **The branch is checked live and for scope.** An Admin may only enrol into
+ * branches they hold — the same boundary `enrolInGroup` gets from the group,
+ * asserted here against the branch the caller named.
+ */
+export async function enrolInLevel(
+  tx: Prisma.TransactionClient,
+  actor: Actor,
+  levelId: string,
+  branchId: string,
+  studentId: string,
+  source: 'roster_edit' | 'approval',
+): Promise<EnrollmentRow> {
+  assertCanManage(actor);
+
+  const level = await tx.level.findFirst({
+    where: { id: levelId, deletedAt: null },
+    select: { id: true, genderRestriction: true },
+  });
+  if (!level) throw new AppError('NOT_FOUND', 'no such level');
+
+  const branch = await tx.branch.findFirst({
+    where: { id: branchId, deletedAt: null },
+    select: { id: true },
+  });
+  if (!branch) throw new AppError('NOT_FOUND', 'no such branch');
+  scope.assertCanActOnBranch(actor.roleScopes, MANAGING_ROLE, branchId, 'no such branch');
+
+  const student = await tx.user.findFirst({
+    where: { id: studentId, deletedAt: null },
+    select: { id: true, sex: true },
+  });
+  if (!student) throw new AppError('NOT_FOUND', 'no such student');
+
+  assertSexEligible(level.genderRestriction, student.sex);
+
+  // BR-21, and the same explained refusal `enrolInGroup` gives: the partial
+  // unique index would catch it, but a raw constraint violation tells an
+  // administrator nothing about what to do instead.
+  const already = await tx.enrollment.findFirst({
+    where: { studentId, levelId, deletedAt: null },
+    select: { id: true, administrativeGroupId: true },
+  });
+  if (already) {
+    throw new AppError('STATE_CONFLICT', 'student is already enrolled in this level', {
+      reason: 'ALREADY_ENROLLED_IN_LEVEL',
+      level_id: levelId,
+      current_administrative_group_id: already.administrativeGroupId,
+    });
+  }
+
+  const row = await tx.enrollment.create({
+    // No group: this Level has no subdivision. The composite FK is not enforced
+    // when `administrative_group_id` is NULL, so the branch stands alone here
+    // and is the caller's checked choice.
+    data: { studentId, levelId, branchId },
+    select: {
+      id: true,
+      studentId: true,
+      levelId: true,
+      administrativeGroupId: true,
+      branchId: true,
+      enrolledAt: true,
+    },
+  });
+
+  await enqueueConsentReevaluationForStudent(tx, studentId);
+
+  await audit.write(tx, {
+    actorUserId: actor.userId,
+    activeRole: actor.activeRole,
+    actionType: 'enrollment.create',
+    targetEntity: 'Enrollment',
+    targetId: row.id,
+    detail: {
+      student_id: studentId,
+      level_id: levelId,
+      // Named explicitly so the trail distinguishes a direct enrolment from one
+      // whose group happens to be missing from a projection.
+      administrative_group_id: null,
+      branch_id: branchId,
+      source,
+    },
+  });
+  return row;
 }
 
 /**
@@ -523,12 +630,16 @@ export async function moveStudent(
     // is the question the column exists to answer.
     const moved = await tx.enrollment.update({
       where: { id: row.id },
-      data: { administrativeGroupId: toGroupId },
+      // R66 — the branch moves WITH the group. Leaving it behind would break
+      // the composite FK immediately, which is the constraint doing exactly
+      // what it exists for: the two can never be updated apart.
+      data: { administrativeGroupId: toGroupId, branchId: to.branchId },
       select: {
         id: true,
         studentId: true,
         levelId: true,
         administrativeGroupId: true,
+        branchId: true,
         enrolledAt: true,
       },
     });
@@ -557,24 +668,33 @@ export async function moveStudent(
   });
 }
 
-/** Every Level a student is enrolled in, with the group that places them there.
- *  This is the ONLY way level membership is answered (§4.4c) — nothing stores
- *  it separately, and the withdrawn `StudentLevel` proposal is why. */
+/**
+ * Every Level a student is enrolled in, with the branch they are enrolled at and
+ * the group placing them there **where one exists** (R66).
+ *
+ * The enrolment row is level membership (§4.4c); the withdrawn `StudentLevel`
+ * proposal is why nothing stores it separately.
+ *
+ * **The group filter is now `OR null`.** It used to require a live group, so a
+ * student in an unsubdivided Level was absent from their own level list — which
+ * is the bug the optional group would otherwise have introduced everywhere this
+ * function is read.
+ */
 export async function levelsForStudent(
   prisma: PrismaClient,
   studentId: string,
-): Promise<{ levelId: string; administrativeGroupId: string; branchId: string }[]> {
+): Promise<{ levelId: string; administrativeGroupId: string | null; branchId: string }[]> {
   const rows = await prisma.enrollment.findMany({
-    where: { studentId, deletedAt: null, administrativeGroup: { deletedAt: null } },
-    select: {
-      levelId: true,
-      administrativeGroupId: true,
-      administrativeGroup: { select: { branchId: true } },
+    where: {
+      studentId,
+      deletedAt: null,
+      OR: [{ administrativeGroupId: null }, { administrativeGroup: { deletedAt: null } }],
     },
+    select: { levelId: true, administrativeGroupId: true, branchId: true },
   });
   return rows.map((r) => ({
     levelId: r.levelId,
     administrativeGroupId: r.administrativeGroupId,
-    branchId: r.administrativeGroup.branchId,
+    branchId: r.branchId,
   }));
 }

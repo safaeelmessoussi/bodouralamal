@@ -180,9 +180,11 @@ async function ownBranchIds(prisma: PrismaClient, actor: LibraryActor): Promise<
 
   const enrolments = await prisma.enrollment.findMany({
     where: { studentId: actor.userId, deletedAt: null, administrativeGroup: { deletedAt: null } },
-    select: { administrativeGroup: { select: { branchId: true } } },
+    // R66 — the enrolment carries the branch; it used to be reached through
+    // the group, which is why an ungrouped student had none.
+    select: { branchId: true },
   });
-  return [...new Set(enrolments.map((e) => e.administrativeGroup.branchId))];
+  return [...new Set(enrolments.map((e) => e.branchId))];
 }
 
 /**
