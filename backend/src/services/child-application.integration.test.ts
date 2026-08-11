@@ -3,6 +3,7 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 import { loadConfig } from '../lib/config.js';
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
 import { actorFor } from '../test-support/actor.js';
+import { listApprovals } from './approval.service.js';
 import {
   decideChildApplication,
   proposeMatches,
@@ -384,6 +385,91 @@ describe('who may decide', () => {
       decideChildApplication(prisma, await actorFor(prisma, outsider), applicationIds[0]!, {
         approve: true,
       }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  });
+});
+
+/**
+ * **The loop, closed** (R62.6).
+ *
+ * The submit endpoint shipped before the queue could read what it wrote, which
+ * meant a parent could submit and no administrator could ever find it — the
+ * request existed and nothing happened. These assert the path a family actually
+ * travels: submit → an administrator sees it → one child is decided → the queue
+ * reflects exactly that.
+ */
+describe('a submitted request reaches the approval queue', () => {
+  it('appears as ONE item per request, with a block per child', async () => {
+    const { requestId } = await submitTwo();
+    const page = await listApprovals(prisma, await actorFor(prisma, adminId), {
+      type: 'child-application',
+    });
+
+    const item = page.data.find((i) => i.id === requestId);
+    expect(item, 'the request is invisible to the queue').toBeDefined();
+    // One item, so an administrator sees a FAMILY rather than unrelated children.
+    expect(item!.children).toHaveLength(2);
+    expect(item!.bundle.childCount).toBe(2);
+    // The parent is named; no child `User` exists yet to name (R62.1).
+    expect(item!.applicants.map((a) => a.role)).toEqual(['parent']);
+  });
+
+  it('carries each child\'s OWN application id, which is what decide acts on', async () => {
+    const { requestId, applicationIds } = await submitTwo();
+    const page = await listApprovals(prisma, await actorFor(prisma, adminId), {
+      type: 'child-application',
+    });
+
+    const item = page.data.find((i) => i.id === requestId)!;
+    // R62.2 decides a child alone, so the ids must be per child rather than per
+    // request — without them an approver could only take the family wholesale.
+    expect(item.children.map((c) => c.applicationId).sort()).toEqual([...applicationIds].sort());
+  });
+
+  it('drops a decided child and keeps its pending sibling', async () => {
+    const { requestId, applicationIds } = await submitTwo();
+    const admin = await actorFor(prisma, adminId);
+
+    await decideChildApplication(prisma, admin, applicationIds[0]!, { approve: true });
+
+    const page = await listApprovals(prisma, admin, { type: 'child-application' });
+    const item = page.data.find((i) => i.id === requestId);
+    // The request is still there — one sibling is still waiting.
+    expect(item, 'the remaining sibling vanished from the queue').toBeDefined();
+    expect(item!.children).toHaveLength(1);
+    expect(item!.children[0]!.applicationId).toBe(applicationIds[1]!);
+  });
+
+  it('leaves the queue entirely once every child is decided', async () => {
+    const { requestId, applicationIds } = await submitTwo();
+    const admin = await actorFor(prisma, adminId);
+
+    await decideChildApplication(prisma, admin, applicationIds[0]!, { approve: true });
+    await decideChildApplication(prisma, admin, applicationIds[1]!, {
+      approve: false,
+      rejectionReason: 'not_eligible',
+    });
+
+    const page = await listApprovals(prisma, admin, { type: 'child-application' });
+    expect(page.data.find((i) => i.id === requestId)).toBeUndefined();
+  });
+
+  it('does not disturb the other queue types', async () => {
+    await submitTwo();
+    const admin = await actorFor(prisma, adminId);
+
+    // A registration item carries no children blocks — the legacy shape bundles
+    // them as pending LINKS, and conflating the two would misreport both.
+    const registrations = await listApprovals(prisma, admin, { type: 'registration' });
+    expect(registrations.data.every((i) => i.children.length === 0)).toBe(true);
+  });
+
+  it('is refused to a caller with no approver role', async () => {
+    await submitTwo();
+    const teacher = await makeUser('مؤطرة أخرى', 'teacher');
+
+    await expect(
+      listApprovals(prisma, await actorFor(prisma, teacher), { type: 'child-application' }),
     ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 });

@@ -198,7 +198,23 @@ describe('GET /api/v1/admin/approvals', () => {
     const item = (res.body.data as Record<string, unknown>[]).find((i) => i.id === parentId)!;
 
     expect(Object.keys(item).sort()).toEqual(
-      ['applicants', 'branch', 'bundle', 'category', 'id', 'requested_role', 'submitted_at', 'type'],
+      [
+        'applicants',
+        'branch',
+        'bundle',
+        'category',
+        // R62 — the per-child decidable blocks. `[]` on a registration item,
+        // which bundles its children as pending LINKS; populated only on a
+        // `child-application` item. It is argued onto this list rather than
+        // arriving on it: without it the queue could show a child-application
+        // request but give the approver nothing to act on, since R62.2 decides
+        // a child alone and the ids live in these blocks.
+        'children',
+        'id',
+        'requested_role',
+        'submitted_at',
+        'type',
+      ],
     );
     // `requested_role` joined in Revision 49 and is deliberately argued onto
     // this list rather than arriving on it: without it the approver cannot tell

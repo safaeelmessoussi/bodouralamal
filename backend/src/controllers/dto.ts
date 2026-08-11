@@ -991,7 +991,7 @@ export function academicYearRefDto(row: {
 
 export interface ApprovalDto {
   id: string;
-  type: 'registration' | 'family-link';
+  type: 'registration' | 'family-link' | 'child-application';
   /**
    * What a self-service applicant asked to become (Revision 49) — `'teacher'`
    * or `null`. **A hint, never an authority**: it is what makes a staff request
@@ -1010,6 +1010,20 @@ export interface ApprovalDto {
   submitted_at: string;
   /** §14.2 column: Bundle contents — what approving this will actually change. */
   bundle: { child_count: number; link_count: number };
+  /**
+   * R62 — the children in this request, one decidable block each.
+   *
+   * `[]` on every other type. Each block carries its own `application_id`,
+   * which is what `POST /admin/child-applications/{id}/decide` acts on: R62.2
+   * decides a child alone, so an approver can accept one sibling and refuse
+   * another in the same visit.
+   */
+  children: {
+    application_id: string;
+    name: string;
+    status: string;
+    schooling_stage: string | null;
+  }[];
   /**
    * §14.2 column: Branch requested (Revision 39) — **what the applicant asked
    * for**, never where they will be placed. `null` on a family-link item, and
@@ -1032,10 +1046,16 @@ export interface ApprovalDto {
  */
 export function approvalDto(row: {
   id: string;
-  type: 'registration' | 'family-link';
+  type: 'registration' | 'family-link' | 'child-application';
   applicants: { id: string; nameArabic: string; role: 'applicant' | 'child' | 'parent' }[];
   submittedAt: Date;
   bundle: { childCount: number; linkCount: number };
+  children: {
+    applicationId: string;
+    nameArabic: string;
+    status: string;
+    schoolingStage: string | null;
+  }[];
   branch: { id: string; name: string } | null;
   requestedRole: string | null;
   category: { id: string; name: string } | null;
@@ -1046,6 +1066,12 @@ export function approvalDto(row: {
     applicants: row.applicants.map((a) => ({ id: a.id, name: a.nameArabic, role: a.role })),
     submitted_at: row.submittedAt.toISOString(),
     bundle: { child_count: row.bundle.childCount, link_count: row.bundle.linkCount },
+    children: row.children.map((c) => ({
+      application_id: c.applicationId,
+      name: c.nameArabic,
+      status: c.status,
+      schooling_stage: c.schoolingStage,
+    })),
     // Field by field, never a spread — the branch is projected to exactly the
     // two fields the screen renders (§16.2).
     branch: row.branch ? { id: row.branch.id, name: row.branch.name } : null,

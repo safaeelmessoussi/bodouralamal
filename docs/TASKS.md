@@ -644,6 +644,16 @@
 - [x] **Two silently-dropped fields fixed on the update path**: `title` and — since R55 — `effective_until`. The regression tests read the ROW, never the status code
 - [ ] The remaining fixture titles from before the seed fix still read `[تجريبي] حدث …`; they are data and were not rewritten. Say the word and they can be cleaned
 
+### R62 — parent/child registration (2026-08-11, in progress)
+- [x] SRS applied; `ChildApplication`, 4 enums, `FamilyLink.relationshipType`, `User.referenceCode`, `User.schoolingStage`; migration applied
+- [x] `child-application.service.ts` — submit, per-child decide, duplicate proposals, a parent's own list
+- [x] HTTP surface: 4 routes, TD-3 registered, OpenAPI 79 paths / 106 operations
+- [x] **Approval queue reads child applications** — one item per request, one decidable block per child
+- [ ] Registration flow → multi-child, through the same service
+- [ ] Identity binding → non-blocking review item when a minor gains a login
+- [ ] Frontend: switcher expansion + «＋ تسجيل طفل», minimal student dashboard, remove `/dashboard/parent`
+- [ ] Still pending the Owner: guardianship verification · right to an actual rejection reason · the three compliance fields · CNDP declaration · Arabic privacy notice
+
 ### R61 — الإدارة is Super Admin only (2026-08-11)
 - [x] Section rule, enforced by a test over `section: 'administration'` rather than per module
 - [x] `/admin/branches` joins the other three; writes were already Super Admin only

@@ -23,7 +23,7 @@ import { applyRoleAssignments } from './user.service.js';
 /** TD-2: approving is Admin or Super Admin, and nobody else. */
 const APPROVER_ROLES = ['admin', 'super_admin'] as const;
 
-export type ApprovalType = 'registration' | 'family-link';
+export type ApprovalType = 'registration' | 'family-link' | 'child-application';
 
 export interface ApprovalItem {
   id: string;
@@ -62,6 +62,25 @@ export interface ApprovalItem {
    * stated*, exactly as a null branch does.
    */
   category: { id: string; name: string } | null;
+  /**
+   * R62 — the children in this request, **one decidable block each**.
+   *
+   * Present only on a `child-application` item; `[]` elsewhere. Each block
+   * carries its OWN application id, because R62.2 decides a child alone: the
+   * item groups siblings so an administrator sees a family, and the ids are
+   * what let them approve one and refuse another in the same visit.
+   *
+   * Deliberately **not** folded into `applicants`. That array answers *who is
+   * this request about*, and its `id` is a `User` — a child application has no
+   * user yet, by design (R62.1), so putting an application id there would make
+   * one field mean two things.
+   */
+  children: {
+    applicationId: string;
+    nameArabic: string;
+    status: 'pending' | 'approved' | 'rejected';
+    schoolingStage: string | null;
+  }[];
 }
 
 export async function listApprovals(
@@ -140,6 +159,9 @@ export async function listApprovals(
           ? { id: applicant.intendedBranch.id, name: applicant.intendedBranch.name }
           : null,
         requestedRole: applicant.requestedRole,
+        // A legacy registration bundles children as pending LINKS, not
+        // applications (R62 changed the shape; the old rows remain).
+        children: [],
         category: applicant.intendedCategory
           ? { id: applicant.intendedCategory.id, name: applicant.intendedCategory.name }
           : null,
@@ -181,7 +203,69 @@ export async function listApprovals(
         // A link request concerns an existing child and asks for no role,
         // and no stage: the child's placement already exists.
         requestedRole: null,
+        children: [],
         category: null,
+      });
+    }
+  }
+
+  // ── R62 — child applications, grouped by request ────────────────────────
+  //
+  // **Without this the queue cannot see them at all**, and `POST
+  // /child-applications` writes rows no administrator can find: a parent
+  // submits and nothing ever happens. One item per REQUEST so an administrator
+  // sees a family rather than a list of unrelated children, and one decidable
+  // block per child inside it, because R62.2 decides a child alone.
+  //
+  // A branch filter excludes the whole type: a child application carries no
+  // branch — placement arrives with the Level and Group chosen at approval
+  // (R39 keeps `intended_branch_id` on the applicant alone) — so filtering by
+  // one would silently drop every family rather than narrowing them.
+  if ((!type || type === 'child-application') && !branchId) {
+    const pending = await prisma.childApplication.findMany({
+      where: { status: 'pending', deletedAt: null },
+      include: {
+        parent: { select: { id: true, nameArabic: true } },
+        requestedCategory: { select: { id: true, name: true } },
+      },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+    });
+
+    // Grouped in memory rather than by a second query: a request holds a
+    // handful of siblings, and `GROUP BY` here would buy nothing but a join.
+    const byRequest = new Map<string, typeof pending>();
+    for (const row of pending) {
+      const group = byRequest.get(row.requestId) ?? [];
+      group.push(row);
+      byRequest.set(row.requestId, group);
+    }
+
+    total += byRequest.size;
+    // The page window is applied to the REQUESTS, so a family is never split
+    // across two pages — half a family is not a thing an approver can act on.
+    for (const group of [...byRequest.values()].slice(skip, skip + take)) {
+      const first = group[0]!;
+      items.push({
+        id: first.requestId,
+        type: 'child-application',
+        applicants: [
+          { id: first.parent.id, nameArabic: first.parent.nameArabic, role: 'parent' },
+        ],
+        submittedAt: first.createdAt,
+        // Approving the whole request would create this many children and this
+        // many links — though R62.2 lets an approver take them one at a time.
+        bundle: { childCount: group.length, linkCount: group.length },
+        branch: null,
+        requestedRole: null,
+        category: first.requestedCategory
+          ? { id: first.requestedCategory.id, name: first.requestedCategory.name }
+          : null,
+        children: group.map((c) => ({
+          applicationId: c.id,
+          nameArabic: `${c.firstNameArabic} ${c.lastNameArabic}`,
+          status: c.status,
+          schoolingStage: c.schoolingStage,
+        })),
       });
     }
   }
