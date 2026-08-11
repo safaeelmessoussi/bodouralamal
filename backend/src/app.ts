@@ -24,6 +24,7 @@ import * as trash from './controllers/trash.controller.js';
 import * as contentCtl from './controllers/content.controller.js';
 import * as exams from './controllers/exam.controller.js';
 import * as childApplications from './controllers/child-application.controller.js';
+import * as students from './controllers/student.controller.js';
 import { createRegistration } from './controllers/registration.controller.js';
 import { healthController } from './controllers/health.controller.js';
 import type { PrismaClient } from './generated/prisma/client.js';
@@ -33,6 +34,7 @@ import { AppError } from './lib/errors.js';
 import { toRoleScopes } from './policies/branch-scope.js';
 import { createStorageClients } from './lib/storage.js';
 import { authenticate, optionalAuthenticate } from './middleware/authenticate.js';
+import { childContext } from './middleware/child-context.js';
 import {
   accessLog,
   errorHandler,
@@ -221,6 +223,16 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
   guarded.get('/child-applications/mine', childApplications.mine(prisma));
   guarded.get('/admin/child-applications/:id/matches', childApplications.matches(prisma));
   guarded.post('/admin/child-applications/:id/decide', childApplications.decide(prisma));
+
+  /**
+   * TD-3.3 / R63 — the FIRST route to mount `childContext`, which until now was
+   * §4.3's resolution written down with no caller.
+   *
+   * Registered before any `/students/:id` route would be: Express matches in
+   * order, and `me` is not a UUID, so a later parameterised sibling cannot
+   * swallow it.
+   */
+  guarded.get('/students/me', childContext(prisma), students.me(prisma));
 
   guarded.get('/admin/approvals', approvals.list(prisma));
   guarded.post('/admin/approvals/:id/approve', approvals.approve(prisma));

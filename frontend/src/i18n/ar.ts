@@ -46,7 +46,29 @@ export const ar = {
     switcherLabel: 'الطفل الحالي',
     switcherHint: 'اختر الطفل الذي تتابع بياناته',
     none: 'لا يوجد أطفال مرتبطون',
-    fallbackName: 'طفل مرتبط',
+    // R62.9 — the persistent action inside the ولي الأمر group. A parent with
+    // no approved children still sees the group, containing only this.
+    register: '＋ تسجيل طفل',
+    registerSubmit: 'إرسال الطلب',
+    registerSubmitted:
+      'وصل الطلب إلى الإدارة لمراجعته. لا يمنحك إرساله أي صلاحية على بيانات الطفل؛ يظهر الطفل في قائمة التبديل بعد الموافقة.',
+    registerConsent: 'أوافق على معالجة بيانات الطفل لأغراض التسجيل والمتابعة التربوية.',
+    registerFailed: 'تعذّر إرسال الطلب. يرجى المحاولة من جديد.',
+  },
+  // §5.3 (R62.10) — one screen, two contexts: the caller's own record, or the
+  // child they are acting for. The banner names which.
+  studentDashboard: {
+    title: 'لوحة الطالبة',
+    viewingChild: 'تتابعين بيانات: {name}',
+    chooseChild: 'اختاري الطفل الذي تتابعين بياناته من قائمة التبديل في الأعلى.',
+    noChildren: 'لا يوجد أطفال معتمدون بعد. يمكنك تسجيل طفل من «＋ تسجيل طفل» في قائمة التبديل.',
+    referenceCode: 'الرمز المرجعي',
+    category: 'الفئة',
+    level: 'المستوى',
+    branch: 'المقر',
+    notPlaced: 'لم يتم بعد إسناد فئة ومستوى. تتولى الإدارة ذلك بعد الموافقة.',
+    moreEnrollments: 'وهناك {count} تسجيل آخر في مستوى مختلف.',
+    upcoming: 'حصص اليوم والقادمة',
   },
   landing: {
     heroTitle: 'نزرع بذرة العلم، ونرعاها حتى تُثمر',

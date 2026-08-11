@@ -271,6 +271,18 @@ const document = {
         { '200': 'The caller\'s applications.', '401': ENVELOPE },
       ),
     },
+    '/students/me': {
+      get: op(
+        "The acting student's identity block",
+        '**SRS Revision 63 — the Student Dashboard read (§5.3, R62.10).** `me` here is the **acting student, not the account**: `GET /me` answers *which account is this*, and for a parent the two name different people. The subject is resolved by the `X-Active-Child-ID` middleware (§4.3) — an approved `FamilyLink` matching **both** the JWT parent and the header child, or the caller themselves when they hold the Student role and send no header. **There is no `{id}` in the path, and that is the security property**: TD-12 forbids trusting a student identifier from the request, so there is nowhere here for a caller to name a different student. The response carries **exactly R62.10\'s five fields** — name, reference code, Category, Level, branch — and nothing else: no sex, no schooling stage, no French name, no consent state, no account status, no dates, because every field added to a screen a parent looks at publishes personal data to one more surface for no stated purpose. `enrollments` is a **list** because `Enrollment` is unique on `(student_id, level_id)` and a student may hold one per Level; a singular field would have to choose one and silently discard the rest. `reference_code` is `null` for adult students and for accounts predating R62. **Reads are deliberately not audited**, unlike `StudentSocialProfile` (§4.10, R28) — a student or their approved parent reading a name and a Level is ordinary use.',
+        {
+          '200': 'The identity block; `{ id, name_arabic, reference_code, enrollments[] }`.',
+          '400': `${ENVELOPE} VALIDATION_FAILED — a Parent-only caller sent no \`X-Active-Child-ID\`, so the request names no student. Staff receive this too: they reach a student record through §14.2 and TD-2, a different authorization path.`,
+          '401': ENVELOPE,
+          '404': `${ENVELOPE} NOT_FOUND for a header resolving to no approved (parent, child) link — pending, revoked, deleted, nonexistent, or another parent's child, with no distinction between them (§4.3, §20 rule 17).`,
+        },
+      ),
+    },
     '/admin/child-applications/{id}/matches': {
       get: op(
         'Existing accounts this child might already have',

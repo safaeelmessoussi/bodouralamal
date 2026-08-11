@@ -75,6 +75,28 @@ export function Menu({
 }
 
 /**
+ * An option that **does** something rather than selecting among alternatives —
+ * «＋ تسجيل طفل» (R62.9).
+ *
+ * `role="menuitem"`, deliberately not `menuitemradio`: it is not one of a set
+ * and it is never "checked", and announcing it as an unchecked radio would tell
+ * a screen-reader user it is a state they can be in.
+ */
+export function MenuAction({
+  label,
+  onSelect,
+}: {
+  label: string;
+  onSelect: () => void;
+}): ReactNode {
+  return (
+    <button type="button" className="menu__option" role="menuitem" onClick={onSelect}>
+      <span className="menu__label">{label}</span>
+    </button>
+  );
+}
+
+/**
  * A single-choice option. `role="menuitemradio"` with `aria-checked` is what
  * tells a screen-reader user which role or child is currently active — a bold
  * font alone conveys nothing.

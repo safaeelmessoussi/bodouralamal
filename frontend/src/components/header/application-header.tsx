@@ -7,7 +7,6 @@ import { api } from '../../lib/api.js';
 import { Container } from '../ui/container.js';
 import { Icon } from '../ui/icon.js';
 import { Logo } from '../ui/logo.js';
-import { ChildContextSwitcher } from './child-context-switcher.js';
 import { DashboardButton, SignInButton } from './auth-buttons.js';
 import { MobileMenu } from './mobile-menu.js';
 import { NavigationMenu } from './navigation-menu.js';
@@ -78,8 +77,12 @@ export function ApplicationHeader(): ReactNode {
             <div className="app-header__actions app-header__actions--desktop">
               {navigation.isAuthenticated ? (
                 <>
-                  {navigation.hasMultipleRoles ? <RoleSwitcher /> : null}
-                  {navigation.hasLinkedChildren ? <ChildContextSwitcher /> : null}
+                  {/* R62.9 — ONE switcher. The child list is a group inside
+                      it, because selecting a child sets the role and the child
+                      in a single action; two menus made that two. `hasLinkedChildren`
+                      no longer gates anything here: a parent with no approved
+                      children still needs the group's «＋ تسجيل طفل» action. */}
+                  <RoleSwitcher />
                   <DashboardButton roles={roles} />
                   <UserMenu onSignOut={signOut} />
                 </>

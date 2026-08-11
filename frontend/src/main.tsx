@@ -10,6 +10,7 @@ import { AdminRouter } from './pages/admin/index.js';
 import { SessionPage } from './pages/session.js';
 import { TeacherRouter } from './pages/teacher/index.js';
 import { CalendarPage } from './pages/calendar.js';
+import { StudentDashboard } from './pages/dashboard/student.js';
 import { Landing } from './pages/landing.js';
 import { Register } from './pages/register.js';
 import {
@@ -80,6 +81,14 @@ function App(): React.ReactNode {
       return (
         <PendingGuard>
           <TeacherRouter />
+        </PendingGuard>
+      );
+    case 'dashboard-student':
+      // §5.3 (R62.10). Inside `PendingGuard` like every authenticated screen:
+      // a Pending user must never glimpse the application shell (§14.4, R8).
+      return (
+        <PendingGuard>
+          <StudentDashboard />
         </PendingGuard>
       );
     case 'screen-pending':

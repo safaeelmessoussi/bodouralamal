@@ -123,14 +123,25 @@ describe('the switchers appear only when they mean something', () => {
     expect(html).toContain('اختر الدور الذي تعمل به');
   });
 
-  it('a parent with no approved link gets no child switcher', () => {
-    expect(render('authenticated', person({ approved_child_links: [] }))).not.toContain(
-      'اختر الطفل',
+  it('R62.9: a parent-only account still gets the switcher — it is their only route to a child', () => {
+    // The old rule hid it below two roles, which left a parent holding exactly
+    // one role with no way to reach anybody. The children and «＋ تسجيل طفل»
+    // live INSIDE this menu now, so hiding it hides the whole family surface.
+    const html = render(
+      'authenticated',
+      person({ roles: ['parent'], approved_child_links: [{ id: 'c1', display_name: 'مريم بنعلي' }] }),
     );
+    expect(html).toContain('اختر الدور الذي تعمل به');
   });
 
-  it('a parent with an approved link gets one (§4.3)', () => {
-    const html = render('authenticated', person({ roles: ['parent'], approved_child_links: [{ id: 'c1', display_name: 'مريم بنعلي' }] }));
-    expect(html).toContain('اختر الطفل الذي تتابع بياناته');
+  it('R62.9: there is ONE switcher, not a second child dropdown beside it', () => {
+    // Selecting a child sets the role and the child in one action; two menus
+    // made that two actions and two places to be wrong about who is active.
+    const html = render(
+      'authenticated',
+      person({ roles: ['parent'], approved_child_links: [{ id: 'c1', display_name: 'مريم بنعلي' }] }),
+    );
+    expect(html).not.toContain('اختر الطفل الذي تتابع بياناته');
+    expect(html.match(/menu__trigger/g) ?? []).toHaveLength(2); // role switcher + account
   });
 });

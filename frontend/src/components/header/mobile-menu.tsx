@@ -3,7 +3,6 @@ import type { ReactNode } from 'react';
 import type { Navigation } from '../../hooks/use-navigation.js';
 import { NavigationMenu } from './navigation-menu.js';
 import { RoleSwitcher } from './role-switcher.js';
-import { ChildContextSwitcher } from './child-context-switcher.js';
 import { DashboardButton, SignInButton, SignOutButton } from './auth-buttons.js';
 
 /**
@@ -43,8 +42,8 @@ export function MobileMenu({
 
         {navigation.isAuthenticated ? (
           <div className="mobile-menu__actions">
-            {navigation.hasMultipleRoles ? <RoleSwitcher inline /> : null}
-            {navigation.hasLinkedChildren ? <ChildContextSwitcher inline /> : null}
+            {/* One switcher, as on desktop (R62.9). */}
+            <RoleSwitcher inline />
             <DashboardButton roles={roles} block />
             <SignOutButton onSignOut={onSignOut} block />
           </div>

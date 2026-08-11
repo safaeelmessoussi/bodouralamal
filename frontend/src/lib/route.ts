@@ -28,6 +28,8 @@ export type Route =
   | 'account-deactivated'
   /** A §14.1 role home whose screen belongs to a later milestone. */
   | 'screen-pending'
+  /** §5.3's Student Dashboard — one route, two contexts (R62.10, R63). */
+  | 'dashboard-student'
   /** The back office, resolved by its module registry. */
   | 'admin'
   /** The teacher portal, resolved by its own registry — a separate application
@@ -76,6 +78,10 @@ export function resolveRoute(pathname: string): Route {
   // reason: `/teacher` is in both this registry and ROLE_HOME_PATHS, and the
   // registry is the authority.
   if (isTeacherPath(path)) return 'teacher';
+
+  // R62.10 delivered this one. A parent reaches it through the account
+  // switcher with a child selected; a student reaches it as themselves.
+  if (path === '/dashboard/student') return 'dashboard-student';
 
   // §14.1 defines these; no milestone has delivered them. "Not built yet" and
   // "does not exist" are different facts and get different pages.

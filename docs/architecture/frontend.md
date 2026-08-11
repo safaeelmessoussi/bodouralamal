@@ -289,7 +289,7 @@ The registry is build-once-reuse, and duplicating one per page is prohibited:
 
 `StudentSelector` · `GroupSelector` / `LevelSelector` / `BranchSelector` ·
 `PaginatedTable` · `DualDateDisplay` · `VisibilityBadge` / `VisibilitySelect` ·
-`ConsentStatusBadge` · `FileUploader` · `ChildContextSwitcher` · `ApprovalCard` ·
+`ConsentStatusBadge` · `FileUploader` · `ChildContextSwitcher` *(R62.9 — no longer a header dropdown of its own; it is the `ولي الأمر` GROUP inside the one account switcher, because selecting a child sets the active role and the active child in a single action)* · `ApprovalCard` ·
 `ConfirmDialog` · `EmptyState` / `ErrorState` / `NoPermissionState` · `JobStatusIndicator`
 
 `DualDateDisplay` carries a rule from the calendar design: it renders **the Gregorian date
@@ -1041,6 +1041,48 @@ The whole back office mounts **inside `PendingGuard`**: a sidebar and headings a
 §5.6 asks for pending-approval counts and overview stats. **No endpoint serves them**, and
 inventing a number would be worse than omitting one — so it lists the modules the session may
 open, with blocked ones marked, and becomes a dashboard when there is something true to count.
+
+## The family surface: one switcher, one dashboard (R62)
+
+**`ولي الأمر` is not a destination — it is a group.** A parent's home is a *child's*
+dashboard, so selecting the bare role would arrive somewhere with nobody selected. The
+account switcher's `parent` entry therefore expands into the approved children plus a
+persistent **«＋ تسجيل طفل»** action, and picking a child sets the active role and the
+active child **in one action**.
+
+That is why there is no longer a second child dropdown beside the role switcher. Two menus
+made one decision into two, and left two places to be wrong about who is currently active.
+
+**A parent-only account still gets the switcher.** The old rule hid it below two roles,
+which for a parent holding exactly one role hid the entire family surface — the children
+and the registration action are inside that menu.
+
+**«＋ تسجيل طفل» opens a dialog, not a route**, and that is a §20 rule 16 decision: §4.3
+describes the affordance as an action on the switcher, and §14.1 lists no path for it.
+Inventing one would be navigation outside the sitemap. It posts a single child to
+`POST /child-applications` — the public registration form is the multi-child one, because a
+family arrives at once and a parent already on the platform is adding one; a second
+repeatable form would be a second thing to keep in step.
+
+### `/dashboard/student` serves two contexts, and says which
+
+The same route renders the caller's own record when they act as a student and the active
+child's when they act as a parent, because `GET /students/me` resolves the **acting**
+student server-side (§4.3, R63). The client sends the child header and renders whatever
+comes back; it never decides whose data this is.
+
+**A persistent banner names the child** (R62.10) — not a toast and not a subtitle. A parent
+looking at the wrong child's schedule must find that out by reading the screen, not by
+noticing something is off.
+
+Its scope is R62.10's and stops there: the identity block, today's and upcoming sessions.
+Quran progress, grades and exams are later milestones and are **not** stubbed — an empty
+section promising a feature is a §14.4 problem, not a placeholder.
+
+**The sessions list passes the access token to `GET /calendar`.** That endpoint is public
+and optionally authenticated, so it returns the *caller's* visibility tier; the public
+calendar page passes nothing and gets the public tier, which is right for it. On this
+screen a session restricted to the student's own Level is exactly what is wanted.
 
 ## Toasts
 

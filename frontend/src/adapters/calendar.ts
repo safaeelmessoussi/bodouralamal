@@ -115,6 +115,17 @@ export interface CalendarQuery {
   branchId?: string | null;
   categoryId?: string | null;
   levelId?: string | null;
+  /**
+   * The caller's access token, when there is one (R62.10).
+   *
+   * `GET /calendar` is public and `optionalAuthenticate`d: it returns the
+   * **caller's visibility tier**, so an anonymous request and a signed-in one
+   * legitimately see different sets (§4.4). The public page passes nothing and
+   * gets the public tier, which is correct for it; the Student Dashboard passes
+   * the token, because a session restricted to the student's own Level is
+   * exactly what that screen is for.
+   */
+  token?: string | null;
 }
 
 export interface CalendarResult {
@@ -128,7 +139,9 @@ export async function fetchOccurrences(query: CalendarQuery): Promise<CalendarRe
   if (query.branchId) params.set('branch_id', query.branchId);
   if (query.categoryId) params.set('category_id', query.categoryId);
   if (query.levelId) params.set('level_id', query.levelId);
-  const page = await api<CalendarPage>(`/calendar?${params.toString()}`);
+  const page = await api<CalendarPage>(`/calendar?${params.toString()}`, {
+    token: query.token ?? null,
+  });
   return { occurrences: page.data, prefilled: page.prefilled_filters ?? null };
 }
 

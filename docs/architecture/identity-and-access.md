@@ -368,7 +368,7 @@ one — the person could narrow themselves and never widen again. `/me` answers
 | Concurrent devices? | Different active roles by construction: two tokens, no shared state, nothing to reconcile |
 | Can a person select a role they lack? | No. The list comes from `/me`, which is derived from the server-issued token, and `setActiveRole` refuses anything outside it |
 | What happens on switch? | The context changes and the browser navigates to that role's home (`homeForRole`) |
-| A role with no portal? | `/dashboard/student` resolves to the **`screen-pending`** state — "not built yet" is a different fact from "does not exist" and gets a different page. **`/dashboard/parent` is now `not-found`** (R62 removed the screen), and the difference is the point: `screen-pending` promises a page that is coming |
+| A role with no portal? | Every role §14.1 declares now has one. **`/dashboard/student` is built** (R62.10) and serves both the student's own record and, for a parent, the active child's. **`/dashboard/parent` is `not-found`** — R62 removed the screen, and the difference from `screen-pending` is the point: `screen-pending` promises a page that is coming |
 
 ### Why both the active role and the active child persist
 

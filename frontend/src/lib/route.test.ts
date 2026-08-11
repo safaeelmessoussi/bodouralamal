@@ -72,7 +72,7 @@ describe('the §14.1 sitemap decides, not a second list', () => {
     // screens are later milestones.
     for (const { role, path } of ROLE_HOMES) {
       const route = resolveRoute(path);
-      expect(['admin', 'teacher', 'screen-pending'] satisfies Route[]).toContain(route);
+      expect(['admin', 'teacher', 'dashboard-student', 'screen-pending'] satisfies Route[]).toContain(route);
       expect(route, `${role} → ${path} must not be a dead link`).not.toBe('not-found');
     }
   });
@@ -86,7 +86,9 @@ describe('the §14.1 sitemap decides, not a second list', () => {
     // waiting for. That is strictly more informative than the generic
     // "not built yet" page it used to get.
     expect(resolveRoute('/teacher')).toBe('teacher');
-    expect(resolveRoute('/dashboard/student')).toBe('screen-pending');
+    // R62.10 delivered `/dashboard/student`, so it is no longer one of them
+    // either — "not built yet" would now be a lie about a screen that exists.
+    expect(resolveRoute('/dashboard/student')).toBe('dashboard-student');
     expect(resolveRoute('/nonsense')).toBe('not-found');
   });
 

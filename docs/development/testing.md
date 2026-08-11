@@ -130,6 +130,26 @@ a regression in unrelated work.
 A green HTTP suite means *the running container passes*. Rebuild before you
 believe it about your own change.
 
+### The same trap on the client, and it has no test to catch it
+
+**Nginx serves `frontend/dist`, a static build mounted read-only** — not a dev
+server. `npm test` and `npx tsc` run against `frontend/src`, so the whole
+frontend suite goes green on code the browser is not running. Nothing in CI or
+in any suite observes the gap.
+
+It surfaced exactly as you would expect: a slice removed `/dashboard/parent` and
+was verified green, and the Document Owner then reported that the interface
+still offered it. Both were true. `dist` was three commits old.
+
+**`cd frontend && npm run build` after any frontend change, before believing
+anything you see in a browser.** If a screen still shows what you just deleted,
+check the bundle before you debug the code:
+
+```bash
+curl -s http://localhost/ | grep -o 'assets/index-[^"]*\.js'   # which bundle is served
+curl -s http://localhost/assets/index-XXXX.js | grep -c 'the string you removed'
+```
+
 **The original wording, still true:**
 `*.http.integration.test.ts` calls the running container, not an in-process app.
 After a migration the container still holds the previous Prisma client, so a
