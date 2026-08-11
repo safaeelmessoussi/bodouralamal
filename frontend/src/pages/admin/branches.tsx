@@ -28,6 +28,7 @@ import {
 import { useSession } from '../../contexts/session.js';
 import { useActiveRole } from '../../contexts/active-role.js';
 import { t } from '../../i18n/index.js';
+import { formatDate } from '../../lib/format-date.js';
 import { ApiError } from '../../lib/api.js';
 
 /**
@@ -107,7 +108,7 @@ export function BranchesPage(): ReactNode {
       secondary: true,
       cell: (r) =>
         r.operational_start_date ? (
-          <time dateTime={r.operational_start_date}>{r.operational_start_date}</time>
+          <time dateTime={r.operational_start_date}>{formatDate(r.operational_start_date)}</time>
         ) : (
           <span className="muted">{t('common.notSet')}</span>
         ),

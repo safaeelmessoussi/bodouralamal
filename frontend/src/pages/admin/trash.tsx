@@ -7,6 +7,7 @@ import { DataTable, type Column, type RowAction, type TableStatus } from '../../
 import { DateField, SearchInput, SelectField } from '../../components/ui/field.js';
 import { useSession } from '../../contexts/session.js';
 import { t } from '../../i18n/index.js';
+import { formatDate } from '../../lib/format-date.js';
 import { ApiError } from '../../lib/api.js';
 
 /** The entity types that reach the Trash. A closed list, so the filter offers
@@ -116,7 +117,7 @@ export function TrashPage(): ReactNode {
     {
       key: 'deletedAt',
       header: t('admin.trash.colDeletedAt'),
-      cell: (r) => <time dateTime={r.deleted_at}>{r.deleted_at.slice(0, 10)}</time>,
+      cell: (r) => <time dateTime={r.deleted_at}>{formatDate(r.deleted_at)}</time>,
     },
     {
       key: 'deletedBy',
@@ -130,7 +131,7 @@ export function TrashPage(): ReactNode {
       header: t('admin.trash.colPurge'),
       secondary: true,
       // BR-15's window, shown because it is the deadline for acting.
-      cell: (r) => <time dateTime={r.purge_after}>{r.purge_after.slice(0, 10)}</time>,
+      cell: (r) => <time dateTime={r.purge_after}>{formatDate(r.purge_after)}</time>,
     },
     {
       key: 'purgeable',

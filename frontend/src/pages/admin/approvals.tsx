@@ -38,6 +38,7 @@ import { listLevels, type Level } from '../../adapters/taxonomy.js';
 import { useSession } from '../../contexts/session.js';
 import { useActiveRole } from '../../contexts/active-role.js';
 import { t } from '../../i18n/index.js';
+import { formatDate } from '../../lib/format-date.js';
 import { ApiError } from '../../lib/api.js';
 
 /**
@@ -182,7 +183,7 @@ export function ApprovalsPage(): ReactNode {
       // The instant is rendered as a date for reading, with the full value in
       // `dateTime` for machines. Formatting an already-fetched value is
       // presentation, which a client may do (§1.1).
-      cell: (r) => <time dateTime={r.submitted_at}>{r.submitted_at.slice(0, 10)}</time>,
+      cell: (r) => <time dateTime={r.submitted_at}>{formatDate(r.submitted_at)}</time>,
     },
   ];
 

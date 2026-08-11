@@ -1,5 +1,42 @@
 /* Part of the design system — see `src/styles/index.css` for the layering. */
 
+/* ── The page frame: the footer sits at the bottom, or after the content ──── */
+
+/*
+ * **A short page used to leave the footer floating mid-screen**, immediately
+ * under a two-line status message, with the background below it — which reads
+ * as a broken page rather than a small one.
+ *
+ * Solved as a LAYOUT, not with a margin or `position: fixed`. Every screen
+ * renders the same three siblings — header, `<main>`, footer — so the root
+ * becomes a column at least as tall as the viewport and `<main>` takes the
+ * slack. On a long page `<main>` is already taller than the slack, nothing
+ * stretches, and the footer follows the content exactly as before. There is no
+ * threshold to tune and no page length that behaves specially.
+ *
+ * `100dvh` rather than `100vh`: on mobile the dynamic unit tracks the browser
+ * chrome collapsing, so the footer does not sit under a toolbar that is about
+ * to disappear.
+ *
+ * `flex: 1 0 auto` — GROW into the slack, never SHRINK below the content's own
+ * height, which is what would otherwise clip a long page in a flex column.
+ */
+#root {
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+/*
+ * The two shapes a page body takes. A public page puts `<main>` directly under
+ * the root; the back-office and teacher shells wrap it in `.admin` beside the
+ * sidebar. Both are named rather than matched by exclusion, so adding a third
+ * sibling to the root is a deliberate decision and not a silent layout change.
+ */
+#root > main,
+#root > .admin {
+  flex: 1 0 auto;
+}
+
 /* ── Layout primitives ───────────────────────────────────────────────────── */
 
 .container {

@@ -17,6 +17,7 @@ import { Dialog } from '../../components/ui/dialog.js';
 import { DateField, TextField } from '../../components/ui/field.js';
 import { useSession } from '../../contexts/session.js';
 import { t } from '../../i18n/index.js';
+import { formatDate } from '../../lib/format-date.js';
 import { ApiError } from '../../lib/api.js';
 
 /**
@@ -104,7 +105,7 @@ export function ScheduleSessionsPage({ scheduleId }: { scheduleId: string }): Re
     {
       key: 'date',
       header: t('admin.sessions.colDate'),
-      cell: (r) => <time dateTime={r.date}>{r.date}</time>,
+      cell: (r) => <time dateTime={r.date}>{formatDate(r.date)}</time>,
     },
     {
       key: 'time',

@@ -679,6 +679,15 @@
 - [x] `ولي الأمر` untouched: about already-approved children, and no registration action inside it
 - [ ] **OWNER DECISION — account deletion (R54).** §4.10 says "two-step account self-deletion"; `docs/SRS-PROPOSAL-R54.md` is drafted and unapproved because it reverses R52's prohibition on permanent deletion. The personal section deliberately ships **no** deletion control. When the decision is taken, its screen belongs at `/profile`
 
+### UI/product pass (2026-08-11)
+- [x] Child section extracted to one shared component; the personal page gains multi-child. 9 tests through both entry points
+- [x] `المستخدمون` filter row aligns on the controls (`align-items: start`) — one rule, every toolbar
+- [x] `الشؤون التعليمية` ordered general → specific; `/admin/groups` relabelled «مجموعات المستويات» (§20 rule 22 — it was calling an Administrative Group a حلقة)
+- [x] One Arabic date formatter at every `<time>`; `DateField` gains a format hint and an Arabic echo. **The native control's placeholder is the user agent's and cannot be overridden** without abandoning the native picker — stated, not worked around
+- [x] Hero: association's own motto and mission wording; logo made transparent (border flood fill) and cropped to its artwork; `object-fit: contain`
+- [x] Mission section removed (strings kept — removed *for now*); footer city removed (key deleted); sticky-footer layout on `#root`
+- [ ] **OWNER DECISION — الفئة offers الكبار in child registration, and the model cannot honour it.** Traced end to end: approval creates a login-less account (no `UserIdentity`, no email), linked to the requester, with consent recorded as given by the requester — contradicting §2.1 (adults hold their own accounts), §4.3/R62.9 (an adult consents for themselves) and §4.1a. The Owner's future cases are already served by adult self-registration (§4.1b). **Removing the option requires R64.7's `Category.holds_own_login` marker** — R27 made the Categories renameable, so filtering by name would hardcode reference data
+
 ### R62 — deferred by scope, not forgotten
 - [ ] `/dashboard/student/calendar`, `/grades`, `/quran` are §14.1 nodes belonging to later milestones; the dashboard deliberately does not stub them
 - [ ] Still pending the Owner: guardianship verification · right to an actual rejection reason · the three compliance fields · CNDP declaration · Arabic privacy notice

@@ -3,7 +3,13 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { fetchBranches, type PublicBranch } from '../../adapters/branches.js';
 import { fetchCalendarBootstrap, type CategoryRef } from '../../adapters/calendar.js';
 import { submitChildApplications } from '../../adapters/child-applications.js';
-import { LIMITS, type ChildInput } from '../../adapters/registrations.js';
+import {
+  ChildrenFieldset,
+  EMPTY_CHILD,
+  toChildInput,
+  validateChildren,
+  type ChildForm,
+} from '../../components/registration/children.js';
 import { ApplicationHeader } from '../../components/header/application-header.js';
 import { SiteFooter } from '../../components/site-footer.js';
 import { ConsentNotice } from '../../components/consent-notice.js';
@@ -11,7 +17,7 @@ import { ErrorState } from '../../components/states.js';
 import { BranchSelector } from '../../components/ui/branch-selector.js';
 import { Button } from '../../components/ui/button.js';
 import { Container } from '../../components/ui/container.js';
-import { SelectField, TextField } from '../../components/ui/field.js';
+import { SelectField } from '../../components/ui/field.js';
 import { useSession } from '../../contexts/session.js';
 import { t } from '../../i18n/index.js';
 import { ApiError } from '../../lib/api.js';
@@ -53,41 +59,13 @@ import { ApiError } from '../../lib/api.js';
  * on the platform is adding one, and a repeatable section here would be a second
  * multi-child form to keep in step with the first.
  */
-const SCHOOLING_STAGES: NonNullable<ChildInput['schooling_stage']>[] = [
-  'pre_primary',
-  'primary',
-  'middle',
-  'high',
-  'post_secondary',
-  'not_in_school',
-];
-
-interface ChildForm {
-  firstNameArabic: string;
-  lastNameArabic: string;
-  firstNameFrench: string;
-  lastNameFrench: string;
-  nickname: string;
-  sex: '' | 'female' | 'male';
-  schoolingStage: '' | NonNullable<ChildInput['schooling_stage']>;
-  mediaRelease: '' | 'yes' | 'no';
-}
-
-const EMPTY: ChildForm = {
-  firstNameArabic: '',
-  lastNameArabic: '',
-  firstNameFrench: '',
-  lastNameFrench: '',
-  nickname: '',
-  sex: '',
-  schoolingStage: '',
-  mediaRelease: '',
-};
-
 export function RegisterChildPage(): ReactNode {
   const { accessToken } = useSession();
 
-  const [form, setForm] = useState<ChildForm>(EMPTY);
+  /** R65 — **one or more**, exactly as `/register` takes them. The personal
+   *  page had lost the repeatable section, so a parent of three submitted three
+   *  requests here while the public form took them in one. */
+  const [children, setChildren] = useState<ChildForm[]>([EMPTY_CHILD]);
   const [branchId, setBranchId] = useState<string | null>(null);
   const [categoryId, setCategoryId] = useState<string | null>(null);
   const [dataProcessing, setDataProcessing] = useState(false);
@@ -100,8 +78,6 @@ export function RegisterChildPage(): ReactNode {
   const [busy, setBusy] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
   const [done, setDone] = useState(false);
-
-  const set = (patch: Partial<ChildForm>) => setForm((current) => ({ ...current, ...patch }));
 
   const loadReference = useCallback(async () => {
     setReferenceFailed(false);
@@ -128,7 +104,7 @@ export function RegisterChildPage(): ReactNode {
     void loadReference();
   }, [loadReference]);
 
-  const errors = validate(form, branchId, categoryId, dataProcessing);
+  const errors = validate(children, branchId, categoryId, dataProcessing);
   const valid = Object.keys(errors).length === 0;
 
   async function submit(): Promise<void> {
@@ -138,24 +114,14 @@ export function RegisterChildPage(): ReactNode {
     setFailure(null);
     try {
       await submitChildApplications(
-        [
-          {
-            first_name_arabic: form.firstNameArabic.trim(),
-            last_name_arabic: form.lastNameArabic.trim(),
-            sex: form.sex as 'female' | 'male',
-            ...(form.firstNameFrench.trim() && form.lastNameFrench.trim()
-              ? {
-                  first_name_french: form.firstNameFrench.trim(),
-                  last_name_french: form.lastNameFrench.trim(),
-                }
-              : {}),
-            ...(form.nickname.trim() ? { nickname: form.nickname.trim() } : {}),
-            ...(form.schoolingStage ? { schooling_stage: form.schoolingStage } : {}),
-            requested_branch_id: branchId!,
-            requested_category_id: categoryId!,
-            consent_media_release: form.mediaRelease === 'yes',
-          },
-        ],
+        // One translation, shared with `/register` (R65) — the branch and stage
+        // are request-level answers this page asks per submission, so they are
+        // attached here rather than living inside a child's fields.
+        children.map((child) => ({
+          ...toChildInput(child),
+          requested_branch_id: branchId!,
+          requested_category_id: categoryId!,
+        })),
         accessToken,
       );
       setDone(true);
@@ -213,66 +179,12 @@ export function RegisterChildPage(): ReactNode {
                 void submit();
               }}
             >
-              <fieldset className="register-form__group">
-                <legend>{t('register.child')}</legend>
-                <TextField
-                  label={t('register.firstNameArabic')}
-                  value={form.firstNameArabic}
-                  onChange={(next) => set({ firstNameArabic: next })}
-                  required
-                  error={touched ? (errors['firstNameArabic'] ?? null) : null}
-                />
-                <TextField
-                  label={t('register.lastNameArabic')}
-                  value={form.lastNameArabic}
-                  onChange={(next) => set({ lastNameArabic: next })}
-                  required
-                  error={touched ? (errors['lastNameArabic'] ?? null) : null}
-                />
-                <SelectField
-                  label={t('register.sex')}
-                  value={form.sex}
-                  onChange={(next) => set({ sex: next as ChildForm['sex'] })}
-                  placeholder={t('common.choose')}
-                  options={[
-                    { value: 'female', label: t('register.sexFemale') },
-                    { value: 'male', label: t('register.sexMale') },
-                  ]}
-                  required
-                  error={touched ? (errors['sex'] ?? null) : null}
-                />
-                {/* R41 — optional as a PAIR: both or neither. */}
-                <TextField
-                  label={t('register.firstNameFrench')}
-                  value={form.firstNameFrench}
-                  onChange={(next) => set({ firstNameFrench: next })}
-                  error={touched ? (errors['firstNameFrench'] ?? null) : null}
-                />
-                <TextField
-                  label={t('register.lastNameFrench')}
-                  value={form.lastNameFrench}
-                  onChange={(next) => set({ lastNameFrench: next })}
-                  error={touched ? (errors['lastNameFrench'] ?? null) : null}
-                />
-                <TextField
-                  label={t('register.nickname')}
-                  value={form.nickname}
-                  onChange={(next) => set({ nickname: next })}
-                  hint={t('register.nicknameHint')}
-                />
-                {/* R62.7 — informs the placement decision; never makes it. */}
-                <SelectField
-                  label={t('register.schoolingStage')}
-                  value={form.schoolingStage}
-                  onChange={(next) => set({ schoolingStage: next as ChildForm['schoolingStage'] })}
-                  placeholder={t('register.schoolingStageChoose')}
-                  options={SCHOOLING_STAGES.map((stage) => ({
-                    value: stage,
-                    label: t(`register.schoolingStage_${stage}`),
-                  }))}
-                  hint={t('register.schoolingStageHint')}
-                />
-              </fieldset>
+              <ChildrenFieldset
+                children={children}
+                onChange={setChildren}
+                errors={errors}
+                touched={touched}
+              />
 
               <fieldset className="register-form__group">
                 <legend>{t('register.branchLegend')}</legend>
@@ -309,19 +221,9 @@ export function RegisterChildPage(): ReactNode {
                   onChange={setDataProcessing}
                   error={touched ? (errors['dataProcessing'] ?? null) : null}
                 />
-                <SelectField
-                  label={t('register.consentMedia')}
-                  value={form.mediaRelease}
-                  onChange={(next) => set({ mediaRelease: next as ChildForm['mediaRelease'] })}
-                  placeholder={t('register.consentMediaChoose')}
-                  options={[
-                    { value: 'yes', label: t('common.yes') },
-                    { value: 'no', label: t('common.no') },
-                  ]}
-                  required
-                  hint={t('register.consentMediaHint')}
-                  error={touched ? (errors['mediaRelease'] ?? null) : null}
-                />
+                {/* R62.3b — the media release is PER CHILD and lives in each
+                    child's own fieldset above; a parent may permit photographs
+                    of one and refuse for another. */}
               </fieldset>
 
               {failure ? (
@@ -345,41 +247,24 @@ export function RegisterChildPage(): ReactNode {
 }
 
 /**
- * The same rules `/register`'s child section applies, stated once here because
- * the two forms submit to two endpoints with one schema behind them (§1.1 — the
- * server is still the authority; this is for immediate feedback).
+ * The page's own rules: the shared child rules, plus the two request-level
+ * answers this surface collects (R64 — `/register` asks them once for the
+ * family; here they are asked per submission).
  */
 export function validate(
-  form: ChildForm,
+  children: ChildForm[],
   branchId: string | null,
   categoryId: string | null,
   dataProcessing: boolean,
 ): Record<string, string> {
-  const errors: Record<string, string> = {};
-
-  for (const part of ['firstNameArabic', 'lastNameArabic'] as const) {
-    const raw = form[part].trim();
-    if (raw === '') errors[part] = t('register.errRequired');
-    else if (raw.length > LIMITS.namePart) errors[part] = t('register.errTooLong');
-  }
-  if (form.sex === '') errors['sex'] = t('register.errRequired');
-
-  // R41: both French parts or neither — half a name is not a name, and the
-  // server refuses it, so the form says which half is missing.
-  const first = form.firstNameFrench.trim();
-  const last = form.lastNameFrench.trim();
-  if (first !== '' && last === '') errors['lastNameFrench'] = t('register.errFrenchPair');
-  if (last !== '' && first === '') errors['firstNameFrench'] = t('register.errFrenchPair');
+  const errors = validateChildren(children);
 
   // R39/R64 — a choice, never a default: defaulting would ask for a branch
   // nobody picked.
   if (!branchId) errors['branch'] = t('register.errBranch');
   if (!categoryId) errors['category'] = t('register.errCategory');
-
   // §4.1a — no lawful basis without it, so it is refused rather than warned about.
   if (!dataProcessing) errors['dataProcessing'] = t('register.errConsent');
-  // A DECISION is required for a minor; "no" is a valid one (BR-1).
-  if (form.mediaRelease === '') errors['mediaRelease'] = t('register.errMediaDecision');
 
   return errors;
 }

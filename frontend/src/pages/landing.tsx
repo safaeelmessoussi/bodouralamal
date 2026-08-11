@@ -29,13 +29,12 @@ export function Landing(): ReactNode {
       <main id="main">
         <Hero />
 
-        <Section
-          id="mission"
-          eyebrow={t('landing.missionEyebrow')}
-          title={t('landing.missionTitle')}
-          lede={t('landing.missionLede')}
-          tint
-        />
+        {/* The mission section was removed on the Owner's instruction. Its
+            substance now lives in the hero lede, which states the association's
+            fields of work and its aim — so removing the section drops a
+            restatement rather than the message. The `landing.mission*` strings
+            are kept in the catalogue: the section may return, and an unused key
+            costs nothing while a deleted one has to be rewritten. */}
 
         <Section
           id="stages"
@@ -112,7 +111,10 @@ function Hero(): ReactNode {
           {/* Decorative: the association name is already the page heading, so
               an alt text here would only repeat it to a screen reader. */}
           <div className="hero__badge" aria-hidden="true">
-            <img src="/logo-large.png" alt="" width={552} height={480} />
+            {/* The intrinsic size matches the asset, so the browser reserves the
+                right box before it loads and the hero does not shift (CLS). It
+                changed when the logo was cropped to its own artwork. */}
+            <img src="/logo-large.png" alt="" width={390} height={444} />
           </div>
         </div>
       </Container>

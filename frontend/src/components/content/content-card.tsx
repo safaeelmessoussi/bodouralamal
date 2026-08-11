@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 
 import type { ContentItem } from '../../adapters/content.js';
 import { t, tList } from '../../i18n/index.js';
+import { formatDate } from '../../lib/format-date.js';
 import { Icon, type IconName } from '../ui/icon.js';
 
 /**
@@ -78,15 +79,6 @@ const ICONS: Record<ContentItem['kind'], IconName> = {
   image: 'image',
   document: 'file',
 };
-
-/** `12 يونيو 2026` — the same Arabic month list the calendar uses, so the two
- *  surfaces never disagree about a month's name. */
-function formatDate(iso: string): string {
-  const [year, month, day] = iso.split('-').map(Number);
-  const months = tList('calendar.months');
-  if (!year || !month || !day) return iso;
-  return `${day} ${months[month - 1] ?? ''} ${year}`;
-}
 
 /**
  * Human file size. Binary units, one decimal place, and **`dir="ltr"` is not

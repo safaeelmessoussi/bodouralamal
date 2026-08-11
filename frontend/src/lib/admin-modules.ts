@@ -74,6 +74,45 @@ export const ADMIN_MODULES: readonly AdminModule[] = [
   },
 
   // ── Academic ──────────────────────────────────────────────────────────────
+  //
+  // **Ordered general → specific, along the dependency chain** (R43's own
+  // model): a Category contains Levels, a Level offers Subjects, a Level is
+  // divided into Administrative Groups, and a Subject within a Level is
+  // divided into Teaching Groups. Reading the menu top to bottom is reading
+  // that hierarchy, so a person meets a concept only after the one it hangs
+  // off. Nothing about authorization changes — the order is presentation.
+  //
+  // **The last two rungs are parameterised screens, not menu nodes.** Assigning
+  // a Subject to a Level and managing its Teaching Groups live at
+  // `/admin/levels/{id}/subjects/{subjectId}`, which cannot be linked without
+  // an id; §14.1 lists them under Levels for exactly that reason, and the
+  // Levels table's subject count is the way in (§20 rule 16 — no invented
+  // navigation).
+  {
+    // R55: الفئات and المواد are two navigation nodes. They were one screen with
+    // two tables; the Owner separated the navigation, and the **implementation
+    // stays single** — `taxonomy.tsx` takes the entity as a parameter, so the
+    // two cannot drift apart the way duplicated CRUD always has here.
+    path: '/admin/categories',
+    labelKey: 'admin.nav.categories',
+    section: 'academic',
+    roles: STAFF,
+    status: 'ready',
+  },
+  {
+    path: '/admin/levels',
+    labelKey: 'admin.nav.levels',
+    section: 'academic',
+    roles: STAFF,
+    status: 'ready',
+  },
+  {
+    path: '/admin/subjects',
+    labelKey: 'admin.nav.subjects',
+    section: 'academic',
+    roles: STAFF,
+    status: 'ready',
+  },
   {
     path: '/admin/groups',
     labelKey: 'admin.nav.groups',
@@ -90,31 +129,6 @@ export const ADMIN_MODULES: readonly AdminModule[] = [
     path: '/admin/schedules',
     labelKey: 'admin.nav.scheduling',
     section: 'scheduling',
-    roles: STAFF,
-    status: 'ready',
-  },
-  {
-    path: '/admin/levels',
-    labelKey: 'admin.nav.levels',
-    section: 'academic',
-    roles: STAFF,
-    status: 'ready',
-  },
-  {
-    // R55: الفئات and المواد are two navigation nodes. They were one screen with
-    // two tables; the Owner separated the navigation, and the **implementation
-    // stays single** — `taxonomy.tsx` takes the entity as a parameter, so the
-    // two cannot drift apart the way duplicated CRUD always has here.
-    path: '/admin/categories',
-    labelKey: 'admin.nav.categories',
-    section: 'academic',
-    roles: STAFF,
-    status: 'ready',
-  },
-  {
-    path: '/admin/subjects',
-    labelKey: 'admin.nav.subjects',
-    section: 'academic',
     roles: STAFF,
     status: 'ready',
   },

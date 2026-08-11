@@ -14,6 +14,7 @@ import { useScopeOptions } from '../hooks/use-scope-options.js';
 import { useSession } from '../contexts/session.js';
 import { useActiveRole } from '../contexts/active-role.js';
 import { t } from '../i18n/index.js';
+import { formatDate } from '../lib/format-date.js';
 import { api } from '../lib/api.js';
 
 /**
@@ -206,7 +207,7 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
       key: 'created',
       header: t('content.col.published'),
       secondary: true,
-      cell: (r) => <time dateTime={r.created_at}>{r.created_at.slice(0, 10)}</time>,
+      cell: (r) => <time dateTime={r.created_at}>{formatDate(r.created_at)}</time>,
     },
   ];
 

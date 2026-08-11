@@ -55,6 +55,14 @@
   color: var(--color-text-muted);
   max-width: 52ch;
 }
+/* The Arabic echo of a chosen date: the native control shows it in the
+   browser's locale, which we cannot change, so the value is also written in the
+   page's own language. Quieter than the hint above it — it repeats, it does not
+   instruct. */
+.field__hint--value {
+  font-weight: 700;
+  color: var(--color-text);
+}
 .field__error {
   font-size: var(--font-size-xs);
   font-weight: 700;
@@ -108,7 +116,13 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-4);
-  align-items: end;
+  /* **`start`, not `end`.** Bottom-aligning the boxes lines up whatever each
+     field happens to end with — and a field carrying a hint (the search box
+     does, for TD-10's two-character floor) is taller than one that does not, so
+     its INPUT sat higher than the selects beside it. Every field is
+     label-then-control, so aligning the tops aligns the controls; a hint then
+     hangs below its own field instead of shoving it upward. */
+  align-items: start;
 }
 /* Wide tables scroll in their own container, so the page body never scrolls
    sideways. */

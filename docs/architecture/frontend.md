@@ -1042,6 +1042,53 @@ The whole back office mounts **inside `PendingGuard`**: a sidebar and headings a
 inventing a number would be worse than omitting one — so it lists the modules the session may
 open, with blocked ones marked, and becomes a dashboard when there is something true to count.
 
+## The child section is one component, not one per entry point
+
+`components/registration/children.tsx` owns the child fields, the add/remove
+behaviour, the cap and the validation. `/register` and `/profile/register-child`
+both compose it.
+
+**They diverged twice before this.** R62 unified the *service* and left the
+*forms* separate; R64 then found that the parent-facing one collected no branch
+and no stage, so approvers received requests missing the two things §4.1 step 1
+and Revision 39 exist to give them. R65 moved the page and the personal copy
+still had no repeatable section — a parent of three submitted three requests
+from one page while the other took them in a single one.
+
+What stays with each page is the *request-level* answer: `/register` asks one
+branch and one stage for the whole family, the personal page asks them per
+submission. Those belong to the surrounding form. A **child** belongs to the
+shared component.
+
+## Dates read in Arabic, and where that stops being possible
+
+`lib/format-date.ts` is the one formatter — `١٢ يونيو ٢٠٢٦`, month names from
+the catalogue the calendar already uses. Every `<time>` on the platform goes
+through it; before, the same day printed three ways depending on the screen
+(`2026-06-12`, `created_at.slice(0, 10)`, or a private helper inside one card).
+
+**`<input type="date">` is the boundary.** Its placeholder and its value render
+in the **user agent's** locale — `lang`, `dir` and CSS cannot change it, which is
+why the fields read `mm/dd/yyyy`. Only abandoning the native control could fix
+that, at the cost of the platform picker, the mobile keyboard, and the keyboard
+and screen-reader behaviour that comes with it. So `DateField` keeps the native
+input and makes the rest Arabic: `lang="ar-MA"`, a hint naming the expected
+order, and the chosen date echoed underneath through `formatDate`.
+
+Stored and transmitted values are untouched — `YYYY-MM-DD` (TD-11).
+
+## The footer sits at the bottom, or after the content
+
+`#root` is a flex column of `min-height: 100dvh`; `#root > main` and
+`#root > .admin` take the slack with `flex: 1 0 auto`.
+
+A short page used to leave the footer floating mid-screen with background below
+it. This is a layout, not a margin and not `position: fixed`: on a long page the
+body is already taller than the slack, nothing stretches, and the footer follows
+the content exactly as before. There is no threshold to tune. `dvh` rather than
+`vh` so mobile browser chrome collapsing does not tuck the footer under a
+toolbar.
+
 ## Every table shows every field its own form collects (R64)
 
 **The rule, stated once.** A management table exposes **every field the entity's

@@ -4,6 +4,7 @@ import { fetchSessionPage, type SessionContentRef, type SessionPage } from '../a
 import { ApplicationHeader } from '../components/header/application-header.js';
 import { SiteFooter } from '../components/site-footer.js';
 import { t } from '../i18n/index.js';
+import { formatDate } from '../lib/format-date.js';
 import { ApiError } from '../lib/api.js';
 
 /**
@@ -94,7 +95,7 @@ function SessionBody({ page }: { page: SessionPage }): ReactNode {
       <dl>
         <dt>{t('session.date')}</dt>
         <dd>
-          <time dateTime={o.date}>{o.date}</time>
+          <time dateTime={o.date}>{formatDate(o.date)}</time>
           {/* The official Hijri overlay, only when the Ministry's month has been
               recorded and published — never computed here (§20 rule 14). */}
           {o.hijri_date ? <span className="muted"> — {o.hijri_date}</span> : null}

@@ -96,11 +96,18 @@ export const ar = {
     upcoming: 'حصص اليوم والقادمة',
   },
   landing: {
-    heroTitle: 'نزرع بذرة العلم، ونرعاها حتى تُثمر',
+    // **The association's own words, not a written-for-the-web paraphrase.**
+    // The title IS its motto («شعار الجمعية») and the lede states its stated
+    // fields of work and its aim, so the public face of the platform says what
+    // the association says about itself rather than a marketing echo of it.
+    heroTitle: 'من أجل أم رائدة و طفل واعد',
     heroLede:
-      'منصة تعليمية تجمع البرامج والدروس والمتابعة التربوية في مكان واحد، وتفتح أبوابها للكبار واليافعين والأطفال بمراكش.',
+      'منصة تعليمية تجمع البرامج والدروس والمتابعة التربوية في مجالات العلم و الثقافة و المجتمع و تهدف الى تعزيز التنمية المستدامة و التقدم الأجتماعي، وتفتح أبوابها للكبار واليافعين والأطفال.',
     ctaLogin: 'تسجيل الدخول',
 
+    // **Kept though the section is removed** (Owner instruction): its substance
+    // moved into the hero lede, and an unused key costs nothing while a deleted
+    // one has to be rewritten if the section returns.
     missionEyebrow: 'رسالتنا',
     missionTitle: 'تعليمٌ متاح، ومتابعةٌ لا تنقطع',
     missionLede:
@@ -165,6 +172,10 @@ export const ar = {
     conflict: 'عدّل مستخدم آخر هذا السجل أثناء عملك. تم تحديث البيانات — يرجى المراجعة وإعادة المحاولة.',
     reasonHint: 'يُسجَّل هذا التبرير في سجل المراجعة (10 أحرف على الأقل).',
     reasonTooLong: 'التبرير طويل جداً ({max} حرف كحد أقصى).',
+    // R66 — the native date control renders its own placeholder in the
+    // BROWSER's locale, which we cannot change; the field states the order it
+    // expects instead, and echoes the chosen date in Arabic underneath.
+    dateFormatHint: 'التاريخ بصيغة: يوم/شهر/سنة',
     choose: 'اختر…',
     all: 'الكل',
     yes: 'نعم',
@@ -258,7 +269,6 @@ export const ar = {
     mapUnavailable: 'لم يُسجَّل موقع هذا المقر على الخريطة بعد.',
     empty: 'لم تُسجَّل أي مقرات بعد.',
     error: 'تعذّر تحميل معلومات المقرات حالياً.',
-    footerCity: 'مراكش، المغرب',
   },
   auth: {
     // §4.1: one screen serves rejected, suspended and soft-deleted accounts
@@ -540,7 +550,11 @@ export const ar = {
     nav: {
       label: 'أقسام الإدارة',
       dashboard: 'لوحة التحكم',
-      groups: 'الحلقات',
+      // **Administrative Groups, not حلقات.** §20 rule 22 forbids conflating
+      // organisation with delivery, and this label did exactly that: a حلقة is
+      // a Teaching Group — a Subject's circle inside a Level — while this node
+      // manages the administrative division OF a Level.
+      groups: 'مجموعات المستويات',
       scheduling: 'الجدولة',
       levels: 'المستويات',
       categories: 'الفئات',
@@ -566,7 +580,7 @@ export const ar = {
     // Each names WHAT is missing — "coming soon" tells nobody whether the wait
     // is a day or a milestone.
     blocked: {
-      groups: 'يتطلب هذا القسم واجهات إدارة الحلقات وجداولها الأسبوعية، وهي غير متوفرة بعد.',
+      groups: 'يتطلب هذا القسم واجهات إدارة مجموعات المستويات وجداولها الأسبوعية، وهي غير متوفرة بعد.',
       content: 'يتطلب هذا القسم واجهات رفع المحتوى وعرضه (المرحلة السادسة)، وهي غير متوفرة بعد.',
     },
     // الفئات والمواد — المفردتان اللتان يقوم عليهما النموذج التعليمي كله.

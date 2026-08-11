@@ -1,6 +1,7 @@
 import { useId, type ReactNode } from 'react';
 
 import { t } from '../../i18n/index.js';
+import { formatDate } from '../../lib/format-date.js';
 
 /**
  * Form field primitives — **the platform's form infrastructure**, not this
@@ -128,22 +129,51 @@ export function TextArea({ rows = 4, ...props }: BaseProps & { rows?: number }):
   );
 }
 
-/** A local calendar date, `YYYY-MM-DD` — never an instant (TD-11). */
+/**
+ * A local calendar date, `YYYY-MM-DD` — never an instant (TD-11).
+ *
+ * ## Why the empty control still reads `mm/dd/yyyy`, and what is done about it
+ *
+ * **`<input type="date">` renders its placeholder and its value in the USER
+ * AGENT's locale, not the document's.** `lang`, `dir` and CSS cannot change it;
+ * only replacing the native control could, and that would cost the platform
+ * picker, the mobile keyboard, and the keyboard and screen-reader behaviour that
+ * comes with it — a bad trade for a placeholder.
+ *
+ * So the native control is kept and the parts we *do* control are made Arabic
+ * and consistent:
+ *
+ * * **`lang="ar-MA"`** — honoured by some user agents, harmless in the rest;
+ * * **a format hint** naming the order in words, so the field states what it
+ *   expects rather than leaving the reader to infer it from `mm/dd/yyyy`;
+ * * **the chosen date echoed in Arabic** beneath the control, from the same
+ *   `formatDate` every table and card now uses — so the date a person reads is
+ *   Arabic even while the picker's own chrome is the browser's.
+ *
+ * The stored and transmitted value is untouched: `YYYY-MM-DD`, exactly as TD-11
+ * requires.
+ */
 export function DateField(props: BaseProps): ReactNode {
   return (
-    <FieldShell {...props}>
+    <FieldShell {...props} hint={props.hint ?? t('common.dateFormatHint')}>
       {({ id, describedBy }) => (
-        <input
-          id={id}
-          className="field__control"
-          type="date"
-          value={props.value}
-          required={props.required ?? false}
-          disabled={props.disabled ?? false}
-          aria-invalid={props.error ? true : undefined}
-          aria-describedby={describedBy}
-          onChange={(e) => props.onChange(e.target.value)}
-        />
+        <>
+          <input
+            id={id}
+            className="field__control"
+            type="date"
+            lang="ar-MA"
+            value={props.value}
+            required={props.required ?? false}
+            disabled={props.disabled ?? false}
+            aria-invalid={props.error ? true : undefined}
+            aria-describedby={describedBy}
+            onChange={(e) => props.onChange(e.target.value)}
+          />
+          {props.value ? (
+            <p className="field__hint field__hint--value">{formatDate(props.value)}</p>
+          ) : null}
+        </>
       )}
     </FieldShell>
   );
