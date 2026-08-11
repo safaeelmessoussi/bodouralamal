@@ -21,6 +21,7 @@ import { DataTable, type Column, type RowAction, type TableStatus } from '../../
 import { Dialog } from '../../components/ui/dialog.js';
 import { SearchInput, SelectField, TextField } from '../../components/ui/field.js';
 import { useSession } from '../../contexts/session.js';
+import { useActiveRole } from '../../contexts/active-role.js';
 import { t } from '../../i18n/index.js';
 import { ApiError } from '../../lib/api.js';
 
@@ -53,8 +54,12 @@ import { ApiError } from '../../lib/api.js';
  * all, which `check-display-identity.sh` enforces across the frontend.
  */
 export function UsersPage(): ReactNode {
-  const { me, accessToken } = useSession();
-  const roles = me?.roles ?? [];
+  const { accessToken } = useSession();
+  const { me } = useSession();
+  const { activeRoles } = useActiveRole();
+  // R60 — the ACTIVE role. A Super Admin working as مؤطِّرة must not be offered
+  // a control the server will refuse: the affordance follows the authority.
+  const roles = activeRoles;
   const isSuperAdmin = roles.includes('super_admin');
 
   const [rows, setRows] = useState<UserSummary[]>([]);

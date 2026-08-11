@@ -25,6 +25,8 @@ export function MobileMenu({
 }: {
   navigation: Navigation;
   pathname: string;
+  /** The ACTIVE role's list, passed down from the header (R60) — never the
+   *  account's full set. One resolution, one place. */
   roles: string[];
   onSignOut: () => void | Promise<void>;
   onNavigate: () => void;

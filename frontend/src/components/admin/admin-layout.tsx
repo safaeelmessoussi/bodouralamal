@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 
-import { useSession } from '../../contexts/session.js';
+import { useActiveRole } from '../../contexts/active-role.js';
 import { t } from '../../i18n/index.js';
 import {
   ADMIN_SECTIONS,
@@ -42,8 +42,10 @@ export function AdminLayout({
   actions?: ReactNode;
   children: ReactNode;
 }): ReactNode {
-  const { me } = useSession();
-  const roles = me?.roles ?? [];
+  // **The ACTIVE role, not the account's roles** (R60). Reading `me.roles` here
+  // listed the Super Admin sidebar to somebody working as Admin — the interface
+  // offering a menu the server would refuse.
+  const { activeRoles: roles } = useActiveRole();
   const current = moduleForPath(window.location.pathname);
   const permitted = current ? canAccess(current, roles) : false;
 

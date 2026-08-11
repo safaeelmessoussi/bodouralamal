@@ -58,10 +58,35 @@ import { useSession } from './session.js';
 const STORAGE_KEY = 'bodour.activeRole';
 
 interface ActiveRoleState {
-  /** The roles this person actually holds, in §14.1's precedence order. */
+  /**
+   * **Every role the account holds**, in §14.1's precedence order.
+   *
+   * For the switcher's menu and nothing else. R60.9 keeps `/me` reporting the
+   * full list precisely so a person can switch back; using it to decide what the
+   * interface *shows* is the bug this context exists to prevent.
+   */
   roles: string[];
   /** `null` only when the account holds no role at all (§14.4's no-role landing). */
   activeRole: string | null;
+  /**
+   * **The active role as a one-element array** — what every presentation
+   * decision reads.
+   *
+   * The helpers that decide navigation and homes (`visibleModules`,
+   * `roleHomePath`, `canAccess`) all take a role *list*, because they predate
+   * R60 and were written against `me.roles`. Handing them `[activeRole]` makes
+   * them correct with no change to their signatures or their logic — and, more
+   * to the point, gives every caller **one obvious thing to read** instead of a
+   * choice between two lists where only one is right.
+   *
+   * That choice is what produced both reported defects: `لوحة التحكم` sent a
+   * Super Admin working as مؤطِّرة to `/admin`, and the back-office sidebar
+   * listed Super Admin modules to someone acting as Admin. Neither was a routing
+   * bug; both were `me.roles` being read where the active role was meant.
+   *
+   * Empty only for an account holding no role at all (§14.4's no-role landing).
+   */
+  activeRoles: string[];
   /** Refused silently for a role the caller does not hold — see `select`. */
   setActiveRole: (role: string) => void;
 }
@@ -140,9 +165,11 @@ export function ActiveRoleProvider({ children }: { children: ReactNode }): React
     // the stored value is only what this tab intends to request next. They differ
     // exactly when a role was revoked, and the granted one is the truth.
     const granted = me?.active_role ?? null;
+    const active = granted ?? resolveActiveRole(stored, roles);
     return {
       roles,
-      activeRole: granted ?? resolveActiveRole(stored, roles),
+      activeRole: active,
+      activeRoles: active === null ? [] : [active],
       setActiveRole,
     };
   }, [roles, stored, setActiveRole, me]);

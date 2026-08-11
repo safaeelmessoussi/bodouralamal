@@ -26,6 +26,7 @@ import {
   TextField,
 } from '../../components/ui/field.js';
 import { useSession } from '../../contexts/session.js';
+import { useActiveRole } from '../../contexts/active-role.js';
 import { t } from '../../i18n/index.js';
 import { ApiError } from '../../lib/api.js';
 
@@ -46,8 +47,11 @@ import { ApiError } from '../../lib/api.js';
  * meaning apart from its branch, and §14.1 names the node *"Branches & Rooms"*.
  */
 export function BranchesPage(): ReactNode {
-  const { me, accessToken } = useSession();
-  const canWrite = (me?.roles ?? []).includes('super_admin');
+  const { accessToken } = useSession();
+  const { activeRoles } = useActiveRole();
+  // R60 — the ACTIVE role. A Super Admin working as مؤطِّرة must not be offered
+  // a control the server will refuse: the affordance follows the authority.
+  const canWrite = (activeRoles).includes('super_admin');
 
   const [rows, setRows] = useState<Branch[]>([]);
   const [status, setStatus] = useState<TableStatus>('loading');

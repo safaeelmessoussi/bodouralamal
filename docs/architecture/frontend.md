@@ -508,6 +508,47 @@ would mint permission checks for content nobody opened.
 > the client should refresh pre-emptively is a Document Owner decision, not an implementation
 > detail.
 
+## The active role drives the whole interface (R60)
+
+**One rule: presentation reads `activeRoles`, never `me.roles`.**
+
+`/me` reports every assigned role on purpose (R60.9) — the switcher's menu is
+built from it, so narrowing it would let a person trap themselves in a lesser
+role. That full list is therefore available everywhere, and **using it to decide
+what the interface shows was the defect**: it answers *what could this account
+do*, where the question is *what is it doing now*.
+
+`useActiveRole()` exposes both, and the names say which is which:
+
+| | Use it for |
+|---|---|
+| `roles` | The switcher's menu. Nothing else |
+| `activeRole` | Labels — "you are working as …" |
+| `activeRoles` | **Everything else**: navigation, dashboards, route guards, write affordances |
+
+`activeRoles` is the active role as a one-element array, because the helpers that
+decide these things (`visibleModules`, `roleHomePath`, `canAccess`) all take a
+role *list* — they predate R60 and were written against `me.roles`. Handing them
+`[activeRole]` makes them correct with no change to their signatures, and gives
+every caller **one obvious thing to read** instead of a choice between two lists
+where only one is right.
+
+> **The two defects this fixed, and why neither was a routing bug.** `لوحة
+> التحكم` resolved most-privileged-first from the full list, so a Super Admin
+> working as مؤطِّرة was sent to `/admin` — a portal her active role does not own
+> — and met the wrong-role screen instead of her dashboard. And the back-office
+> sidebar listed Super Admin modules to somebody acting as Admin: a menu of
+> things the server would refuse. Both were `me.roles` read where the active role
+> was meant, in thirteen places.
+
+**Write affordances follow it too.** A Super Admin working as مؤطِّرة is not
+offered a control the server will refuse — the affordance follows the authority,
+which is the whole point of R60 reaching the client.
+
+**The wrong-role screen survives, for deep links only.** A bookmark or a shared
+URL into a portal the active role does not own still needs an answer, and §14.4
+forbids a blank page. Nothing *inside* the application navigates there any more.
+
 ## Scheduling is one screen (R56)
 
 `الجدولة` (`/admin/schedules`) is the single scheduling entry point. An

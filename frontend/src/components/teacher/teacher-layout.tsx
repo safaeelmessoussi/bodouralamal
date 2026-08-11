@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 
-import { useSession } from '../../contexts/session.js';
+import { useActiveRole } from '../../contexts/active-role.js';
 import { t } from '../../i18n/index.js';
 import {
   canAccess,
@@ -30,8 +30,8 @@ export function TeacherLayout({
   actions?: ReactNode;
   children: ReactNode;
 }): ReactNode {
-  const { me } = useSession();
-  const roles = me?.roles ?? [];
+  // The ACTIVE role, not the account's roles (R60) — see `admin-layout.tsx`.
+  const { activeRoles: roles } = useActiveRole();
   const current = teacherModuleForPath(window.location.pathname);
   const permitted = current ? canAccess(current, roles) : false;
 

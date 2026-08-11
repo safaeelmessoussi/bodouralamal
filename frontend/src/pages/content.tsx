@@ -12,6 +12,7 @@ import { Dialog } from '../components/ui/dialog.js';
 import { ScopeSelectors } from '../components/scope/scope-selectors.js';
 import { useScopeOptions } from '../hooks/use-scope-options.js';
 import { useSession } from '../contexts/session.js';
+import { useActiveRole } from '../contexts/active-role.js';
 import { t } from '../i18n/index.js';
 import { api } from '../lib/api.js';
 
@@ -71,7 +72,7 @@ const SCOPE_FIELDS = ['levelId', 'subjectId', 'academicYearId', 'branchId'] as c
 const GLOBAL = '__global__';
 
 export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactNode {
-  const { accessToken, me } = useSession();
+  const { accessToken } = useSession();
   const Layout = portal === 'admin' ? AdminLayout : TeacherLayout;
 
   /**
@@ -97,8 +98,11 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
   const [deleting, setDeleting] = useState<LibraryRow | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const { activeRoles } = useActiveRole();
 
-  const isAdmin = (me?.roles ?? []).some((r) => r === 'admin' || r === 'super_admin');
+  // R60 — the ACTIVE role. A Super Admin working as مؤطِّرة must not be offered
+  // a control the server will refuse: the affordance follows the authority.
+  const isAdmin = activeRoles.some((r) => r === 'admin' || r === 'super_admin');
 
   const load = useCallback(async () => {
     setStatus('loading');

@@ -644,6 +644,13 @@
 - [x] **Two silently-dropped fields fixed on the update path**: `title` and — since R55 — `effective_until`. The regression tests read the ROW, never the status code
 - [ ] The remaining fixture titles from before the seed fix still read `[تجريبي] حدث …`; they are data and were not rewritten. Say the word and they can be cleaned
 
+### R60 follow-up — the active role drives the interface (2026-08-11)
+- [x] `useActiveRole().activeRoles` is what presentation reads; `me.roles` is for the switcher's menu only
+- [x] `لوحة التحكم` opens the active role's home — teacher → `/teacher`, admin → `/admin`
+- [x] Both portal sidebars, the header (desktop + mobile) and 9 write affordances converted
+- [x] The missing `roles.wrongRole*` strings added; the screen kept for deep links only
+- [ ] The rule is documented but not enforced by a guard — a future page could read `me.roles` again. A lint rule or a source scan would pin it
+
 ### R60 — the Active Role as a security context (2026-08-11)
 - [x] `active_role` JWT claim; the token is **already narrowed** when it is present
 - [x] `POST /auth/switch-role` — live rows decide, 403 `ROLE_NOT_ASSIGNED` otherwise, audited

@@ -19,6 +19,7 @@ import { DataTable, type Column, type RowAction, type TableStatus } from '../../
 import { Dialog } from '../../components/ui/dialog.js';
 import { NumberField, SelectField, TextField } from '../../components/ui/field.js';
 import { useSession } from '../../contexts/session.js';
+import { useActiveRole } from '../../contexts/active-role.js';
 import { t } from '../../i18n/index.js';
 import { ApiError } from '../../lib/api.js';
 
@@ -47,8 +48,11 @@ const GENDER_OPTIONS: GenderRestriction[] = ['any', 'girls_only', 'boys_only'];
  * Writing is Super Admin; an Admin reads (TD-2 R26), and the server enforces it.
  */
 export function LevelsPage(): ReactNode {
-  const { me, accessToken } = useSession();
-  const canWrite = (me?.roles ?? []).includes('super_admin');
+  const { accessToken } = useSession();
+  const { activeRoles } = useActiveRole();
+  // R60 — the ACTIVE role. A Super Admin working as مؤطِّرة must not be offered
+  // a control the server will refuse: the affordance follows the authority.
+  const canWrite = (activeRoles).includes('super_admin');
 
   const [rows, setRows] = useState<Level[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);

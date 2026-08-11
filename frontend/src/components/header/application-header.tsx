@@ -11,6 +11,7 @@ import { ChildContextSwitcher } from './child-context-switcher.js';
 import { DashboardButton, SignInButton } from './auth-buttons.js';
 import { MobileMenu } from './mobile-menu.js';
 import { NavigationMenu } from './navigation-menu.js';
+import { useActiveRole } from '../../contexts/active-role.js';
 import { RoleSwitcher } from './role-switcher.js';
 import { UserMenu } from './user-menu.js';
 
@@ -27,7 +28,7 @@ import { UserMenu } from './user-menu.js';
  * one role (§2.1) and a child switcher when they have approved links (§4.3).
  */
 export function ApplicationHeader(): ReactNode {
-  const { me, setAccessToken } = useSession();
+  const { setAccessToken } = useSession();
   const navigation = useNavigation();
   const [open, setOpen] = useState(false);
   const pathname = typeof window === 'undefined' ? '/' : window.location.pathname;
@@ -53,7 +54,11 @@ export function ApplicationHeader(): ReactNode {
     }
   }
 
-  const roles = me?.roles ?? [];
+  // **`لوحة التحكم` opens the home of the role being worked as** (R60). It read
+  // `me.roles` and resolved most-privileged-first, so a Super Admin acting as
+  // مؤطِّرة was sent to `/admin` — a portal her active role does not own, which
+  // is why she met the wrong-role screen instead of her own dashboard.
+  const { activeRoles: roles } = useActiveRole();
 
   return (
     <>

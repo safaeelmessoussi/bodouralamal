@@ -19,6 +19,7 @@ import { DataTable, type Column, type RowAction, type TableStatus } from '../../
 import { Dialog } from '../../components/ui/dialog.js';
 import { NumberField, TextField } from '../../components/ui/field.js';
 import { useSession } from '../../contexts/session.js';
+import { useActiveRole } from '../../contexts/active-role.js';
 import { t } from '../../i18n/index.js';
 import { ApiError } from '../../lib/api.js';
 
@@ -123,8 +124,11 @@ const KINDS: Record<TaxonomyKind, KindSpec> = {
 
 export function TaxonomyPage({ kind }: { kind: TaxonomyKind }): ReactNode {
   const spec = KINDS[kind];
-  const { me, accessToken } = useSession();
-  const canWrite = (me?.roles ?? []).includes('super_admin');
+  const { accessToken } = useSession();
+  const { activeRoles } = useActiveRole();
+  // R60 — the ACTIVE role. A Super Admin working as مؤطِّرة must not be offered
+  // a control the server will refuse: the affordance follows the authority.
+  const canWrite = (activeRoles).includes('super_admin');
 
   const [rows, setRows] = useState<Row[]>([]);
   const [status, setStatus] = useState<TableStatus>('loading');

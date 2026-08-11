@@ -13,6 +13,7 @@ import { Button } from '../../components/ui/button.js';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
 import { SelectField } from '../../components/ui/field.js';
 import { useSession } from '../../contexts/session.js';
+import { useActiveRole } from '../../contexts/active-role.js';
 import { t } from '../../i18n/index.js';
 import { ApiError } from '../../lib/api.js';
 
@@ -41,8 +42,11 @@ import { ApiError } from '../../lib/api.js';
  * their job. The server enforces both.
  */
 export function LevelSubjectsPage({ levelId }: { levelId: string }): ReactNode {
-  const { me, accessToken } = useSession();
-  const canWrite = (me?.roles ?? []).includes('super_admin');
+  const { accessToken } = useSession();
+  const { activeRoles } = useActiveRole();
+  // R60 — the ACTIVE role. A Super Admin working as مؤطِّرة must not be offered
+  // a control the server will refuse: the affordance follows the authority.
+  const canWrite = (activeRoles).includes('super_admin');
 
   const [level, setLevel] = useState<Level | null>(null);
   const [assigned, setAssigned] = useState<SubjectRef[]>([]);

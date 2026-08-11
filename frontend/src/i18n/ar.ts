@@ -28,6 +28,13 @@ export const ar = {
   },
   roles: {
     switcherLabel: 'الدور الحالي',
+    // R60 — reached only by a DEEP LINK into a portal the active role does not
+    // own (a bookmark, a shared URL). `لوحة التحكم` and the menus now follow the
+    // active role, so nothing inside the application navigates here.
+    wrongRoleTitle: 'هذه الصفحة تخصّ دورًا آخر',
+    wrongRoleBody: 'صفحة «{module}» ليست ضمن صلاحيات دوركِ الحالي «{active}».',
+    wrongRoleNoRole: 'لا تملكين دورًا يفتح هذه الصفحة.',
+    wrongRoleSwitch: 'التبديل إلى {role}',
     switcherHint: 'اختر الدور الذي تعمل به',
     super_admin: 'مشرف عام',
     admin: 'مسؤولة',

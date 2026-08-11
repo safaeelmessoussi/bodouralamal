@@ -33,6 +33,7 @@ import {
 } from '../../adapters/administrative-groups.js';
 import { listLevels, type Level } from '../../adapters/taxonomy.js';
 import { useSession } from '../../contexts/session.js';
+import { useActiveRole } from '../../contexts/active-role.js';
 import { t } from '../../i18n/index.js';
 import { ApiError } from '../../lib/api.js';
 
@@ -66,8 +67,11 @@ import { ApiError } from '../../lib/api.js';
  * that type wholesale rather than matching none of it.
  */
 export function ApprovalsPage(): ReactNode {
-  const { me, accessToken } = useSession();
-  const isSuperAdmin = (me?.roles ?? []).includes('super_admin');
+  const { accessToken } = useSession();
+  const { activeRoles } = useActiveRole();
+  // R60 — the ACTIVE role. A Super Admin working as مؤطِّرة must not be offered
+  // a control the server will refuse: the affordance follows the authority.
+  const isSuperAdmin = (activeRoles).includes('super_admin');
 
   const [rows, setRows] = useState<Approval[]>([]);
   const [status, setStatus] = useState<TableStatus>('loading');

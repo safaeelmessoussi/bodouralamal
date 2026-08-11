@@ -25,6 +25,7 @@ import {
 import { Dialog } from '../../components/ui/dialog.js';
 import { NumberField, SearchInput, TextField } from '../../components/ui/field.js';
 import { useSession } from '../../contexts/session.js';
+import { useActiveRole } from '../../contexts/active-role.js';
 import { t } from '../../i18n/index.js';
 import { ScopeSelectors } from '../../components/scope/scope-selectors.js';
 import { useScopeOptions } from '../../hooks/use-scope-options.js';
@@ -57,8 +58,11 @@ import { ApiError } from '../../lib/api.js';
 const GROUP_SCOPE = ['branchId', 'levelId'] as const;
 
 export function GroupsPage(): ReactNode {
-  const { me, accessToken } = useSession();
-  const canWrite = (me?.roles ?? []).some((r) => ['admin', 'super_admin'].includes(r));
+  const { accessToken } = useSession();
+  const { activeRoles } = useActiveRole();
+  // R60 — the ACTIVE role. A Super Admin working as مؤطِّرة must not be offered
+  // a control the server will refuse: the affordance follows the authority.
+  const canWrite = (activeRoles).some((r) => ['admin', 'super_admin'].includes(r));
 
   const [rows, setRows] = useState<AdministrativeGroup[]>([]);
   const [status, setStatus] = useState<TableStatus>('loading');

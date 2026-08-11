@@ -2,6 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { ActiveRoleProvider, orderedRoles, resolveActiveRole, useActiveRole } from './active-role.js';
+import { visibleModules } from '../lib/admin-modules.js';
 import { SessionContext, type Me } from './session.js';
 import { homeForRole, roleHomePath } from '../lib/role-home.js';
 
@@ -35,12 +36,16 @@ const person = (roles: string[]): Me => ({
 function observe(
   me: Me,
   act?: (state: ReturnType<typeof useActiveRole>) => void,
-): { active: string | null; roles: string[] } {
-  let seen: { active: string | null; roles: string[] } = { active: null, roles: [] };
+): { active: string | null; roles: string[]; activeRoles: string[] } {
+  let seen: { active: string | null; roles: string[]; activeRoles: string[] } = {
+    active: null,
+    roles: [],
+    activeRoles: [],
+  };
 
   function Probe(): null {
     const state = useActiveRole();
-    seen = { active: state.activeRole, roles: state.roles };
+    seen = { active: state.activeRole, roles: state.roles, activeRoles: state.activeRoles };
     act?.(state);
     return null;
   }
@@ -164,5 +169,72 @@ describe('where each role lands', () => {
     expect(roleHomePath(roles)).toBe('/admin');
     // …but the switch must be able to reach the other portal.
     expect(homeForRole('teacher')).toBe('/teacher');
+  });
+});
+
+/**
+ * **The two defects R60 shipped, pinned.**
+ *
+ * R60 narrowed the *server* and left the client reading `me.roles` — the full
+ * list `/me` deliberately keeps so the switcher can offer a way back. Every
+ * presentation decision that read it was therefore answering *"what could this
+ * account do"* where the question was *"what is it doing now"*.
+ *
+ * It produced two visible failures, and neither was a routing bug:
+ *
+ *   * `لوحة التحكم` resolved most-privileged-first from the full list, so a
+ *     Super Admin working as مؤطِّرة was sent to `/admin` — a portal her active
+ *     role does not own — and met the wrong-role screen instead of her dashboard.
+ *   * The back-office sidebar listed Super Admin modules to someone acting as
+ *     Admin: a menu of things the server would refuse.
+ *
+ * `activeRoles` is the single thing the interface reads now, and these assert it
+ * behaves as those helpers expect.
+ */
+describe('activeRoles — what the interface reads (R60)', () => {
+  it('is the active role alone, never the account\'s full set', () => {
+    const seen = observe(person(['super_admin', 'admin', 'teacher']));
+    // The menu keeps every role, so switching back stays possible…
+    expect(seen.roles).toEqual(['super_admin', 'admin', 'teacher']);
+    // …while the interface is driven by exactly one.
+    expect(seen.activeRoles).toEqual(['super_admin']);
+  });
+
+  it('follows a switch', () => {
+    observe(person(['super_admin', 'teacher']), (s) => s.setActiveRole('teacher'));
+    const after = observe(person(['super_admin', 'teacher']));
+    expect(after.activeRoles).toEqual(['teacher']);
+    expect(after.roles).toContain('super_admin');
+  });
+
+  it('is empty for an account with no role (§14.4), not a stale one', () => {
+    expect(observe(person([])).activeRoles).toEqual([]);
+  });
+});
+
+describe('the dashboard button opens the ACTIVE role\'s home', () => {
+  it('sends a Super Admin working as مؤطِّرة to /teacher, not /admin', () => {
+    // The reported defect, at its source: the button resolves from whatever list
+    // it is handed, so handing it the full set is what sent her to /admin.
+    expect(roleHomePath(['super_admin', 'admin', 'teacher'])).toBe('/admin');
+    expect(roleHomePath(['teacher'])).toBe('/teacher');
+    expect(roleHomePath(['admin'])).toBe('/admin');
+  });
+});
+
+describe('the menu contains only the active role\'s modules', () => {
+  it('does not offer Super Admin screens to somebody acting as Admin', () => {
+    const asAdmin = visibleModules(['admin']).map((m) => m.path);
+    const asSuper = visibleModules(['super_admin']).map((m) => m.path);
+
+    // Super-Admin-only nodes (§14.1) must be absent from the Admin menu.
+    expect(asSuper).toContain('/superadmin/settings');
+    expect(asAdmin).not.toContain('/superadmin/settings');
+    expect(asAdmin).not.toContain('/admin/trash');
+  });
+
+  it('gives a teacher no back-office menu at all', () => {
+    // The back office is not the teacher's portal; `/teacher` is.
+    expect(visibleModules(['teacher']).map((m) => m.path)).not.toContain('/admin/users');
   });
 });
