@@ -2,6 +2,9 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react';
 
 import {
   approveApproval,
+  decideChildApplication,
+  CHILD_REJECTION_REASONS,
+  type ChildRejectionReason,
   listApprovals,
   rejectApproval,
   type Approval,
@@ -87,6 +90,12 @@ export function ApprovalsPage(): ReactNode {
   /** §4.1 (R43) — approving a registration IS the placement, so the queue
    *  cannot approve one without asking where the student goes. */
   const [placing, setPlacing] = useState<Approval | null>(null);
+  /**
+   * R62.2 — a child-registration request has **no bundle decision at all**: each
+   * child is approved or refused on its own. So it gets its own dialog, and the
+   * generic approve/reject path is never offered for it.
+   */
+  const [childDeciding, setChildDeciding] = useState<Approval | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -187,16 +196,26 @@ export function ApprovalsPage(): ReactNode {
         // Three different acts behind one label. A staff request needs a role;
         // a registration needs a PLACEMENT, without which §4.1 refuses; a
         // family-link request needs neither.
-        row.requested_role
-          ? setStaffApproval(row)
-          : row.type === 'registration'
-            ? setPlacing(row)
-            : setDeciding({ row, approve: true }),
+        // Four different acts behind two labels. A staff request needs a role;
+        // a registration needs a PLACEMENT, without which §4.1 refuses; a
+        // family-link request needs neither; and a child-registration request
+        // has **no bundle decision at all** (R62.2) — each child is decided
+        // alone, so it opens its own dialog for both outcomes.
+        row.type === 'child-application'
+          ? setChildDeciding(row)
+          : row.requested_role
+            ? setStaffApproval(row)
+            : row.type === 'registration'
+              ? setPlacing(row)
+              : setDeciding({ row, approve: true }),
     },
     {
       label: t('admin.approvals.reject'),
       danger: true,
-      onSelect: (row) => setDeciding({ row, approve: false }),
+      onSelect: (row) =>
+        row.type === 'child-application'
+          ? setChildDeciding(row)
+          : setDeciding({ row, approve: false }),
     },
   ];
 
@@ -291,6 +310,7 @@ export function ApprovalsPage(): ReactNode {
               options={[
                 { value: 'registration', label: t('admin.approvals.typeRegistration') },
                 { value: 'family-link', label: t('admin.approvals.typeLink') },
+                { value: 'child-application', label: t('admin.approvals.typeChild') },
               ]}
               onChange={(value) => {
                 setTypeFilter(value as '' | ApprovalType);
@@ -317,11 +337,39 @@ export function ApprovalsPage(): ReactNode {
       {placing ? (
         <PlacementDialog
           row={placing}
+          // The applicant enrols only when there is no child: a bundle with
+          // children is a parent registering a family.
+          students={
+            placing.applicants.filter((a) => a.role === 'child').length > 0
+              ? placing.applicants.filter((a) => a.role === 'child')
+              : placing.applicants.filter((a) => a.role === 'applicant')
+          }
+          title={t('admin.approvals.placeTitle')}
           busy={busy}
           onCancel={() => setPlacing(null)}
-          onConfirm={(enrollments) =>
-            void confirmDecision(undefined, { enrollments, row: placing })
+          onConfirm={(placements) =>
+            void confirmDecision(undefined, {
+              enrollments: placements.map((p) => ({
+                user_id: p.id,
+                administrative_group_id: p.administrative_group_id,
+              })),
+              row: placing,
+            })
           }
+        />
+      ) : null}
+
+      {childDeciding ? (
+        <ChildDecisionDialog
+          row={childDeciding}
+          busy={busy}
+          onCancel={() => setChildDeciding(null)}
+          onDone={async (message) => {
+            setChildDeciding(null);
+            await load();
+            setNotice(message);
+          }}
+          onBusy={setBusy}
         />
       ) : null}
 
@@ -499,20 +547,30 @@ function StaffApprovalDialog({
  */
 function PlacementDialog({
   row,
+  students,
+  title,
   busy,
   onConfirm,
   onCancel,
 }: {
   row: Approval;
+  /**
+   * Who is being placed, as `{ id, name }`.
+   *
+   * **Passed in rather than derived from `row`, because the id means different
+   * things on the two paths that need this picker** — a `User` id on a
+   * registration bundle, a `ChildApplication` id on a child-registration
+   * request, where no `User` exists yet. The Level/group logic is identical and
+   * §4.1 step 1's preselection is identical, so the picker is shared and the
+   * caller owns the meaning of the id.
+   */
+  students: { id: string; name: string }[];
+  title: string;
   busy: boolean;
-  onConfirm: (enrollments: { user_id: string; administrative_group_id: string }[]) => void;
+  onConfirm: (placements: { id: string; administrative_group_id: string }[]) => void;
   onCancel: () => void;
 }): ReactNode {
   const { accessToken } = useSession();
-  // The applicant enrols only when there is no child: a bundle with children is
-  // a parent registering a family.
-  const children = row.applicants.filter((a) => a.role === 'child');
-  const students = children.length > 0 ? children : row.applicants.filter((a) => a.role === 'applicant');
   const studentIds = students.map((s) => s.id);
 
   const [levels, setLevels] = useState<Level[]>([]);
@@ -572,7 +630,7 @@ function PlacementDialog({
   const complete = students.every((s) => choice[s.id]?.groupId);
 
   return (
-    <Dialog open onClose={onCancel} title={t('admin.approvals.placeTitle')}>
+    <Dialog open onClose={onCancel} title={title}>
       <div className="form">
         <p>{t('admin.approvals.placeBody')}</p>
 
@@ -658,13 +716,200 @@ function PlacementDialog({
             onClick={() =>
               onConfirm(
                 students.map((s) => ({
-                  user_id: s.id,
+                  id: s.id,
                   administrative_group_id: choice[s.id]!.groupId,
                 })),
               )
             }
           >
             {t('admin.approvals.approve')}
+          </Button>
+        </div>
+      </div>
+    </Dialog>
+  );
+}
+
+/**
+ * **A child-registration request, decided one child at a time (R62.2).**
+ *
+ * TD-4.2 used to approve a parent, a child and their link atomically as a
+ * bundle. R62 narrowed it to **one child**, for a reason this dialog exists to
+ * express: an approver may admit one sibling and refuse another, and a bundle
+ * decision could not say that. So there is no "approve this request" — the
+ * server refuses that id by name (`DECIDE_PER_CHILD`), and this screen no
+ * longer offers it.
+ *
+ * Each child is therefore its own row with its own outcome:
+ *
+ * * **Approve** carries a placement, because §4.1 (R43) is unchanged by R62 —
+ *   *"an approved account with no enrollment is a person the platform admitted
+ *   and then lost"*. The Level/group picker is `PlacementDialog`'s, shared
+ *   rather than copied; only the meaning of the id differs.
+ * * **Reject** carries a **bounded** reason (R62.8), never free text: it is the
+ *   one thing the parent is told, and a free-text note would eventually carry a
+ *   safeguarding judgement that must not reach them. The staff-only
+ *   `internal_note` is where that belongs.
+ *
+ * **Each child is a separate request and a separate transaction**, so a failure
+ * part-way leaves the earlier decisions standing — exactly what R62.2 says
+ * happens. The result message reports what actually landed rather than what was
+ * attempted.
+ */
+function ChildDecisionDialog({
+  row,
+  busy,
+  onCancel,
+  onDone,
+  onBusy,
+}: {
+  row: Approval;
+  busy: boolean;
+  onCancel: () => void;
+  onDone: (message: string) => Promise<void>;
+  onBusy: (busy: boolean) => void;
+}): ReactNode {
+  const { accessToken } = useSession();
+  const pending = row.children.filter((child) => child.status === 'pending');
+  const [outcome, setOutcome] = useState<Record<string, 'approve' | 'reject'>>({});
+  const [reason, setReason] = useState<Record<string, ChildRejectionReason | ''>>({});
+  const [placeFor, setPlaceFor] = useState<{ application_id: string; name: string }[] | null>(null);
+  const [failure, setFailure] = useState<string | null>(null);
+
+  const chosen = (id: string): 'approve' | 'reject' | undefined => outcome[id];
+  const approving = pending.filter((c) => chosen(c.application_id) === 'approve');
+  const rejecting = pending.filter((c) => chosen(c.application_id) === 'reject');
+  const complete =
+    approving.length + rejecting.length > 0 &&
+    rejecting.every((c) => reason[c.application_id]);
+
+  /** Runs the decisions one at a time and reports what actually landed. */
+  async function apply(
+    placements: Record<string, string>,
+  ): Promise<void> {
+    onBusy(true);
+    setFailure(null);
+    let done = 0;
+    try {
+      for (const child of approving) {
+        await decideChildApplication(
+          child.application_id,
+          { approve: true, administrative_group_id: placements[child.application_id]! },
+          accessToken,
+        );
+        done += 1;
+      }
+      for (const child of rejecting) {
+        await decideChildApplication(
+          child.application_id,
+          { approve: false, rejection_reason: reason[child.application_id] as ChildRejectionReason },
+          accessToken,
+        );
+        done += 1;
+      }
+      await onDone(t('admin.approvals.childDecided').replace('{n}', String(done)));
+    } catch (error) {
+      // Honest about a partial outcome: the decisions already committed are not
+      // undone, and telling the approver otherwise would be worse than the
+      // failure itself.
+      setFailure(
+        `${t('admin.approvals.childPartial').replace('{n}', String(done))} ${
+          error instanceof ApiError ? error.message : ''
+        }`.trim(),
+      );
+      setPlaceFor(null);
+    } finally {
+      onBusy(false);
+    }
+  }
+
+  // Step two: where each approved child goes. Skipped entirely when nobody is
+  // being approved — a request refused outright needs no Level.
+  if (placeFor) {
+    return (
+      <PlacementDialog
+        row={row}
+        students={placeFor.map((c) => ({ id: c.application_id, name: c.name }))}
+        title={t('admin.approvals.placeTitle')}
+        busy={busy}
+        onCancel={() => setPlaceFor(null)}
+        onConfirm={(placements) =>
+          void apply(
+            Object.fromEntries(placements.map((p) => [p.id, p.administrative_group_id])),
+          )
+        }
+      />
+    );
+  }
+
+  return (
+    <Dialog open onClose={onCancel} title={t('admin.approvals.childTitle')}>
+      <div className="form">
+        <p>{t('admin.approvals.childBody')}</p>
+        {failure ? (
+          <p className="state" role="alert">
+            {failure}
+          </p>
+        ) : null}
+
+        {pending.map((child) => (
+          <fieldset key={child.application_id}>
+            <legend>{child.name}</legend>
+            <SelectField
+              label={t('admin.approvals.childOutcome')}
+              value={chosen(child.application_id) ?? ''}
+              onChange={(value) =>
+                setOutcome((current) => ({
+                  ...current,
+                  [child.application_id]: value as 'approve' | 'reject',
+                }))
+              }
+              options={[
+                { value: '', label: t('admin.approvals.childUndecided') },
+                { value: 'approve', label: t('admin.approvals.approve') },
+                { value: 'reject', label: t('admin.approvals.reject') },
+              ]}
+            />
+            {chosen(child.application_id) === 'reject' ? (
+              <SelectField
+                label={t('admin.approvals.childReason')}
+                value={reason[child.application_id] ?? ''}
+                onChange={(value) =>
+                  setReason((current) => ({
+                    ...current,
+                    [child.application_id]: value as ChildRejectionReason,
+                  }))
+                }
+                required
+                options={[
+                  { value: '', label: t('common.choose') },
+                  ...CHILD_REJECTION_REASONS.map((value) => ({
+                    value,
+                    label: t(`admin.approvals.childReason_${value}`),
+                  })),
+                ]}
+                hint={t('admin.approvals.childReasonHint')}
+              />
+            ) : null}
+          </fieldset>
+        ))}
+
+        <div className="form__actions">
+          <Button variant="secondary" onClick={onCancel}>
+            {t('common.cancel')}
+          </Button>
+          <Button
+            variant="primary"
+            disabled={busy || !complete}
+            onClick={() =>
+              approving.length > 0
+                ? setPlaceFor(
+                    approving.map((c) => ({ application_id: c.application_id, name: c.name })),
+                  )
+                : void apply({})
+            }
+          >
+            {t('common.save')}
           </Button>
         </div>
       </div>

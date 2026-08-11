@@ -660,6 +660,16 @@
 - [x] `/dashboard/student` — identity block, today's and upcoming sessions, persistent banner naming whose data is shown
 - [ ] Identity binding → non-blocking review item when a minor gains a login
 
+### R64 — the child-registration flow reconciled (2026-08-11)
+- [x] **The reported `NOT_FOUND` root-caused**: a child-application request id names no `User` and no `FamilyLink`; there is no bundle decision (R62.2). Server refuses it by name (`DECIDE_PER_CHILD`); the queue decides per child
+- [x] **Approving a child was revoking the parent's other roles** — found end-to-end, not by any test. The grant is additive now, pinned by a regression test
+- [x] `ChildApplication.requested_branch_id` written by both paths; queue reports the branch and the filter reaches the type
+- [x] §4.1 placement rule restored on the per-child path (`ENROLLMENT_REQUIRED`); linking an existing account stays exempt
+- [x] «＋ تسجيل طفل» → `/dashboard/student/register-child`, same fields as `/register`; `ولي الأمر` hidden until a child is approved
+- [x] نوع التسجيل relabelled so it stops naming a Category
+- [x] Table rule established and applied (branches +4 columns, levels +1); `إضافة مجموعة` converted to `FormDialog`
+- [ ] **OWNER DECISION — nothing marks the adult Category.** §2.1 says adults hold logins and minors do not, but R27 made the Categories renameable generic rows, so no form can enforce it and matching by name would hardcode reference data. Recommendation: a `Category.holds_own_login` marker. Until then a self-registering adult can request الطفل, and an approver corrects it
+
 ### R62 — deferred by scope, not forgotten
 - [ ] `/dashboard/student/calendar`, `/grades`, `/quran` are §14.1 nodes belonging to later milestones; the dashboard deliberately does not stub them
 - [ ] Still pending the Owner: guardianship verification · right to an actual rejection reason · the three compliance fields · CNDP declaration · Arabic privacy notice

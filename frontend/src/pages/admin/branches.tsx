@@ -112,6 +112,54 @@ export function BranchesPage(): ReactNode {
           <span className="muted">{t('common.notSet')}</span>
         ),
     },
+    /**
+     * **The four fields `BranchInput` collects and this table used not to show.**
+     *
+     * §14.2 calls its column list *"the minimum set"*, which is a floor and was
+     * read as a ceiling: an administrator who entered a phone number, an email,
+     * opening hours and a map link could not see any of them again without
+     * opening the editor, so the screen could not answer *is this branch's
+     * contact information complete* — the question a public directory makes
+     * worth asking (Revision 35 publishes exactly these to anonymous visitors).
+     *
+     * The rule now applied to every management table: **a table shows every
+     * field its own form collects**, minus operational metadata (`version`,
+     * timestamps, `deleted_*`) which belongs to the mechanism rather than the
+     * entity. See `docs/architecture/frontend.md`.
+     */
+    {
+      key: 'phone',
+      header: t('admin.branches.phone'),
+      secondary: true,
+      cell: (r) => r.phone ?? <span className="muted">{t('common.notSet')}</span>,
+    },
+    {
+      key: 'email',
+      header: t('admin.branches.email'),
+      secondary: true,
+      cell: (r) => r.email ?? <span className="muted">{t('common.notSet')}</span>,
+    },
+    {
+      key: 'hours',
+      header: t('admin.branches.openingHours'),
+      secondary: true,
+      cell: (r) => r.opening_hours_ar ?? <span className="muted">{t('common.notSet')}</span>,
+    },
+    {
+      // A URL is unreadable as text and useful as a link, so the cell renders
+      // the affordance rather than 90 characters of query string.
+      key: 'map',
+      header: t('admin.branches.mapsUrl'),
+      secondary: true,
+      cell: (r) =>
+        r.google_maps_url ? (
+          <a href={r.google_maps_url} target="_blank" rel="noreferrer noopener">
+            {t('admin.branches.mapOpen')}
+          </a>
+        ) : (
+          <span className="muted">{t('common.notSet')}</span>
+        ),
+    },
     {
       key: 'order',
       header: t('admin.branches.colOrder'),

@@ -99,6 +99,16 @@ export interface ChildInput {
     | 'post_secondary'
     | 'not_in_school';
   /**
+   * R64 — **the branch and stage asked for, per child.**
+   *
+   * Optional on the wire because `/register` supplies them once for the family
+   * and the server copies them onto each application; the `/dashboard/student`
+   * page collects them per request and sends them here. Both are **requests**,
+   * never placements — nothing reads either to choose, validate or refuse.
+   */
+  requested_branch_id?: string;
+  requested_category_id?: string;
+  /**
    * R62.3b — **per child**, because a parent may permit photographs of one
    * child and refuse for another. A required *decision*; `false` is valid and
    * is stored as a real record, because BR-1 reads an absent record as refusal

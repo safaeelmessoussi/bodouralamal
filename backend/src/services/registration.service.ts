@@ -264,6 +264,10 @@ export async function register(
             // One stage for the family, chosen once (§4.1) — the approver may
             // place each child differently, which is R62.7's whole point.
             requestedCategoryId: input.category_id,
+            // R64 — the same branch, recorded on the CHILD's request as well as
+            // on the applicant's own row. Two paths create these applications
+            // and the approver must not be able to tell which one did.
+            requestedBranchId: input.branch_id,
             consentMediaRelease: c.consent_media_release,
           })),
         });

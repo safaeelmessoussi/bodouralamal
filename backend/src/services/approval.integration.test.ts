@@ -236,7 +236,9 @@ describe('§5.6 / TD-4.2 approval queue', () => {
       prisma,
       await actorFor(prisma, admin),
       applicationId,
-      { approve: true },
+      // R64.5 — approving a child places it, exactly as approving a
+      // registration always has (§4.1).
+      { approve: true, administrativeGroupId: placement.groupId },
     );
     const link = await prisma.familyLink.findFirst({
       where: { parentId, studentId: childResult.childUserId! },

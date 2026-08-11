@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 
 import { useActiveChild } from '../../contexts/active-child.js';
 import { t } from '../../i18n/index.js';
-import { MenuAction, MenuOption } from './menu.js';
+import { MenuOption } from './menu.js';
 
 /**
  * The `ولي الأمر` group inside the account switcher (§4.3, §14.3, R62.9).
@@ -21,17 +21,22 @@ import { MenuAction, MenuOption } from './menu.js';
  * server-side verification is the enforcement. Only approved links reach here,
  * because `GET /me` returns only those.
  *
- * **The «＋ تسجيل طفل» action is persistent** (R62.9): a parent holding the role
- * with no approved children still sees this group, containing only that action.
- * A group that vanished when it was empty would leave such a parent no way to
- * register anybody.
+ * **Registering a child is NOT here.** The action used to live in this group,
+ * so a parent-only account with no approved children saw a switcher containing
+ * one item that was not a context at all. A switcher lists the contexts you may
+ * work in; a registration is a task, and it belongs on a page (§14.1) reached
+ * from the dashboard — where the same fields and the same rules as the public
+ * registration form apply, which a dropdown could never carry.
+ *
+ * The consequence, and it is the intended one: **`ولي الأمر` does not appear at
+ * all until at least one child is approved.** The role exists only once a child
+ * is approved (R62.9 grants it on the first approval), so a group with nothing
+ * in it described a state that cannot occur.
  */
 export function ChildContextSwitcher({
   onSelectChild,
-  onRegisterChild,
 }: {
   onSelectChild: (childId: string) => void;
-  onRegisterChild: () => void;
 }): ReactNode {
   const { children, activeChildId } = useActiveChild();
 
@@ -46,7 +51,6 @@ export function ChildContextSwitcher({
           onSelect={() => onSelectChild(child.id)}
         />
       ))}
-      <MenuAction label={t('child.register')} onSelect={onRegisterChild} />
     </>
   );
 }

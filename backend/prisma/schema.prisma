@@ -587,6 +587,8 @@ model Branch {
   /// Revision 39 — applicants who REQUESTED this branch at registration. Not
   /// the people placed here; that is `groups → StudentGroup`.
   intendedBy           User[]                    @relation("UserIntendedBranch")
+  /// Revision 64 — the branch a child-registration request asked for.
+  childApplications    ChildApplication[]
 
   @@index([displayOrder])
   @@map("branch")
@@ -1243,6 +1245,22 @@ model ChildApplication {
   requestedCategoryId String?   @map("requested_category_id") @db.Uuid
   requestedCategory   Category? @relation(fields: [requestedCategoryId], references: [id], onDelete: Restrict)
 
+  /// Revision 64 — THE BRANCH ASKED FOR, for THIS child.
+  ///
+  /// Revision 39 put `intended_branch_id` on the applicant's `User` row and
+  /// said it is written on the applicant only, never copied onto the child —
+  /// correct while a registration always created a parent row, and a dead end
+  /// once the parent already exists. A second child therefore arrived naming no
+  /// branch at all. Recording it here also lets two siblings be asked for at
+  /// different branches, which one parent-level column could not express.
+  ///
+  /// A REQUEST, never a placement (Revision 39's rule, unchanged): nothing
+  /// reads it to choose, validate or refuse anything. Nullable because
+  /// applications submitted before this revision have no answer, and *not
+  /// stated* is a real state rather than a missing one.
+  requestedBranchId String? @map("requested_branch_id") @db.Uuid
+  requestedBranch   Branch? @relation(fields: [requestedBranchId], references: [id], onDelete: Restrict)
+
   /// R62.3b — as given at submission, never re-read at approval.
   consentDataProcessing Boolean  @map("consent_data_processing")
   consentMediaRelease   Boolean  @map("consent_media_release")
@@ -1274,6 +1292,7 @@ model ChildApplication {
   /// The queue reads pending applications by request; the parent reads their own.
   @@index([requestId])
   @@index([parentId, status])
+  @@index([requestedBranchId])
   @@index([status, createdAt])
   @@map("child_application")
 }

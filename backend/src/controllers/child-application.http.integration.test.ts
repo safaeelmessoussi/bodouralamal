@@ -10,6 +10,7 @@ import {
   type SavedConsentVersion,
 } from '../test-support/consent-setting.js';
 import { httpCall } from '../test-support/http-client.js';
+import { clearPlacement, provisionPlacement, type Placement } from '../test-support/placement.js';
 
 /**
  * Child applications over real HTTP, through Nginx (SRS Revision 62).
@@ -31,6 +32,9 @@ const BASE = `${config.PUBLIC_BASE_URL}/api/v1`;
 const TAG = '[http-childapp-test]';
 
 let savedConsentVersion: SavedConsentVersion | null = null;
+/** R64.5 — approving a child places it (§4.1), so every approval names a group. */
+let placement: Placement;
+const PLACEMENT_TAG = '[http-childapp-test-place]';
 
 interface Body {
   error?: { code?: string; details?: Record<string, unknown> };
@@ -122,6 +126,7 @@ async function clear(): Promise<void> {
       ],
     },
   });
+  await prisma.enrollment.deleteMany({ where: { studentId: { in: ids } } });
   await prisma.user.deleteMany({ where: { id: { in: ids } } });
 }
 
@@ -140,6 +145,7 @@ beforeAll(async () => {
   }
 
   await clear();
+  placement = await provisionPlacement(prisma, PLACEMENT_TAG);
   await prisma.systemSetting.upsert({
     where: { key: CONSENT_TEXT_VERSION_KEY },
     update: { value: 'http-childapp-v1' },
@@ -151,6 +157,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await clear();
+  await clearPlacement(prisma, PLACEMENT_TAG);
   if (savedConsentVersion) await restoreConsentVersion(prisma, savedConsentVersion);
   await prisma.$disconnect();
 });
@@ -242,7 +249,7 @@ describe('POST /admin/child-applications/{id}/decide', () => {
       'POST',
       `/admin/child-applications/${submitted.body.application_ids![0]!}/decide`,
       teacher.token,
-      { approve: true },
+      { approve: true, administrative_group_id: placement.groupId },
     );
     expect(res.status).toBe(403);
   });
@@ -253,9 +260,13 @@ describe('POST /admin/child-applications/{id}/decide', () => {
     const id = submitted.body.application_ids![0]!;
     const first = await call('POST', `/admin/child-applications/${id}/decide`, admin.token, {
       approve: true,
+      administrative_group_id: placement.groupId,
     });
     expect(first.status).toBe(200);
 
+    // Deliberately WITHOUT a placement: TD-15.3's already-decided check runs
+    // before R64.5's placement rule, so a second decision is refused for being
+    // second, not for being incomplete.
     const second = await call('POST', `/admin/child-applications/${id}/decide`, admin.token, {
       approve: true,
     });
@@ -283,7 +294,7 @@ describe('POST /admin/child-applications/{id}/decide', () => {
       'POST',
       `/admin/child-applications/${submitted.body.application_ids![0]!}/decide`,
       admin.token,
-      { approve: true },
+      { approve: true, administrative_group_id: placement.groupId },
     );
     expect(decided.status).toBe(200);
     expect(decided.body.parent_role_granted).toBe(true);
@@ -304,7 +315,7 @@ describe('POST /admin/child-applications/{id}/decide', () => {
       'POST',
       `/admin/child-applications/${submitted.body.application_ids![0]!}/decide`,
       admin.token,
-      { approve: true },
+      { approve: true, administrative_group_id: placement.groupId },
     );
     const token = bearer(parent.id, ['parent']);
     expect((await call('GET', '/me', token)).body.approved_child_links).toHaveLength(1);
@@ -339,7 +350,7 @@ describe('GET /admin/child-applications/{id}/matches', () => {
       'POST',
       `/admin/child-applications/${firstSubmit.body.application_ids![0]!}/decide`,
       admin.token,
-      { approve: true },
+      { approve: true, administrative_group_id: placement.groupId },
     );
 
     // A second parent applies for a child with the same name.

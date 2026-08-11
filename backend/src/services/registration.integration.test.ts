@@ -32,6 +32,9 @@ const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);
 let savedConsentVersion: SavedConsentVersion | null = null;
 const KEY = config.ONBOARDING_TOKEN_KEY;
 const TAG = '[reg-test]';
+/** Deliberately not a prefix-extension of `TAG` — `clear()` sweeps by prefix,
+ *  and a placement caught by it would be deleted before its group. */
+const PLACEMENT_TAG = '[reg-test-place]';
 const TEXT_VERSION = 'reg-test-v1';
 
 let counter = 0;
@@ -66,6 +69,10 @@ const parentChild = (): Extract<RegistrationInput, { kind: 'parent_child' }> => 
  * honest instead of dropping the assertions with the shape that carried them.
  */
 async function approveFirstChild(applicationId: string): Promise<string> {
+  // R64.5 — an approved child must be placed (§4.1). Provisioned here rather
+  // than in `beforeEach` because only the approving tests need it.
+  const { provisionPlacement } = await import('../test-support/placement.js');
+  const placement = await provisionPlacement(prisma, PLACEMENT_TAG);
   const role = await prisma.role.findUnique({ where: { name: 'admin' } });
   const admin = await prisma.user.create({
     data: { nameArabic: `${TAG} مسؤولة`, accountStatus: 'active' },
@@ -79,7 +86,7 @@ async function approveFirstChild(applicationId: string): Promise<string> {
     prisma,
     await actorFor(prisma, admin.id),
     applicationId,
-    { approve: true },
+    { approve: true, administrativeGroupId: placement.groupId },
   );
   return result.childUserId!;
 }
@@ -111,6 +118,10 @@ async function clear(): Promise<void> {
   await prisma.familyLink.deleteMany({
     where: { OR: [{ parentId: { in: ids } }, { studentId: { in: ids } }] },
   });
+  // R64.5 — approving a child now creates an enrolment, and
+  // `enrollment.student_id` is ON DELETE RESTRICT, so it goes before the
+  // student it belongs to.
+  await prisma.enrollment.deleteMany({ where: { studentId: { in: ids } } });
   await prisma.userIdentity.deleteMany({ where: { userId: { in: ids } } });
   await prisma.userBranchRole.deleteMany({ where: { userId: { in: ids } } });
   await prisma.user.deleteMany({ where: { id: { in: ids } } });
@@ -150,6 +161,10 @@ async function waitFor(condition: () => Promise<boolean>, timeoutMs = 15_000): P
 
 afterAll(async () => {
   await clear();
+  // R64.5 — the approving tests provision a placement, and its group holds an
+  // enrolment under RESTRICT, so it goes after the people it enrolled.
+  const { clearPlacement } = await import('../test-support/placement.js');
+  await clearPlacement(prisma, PLACEMENT_TAG);
   // Restore, never delete: deleting left the developer's database with no
   // consent text version, and registration then failed closed for everyone
   // who used the form after a test run (see test-support/consent-setting).

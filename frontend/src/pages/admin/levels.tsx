@@ -108,6 +108,16 @@ export function LevelsPage(): ReactNode {
       cell: (r) => t(`admin.levels.gender.${r.gender_restriction}`),
     },
     {
+      // The fourth field `LevelFormDialog` collects, and the second gap the
+      // R64 table sweep found: §2.2 orders Levels by it, so a screen that
+      // hides it cannot answer *why is this Level listed here*.
+      key: 'order',
+      header: t('admin.levels.colOrder'),
+      numeric: true,
+      secondary: true,
+      cell: (r) => (r.display_order ?? '—') as ReactNode,
+    },
+    {
       key: 'groups',
       header: t('admin.levels.colGroups'),
       numeric: true,

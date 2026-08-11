@@ -1042,6 +1042,57 @@ The whole back office mounts **inside `PendingGuard`**: a sidebar and headings a
 inventing a number would be worse than omitting one — so it lists the modules the session may
 open, with blocked ones marked, and becomes a dashboard when there is something true to count.
 
+## Every table shows every field its own form collects (R64)
+
+**The rule, stated once.** A management table exposes **every field the entity's
+own create/edit form collects**, minus two exceptions:
+
+* **operational metadata** — `version`, `created_at`/`updated_at`, `deleted_*` —
+  which belongs to the mechanism, not to the entity;
+* **a relation the row already names another way**, so it is not printed twice.
+
+§14.2 calls its column list *"the minimum set"*, and that was read as a ceiling.
+The audit that produced this rule found two tables silently short:
+
+| Table | Collected by its form, absent from the table |
+|---|---|
+| `/admin/branches` | `phone`, `email`, `opening_hours_ar`, `google_maps_url` |
+| `/admin/levels` | `display_order` |
+
+Neither omission was a decision. An administrator who entered a branch's phone
+number and opening hours could not see either again without reopening the
+editor, so the screen could not answer *is this branch's public information
+complete* — the question Revision 35 makes worth asking, since exactly those
+fields are published to anonymous visitors.
+
+**A URL renders as an affordance, not as text**: the map column is a link
+labelled «فتح الخريطة», because ninety characters of query string is not
+information. Everything else renders its value or the shared *not set* marker.
+
+Checked and already complete: `/admin/groups`, `/admin/users`, `/admin/subjects`
+and `/admin/categories`. `/admin/trash`, `/admin/schedules` and the occurrences
+list are composite views rather than one entity's CRUD, and the rule does not
+reach them.
+
+## One form pattern: `FormDialog` (R64)
+
+Every create/edit dialog is a `FormDialog`, and every control inside it is a
+`field.tsx` primitive. The component exists precisely to end drift — its own doc
+comment records the Events-versus-Sessions divergence that produced it — and
+`إضافة مجموعة` was the last screen that had not adopted it:
+
+| | `إضافة مجموعة` before | Everything else |
+|---|---|---|
+| Selects | raw `<label><select>` | `SelectField` |
+| Buttons | its own `dialog__actions` row | the shared pair |
+| Save emphasis | default (secondary) | `primary` |
+
+Beside `إضافة مستوى` the difference was visible at a glance, and none of it was
+a decision anybody took. A hand-rolled `<select>` also has no label association,
+no placeholder handling, no required marking and no error announcement except
+what that screen remembers to add, which is the accessibility half of the same
+problem.
+
 ## The family surface: one switcher, one dashboard (R62)
 
 **`ولي الأمر` is not a destination — it is a group.** A parent's home is a *child's*
@@ -1057,12 +1108,19 @@ made one decision into two, and left two places to be wrong about who is current
 which for a parent holding exactly one role hid the entire family surface — the children
 and the registration action are inside that menu.
 
-**«＋ تسجيل طفل» opens a dialog, not a route**, and that is a §20 rule 16 decision: §4.3
-describes the affordance as an action on the switcher, and §14.1 lists no path for it.
-Inventing one would be navigation outside the sitemap. It posts a single child to
-`POST /child-applications` — the public registration form is the multi-child one, because a
-family arrives at once and a parent already on the platform is adding one; a second
-repeatable form would be a second thing to keep in step.
+**R64 moved «＋ تسجيل طفل» out of the switcher onto its own page**,
+`/dashboard/student/register-child`. A switcher lists the *contexts* a person may
+work in and registering is a task — and, more concretely, a dialog opened from a
+menu could only ever carry a subset of what the public form collects. That subset
+is exactly how the two registration paths diverged: a parent adding a second child
+supplied **no branch and no stage**, so the approver received a request missing the
+two things §4.1 step 1 and Revision 39 exist to give them. The page asks what
+`/register`'s child section asks and nothing more. It posts a single child — the
+public form is the multi-child one, because a family arrives at once.
+
+**`ولي الأمر` is offered only once a child is approved.** The entry expands into
+the children and nothing else, so with none approved it would open an empty menu:
+an entry onto nothing is the same defect as a button that renders a blank page.
 
 ### `/dashboard/student` serves two contexts, and says which
 

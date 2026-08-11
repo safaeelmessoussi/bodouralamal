@@ -47,6 +47,13 @@ const submitSchema = z
             schooling_stage: SCHOOLING_STAGE.optional(),
             requested_category_id: z.uuid().optional(),
             /**
+             * R64 — **the branch this child is asked to attend.** Revision 39
+             * put the applicant's own branch on their `User` row; a parent who
+             * already exists has no new row, so a second child arrived naming
+             * none. A request, never a placement.
+             */
+            requested_branch_id: z.uuid().optional(),
+            /**
              * R62.3b — **per child**, because a parent may allow photographs of
              * one and refuse for another. Required rather than optional: BR-1
              * makes absence a refusal, and an unstated answer must not be
@@ -114,6 +121,7 @@ export function submit(prisma: PrismaClient) {
           ...(c.sex ? { sex: c.sex } : {}),
           ...(c.schooling_stage ? { schoolingStage: c.schooling_stage } : {}),
           ...(c.requested_category_id ? { requestedCategoryId: c.requested_category_id } : {}),
+          ...(c.requested_branch_id ? { requestedBranchId: c.requested_branch_id } : {}),
           consentMediaRelease: c.consent_media_release,
         })),
       }),

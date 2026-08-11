@@ -8,7 +8,6 @@ import { useActiveRole } from '../../contexts/active-role.js';
 import { storeActiveRole, useSession } from '../../contexts/session.js';
 import { t } from '../../i18n/index.js';
 import { homeForRole } from '../../lib/role-home.js';
-import { ChildApplicationDialog } from '../child-application-dialog.js';
 import { ChildContextSwitcher } from './child-context-switcher.js';
 import { Menu, MenuOption } from './menu.js';
 
@@ -44,23 +43,35 @@ import { Menu, MenuOption } from './menu.js';
  *
  * **R62.9 — `ولي الأمر` is not a destination, it is a group.** A parent's home
  * is a *child's* dashboard, so selecting the bare role would arrive somewhere
- * with nobody selected. The entry therefore expands into the approved children
- * plus a persistent «＋ تسجيل طفل» action, and picking a child sets the role and
- * the child **in one action** — which is why the separate child dropdown that
- * used to sit beside this one is gone.
+ * with nobody selected. The entry expands into the approved children, and
+ * picking one sets the role and the child **in one action** — which is why the
+ * separate child dropdown that used to sit beside this one is gone.
+ *
+ * **A role with nothing to switch into is not offered.** `ولي الأمر` is hidden
+ * unless at least one child is approved: the group would otherwise be an empty
+ * menu, and an entry that opens onto nothing is the same defect as a button
+ * that renders a blank page. Registering a child is a *task* and lives on its
+ * own page, not in a context switcher (§14.1).
+ *
+ * The rule is applied to the LIST, not inside the group, so the switcher itself
+ * disappears for an account whose only remaining role is one it cannot use.
  */
 export function RoleSwitcher({ inline = false }: { inline?: boolean }): ReactNode {
   const { roles, activeRole, setActiveRole } = useActiveRole();
-  const { setActiveChildId } = useActiveChild();
+  const { children, setActiveChildId } = useActiveChild();
   const { accessToken } = useSession();
   const [busy, setBusy] = useState(false);
-  const [registering, setRegistering] = useState(false);
+
+  // `ولي الأمر` is a group of children; with none approved there is nothing to
+  // switch into, so the role is not offered at all.
+  const selectable = roles.filter((role) => role !== 'parent' || children.length > 0);
 
   // A person holding only `parent` still needs this control: it is the only
   // route to their children. So the "one role, nothing to switch" shortcut has
-  // to make an exception for it, or that account gets no switcher at all.
-  const isParentOnly = roles.length === 1 && roles[0] === 'parent';
-  if ((roles.length < 2 && !isParentOnly) || activeRole === null) return null;
+  // to make an exception for it, or that account gets no switcher at all — but
+  // only once they HAVE a child, which `selectable` already decided.
+  const isParentOnly = selectable.length === 1 && selectable[0] === 'parent';
+  if ((selectable.length < 2 && !isParentOnly) || activeRole === null) return null;
 
   async function select(role: string, childId?: string): Promise<void> {
     setBusy(true);
@@ -89,7 +100,7 @@ export function RoleSwitcher({ inline = false }: { inline?: boolean }): ReactNod
         {(close) => (
           <>
             <p className="menu__group-label">{t('roles.switcherLabel')}</p>
-            {roles.map((role) =>
+            {selectable.map((role) =>
               role === 'parent' ? (
                 <ChildContextSwitcher
                   key="parent"
@@ -97,10 +108,6 @@ export function RoleSwitcher({ inline = false }: { inline?: boolean }): ReactNod
                     close();
                     if (busy) return;
                     void select('parent', childId);
-                  }}
-                  onRegisterChild={() => {
-                    close();
-                    setRegistering(true);
                   }}
                 />
               ) : (
@@ -119,7 +126,6 @@ export function RoleSwitcher({ inline = false }: { inline?: boolean }): ReactNod
           </>
         )}
       </Menu>
-      {registering ? <ChildApplicationDialog onClose={() => setRegistering(false)} /> : null}
     </>
   );
 }

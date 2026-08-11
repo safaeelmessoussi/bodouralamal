@@ -33,7 +33,7 @@ function render(links: { id: string; display_name: string }[]): string {
       }}
     >
       <ActiveChildProvider>
-        <ChildContextSwitcher onSelectChild={() => undefined} onRegisterChild={() => undefined} />
+        <ChildContextSwitcher onSelectChild={() => undefined} />
       </ActiveChildProvider>
     </SessionContext.Provider>,
   );
@@ -53,12 +53,14 @@ describe('the ولي الأمر group (R62.9)', () => {
     expect(html).not.toContain('طفل مرتبط');
   });
 
-  it('carries «＋ تسجيل طفل» PERSISTENTLY — including with no children at all', () => {
-    // R62.9 is explicit: a parent holding the role with no approved children
-    // still sees the group, containing only this action. A group that vanished
-    // when empty would leave that parent no way to register anybody.
-    const html = render([]);
-    expect(html).toContain('تسجيل طفل');
+  it('R64: registering a child is NOT here — a switcher lists contexts, not tasks', () => {
+    // The action used to live in this group, so an account with the role and no
+    // approved children opened a menu containing one item that was not a
+    // context at all — and the dialog it opened could only carry a subset of
+    // the fields the public form collects, which is how the two registration
+    // paths diverged. It is a page now (§14.1).
+    expect(render([])).not.toContain('تسجيل طفل');
+    expect(render([{ id: 'c1', display_name: 'مريم بنعلي' }])).not.toContain('تسجيل طفل');
   });
 
   it('offers a child as a single-choice option, not a link', () => {

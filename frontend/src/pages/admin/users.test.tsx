@@ -49,6 +49,8 @@ const QUEUE_ITEM: Approval = {
   applicants: [{ id: WIRE.id, name: WIRE.name_arabic, role: 'applicant' }],
   submitted_at: '2026-08-05T10:00:00.000Z',
   bundle: { child_count: 0, link_count: 0 },
+  // R62 — a registration bundle carries no child APPLICATIONS.
+  children: [],
   branch: { id: ASSIGNMENT.branch_id!, name: ASSIGNMENT.branch_name! },
   requested_role: null,
   category: { id: '00000000-0000-4000-8000-00000000000a', name: 'طفل' },

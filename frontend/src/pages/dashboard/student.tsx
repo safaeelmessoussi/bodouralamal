@@ -124,9 +124,16 @@ export function StudentDashboard(): ReactNode {
             </>
           ) : null}
 
-          {/* A parent holding the role with no approved children (R62.9): the
-              switcher still carries «＋ تسجيل طفل», so this says what to do
-              rather than leaving an empty screen. */}
+          {/* R64 — registering a child is a TASK and lives on its own page,
+              reached from here rather than from the account switcher. Offered
+              to any adult account: a parent adding another child and an adult
+              student registering one are the same act. */}
+          <p className="register-form__actions">
+            <a className="button secondary" href="/dashboard/student/register-child">
+              {t('studentDashboard.registerChild')}
+            </a>
+          </p>
+
           {asParent && children.length === 0 ? (
             <p className="state" role="status">
               {t('studentDashboard.noChildren')}

@@ -12,7 +12,21 @@ import { api } from '../lib/api.js';
  * find an applicant whose chosen branch is **wrong**, or absent, and correct it.
  */
 
-export type ApprovalType = 'registration' | 'family-link';
+export type ApprovalType = 'registration' | 'family-link' | 'child-application';
+
+/**
+ * One child inside a `child-application` item (R62.1).
+ *
+ * **`application_id`, not a user id** — no `User` exists until the application
+ * is approved, which is exactly what lets a rejected child leave no account and
+ * no link behind.
+ */
+export interface ApprovalChild {
+  application_id: string;
+  name: string;
+  status: 'pending' | 'approved' | 'rejected';
+  schooling_stage: string | null;
+}
 
 export interface ApprovalApplicant {
   id: string;
@@ -55,6 +69,9 @@ export interface Approval {
    * this revision — where it means *not stated*.
    */
   category: { id: string; name: string } | null;
+  /** R62 — present on a `child-application` item; `[]` elsewhere. Each entry is
+   *  decided on its own (R62.2). */
+  children: ApprovalChild[];
 }
 
 export interface Page<T> {
@@ -144,3 +161,57 @@ export async function rejectApproval(
 
 /** TD-9's ceiling for a decision reason (§5.6). */
 export const DECISION_REASON_MAX = 500;
+
+/* ── Child applications: decided ONE CHILD AT A TIME (R62.2) ──────────────── */
+
+/**
+ * **There is no "approve this request".** R62.2 narrowed TD-4.2 from the bundle
+ * to a single child: approving one application creates or links that child,
+ * approves the link, grants the `parent` role if absent and audits — in one
+ * transaction, **leaving every sibling untouched**. An approver may admit one
+ * child and refuse another, which a bundle decision could not express.
+ *
+ * So a queue item of type `child-application` is decided through **this**
+ * endpoint, keyed by `application_id`, never through
+ * `POST /admin/approvals/{id}/approve` — whose id is a `request_id` naming no
+ * `User` and no `FamilyLink`. Sending it there answered `404 NOT_FOUND` for an
+ * item the queue had just rendered; the server now refuses it by name
+ * (`DECIDE_PER_CHILD`) and the client no longer offers it.
+ */
+export interface ChildDecision {
+  approve: boolean;
+  /** §4.1 (R43) — required to approve a NEW child, or the server refuses with
+   *  `ENROLLMENT_REQUIRED`: an admitted account with no enrolment is a person
+   *  the platform admitted and then lost. */
+  administrative_group_id?: string;
+  /** R62.8 — **bounded**, never free text: the reason reaches the parent, and a
+   *  free-text note would eventually carry a safeguarding judgement. */
+  rejection_reason?: ChildRejectionReason;
+  /** Staff-only; never returned to a parent (R62.8). */
+  internal_note?: string;
+}
+
+export type ChildRejectionReason =
+  | 'duplicate_application'
+  | 'insufficient_information'
+  | 'not_eligible'
+  | 'other';
+
+export const CHILD_REJECTION_REASONS: ChildRejectionReason[] = [
+  'duplicate_application',
+  'insufficient_information',
+  'not_eligible',
+  'other',
+];
+
+export async function decideChildApplication(
+  applicationId: string,
+  decision: ChildDecision,
+  token: string | null,
+): Promise<{ child_user_id: string | null; parent_role_granted: boolean }> {
+  return api(`/admin/child-applications/${applicationId}/decide`, {
+    method: 'POST',
+    token,
+    body: decision,
+  });
+}

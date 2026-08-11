@@ -23,7 +23,8 @@ import {
   type TableStatus,
 } from '../../components/ui/data-table.js';
 import { Dialog } from '../../components/ui/dialog.js';
-import { NumberField, SearchInput, TextField } from '../../components/ui/field.js';
+import { FormDialog } from '../../components/ui/form-dialog.js';
+import { NumberField, SearchInput, SelectField, TextField } from '../../components/ui/field.js';
 import { useSession } from '../../contexts/session.js';
 import { useActiveRole } from '../../contexts/active-role.js';
 import { t } from '../../i18n/index.js';
@@ -354,68 +355,62 @@ function GroupDialog({
   const complete = name.trim() !== '' && levelId !== '' && branchId !== '';
 
   return (
-    <Dialog
+    /**
+     * **`FormDialog`, not a hand-assembled `Dialog`** — this form was the last
+     * one that had not adopted it, and it looked it: raw `<label><select>`
+     * pairs instead of `SelectField`, so its labels, hints, required marking
+     * and error wiring came from nothing, and a `dialog__actions` row of its
+     * own rather than the shared one, so its Save button was not even the
+     * emphasised action. Beside `إضافة مستوى` the difference was visible at a
+     * glance and none of it was a decision anybody took.
+     *
+     * `FormDialog` exists precisely to end this drift (see its own doc comment,
+     * which records the Events-versus-Sessions divergence that produced it).
+     */
+    <FormDialog
       open={open}
-      onClose={onCancel}
       title={t(group ? 'admin.groups.editTitle' : 'admin.groups.create')}
+      busy={busy}
+      disabled={!complete}
+      onCancel={onCancel}
+      onSubmit={() =>
+        onSave({
+          name,
+          level_id: levelId,
+          branch_id: branchId,
+          display_order: order.trim() === '' ? null : Number(order),
+        })
+      }
     >
       <TextField label={t('admin.groups.colName')} value={name} onChange={setName} required />
 
-      <label>
-        <span>{t('admin.groups.colLevel')}</span>
-        <select
-          value={levelId}
-          disabled={group !== null}
-          onChange={(e) => setLevelId(e.target.value)}
-        >
-          <option value="">{t('common.choose')}</option>
-          {levels.map((l) => (
-            <option key={l.id} value={l.id}>
-              {l.name}
-            </option>
-          ))}
-        </select>
-      </label>
+      {/* The shared primitive rather than a bare `<select>`: label association,
+          the placeholder option, required marking and error announcement are
+          `field.tsx`'s job, not this screen's to remember. */}
+      <SelectField
+        label={t('admin.groups.colLevel')}
+        value={levelId}
+        onChange={setLevelId}
+        disabled={group !== null}
+        placeholder={t('common.choose')}
+        options={levels.map((level) => ({ value: level.id, label: level.name }))}
+        required
+      />
 
-      <label>
-        <span>{t('admin.groups.colBranch')}</span>
-        <select
-          value={branchId}
-          disabled={group !== null}
-          onChange={(e) => setBranchId(e.target.value)}
-        >
-          <option value="">{t('common.choose')}</option>
-          {branches.map((b) => (
-            <option key={b.id} value={b.id}>
-              {b.name}
-            </option>
-          ))}
-        </select>
-      </label>
+      <SelectField
+        label={t('admin.groups.colBranch')}
+        value={branchId}
+        onChange={setBranchId}
+        disabled={group !== null}
+        placeholder={t('common.choose')}
+        options={branches.map((branch) => ({ value: branch.id, label: branch.name }))}
+        required
+      />
 
       {group ? <p className="muted">{t('admin.groups.fixedAfterCreate')}</p> : null}
 
       <NumberField label={t('admin.groups.colOrder')} value={order} onChange={setOrder} />
-
-      <div className="dialog__actions">
-        <Button variant="secondary" onClick={onCancel}>
-          {t('common.cancel')}
-        </Button>
-        <Button
-          disabled={!complete || busy}
-          onClick={() =>
-            onSave({
-              name,
-              level_id: levelId,
-              branch_id: branchId,
-              display_order: order.trim() === '' ? null : Number(order),
-            })
-          }
-        >
-          {t('common.save')}
-        </Button>
-      </div>
-    </Dialog>
+    </FormDialog>
   );
 }
 

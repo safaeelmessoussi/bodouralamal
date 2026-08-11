@@ -59,10 +59,17 @@ export function BundleSummary({
 }
 
 /** The item's type, in words — §14.2's first column. */
+const TYPE_LABEL: Record<ApprovalType, string> = {
+  registration: 'admin.approvals.typeRegistration',
+  'family-link': 'admin.approvals.typeLink',
+  // R62 — a third type joined the queue and this badge did not know it, so a
+  // child-registration request was labelled «ربط ابن»: the wrong act, and one
+  // whose approval path is a different endpoint entirely (R64.5).
+  'child-application': 'admin.approvals.typeChild',
+};
+
 export function ApprovalTypeBadge({ type }: { type: ApprovalType }): ReactNode {
   return (
-    <Badge tone={type === 'registration' ? 'ok' : 'warn'}>
-      {t(type === 'registration' ? 'admin.approvals.typeRegistration' : 'admin.approvals.typeLink')}
-    </Badge>
+    <Badge tone={type === 'registration' ? 'ok' : 'warn'}>{t(TYPE_LABEL[type])}</Badge>
   );
 }

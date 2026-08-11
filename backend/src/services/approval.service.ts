@@ -238,15 +238,19 @@ export async function listApprovals(
   // sees a family rather than a list of unrelated children, and one decidable
   // block per child inside it, because R62.2 decides a child alone.
   //
-  // A branch filter excludes the whole type: a child application carries no
-  // branch — placement arrives with the Level and Group chosen at approval
-  // (R39 keeps `intended_branch_id` on the applicant alone) — so filtering by
-  // one would silently drop every family rather than narrowing them.
-  if ((!type || type === 'child-application') && !branchId) {
+  // **R64 — the branch filter now reaches this type.** It used to exclude the
+  // whole of it, on the true-at-the-time ground that a child application
+  // carried no branch (R39 kept `intended_branch_id` on the applicant alone).
+  // The request records its own branch since R64, so filtering narrows these
+  // items exactly as it narrows registrations, instead of silently dropping
+  // every family. A request submitted before R64 has none, and a branch filter
+  // excludes it — which is what *not stated* has always meant here.
+  if (!type || type === 'child-application') {
     const pending = await prisma.childApplication.findMany({
       where: {
         status: 'pending',
         deletedAt: null,
+        ...(branchId ? { requestedBranchId: branchId } : {}),
         // **Not the ones already shown on their parent's registration item.**
         // A non-student parent registering produces both a pending applicant
         // and applications; listing them twice would invite an approver to
@@ -258,6 +262,10 @@ export async function listApprovals(
       include: {
         parent: { select: { id: true, nameArabic: true } },
         requestedCategory: { select: { id: true, name: true } },
+        // R64 — the branch this child was asked to attend. Until it existed the
+        // item reported `branch: null` and the §14.2 branch filter could not
+        // reach a child-registration request at all.
+        requestedBranch: { select: { id: true, name: true } },
       },
       orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
     });
@@ -286,7 +294,11 @@ export async function listApprovals(
         // Approving the whole request would create this many children and this
         // many links — though R62.2 lets an approver take them one at a time.
         bundle: { childCount: group.length, linkCount: group.length },
-        branch: null,
+        // The request's branch, which every child in it shares — one form, one
+        // choice. Still `null` for a request submitted before R64.
+        branch: first.requestedBranch
+          ? { id: first.requestedBranch.id, name: first.requestedBranch.name }
+          : null,
         requestedRole: null,
         category: first.requestedCategory
           ? { id: first.requestedCategory.id, name: first.requestedCategory.name }
@@ -556,6 +568,32 @@ export async function decide(
         // told plainly and the UI treats it as "already handled, refreshing".
         throw new AppError('STATE_CONFLICT', 'already decided');
       }
+
+      /**
+       * **R62.2 — a child-application request is NOT decidable here, and this
+       * says so instead of answering `404`.**
+       *
+       * The queue lists those items under a `request_id`, which names no `User`
+       * and no `FamilyLink`, so both lookups above miss and the honest-looking
+       * answer was *"no such approval item"* — for an item the queue had just
+       * rendered. That is what an administrator actually hit.
+       *
+       * The deeper rule is R62.2's: TD-4.2 is **narrowed to one child**, so
+       * there is no such act as "approve this request". Each child is decided
+       * alone, through `POST /admin/child-applications/{id}/decide`. A generic
+       * approval here could only ever be the bundle decision R62 removed.
+       */
+      const childRequest = await tx.childApplication.count({
+        where: { requestId: id, status: 'pending', deletedAt: null },
+      });
+      if (childRequest > 0) {
+        throw new AppError(
+          'VALIDATION_FAILED',
+          'a child-registration request is decided one child at a time (R62.2)',
+          { reason: 'DECIDE_PER_CHILD' },
+        );
+      }
+
       throw new AppError('NOT_FOUND', 'no such approval item');
     }
 

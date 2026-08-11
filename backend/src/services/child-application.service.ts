@@ -50,6 +50,8 @@ export interface ChildApplicationInput {
     | 'post_secondary'
     | 'not_in_school';
   requestedCategoryId?: string;
+  /** R64 — the branch asked for, per child. A request, never a placement. */
+  requestedBranchId?: string;
   /** R62.3b — per child: a parent may permit photographs of one and not another. */
   consentMediaRelease: boolean;
 }
@@ -107,6 +109,7 @@ export async function submitChildApplications(
         lastNameArabic: lastName,
         ...(child.sex ? { sex: child.sex } : {}),
         ...(child.schoolingStage ? { schoolingStage: child.schoolingStage } : {}),
+        ...(child.requestedBranchId ? { requestedBranchId: child.requestedBranchId } : {}),
         ...(child.requestedCategoryId
           ? { requestedCategoryId: child.requestedCategoryId }
           : {}),
@@ -204,6 +207,28 @@ export async function decideChildApplication(
       return { childUserId: null, parentRoleGranted: false };
     }
 
+    /**
+     * **§4.1 (R43) — an approval places the student, or it is refused.**
+     *
+     * > *"Approval and every resulting `Enrollment` row are written in one
+     * > transaction — an approved account with no enrollment is a person the
+     * > platform admitted and then lost."*
+     *
+     * The registration path has enforced this since R43 (`ENROLLMENT_REQUIRED`).
+     * R62 narrowed TD-4.2 to one child and, in doing so, made the placement
+     * *optional* here — so the family route obeyed §4.1 and the per-child route
+     * quietly did not, which is the two-implementations-of-one-rule failure
+     * this project keeps paying for. The rule is restored on this path.
+     *
+     * Linking an EXISTING account is exempt: that student is already placed,
+     * and demanding a second enrolment would mean a Level per parent.
+     */
+    if (!decision.matchExistingUserId && !decision.administrativeGroupId) {
+      throw new AppError('VALIDATION_FAILED', 'an approved child must be placed (§4.1)', {
+        reason: 'ENROLLMENT_REQUIRED',
+      });
+    }
+
     // ── Approval: create or link the child. ─────────────────────────────────
     let childUserId: string;
     let created = false;
@@ -298,12 +323,40 @@ export async function decideChildApplication(
     });
     const parentRoleGranted = holdsParent === 0;
     if (parentRoleGranted) {
-      // Through the one implementation that carries the privilege guard, the
-      // branch-liveness check and the last-administrator rule — so approving
-      // cannot become a second, weaker way to hand out authority.
-      // `branchId: null` is *all branches for this assignment* (R24) — a parent's
-      // reach is their children, not a branch, so scoping it would be meaningless.
+      /**
+       * **The grant is ADDITIVE, and it has to be spelled out that way.**
+       *
+       * `applyRoleAssignments` is the one implementation carrying the privilege
+       * guard, the branch-liveness check and the last-administrator rule, which
+       * is why approval routes through it rather than inserting a row — but its
+       * contract is *"these are now the account's assignments"*, **not** *"add
+       * this one"*. Passing `[{ parent }]` alone therefore **revoked every other
+       * role the parent held**: a مؤطِّرة who registered her own daughter stopped
+       * being a teacher the moment an administrator approved the child, and for
+       * the last Super Admin `assertNotLastSuperAdmin` refused the approval
+       * outright — so the child could not be admitted at all.
+       *
+       * Found by walking the flow end to end as a Super Admin, not by any test:
+       * every suite granted `parent` to an account that held nothing else, where
+       * a replace and an append are indistinguishable.
+       *
+       * Passing the UNION keeps the guard honest as well as the roles: nothing
+       * privileged appears in `changing`, so an Admin approver is not refused
+       * for a privilege they are not altering.
+       *
+       * `branchId: null` is *all branches for this assignment* (R24) — a
+       * parent's reach is their children, not a branch, so scoping it would be
+       * meaningless.
+       */
+      const live = await tx.userBranchRole.findMany({
+        where: { userId: application.parentId, deletedAt: null },
+        select: { branchId: true, role: { select: { name: true } } },
+      });
       await applyRoleAssignments(tx, actor, application.parentId, [
+        ...live.map((assignment) => ({
+          role: assignment.role.name,
+          branchId: assignment.branchId,
+        })),
         { role: 'parent', branchId: null },
       ]);
     }

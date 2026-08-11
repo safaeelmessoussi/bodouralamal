@@ -11,6 +11,7 @@ import { SessionPage } from './pages/session.js';
 import { TeacherRouter } from './pages/teacher/index.js';
 import { CalendarPage } from './pages/calendar.js';
 import { StudentDashboard } from './pages/dashboard/student.js';
+import { RegisterChildPage } from './pages/dashboard/register-child.js';
 import { Landing } from './pages/landing.js';
 import { Register } from './pages/register.js';
 import {
@@ -89,6 +90,13 @@ function App(): React.ReactNode {
       return (
         <PendingGuard>
           <StudentDashboard />
+        </PendingGuard>
+      );
+    case 'register-child':
+      // §14.1 (R64). Authenticated like every dashboard screen.
+      return (
+        <PendingGuard>
+          <RegisterChildPage />
         </PendingGuard>
       );
     case 'screen-pending':

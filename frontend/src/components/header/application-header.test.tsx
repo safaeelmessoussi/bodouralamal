@@ -119,8 +119,26 @@ describe('the switchers appear only when they mean something', () => {
   });
 
   it('a multi-role account gets one (§2.1)', () => {
-    const html = render('authenticated', person({ roles: ['parent', 'teacher'] }));
+    const html = render(
+      'authenticated',
+      person({
+        roles: ['parent', 'teacher'],
+        approved_child_links: [{ id: 'c1', display_name: 'مريم بنعلي' }],
+      }),
+    );
     expect(html).toContain('اختر الدور الذي تعمل به');
+  });
+
+  it('R64: ولي الأمر with no approved child is not a role you can switch into', () => {
+    // The entry expands into the children and nothing else, so with none
+    // approved it would open an empty menu — the same defect as a button that
+    // renders a blank page. Here it leaves the account one usable role, and the
+    // switcher disappears with it.
+    const html = render(
+      'authenticated',
+      person({ roles: ['parent', 'teacher'], approved_child_links: [] }),
+    );
+    expect(html).not.toContain('اختر الدور الذي تعمل به');
   });
 
   it('R62.9: a parent-only account still gets the switcher — it is their only route to a child', () => {

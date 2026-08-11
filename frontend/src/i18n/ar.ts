@@ -46,14 +46,18 @@ export const ar = {
     switcherLabel: 'الطفل الحالي',
     switcherHint: 'اختر الطفل الذي تتابع بياناته',
     none: 'لا يوجد أطفال مرتبطون',
-    // R62.9 — the persistent action inside the ولي الأمر group. A parent with
-    // no approved children still sees the group, containing only this.
+    // R64 — a PAGE (§14.1), not an item in the account switcher: a switcher
+    // lists the contexts you may work in, and registering is a task.
     register: '＋ تسجيل طفل',
+    registerTitle: 'تسجيل ابن/ابنة',
+    registerLede:
+      'يُملأ هذا النموذج بنفس المعطيات المطلوبة في طلب الانضمام. يصل الطلب إلى الإدارة لمراجعته.',
     registerSubmit: 'إرسال الطلب',
+    registerSubmittedTitle: 'وصل طلبك',
     registerSubmitted:
       'وصل الطلب إلى الإدارة لمراجعته. لا يمنحك إرساله أي صلاحية على بيانات الطفل؛ يظهر الطفل في قائمة التبديل بعد الموافقة.',
-    registerConsent: 'أوافق على معالجة بيانات الطفل لأغراض التسجيل والمتابعة التربوية.',
     registerFailed: 'تعذّر إرسال الطلب. يرجى المحاولة من جديد.',
+    backToDashboard: 'العودة إلى اللوحة',
   },
   // §5.3 (R62.10) — one screen, two contexts: the caller's own record, or the
   // child they are acting for. The banner names which.
@@ -61,7 +65,8 @@ export const ar = {
     title: 'لوحة الطالبة',
     viewingChild: 'تتابعين بيانات: {name}',
     chooseChild: 'اختاري الطفل الذي تتابعين بياناته من قائمة التبديل في الأعلى.',
-    noChildren: 'لا يوجد أطفال معتمدون بعد. يمكنك تسجيل طفل من «＋ تسجيل طفل» في قائمة التبديل.',
+    noChildren: 'لا يوجد أطفال معتمدون بعد.',
+    registerChild: '＋ تسجيل ابن/ابنة',
     referenceCode: 'الرمز المرجعي',
     category: 'الفئة',
     level: 'المستوى',
@@ -258,17 +263,17 @@ export const ar = {
     title: 'طلب الانضمام',
     lede: 'املأ البيانات التالية. سيراجع مشرف الجمعية طلبك قبل تفعيل الحساب.',
     kindLabel: 'نوع التسجيل',
-    kindAdult: 'تسجيل شخصي (الكبار)',
-    kindParentChild: 'تسجيل ولي أمر مع ابن/ابنة',
+    kindAdult: 'أُسجّل نفسي',
+    kindParentChild: 'أُسجّل ابناً/ابنة إلى جانب حسابي',
     kindTeacher: 'أرغب في الالتحاق بهيئة التأطير',
     categoryLabel: 'الفئة',
     categoryEmpty: 'اختاري الفئة…',
-    categoryHint: 'المرحلة التعليمية المطلوبة. تُقترح منها المستويات عند الموافقة، والقرار النهائي للإدارة.',
+    categoryHint: 'المرحلة التعليمية المطلوبة للطالب/ة. تُقترح منها المستويات عند الموافقة، والقرار النهائي للإدارة.',
     errCategory: 'اختاري الفئة.',
     // يُقال صراحةً: الطلب لا يمنح شيئًا، والصفة تُسنَد بعد الموافقة.
     teacherNotice:
       'سيصل طلبك إلى الإدارة لمراجعته. لا يمنحك إرسال الطلب أي صلاحية؛ تُسنَد صفة الأستاذة عند الموافقة.',
-    kindHint: 'اختر «ولي أمر» إذا كنت تسجّل ابناً أو ابنة إلى جانب حسابك.',
+    kindHint: 'هذا السؤال عن **مَن** يُسجَّل، لا عن المرحلة التعليمية؛ تُحدَّد الفئة في الأسفل.',
     you: 'بياناتك',
     parent: 'بيانات ولي الأمر',
     child: 'بيانات الابن/الابنة',
@@ -981,6 +986,7 @@ export const ar = {
       email: 'البريد الإلكتروني',
       openingHours: 'أوقات العمل',
       mapsUrl: 'رابط الخريطة',
+      mapOpen: 'فتح الخريطة',
       addressHint: '5 أحرف على الأقل. يظهر هذا العنوان للزوار في الصفحة الرئيسية.',
       // §7: free text, displayed verbatim and NEVER parsed — the hint says so,
       // because the next reader will otherwise expect a weekday grid.
@@ -1026,6 +1032,19 @@ export const ar = {
       filterType: 'نوع الطلب',
       filterAll: 'كل الأنواع',
       typeRegistration: 'تسجيل جديد',
+      typeChild: 'طلب تسجيل ابن/ابنة',
+      childTitle: 'البتّ في طلب تسجيل الأبناء',
+      childBody: 'يُبتّ في كل ابن/ابنة على حدة؛ يمكنك قبول واحد ورفض آخر في نفس الطلب.',
+      childOutcome: 'القرار',
+      childUndecided: 'دون قرار الآن',
+      childReason: 'سبب الرفض',
+      childReasonHint: 'يُبلَّغ ولي الأمر بهذا السبب، ولذلك فهو من لائحة محدَّدة.',
+      childReason_duplicate_application: 'طلب مكرَّر',
+      childReason_insufficient_information: 'معطيات غير كافية',
+      childReason_not_eligible: 'لا تنطبق الشروط',
+      childReason_other: 'سبب آخر',
+      childDecided: 'تمّ البتّ في {n} من الطلبات.',
+      childPartial: 'تمّ البتّ في {n} فقط؛ لم تُلغَ القرارات التي تمّت.',
       typeLink: 'ربط ابن',
       role: {
         applicant: 'مقدّم الطلب',
