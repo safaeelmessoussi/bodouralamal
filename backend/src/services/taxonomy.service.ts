@@ -97,6 +97,7 @@ export async function createSubject(
     });
     await audit.write(tx, {
       actorUserId: actor.userId,
+      activeRole: actor.activeRole,
       actionType: 'subject.create',
       targetEntity: 'Subject',
       targetId: subject.id,
@@ -173,6 +174,7 @@ export async function deleteSubject(prisma: PrismaClient, actor: Actor, id: stri
     });
     await audit.write(tx, {
       actorUserId: actor.userId,
+      activeRole: actor.activeRole,
       actionType: 'subject.delete',
       targetEntity: 'Subject',
       targetId: id,
@@ -239,6 +241,7 @@ export async function createCategory(
     });
     await audit.write(tx, {
       actorUserId: actor.userId,
+      activeRole: actor.activeRole,
       actionType: 'category.create',
       targetEntity: 'Category',
       targetId: category.id,
@@ -337,6 +340,7 @@ export async function deleteCategory(prisma: PrismaClient, actor: Actor, id: str
     });
     await audit.write(tx, {
       actorUserId: actor.userId,
+      activeRole: actor.activeRole,
       actionType: 'category.delete',
       targetEntity: 'Category',
       targetId: id,

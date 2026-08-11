@@ -126,6 +126,7 @@ export async function preProvision(
     // that a named Google address may claim must be attributable to its creator.
     await audit.write(tx, {
       actorUserId: actor.userId,
+      activeRole: actor.activeRole,
       actionType: 'user.create',
       targetEntity: 'User',
       targetId: user.id,
@@ -415,6 +416,7 @@ export async function updateUser(
     // would make search find some rows and not others with nothing failing.
     await audit.write(tx, {
       actorUserId: actor.userId,
+      activeRole: actor.activeRole,
       actionType: 'user.update',
       targetEntity: 'User',
       targetId: id,
@@ -475,6 +477,7 @@ export async function suspendUser(
 
     await audit.write(tx, {
       actorUserId: actor.userId,
+      activeRole: actor.activeRole,
       actionType: 'user.suspend',
       targetEntity: 'User',
       targetId: id,
@@ -482,7 +485,12 @@ export async function suspendUser(
     });
     // TD-4.15, in this transaction and not after it. Writes its own
     // `auth.token_revoked` row naming the affected session ids.
-    await revokeAllSessions(tx, { userId: id, reason: 'suspension', actorUserId: actor.userId });
+    await revokeAllSessions(tx, {
+      userId: id,
+      reason: 'suspension',
+      actorUserId: actor.userId,
+      activeRole: actor.activeRole,
+    });
   });
 
   return readOne(prisma, id);
@@ -520,6 +528,7 @@ export async function reactivateUser(
 
     await audit.write(tx, {
       actorUserId: actor.userId,
+      activeRole: actor.activeRole,
       actionType: 'user.reactivate',
       targetEntity: 'User',
       targetId: id,
@@ -622,7 +631,7 @@ async function assertNotLastSuperAdmin(
  */
 export async function applyRoleAssignments(
   tx: Prisma.TransactionClient,
-  actor: { userId: string; roles: string[] },
+  actor: { userId: string; roles: string[]; activeRole?: string | undefined },
   id: string,
   assignments: RoleAssignmentInput[],
 ): Promise<void> {
@@ -699,6 +708,7 @@ export async function applyRoleAssignments(
 
     await audit.write(tx, {
       actorUserId: actor.userId,
+      activeRole: actor.activeRole,
       actionType: 'user.roles_set',
       targetEntity: 'User',
       targetId: id,

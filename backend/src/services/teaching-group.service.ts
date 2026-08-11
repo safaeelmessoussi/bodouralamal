@@ -145,6 +145,7 @@ export async function createTeachingGroup(
 
     await audit.write(tx, {
       actorUserId: actor.userId,
+      activeRole: actor.activeRole,
       actionType: 'teachinggroup.create',
       targetEntity: 'TeachingGroup',
       targetId: group.id,
@@ -184,6 +185,7 @@ export async function updateTeachingGroup(
     });
     await audit.write(tx, {
       actorUserId: actor.userId,
+      activeRole: actor.activeRole,
       actionType: 'teachinggroup.update',
       targetEntity: 'TeachingGroup',
       targetId: id,
@@ -251,6 +253,7 @@ export async function deleteTeachingGroup(
     });
     await audit.write(tx, {
       actorUserId: actor.userId,
+      activeRole: actor.activeRole,
       actionType: 'teachinggroup.delete',
       targetEntity: 'TeachingGroup',
       targetId: id,
@@ -339,6 +342,7 @@ export async function addMember(
 
     await audit.write(tx, {
       actorUserId: actor.userId,
+      activeRole: actor.activeRole,
       actionType: 'teachinggroup.member_add',
       targetEntity: 'StudentTeachingGroup',
       targetId: row.id,
@@ -403,6 +407,7 @@ export async function removeMember(
     });
     await audit.write(tx, {
       actorUserId: actor.userId,
+      activeRole: actor.activeRole,
       actionType: 'teachinggroup.member_remove',
       targetEntity: 'StudentTeachingGroup',
       targetId: row.id,

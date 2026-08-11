@@ -384,6 +384,7 @@ export async function decide(
 
       await audit.write(tx, {
         actorUserId: actor.userId,
+        activeRole: actor.activeRole,
         actionType: decision.approve ? 'user.approve' : 'user.reject',
         targetEntity: 'User',
         targetId: applicant.id,
@@ -442,6 +443,7 @@ export async function decide(
     });
     await audit.write(tx, {
       actorUserId: actor.userId,
+      activeRole: actor.activeRole,
       actionType: decision.approve ? 'familylink.approve' : 'familylink.reject',
       targetEntity: 'FamilyLink',
       targetId: link.id,

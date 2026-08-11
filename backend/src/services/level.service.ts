@@ -262,6 +262,7 @@ export async function deleteLevel(prisma: PrismaClient, actor: Actor, id: string
     });
     await audit.write(tx, {
       actorUserId: actor.userId,
+      activeRole: actor.activeRole,
       actionType: 'level.delete',
       targetEntity: 'Level',
       targetId: id,
@@ -328,6 +329,7 @@ export async function createLevel(
 
     await audit.write(tx, {
       actorUserId: actor.userId,
+      activeRole: actor.activeRole,
       actionType: 'level.create',
       targetEntity: 'Level',
       targetId: level.id,

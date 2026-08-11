@@ -178,6 +178,7 @@ export async function createPhysicalExam(
 
     await audit.write(tx, {
       actorUserId: actor.userId,
+      activeRole: actor.activeRole,
       actionType: 'exam.create',
       targetEntity: 'Exam',
       targetId: exam.id,
@@ -281,6 +282,7 @@ export async function updatePhysicalExam(
 
     await audit.write(tx, {
       actorUserId: actor.userId,
+      activeRole: actor.activeRole,
       actionType: 'exam.update',
       targetEntity: 'Exam',
       targetId: id,
@@ -331,6 +333,7 @@ export async function deleteExam(prisma: PrismaClient, actor: Actor, id: string)
     });
     await audit.write(tx, {
       actorUserId: actor.userId,
+      activeRole: actor.activeRole,
       actionType: 'exam.delete',
       targetEntity: 'Exam',
       targetId: id,

@@ -195,6 +195,7 @@ export async function overrideSession(
 
     await audit.write(tx, {
       actorUserId: actor.userId,
+      activeRole: actor.activeRole,
       actionType: 'session.override',
       targetEntity: 'Session',
       targetId: sessionId,
@@ -252,6 +253,7 @@ export async function cancelSession(
     });
     await audit.write(tx, {
       actorUserId: actor.userId,
+      activeRole: actor.activeRole,
       actionType: 'session.cancel',
       targetEntity: 'Session',
       targetId: sessionId,
@@ -301,6 +303,7 @@ export async function restoreSession(
     });
     await audit.write(tx, {
       actorUserId: actor.userId,
+      activeRole: actor.activeRole,
       actionType: 'session.restore',
       targetEntity: 'Session',
       targetId: sessionId,
@@ -331,6 +334,7 @@ export async function markHeld(
     });
     await audit.write(tx, {
       actorUserId: actor.userId,
+      activeRole: actor.activeRole,
       actionType: 'session.held',
       targetEntity: 'Session',
       targetId: sessionId,
@@ -380,6 +384,7 @@ export async function linkContent(
 
     await audit.write(tx, {
       actorUserId: actor.userId,
+      activeRole: actor.activeRole,
       actionType: 'session.content_link',
       targetEntity: 'Session',
       targetId: sessionId,
@@ -428,6 +433,7 @@ export async function unlinkContent(
     });
     await audit.write(tx, {
       actorUserId: actor.userId,
+      activeRole: actor.activeRole,
       actionType: 'session.content_unlink',
       targetEntity: 'Session',
       targetId: sessionId,
@@ -574,6 +580,7 @@ async function regenerateOne(
 
     await audit.write(tx, {
       actorUserId: actor.userId,
+      activeRole: actor.activeRole,
       actionType: 'session.regenerate',
       targetEntity: 'Session',
       targetId: sessionId,

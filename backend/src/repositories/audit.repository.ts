@@ -89,6 +89,20 @@ export interface AuditEntry {
    * re-evaluation job has no operator. The action type and detail carry the why.
    */
   actorUserId: string | null;
+  /**
+   * **R60.8 — the capacity the actor was working in**, alongside and never
+   * instead of `actorUserId`.
+   *
+   * The account stays the accountable identity. This answers a different
+   * question: *"the Super Admin deleted it"* and *"the Super Admin, working as
+   * مؤطِّرة, deleted it"* describe different events, and a trail that records
+   * only the first cannot tell them apart.
+   *
+   * `undefined` for an un-narrowed session and for the system-initiated writes
+   * where `actorUserId` is null too — there is genuinely no capacity to record.
+   * Stored inside `detail`, which every row already has, so no schema change.
+   */
+  activeRole?: string | undefined;
   actionType: string;
   targetEntity?: string;
   targetId?: string;
@@ -103,7 +117,13 @@ export async function write(db: Db, entry: AuditEntry): Promise<void> {
       actionType: entry.actionType,
       targetEntity: entry.targetEntity ?? null,
       targetId: entry.targetId ?? null,
-      detail: entry.detail,
+      // Merged into `detail` rather than added as a column: one short string on
+      // an existing JSONB field, and no migration for a field that is absent on
+      // system-initiated rows anyway.
+      detail:
+        entry.activeRole === undefined
+          ? entry.detail
+          : { ...(entry.detail as object), active_role: entry.activeRole },
     },
   });
 }

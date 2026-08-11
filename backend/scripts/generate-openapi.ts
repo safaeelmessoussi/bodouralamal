@@ -175,6 +175,30 @@ const document = {
         },
       ),
     },
+    '/auth/switch-role': {
+      post: op(
+        'Work as one of your own assigned roles',
+        '**SRS Revision 60.3 — the Active Role.** A person holding several roles (§2.1) chooses which one they are currently working as. Body `{ role }`; answers `{ access_token, expires_at, active_role }`. **The returned token is already NARROWED**: `roles[]` and `role_scopes[]` carry only that role\'s entry, so every authorization check in the platform narrows without any of them knowing this endpoint exists — a Super Admin working as `teacher` is refused by `isSuperAdmin` everywhere, including the Trash\'s destructive verbs. **§4.2 is unchanged**: scope still resolves per role, and the retained entry keeps its own branches, so a مؤطِّرة scoped to Marrakesh stays scoped to Marrakesh. **Decided against LIVE rows, never against the presented token** — the caller\'s current token may itself be narrowed, and reading it here would make the first switch a one-way door. **No logout, no new session, no refresh-cookie change.** **Not the load-bearing path**: the client holds the access token in memory and switching navigates by full page load, so `POST /auth/refresh` is what makes an active role persist; this endpoint exists for the immediate coded refusal and the `auth.role_switch` audit row. **A SAFETY mechanism, not containment** (§60.0) — switching back is self-service and instant, so it prevents accidents and makes testing-as-a-role truthful rather than defending against a hostile Super Admin.',
+        {
+          '200': 'Switched; the token is narrowed to the requested role.',
+          '400': `${ENVELOPE} VALIDATION_FAILED when no role is given.`,
+          '401': ENVELOPE,
+          '403': `${ENVELOPE} FORBIDDEN with details.reason ROLE_NOT_ASSIGNED — the live rows do not carry that role for this account. 403 rather than 404: the caller is authenticated and the roles are their own, so there is nothing to hide.`,
+        },
+      ),
+    },
+    '/auth/switch-role': {
+      post: op(
+        'Work as one of your own assigned roles',
+        '**SRS Revision 60.3 — the Active Role.** A person holding several roles (§2.1) chooses which one they are currently working as. **`{ role }`**; answers `{ access_token, expires_at, active_role }`. **The returned token is already NARROWED**: `roles[]` and `role_scopes[]` carry only that role\'s entry, so every authorization check in the platform — all 103 of them — narrows without any of them knowing this endpoint exists. A Super Admin working as `teacher` is refused by `isSuperAdmin` everywhere, including the Trash\'s destructive verbs. **§4.2 is unchanged**: scope still resolves per role, and the retained entry keeps its own branches, so a مؤطِّرة scoped to Marrakesh stays scoped to Marrakesh. **Decided against LIVE rows, never against the presented token** — the caller\'s current token may itself be narrowed, and reading it here would make the first switch a one-way door. **No logout, no new session, no refresh-cookie change**: the refresh chain records *who is signed in*, and this changes only *in what capacity*. **Not the load-bearing path**, despite appearances — the client holds the access token in memory and switching navigates by full page load, so `POST /auth/refresh` is what makes an active role persist; this endpoint exists for the immediate coded refusal and the `auth.role_switch` audit row. **This is a SAFETY mechanism, not containment** (§60.0): switching back is self-service and instant, so it cannot defend against a Super Admin who intends harm — it prevents accidents and makes testing-as-a-role truthful.',
+        {
+          '200': 'Switched; the token is narrowed to the requested role.',
+          '400': `${ENVELOPE} VALIDATION_FAILED when no role is given.`,
+          '401': ENVELOPE,
+          '403': `${ENVELOPE} FORBIDDEN with details.reason ROLE_NOT_ASSIGNED — the live rows do not carry that role for this account. 403 rather than 404: the caller is authenticated and the roles are their own, so there is nothing to hide.`,
+        },
+      ),
+    },
     '/auth/logout': {
       post: op(
         'Log out of the current session',
@@ -186,7 +210,14 @@ const document = {
       get: op(
         'Current identity',
         'Identity, roles, branch scopes, account_status and approved child links. The only ' +
-          'endpoint (with logout) that a Pending session may call (TD-1).',
+          'endpoint (with logout) that a Pending session may call (TD-1). ' +
+          '**R60.9: `roles[]` and `role_scopes[]` here are the LIVE assignments, read from the ' +
+          'database rather than from the token, plus `active_role` — the one the session is ' +
+          'currently working as, or `null` when un-narrowed.** Under an active role the token ' +
+          'carries exactly one role, so reading it here would leave the switcher a menu of one ' +
+          'and the person could narrow themselves and never widen again. This endpoint and ' +
+          'authorization deliberately read different things: `/me` answers *what may this ' +
+          'person become*, authorization answers *what is this person now*.',
         { '200': 'Current user.', '401': ENVELOPE },
       ),
     },

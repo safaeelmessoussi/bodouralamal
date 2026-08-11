@@ -139,6 +139,7 @@ export async function createBranch(
     });
     await audit.write(tx, {
       actorUserId: actor.userId,
+      activeRole: actor.activeRole,
       actionType: 'branch.create',
       targetEntity: 'Branch',
       targetId: branch.id,
@@ -238,6 +239,7 @@ export async function deleteBranch(
     });
     await audit.write(tx, {
       actorUserId: actor.userId,
+      activeRole: actor.activeRole,
       actionType: 'branch.delete',
       targetEntity: 'Branch',
       targetId: id,
@@ -286,6 +288,7 @@ export async function createRoom(
     const room = await tx.room.create({ data: { name: data.name, branchId } });
     await audit.write(tx, {
       actorUserId: actor.userId,
+      activeRole: actor.activeRole,
       actionType: 'room.create',
       targetEntity: 'Room',
       targetId: room.id,
@@ -351,6 +354,7 @@ export async function deleteRoom(prisma: PrismaClient, actor: Actor, id: string)
     });
     await audit.write(tx, {
       actorUserId: actor.userId,
+      activeRole: actor.activeRole,
       actionType: 'room.delete',
       targetEntity: 'Room',
       targetId: id,

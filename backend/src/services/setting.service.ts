@@ -162,6 +162,7 @@ export async function updateSetting(
     // question a compliance review actually asks.
     await audit.write(tx, {
       actorUserId: actor.userId,
+      activeRole: actor.activeRole,
       actionType: 'setting.update',
       targetEntity: 'SystemSetting',
       // No `targetId`: a SystemSetting's identity IS its key, and it is a

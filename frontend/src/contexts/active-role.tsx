@@ -29,6 +29,17 @@ import { useSession } from './session.js';
  * anything either.** Narrowing server authority to the active role would be a
  * new normative concept and needs its own SRS revision.
  *
+ * ## R60 — the server is now the authority
+ *
+ * This began as a client-only context, and it is now a *reflection* of a real
+ * authorization state. `me.active_role` is what the token actually carries, so
+ * the interface can no longer disagree with what the server will accept: if the
+ * requested role was revoked, refresh fell back to another and said so, and this
+ * shows that one.
+ *
+ * `sessionStorage` still holds the **request** — what this tab asks for on its
+ * next refresh — which is a different thing from what it was granted.
+ *
  * ## Why this one persists when the active child does not
  *
  * `ActiveChildProvider` deliberately keeps nothing: a stale child in storage
@@ -99,6 +110,8 @@ export function ActiveRoleProvider({ children }: { children: ReactNode }): React
   const { me } = useSession();
   const [stored, setStored] = useState<string | null>(readStored);
 
+  // `me.roles` stays the LIVE assignment list even while the token is narrowed
+  // (R60.9), which is what keeps the menu complete and the switch reversible.
   const roles = useMemo(() => orderedRoles(me?.roles ?? []), [me]);
 
   const setActiveRole = useCallback(
@@ -123,8 +136,16 @@ export function ActiveRoleProvider({ children }: { children: ReactNode }): React
     // privileged one rather than leaving the interface in a role that was
     // revoked — the same reasoning `ActiveChildProvider` applies to a revoked
     // link, reached differently because this value is persisted.
-    return { roles, activeRole: resolveActiveRole(stored, roles), setActiveRole };
-  }, [roles, stored, setActiveRole]);
+    // **The server's answer first.** `me.active_role` is what the token carries;
+    // the stored value is only what this tab intends to request next. They differ
+    // exactly when a role was revoked, and the granted one is the truth.
+    const granted = me?.active_role ?? null;
+    return {
+      roles,
+      activeRole: granted ?? resolveActiveRole(stored, roles),
+      setActiveRole,
+    };
+  }, [roles, stored, setActiveRole, me]);
 
   return <ActiveRoleContext.Provider value={value}>{children}</ActiveRoleContext.Provider>;
 }

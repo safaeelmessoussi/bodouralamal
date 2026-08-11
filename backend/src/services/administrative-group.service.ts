@@ -122,6 +122,7 @@ export async function createAdministrativeGroup(
 
     await audit.write(tx, {
       actorUserId: actor.userId,
+      activeRole: actor.activeRole,
       actionType: 'administrativegroup.create',
       targetEntity: 'AdministrativeGroup',
       targetId: group.id,
@@ -165,6 +166,7 @@ export async function updateAdministrativeGroup(
     });
     await audit.write(tx, {
       actorUserId: actor.userId,
+      activeRole: actor.activeRole,
       actionType: 'administrativegroup.update',
       targetEntity: 'AdministrativeGroup',
       targetId: id,
@@ -239,6 +241,7 @@ export async function deleteAdministrativeGroup(
     });
     await audit.write(tx, {
       actorUserId: actor.userId,
+      activeRole: actor.activeRole,
       actionType: 'administrativegroup.delete',
       targetEntity: 'AdministrativeGroup',
       targetId: id,

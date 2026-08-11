@@ -93,7 +93,7 @@ async function authorize(
    */
   caller: Actor,
   studentId: string,
-): Promise<{ userId: string; roles: string[] }> {
+): Promise<{ userId: string; roles: string[]; activeRole?: string | undefined }> {
   // R60 — the FRESH, narrowed roles are returned, not the token's. A caller
   // acting as مؤطِّرة must be audited and evaluated as مؤطِّرة even when the
   // account also holds Admin.
@@ -101,7 +101,7 @@ async function authorize(
   // The narrowed scopes, so §4.2's per-role resolution runs on the role being
   // exercised rather than on every role the account holds.
   await assertCanAccessStudent(prisma, { userId: actor.userId, roleScopes: actor.roleScopes }, studentId);
-  return { userId: actor.userId, roles: actor.roles };
+  return { userId: actor.userId, roles: actor.roles, activeRole: caller.activeRole };
 }
 
 /** `GET /students/{id}/social-profile` — audited read (TD-8 R28). */
@@ -119,6 +119,7 @@ export async function readProfile(
   // Audited even when no profile exists yet: the attempt to look is the event.
   await audit.write(prisma, {
     actorUserId: acting.userId,
+    activeRole: acting.activeRole,
     actionType: 'socialprofile.view',
     targetEntity: 'StudentSocialProfile',
     targetId: row?.id ?? studentId,
@@ -160,6 +161,7 @@ export async function writeProfile(
 
     await audit.write(tx, {
       actorUserId: acting.userId,
+      activeRole: acting.activeRole,
       actionType: 'socialprofile.update',
       targetEntity: 'StudentSocialProfile',
       targetId: row.id,

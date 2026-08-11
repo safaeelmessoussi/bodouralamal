@@ -14,6 +14,14 @@ export interface Me {
   roles: string[];
   /** One entry per role; `branches: null` = all branches (§4.2 Revision 24). */
   role_scopes: { role: string; branches: string[] | null }[];
+  /**
+   * R60 — which of `roles` this session is working as; `null` when un-narrowed.
+   *
+   * `roles` above stays the LIVE assignment list even while narrowed, because
+   * the switcher's menu is built from it: reporting only the active role would
+   * let a person narrow themselves and never widen again.
+   */
+  active_role: string | null;
   approved_child_links: string[];
 }
 
@@ -34,19 +42,61 @@ export const SessionContext = createContext<SessionState | null>(null);
  *  concurrent callers await its result. */
 let inFlightRefresh: Promise<string | null> | null = null;
 
+/**
+ * The role this tab is working as (R60), kept where a full page load survives.
+ *
+ * The access token lives in memory and the role switch navigates, so without
+ * this the narrowing would be destroyed by the navigation that caused it. It is
+ * a *request*, never an authority: the server validates it against live rows and
+ * answers with the role it actually granted.
+ */
+const ACTIVE_ROLE_KEY = 'bodour.activeRole';
+
+export function storedActiveRole(): string | null {
+  try {
+    return window.sessionStorage.getItem(ACTIVE_ROLE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function storeActiveRole(role: string | null): void {
+  try {
+    if (role === null) window.sessionStorage.removeItem(ACTIVE_ROLE_KEY);
+    else window.sessionStorage.setItem(ACTIVE_ROLE_KEY, role);
+  } catch {
+    // Storage disabled: the tab still works, it simply forgets on navigation.
+  }
+}
+
 export async function refreshAccessToken(): Promise<string | null> {
   inFlightRefresh ??= (async () => {
     try {
+      const requested = storedActiveRole();
       const response = await fetch('/api/v1/auth/refresh', {
         method: 'POST',
         // TD-12: the refresh endpoint is the only cookie-authenticated route and
         // additionally requires this custom header, which a cross-site form
         // cannot set.
-        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        headers: {
+          'X-Requested-With': 'XMLHttpRequest',
+          'Content-Type': 'application/json',
+        },
         credentials: 'same-origin',
+        // R60.4 — re-asserted on every refresh. Omitting it would silently widen
+        // the session back to every role held, which is the one failure mode the
+        // fail-safe rule exists to prevent.
+        body: JSON.stringify(requested === null ? {} : { active_role: requested }),
       });
       if (!response.ok) return null;
-      const body = (await response.json()) as { access_token: string };
+      const body = (await response.json()) as {
+        access_token: string;
+        active_role: string | null;
+      };
+      // **The server's answer wins.** When the requested role has been revoked it
+      // falls back to another assignment and says which — storing what we asked
+      // for would leave the tab claiming a role it no longer has.
+      storeActiveRole(body.active_role);
       return body.access_token;
     } catch {
       return null;

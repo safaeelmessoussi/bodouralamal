@@ -163,6 +163,7 @@ export async function assignSubjectToLevel(
 
     await audit.write(tx, {
       actorUserId: actor.userId,
+      activeRole: actor.activeRole,
       actionType: 'levelsubject.assign',
       targetEntity: 'LevelSubject',
       targetId: id,
@@ -221,6 +222,7 @@ export async function unassignSubjectFromLevel(
     });
     await audit.write(tx, {
       actorUserId: actor.userId,
+      activeRole: actor.activeRole,
       actionType: 'levelsubject.unassign',
       targetEntity: 'LevelSubject',
       targetId: row.id,

@@ -37,6 +37,7 @@ const person = (over: Partial<Me> = {}): Me => ({
   account_status: 'active',
   roles: ['student'],
   role_scopes: [{ role: 'student', branches: null }],
+  active_role: null,
   approved_child_links: [],
   ...over,
 });

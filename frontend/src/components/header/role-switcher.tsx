@@ -1,6 +1,10 @@
 import type { ReactNode } from 'react';
 
+import { useState } from 'react';
+
+import { switchRole } from '../../adapters/auth.js';
 import { useActiveRole } from '../../contexts/active-role.js';
+import { storeActiveRole, useSession } from '../../contexts/session.js';
 import { t } from '../../i18n/index.js';
 import { homeForRole } from '../../lib/role-home.js';
 import { Menu, MenuOption } from './menu.js';
@@ -25,13 +29,39 @@ import { Menu, MenuOption } from './menu.js';
  * this application navigates. It also guarantees every screen re-reads the new
  * active role rather than half of them keeping the old one.
  *
- * **What it does not do:** grant anything. TD-2 is enforced server-side on every
- * request from the JWT, which carries every role the caller holds. Switching
- * chooses a portal; it never widens or narrows authority.
+ * **R60 — it now changes AUTHORITY, not only presentation.** The server mints a
+ * token narrowed to the chosen role, so a Super Admin working as مؤطِّرة is
+ * refused Super Admin operations until they switch back. The request is stored
+ * before navigating, because the next page re-acquires its token from
+ * `/auth/refresh` and that is what makes the choice persist.
+ *
+ * **A safety mechanism, not containment** (§60.0): switching back is one click,
+ * so this prevents accidents and makes testing-as-a-role truthful. It does not
+ * defend against a Super Admin who intends harm.
  */
 export function RoleSwitcher({ inline = false }: { inline?: boolean }): ReactNode {
   const { roles, activeRole, setActiveRole } = useActiveRole();
+  const { accessToken } = useSession();
+  const [busy, setBusy] = useState(false);
   if (roles.length < 2 || activeRole === null) return null;
+
+  async function select(role: string): Promise<void> {
+    setBusy(true);
+    try {
+      // The server decides. It refuses a role the live rows do not carry, which
+      // is why this asks rather than assumes.
+      const result = await switchRole(role, accessToken);
+      storeActiveRole(result.active_role);
+      setActiveRole(result.active_role);
+      const home = homeForRole(result.active_role);
+      // A role §14.1 gives no home stays put; the context has still changed.
+      window.location.assign(home ?? window.location.pathname);
+    } catch {
+      // Refused, or offline. The menu closes and nothing changed — the token in
+      // hand is still the one that was working a moment ago.
+      setBusy(false);
+    }
+  }
 
   return (
     <Menu label={t('roles.switcherHint')} triggerLabel={roleLabel(activeRole)} inline={inline}>
@@ -45,14 +75,8 @@ export function RoleSwitcher({ inline = false }: { inline?: boolean }): ReactNod
               selected={role === activeRole}
               onSelect={() => {
                 close();
-                if (role === activeRole) return;
-                setActiveRole(role);
-
-                // A role §14.1 gives no home stays where it is rather than
-                // navigating nowhere. The context has still changed, so the
-                // navigation and the portal follow on this page.
-                const home = homeForRole(role);
-                if (home !== null) window.location.assign(home);
+                if (role === activeRole || busy) return;
+                void select(role);
               }}
             />
           ))}

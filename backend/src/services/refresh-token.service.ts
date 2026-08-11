@@ -271,6 +271,9 @@ export async function revokeAllSessions(
     reason: RefreshRevokedReason;
     /** Null for system-initiated revocation; the admin's id for suspension. */
     actorUserId: string | null;
+    /** R60.8 — the capacity a suspending admin acted in. Absent when the
+     *  revocation is system-initiated, where there is no capacity to record. */
+    activeRole?: string | undefined;
   },
   now: Date = new Date(),
 ): Promise<{ sessionIds: string[]; tokenCount: number }> {
@@ -280,6 +283,7 @@ export async function revokeAllSessions(
   // session existed" is itself the answer to "why is there no revocation row?".
   await audit.write(db, {
     actorUserId: params.actorUserId,
+    ...(params.activeRole !== undefined ? { activeRole: params.activeRole } : {}),
     actionType: audit.AUDIT_ACTIONS.tokenRevoked,
     targetEntity: 'User',
     targetId: params.userId,

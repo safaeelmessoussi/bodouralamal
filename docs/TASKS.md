@@ -644,6 +644,18 @@
 - [x] **Two silently-dropped fields fixed on the update path**: `title` and — since R55 — `effective_until`. The regression tests read the ROW, never the status code
 - [ ] The remaining fixture titles from before the seed fix still read `[تجريبي] حدث …`; they are data and were not rewritten. Say the word and they can be cleaned
 
+### R60 — the Active Role as a security context (2026-08-11)
+- [x] `active_role` JWT claim; the token is **already narrowed** when it is present
+- [x] `POST /auth/switch-role` — live rows decide, 403 `ROLE_NOT_ASSIGNED` otherwise, audited
+- [x] TD-12 freshness narrows too — the split that would have left high-risk endpoints unrestricted
+- [x] Refresh re-asserts, returns the granted role, and fails safe to the most privileged remaining
+- [x] `/me` reads live rows so the switcher keeps its menu
+- [x] `active_role` on every audit row where a capacity exists
+- [x] nginx exception so switching is not rate-limited as a credential surface
+- [x] 16 security tests: switching, tampering, revoked roles, concurrent devices, privilege boundaries, branch scope
+- [ ] §4.3 Student/Parent now follows the active role — **worth a QA pass with a real dual-role account** once a parent portal exists
+- [ ] Audit rows omit the capacity where none exists (login, registration, system-initiated). Stated in R60.8 rather than forced
+
 ### Role switching (§2.1) — 2026-08-09
 - [x] Active-role context, defaulting to the most privileged role held, persisted and validated against `/me`
 - [x] Switching redirects to that role's home; the back office resolves modules from the active role

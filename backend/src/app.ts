@@ -29,6 +29,7 @@ import type { PrismaClient } from './generated/prisma/client.js';
 import { verifyAccessToken } from './lib/access-token.js';
 import type { AppConfig } from './lib/config.js';
 import { AppError } from './lib/errors.js';
+import { toRoleScopes } from './policies/branch-scope.js';
 import { createStorageClients } from './lib/storage.js';
 import { authenticate, optionalAuthenticate } from './middleware/authenticate.js';
 import {
@@ -60,16 +61,36 @@ function meController(prisma: PrismaClient, config: AppConfig) {
     const user = await prisma.user.findUnique({ where: { id: verified.claims.sub } });
     if (!user || user.deletedAt !== null) throw new AppError('AUTH_REQUIRED', 'account unavailable');
 
-    const links = await prisma.familyLink.findMany({
-      where: { parentId: user.id, status: 'approved', deletedAt: null },
-      select: { studentId: true },
-    });
+    // **R60.9 — LIVE roles, not the token's.** Under an active role the token
+    // carries exactly one, and reading it here would leave the switcher with a
+    // menu of one: the person could narrow themselves and never widen again.
+    //
+    // This endpoint and authorization deliberately read different things.
+    // `/me` answers *what may this person become*; authorization answers *what
+    // is this person now*. One indexed query, on a request that already makes
+    // two.
+    const [links, assignments] = await Promise.all([
+      prisma.familyLink.findMany({
+        where: { parentId: user.id, status: 'approved', deletedAt: null },
+        select: { studentId: true },
+      }),
+      prisma.userBranchRole.findMany({
+        where: { userId: user.id, deletedAt: null },
+        include: { role: true },
+      }),
+    ]);
+    const liveScopes = toRoleScopes(assignments);
 
     res.json({
       id: user.id,
       account_status: user.accountStatus,
-      roles: verified.claims.roles,
-      role_scopes: verified.claims.role_scopes,
+      roles: liveScopes.map((scope) => scope.role),
+      role_scopes: liveScopes,
+      /**
+       * R60 — which of those the session is currently working as. `null` for an
+       * un-narrowed session, which is a real answer rather than a missing one.
+       */
+      active_role: verified.claims.active_role ?? null,
       // §14.3 ChildContextSwitcher renders approved links only (§4.3).
       approved_child_links: links.map((link) => link.studentId),
     });
@@ -130,6 +151,10 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
 
   const guarded = express.Router();
   guarded.use(authenticate(config));
+  // R60.3 — work as a different one of your OWN roles. Guarded, because it acts
+  // on the caller's identity; the roles it will accept come from live rows, not
+  // from the presented token, so switching back out of a narrowed session works.
+  guarded.post('/auth/switch-role', auth.switchRole(prisma, config));
   // Approvals (§5.6, TD-3.2). TD-12 marks these high-risk, so the service
   // re-asserts the caller's live status against the database per request.
   // Platform settings (TD-3.11, §5.6, Revision 42). Super Admin only, asserted

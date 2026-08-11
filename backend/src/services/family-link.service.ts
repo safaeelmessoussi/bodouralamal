@@ -96,6 +96,7 @@ export async function createLink(
     // member creating a route into a minor's record must be attributable.
     await audit.write(tx, {
       actorUserId: actor.userId,
+      activeRole: actor.activeRole,
       actionType: 'familylink.create',
       targetEntity: 'FamilyLink',
       targetId: link.id,
@@ -168,6 +169,7 @@ export async function revokeLink(
     });
     await audit.write(tx, {
       actorUserId: actor.userId,
+      activeRole: actor.activeRole,
       actionType: 'familylink.revoke',
       targetEntity: 'FamilyLink',
       targetId: link.id,

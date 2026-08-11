@@ -428,6 +428,7 @@ export async function completeUpload(
     });
     await audit.write(tx, {
       actorUserId: actor.userId,
+      activeRole: actor.activeRole,
       actionType: 'content.upload',
       targetEntity: 'EducationalContent',
       targetId: claims.cid,
@@ -529,6 +530,7 @@ async function replaceContentFile(
     });
     await audit.write(tx, {
       actorUserId: actor.userId,
+      activeRole: actor.activeRole,
       actionType: 'content.replace',
       targetEntity: 'EducationalContent',
       targetId: claims.cid,
@@ -597,6 +599,7 @@ export async function deleteContent(
     });
     await audit.write(tx, {
       actorUserId: actor.userId,
+      activeRole: actor.activeRole,
       actionType: 'content.delete',
       targetEntity: 'EducationalContent',
       targetId: contentId,

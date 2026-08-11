@@ -27,6 +27,7 @@ const person = (roles: string[]): Me => ({
   account_status: 'active',
   roles,
   role_scopes: roles.map((role) => ({ role, branches: null })),
+  active_role: null,
   approved_child_links: [],
 });
 

@@ -158,6 +158,7 @@ export async function recordStaffConsent(
 
     await audit.write(tx, {
       actorUserId: actor.userId,
+      activeRole: actor.activeRole,
       actionType: decision.granted ? 'consent.grant' : 'consent.revoke',
       targetEntity: 'ConsentRecord',
       targetId: record.id,

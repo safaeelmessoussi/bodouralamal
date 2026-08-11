@@ -299,6 +299,7 @@ export async function recordMonthStart(
 
     await audit.write(tx, {
       actorUserId: actor.userId,
+      activeRole: actor.activeRole,
       actionType: 'hijri.month_start.record',
       targetEntity: 'HijriMonthStart',
       targetId: row.id,
@@ -351,6 +352,7 @@ export async function publishYear(
 
     await audit.write(tx, {
       actorUserId: actor.userId,
+      activeRole: actor.activeRole,
       actionType: 'hijri.year.publish',
       targetEntity: 'HijriMonthStart',
       detail: { hijri_year: year, months_published: drafts.length },
@@ -484,6 +486,7 @@ export async function deleteMonthStart(
 
     await audit.write(tx, {
       actorUserId: actor.userId,
+      activeRole: actor.activeRole,
       actionType: 'hijri.month_start.delete',
       targetEntity: 'HijriMonthStart',
       targetId: row.id,

@@ -504,6 +504,7 @@ export async function restoreEntry(
 
     await audit.write(tx, {
       actorUserId: actor.userId,
+      activeRole: actor.activeRole,
       actionType: 'trash.restore',
       targetEntity: entry.targetEntity,
       targetId: entry.targetId,
@@ -582,6 +583,7 @@ export async function purgeEntry(
         await tx.trash.delete({ where: { id } });
         await audit.write(tx, {
           actorUserId: actor.userId,
+          activeRole: actor.activeRole,
           actionType: 'trash.permanent_delete',
           targetEntity: entry.targetEntity,
           targetId: entry.targetId,
@@ -612,6 +614,7 @@ export async function purgeEntry(
       // outlives the audit-purge horizon.
       await audit.write(tx, {
         actorUserId: actor.userId,
+        activeRole: actor.activeRole,
         actionType: 'trash.permanent_delete',
         targetEntity: entry.targetEntity,
         targetId: entry.targetId,

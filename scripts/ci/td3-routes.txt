@@ -33,6 +33,7 @@
 GET /auth/google                              # TD-3.1, §4.1b step 1
 GET /auth/google/callback                     # TD-3.1, §4.1b steps 2-4
 POST /auth/refresh                            # TD-3.1, TD-12
+POST /auth/switch-role                        # §2.1 (R60.3) — work as one of your own assigned roles; live rows decide
 POST /auth/logout                             # TD-3.1, TD-4.14
 GET /me                                       # TD-3.1, TD-1
 

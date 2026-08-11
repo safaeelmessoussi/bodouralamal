@@ -460,6 +460,7 @@ export async function createCourseSchedule(
 
     await audit.write(tx, {
       actorUserId: actor.userId,
+      activeRole: actor.activeRole,
       actionType: 'courseschedule.create',
       targetEntity: 'RecurringCourseSchedule',
       targetId: schedule.id,
@@ -598,6 +599,7 @@ export async function updateCourseSchedule(
 
     await audit.write(tx, {
       actorUserId: actor.userId,
+      activeRole: actor.activeRole,
       actionType: 'courseschedule.update',
       targetEntity: 'RecurringCourseSchedule',
       targetId: id,
@@ -797,6 +799,7 @@ async function splitCourseSchedule(
 
     await audit.write(tx, {
       actorUserId: actor.userId,
+      activeRole: actor.activeRole,
       actionType: 'courseschedule.update',
       targetEntity: 'RecurringCourseSchedule',
       targetId: id,
@@ -891,6 +894,7 @@ export async function deleteCourseSchedule(
 
     await audit.write(tx, {
       actorUserId: actor.userId,
+      activeRole: actor.activeRole,
       actionType: 'courseschedule.delete',
       targetEntity: 'RecurringCourseSchedule',
       targetId: id,

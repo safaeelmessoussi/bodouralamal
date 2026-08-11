@@ -197,6 +197,7 @@ export async function createEvent(
 
     await audit.write(tx, {
       actorUserId: actor.userId,
+      activeRole: actor.activeRole,
       actionType: 'event.create',
       targetEntity: 'Event',
       targetId: event.id,
@@ -349,6 +350,7 @@ export async function updateEvent(
 
     await audit.write(tx, {
       actorUserId: actor.userId,
+      activeRole: actor.activeRole,
       actionType: 'event.update',
       targetEntity: 'Event',
       targetId: id,
@@ -428,6 +430,7 @@ export async function deleteEvent(
     });
     await audit.write(tx, {
       actorUserId: actor.userId,
+      activeRole: actor.activeRole,
       actionType: 'event.delete',
       targetEntity: 'Event',
       targetId: id,
@@ -510,6 +513,7 @@ export async function backfillAttach(
 
     await audit.write(tx, {
       actorUserId: actor.userId,
+      activeRole: actor.activeRole,
       actionType: 'event.backfill',
       targetEntity: 'Branch',
       targetId: branchId,

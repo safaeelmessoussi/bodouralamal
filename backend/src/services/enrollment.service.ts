@@ -323,6 +323,7 @@ export async function enrolInGroup(
 
     await audit.write(tx, {
       actorUserId: actor.userId,
+      activeRole: actor.activeRole,
       actionType: 'enrollment.create',
       targetEntity: 'Enrollment',
       targetId: row.id,
@@ -443,6 +444,7 @@ export async function unenrolStudent(
 
     await audit.write(tx, {
       actorUserId: actor.userId,
+      activeRole: actor.activeRole,
       actionType: 'enrollment.delete',
       targetEntity: 'Enrollment',
       targetId: row.id,
@@ -538,6 +540,7 @@ export async function moveStudent(
 
     await audit.write(tx, {
       actorUserId: actor.userId,
+      activeRole: actor.activeRole,
       actionType: 'enrollment.move',
       targetEntity: 'Enrollment',
       targetId: moved.id,

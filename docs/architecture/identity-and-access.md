@@ -274,19 +274,61 @@ pointless churn.
 A person may hold several roles at once (§2.1), and the header carries an
 **account switcher** for choosing between them.
 
-**The active role is a context, not a permission.** It selects which portal,
-navigation and home page the interface presents. It does **not** change what the
-server will accept: §4.2 resolves scope per role from the JWT, which carries
-every role held, so a Super Admin acting as مؤطِّرة still *is* a Super Admin to
-every endpoint. Narrowing server authority to the selected role would be a new
-normative concept and needs its own SRS revision — it is deliberately not
-implied by the switcher.
+**R60 made it a real authorization context.** It was a client-side context; it
+is now a **JWT claim**, and a Super Admin working as مؤطِّرة genuinely loses
+Super Admin authority until they switch back.
+
+**Safety, not containment.** Switching back is self-service and instant, so this
+cannot defend against a Super Admin who intends harm — and no design allowing
+instant switching could. What it delivers is what it was approved for: testing
+the platform exactly as another role experiences it, and an accidental click
+while acting as مؤطِّرة that cannot delete a branch.
+
+### How one claim narrows 103 call sites
+
+Every authorization decision in the backend reads `Actor.roleScopes` — 103
+references across 28 files, through five helpers in `branch-scope.ts`. When
+`active_role` is present, `issueAccessToken` emits `role_scopes[]` **already
+filtered to that one role**, and `roles[]` is derived from it, so both narrow
+together.
+
+Nothing downstream was edited. More importantly, nothing downstream *can*
+consult an un-narrowed array, because none exists in that request.
+
+```
+narrowToRole(scopes, 'teacher')  →  [ { role: 'teacher', branches: [...] } ]
+        ↓
+isSuperAdmin(scopes) === false   →  refused at all 44 call sites
+branchesForRole()                →  the Super Admin short-circuit stops applying
+```
+
+**§4.2 is untouched.** Scope still resolves per role; the array simply has one
+entry, and that entry keeps its own `branches`, so a مؤطِّرة scoped to Marrakesh
+stays scoped to Marrakesh.
+
+### The two places that would have leaked
+
+**TD-12 freshness** rebuilds roles from live rows and *ignores the token*. Left
+alone it would have handed back full Super Admin authority on exactly the
+endpoints TD-12 protects — everything narrowing except the most dangerous
+surfaces. `assertFreshActive` now takes the active role, checks it is still
+assigned, and returns scopes narrowed to it. This is the single largest risk the
+revision carried, and `active-role.http.integration.test.ts` mutation-proves it:
+reverting only that narrowing turns `/admin/settings` green for a teacher.
+
+**`/me`** reads **live** rows rather than the token. Under an active role the
+token carries one role, so reading the claim would leave the switcher a menu of
+one — the person could narrow themselves and never widen again. `/me` answers
+*what may this person become*; authorization answers *what is this person now*.
 
 | Question | Answer |
 |---|---|
-| Where does it live? | `contexts/active-role.tsx`, client-side, mirroring the active-child context |
-| How is it persisted? | `sessionStorage`, **validated against `/me` on every read** |
-| Does switching re-issue a token? | **No.** The token already carries every role; re-issuing would buy nothing and would make switching slow |
+| Where does it live? | The **JWT**, as `active_role` (R60). The client mirrors it in `contexts/active-role.tsx` |
+| How is it persisted? | Not server-side at all — **no column on `User` or `RefreshToken`**. The claim is in the token, and the token is per-device |
+| Does switching re-issue a token? | **Yes** — `POST /auth/switch-role`, one indexed query and one signature. No logout, no new session |
+| What makes it survive a page load? | `POST /auth/refresh`. The client holds the token in memory and switching navigates by full page load, so **refresh is the load-bearing path**; it re-asserts the role and returns the one it granted |
+| A revoked active role? | Refresh **falls back to the most privileged still-valid assignment** and says so — never a silent widening back to every role |
+| Concurrent devices? | Different active roles by construction: two tokens, no shared state, nothing to reconcile |
 | Can a person select a role they lack? | No. The list comes from `/me`, which is derived from the server-issued token, and `setActiveRole` refuses anything outside it |
 | What happens on switch? | The context changes and the browser navigates to that role's home (`homeForRole`) |
 | A role with no portal? | `/dashboard/parent` and `/dashboard/student` resolve to the **`screen-pending`** state — "not built yet" is a different fact from "does not exist" and gets a different page |
