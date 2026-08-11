@@ -44,7 +44,7 @@ export const PUBLIC_LINKS: NavLink[] = [
  */
 export function buildNavigation(
   status: 'loading' | 'anonymous' | 'authenticated',
-  me: { roles: string[]; approved_child_links: string[] } | null,
+  me: { roles: string[]; approved_child_links: { id: string }[] } | null,
 ): Navigation {
   const isAuthenticated = status === 'authenticated' && me !== null;
 

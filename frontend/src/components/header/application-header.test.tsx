@@ -130,7 +130,7 @@ describe('the switchers appear only when they mean something', () => {
   });
 
   it('a parent with an approved link gets one (§4.3)', () => {
-    const html = render('authenticated', person({ roles: ['parent'], approved_child_links: ['c1'] }));
+    const html = render('authenticated', person({ roles: ['parent'], approved_child_links: [{ id: 'c1', display_name: 'مريم بنعلي' }] }));
     expect(html).toContain('اختر الطفل الذي تتابع بياناته');
   });
 });

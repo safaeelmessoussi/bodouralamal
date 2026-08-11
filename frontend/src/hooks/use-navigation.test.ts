@@ -19,7 +19,9 @@ const authed = (over: Partial<{ roles: string[]; children: string[] }> = {}) => 
     account_status: 'active' as const,
     roles: over.roles ?? ['student'],
     role_scopes: (over.roles ?? ['student']).map((role) => ({ role, branches: null })),
-    approved_child_links: over.children ?? [],
+    // R62 — each link carries the child's name; the switcher labels an
+    // option with a person rather than an array index.
+    approved_child_links: (over.children ?? []).map((id) => ({ id, display_name: id })),
   },
 });
 

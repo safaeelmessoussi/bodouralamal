@@ -22,7 +22,11 @@ export interface Me {
    * let a person narrow themselves and never widen again.
    */
   active_role: string | null;
-  approved_child_links: string[];
+  /**
+   * R62 — the approved links, each carrying the child's name so the account
+   * switcher can label an option with a person rather than an index.
+   */
+  approved_child_links: { id: string; display_name: string }[];
 }
 
 interface SessionState {

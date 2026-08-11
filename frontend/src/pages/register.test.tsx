@@ -23,15 +23,27 @@ const person = {
   notes: '',
   sex: 'female' as const,
 };
+/** R62 — a child is no longer a `person`: no phone, no notes, and two
+ *  decisions of its own. */
+const child = {
+  firstNameArabic: 'مريم',
+  lastNameArabic: 'بنعلي',
+  firstNameFrench: '',
+  lastNameFrench: '',
+  nickname: '',
+  sex: 'female' as const,
+  schoolingStage: '' as const,
+  mediaRelease: '' as const,
+};
 const base = {
   // R49 — the FORM's three options, not the wire's two `kind`s.
   intent: 'adult' as const,
   applicant: person,
-  child: person,
+  // R62.1 — an array, because one request may carry several children.
+  children: [child],
   branchId: 'b1',
   categoryId: 'c1',
   dataProcessing: true,
-  mediaRelease: '' as const,
 };
 
 describe('§4.1 Revision 39 — the branch is a required choice', () => {
@@ -70,15 +82,29 @@ describe('consent rules (§4.1, BR-1)', () => {
   it('requires a media-release DECISION for a minor, and accepts "no"', () => {
     const parentChild = { ...base, intent: 'parent_child' as const };
     // Unanswered is refused…
-    expect(validate(parentChild)).toHaveProperty('mediaRelease');
+    expect(validate(parentChild)).toHaveProperty('children.0.mediaRelease');
     // …but declining is a valid, recorded answer. BR-1 reads an absent record
     // as refusal, so "no" and "unanswered" must not collapse into each other.
-    expect(validate({ ...parentChild, mediaRelease: 'no' })).toEqual({});
-    expect(validate({ ...parentChild, mediaRelease: 'yes' })).toEqual({});
+    expect(validate({ ...parentChild, children: [{ ...child, mediaRelease: 'no' }] })).toEqual({});
+    expect(validate({ ...parentChild, children: [{ ...child, mediaRelease: 'yes' }] })).toEqual({});
+  });
+
+  it('R62.3b: the decision is PER CHILD — one answered, one not, is still refused', () => {
+    // The whole reason the control moved out of the family fieldset: a parent
+    // may permit photographs of one child and refuse for another, and a single
+    // control could not express it. A form that only checked the first child
+    // would send an unanswered release for the second.
+    const errors = validate({
+      ...base,
+      intent: 'parent_child',
+      children: [{ ...child, mediaRelease: 'yes' }, child],
+    });
+    expect(errors).not.toHaveProperty('children.0.mediaRelease');
+    expect(errors).toHaveProperty('children.1.mediaRelease');
   });
 
   it('asks nothing about media release on the adult path', () => {
-    expect(validate(base)).not.toHaveProperty('mediaRelease');
+    expect(Object.keys(validate(base))).toEqual([]);
   });
 });
 
@@ -98,16 +124,20 @@ describe('person rules mirror TD-9', () => {
     expect(validate({ ...base, applicant: long })).toHaveProperty('applicant.lastNameArabic');
   });
 
-  it('validates the CHILD too, not only the applicant', () => {
-    // The parent+child path creates two people, and a form that checked only
-    // the first would send an invalid child to be rejected by the server.
+  it('validates EVERY child, not only the applicant and not only the first', () => {
+    // The parent+child path creates several people, and a form that checked
+    // only the first would send an invalid child to be rejected by the server —
+    // with no indication of which one.
     const errors = validate({
       ...base,
       intent: 'parent_child',
-      mediaRelease: 'no',
-      child: { ...person, firstNameArabic: '' },
+      children: [
+        { ...child, mediaRelease: 'no' as const },
+        { ...child, mediaRelease: 'no' as const, firstNameArabic: '' },
+      ],
     });
-    expect(errors).toHaveProperty('child.firstNameArabic');
+    expect(errors).not.toHaveProperty('children.0.firstNameArabic');
+    expect(errors).toHaveProperty('children.1.firstNameArabic');
   });
 
   it('R41: French parts are optional, but as a PAIR — half a name is not a name', () => {

@@ -250,6 +250,21 @@ export const ar = {
     you: 'بياناتك',
     parent: 'بيانات ولي الأمر',
     child: 'بيانات الابن/الابنة',
+    // R62.1 — one request may carry several children, decided one at a time.
+    childAdd: '＋ إضافة ابن/ابنة',
+    childRemove: 'حذف هذا الابن/الابنة',
+    // R62.7 — informs the placement decision; it never decides it. The hint
+    // says so, because a parent who believes this chooses the Category will
+    // answer strategically rather than truthfully.
+    schoolingStage: 'المستوى الدراسي الحالي (اختياري)',
+    schoolingStageChoose: 'اختر المستوى…',
+    schoolingStageHint: 'يساعد الإدارة على اقتراح الفئة المناسبة، ولا يحدّدها تلقائياً.',
+    schoolingStage_pre_primary: 'التعليم الأوّلي',
+    schoolingStage_primary: 'الابتدائي',
+    schoolingStage_middle: 'الإعدادي',
+    schoolingStage_high: 'الثانوي',
+    schoolingStage_post_secondary: 'ما بعد الثانوي',
+    schoolingStage_not_in_school: 'غير متمدرس',
     // Revision 40 — matching how Moroccan administrative records read.
     firstNameArabic: 'الاسم الشخصي',
     lastNameArabic: 'الاسم العائلي',

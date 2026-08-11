@@ -2,7 +2,7 @@
  * Where a signed-in person's "dashboard" actually is.
  *
  * §14.1's sitemap has **no bare `/dashboard` node**. It lists *role-specific
- * homes*: `/dashboard/student`, `/dashboard/parent`, `/teacher` and `/admin`.
+ * homes*: `/dashboard/student`, `/teacher` and `/admin`.
  * §4.1b step 4a calls the post-login landing a "role-based dashboard redirect"
  * for the same reason — which home you get depends on who you are.
  *
@@ -19,7 +19,22 @@ export const ROLE_HOMES: { role: string; path: string }[] = [
   { role: 'super_admin', path: '/admin' },
   { role: 'admin', path: '/admin' },
   { role: 'teacher', path: '/teacher' },
-  { role: 'parent', path: '/dashboard/parent' },
+  /**
+   * **R62 — a parent's home is their child's dashboard, not one of their own.**
+   *
+   * `/dashboard/parent` was removed with the Family Dashboard (§5.4): the two
+   * screens would have shown the same child's data behind different chrome, and
+   * the parent's question is *how is my daughter doing*, which the Student
+   * Dashboard already answers. A parent therefore lands where their child's
+   * data is, with the child chosen from the account switcher (§4.3) and named
+   * by a persistent banner so it is never unclear whose data is on screen.
+   *
+   * The two roles resolving to one path is deliberate and is why this list is
+   * ordered rather than keyed: `parent` still precedes `student`, so a person
+   * who is both reaches the same screen either way, and the active role decides
+   * whether it renders their own record or their child's.
+   */
+  { role: 'parent', path: '/dashboard/student' },
   { role: 'student', path: '/dashboard/student' },
 ];
 

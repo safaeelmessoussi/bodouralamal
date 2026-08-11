@@ -72,8 +72,19 @@ function meController(prisma: PrismaClient, config: AppConfig) {
     // two.
     const [links, assignments] = await Promise.all([
       prisma.familyLink.findMany({
-        where: { parentId: user.id, status: 'approved', deletedAt: null },
-        select: { studentId: true },
+        where: {
+          parentId: user.id,
+          status: 'approved',
+          deletedAt: null,
+          // A link to a soft-deleted child is not a child the switcher may
+          // offer: `resolveActingStudent` refuses it on the very next request,
+          // so listing it would render an option that always answers 404.
+          student: { deletedAt: null },
+        },
+        select: { student: { select: { id: true, nameArabic: true } } },
+        // §2.2 — the switcher is a list of people and is ordered like every
+        // other one. `ar-x-icu` collation makes this correct without a COLLATE.
+        orderBy: { student: { nameArabic: 'asc' } },
       }),
       prisma.userBranchRole.findMany({
         where: { userId: user.id, deletedAt: null },
@@ -92,8 +103,31 @@ function meController(prisma: PrismaClient, config: AppConfig) {
        * un-narrowed session, which is a real answer rather than a missing one.
        */
       active_role: verified.claims.active_role ?? null,
-      // §14.3 ChildContextSwitcher renders approved links only (§4.3).
-      approved_child_links: links.map((link) => link.studentId),
+      /**
+       * §14.3 ChildContextSwitcher renders approved links only (§4.3).
+       *
+       * **R62 — each link now carries the child's name.** It used to be a bare
+       * id array, so the switcher had nothing to label an option with and the
+       * client fabricated «ابني ١», «ابني ٢» from the array index: a parent of
+       * three could not tell which child they were about to act for, and the
+       * numbering shifted the moment a link was revoked. R62.9 makes the group
+       * expand into the children themselves, which needs the name.
+       *
+       * **The name and nothing else.** This is the least the switcher can be
+       * labelled with; the reference code, Category, Level and branch belong to
+       * the identity block on the dashboard, not to every authenticated
+       * request. Widening `/me` is the cheap habit that turns a session probe
+       * into a profile endpoint.
+       *
+       * The parent already knows these names — they submitted them — so no
+       * display-identity resolution applies here: `public_display_name` (§7)
+       * governs PUBLIC surfaces, and this one is visible to exactly the adult
+       * whose approved `FamilyLink` produced the row.
+       */
+      approved_child_links: links.map((link) => ({
+        id: link.student.id,
+        display_name: link.student.nameArabic,
+      })),
     });
   };
 }

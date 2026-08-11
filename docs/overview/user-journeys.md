@@ -21,36 +21,50 @@ The most-travelled path in the system, and the one with the most moving parts.
 Visitor
   └─ /register → "Continue with Google" → Google verifies the email
        └─ no match anywhere → unified parent + child form (email read-only)
-            └─ submit
-                 ONE TRANSACTION: parent · child · family link · consents ·
-                                  parent identity · single-use token record
+            └─ submit — ONE OR MORE children on one form (R62)
+                 ONE TRANSACTION: parent · one ChildApplication per child ·
+                                  the parent's consents · parent identity ·
+                                  single-use token record
                  └─ Pending status screen — zero data access
 Admin
-  └─ /admin/approvals → approve the bundle
-       ONE TRANSACTION: parent active · child active · link approved · audit row
+  └─ /admin/approvals → the family is ONE queue item, decided PER CHILD (R62)
+       ONE TRANSACTION PER CHILD: the child's User · reference code · its
+       consents (with the SUBMISSION's values) · link approved · the parent
+       role on the first approval · audit row
        └─ the parent is told through the association's existing channels
 Parent
-  └─ logs in → /dashboard/parent → the child is visible
+  └─ logs in → /dashboard/student → the child is visible
        └─ switches to the child's context
             └─ every subsequent child-scoped request carries X-Active-Child-ID,
                and the middleware re-verifies the approved link each time
 ```
 
 **What this journey proves:** atomicity of registration, that `Pending` really means zero
-access, atomic bundle approval, and that child context is verified per request rather than
-trusted from the session.
+access, per-child approval atomicity, and that child context is verified per request rather
+than trusted from the session.
+
+**No child account exists between submission and approval (R62).** The child `User`, its
+`FamilyLink` and its `ConsentRecord`s are created *at approval*, one child at a time —
+which is what lets an administrator approve one sibling and reject another. A rejected
+child leaves no `User` row at all, so a partial approval cannot expose one: the safety
+property is structural rather than enforced. The parent's own application is decided
+explicitly and separately, and is never inferred from the children's outcomes.
 
 ---
 
 ## J2 — A second child joins an existing parent
 
 ```
-Parent → /family/link-child → submit → FamilyLink (Pending)
+Parent (already signed in) → account switcher → «＋ تسجيل طفل»
+   → POST /child-applications → ChildApplication (Pending)
    ↓
-   No visibility of any kind before approval — BR-4.
-   X-Active-Child-ID for the new child returns 404 until the link is Approved.
+   No visibility of any kind before approval — BR-4. There is no child User
+   yet, so there is nothing for X-Active-Child-ID to name; once approval
+   creates one, an un-approved link still answers 404.
    ↓
-Admin approves → the child appears in the family dashboard
+Admin approves the application → the child's User, its reference code, its
+consents and an Approved FamilyLink are created in one transaction
+   → the child appears in the account switcher's ولي الأمر group
 ```
 
 **The `404` is the point.** Not `403`, not "pending" — `404`, indistinguishable from a
@@ -61,6 +75,15 @@ have no search over existing children, because there is no way for a parent to k
 child's identifier and building a lookup over minors' records would need an anti-enumeration
 design nobody had specified. Parents may register a **new** child freely; attaching a second
 parent to an existing child is done by staff from the user-management screen (Revision 23).
+
+**A duplicate is resolved by the administrator, never by the platform (R62).** When a
+second parent registers a child who may already exist, the server *proposes* candidates —
+each shown as name + reference code + the family already linked to it — and the
+administrator chooses *link this account* or *create a new one*. There is no natural key for
+a child (no national identifier, no date of birth), so matching on names would eventually
+attach a child to the wrong family: a safeguarding failure no audit row undoes. This is also
+the mechanism by which a second parent legitimately joins an existing child, since
+uniqueness is on the *pair* and two approved links are two independent authorizations.
 
 ---
 

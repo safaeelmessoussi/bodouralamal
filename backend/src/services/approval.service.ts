@@ -2,6 +2,7 @@ import type { PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
 import type { Actor } from '../policies/actor.js';
 import { pageWindow, type Page } from '../lib/pagination.js';
+import { composeArabicName } from '../lib/person-name.js';
 import { assertFreshActive } from '../policies/freshness.policy.js';
 import * as audit from '../repositories/audit.repository.js';
 import { enrolInGroup } from './enrollment.service.js';
@@ -178,7 +179,7 @@ export async function listApprovals(
         // rows remain and are still counted by `bundle` above.
         children: applicant.childApplicationsAsParent.map((c) => ({
           applicationId: c.id,
-          nameArabic: `${c.firstNameArabic} ${c.lastNameArabic}`,
+          nameArabic: composeArabicName(c.firstNameArabic, c.lastNameArabic),
           status: c.status,
           schoolingStage: c.schoolingStage,
         })),
@@ -292,7 +293,7 @@ export async function listApprovals(
           : null,
         children: group.map((c) => ({
           applicationId: c.id,
-          nameArabic: `${c.firstNameArabic} ${c.lastNameArabic}`,
+          nameArabic: composeArabicName(c.firstNameArabic, c.lastNameArabic),
           status: c.status,
           schoolingStage: c.schoolingStage,
         })),

@@ -650,8 +650,13 @@
 - [x] HTTP surface: 4 routes, TD-3 registered, OpenAPI 79 paths / 106 operations
 - [x] **Approval queue reads child applications** — one item per request, one decidable block per child
 - [x] Registration flow → multi-child, through the same service; `phone` and child `notes` cease to be collected as a consequence of R62.1's shape
+- [x] **Registration form → multi-child**; it was sending the pre-R62 shape and every family registration through the UI returned `400`. Per-child media release, `schooling_stage` collected, indexed server-issue paths
+- [x] `GET /me` names the children; `/dashboard/parent` removed (a parent's home is `/dashboard/student`); active child persists across the navigation a role switch causes
+- [x] 11 HTTP integration tests for the child-application endpoints — including submit → approve → `/me` names the child
 - [ ] Identity binding → non-blocking review item when a minor gains a login
-- [ ] Frontend: switcher expansion + «＋ تسجيل طفل», minimal student dashboard, remove `/dashboard/parent`
+- [ ] Frontend: fold the child list into the role switcher's `ولي الأمر` group + «＋ تسجيل طفل», minimal student dashboard
+- [ ] **Open for the Owner:** R62.10's Student Dashboard needs a read endpoint for the identity block (name, reference code, Category, Level, branch) and TD-3 registers none. Adding one is an SRS route registration, not an implementation detail
+- [ ] **Reported, SRS-internal:** §14.1's `Dashboard` line still lists `/dashboard/parent` while the `Family` line four rows below says it is removed (R62.9). Later revision wins, so the code follows R62 — but the sitemap line is stale
 - [ ] Still pending the Owner: guardianship verification · right to an actual rejection reason · the three compliance fields · CNDP declaration · Arabic privacy notice
 
 ### R61 — الإدارة is Super Admin only (2026-08-11)

@@ -368,16 +368,32 @@ one — the person could narrow themselves and never widen again. `/me` answers
 | Concurrent devices? | Different active roles by construction: two tokens, no shared state, nothing to reconcile |
 | Can a person select a role they lack? | No. The list comes from `/me`, which is derived from the server-issued token, and `setActiveRole` refuses anything outside it |
 | What happens on switch? | The context changes and the browser navigates to that role's home (`homeForRole`) |
-| A role with no portal? | `/dashboard/parent` and `/dashboard/student` resolve to the **`screen-pending`** state — "not built yet" is a different fact from "does not exist" and gets a different page |
+| A role with no portal? | `/dashboard/student` resolves to the **`screen-pending`** state — "not built yet" is a different fact from "does not exist" and gets a different page. **`/dashboard/parent` is now `not-found`** (R62 removed the screen), and the difference is the point: `screen-pending` promises a page that is coming |
 
-### Why it persists when the active child does not
+### Why both the active role and the active child persist
 
-`ActiveChildProvider` stores nothing deliberately: a stale child would silently
-change *whose data* a page requests after a link is revoked. A role selects a
-portal rather than a person — and switching **navigates**, which in this
-application is a full page load, so an in-memory selection would be destroyed by
-the very navigation it causes. Persistence is validated on every read, which
-gives the same freshness property by a different route.
+Both live in **`sessionStorage`**, and for one reason: switching **navigates**,
+which in this application is a full page load, so an in-memory selection would be
+destroyed by the very navigation it causes.
+
+The active child did *not* persist until R62, on the reasoning that a stale child
+would silently change *whose data* a page requests after a link is revoked. R62
+made that untenable rather than merely inconvenient — choosing a child now also
+switches the active role, so the selection was lost by the action that made it.
+
+**The staleness argument was answered, not dropped**, and by three independent
+mechanisms rather than by a storage choice:
+
+1. a revoked link is absent from the next `GET /me`, and `ActiveChildProvider`
+   drops any stored id that is not in that list;
+2. `localStorage` is still refused, so nothing survives the tab;
+3. the server re-checks the approved `FamilyLink` on **every** request and
+   answers `404` regardless of what the client believes (§4.3).
+
+(1) is what makes the stored value safe: it is a *preference*, reconciled against
+live authorization on every load, never a claim. Neither value is ever a token
+claim — §4.3 is explicit that the active child must not be, so that revocation
+takes effect on the very next request.
 
 > **The defect this replaced.** `RoleSwitcher` held its selection in local
 > component state and did nothing with it: picking a role re-labelled the trigger

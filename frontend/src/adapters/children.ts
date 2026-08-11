@@ -1,21 +1,21 @@
 import type { Me } from '../contexts/session.js';
-import { t } from '../i18n/index.js';
 
 /**
  * Linked-children adapter.
  *
- * `GET /me` returns `approved_child_links` as **student ids and nothing else**
- * — there is no endpoint yet that gives a parent their children's names, so the
- * switcher cannot label its options from the contract alone. This adapter is
- * that seam, and it exists for exactly the reason adapters are permitted: the
- * backend surface does not exist yet.
+ * **This file used to fabricate names.** `GET /me` returned `approved_child_links`
+ * as bare student ids, so the switcher labelled its options «طفل مرتبط ١»,
+ * «طفل مرتبط ٢» from the array index — a parent of three could not tell which
+ * child they were about to act for, and the numbering shifted the moment a link
+ * was revoked. The adapter existed to make that seam visible and to promise that
+ * *when the field lands, only this file changes.*
  *
- * It deliberately does **not** invent names. Until the contract carries one, an
- * option is labelled generically and disambiguated by a short id fragment,
- * which is honest — a fabricated name would be worse than an opaque one.
+ * **R62 landed it.** The contract now carries `display_name`, and the promise is
+ * kept: every consumer already reads `{ id, label }`, so nothing else moved.
  *
- * **When the field lands, only this file changes.** Every consumer already
- * reads `{ id, label }`.
+ * What remains is the shape translation itself, which is worth keeping — the
+ * switcher's options are `{ id, label }` whatever the server calls its fields,
+ * and the components stay ignorant of the wire format.
  */
 export interface LinkedChild {
   id: string;
@@ -24,13 +24,5 @@ export interface LinkedChild {
 
 export function linkedChildren(me: Me | null): LinkedChild[] {
   if (!me) return [];
-  return me.approved_child_links.map((id, index) => ({
-    id,
-    label: `${t('child.fallbackName')} ${toArabicDigits(index + 1)}`,
-  }));
-}
-
-/** Arabic-Indic digits, matching how the rest of the interface reads. */
-function toArabicDigits(value: number): string {
-  return String(value).replace(/\d/g, (d) => '٠١٢٣٤٥٦٧٨٩'[Number(d)] ?? d);
+  return me.approved_child_links.map((link) => ({ id: link.id, label: link.display_name }));
 }

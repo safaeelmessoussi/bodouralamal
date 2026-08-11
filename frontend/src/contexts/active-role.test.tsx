@@ -154,7 +154,9 @@ describe('where each role lands', () => {
     expect(homeForRole('super_admin')).toBe('/admin');
     expect(homeForRole('admin')).toBe('/admin');
     expect(homeForRole('teacher')).toBe('/teacher');
-    expect(homeForRole('parent')).toBe('/dashboard/parent');
+    // R62 — a parent's home is their child's dashboard; §5.4's Family
+    // Dashboard is removed.
+    expect(homeForRole('parent')).toBe('/dashboard/student');
     expect(homeForRole('student')).toBe('/dashboard/student');
   });
 

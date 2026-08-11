@@ -50,10 +50,17 @@ describe('every path resolves to a page — never to nothing', () => {
   });
 
   it('resolves the bare /dashboard to NOT FOUND, not to nothing', () => {
-    // §14.1 lists /dashboard/student and /dashboard/parent. It does not list
-    // /dashboard, so the honest answer is "no such page" — rendered as a real
-    // page with a way back, never as an empty document.
+    // §14.1 lists /dashboard/student. It does not list /dashboard, so the
+    // honest answer is "no such page" — rendered as a real page with a way
+    // back, never as an empty document.
     expect(resolveRoute('/dashboard')).toBe('not-found');
+  });
+
+  it('R62: /dashboard/parent is NOT FOUND — the Family Dashboard was removed', () => {
+    // It used to resolve to `screen-pending` ("not built yet"), which is a
+    // promise. §5.4 removed the screen, so the honest answer changed with it:
+    // this page is not coming.
+    expect(resolveRoute('/dashboard/parent')).toBe('not-found');
   });
 });
 

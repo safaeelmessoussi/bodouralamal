@@ -2,6 +2,7 @@ import type { PrismaClient, User } from '../generated/prisma/client.js';
 import { ConsentMethod, ConsentType } from '../generated/prisma/enums.js';
 import { AppError, uniqueViolationFields } from '../lib/errors.js';
 import { verifyOnboardingToken } from '../lib/onboarding-token.js';
+import { composeArabicName, composeFrenchName } from '../lib/person-name.js';
 import * as audit from '../repositories/audit.repository.js';
 import { submitChildApplications } from './child-application.service.js';
 import type { RegistrationInput } from '../validators/registration.validators.js';
@@ -47,32 +48,6 @@ import type { RegistrationInput } from '../validators/registration.validators.js
  */
 export const CONSENT_TEXT_VERSION_KEY = 'legal.consent_text_version';
 
-
-/**
- * Composes `name_arabic` from the two collected parts (§7, Revision 40).
- *
- * **The server does this, never a client** (§1.1). Two clients would disagree
- * about order and separator, and the wrong answer is a person's name rendered
- * backwards — a mistake nobody reviewing a list would spot, and one the person
- * themselves would find insulting.
- *
- * A single space, personal name first, matching how Moroccan administrative
- * records read. Both parts are already trimmed and non-empty by the time they
- * reach here (Zod + a database CHECK), so the composition cannot produce a
- * leading or trailing space.
- */
-function composeArabicName(first: string, last: string): string {
-  return `${first} ${last}`;
-}
-
-/**
- * Composes `name_french` from its parts (§7, Revision 41), or `null` when the
- * applicant gave neither — the pair is optional, and an empty string would be a
- * third state meaning the same thing as absent.
- */
-function composeFrenchName(first?: string, last?: string): string | null {
-  return first && last ? `${first} ${last}` : null;
-}
 
 export interface RegistrationResult {
   applicantId: string;

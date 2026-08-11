@@ -236,8 +236,9 @@ signed-in user.
 Two mistakes met:
 
 1. **The header's Dashboard button linked to `/dashboard`** — a path §14.1 does not define.
-   The sitemap lists *role-specific homes*: `/dashboard/student`, `/dashboard/parent`,
-   `/teacher`, `/admin`. §4.1b step 4a calls the post-login landing a "role-based dashboard
+   The sitemap lists *role-specific homes*: `/dashboard/student`, `/teacher`, `/admin`
+   (R62 removed `/dashboard/parent` with the Family Dashboard — a parent's home is their
+   child's dashboard). §4.1b step 4a calls the post-login landing a "role-based dashboard
    redirect" for the same reason: which home you get depends on who you are.
 2. **The path switch's `default` branch returned `null`.** React renders nothing, and the
    browser shows an empty document — which §14.4 forbids outright ("never a blank page,

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import type { Prisma, PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
+import { composeArabicName } from '../lib/person-name.js';
 import { allocateReferenceCode } from '../lib/reference-code.js';
 import type { Actor } from '../policies/actor.js';
 import { assertFreshActive } from '../policies/freshness.policy.js';
@@ -230,7 +231,7 @@ export async function decideChildApplication(
       );
       const child = await tx.user.create({
         data: {
-          nameArabic: `${application.firstNameArabic} ${application.lastNameArabic}`,
+          nameArabic: composeArabicName(application.firstNameArabic, application.lastNameArabic),
           firstNameArabic: application.firstNameArabic,
           lastNameArabic: application.lastNameArabic,
           ...(application.sex ? { sex: application.sex } : {}),

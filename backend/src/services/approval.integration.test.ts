@@ -154,10 +154,14 @@ let otherBranchId = '';
  */
 let placement: Placement;
 
-/** The child is the student; the parent's access comes through the link. */
-const admit = (childId: string) => ({
-  enrollments: [{ userId: childId, administrativeGroupId: placement.groupId }],
-});
+/**
+ * Left dead by R62 and removed rather than kept "in case".
+ *
+ * It built the `enrollments` argument for approving a family registration —
+ * which no longer takes one: a parent enrols nobody, and the child's placement
+ * is chosen when *that child's* application is decided. CI's lint gate is what
+ * caught it, which is the gate doing its job.
+ */
 
 beforeEach(async () => {
   savedConsentVersion ??= await captureConsentVersion(prisma);

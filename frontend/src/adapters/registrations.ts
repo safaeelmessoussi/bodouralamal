@@ -69,25 +69,74 @@ export interface AdultRegistration {
   consents: { data_processing: boolean };
 }
 
+/**
+ * A child on a registration (R62.1) — **deliberately not `PersonInput`.**
+ *
+ * The two shapes differ, and the difference is the point: a child has no
+ * `phone` and no free-text `notes`. The server's `childCore` schema does not
+ * accept either, so sending them is a `400`, not a field quietly dropped. That
+ * is R62 narrowing what is collected about a minor to what the platform can say
+ * it needs — reusing `PersonInput` here would put both fields back on the form.
+ */
+export interface ChildInput {
+  first_name_arabic: string;
+  last_name_arabic: string;
+  first_name_french?: string;
+  last_name_french?: string;
+  nickname?: string;
+  sex: 'female' | 'male';
+  /**
+   * R62.7 — what the child is currently studying, which **informs** an
+   * administrator's placement decision and gates nothing. Optional: a parent
+   * who does not answer still registers, and nothing may refuse a placement on
+   * it or on an age derived from it.
+   */
+  schooling_stage?:
+    | 'pre_primary'
+    | 'primary'
+    | 'middle'
+    | 'high'
+    | 'post_secondary'
+    | 'not_in_school';
+  /**
+   * R62.3b — **per child**, because a parent may permit photographs of one
+   * child and refuse for another. A required *decision*; `false` is valid and
+   * is stored as a real record, because BR-1 reads an absent record as refusal
+   * and a declined release must be distinguishable from an unanswered one.
+   */
+  consent_media_release: boolean;
+}
+
 export interface ParentChildRegistration {
   kind: 'parent_child';
   parent: PersonInput;
-  child: PersonInput;
+  /**
+   * R62.1 — **one request, one or more children**, decided one at a time. It
+   * used to be a single `child`, which forced a parent of three to register
+   * three times and forced an administrator to approve or reject the whole
+   * family at once.
+   */
+  children: ChildInput[];
   branch_id: string;
-  /** The **child's** stage, and required: the child is the one who enrols. One
+  /** The **children's** stage, and required: they are the ones who enrol. One
    *  choice per application, recorded once — like `branch_id`. */
   category_id: string;
-  /** `media_release` is a required *decision* for a minor; `false` is valid and
-   *  is stored as a real record, because BR-1 reads an absent record as refusal
-   *  and a declined release must be distinguishable from an unanswered one. */
-  consents: { data_processing: boolean; media_release: boolean };
+  consents: { data_processing: boolean };
 }
 
 export type RegistrationInput = AdultRegistration | ParentChildRegistration;
 
 export interface RegistrationResult {
   applicant_id: string;
-  child_id: string | null;
+  /**
+   * R62 — the applications the request created, `[]` on an adult registration.
+   *
+   * It replaced `child_id`, and the rename records a real change: **no child
+   * account exists yet.** Creating one at submission is what forced the
+   * all-or-nothing bundle, so a rejected child now leaves no `User` row and no
+   * `FamilyLink` at all.
+   */
+  child_application_ids: string[];
   account_status: string;
 }
 
@@ -108,6 +157,9 @@ export async function submitRegistration(
 export const LIMITS = {
   /** TD-9, Revision 40: each Arabic name part, so the composed name fits 120. */
   namePart: 60,
+  /** R62.1 — the server's ceiling on one request. A bound rather than a policy:
+   *  it stops a runaway client, and no family is expected to reach it. */
+  childrenPerRequest: 12,
   nameFrench: 120,
   nickname: 60,
   phoneMin: 5,

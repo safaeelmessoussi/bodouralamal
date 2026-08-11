@@ -5,6 +5,7 @@ import {
   LIMITS,
   PHONE_PATTERN,
   submitRegistration,
+  type ChildInput,
   type PersonInput,
   type RegistrationInput,
 } from '../adapters/registrations.js';
@@ -71,10 +72,15 @@ export function Register(): ReactNode {
   const [intent, setIntent] = useState<'adult' | 'parent_child' | 'teacher'>('adult');
   const kind: 'adult' | 'parent_child' = intent === 'parent_child' ? 'parent_child' : 'adult';
   const [applicant, setApplicant] = useState<PersonForm>(emptyPerson);
-  const [child, setChild] = useState<PersonForm>(emptyPerson);
+  /**
+   * R62.1 — one request carries **one or more** children. The array starts with
+   * one so the form looks exactly as it did for the common case; a parent of
+   * three no longer submits three registrations and no longer has the whole
+   * family approved or rejected as a block.
+   */
+  const [children, setChildren] = useState<ChildForm[]>([emptyChild]);
   const [branchId, setBranchId] = useState<string | null>(null);
   const [dataProcessing, setDataProcessing] = useState(false);
-  const [mediaRelease, setMediaRelease] = useState<'' | 'yes' | 'no'>('');
 
   const [touched, setTouched] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -120,11 +126,10 @@ export function Register(): ReactNode {
   const localErrors = validate({
     intent,
     applicant,
-    child,
+    children,
     branchId,
     categoryId,
     dataProcessing,
-    mediaRelease,
   });
   const valid = Object.keys(localErrors).length === 0;
   // The server's verdict wins where the two disagree: it is the authority
@@ -144,10 +149,9 @@ export function Register(): ReactNode {
         buildPayload({
           intent,
           applicant,
-          child,
+          children,
           branchId: branchId!,
           categoryId: categoryId!,
-          mediaRelease,
         }),
         token,
       );
@@ -267,16 +271,55 @@ export function Register(): ReactNode {
               />
             </fieldset>
 
+            {kind === 'parent_child'
+              ? children.map((entry, index) => (
+                  <fieldset className="register-form__group" key={index}>
+                    <legend>
+                      {children.length === 1
+                        ? t('register.child')
+                        : `${t('register.child')} ${toArabicDigits(index + 1)}`}
+                    </legend>
+                    <ChildFields
+                      value={entry}
+                      onChange={(next) =>
+                        setChildren(children.map((c, i) => (i === index ? next : c)))
+                      }
+                      errors={touched ? errors : {}}
+                      prefix={`children.${index}`}
+                    />
+                    {/* Offered only from the second child onward: removing the
+                        only child would leave a parent+child registration with
+                        no child, which the server refuses anyway (min 1). */}
+                    {children.length > 1 ? (
+                      <div className="register-form__actions">
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          onClick={() => setChildren(children.filter((_, i) => i !== index))}
+                        >
+                          {t('register.childRemove')}
+                        </Button>
+                      </div>
+                    ) : null}
+                  </fieldset>
+                ))
+              : null}
+
             {kind === 'parent_child' ? (
-              <fieldset className="register-form__group">
-                <legend>{t('register.child')}</legend>
-                <PersonFields
-                  value={child}
-                  onChange={setChild}
-                  errors={touched ? errors : {}}
-                  prefix="child"
-                />
-              </fieldset>
+              <div className="register-form__actions">
+                {/* TD-9's ceiling mirrored for immediate feedback (§1.1 — the
+                    server still enforces it). Past it the control disappears
+                    rather than failing on submit. */}
+                {children.length < LIMITS.childrenPerRequest ? (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    onClick={() => setChildren([...children, emptyChild])}
+                  >
+                    {t('register.childAdd')}
+                  </Button>
+                ) : null}
+              </div>
             ) : null}
 
             <fieldset className="register-form__group">
@@ -331,24 +374,10 @@ export function Register(): ReactNode {
                 error={touched ? (errors['dataProcessing'] ?? null) : null}
               />
 
-              {kind === 'parent_child' ? (
-                <SelectField
-                  label={t('register.consentMedia')}
-                  value={mediaRelease}
-                  onChange={(next) => setMediaRelease(next as '' | 'yes' | 'no')}
-                  placeholder={t('register.consentMediaChoose')}
-                  options={[
-                    { value: 'yes', label: t('common.yes') },
-                    { value: 'no', label: t('common.no') },
-                  ]}
-                  required
-                  // Declining is a real, recorded decision — never an omission.
-                  // BR-1 treats an absent record as refusal, so "no" and
-                  // "unanswered" must be different answers here.
-                  hint={t('register.consentMediaHint')}
-                  error={touched ? (errors['mediaRelease'] ?? null) : null}
-                />
-              ) : null}
+              {/* R62.3b moved the media release **into each child's own
+                  fieldset**: a parent may permit photographs of one child and
+                  refuse for another, and one control for the family could not
+                  express that. It is no longer here. */}
             </fieldset>
 
             {failure ? (
@@ -410,22 +439,85 @@ const emptyPerson: PersonForm = {
 };
 
 /**
- * One component for both people (§2.1 — one component per *concept*). A
- * `ParentFields` and a `ChildFields` would have been two copies of the same
- * five inputs, and the second would have drifted.
+ * A child on the form (R62.1) — **the collected shape, not a person's.**
+ *
+ * `phone` and `notes` are absent, and their absence is the design rather than an
+ * oversight: R62 declares what is collected about a minor, and the server's
+ * schema rejects both outright. Modelling a child as a `PersonForm` would put
+ * two inputs back on the screen that no longer have anywhere to go.
+ *
+ * The two decisions that *are* per child live here for the same reason — the
+ * media release (R62.3b) and the schooling stage (R62.7) belong to a child, not
+ * to a family.
  */
-function PersonFields({
+export interface ChildForm {
+  firstNameArabic: string;
+  lastNameArabic: string;
+  firstNameFrench: string;
+  lastNameFrench: string;
+  nickname: string;
+  sex: '' | 'female' | 'male';
+  schoolingStage: '' | NonNullable<ChildInput['schooling_stage']>;
+  /** Three-state: an unanswered release is not a refused one (BR-1). */
+  mediaRelease: '' | 'yes' | 'no';
+}
+
+const emptyChild: ChildForm = {
+  firstNameArabic: '',
+  lastNameArabic: '',
+  firstNameFrench: '',
+  lastNameFrench: '',
+  nickname: '',
+  sex: '',
+  schoolingStage: '',
+  mediaRelease: '',
+};
+
+/** The stages R62.7 defines, in the order a school year runs. */
+const SCHOOLING_STAGES: NonNullable<ChildInput['schooling_stage']>[] = [
+  'pre_primary',
+  'primary',
+  'middle',
+  'high',
+  'post_secondary',
+  'not_in_school',
+];
+
+/** Arabic-Indic digits, matching how the rest of the interface reads. */
+function toArabicDigits(value: number): string {
+  return String(value).replace(/\d/g, (d) => '٠١٢٣٤٥٦٧٨٩'[Number(d)] ?? d);
+}
+
+/**
+ * The name inputs every person has, wherever they appear (§2.1 — one component
+ * per *concept*).
+ *
+ * **This is the shared half, and it is shared deliberately.** The form used to
+ * have one `PersonFields` for the applicant and the child alike, on the
+ * reasoning that two copies of the same six inputs would drift. R62 made the
+ * two shapes genuinely different — a child has no phone and no notes, and has a
+ * schooling stage and a media release that an adult does not — so the component
+ * splits along that seam and **only** along it: the names still exist once.
+ */
+function NameFields({
   value,
   onChange,
   errors,
   prefix,
 }: {
-  value: PersonForm;
-  onChange: (next: PersonForm) => void;
+  value: {
+    firstNameArabic: string;
+    lastNameArabic: string;
+    firstNameFrench: string;
+    lastNameFrench: string;
+    nickname: string;
+    sex: '' | 'female' | 'male';
+  };
+  onChange: (patch: Record<string, string>) => void;
   errors: Record<string, string>;
-  prefix: 'applicant' | 'child';
+  prefix: string;
 }): ReactNode {
-  const set = (patch: Partial<PersonForm>) => onChange({ ...value, ...patch });
+  const set = (patch: Record<string, string>) => onChange(patch);
 
   return (
     <>
@@ -478,6 +570,27 @@ function PersonFields({
         onChange={(next) => set({ nickname: next })}
         hint={t('register.nicknameHint')}
       />
+    </>
+  );
+}
+
+/** The applicant: the shared names, plus the two fields only an adult gives. */
+function PersonFields({
+  value,
+  onChange,
+  errors,
+  prefix,
+}: {
+  value: PersonForm;
+  onChange: (next: PersonForm) => void;
+  errors: Record<string, string>;
+  prefix: 'applicant';
+}): ReactNode {
+  const set = (patch: Partial<PersonForm>) => onChange({ ...value, ...patch });
+
+  return (
+    <>
+      <NameFields value={value} onChange={set} errors={errors} prefix={prefix} />
       <TextField
         label={t('register.phone')}
         type="tel"
@@ -491,6 +604,65 @@ function PersonFields({
         value={value.notes}
         onChange={(next) => set({ notes: next })}
         rows={3}
+      />
+    </>
+  );
+}
+
+/**
+ * A child: the shared names, plus the two decisions R62 makes per child.
+ *
+ * **No phone and no notes**, because `childCore` does not accept them — the
+ * absence here is what stops the form collecting what the platform declared it
+ * would not.
+ */
+function ChildFields({
+  value,
+  onChange,
+  errors,
+  prefix,
+}: {
+  value: ChildForm;
+  onChange: (next: ChildForm) => void;
+  errors: Record<string, string>;
+  prefix: string;
+}): ReactNode {
+  const set = (patch: Partial<ChildForm>) => onChange({ ...value, ...patch });
+
+  return (
+    <>
+      <NameFields value={value} onChange={set} errors={errors} prefix={prefix} />
+
+      {/* R62.7 — optional, and it INFORMS the placement decision rather than
+          making it. The hint says so, because a parent who thinks this decides
+          the Category will answer strategically rather than truthfully. */}
+      <SelectField
+        label={t('register.schoolingStage')}
+        value={value.schoolingStage}
+        onChange={(next) => set({ schoolingStage: next as ChildForm['schoolingStage'] })}
+        placeholder={t('register.schoolingStageChoose')}
+        options={SCHOOLING_STAGES.map((stage) => ({
+          value: stage,
+          label: t(`register.schoolingStage_${stage}`),
+        }))}
+        hint={t('register.schoolingStageHint')}
+      />
+
+      <SelectField
+        label={t('register.consentMedia')}
+        value={value.mediaRelease}
+        onChange={(next) => set({ mediaRelease: next as ChildForm['mediaRelease'] })}
+        placeholder={t('register.consentMediaChoose')}
+        options={[
+          { value: 'yes', label: t('common.yes') },
+          { value: 'no', label: t('common.no') },
+        ]}
+        required
+        // Declining is a real, recorded decision — never an omission. BR-1
+        // treats an absent record as refusal, so "no" and "unanswered" must be
+        // different answers here.
+        hint={t('register.consentMediaHint')}
+        error={errors[`${prefix}.mediaRelease`] ?? null}
       />
     </>
   );
@@ -524,6 +696,9 @@ const SERVER_FIELD_PATHS: Record<string, string> = {
   phone: 'phone',
   notes: 'notes',
   sex: 'sex',
+  // R62 — the two fields a child has and an adult does not.
+  schooling_stage: 'schoolingStage',
+  consent_media_release: 'mediaRelease',
 };
 
 export interface ServerErrors {
@@ -548,10 +723,17 @@ export function mapServerIssues(error: unknown): ServerErrors {
     const message = typeof issue.message === 'string' ? issue.message : '';
 
     // `applicant.first_name_arabic` → person `applicant`, field `first_name_arabic`.
-    const [head, tail] = path.includes('.') ? path.split('.', 2) : ['', path];
-    const person = head === 'parent' ? 'applicant' : head; // the form calls the parent "applicant"
+    // `children.1.last_name_arabic` → person `children.1` (R62: the index is
+    // part of the identity, because two children can fail differently and the
+    // form must mark the right one).
+    const segments = path.split('.');
+    const tail = segments.length > 1 ? segments[segments.length - 1]! : path;
+    const head = segments.slice(0, -1).join('.');
+    // The form calls the parent "applicant".
+    const person = head === 'parent' ? 'applicant' : head;
+    const known = person === 'applicant' || /^children\.\d+$/.test(person);
 
-    if (tail && SERVER_FIELD_PATHS[tail] && (person === 'applicant' || person === 'child')) {
+    if (segments.length > 1 && SERVER_FIELD_PATHS[tail] && known) {
       fields[`${person}.${SERVER_FIELD_PATHS[tail]}`] = t('register.errServerField');
       continue;
     }
@@ -630,17 +812,16 @@ interface FormState {
    *  is an adult registering themselves (R49). */
   intent: 'adult' | 'parent_child' | 'teacher';
   applicant: PersonForm;
-  child: PersonForm;
+  children: ChildForm[];
   branchId: string | null;
   categoryId: string | null;
   dataProcessing: boolean;
-  mediaRelease: '' | 'yes' | 'no';
 }
 
 export function validate(state: FormState): Record<string, string> {
   const errors: Record<string, string> = {};
 
-  const person = (p: PersonForm, prefix: string) => {
+  const person = (p: PersonForm | ChildForm, prefix: string) => {
     // Both parts are required and each is capped separately (TD-9, R40) — the
     // per-part limit is what keeps the composed name inside its column.
     for (const part of ['firstNameArabic', 'lastNameArabic'] as const) {
@@ -660,13 +841,22 @@ export function validate(state: FormState): Record<string, string> {
       if (raw.length > LIMITS.namePart) errors[`${prefix}.${part}`] = t('register.errTooLong');
     }
 
-    const phone = p.phone.trim();
+    // Only an adult gives one — a child has no `phone` field to validate.
+    const phone = 'phone' in p ? p.phone.trim() : '';
     if (phone !== '' && (!PHONE_PATTERN.test(phone) || phone.length < LIMITS.phoneMin || phone.length > LIMITS.phoneMax))
       errors[`${prefix}.phone`] = t('register.errPhone');
   };
 
   person(state.applicant, 'applicant');
-  if (state.intent === 'parent_child') person(state.child, 'child');
+  if (state.intent === 'parent_child') {
+    state.children.forEach((child, index) => {
+      const prefix = `children.${index}`;
+      person(child, prefix);
+      // A DECISION is required per child; "no" is a valid one (BR-1). R62.3b
+      // put it here rather than on the family, so it is checked here too.
+      if (child.mediaRelease === '') errors[`${prefix}.mediaRelease`] = t('register.errMediaDecision');
+    });
+  }
 
   // §4.1 Revision 39 — a choice, never a default. Defaulting would place
   // someone at a branch nobody picked.
@@ -681,20 +871,15 @@ export function validate(state: FormState): Record<string, string> {
   // refused rather than warned about.
   if (!state.dataProcessing) errors['dataProcessing'] = t('register.errConsent');
 
-  // A DECISION is required for a minor; "no" is a valid one (BR-1).
-  if (state.intent === 'parent_child' && state.mediaRelease === '')
-    errors['mediaRelease'] = t('register.errMediaDecision');
-
   return errors;
 }
 
 function buildPayload(state: {
   intent: 'adult' | 'parent_child' | 'teacher';
   applicant: PersonForm;
-  child: PersonForm;
+  children: ChildForm[];
   branchId: string;
   categoryId: string;
-  mediaRelease: '' | 'yes' | 'no';
 }): RegistrationInput {
   const person = (p: PersonForm): PersonInput => ({
     // The parts only — the server composes `name_arabic` (§1.1, R40), and
@@ -736,10 +921,25 @@ function buildPayload(state: {
   return {
     kind: 'parent_child',
     parent: person(state.applicant),
-    child: person(state.child),
+    children: state.children.map((c) => ({
+      first_name_arabic: c.firstNameArabic.trim(),
+      last_name_arabic: c.lastNameArabic.trim(),
+      sex: c.sex as 'female' | 'male',
+      ...(c.firstNameFrench.trim() && c.lastNameFrench.trim()
+        ? {
+            first_name_french: c.firstNameFrench.trim(),
+            last_name_french: c.lastNameFrench.trim(),
+          }
+        : {}),
+      ...(c.nickname.trim() ? { nickname: c.nickname.trim() } : {}),
+      ...(c.schoolingStage ? { schooling_stage: c.schoolingStage } : {}),
+      // R62.3b — per child, and always sent: an unanswered release cannot reach
+      // here, because `validate` refuses the form until every child has one.
+      consent_media_release: c.mediaRelease === 'yes',
+    })),
     branch_id: state.branchId,
-    // The CHILD's stage: the child is the one who enrols.
+    // The CHILDREN's stage: they are the ones who enrol.
     category_id: state.categoryId,
-    consents: { data_processing: true, media_release: state.mediaRelease === 'yes' },
+    consents: { data_processing: true },
   };
 }

@@ -142,12 +142,26 @@ describe('mapServerIssues — the user learns WHICH field, not "review the field
     expect(fields).toHaveProperty('applicant.lastNameArabic');
   });
 
-  it('marks the child separately from the applicant', () => {
+  it('marks the right CHILD separately from the applicant (R62)', () => {
+    // The index is part of the identity now: a request may carry several
+    // children, and marking the wrong fieldset is worse than marking none.
     const { fields } = mapServerIssues(
-      withIssues([{ path: 'child.first_name_arabic', message: 'Required' }]),
+      withIssues([{ path: 'children.1.first_name_arabic', message: 'Required' }]),
     );
-    expect(fields).toHaveProperty('child.firstNameArabic');
+    expect(fields).toHaveProperty('children.1.firstNameArabic');
+    expect(fields).not.toHaveProperty('children.0.firstNameArabic');
     expect(fields).not.toHaveProperty('applicant.firstNameArabic');
+  });
+
+  it('does not mistake a bare `children` issue for a field on a child', () => {
+    // `children: Array must contain at least 1 element` has no index and no
+    // field. Inventing one would light up a fieldset at random; surfacing the
+    // message verbatim is what the unmapped list is for.
+    const { fields, unmapped } = mapServerIssues(
+      withIssues([{ path: 'children', message: 'Too small: expected array to have >=1 items' }]),
+    );
+    expect(fields).toEqual({});
+    expect(unmapped).toHaveLength(1);
   });
 
   it('maps the R41 half-a-French-name refusal onto the missing half', () => {
