@@ -22,13 +22,19 @@ export interface NavLink {
   labelKey: string;
 }
 
+/**
+ * **`hasMultipleRoles` and `hasLinkedChildren` used to live here and are gone
+ * (R62.9).** They gated the two header switchers, and both rules moved into
+ * `RoleSwitcher` when the two menus became one — because the rule stopped being
+ * "how many roles" the moment a parent-only account needed the switcher too.
+ *
+ * Removed rather than left: a flag nothing reads is a rule with no enforcement,
+ * and the next person to need one would have found two answers to the same
+ * question in two files.
+ */
 export interface Navigation {
   links: NavLink[];
   isAuthenticated: boolean;
-  /** More than one role means the caller can act in several capacities (§4.2). */
-  hasMultipleRoles: boolean;
-  /** A parent with at least one approved link needs the child switcher (§4.3). */
-  hasLinkedChildren: boolean;
 }
 
 /** Public routes, in the order the existing site presents them. */
@@ -44,7 +50,7 @@ export const PUBLIC_LINKS: NavLink[] = [
  */
 export function buildNavigation(
   status: 'loading' | 'anonymous' | 'authenticated',
-  me: { roles: string[]; approved_child_links: { id: string }[] } | null,
+  me: { roles: string[] } | null,
 ): Navigation {
   const isAuthenticated = status === 'authenticated' && me !== null;
 
@@ -53,8 +59,6 @@ export function buildNavigation(
     // the header's actions area only when `isAuthenticated` — never a nav link.
     links: PUBLIC_LINKS,
     isAuthenticated,
-    hasMultipleRoles: (me?.roles.length ?? 0) > 1,
-    hasLinkedChildren: (me?.approved_child_links.length ?? 0) > 0,
   };
 }
 

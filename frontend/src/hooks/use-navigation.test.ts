@@ -66,33 +66,16 @@ describe('who is authenticated', () => {
   });
 });
 
-describe('the switcher conditions', () => {
-  it('one role means no role switcher', () => {
-    expect(buildNavigation('authenticated', authed({ roles: ['student'] }).me).hasMultipleRoles).toBe(
-      false,
-    );
-  });
-
-  it('two roles means a role switcher (§2.1)', () => {
-    expect(
-      buildNavigation('authenticated', authed({ roles: ['parent', 'student'] }).me).hasMultipleRoles,
-    ).toBe(true);
-  });
-
-  it('no approved links means no child switcher', () => {
-    expect(buildNavigation('authenticated', authed({ children: [] }).me).hasLinkedChildren).toBe(false);
-  });
-
-  it('an approved link means a child switcher (§4.3)', () => {
-    expect(buildNavigation('authenticated', authed({ children: ['c1'] }).me).hasLinkedChildren).toBe(
-      true,
-    );
-  });
-
-  it('an anonymous visitor gets neither switcher', () => {
-    const nav = buildNavigation(anonymous.status, anonymous.me);
-    expect(nav.hasMultipleRoles).toBe(false);
-    expect(nav.hasLinkedChildren).toBe(false);
+describe('the switcher conditions no longer live here (R62.9)', () => {
+  it('exposes nothing about switchers — `RoleSwitcher` owns that rule', () => {
+    // `hasMultipleRoles` and `hasLinkedChildren` were removed when the two
+    // header menus became one: "more than one role" stopped being the rule the
+    // moment a parent holding exactly one role needed the switcher too, and a
+    // second answer to that question living here would drift from the first.
+    expect(Object.keys(buildNavigation('authenticated', authed().me)).sort()).toEqual([
+      'isAuthenticated',
+      'links',
+    ]);
   });
 });
 
