@@ -119,7 +119,18 @@ inside the same minute can exhaust the auth zone and fail whichever
 stays put. Confirm by running that one suite alone; if it passes, the code is
 fine and the window simply needs to elapse.
 
-**The API container serves the HTTP suites, so schema changes need a rebuild.**
+**The API container serves the HTTP suites, so ANY backend change needs a
+rebuild — not only a schema change.** This is stated more broadly than it first
+was, because the narrow version produced a false green: a branch-visibility
+change was committed after a full suite run that had exercised the *previous*
+build. The suite was truthful about the container it hit and silent about the
+code that had been written. The failure surfaced one commit later, looking like
+a regression in unrelated work.
+
+A green HTTP suite means *the running container passes*. Rebuild before you
+believe it about your own change.
+
+**The original wording, still true:**
 `*.http.integration.test.ts` calls the running container, not an in-process app.
 After a migration the container still holds the previous Prisma client, so a
 dropped table surfaces as a `500` — or, where the route degrades, as an

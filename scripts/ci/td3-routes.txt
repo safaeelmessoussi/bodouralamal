@@ -46,6 +46,10 @@ GET /admin/settings                           # TD-3.11, §5.6 (R42) — Super A
 PUT /admin/settings/{key}                     # TD-3.11 (R42) — allow-listed keys, audited
 GET /admin/approvals                          # TD-3.2, §5.6
 POST /admin/approvals/{id}/approve            # TD-3.2, TD-4.2; R49 optional assignments[] granted in the same transaction
+POST /child-applications                      # §4.1/§4.3 (R62) — one request, many children; signed-in adult
+GET /child-applications/mine                  # §4.3 (R62) — a parent's own applications, and nothing else
+GET /admin/child-applications/{id}/matches    # §4.3 (R62) — duplicate PROPOSALS; the platform never merges
+POST /admin/child-applications/{id}/decide    # §4.3 (R62) — one child decided alone; TD-4.2 narrowed
 POST /admin/approvals/{id}/reject             # TD-3.2, §5.6
 POST /family-links                            # TD-3.2, §4.3 Revision 23 (staff-mediated, existing child)
 GET /students/{id}/consents                   # §4.1a, BR-1; TD-2 "Record staff-declared consent grants/revocations"

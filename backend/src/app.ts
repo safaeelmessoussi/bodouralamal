@@ -23,6 +23,7 @@ import * as taxonomy from './controllers/taxonomy.controller.js';
 import * as trash from './controllers/trash.controller.js';
 import * as contentCtl from './controllers/content.controller.js';
 import * as exams from './controllers/exam.controller.js';
+import * as childApplications from './controllers/child-application.controller.js';
 import { createRegistration } from './controllers/registration.controller.js';
 import { healthController } from './controllers/health.controller.js';
 import type { PrismaClient } from './generated/prisma/client.js';
@@ -174,6 +175,18 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
 
   guarded.get('/admin/settings', settings.list(prisma));
   guarded.put('/admin/settings/:key', settings.update(prisma));
+
+  // R62 — child applications. One request holds several children; each is
+  // decided alone, and the parent role appears on the first approval.
+  //
+  // The submit route is GUARDED because it serves an already-signed-in adult —
+  // a student registering their children, or a parent adding another. The
+  // registration flow reaches the SAME service through `POST /registrations`,
+  // where the caller is established by the signed onboarding token instead.
+  guarded.post('/child-applications', childApplications.submit(prisma));
+  guarded.get('/child-applications/mine', childApplications.mine(prisma));
+  guarded.get('/admin/child-applications/:id/matches', childApplications.matches(prisma));
+  guarded.post('/admin/child-applications/:id/decide', childApplications.decide(prisma));
 
   guarded.get('/admin/approvals', approvals.list(prisma));
   guarded.post('/admin/approvals/:id/approve', approvals.approve(prisma));

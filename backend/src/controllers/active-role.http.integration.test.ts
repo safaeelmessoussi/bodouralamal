@@ -188,9 +188,23 @@ describe('a Super Admin working as مؤطِّرة genuinely loses Super Admin', 
     // The narrowed token is not a lesser credential to be smuggled: it grants
     // the teacher's authority and nothing more, wherever it is presented.
     const asTeacher = await switchTo('teacher');
-    for (const path of ['/admin/trash', '/admin/settings', '/admin/branches']) {
+    for (const path of ['/admin/trash', '/admin/settings']) {
       expect((await call('GET', path, asTeacher.access_token)).status, path).toBe(403);
     }
+
+    // **`/admin/branches` was in this list and no longer belongs.** A teacher
+    // now READS branches — scoped to the ones they teach in — because R26
+    // always granted that and the guard wrongly demanded `isAdmin`. So the
+    // narrowing shows up as an empty list rather than a refusal: this account
+    // staffs no schedule, so as مؤطِّرة it reaches no branch at all.
+    const branches = await call('GET', '/admin/branches?page_size=100', asTeacher.access_token);
+    expect(branches.status).toBe(200);
+    expect(branches.body.data).toHaveLength(0);
+
+    // …while the same account un-narrowed is a Super Admin and sees them.
+    const asSuper = await switchTo('super_admin', asTeacher.access_token!);
+    const all = await call('GET', '/admin/branches?page_size=100', asSuper.access_token);
+    expect(all.body.data!.length).toBeGreaterThan(0);
   });
 });
 

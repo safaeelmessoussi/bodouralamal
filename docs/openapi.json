@@ -613,6 +613,210 @@
         }
       }
     },
+    "/child-applications": {
+      "post": {
+        "summary": "Request registration for one or more children",
+        "description": "**SRS Revision 62.** One request holds **one or more children**, and an administrator decides **each independently** — TD-4.2's atomicity is narrowed from the bundle to a single child. **The child `User` is created AT APPROVAL, not here**: creating it at submission is exactly what forced all-or-nothing approval, and deferring it means a **rejected child leaves no `User` row and no `FamilyLink` at all**, so partial approval cannot expose one. **Consent is captured now and materialised at approval** (R62.3b): `ConsentRecord.student_id` cannot be written before the student exists, so the decisions travel on the application — including **the consent text version in force at THIS moment**, because `legal.consent_text_version` is editable between submission and approval and materialising with the current value would record that a parent consented to text they never saw (§4.1a). `consent_media_release` is **per child**: a parent may permit photographs of one and refuse for another. **Guarded**, because it serves an already-signed-in adult — an adult student registering their children, or a parent adding another. The registration flow reaches the same service through `POST /registrations`, where the caller is established by the signed onboarding token; **one service, two callers**, because two implementations of one shape drift silently until an administrator sees two different queues.",
+        "responses": {
+          "201": {
+            "description": "Created; `{ request_id, application_ids }`."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — no children, a missing name, or data-processing consent not given.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT with CONSENT_TEXT_VERSION_MISSING — §4.1a: no version, no lawful consent, no application.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/child-applications/mine": {
+      "get": {
+        "summary": "A parent's own child applications",
+        "description": "**R62.** The applications this caller submitted, and nothing else. **`internal_note` is absent from the projection** — R62.8 makes it staff-only, and a projection is where that rule holds rather than where it is merely stated. The parent sees the **bounded** `rejection_reason` only: a free-text note will eventually carry a safeguarding judgement (*\"could not verify guardianship\"*) that must not reach the applicant. Once a child is approved the row also carries their **reference code**, which is how a parent quotes a child without speaking a name aloud.",
+        "responses": {
+          "200": {
+            "description": "The caller's applications."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/child-applications/{id}/matches": {
+      "get": {
+        "summary": "Existing accounts this child might already have",
+        "description": "**R62.3 — proposals, never a merge.** There is **no natural key for a child**: no national identifier and, by decision, no date of birth. Matching on names alone would eventually attach a child to the wrong family, which is a safeguarding failure no audit row undoes — so the platform **proposes** and an administrator decides. Each candidate carries **the parent it is already linked to and its reference code**, which is what lets an administrator tell two same-named children apart without the platform holding a precise identifier for either. Candidates are **minors only** — accounts with no active login — because an adult consents for themselves.",
+        "responses": {
+          "200": {
+            "description": "Candidate accounts."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN — approver roles only.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an unknown application.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/child-applications/{id}/decide": {
+      "post": {
+        "summary": "Decide ONE child application",
+        "description": "**SRS Revision 62.2 — TD-4.2 narrowed from the bundle to a single child.** Approving creates or links that child, creates the `FamilyLink(approved)`, materialises the consent records **with the submission's values**, grants the `parent` role **if the parent does not already hold it**, and audits — all in one transaction, leaving every sibling untouched. **The parent's own application is decided separately and is never inferred from the children's outcomes.** Rejection creates **nothing** and requires a **bounded** `rejection_reason`; the optional `internal_note` is staff-only and is never returned to a parent. `match_existing_user_id` links an account the administrator chose — refused with `ACCOUNT_HAS_LOGIN` if it has its own login, because an adult consents for themselves and linking would hand a third party their record. `administrative_group_id` places the child through the **existing** enrolment service, so approval and the roster screen place students by the same rules. **`schooling_stage` informs placement and gates nothing** (R62.7): no logic here reads it to choose, validate or refuse a group — a student older than the usual high-school age still belongs in اليافعون if she is still in high school. TD-12 freshness applies, and TD-15.3 makes a double decision first-wins.",
+        "responses": {
+          "200": {
+            "description": "Decided; `{ child_user_id, parent_role_granted }`."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a rejection with no bounded reason.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN — approver roles only, re-read from live rows (TD-12).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an unknown application or account.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT — ALREADY_DECIDED (TD-15.3 first-wins) or ACCOUNT_HAS_LOGIN.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/admin/approvals/{id}/approve": {
       "post": {
         "summary": "Approve a queue item",
