@@ -689,6 +689,7 @@
   - **Per-child branch/category** needs **no migration** — `child_application` already holds both per row. Only the validator and two forms treat them as request-level. Needs a revision amending R62/R64.2
   - **Deletion**: 28 of 45 models soft-delete; 6 restorable, 17 purgeable, deliberately narrower. **Recommendation: do NOT draft a generic "delete anything" revision** — three smaller decisions instead (widen RESTORABLE per type · switch on retention · settle the backup statement)
   - **Deployment**: `bodouralamal.vercel.app` is a **mock-backed frontend preview by design** (§19.0). Same-origin routing is load-bearing for TD-12 cookies and the OAuth callback, so a split deploy is ruled out by the SRS. **Do not deploy.** Needs a VPS
+  - **Educational structure** (addendum): 4 of the 6 statements are ALREADY the specification — a Subject needs no change at all (§7 states it verbatim). The conflict is one rule R43 took explicitly: *"exactly one Administrative Group inside each enrolled Level"*. **Smallest revision: the branch moves from the group to `Enrollment`**, which makes the group nullable with no other structural change, keeps groups branch-owning as the Owner's example requires, and makes the 18 group-less Levels legal instead of broken. Retires TD-4.6b, TD-4.6d and `LAST_GROUP_IN_LEVEL`. Backfill is derivable
 
 ### UI/product pass (2026-08-11)
 - [x] Child section extracted to one shared component; the personal page gains multi-child. 9 tests through both entry points
