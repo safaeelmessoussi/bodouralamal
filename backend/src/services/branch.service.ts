@@ -7,7 +7,6 @@ import { page, pageWindow, type Page, type PageParams } from '../lib/pagination.
 import * as audit from '../repositories/audit.repository.js';
 import * as trash from '../repositories/trash.repository.js';
 import { assertNoBlockingReferences, updateWithVersion } from '../repositories/optimistic-lock.js';
-import { backfillFirstGroups } from './administrative-group.service.js';
 
 /**
  * Branch and Room management (SRS §5.6, §2.2, TD-2, TD-5, TD-15).
@@ -195,16 +194,20 @@ export async function createBranch(
       detail: { name: branch.name },
     });
 
-    // TD-4.6d (Revision 43.1) — the bootstrap backfill, INSIDE this transaction
-    // so a Branch and the groups it enabled commit together.
-    //
-    // §15.1 seeds Levels and forbids seeding Branches, so seeded Levels exist
-    // before any Branch does and cannot be given their المجموعة 1 at creation
-    // time. This is the first moment they can be. Keyed on "every Level with no
-    // live group", so it is a no-op on every subsequent branch — see the note
-    // on `backfillFirstGroups` for why that is stated as the condition rather
-    // than as "is this the first branch".
-    await backfillFirstGroups(tx, branch.id, actor.userId);
+    /**
+     * **TD-4.6d's bootstrap backfill is retired by Revision 66, and creating a
+     * branch no longer creates groups.**
+     *
+     * It existed because §15.1 seeds Levels and forbids seeding Branches, so a
+     * seeded Level could not be given its المجموعة 1 at creation time and the
+     * first Branch was the first moment it could be. R66 removes the premise: a
+     * Level nobody has subdivided needs no group, and students are enrolled in
+     * it directly.
+     *
+     * Dropping it also removes a surprise — creating a branch silently created
+     * one group per group-less Level, at that branch, which is a placement
+     * decision nobody made.
+     */
 
     return branch;
   });

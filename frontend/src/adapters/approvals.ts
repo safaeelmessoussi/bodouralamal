@@ -127,7 +127,13 @@ export async function approveApproval(
      *
      * `level_id` is deliberately absent — the group already names its Level.
      */
-    enrollments?: { user_id: string; administrative_group_id: string }[];
+    /**
+     * R66.5 — each placement is a **group**, or a **Level and a branch**. The
+     * union is the contract: the server refuses a request naming both, and
+     * refuses half of the second shape, so a client that sent a mixture would
+     * learn it failed rather than have one silently win.
+     */
+    enrollments?: ({ user_id: string } & PlacementBody)[];
   } = {},
 ): Promise<DecisionResult> {
   return api<DecisionResult>(`/admin/approvals/${id}/approve`, {
@@ -183,13 +189,29 @@ export interface ChildDecision {
   /** §4.1 (R43) — required to approve a NEW child, or the server refuses with
    *  `ENROLLMENT_REQUIRED`: an admitted account with no enrolment is a person
    *  the platform admitted and then lost. */
+  /** R66.5 — a group, or a Level and a branch. Never both, never half. */
   administrative_group_id?: string;
+  level_id?: string;
+  branch_id?: string;
   /** R62.8 — **bounded**, never free text: the reason reaches the parent, and a
    *  free-text note would eventually carry a safeguarding judgement. */
   rejection_reason?: ChildRejectionReason;
   /** Staff-only; never returned to a parent (R62.8). */
   internal_note?: string;
 }
+
+/**
+ * Where a student is being placed (R66.5).
+ *
+ * Naming a **group** says the Level is subdivided and the student goes in this
+ * subdivision — the Level and branch are read from it, and the composite FK
+ * proves they agree. Naming a **Level and a branch** says the Level is not
+ * subdivided, which is the case that used to leave an approver with no way to
+ * admit anybody.
+ */
+export type PlacementBody =
+  | { administrative_group_id: string }
+  | { level_id: string; branch_id: string };
 
 export type ChildRejectionReason =
   | 'duplicate_application'

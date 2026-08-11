@@ -74,13 +74,29 @@ const decideSchema = z
   .object({
     approve: z.boolean(),
     match_existing_user_id: z.uuid().optional(),
+    /**
+     * R66.5 — a group when the Level is subdivided, a Level and a branch when
+     * it is not. Exactly one, refined below: both would have to be reconciled
+     * and neither is the missing placement §4.1 refuses.
+     */
     administrative_group_id: z.uuid().optional(),
+    level_id: z.uuid().optional(),
+    branch_id: z.uuid().optional(),
     rejection_reason: z
       .enum(['duplicate_application', 'insufficient_information', 'not_eligible', 'other'])
       .optional(),
     internal_note: z.string().trim().max(500).optional(),
   })
-  .strict();
+  .strict()
+  .refine(
+    (d) =>
+      d.administrative_group_id === undefined ||
+      (d.level_id === undefined && d.branch_id === undefined),
+    { message: 'a placement is either administrative_group_id, or level_id with branch_id (R66.5)' },
+  )
+  .refine((d) => (d.level_id === undefined) === (d.branch_id === undefined), {
+    message: 'level_id and branch_id are given together or not at all',
+  });
 
 /**
  * The consent text version **in force now**, captured onto the application.
@@ -147,8 +163,10 @@ export function decide(prisma: PrismaClient) {
           ? { matchExistingUserId: body.match_existing_user_id }
           : {}),
         ...(body.administrative_group_id
-          ? { administrativeGroupId: body.administrative_group_id }
-          : {}),
+          ? { placement: { administrativeGroupId: body.administrative_group_id } }
+          : body.level_id && body.branch_id
+            ? { placement: { levelId: body.level_id, branchId: body.branch_id } }
+            : {}),
         ...(body.rejection_reason ? { rejectionReason: body.rejection_reason } : {}),
         ...(body.internal_note ? { internalNote: body.internal_note } : {}),
       },

@@ -185,6 +185,41 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 
+describe('R66.5 — an approver places into a Level with no group', () => {
+  it('approves with level_id + branch_id and enrols directly', async () => {
+    // The capability the revision exists for. Before it, an approver facing a
+    // Level nobody had subdivided could not admit anybody at all: the placement
+    // demanded a group, and there was none to name.
+    const bare = await prisma.level.create({
+      data: { name: `${TAG} مستوى بلا مجموعة`, categoryId: placement.categoryId },
+    });
+    const { parentId, applicationId } = await submitBundle();
+    const admin = await makeAdmin('super_admin');
+
+    const { decideChildApplication } = await import('./child-application.service.js');
+    const result = await decideChildApplication(
+      prisma,
+      await actorFor(prisma, admin),
+      applicationId,
+      { approve: true, placement: { levelId: bare.id, branchId } },
+    );
+
+    const enrolment = await prisma.enrollment.findFirstOrThrow({
+      where: { studentId: result.childUserId!, deletedAt: null },
+    });
+    expect(enrolment.administrativeGroupId).toBeNull();
+    // R66 — the branch is on the enrolment, which is what keeps every
+    // branch-scoped rule working for a student who has no group.
+    expect(enrolment.branchId).toBe(branchId);
+    expect(enrolment.levelId).toBe(bare.id);
+
+    await prisma.enrollment.deleteMany({ where: { levelId: bare.id } });
+    await prisma.level.delete({ where: { id: bare.id } });
+    expect(parentId).toBeTruthy();
+  });
+
+});
+
 describe('§5.6 / TD-4.2 approval queue', () => {
   it('lists a parent+child registration as ONE item, with the child as a decidable block', async () => {
     const admin = await makeAdmin();
@@ -238,7 +273,7 @@ describe('§5.6 / TD-4.2 approval queue', () => {
       applicationId,
       // R64.5 — approving a child places it, exactly as approving a
       // registration always has (§4.1).
-      { approve: true, administrativeGroupId: placement.groupId },
+      { approve: true, placement: { administrativeGroupId: placement.groupId } },
     );
     const link = await prisma.familyLink.findFirst({
       where: { parentId, studentId: childResult.childUserId! },
@@ -324,7 +359,7 @@ describe('§5.6 / TD-4.2 approval queue', () => {
       prisma,
       await actorFor(prisma, admin),
       applicationId,
-      { approve: true, administrativeGroupId: placement.groupId },
+      { approve: true, placement: { administrativeGroupId: placement.groupId } },
     );
 
     expect((await prisma.user.findUnique({ where: { id: parentId } }))?.accountStatus).toBe('active');

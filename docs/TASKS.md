@@ -687,7 +687,7 @@
 - [x] `enrolInLevel` — direct enrolment in an unsubdivided Level; 13 branch reads moved off the join
 - [x] Level creation drops the branch end to end (service, validator with `.strict()`, DTO, controller, adapter, form)
 - [x] 995 backend tests green; the ten encoding retired rules rewritten to the new rule, not deleted
-- [ ] **Approval placement into a group-less Level** — `enrolInLevel` exists and is tested, but `decide()`'s `enrollments[]` still takes only `administrative_group_id`, so the queue's dialog cannot yet place into the 18 Levels this revision legalises. It currently filters them out (the item-4 fix). Next slice: widen the placement contract to `{ user_id, level_id, branch_id }`
+- [x] **Approval placement into a group-less Level** — `enrolAtPlacement` dispatches one `PlacementInput` union for both approval paths; both wire schemas refuse a mixture and half a placement by name; the dialog offers every Level again with a branch selector where there is no group. TD-4.6d's backfill removed from code with it
 
 ### UI/product pass 2 (2026-08-11)
 - [x] Arabic-Indic digits removed platform-wide + `check-western-digits.sh` (14th guard). **Arabic text, Western numerals**

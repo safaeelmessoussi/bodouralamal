@@ -7,7 +7,7 @@ import { allocateReferenceCode } from '../lib/reference-code.js';
 import type { Actor } from '../policies/actor.js';
 import { assertFreshActive } from '../policies/freshness.policy.js';
 import * as audit from '../repositories/audit.repository.js';
-import { enrolInGroup } from './enrollment.service.js';
+import { enrolAtPlacement, type PlacementInput } from './enrollment.service.js';
 import { applyRoleAssignments } from './user.service.js';
 
 /**
@@ -131,8 +131,12 @@ export interface DecideInput {
   approve: boolean;
   /** On approval: link this existing account instead of creating a child. */
   matchExistingUserId?: string;
-  /** The administrator's placement — R62.7 makes this *their* decision. */
-  administrativeGroupId?: string;
+  /**
+   * The administrator's placement — R62.7 makes this *their* decision, and
+   * R66.5 lets them express it either way: a **group** when the Level is
+   * subdivided, or a **Level and a branch** when it is not.
+   */
+  placement?: PlacementInput;
   rejectionReason?:
     | 'duplicate_application'
     | 'insufficient_information'
@@ -223,7 +227,7 @@ export async function decideChildApplication(
      * Linking an EXISTING account is exempt: that student is already placed,
      * and demanding a second enrolment would mean a Level per parent.
      */
-    if (!decision.matchExistingUserId && !decision.administrativeGroupId) {
+    if (!decision.matchExistingUserId && !decision.placement) {
       throw new AppError('VALIDATION_FAILED', 'an approved child must be placed (§4.1)', {
         reason: 'ENROLLMENT_REQUIRED',
       });
@@ -365,8 +369,10 @@ export async function decideChildApplication(
     //
     // R62.7: schooling stage INFORMS this decision and never makes it. Nothing
     // here reads `schoolingStage` to choose, validate or refuse a group.
-    if (decision.administrativeGroupId) {
-      await enrolInGroup(tx, actor, decision.administrativeGroupId, childUserId, 'approval');
+    if (decision.placement) {
+      // The same resolver `decide()` uses, so the two approval paths cannot
+      // place students by different rules (R66.5).
+      await enrolAtPlacement(tx, actor, decision.placement, childUserId, 'approval');
     }
 
     await tx.childApplication.update({

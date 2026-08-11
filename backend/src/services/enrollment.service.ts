@@ -348,6 +348,43 @@ export async function enrolInGroup(
 }
 
 /**
+ * **Where a student is being placed — a group, or a Level and a branch (R66.5).**
+ *
+ * Exactly one of the two, and the type says so rather than a validator saying
+ * it later: a shape carrying both would have to decide which wins, and a shape
+ * carrying neither is the missing placement §4.1 refuses.
+ *
+ * The two are not interchangeable spellings of one thing. Naming a **group**
+ * says *this Level is subdivided and the student goes in this subdivision*, and
+ * the Level and branch are read from it — which the composite FK then proves.
+ * Naming a **Level and a branch** says *this Level is not subdivided*, and both
+ * are the caller's checked choice.
+ */
+export type PlacementInput =
+  | { administrativeGroupId: string }
+  | { levelId: string; branchId: string };
+
+/**
+ * Places a student, whichever way the caller expressed it.
+ *
+ * **One entry point for both approval paths.** `decide()` and
+ * `decideChildApplication` both place students, and this project has paid
+ * repeatedly for one rule with two implementations — so the dispatch lives here
+ * and both callers hand it a `PlacementInput` rather than branching themselves.
+ */
+export async function enrolAtPlacement(
+  tx: Prisma.TransactionClient,
+  actor: Actor,
+  placement: PlacementInput,
+  studentId: string,
+  source: 'roster_edit' | 'approval',
+): Promise<EnrollmentRow> {
+  return 'administrativeGroupId' in placement
+    ? enrolInGroup(tx, actor, placement.administrativeGroupId, studentId, source)
+    : enrolInLevel(tx, actor, placement.levelId, placement.branchId, studentId, source);
+}
+
+/**
  * **Enrols a student DIRECTLY in a Level (Revision 66).**
  *
  * The counterpart of `enrolInGroup`, for a Level nobody has subdivided. It is a

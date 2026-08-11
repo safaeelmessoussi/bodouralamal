@@ -4,13 +4,11 @@ import { loadConfig } from '../lib/config.js';
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
 import type { RoleScope } from '../policies/branch-scope.js';
 import {
-  backfillFirstGroups,
   createAdministrativeGroup,
   deleteAdministrativeGroup,
   listAdministrativeGroups,
 } from './administrative-group.service.js';
 import type { Actor } from '../policies/actor.js';
-import { createBranch } from './branch.service.js';
 import { createLevel, levelsWithoutGroups } from './level.service.js';
 import {
   enrolInLevel,

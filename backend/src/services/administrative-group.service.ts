@@ -5,7 +5,6 @@ import * as scope from '../policies/branch-scope.js';
 import * as audit from '../repositories/audit.repository.js';
 import * as trash from '../repositories/trash.repository.js';
 import { updateWithVersion } from '../repositories/optimistic-lock.js';
-import { FIRST_GROUP_NAME } from './level.service.js';
 import type { Actor } from '../policies/actor.js';
 
 /**
@@ -252,63 +251,10 @@ export async function deleteAdministrativeGroup(
 }
 
 /**
- * **TD-4.6d — the bootstrap backfill.**
+ * **`backfillFirstGroups` was here and is removed by Revision 66.**
  *
- * *"`Branch` insert + **المجموعة 1 for every Level that has none** + `AuditLog`
- * row, atomic. Runs once per deployment by construction — after it, no Level
- * lacks a group — and is idempotent if re-entered."*
- *
- * **Why this exists at all.** §15.1 seeds Levels and **forbids seeding
- * Branches** (real premises are entered by the owner, §2.3), so seeded Levels
- * necessarily exist before any Branch does and cannot be given a group at
- * creation time. This closes that gap at the first moment a Branch exists.
- *
- * **It is keyed on the CONDITION, not on "is this the first branch".** The query
- * is *"every Level with no live group"*, which is naturally idempotent: after
- * the first run there are none, so every later branch creation is a no-op, and
- * a re-entry after a partial failure completes rather than duplicates. Detecting
- * "first branch" explicitly would have been a second, weaker way of asking the
- * same question — and wrong the moment a deployment's first branch is
- * soft-deleted.
- *
- * Called **inside** the branch-creation transaction, so a Branch and the groups
- * it enabled commit together.
+ * TD-4.6d gave every group-less Level a `المجموعة 1` when the first Branch
+ * appeared, because a Level without a group could admit nobody. R66 makes that
+ * state ordinary, so the backfill has nothing to repair — and creating a branch
+ * no longer makes placement decisions nobody asked for.
  */
-export async function backfillFirstGroups(
-  tx: Prisma.TransactionClient,
-  branchId: string,
-  actorUserId: string,
-): Promise<{ levelId: string; groupId: string }[]> {
-  const orphans = await tx.level.findMany({
-    where: { deletedAt: null, administrativeGroups: { none: { deletedAt: null } } },
-    select: { id: true, name: true },
-    orderBy: { displayOrder: 'asc' },
-  });
-  if (orphans.length === 0) return [];
-
-  const created: { levelId: string; groupId: string }[] = [];
-  for (const level of orphans) {
-    const group = await tx.administrativeGroup.create({
-      data: { name: FIRST_GROUP_NAME, levelId: level.id, branchId, displayOrder: 0 },
-      select: { id: true },
-    });
-    created.push({ levelId: level.id, groupId: group.id });
-  }
-
-  // One row for the whole backfill rather than one per group: this was a single
-  // operator action with a single cause, and N rows would misrepresent it as N
-  // decisions (§7 attribution invariant).
-  await audit.write(tx, {
-    actorUserId,
-    actionType: 'administrativegroup.bootstrap_backfill',
-    targetEntity: 'Branch',
-    targetId: branchId,
-    detail: {
-      reason: 'FIRST_BRANCH_BACKFILL',
-      branch_id: branchId,
-      levels: created.length,
-      level_ids: created.map((c) => c.levelId),
-    },
-  });
-  return created;
-}

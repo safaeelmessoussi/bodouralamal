@@ -41,7 +41,35 @@ const decisionSchema = z.object({
    * are not interchangeable — on the parent+child path the **child** enrols.
    */
   enrollments: z
-    .array(z.object({ user_id: z.uuid(), administrative_group_id: z.uuid() }))
+    .array(
+      z
+        .object({
+          user_id: z.uuid(),
+          administrative_group_id: z.uuid().optional(),
+          level_id: z.uuid().optional(),
+          branch_id: z.uuid().optional(),
+        })
+        .strict()
+        /**
+         * **Exactly one of the two shapes (R66.5).** A group names a Level that
+         * IS subdivided and the Level and branch are read from it; a Level and
+         * branch name one that is not. Both together would have to be
+         * reconciled, and neither is the missing placement §4.1 refuses — so
+         * the boundary rejects each rather than letting the service guess.
+         */
+        .refine(
+          (e) =>
+            (e.administrative_group_id !== undefined) !==
+            (e.level_id !== undefined && e.branch_id !== undefined),
+          {
+            message:
+              'a placement is either administrative_group_id, or level_id with branch_id (R66.5)',
+          },
+        )
+        .refine((e) => (e.level_id === undefined) === (e.branch_id === undefined), {
+          message: 'level_id and branch_id are given together or not at all',
+        }),
+    )
     .max(20)
     .optional(),
 });
@@ -90,7 +118,12 @@ function decision(prisma: PrismaClient, approve: boolean) {
         ? {
             enrollments: parsed.data.enrollments.map((e) => ({
               userId: e.user_id,
-              administrativeGroupId: e.administrative_group_id,
+              // The refinements above guarantee exactly one shape reaches here,
+              // so this reads the discriminator rather than re-deciding it.
+              placement:
+                e.administrative_group_id !== undefined
+                  ? { administrativeGroupId: e.administrative_group_id }
+                  : { levelId: e.level_id!, branchId: e.branch_id! },
             })),
           }
         : {}),

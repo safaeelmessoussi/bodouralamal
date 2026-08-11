@@ -43,7 +43,7 @@ let parentId = '';
 let placement: Placement;
 const PLACEMENT_TAG = '[child-app-test-place]';
 /** The argument every approval in this suite passes. */
-const place = () => ({ administrativeGroupId: placement.groupId });
+const place = () => ({ placement: { administrativeGroupId: placement.groupId } });
 
 async function makeUser(label: string, role?: string): Promise<string> {
   const u = await prisma.user.create({

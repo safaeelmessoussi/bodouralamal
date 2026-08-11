@@ -5,6 +5,7 @@ import {
   decideChildApplication,
   CHILD_REJECTION_REASONS,
   type ChildRejectionReason,
+  type PlacementBody,
   listApprovals,
   rejectApproval,
   type Approval,
@@ -224,7 +225,7 @@ export function ApprovalsPage(): ReactNode {
     reason?: string,
     options?: {
       assignments?: { role: string; branch_id: string | null }[];
-      enrollments?: { user_id: string; administrative_group_id: string }[];
+      enrollments?: ({ user_id: string } & PlacementBody)[];
       row?: Approval;
     },
   ): Promise<void> {
@@ -346,13 +347,16 @@ export function ApprovalsPage(): ReactNode {
               : placing.applicants.filter((a) => a.role === 'applicant')
           }
           title={t('admin.approvals.placeTitle')}
+          branches={branches}
           busy={busy}
           onCancel={() => setPlacing(null)}
           onConfirm={(placements) =>
             void confirmDecision(undefined, {
-              enrollments: placements.map((p) => ({
-                user_id: p.id,
-                administrative_group_id: p.administrative_group_id,
+              // R66.5 — whichever shape the dialog produced travels through
+              // unchanged; the server refuses a mixture rather than picking one.
+              enrollments: placements.map(({ id, ...placement }) => ({
+                user_id: id,
+                ...placement,
               })),
               row: placing,
             })
@@ -363,6 +367,7 @@ export function ApprovalsPage(): ReactNode {
       {childDeciding ? (
         <ChildDecisionDialog
           row={childDeciding}
+          branches={branches}
           busy={busy}
           onCancel={() => setChildDeciding(null)}
           onDone={async (message) => {
@@ -550,6 +555,7 @@ function PlacementDialog({
   row,
   students,
   title,
+  branches,
   busy,
   onConfirm,
   onCancel,
@@ -567,8 +573,10 @@ function PlacementDialog({
    */
   students: { id: string; name: string }[];
   title: string;
+  /** R66.5 — offered when the chosen Level has no group to inherit one from. */
+  branches: PublicBranch[];
   busy: boolean;
-  onConfirm: (placements: { id: string; administrative_group_id: string }[]) => void;
+  onConfirm: (placements: ({ id: string } & PlacementBody)[]) => void;
   onCancel: () => void;
 }): ReactNode {
   const { accessToken } = useSession();
@@ -576,7 +584,10 @@ function PlacementDialog({
 
   const [levels, setLevels] = useState<Level[]>([]);
   const [groups, setGroups] = useState<AdministrativeGroup[]>([]);
-  const [choice, setChoice] = useState<Record<string, { levelId: string; groupId: string }>>({});
+  /** R66.5 — a group, OR a branch when the Level has none. Never both. */
+  const [choice, setChoice] = useState<
+    Record<string, { levelId: string; groupId: string; branchId: string }>
+  >({});
   const [loadFailed, setLoadFailed] = useState(false);
   /** §4.1 step 1 filters to the applicant's Category — and lets the approver
    *  leave it, because the applicant may have chosen the wrong stage. */
@@ -605,7 +616,14 @@ function PlacementDialog({
               Object.fromEntries(
                 studentIds.map((id) => [
                   id,
-                  { levelId: first.id, groupId: inLevel.length === 1 ? inLevel[0]!.id : '' },
+                  {
+                    levelId: first.id,
+                    groupId: inLevel.length === 1 ? inLevel[0]!.id : '',
+                    // R66.5 — with no group to inherit a branch from, the
+                    // approver states it. Preselected from the request where
+                    // one was made, exactly as the Level is.
+                    branchId: inLevel.length === 0 ? (row.branch?.id ?? '') : '',
+                  },
                 ]),
               ),
             );
@@ -623,12 +641,30 @@ function PlacementDialog({
     const inLevel = groups.filter((g) => g.level_id === levelId);
     setChoice((c) => ({
       ...c,
-      // §4.1 step 2: a Level with one group needs no interaction.
-      [studentId]: { levelId, groupId: inLevel.length === 1 ? inLevel[0]!.id : '' },
+      // §4.1 step 2: a Level with one group needs no interaction. R66.5: a
+      // Level with NO group needs a branch instead, defaulted to the one the
+      // applicant asked for.
+      [studentId]: {
+        levelId,
+        groupId: inLevel.length === 1 ? inLevel[0]!.id : '',
+        branchId: inLevel.length === 0 ? (row.branch?.id ?? '') : '',
+      },
     }));
   }
 
-  const complete = students.every((s) => choice[s.id]?.groupId);
+  /**
+   * A placement is complete when it names a group, or — for a Level nobody has
+   * subdivided — a branch. R66.5 made the second shape possible; before it, a
+   * group-less Level could never satisfy this and the confirm button stayed
+   * disabled with no explanation.
+   */
+  const complete = students.every((s) => {
+    const picked = choice[s.id];
+    if (!picked?.levelId) return false;
+    return groups.some((g) => g.level_id === picked.levelId)
+      ? picked.groupId !== ''
+      : picked.branchId !== '';
+  });
 
   return (
     <Dialog open onClose={onCancel} title={title}>
@@ -661,16 +697,9 @@ function PlacementDialog({
           }
         />
 
-        {/* The whole point of excluding unassignable Levels is that the
-            approver is never left pressing a dead button — so when the
-            exclusion empties the list, the screen says why and where to fix
-            it rather than showing an empty dropdown. */}
-        {levels.length > 0 && !levels.some((l) => groups.some((g) => g.level_id === l.id)) ? (
-          <p className="state" role="alert">
-            {t('admin.approvals.placeNoAssignableLevels')}{' '}
-            <a href="/admin/groups">{t('admin.nav.groups')}</a>
-          </p>
-        ) : null}
+        {/* R66.5 — the "no assignable Level" notice is gone with the filter
+            that made it necessary. Every Level can now be placed into: a group
+            where the Level is subdivided, a branch where it is not. */}
 
         {students.map((s) => {
           const picked = choice[s.id];
@@ -689,29 +718,21 @@ function PlacementDialog({
                   // order within its Category), so the list reads as curricula
                   // rather than as one flat run.
                   /**
-                   * **Levels with no live Administrative Group are excluded,
-                   * not offered and then refused.**
+                   * **Every Level is offered again (R66.5).**
                    *
-                   * They used to be listed. Picking one left `groupId` empty,
-                   * which left the confirm button `disabled` — so pressing
-                   * موافقة produced **no network request at all** and no
-                   * explanation beyond a line of small print. An approver with
-                   * a queue full of applicants had no way to tell a dead
-                   * control from a broken page.
+                   * They were excluded for one release, because picking a Level
+                   * with no group left the confirm button `disabled` and
+                   * pressing موافقة produced no network request at all. That was
+                   * the honest workaround while §4.1's placement demanded a
+                   * group and 18 of 20 live Levels had none.
                    *
-                   * §4.1 is the reason it cannot be assigned: approval IS the
-                   * enrolment, and an enrolment needs a group. TD-4.6b makes
-                   * `createLevel` produce a first group precisely so this state
-                   * cannot arise — but it does arise for Levels that entered
-                   * any other way (seeds, fixtures, a group later deleted),
-                   * and 18 of 20 live Levels are in it today.
-                   *
-                   * Excluding them keeps every offered choice completable. The
-                   * notice below says what to do about the ones that are gone.
+                   * R66 removes the premise: a Level nobody has subdivided is
+                   * ordinary, and the placement it needs is a **branch** rather
+                   * than a group. So the filter goes, and the branch selector
+                   * below appears exactly when there is no group to choose.
                    */
                   ...levels
                     .filter((l) => categoryFilter === '' || l.category_id === categoryFilter)
-                    .filter((l) => groups.some((g) => g.level_id === l.id))
                     .map((l) => ({ value: l.id, label: `${l.category_name} — ${l.name}` })),
                 ]}
               />
@@ -730,11 +751,23 @@ function PlacementDialog({
                 />
               ) : null}
               {picked && inLevel.length === 0 ? (
-                // Only reachable for a Level whose last group was deleted
-                // between this dialog loading and the choice being made.
-                <p className="state" role="status">
-                  {t('admin.approvals.placeNoGroups')}
-                </p>
+                // R66.5 — no subdivision, so the approver names the branch the
+                // student is enrolled AT. It lands on `Enrollment.branch_id`,
+                // which is what keeps every branch-scoped rule working for a
+                // student who has no group.
+                <SelectField
+                  label={t('admin.approvals.placeBranch')}
+                  value={picked.branchId}
+                  onChange={(v) =>
+                    setChoice((c) => ({ ...c, [s.id]: { ...picked, branchId: v } }))
+                  }
+                  required
+                  options={[
+                    { value: '', label: t('common.choose') },
+                    ...branches.map((b) => ({ value: b.id, label: b.name })),
+                  ]}
+                  hint={t('admin.approvals.placeBranchHint')}
+                />
               ) : null}
             </fieldset>
           );
@@ -749,10 +782,14 @@ function PlacementDialog({
             disabled={busy || !complete}
             onClick={() =>
               onConfirm(
-                students.map((s) => ({
-                  id: s.id,
-                  administrative_group_id: choice[s.id]!.groupId,
-                })),
+                students.map((s) => {
+                  const picked = choice[s.id]!;
+                  // Exactly one shape, chosen by whether the Level is
+                  // subdivided — the server refuses a request carrying both.
+                  return picked.groupId
+                    ? { id: s.id, administrative_group_id: picked.groupId }
+                    : { id: s.id, level_id: picked.levelId, branch_id: picked.branchId };
+                }),
               )
             }
           >
@@ -792,12 +829,15 @@ function PlacementDialog({
  */
 function ChildDecisionDialog({
   row,
+  branches,
   busy,
   onCancel,
   onDone,
   onBusy,
 }: {
   row: Approval;
+  /** R66.5 — passed through to the placement step. */
+  branches: PublicBranch[];
   busy: boolean;
   onCancel: () => void;
   onDone: (message: string) => Promise<void>;
@@ -818,9 +858,7 @@ function ChildDecisionDialog({
     rejecting.every((c) => reason[c.application_id]);
 
   /** Runs the decisions one at a time and reports what actually landed. */
-  async function apply(
-    placements: Record<string, string>,
-  ): Promise<void> {
+  async function apply(placements: Record<string, PlacementBody>): Promise<void> {
     onBusy(true);
     setFailure(null);
     let done = 0;
@@ -828,7 +866,8 @@ function ChildDecisionDialog({
       for (const child of approving) {
         await decideChildApplication(
           child.application_id,
-          { approve: true, administrative_group_id: placements[child.application_id]! },
+          // R66.5 — whichever shape the placement dialog produced.
+          { approve: true, ...placements[child.application_id]! },
           accessToken,
         );
         done += 1;
@@ -865,12 +904,11 @@ function ChildDecisionDialog({
         row={row}
         students={placeFor.map((c) => ({ id: c.application_id, name: c.name }))}
         title={t('admin.approvals.placeTitle')}
+        branches={branches}
         busy={busy}
         onCancel={() => setPlaceFor(null)}
         onConfirm={(placements) =>
-          void apply(
-            Object.fromEntries(placements.map((p) => [p.id, p.administrative_group_id])),
-          )
+          void apply(Object.fromEntries(placements.map(({ id, ...rest }) => [id, rest])))
         }
       />
     );

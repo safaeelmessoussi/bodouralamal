@@ -5,7 +5,7 @@ import { pageWindow, type Page } from '../lib/pagination.js';
 import { composeArabicName } from '../lib/person-name.js';
 import { assertFreshActive } from '../policies/freshness.policy.js';
 import * as audit from '../repositories/audit.repository.js';
-import { enrolInGroup } from './enrollment.service.js';
+import { enrolAtPlacement, type PlacementInput } from './enrollment.service.js';
 import { applyRoleAssignments } from './user.service.js';
 
 /**
@@ -361,7 +361,12 @@ interface Decision {
    * **Teaching Groups are never assigned here** (§4.1): at approval nobody yet
    * knows how each Subject will be split, and most Subjects are never split.
    */
-  enrollments?: { userId: string; administrativeGroupId: string }[];
+  /**
+   * R66.5 — each placement is a **group**, or a **Level and a branch**. A Level
+   * nobody has subdivided has no group to name, and demanding one is what left
+   * an approver unable to admit anybody to eighteen of twenty live Levels.
+   */
+  enrollments?: { userId: string; placement: PlacementInput }[];
 }
 
 /**
@@ -458,7 +463,7 @@ export async function decide(
       }
 
       // §4.1 (Revision 43) — the placement, in THIS transaction. Nothing here
-      // is re-implemented: `enrolInGroup` carries the branch-scope check, the
+      // is re-implemented: the enrolment services carry the branch-scope check, the
       // §4.4b sex restriction, BR-21's one-group-per-Level rule and the consent
       // re-evaluation enqueue, so approval and the roster screen place students
       // by exactly the same rules.
@@ -518,7 +523,9 @@ export async function decide(
       }
 
       for (const e of enrollments) {
-        await enrolInGroup(tx, actor, e.administrativeGroupId, e.userId, 'approval');
+        // One resolver for both shapes and both approval paths — the branching
+        // lives in `enrolAtPlacement`, not in each caller (R66.5).
+        await enrolAtPlacement(tx, actor, e.placement, e.userId, 'approval');
       }
 
       await audit.write(tx, {
@@ -540,7 +547,13 @@ export async function decide(
           // must be answerable from the approval alone.
           enrolled: enrollments.map((e) => ({
             user_id: e.userId,
-            administrative_group_id: e.administrativeGroupId,
+            // R66.5 — the trail records WHICH shape the approver used, because
+            // "placed in a group" and "placed directly in a Level" are
+            // different decisions and a null would not distinguish them from a
+            // group the projection happened to omit.
+            ...('administrativeGroupId' in e.placement
+              ? { administrative_group_id: e.placement.administrativeGroupId }
+              : { level_id: e.placement.levelId, branch_id: e.placement.branchId }),
           })),
           ...(decision.reason ? { reason: decision.reason } : {}),
         },

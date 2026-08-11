@@ -86,7 +86,7 @@ async function approveFirstChild(applicationId: string): Promise<string> {
     prisma,
     await actorFor(prisma, admin.id),
     applicationId,
-    { approve: true, administrativeGroupId: placement.groupId },
+    { approve: true, placement: { administrativeGroupId: placement.groupId } },
   );
   return result.childUserId!;
 }

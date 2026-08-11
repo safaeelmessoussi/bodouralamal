@@ -79,7 +79,6 @@ let branchA: string;
 let branchB: string;
 let levelId: string;
 let soloLevelId: string;
-let soloGroupId: string;
 
 async function clear(): Promise<void> {
   const groups = await prisma.administrativeGroup.findMany({
@@ -157,10 +156,9 @@ beforeAll(async () => {
     data: { name: `${TAG} مستوى وحيد`, categoryId: category.id, genderRestriction: 'any' },
   });
   soloLevelId = solo.id;
-  const soloGroup = await prisma.administrativeGroup.create({
-    data: { name: `${TAG} وحيدة`, levelId: solo.id, branchId: branchA, displayOrder: 0 },
-  });
-  soloGroupId = soloGroup.id;
+  // R66 — `soloLevelId` deliberately keeps NO group of its own: the tests that
+  // need one create it, and the ones about deleting a last group need the Level
+  // to be able to end up with none.
 
   superAdmin = bearer(await makeUser('مدير عام'), [{ role: 'super_admin', branches: null }]);
   // Scoped to branch A ONLY — the half of TD-2 a null scope cannot exercise.

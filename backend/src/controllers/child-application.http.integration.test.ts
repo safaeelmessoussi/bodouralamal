@@ -336,6 +336,62 @@ describe('POST /admin/child-applications/{id}/decide', () => {
   });
 });
 
+describe('R66.5 — a placement is a group, OR a Level and a branch', () => {
+  it('approves into a Level with NO group, using level_id + branch_id', async () => {
+    const bare = await prisma.level.create({
+      data: { name: `${TAG} مستوى مباشر`, categoryId: placement.categoryId },
+    });
+    const parent = await makeAdult('مباشرة');
+    const submitted = await call('POST', '/child-applications', parent.token, payload(`${TAG}-م`));
+    const res = await call(
+      'POST',
+      `/admin/child-applications/${submitted.body.application_ids![0]!}/decide`,
+      admin.token,
+      { approve: true, level_id: bare.id, branch_id: placement.branchId },
+    );
+    expect(res.status).toBe(200);
+
+    const enrolment = await prisma.enrollment.findFirstOrThrow({
+      where: { studentId: res.body.child_user_id!, deletedAt: null },
+    });
+    expect(enrolment.administrativeGroupId).toBeNull();
+    expect(enrolment.branchId).toBe(placement.branchId);
+
+    await prisma.enrollment.deleteMany({ where: { levelId: bare.id } });
+    await prisma.level.delete({ where: { id: bare.id } });
+  });
+
+  it('REFUSES both shapes at once — the boundary decides, not the service', async () => {
+    const parent = await makeAdult('مزدوجة');
+    const submitted = await call('POST', '/child-applications', parent.token, payload(`${TAG}-ز`));
+    const res = await call(
+      'POST',
+      `/admin/child-applications/${submitted.body.application_ids![0]!}/decide`,
+      admin.token,
+      {
+        approve: true,
+        administrative_group_id: placement.groupId,
+        level_id: placement.levelId,
+        branch_id: placement.branchId,
+      },
+    );
+    expect(res.status).toBe(400);
+    expect(res.body.error?.code).toBe('VALIDATION_FAILED');
+  });
+
+  it('REFUSES a level_id with no branch_id — half a placement is not one', async () => {
+    const parent = await makeAdult('ناقصة');
+    const submitted = await call('POST', '/child-applications', parent.token, payload(`${TAG}-ن`));
+    const res = await call(
+      'POST',
+      `/admin/child-applications/${submitted.body.application_ids![0]!}/decide`,
+      admin.token,
+      { approve: true, level_id: placement.levelId },
+    );
+    expect(res.status).toBe(400);
+  });
+});
+
 describe('GET /admin/child-applications/{id}/matches', () => {
   it('proposes an existing same-named child, with the facts that tell two apart', async () => {
     // An approved child first — that account becomes the candidate.
