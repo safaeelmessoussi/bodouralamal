@@ -39,6 +39,11 @@ jobs:
         run: bash scripts/ci/check-design-tokens.sh
       - name: Public display identity resolved server-side (§7, §20 rule 21)
         run: bash scripts/ci/check-display-identity.sh
+      # R60 shipped two defects from reading the account's full role list where
+      # the active role was meant, and both type-checked — only a rule about
+      # WHICH list may be read can catch the next one.
+      - name: Presentation reads the active role, not the account's roles (R60)
+        run: bash scripts/ci/check-active-role-presentation.sh
       # A response shape nobody chose is still a contract once a client depends
       # on it, and the drift is silent: adding a column to a model changes the
       # API without changing a test.

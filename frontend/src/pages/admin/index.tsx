@@ -237,9 +237,10 @@ function WrongRole({
   module: { labelKey: string; roles: readonly string[] };
   activeRole: string;
 }): ReactNode {
-  const { roles, setActiveRole } = useActiveRole();
-  // Only a role they actually hold is offered — the switcher's own rule.
-  const target = module.roles.find((role) => roles.includes(role));
+  const { setActiveRole, switchableTo } = useActiveRole();
+  // Only a role they actually hold is offered — the switcher's own rule, asked
+  // by name so this screen never reads the full list itself (R60).
+  const target = switchableTo(module.roles);
 
   return (
     <div className="admin-empty">
@@ -249,7 +250,7 @@ function WrongRole({
           .replace('{module}', t(module.labelKey))
           .replace('{active}', t(`roles.${activeRole}`))}
       </p>
-      {target === undefined ? (
+      {target === null ? (
         // They hold no role that opens it. Stated plainly rather than offering
         // a switch that would do nothing.
         <p className="muted">{t('roles.wrongRoleNoRole')}</p>

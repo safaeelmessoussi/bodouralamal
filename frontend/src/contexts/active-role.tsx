@@ -89,6 +89,15 @@ interface ActiveRoleState {
   activeRoles: string[];
   /** Refused silently for a role the caller does not hold — see `select`. */
   setActiveRole: (role: string) => void;
+  /**
+   * **Which of these roles the person could switch to**, or `null` for none.
+   *
+   * The one legitimate question a screen can ask about the full list, given a
+   * name so the list itself never has to leave this module. Without it the
+   * wrong-role screen had to destructure `roles`, which is indistinguishable —
+   * to a reader and to the guard — from the mistake R60 shipped.
+   */
+  switchableTo: (candidates: readonly string[]) => string | null;
 }
 
 const ActiveRoleContext = createContext<ActiveRoleState | null>(null);
@@ -171,6 +180,7 @@ export function ActiveRoleProvider({ children }: { children: ReactNode }): React
       activeRole: active,
       activeRoles: active === null ? [] : [active],
       setActiveRole,
+      switchableTo: (candidates) => candidates.find((role) => roles.includes(role)) ?? null,
     };
   }, [roles, stored, setActiveRole, me]);
 

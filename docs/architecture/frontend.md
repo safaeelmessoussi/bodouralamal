@@ -541,6 +541,34 @@ where only one is right.
 > things the server would refuse. Both were `me.roles` read where the active role
 > was meant, in thirteen places.
 
+### The rule is enforced, not documented
+
+`scripts/ci/check-active-role-presentation.sh` scans the frontend and fails on
+any presentation read of the account's full list. It catches three forms — the
+direct read, destructuring it out of `me`, and taking `roles` from the context
+that publishes both — because the second and third are the obvious ways around
+the first.
+
+**A source scan rather than an ESLint rule**, deliberately: the project has no
+ESLint plugin configuration and twelve guards of this exact shape already wired
+into CI. A custom rule would mean a new dependency to pin (§3.1a) to catch a
+pattern that is a grep.
+
+**Four files may read the full list**, each for a stated reason: the context that
+owns the distinction, the session that fetches `/me`, the switcher whose menu
+*is* that list, and `hasMultipleRoles` — which asks whether there is a choice to
+offer, a switcher question.
+
+**A screen that needs to know what the person could switch to asks by name.**
+`switchableTo(candidates)` exists so the wrong-role screen never destructures
+`roles`; reading the list there would be indistinguishable, to a reader and to
+the guard, from the mistake R60 shipped.
+
+> **What it cannot catch, stated rather than implied.** A value laundered through
+> an intermediate — `const s = me; s.roles` — is beyond a regex. What it does
+> catch is every direct read and every destructuring, which is how all thirteen
+> sites were written and how a fourteenth would be.
+
 **Write affordances follow it too.** A Super Admin working as مؤطِّرة is not
 offered a control the server will refuse — the affordance follows the authority,
 which is the whole point of R60 reaching the client.

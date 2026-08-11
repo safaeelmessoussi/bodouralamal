@@ -655,7 +655,7 @@
 - [x] `لوحة التحكم` opens the active role's home — teacher → `/teacher`, admin → `/admin`
 - [x] Both portal sidebars, the header (desktop + mobile) and 9 write affordances converted
 - [x] The missing `roles.wrongRole*` strings added; the screen kept for deep links only
-- [ ] The rule is documented but not enforced by a guard — a future page could read `me.roles` again. A lint rule or a source scan would pin it
+- [x] **Enforced** by `scripts/ci/check-active-role-presentation.sh` — three forms caught, mutation-proved, wired into CI
 
 ### R60 — the Active Role as a security context (2026-08-11)
 - [x] `active_role` JWT claim; the token is **already narrowed** when it is present
