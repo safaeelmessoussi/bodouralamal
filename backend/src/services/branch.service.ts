@@ -1,5 +1,6 @@
 import type { Branch, PrismaClient, Room } from '../generated/prisma/client.js';
 import * as scope from '../policies/branch-scope.js';
+import { teacherBranchIds } from '../policies/roster-resolution.js';
 import type { Actor } from '../policies/actor.js';
 import { AppError } from '../lib/errors.js';
 import { page, pageWindow, type Page, type PageParams } from '../lib/pagination.js';
@@ -47,9 +48,53 @@ function assertCanWriteReferenceData(actor: Actor): void {
  * TD-2 (Revision 26): Admins **read** reference data, branch-scoped, because
  * operational work depends on it — a Group references a Branch, a Level and a
  * Room, so withdrawing read access would make Group management impossible.
+ *
+ * **Teachers read it too, and did not.** R26's own sentence retains read access
+ * for *"Admins (branch-scoped) and **Teachers (own groups)**"*, and this guard
+ * demanded `isAdmin` — so every teacher was refused a list the specification
+ * grants them. A gap against R26, not a rule.
  */
 function assertCanReadReferenceData(actor: Actor): void {
-  if (!isAdmin(actor)) throw new AppError('FORBIDDEN', 'branch access requires admin');
+  if (!isAdmin(actor) && !scope.hasRole(actor.roleScopes, 'teacher')) {
+    throw new AppError('FORBIDDEN', 'branch access requires admin or teacher');
+  }
+}
+
+/**
+ * **The branches this caller may see at all** — `null` meaning every branch.
+ *
+ * Two different questions, answered from two different places, because the two
+ * roles derive reach differently and §4.2 forbids unioning them:
+ *
+ *   * an **Admin** reaches the branches on their own `admin` assignments
+ *     (`branches: null` = all of them, R24);
+ *   * a **Teacher** reaches the branches of the schedules they staff (§4.4c as
+ *     amended by R43.3 — *"teacher scope resolves through the Course Schedule"*),
+ *     which is what `teacherBranchIds` already computes for every other teacher
+ *     surface. Their `UserBranchRole` row is deliberately NOT consulted: a
+ *     teacher assignment with `branch_id IS NULL` would mean *every branch*, and
+ *     a teacher's reach is where they teach, not where their row was written.
+ *
+ * A caller holding both roles reaches the union of the two — which is not the
+ * flat-union §4.2 prohibits: each half was resolved under its own role first.
+ */
+async function visibleBranchIds(
+  prisma: PrismaClient,
+  actor: Actor,
+): Promise<string[] | null> {
+  if (isSuperAdmin(actor)) return null;
+
+  const asAdmin = scope.hasRole(actor.roleScopes, MANAGING_ROLE)
+    ? scope.reachableBranches(actor.roleScopes, [MANAGING_ROLE])
+    : [];
+  // `null` from an all-branches admin assignment ends the question.
+  if (asAdmin === null) return null;
+
+  const asTeacher = scope.hasRole(actor.roleScopes, 'teacher')
+    ? await teacherBranchIds(prisma, actor.userId)
+    : [];
+
+  return [...new Set([...asAdmin, ...asTeacher])];
 }
 
 /**
@@ -74,9 +119,13 @@ export async function listBranches(
   params: PageParams = {},
 ): Promise<Page<Branch>> {
   assertCanReadReferenceData(actor);
+  // **Other branches' names are not shown** (Owner instruction, 2026-08-11).
+  // Viewing a branch is not privileged, but seeing branches you have nothing to
+  // do with is noise at best and organisational detail at worst.
+  const visible = await visibleBranchIds(prisma, actor);
   const where = {
     deletedAt: null,
-    ...scope.branchFilter(actor.roleScopes, [MANAGING_ROLE]),
+    ...(visible === null ? {} : { id: { in: visible } }),
   };
   const window = pageWindow(params);
   const [rows, total] = await Promise.all([
@@ -257,7 +306,15 @@ export async function listRooms(
   params: PageParams = {},
 ): Promise<Page<Room>> {
   assertCanReadReferenceData(actor);
-  scope.assertCanActOnBranch(actor.roleScopes, MANAGING_ROLE, branchId);
+  // Rooms follow the branch: reachable through the SAME resolution, so a teacher
+  // sees the rooms of the branches they teach in and nobody else's. The previous
+  // check asked only the `admin` role, which refused every teacher.
+  const visible = await visibleBranchIds(prisma, actor);
+  if (visible !== null && !visible.includes(branchId)) {
+    // §20 rule 17 — `NOT_FOUND`, never `FORBIDDEN`: a 403 would confirm that a
+    // branch with this id exists to somebody with no business knowing.
+    throw new AppError('NOT_FOUND', 'no such branch');
+  }
   const where = { branchId, deletedAt: null };
   const window = pageWindow(params);
   const [rows, total] = await Promise.all([

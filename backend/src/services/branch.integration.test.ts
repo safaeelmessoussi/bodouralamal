@@ -5,6 +5,11 @@ import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
 import type { Actor } from '../policies/actor.js';
 import type { RoleScope } from '../policies/branch-scope.js';
 import {
+  clearTeachingContext,
+  createTeachingContext,
+  staff as staffSchedule,
+} from '../test-support/educational-fixture.js';
+import {
   createBranch,
   createRoom,
   deleteBranch,
@@ -53,6 +58,10 @@ async function seedBranch(name: string): Promise<string> {
 }
 
 async function clear(): Promise<void> {
+  // The teacher tests build a schedule to derive reach from; it references the
+  // branches this suite creates, so it unwinds first.
+  await prisma.courseScheduleStaff.deleteMany({ where: { userId: actorUserId ?? undefined } });
+  await clearTeachingContext(prisma, TAG);
   const branches = await prisma.branch.findMany({
     where: { name: { startsWith: TAG } },
     select: { id: true },
@@ -211,7 +220,91 @@ describe('TD-2 R26 — READING reference data stays with Admins, branch-scoped',
     expect(visible.filter((b) => b.name.startsWith(TAG))).toHaveLength(2);
   });
 
-  it('a teacher cannot browse the branch list', async () => {
-    await expect(listBranches(prisma, teacher())).rejects.toMatchObject({ code: 'FORBIDDEN' });
+  /**
+   * **This test used to assert the opposite, and it was wrong.**
+   *
+   * It read `a teacher cannot browse the branch list` and expected `FORBIDDEN` —
+   * pinning the implementation rather than the specification. Revision 26 says
+   * read access is retained for *"Admins (branch-scoped) and **Teachers (own
+   * groups)**"*, so the guard was the defect and this test was protecting it.
+   *
+   * A green test over wrong behaviour is worse than no test: it makes the defect
+   * look like a decision. Kept here, corrected, so the next reader sees which it
+   * was.
+   */
+  it('a teacher browses the list, seeing only what their teaching reaches', async () => {
+    await seedBranch('مراكش');
+    // Staffing nothing yet, so the honest answer is an empty list — not a
+    // refusal, and not everybody else's branches.
+    const result = await listBranches(prisma, teacher());
+    expect(result.data).toHaveLength(0);
+  });
+});
+
+/**
+ * **A teacher sees the branches they teach in — and no others.**
+ *
+ * Revision 26 retained read access for *"Admins (branch-scoped) and Teachers
+ * (own groups)"*, and the guard demanded `isAdmin`, so every teacher was refused
+ * a list the specification grants them. The Owner's instruction of 2026-08-11
+ * made the second half explicit: viewing a branch is not privileged, but a
+ * teacher must not see the names of branches they have nothing to do with.
+ *
+ * **Reach comes from the schedules they staff**, not from their role row (§4.4c,
+ * R43.3). That distinction is the substance: a `teacher` assignment with
+ * `branch_id IS NULL` means *every branch* under R24, so reading the role row
+ * would show a teacher the whole organisation — the opposite of the rule.
+ */
+describe('a teacher reads only the branches they teach in', () => {
+  it('sees a branch it staffs a schedule at, and not one it does not', async () => {
+    const mine = await seedBranch('مراكش');
+    const theirs = await seedBranch('الدار البيضاء');
+    const ctx = await createTeachingContext(prisma, `${TAG} سياق`, mine);
+    await staffSchedule(prisma, ctx, actorUserId);
+
+    const ids = (await listBranches(prisma, teacher())).data.map((b) => b.id);
+
+    expect(ids).toContain(mine);
+    // The point of the instruction: not even the NAME of the other branch.
+    expect(ids).not.toContain(theirs);
+  });
+
+  it('reads the rooms of that branch, which every scheduling selector needs', async () => {
+    const mine = await seedBranch('مراكش');
+    const ctx = await createTeachingContext(prisma, `${TAG} سياق`, mine);
+    await staffSchedule(prisma, ctx, actorUserId);
+    await createRoom(prisma, superAdmin(), mine, { name: `${TAG} قاعة` });
+
+    expect((await listRooms(prisma, teacher(), mine)).data).toHaveLength(1);
+  });
+
+  it('is refused the rooms of a branch it does not teach at — 404, no leak', async () => {
+    const mine = await seedBranch('مراكش');
+    const theirs = await seedBranch('الدار البيضاء');
+    const ctx = await createTeachingContext(prisma, `${TAG} سياق`, mine);
+    await staffSchedule(prisma, ctx, actorUserId);
+    await createRoom(prisma, superAdmin(), theirs, { name: `${TAG} قاعتهم` });
+
+    // §20 rule 17 — a 403 would confirm the branch exists.
+    await expect(listRooms(prisma, teacher(), theirs)).rejects.toMatchObject({
+      code: 'NOT_FOUND',
+    });
+  });
+
+  it('sees NOTHING when it staffs no schedule at all', async () => {
+    await seedBranch('مراكش');
+    // An unassigned teacher reaches no branch. Empty is the honest answer, and
+    // it is not an error: they simply teach nowhere yet.
+    expect((await listBranches(prisma, teacher())).data).toHaveLength(0);
+  });
+
+  it('still refuses a teacher every WRITE (R26 unchanged)', async () => {
+    const branchId = await seedBranch('مراكش');
+    const ctx = await createTeachingContext(prisma, `${TAG} سياق`, branchId);
+    await staffSchedule(prisma, ctx, actorUserId);
+
+    await expect(
+      createRoom(prisma, teacher(), branchId, { name: `${TAG} محاولة` }),
+    ).rejects.toMatchObject({ code: 'FORBIDDEN' });
   });
 });

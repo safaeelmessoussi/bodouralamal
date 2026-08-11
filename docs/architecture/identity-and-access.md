@@ -269,6 +269,43 @@ pointless churn.
 
 ---
 
+## Who sees which branches
+
+Viewing a branch is **not privileged** — but seeing branches you have nothing to
+do with is noise at best and organisational detail at worst. So the list is
+scoped, and the two staff roles derive their reach differently, because §4.2
+forbids unioning roles into one flat scope:
+
+| Role | Reaches |
+|---|---|
+| Super Admin | Every branch |
+| Admin | The branches on their own `admin` assignments (`branches: null` = all, R24) |
+| Teacher | **The branches of the schedules they staff** (§4.4c, R43.3) |
+| Anyone else | Refused |
+
+**A teacher's role row is deliberately not consulted.** A `teacher` assignment
+with `branch_id IS NULL` means *every branch* under R24, so reading it would show
+a teacher the whole organisation — the opposite of the rule. Reach is where they
+teach, resolved by `teacherBranchIds`, which every other teacher surface already
+uses.
+
+An unassigned teacher therefore sees an **empty list**, which is the honest
+answer rather than an error: they teach nowhere yet.
+
+> **This closed a gap against R26, not a new rule.** R26 retained read access for
+> *"Admins (branch-scoped) and **Teachers (own groups)**"*, and the guard demanded
+> `isAdmin` — so every teacher was refused a list the specification grants them.
+> A test asserted the refusal, pinning the implementation rather than the
+> specification; it is corrected in place, with a note saying which it was,
+> because a green test over wrong behaviour makes a defect look like a decision.
+
+Rooms follow the branch through the same resolution. A branch out of reach
+answers **`404`, never `403`** (§20 rule 17): a refusal would confirm the branch
+exists to somebody with no business knowing.
+
+**Writes are unchanged**: every create, edit and delete of a branch or room stays
+Super Admin only (R26), and the screen itself is Super-Admin-only (R61).
+
 ## Active role
 
 A person may hold several roles at once (§2.1), and the header carries an
