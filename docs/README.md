@@ -94,6 +94,7 @@ The technical core. Written for an engineer who has never seen the repository.
 | | |
 |---|---|
 | [Personal data & CNDP readiness audit](compliance/personal-data-audit.md) | Every personal-data field: purpose, necessity, access, retention, and what needs a lawyer rather than an engineer |
+| [Data-collection decision](compliance/data-collection-decision.md) | The recommended profile per person type, what to reject and why, and the decisions that block R62 |
 
 ### [Operations](operations/README.md) — running it
 | | |

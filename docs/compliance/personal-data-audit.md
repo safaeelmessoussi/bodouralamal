@@ -4,6 +4,8 @@
 
 **Date:** 2026-08-11 · **Scope:** the live `develop` architecture, before R62
 **Status:** audit for the Document Owner. No code, schema, or SRS was changed.
+**Followed by:** [the data-collection decision document](data-collection-decision.md),
+which turns these findings into a recommended profile per person type.
 
 ---
 
