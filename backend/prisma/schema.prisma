@@ -94,6 +94,58 @@ enum DayOfWeek {
 }
 
 /// TD-1 FamilyLink lifecycle; Approved/Rejected are terminal.
+/// R62 — how a linked adult relates to the child. Three values, no free text
+/// and no `other`: the platform asks only *may this person act for this child*,
+/// and a grandparent who acts legally IS a legal guardian. Finer gradation would
+/// record family structure that nothing consumes.
+enum RelationshipType {
+  mother
+  father
+  legal_guardian
+
+  @@map("relationship_type")
+}
+
+/// R62 — the schooling stage a student is currently in.
+///
+/// **It INFORMS an administrator's placement decision and gates nothing.** No
+/// logic may refuse a placement on this value, or on any age derived from it:
+/// a student older than the usual high-school age still belongs in اليافعون if
+/// she is still in high school. A rule automating that would refuse the very
+/// case R62 was written around.
+enum SchoolingStage {
+  pre_primary
+  primary
+  middle
+  high
+  post_secondary
+  not_in_school
+
+  @@map("schooling_stage")
+}
+
+/// R62 — per-child decision on one application.
+enum ChildApplicationStatus {
+  pending
+  approved
+  rejected
+
+  @@map("child_application_status")
+}
+
+/// R62 — what a REJECTED applicant is told. Bounded on purpose: a free-text
+/// reason will eventually carry a safeguarding judgement ("could not verify
+/// guardianship") that must not reach the applicant. The unbounded note lives
+/// beside it and is never returned.
+enum ChildApplicationRejectionReason {
+  duplicate_application
+  insufficient_information
+  not_eligible
+  other
+
+  @@map("child_application_rejection_reason")
+}
+
 enum FamilyLinkStatus {
   pending
   approved
@@ -306,6 +358,22 @@ model User {
   ///
   /// `Restrict`, like every other reference to a Branch (TD-5): a branch with
   /// registrations pointing at it cannot be deleted out from under them.
+  /// R62 — a short, stable, NON-PERSONAL student identifier.
+  ///
+  /// Random rather than sequential: a sequence leaks enrolment order and
+  /// headcount and invites enumeration. The alphabet excludes `0/O` and `1/I/l`
+  /// because it is read aloud and hand-copied.
+  ///
+  /// **It identifies; it never authorises.** A lookup by code runs exactly the
+  /// same authorization as a lookup by id — otherwise the code becomes a bearer
+  /// token by accident, and knowing a child's code would grant something.
+  ///
+  /// Students only; nullable because staff have none and rows predate it.
+  referenceCode String? @unique @map("reference_code") @db.VarChar(16)
+
+  /// R62 — informs placement, gates nothing. See `SchoolingStage`.
+  schoolingStage SchoolingStage? @map("schooling_stage")
+
   intendedBranchId String? @map("intended_branch_id") @db.Uuid
   intendedBranch   Branch? @relation("UserIntendedBranch", fields: [intendedBranchId], references: [id], onDelete: Restrict)
 
@@ -374,6 +442,12 @@ model User {
 
   parentLinks       FamilyLink[]            @relation("FamilyLinkParent")
   childLinks        FamilyLink[]            @relation("FamilyLinkChild")
+
+  /// R62 — child applications, in each of the four roles a User can play on one.
+  childApplicationsAsParent   ChildApplication[] @relation("ChildApplicationParent")
+  childApplicationsAsChild    ChildApplication[] @relation("ChildApplicationChild")
+  childApplicationsAsMatch    ChildApplication[] @relation("ChildApplicationMatch")
+  childApplicationsAsDecider  ChildApplication[] @relation("ChildApplicationDecider")
   quranLogs         QuranProgressLog[]      @relation("QuranLogStudent")
   quranLogsAuthored QuranProgressLog[]      @relation("QuranLogLoggedBy")
   surahProgress     StudentSurahProgress[]
@@ -565,6 +639,9 @@ model Category {
   deletedById String?   @map("deleted_by") @db.Uuid
 
   levels      Level[]
+  /// R62 — the stage a parent applied to for a child. The administrator may
+  /// change it: placement is an administrative decision, never a rule.
+  childApplications ChildApplication[]
   eventScopes EventCategory[]
   /// Revision 49 — applicants who asked for this stage. See `User`.
   intendedBy  User[]          @relation("UserIntendedCategory")
@@ -1102,6 +1179,10 @@ model FamilyLink {
   student   User             @relation("FamilyLinkChild", fields: [studentId], references: [id], onDelete: Restrict)
   status    FamilyLinkStatus @default(pending)
 
+  /// R62. Nullable because rows predating the revision have no value and
+  /// guessing one would be a fabrication about a family.
+  relationshipType RelationshipType? @map("relationship_type")
+
   decidedAt      DateTime? @map("decided_at") @db.Timestamptz(6)
   decidedById    String?   @map("decided_by") @db.Uuid
   decisionReason String?   @map("decision_reason") @db.VarChar(500)
@@ -1119,6 +1200,84 @@ model FamilyLink {
 /// One row per consent decision. Consent is NEVER a boolean on the user row
 /// (§20 rule 2); absence of a record means NO consent (BR-1). History is
 /// preserved — revocation is a state change with its own actor and timestamp.
+/// R62 — one child in a parent's registration request.
+///
+/// ## Why the child `User` is not created here
+///
+/// Today's parent+child registration creates the child at submission, and that
+/// is exactly what forces approval to be all-or-nothing: a rejected child would
+/// otherwise leave an orphan account. Deferring creation to approval is what
+/// makes per-child decisions clean — and it means **a rejected child leaves no
+/// `User` row and no `FamilyLink` at all**, so partial approval cannot expose
+/// one. The safety property is structural rather than enforced.
+///
+/// ## Consent is captured here and materialised at approval
+///
+/// `ConsentRecord.student_id` cannot be written before the student exists, so
+/// the decisions travel on this row — including **the consent text version in
+/// force at SUBMISSION**. `legal.consent_text_version` is a Super-Admin-editable
+/// setting: materialising with the current value would record that a parent
+/// consented to text they never saw, which §4.1a forbids.
+model ChildApplication {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// Groups the children submitted together. One request, many applications,
+  /// each decided on its own.
+  requestId String @map("request_id") @db.Uuid
+
+  /// The requesting adult — a pending applicant or an already-approved account.
+  parentId String @map("parent_id") @db.Uuid
+  parent   User   @relation("ChildApplicationParent", fields: [parentId], references: [id], onDelete: Restrict)
+
+  /// NULL until approved. Set to the created or matched child.
+  childUserId String? @map("child_user_id") @db.Uuid
+  childUser   User?   @relation("ChildApplicationChild", fields: [childUserId], references: [id], onDelete: Restrict)
+
+  firstNameArabic String  @map("first_name_arabic") @db.VarChar(60)
+  lastNameArabic  String  @map("last_name_arabic") @db.VarChar(60)
+  sex             Sex?
+  schoolingStage  SchoolingStage? @map("schooling_stage")
+
+  /// The stage the parent is applying to — the administrator may change it
+  /// (R62.7: placement is an administrative decision).
+  requestedCategoryId String?   @map("requested_category_id") @db.Uuid
+  requestedCategory   Category? @relation(fields: [requestedCategoryId], references: [id], onDelete: Restrict)
+
+  /// R62.3b — as given at submission, never re-read at approval.
+  consentDataProcessing Boolean  @map("consent_data_processing")
+  consentMediaRelease   Boolean  @map("consent_media_release")
+  consentTextVersion    String   @map("consent_text_version") @db.VarChar(60)
+  consentGivenAt        DateTime @map("consent_given_at") @db.Timestamptz(6)
+
+  status ChildApplicationStatus @default(pending)
+
+  /// The account an administrator chose to link instead of creating a new one.
+  /// **Never set automatically** — there is no natural key for a child, and
+  /// matching on names alone would eventually attach one to the wrong family.
+  matchedExistingUserId String? @map("matched_existing_user_id") @db.Uuid
+  matchedExistingUser   User?   @relation("ChildApplicationMatch", fields: [matchedExistingUserId], references: [id], onDelete: Restrict)
+
+  /// Bounded, and the only reason a parent is shown.
+  rejectionReason ChildApplicationRejectionReason? @map("rejection_reason")
+  /// Staff only. **Never returned to a parent in any payload.**
+  internalNote String? @map("internal_note") @db.VarChar(500)
+
+  decidedAt   DateTime? @map("decided_at") @db.Timestamptz(6)
+  decidedById String?   @map("decided_by") @db.Uuid
+  decidedBy   User?     @relation("ChildApplicationDecider", fields: [decidedById], references: [id], onDelete: Restrict)
+
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  deletedById String?   @map("deleted_by") @db.Uuid
+
+  /// The queue reads pending applications by request; the parent reads their own.
+  @@index([requestId])
+  @@index([parentId, status])
+  @@index([status, createdAt])
+  @@map("child_application")
+}
+
 model ConsentRecord {
   id          String        @id @default(uuid()) @db.Uuid
   studentId   String        @map("student_id") @db.Uuid
