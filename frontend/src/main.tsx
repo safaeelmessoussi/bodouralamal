@@ -11,7 +11,8 @@ import { SessionPage } from './pages/session.js';
 import { TeacherRouter } from './pages/teacher/index.js';
 import { CalendarPage } from './pages/calendar.js';
 import { StudentDashboard } from './pages/dashboard/student.js';
-import { RegisterChildPage } from './pages/dashboard/register-child.js';
+import { RegisterChildPage } from './pages/profile/register-child.js';
+import { ProfilePage } from './pages/profile/index.js';
 import { Landing } from './pages/landing.js';
 import { Register } from './pages/register.js';
 import {
@@ -92,8 +93,16 @@ function App(): React.ReactNode {
           <StudentDashboard />
         </PendingGuard>
       );
+    case 'profile':
+      // §5.2 *Shared / Cross-Role* (R65) — the personal section. Not role-gated:
+      // every account has a person behind it.
+      return (
+        <PendingGuard>
+          <ProfilePage />
+        </PendingGuard>
+      );
     case 'register-child':
-      // §14.1 (R64). Authenticated like every dashboard screen.
+      // §14.1 (R65). Authenticated, and role-independent.
       return (
         <PendingGuard>
           <RegisterChildPage />

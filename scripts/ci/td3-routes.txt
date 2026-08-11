@@ -36,6 +36,8 @@ POST /auth/refresh                            # TD-3.1, TD-12
 POST /auth/switch-role                        # §2.1 (R60.3) — work as one of your own assigned roles; live rows decide
 POST /auth/logout                             # TD-3.1, TD-4.14
 GET /me                                       # TD-3.1, TD-1
+GET /profile                                  # TD-3.1, §5.2 (R65) — the caller's OWN details; no id, no role gate
+PATCH /profile                                # §5.2 (R65) — own basic contact info only (phone, nickname); TD-15
 
 # ── Registration & approvals (TD-3.2)
 POST /registrations                           # TD-3.2, §4.1b step 5; R49 optional requested_role (hint only, grants nothing)

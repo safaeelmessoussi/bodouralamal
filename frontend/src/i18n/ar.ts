@@ -57,7 +57,27 @@ export const ar = {
     registerSubmitted:
       'وصل الطلب إلى الإدارة لمراجعته. لا يمنحك إرساله أي صلاحية على بيانات الطفل؛ يظهر الطفل في قائمة التبديل بعد الموافقة.',
     registerFailed: 'تعذّر إرسال الطلب. يرجى المحاولة من جديد.',
-    backToDashboard: 'العودة إلى اللوحة',
+    backToProfile: 'العودة إلى صفحة الحساب',
+  },
+  // §5.2 (R65) — the personal section: role-independent, for every account.
+  profile: {
+    title: 'حسابي',
+    lede: 'بياناتك الشخصية وطلباتك. هذه الصفحة تخصّ شخصك، لا الدور الذي تعملين به.',
+    detailsTitle: 'بياناتي',
+    nameFrench: 'الاسم بالفرنسية',
+    identityReadOnly:
+      'الاسم والبريد الإلكتروني وحالة الحساب تُعدَّل من طرف الإدارة، لأنها تخصّ الهوية لا وسائل الاتصال.',
+    saved: 'تمّ حفظ التعديل.',
+    saveFailed: 'تعذّر الحفظ. يرجى المحاولة من جديد.',
+    versionConflict: 'عُدِّلت هذه البيانات من مكان آخر. أعيدي تحميل الصفحة ثم حاولي مجدداً.',
+    childrenTitle: 'تسجيل الأبناء',
+    childrenLede:
+      'يمكن لأي حساب أن يطلب تسجيل ابن أو ابنة، مهما كان دوره. صفة «ولي الأمر» تخصّ متابعة الأبناء بعد الموافقة.',
+    childStatus: {
+      pending: 'قيد المراجعة',
+      approved: 'مقبول',
+      rejected: 'مرفوض',
+    },
   },
   // §5.3 (R62.10) — one screen, two contexts: the caller's own record, or the
   // child they are acting for. The banner names which.

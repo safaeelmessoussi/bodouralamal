@@ -9,8 +9,14 @@ import { SignOutButton } from './auth-buttons.js';
  * signed-in person rather than to the site, so the header bar stays a
  * navigation bar.
  *
- * It holds sign-out today; profile and the other §14.1 account nodes join it
- * when those pages exist, without the header changing.
+ * **R65 — this is the entry to the personal section**, and it is the one place
+ * in the header that never depends on a role. §5.2 lists `/profile` under
+ * *Shared / Cross-Role*; the account menu is what makes that reachable from
+ * every portal, so a مؤطِّرة working as a teacher can still open the acts that
+ * concern her as a person — her details, and registering her own child.
+ *
+ * It held sign-out alone until then, which is why the child-registration page
+ * ended up hanging off a role's dashboard: there was nowhere else to put it.
  */
 export function UserMenu({
   onSignOut,
@@ -23,6 +29,12 @@ export function UserMenu({
     <Menu label={t('nav.account')} triggerLabel={t('nav.account')} inline={inline}>
       {() => (
         <>
+          <a className="menu__option" href="/profile">
+            <span className="menu__label">{t('profile.title')}</span>
+          </a>
+          <a className="menu__option" href="/profile/register-child">
+            <span className="menu__label">{t('child.register')}</span>
+          </a>
           <div className="menu__sep" />
           <SignOutButton onSignOut={onSignOut} block />
         </>

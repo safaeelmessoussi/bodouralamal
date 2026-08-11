@@ -30,7 +30,9 @@ export type Route =
   | 'screen-pending'
   /** §5.3's Student Dashboard — one route, two contexts (R62.10, R63). */
   | 'dashboard-student'
-  /** §14.1 (R64) — an adult registers a child. A page, not a menu item. */
+  /** §14.1, §5.2 (R65) — the PERSONAL section: role-independent, every account. */
+  | 'profile'
+  /** §14.1 (R65) — any account registers a child, from the personal section. */
   | 'register-child'
   /** The back office, resolved by its module registry. */
   | 'admin'
@@ -84,9 +86,12 @@ export function resolveRoute(pathname: string): Route {
   // R62.10 delivered this one. A parent reaches it through the account
   // switcher with a child selected; a student reaches it as themselves.
   if (path === '/dashboard/student') return 'dashboard-student';
-  // R64 — a child of that node, reached from the dashboard. Checked before the
-  // role-home list so the more specific path wins.
-  if (path === '/dashboard/student/register-child') return 'register-child';
+  // R65 — the personal section, and the child-registration page under it.
+  // Registering is an act of a PERSON, so neither is under a role's area: R64
+  // put the page at `/dashboard/student/register-child`, which left a مؤطِّرة
+  // who is nobody's student with no way to register her own child.
+  if (path === '/profile') return 'profile';
+  if (path === '/profile/register-child') return 'register-child';
 
   // §14.1 defines these; no milestone has delivered them. "Not built yet" and
   // "does not exist" are different facts and get different pages.

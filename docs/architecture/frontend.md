@@ -1093,6 +1093,61 @@ no placeholder handling, no required marking and no error announcement except
 what that screen remembers to add, which is the accessibility half of the same
 problem.
 
+## The personal section is role-independent (R65)
+
+**`/profile` carries what concerns the person; a portal carries what concerns a
+role.** The line is not stylistic — it decides who can reach a screen at all.
+
+§5.2 has listed `Profile (/profile)` under *Shared / Cross-Role* since long
+before the portals existed, and it was never built. So when R64 needed somewhere
+to put child registration it hung the page off `/dashboard/student/` — and **a
+مؤطِّرة who is nobody's student then had no way to register her own child**, even
+though `POST /child-applications` had never required a role and never checked
+one. The capability was there; only the door was missing.
+
+The test for whether something belongs here: **would you still want it if the
+account's only role were `teacher`?** Your own details, editing your contact
+info, registering a child, and the status of requests you have made — yes, all
+of them. A roster, a schedule, a grade — no.
+
+**The account menu (`الحساب`) is the entry**, because it is the one header
+control that never depends on a role.
+
+**One entry point, not one per role.** R64 exists because a dialog reachable only
+by parents carried fewer fields than the public form, and approvers received
+requests naming no branch and no stage. A second door invites a second form.
+
+**`ولي الأمر` stays about already-approved children.** Selecting it → a child is
+how you enter that child's Student Dashboard, and no registration action lives
+inside it.
+
+### What is deliberately absent
+
+**No account-deletion control**, though §4.10 says *"two-step account
+self-deletion"*. Those five words have no route, no state and no screen;
+`docs/SRS-PROPOSAL-R54.md` drafted the whole thing and **has never been
+approved**, because it reverses R52's prohibition on permanent deletion.
+Shipping an irreversible action because a page now exists to host it would be
+the worst possible reading of R65. When the Owner takes that decision, the
+screen belongs here.
+
+### The write surface is two fields
+
+`PATCH /profile` accepts `phone` and `nickname`. The exclusions are the
+specification, not an oversight:
+
+| Excluded | Why |
+|---|---|
+| names | **Identity.** §1.1 composes them server-side from parts collected once; a rename is a staff act on §14.2 where it is reviewable |
+| `sex` | Feeds §4.4b's `gender_restriction` — self-editing it moves a person past an admission rule |
+| `email` | The Google identity the account is keyed to (§4.1b) |
+| `account_status` | An approver's decision (TD-1) |
+
+They are **refused, not ignored**: the schema is `.strict()`, so a client that
+tried to rename someone learns it failed rather than believing it worked. The
+read shows them anyway — a person should see the name and email staff will use
+to find them.
+
 ## The family surface: one switcher, one dashboard (R62)
 
 **`ولي الأمر` is not a destination — it is a group.** A parent's home is a *child's*
@@ -1108,8 +1163,8 @@ made one decision into two, and left two places to be wrong about who is current
 which for a parent holding exactly one role hid the entire family surface — the children
 and the registration action are inside that menu.
 
-**R64 moved «＋ تسجيل طفل» out of the switcher onto its own page**,
-`/dashboard/student/register-child`. A switcher lists the *contexts* a person may
+**R64 moved «＋ تسجيل طفل» out of the switcher onto its own page, and R65 moved
+that page out of the student dashboard** to `/profile/register-child`. A switcher lists the *contexts* a person may
 work in and registering is a task — and, more concretely, a dialog opened from a
 menu could only ever carry a subset of what the public form collects. That subset
 is exactly how the two registration paths diverged: a parent adding a second child

@@ -670,6 +670,15 @@
 - [x] Table rule established and applied (branches +4 columns, levels +1); `إضافة مجموعة` converted to `FormDialog`
 - [ ] **OWNER DECISION — nothing marks the adult Category.** §2.1 says adults hold logins and minors do not, but R27 made the Categories renameable generic rows, so no form can enforce it and matching by name would hardcode reference data. Recommendation: a `Category.holds_own_login` marker. Until then a self-registering adult can request الطفل, and an approver corrects it
 
+### R65 — the personal section is role-independent (2026-08-11)
+- [x] **Audit finding: §5.2 already places `/profile` under *Shared / Cross-Role*** and it had never been built — which is why R64 hung child registration off a role's dashboard
+- [x] `/profile` ships: own details, editable contact info, child registration, the status of own requests. Reached from the account menu, not role-gated
+- [x] `/profile/register-child` replaces `/dashboard/student/register-child`; the dashboard link is removed — one entry point, not one per role
+- [x] `GET`/`PATCH /profile` registered in TD-3; `PATCH` accepts `phone` and `nickname` only, refused not ignored; TD-15 versioning; `user.update` audit
+- [x] **No authorization change** — `POST /child-applications` never checked a role; only the door was missing
+- [x] `ولي الأمر` untouched: about already-approved children, and no registration action inside it
+- [ ] **OWNER DECISION — account deletion (R54).** §4.10 says "two-step account self-deletion"; `docs/SRS-PROPOSAL-R54.md` is drafted and unapproved because it reverses R52's prohibition on permanent deletion. The personal section deliberately ships **no** deletion control. When the decision is taken, its screen belongs at `/profile`
+
 ### R62 — deferred by scope, not forgotten
 - [ ] `/dashboard/student/calendar`, `/grades`, `/quran` are §14.1 nodes belonging to later milestones; the dashboard deliberately does not stub them
 - [ ] Still pending the Owner: guardianship verification · right to an actual rejection reason · the three compliance fields · CNDP declaration · Arabic privacy notice

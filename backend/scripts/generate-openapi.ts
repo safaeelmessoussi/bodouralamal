@@ -271,6 +271,23 @@ const document = {
         { '200': 'The caller\'s applications.', '401': ENVELOPE },
       ),
     },
+    '/profile': {
+      get: op(
+        "The caller's own personal details",
+        '**SRS Revision 65 — the personal section (§5.2 *Shared / Cross-Role*).** Role-INDEPENDENT: no role is read and none is required, because every account has a person behind it and a مؤطِّرة editing her own phone number is not acting in any capacity. **No id parameter**: the subject is the JWT `sub`, so there is nowhere for a caller to name someone else. Distinct from `GET /me`, which answers *which account is this* — roles, scopes, status, approved child links — and deliberately carries no personal detail (R63).',
+        { '200': 'The caller\'s own record, including its TD-15 `version`.', '401': ENVELOPE },
+      ),
+      patch: op(
+        "Edit own basic contact info",
+        '**§5.2: *view/edit own basic contact info (sensitive profiling fields remain restricted)*.** Accepts **`phone` and `nickname` and nothing else**, and the exclusions are the specification rather than an oversight: **names are identity** — §1.1 composes them server-side from parts collected once, and a rename is a staff act on the §14.2 screen where it is reviewable; **`sex`** feeds §4.4b\'s `gender_restriction`, so self-editing it would let a person move themselves past an admission rule; **`email`** is the Google identity the account is keyed to (§4.1b); **`account_status`** is an approver\'s decision (TD-1); and §4.10/BR-16 safeguarding data never reaches this surface. **TD-15 optimistic locking**: the caller sends the `version` it loaded. The write reuses the existing `user.update` audit action — the same act as a staff edit by a different actor — and records the FIELDS changed, never their values (§14, no PII in logs).',
+        {
+          '200': 'The updated record.',
+          '400': `${ENVELOPE} VALIDATION_FAILED — a malformed phone, an over-long nickname, or a field this endpoint does not accept.`,
+          '401': ENVELOPE,
+          '409': `${ENVELOPE} VERSION_CONFLICT — the row changed since it was loaded (TD-15).`,
+        },
+      ),
+    },
     '/students/me': {
       get: op(
         "The acting student's identity block",

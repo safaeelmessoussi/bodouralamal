@@ -28,3 +28,32 @@ export async function submitChildApplications(
     body: { children, consent_data_processing: true },
   });
 }
+
+/**
+ * `GET /child-applications/mine` (R62) — **the caller's own requests, and
+ * nothing else.** The endpoint scopes to the session; there is no id to pass.
+ *
+ * `internal_note` is **absent from the projection server-side** (R62.8), which
+ * is where that rule holds rather than where it is merely stated: a staff note
+ * will eventually carry a safeguarding judgement that must not reach a parent.
+ * What they are told is the **bounded** `rejection_reason`.
+ */
+export interface MyChildApplication {
+  id: string;
+  request_id: string;
+  first_name_arabic: string;
+  last_name_arabic: string;
+  status: 'pending' | 'approved' | 'rejected';
+  rejection_reason: string | null;
+  /** Present once the child is approved — how a parent quotes a child (R62.6). */
+  reference_code: string | null;
+  decided_at: string | null;
+  created_at: string;
+}
+
+export async function fetchMyChildApplications(
+  token: string | null,
+): Promise<MyChildApplication[]> {
+  const body = await api<{ data: MyChildApplication[] }>('/child-applications/mine', { token });
+  return body.data;
+}

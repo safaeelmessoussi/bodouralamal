@@ -34,6 +34,8 @@ describe('every path resolves to a page — never to nothing', () => {
     '/teacher',
     '/dashboard/parent',
     '/dashboard/student',
+    '/profile',
+    '/profile/register-child',
     // The regression itself, plus the shapes that surround it.
     '/dashboard',
     '/dashboard/',
@@ -54,6 +56,16 @@ describe('every path resolves to a page — never to nothing', () => {
     // honest answer is "no such page" — rendered as a real page with a way
     // back, never as an empty document.
     expect(resolveRoute('/dashboard')).toBe('not-found');
+  });
+
+  it('R65: the personal section is role-independent, and both its paths resolve', () => {
+    // §5.2 lists `/profile` under *Shared / Cross-Role* and it was never built,
+    // which is why R64 hung child registration off `/dashboard/student` — and
+    // left a مؤطِّرة who is nobody's student unable to register her own child.
+    expect(resolveRoute('/profile')).toBe('profile');
+    expect(resolveRoute('/profile/register-child')).toBe('register-child');
+    // The role-shaped address R64 used is gone with it.
+    expect(resolveRoute('/dashboard/student/register-child')).toBe('not-found');
   });
 
   it('R62: /dashboard/parent is NOT FOUND — the Family Dashboard was removed', () => {

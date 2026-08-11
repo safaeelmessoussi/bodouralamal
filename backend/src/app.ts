@@ -25,6 +25,7 @@ import * as contentCtl from './controllers/content.controller.js';
 import * as exams from './controllers/exam.controller.js';
 import * as childApplications from './controllers/child-application.controller.js';
 import * as students from './controllers/student.controller.js';
+import * as profile from './controllers/profile.controller.js';
 import { createRegistration } from './controllers/registration.controller.js';
 import { healthController } from './controllers/health.controller.js';
 import type { PrismaClient } from './generated/prisma/client.js';
@@ -232,6 +233,13 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
    * order, and `me` is not a UUID, so a later parameterised sibling cannot
    * swallow it.
    */
+  /**
+   * R65 — the personal section. **No role gate and no id**: §5.2 places
+   * `/profile` under *Shared / Cross-Role*, and the subject is the JWT `sub`.
+   */
+  guarded.get('/profile', profile.read(prisma));
+  guarded.patch('/profile', profile.update(prisma));
+
   guarded.get('/students/me', childContext(prisma), students.me(prisma));
 
   guarded.get('/admin/approvals', approvals.list(prisma));

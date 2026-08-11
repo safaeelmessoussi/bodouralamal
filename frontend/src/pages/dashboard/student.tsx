@@ -124,16 +124,9 @@ export function StudentDashboard(): ReactNode {
             </>
           ) : null}
 
-          {/* R64 — registering a child is a TASK and lives on its own page,
-              reached from here rather than from the account switcher. Offered
-              to any adult account: a parent adding another child and an adult
-              student registering one are the same act. */}
-          <p className="register-form__actions">
-            <a className="button secondary" href="/dashboard/student/register-child">
-              {t('studentDashboard.registerChild')}
-            </a>
-          </p>
-
+          {/* R65 — registering a child is NOT a student's act, so no link to it
+              lives here. It belongs to the person, in the personal section
+              (`/profile`), reachable whatever role the account is working as. */}
           {asParent && children.length === 0 ? (
             <p className="state" role="status">
               {t('studentDashboard.noChildren')}

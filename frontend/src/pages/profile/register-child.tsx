@@ -17,15 +17,25 @@ import { t } from '../../i18n/index.js';
 import { ApiError } from '../../lib/api.js';
 
 /**
- * `/dashboard/student/register-child` — an adult registers a child (§14.1, R64).
+ * `/profile/register-child` — **any account** registers a child (§14.1, R65).
  *
- * **It used to be a dropdown item.** «＋ تسجيل طفل» sat inside the account
- * switcher's `ولي الأمر` group, which was wrong twice over: a switcher lists the
- * *contexts* a person may work in and registering is a task, and a dialog opened
- * from a menu could only ever carry a subset of what the public form collects.
- * That subset is exactly how the two paths diverged — a parent adding a second
- * child supplied **no branch and no stage**, so the approver received a request
- * missing the two things §4.1 step 1 and Revision 39 exist to give them.
+ * **Two moves, each correcting the one before it.** R62 put «＋ تسجيل طفل»
+ * inside the account switcher's `ولي الأمر` group; R64 made it a page, but hung
+ * it off `/dashboard/student/` — a *role's* area. Both were wrong for the same
+ * reason, and the Owner's case names it exactly: **a مؤطِّرة who is nobody's
+ * student must be able to register her own child.** Registering is an act of a
+ * person, so it lives in the personal section, which §5.2 has listed under
+ * *Shared / Cross-Role* since long before any of this.
+ *
+ * **This changes no authorization.** `POST /child-applications` has always
+ * required only an authenticated active account — `submitChildApplications`
+ * performs no role check by design — so the teacher could always have called
+ * it. The interface simply gave her nowhere to do it.
+ *
+ * **One entry point, not one per role**, and that is what keeps the field set
+ * from diverging again: R64 exists because a dialog reachable only by parents
+ * carried less than the public form, and an approver received requests naming
+ * no branch and no stage.
  *
  * **So this page asks what `/register`'s child section asks, and nothing more:**
  * the two Arabic name parts, sex, the optional French pair, a nickname, the
@@ -174,8 +184,8 @@ export function RegisterChildPage(): ReactNode {
               act for. */}
           <p>{t('child.registerSubmitted')}</p>
           <div className="auth-page__links">
-            <a className="button primary" href="/dashboard/student">
-              {t('child.backToDashboard')}
+            <a className="button primary" href="/profile">
+              {t('child.backToProfile')}
             </a>
           </div>
         </main>
