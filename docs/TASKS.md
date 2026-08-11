@@ -679,6 +679,17 @@
 - [x] `ولي الأمر` untouched: about already-approved children, and no registration action inside it
 - [ ] **OWNER DECISION — account deletion (R54).** §4.10 says "two-step account self-deletion"; `docs/SRS-PROPOSAL-R54.md` is drafted and unapproved because it reverses R52's prohibition on permanent deletion. The personal section deliberately ships **no** deletion control. When the decision is taken, its screen belongs at `/profile`
 
+### UI/product pass 2 (2026-08-11)
+- [x] Arabic-Indic digits removed platform-wide + `check-western-digits.sh` (14th guard). **Arabic text, Western numerals**
+- [x] Approval button traced: the DATA violates TD-4.6b's invariant — 18 of 20 Levels have no group, so `complete` could never be true and the control was disabled. Unassignable Levels are now excluded, with a route to fix
+- [x] «＋ تسجيل طفل» removed from the account menu; `/profile/register-child` unchanged
+- [x] `.field--choice` had no CSS rule at all — one rule fixes five usages (RTL-safe)
+- [ ] **AUDITED, NOT IMPLEMENTED — see [audit-2026-08-11.md](development/audit-2026-08-11.md):**
+  - **Level creation's branch** conflicts with TD-4.6b (Level + first group, atomic). Three resolutions costed; **A recommended** (retire the invariant). Needs a revision + a decision on the 18 existing group-less Levels
+  - **Per-child branch/category** needs **no migration** — `child_application` already holds both per row. Only the validator and two forms treat them as request-level. Needs a revision amending R62/R64.2
+  - **Deletion**: 28 of 45 models soft-delete; 6 restorable, 17 purgeable, deliberately narrower. **Recommendation: do NOT draft a generic "delete anything" revision** — three smaller decisions instead (widen RESTORABLE per type · switch on retention · settle the backup statement)
+  - **Deployment**: `bodouralamal.vercel.app` is a **mock-backed frontend preview by design** (§19.0). Same-origin routing is load-bearing for TD-12 cookies and the OAuth callback, so a split deploy is ruled out by the SRS. **Do not deploy.** Needs a VPS
+
 ### UI/product pass (2026-08-11)
 - [x] Child section extracted to one shared component; the personal page gains multi-child. 9 tests through both entry points
 - [x] `المستخدمون` filter row aligns on the controls (`align-items: start`) — one rule, every toolbar
