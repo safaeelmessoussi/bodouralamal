@@ -688,6 +688,14 @@
 - [x] **Breadcrumb across المستويات → مواد المستوى → حلقات المادة** — `PortalShell` takes an optional trail; passed in by the page, never derived from the URL, so it can only link nodes that exist
 - [x] **Post-R69 audit (2026-08-12):** the drill-down out of مواد المستوى still used the legacy path and navigated twice; «تنظيم المادة» survived as a row-action label for a screen now called «حلقات المواد»; `pickSubject` was substituted into the heading as if it were a Subject name
 
+### R72 — the Teacher's الجدولة write access (2026-08-12)
+- [x] **R72 applied:** §14.1's `/teacher/schedules` clause said *"do not create or edit schedules"* and gave TD-2's event grant no node. Clarified to mean Course Schedules; Activities are authored here
+- [x] Reuses `SchedulingDialog` with `types={['activity']}` — no second screen (R56)
+- [x] **Found live:** the form sent `branchIds` into a snake_case `.strict()` contract, so **every non-Global event creation returned 400**
+- [x] **Found live:** no form ever offered a `group` scope, the only one a Teacher may use — the server has accepted `group_ids` since R43
+- [x] A Teacher is offered `group` and nothing else, and it is their default
+- [ ] **Not built:** a Teacher edits an activity only from the calendar; this list is Course Schedules and shows no activity rows
+
 ### R71 — an event has somebody responsible for it (2026-08-12)
 - [x] **Audit first:** the role model already separates person · capability · scope. No new Role, no capability table, no parallel authorization
 - [x] `EventStaff` + `EventStaffPosition` (`responsible | assistant`), shaped like `ExamStaff`, R59 tombstone-and-revive, no Trash entry

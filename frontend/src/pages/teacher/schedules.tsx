@@ -14,6 +14,8 @@ import {
 } from '../../components/ui/data-table.js';
 import { Dialog } from '../../components/ui/dialog.js';
 import { TeacherLayout } from '../../components/teacher/teacher-layout.js';
+import { Button } from '../../components/ui/button.js';
+import { SchedulingDialog } from '../admin/scheduling.js';
 import { useSession } from '../../contexts/session.js';
 import { t } from '../../i18n/index.js';
 import { recurrenceLabel, timeLabel } from '../../components/scheduling/labels.js';
@@ -30,9 +32,24 @@ import { recurrenceLabel, timeLabel } from '../../components/scheduling/labels.j
  *
  * So this screen shares the adapter **and** the two cell renderers with
  * `/admin/schedules`. What differs is what §14.1 says differs: a teacher reads
- * their schedules and their audience, and **does not create or edit them** — so
- * there is no create button, no edit and no delete here, and the server refuses
- * those verbs regardless.
+ * their **Recurring Course Schedules** and their audience and does not create or
+ * edit them — there is no create, edit or delete for a class here, and the
+ * server refuses those verbs regardless. R71.0 records why that `⊘` is
+ * load-bearing: §4.4c derives a Teacher's whole scope *from the schedules they
+ * staff*, so creating one would let them widen their own reach.
+ *
+ * **R72 — Activities are different, and are authored here.** TD-2 has granted
+ * *"Schedule/edit Events (own scope; hidden allowed)"* since R43 and the service
+ * has enforced it ever since, but **§14.1 gave that capability nowhere to
+ * happen** — the same defect R69 found for `مواد المستوى` and R70.1 for grade
+ * entry. It reuses `SchedulingDialog` with `types={['activity']}`, because R56
+ * already made scheduling one form whose *type is a field*; a second screen
+ * would be exactly what R69 spent a revision undoing.
+ *
+ * **The scope rules are the server's, unchanged.** A Teacher must name
+ * Administrative Groups they teach and may not reach a branch, category, level
+ * or the Global scope — this screen renders those refusals rather than
+ * reimplementing them.
  */
 export function TeacherSchedulesPage(): ReactNode {
   const { accessToken } = useSession();
@@ -41,6 +58,9 @@ export function TeacherSchedulesPage(): ReactNode {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [roster, setRoster] = useState<ScheduleRosterEntry[] | null>(null);
+  /** R72 — authoring an Activity. `'new'` because a Teacher edits an event from
+   *  the calendar, not from this list, which is a Course Schedule list. */
+  const [composing, setComposing] = useState(false);
 
   const load = useCallback(async () => {
     setStatus('loading');
@@ -96,7 +116,17 @@ export function TeacherSchedulesPage(): ReactNode {
   ];
 
   return (
-    <TeacherLayout title={t('teacher.nav.schedules')} lede={t('teacher.schedules.lede')}>
+    <TeacherLayout
+      title={t('teacher.nav.schedules')}
+      lede={t('teacher.schedules.lede')}
+      actions={
+        <Button variant="primary" onClick={() => setComposing(true)}>
+          {t('teacher.schedules.addActivity')}
+        </Button>
+      }
+    >
+      {/* The list below is Course Schedules — read-only (§14.1). The action
+          above creates an ACTIVITY, which is the one kind TD-2 grants. */}
       <DataTable
         caption={t('teacher.schedules.caption')}
         columns={columns}
@@ -124,6 +154,25 @@ export function TeacherSchedulesPage(): ReactNode {
           </ul>
         )}
       </Dialog>
+
+      {composing ? (
+        <SchedulingDialog
+          item={null}
+          token={accessToken}
+          // R72 — the one kind a Teacher may author. The form locks the field
+          // rather than offering a selector with a single option.
+          types={ACTIVITY_ONLY}
+          onCancel={() => setComposing(false)}
+          onSaved={() => {
+            setComposing(false);
+            // The class list is unaffected by an activity, and reloading it
+            // would suggest otherwise. The new event appears on the calendar.
+          }}
+        />
+      ) : null}
     </TeacherLayout>
   );
 }
+
+/** R72 — TD-2 grants a Teacher exactly this one kind on this screen. */
+const ACTIVITY_ONLY = ['activity'] as const;

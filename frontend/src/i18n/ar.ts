@@ -407,6 +407,8 @@ export const ar = {
   },
   teacher: {
     schedules: {
+      // R72 — the one kind TD-2 grants a مؤطرة on this screen.
+      addActivity: '＋ نشاط جديد',
       lede: 'الجداول التي تؤطّرينها. لعرض المستفيدات اضغطي على الجدول.',
       caption: 'حصصي',
       empty: 'لا توجد جداول مسندة إليك حالياً.',
@@ -657,6 +659,7 @@ export const ar = {
       staffAdminOnly: 'إسناد المسؤولية عن النشاط من صلاحيات الإدارة.',
       scopeFixed: 'النطاق يُحدَّد عند الإنشاء ولا يُعدَّل.',
       scopeCategory: 'فئة',
+      scopeGroup: 'مجموعة مستوى',
       scopeLevel: 'مستوى',
       scopeHint: 'يُحدَّد عند الإنشاء فقط.',
       scopeLocked: 'لا يمكن تغيير نطاق النشاط بعد إنشائه — تغيير الجمهور إعادة إنشاء لا تعديل.',

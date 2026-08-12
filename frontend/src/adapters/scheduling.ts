@@ -349,7 +349,16 @@ export interface SchedulingInput {
   repeatUntil: string | null;
   /** Activity only. */
   visibility?: string;
-  scope?: { global?: boolean; branchIds?: string[]; categoryIds?: string[]; levelIds?: string[] };
+  /** §4.4's four-way scope. **`groupIds` was missing until R72**, and it is the
+   *  ONLY kind a Teacher may use (TD-2, §4.9) — so the form could offer them
+   *  nothing the server would accept. */
+  scope?: {
+    global?: boolean;
+    branchIds?: string[];
+    categoryIds?: string[];
+    levelIds?: string[];
+    groupIds?: string[];
+  };
   /** Exam only (§4.6, R58) — the Level it examines, and who sits it. */
   levelId?: string;
   /** `null` is the whole Level, never "no target". */
@@ -490,7 +499,15 @@ export async function saveSchedulingItem(
     end_time: input.endTime,
     recurrence_type: input.recurrence as EventInput['recurrence_type'],
     recurrence_end_date: input.repeatUntil,
-    ...(existing ? {} : (input.scope ?? { global: true })),
+    ...(existing
+      ? {}
+      : {
+          ...(input.scope?.global ? { global: true } : {}),
+          ...(input.scope?.branchIds ? { branch_ids: input.scope.branchIds } : {}),
+          ...(input.scope?.categoryIds ? { category_ids: input.scope.categoryIds } : {}),
+          ...(input.scope?.levelIds ? { level_ids: input.scope.levelIds } : {}),
+          ...(input.scope?.groupIds ? { group_ids: input.scope.groupIds } : {}),
+        }),
   };
   // **Two calls, and deliberately so.** R71 made assigning staff its own
   // capability with its own audit action — *who answers for this celebration*

@@ -22,7 +22,11 @@ import { CalendarGrid } from '../../components/calendar/calendar-grid.js';
 import { CalendarNav } from '../../components/calendar/calendar-nav.js';
 import { CalendarTitle } from '../../components/calendar/calendar-title.js';
 import { DayEventsDialog } from '../../components/calendar/day-events-dialog.js';
-import { ActivitySection, ClassSection } from '../../components/scheduling/class-section.js';
+import {
+  ActivitySection,
+  ClassSection,
+  TEACHER_SCOPE_KINDS,
+} from '../../components/scheduling/class-section.js';
 import { ExamSection, examStaffOf } from '../../components/scheduling/exam-section.js';
 import { SchedulingForm } from '../../components/scheduling/scheduling-form.js';
 import { patternOf, type RecurrenceValue } from '../../components/scheduling/recurrence-editor.js';
@@ -419,19 +423,33 @@ function CalendarView(): ReactNode {
  * Adding Exams (§4.6, M5) is a third `section` and a third arm in the adapter's
  * router — nothing in this file's structure moves.
  */
-function SchedulingDialog({
+/**
+ * **Exported for the teacher portal (R72).** `/teacher/schedules` renders this
+ * same dialog with `types={['activity']}` — TD-2 grants a Teacher event
+ * authoring and nothing else on this screen, and R56 already made scheduling
+ * one form whose *type is a field*, so the teacher view offers the one kind
+ * they may author rather than becoming a second implementation.
+ *
+ * Everything else is unchanged and deliberately so: the scope rules, the
+ * refusals and the R71 staff picker are the server's and the shared
+ * components', not this dialog's.
+ */
+export function SchedulingDialog({
   item,
   token,
   onCancel,
   onSaved,
+  types = AVAILABLE_TYPES,
 }: {
   item: SchedulingItem | null;
   token: string | null;
   onCancel: () => void;
   onSaved: () => void;
+  /** R72 — the kinds this caller may create. One kind locks the field. */
+  types?: readonly SchedulingType[];
 }): ReactNode {
   const editing = item !== null;
-  const [type, setType] = useState<SchedulingType>(item?.type ?? 'class');
+  const [type, setType] = useState<SchedulingType>(item?.type ?? types[0] ?? 'class');
   const [title, setTitle] = useState(item?.title ?? '');
   const [description, setDescription] = useState(item?.description ?? '');
   const [allDay, setAllDay] = useState(item ? item.startTime === null : false);
@@ -474,7 +492,9 @@ function SchedulingDialog({
     item?.ids.staff.find((x) => x.position === 'responsible')?.user_id ?? '',
   );
   const [visibility, setVisibility] = useState('public');
-  const [scopeKind, setScopeKind] = useState('global');
+  // R72 — a Teacher may scope an event to their own groups and nothing else
+  // (TD-2, §4.9), so `global` would be a default the server refuses.
+  const [scopeKind, setScopeKind] = useState(canAssignStaff ? 'global' : 'group');
   const [scopeId, setScopeId] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -611,7 +631,9 @@ function SchedulingDialog({
                 ? { branchIds: [scopeId] }
                 : scopeKind === 'category'
                   ? { categoryIds: [scopeId] }
-                  : { levelIds: [scopeId] },
+                  : scopeKind === 'group'
+                    ? { groupIds: [scopeId] }
+                    : { levelIds: [scopeId] },
           subjectId: scope.value.subjectId,
           levelId: scope.value.levelId,
           // `null` is the whole Level sitting together (R58), not a gap.
@@ -673,7 +695,10 @@ function SchedulingDialog({
       <SchedulingForm
         type={type}
         onTypeChange={setType}
-        typeLocked={editing}
+        // A single permitted kind is already decided; offering a selector with
+        // one option would ask a question with one answer.
+        typeLocked={editing || types.length === 1}
+        types={types}
         title={title}
         onTitle={setTitle}
         // **R57 — every schedulable item is named by something a person typed.**
@@ -743,12 +768,15 @@ function SchedulingDialog({
             assistantIds={assistantIds}
             onAssistants={setAssistantIds}
             canAssignStaff={canAssignStaff}
+            scopeKinds={canAssignStaff ? undefined : TEACHER_SCOPE_KINDS}
             scopeOptions={
               scopeKind === 'branch'
                 ? scope.options.branchId.map((o) => ({ id: o.value, name: o.label }))
                 : scopeKind === 'category'
                   ? scope.options.categoryId.map((o) => ({ id: o.value, name: o.label }))
-                  : scope.options.levelId.map((o) => ({ id: o.value, name: o.label }))
+                  : scopeKind === 'group'
+                    ? scope.options.groupId.map((o) => ({ id: o.value, name: o.label }))
+                    : scope.options.levelId.map((o) => ({ id: o.value, name: o.label }))
             }
             locked={editing}
           />

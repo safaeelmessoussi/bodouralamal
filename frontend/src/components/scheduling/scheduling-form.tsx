@@ -41,6 +41,10 @@ export interface SchedulingFormProps {
   type: SchedulingType;
   onTypeChange: (next: SchedulingType) => void;
   typeLocked: boolean;
+  /** R72 — which kinds this caller may author. The teacher view passes the one
+   *  kind TD-2 grants them, so the form offers no option the server refuses;
+   *  the back office passes nothing and gets §4.4's full set. */
+  types?: readonly SchedulingType[];
 
   title: string;
   onTitle: (v: string) => void;
@@ -88,6 +92,7 @@ export function SchedulingForm({
   type,
   onTypeChange,
   typeLocked,
+  types = SCHEDULING_TYPES,
   title,
   onTitle,
   showTitle,
@@ -121,7 +126,7 @@ export function SchedulingForm({
         // creation-time decision, and the form says so rather than failing.
         disabled={typeLocked}
         hint={typeLocked ? t('scheduling.typeFixed') : undefined}
-        options={SCHEDULING_TYPES.map((k) => ({
+        options={types.map((k) => ({
           value: k,
           // §14.4: a blocked capability states its reason instead of vanishing.
           // `exam` is real (§4.6) and arrives with M5, and hiding it would make

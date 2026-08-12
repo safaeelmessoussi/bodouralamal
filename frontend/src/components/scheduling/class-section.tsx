@@ -179,6 +179,26 @@ export function ClassSection({
  * **Assigning is Admin and above (R71.4)** — the picker renders disabled for
  * anyone else, and the server refuses regardless: hiding is not enforcement.
  */
+/**
+ * §4.4's four scopes plus **`group`, which R72 added**: the join table
+ * `EventAdministrativeGroup` has existed since R43 and the server has always
+ * accepted `group_ids`, but no form ever offered it — so the one scope a
+ * Teacher is permitted (TD-2, §4.9) could not be expressed at all.
+ */
+const ALL_SCOPE_KINDS = [
+  { value: 'global', labelKey: 'admin.calendar.scopeGlobal' },
+  { value: 'branch', labelKey: 'admin.calendar.scopeBranch' },
+  { value: 'category', labelKey: 'admin.calendar.scopeCategory' },
+  { value: 'level', labelKey: 'admin.calendar.scopeLevel' },
+  { value: 'group', labelKey: 'admin.calendar.scopeGroup' },
+] as const;
+
+/** R72 — a Teacher may scope an event to their own Administrative Groups and
+ *  to nothing else, so this is the whole list they are offered. */
+export const TEACHER_SCOPE_KINDS = [
+  { value: 'group', labelKey: 'admin.calendar.scopeGroup' },
+] as const;
+
 export function ActivitySection({
   visibility,
   onVisibility,
@@ -194,6 +214,7 @@ export function ActivitySection({
   assistantIds,
   onAssistants,
   canAssignStaff,
+  scopeKinds = ALL_SCOPE_KINDS,
 }: {
   visibility: string;
   onVisibility: (v: string) => void;
@@ -213,6 +234,10 @@ export function ActivitySection({
   onAssistants: (ids: string[]) => void;
   /** R71.4 — assigning staff is Admin and above. */
   canAssignStaff: boolean;
+  /** R72 — the scope kinds this caller may choose. A Teacher gets `group` and
+   *  only `group`: §4.9 and TD-2 forbid them a branch, category, level or the
+   *  Global scope, so offering those would offer a refusal. */
+  scopeKinds?: readonly { value: string; labelKey: string }[];
 }): ReactNode {
   return (
     <>
@@ -238,12 +263,7 @@ export function ActivitySection({
             label={t('admin.calendar.scopeLabel')}
             value={scopeKind}
             onChange={onScopeKind}
-            options={[
-              { value: 'global', label: t('admin.calendar.scopeGlobal') },
-              { value: 'branch', label: t('admin.calendar.scopeBranch') },
-              { value: 'category', label: t('admin.calendar.scopeCategory') },
-              { value: 'level', label: t('admin.calendar.scopeLevel') },
-            ]}
+            options={scopeKinds.map((k) => ({ value: k.value, label: t(k.labelKey) }))}
           />
           {scopeKind === 'global' ? null : (
             <SelectField
