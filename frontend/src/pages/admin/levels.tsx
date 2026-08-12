@@ -121,15 +121,35 @@ export function LevelsPage(): ReactNode {
       key: 'subjects',
       header: t('admin.levels.colSubjects'),
       numeric: true,
-      // **The count IS the way in.** The screen that assigns Subjects to a Level
-      // existed and was reachable only through a row-action menu labelled
-      // «المواد» — so an administrator told *this level teaches no subjects* had
-      // no obvious next click, and the number they were reading was the exact
-      // thing they needed to change. A zero here is the most actionable cell on
-      // the page, and it now behaves like it.
+      /**
+       * **The count IS the way in** — the link stays, because an administrator
+       * told *this Level teaches no subjects* should be able to act on the very
+       * number they are reading.
+       *
+       * **But it renders a NUMBER, not a sentence.** It used to print
+       * «لا مواد — أسنِدي» when the count was zero, in a column declared
+       * `numeric` — which is `text-align: end` with `tabular-nums`, styling
+       * meant for digits. Three things broke at once: a fourteen-character
+       * phrase sat in a column sized for single digits; the column stopped
+       * being scannable, because comparing Levels at a glance is exactly what a
+       * count column is for and one row was prose; and it duplicated the row
+       * action «مواد المستوى», which is where a reader looks for an action and
+       * which carries a proper label.
+       *
+       * The imperative also broke `badge.tsx`'s stated rule the other way
+       * about: **state is carried in words, never in colour alone** — but a
+       * data cell is not where those words belong. `0` is unambiguous, and the
+       * accessible name below is what stops it being an unlabelled link
+       * (WCAG 2.4.4).
+       */
       cell: (r) => (
-        <a href={`/admin/levels/${r.id}/subjects`}>
-          {r.subject_count === 0 ? t('admin.levels.noSubjectsYet') : r.subject_count}
+        <a
+          href={`/admin/levels/${r.id}/subjects`}
+          aria-label={t('admin.levels.subjectsLinkLabel')
+            .replace('{n}', String(r.subject_count))
+            .replace('{level}', r.name)}
+        >
+          {r.subject_count}
         </a>
       ),
     },
