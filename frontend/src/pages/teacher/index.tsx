@@ -6,6 +6,7 @@ import { t } from '../../i18n/index.js';
 import { teacherModuleForPath } from '../../lib/teacher-modules.js';
 import { ContentPage } from '../content.js';
 import { TeacherExamsPage } from './exams.js';
+import { TeacherQuranPage } from './quran.js';
 import { TeacherSchedulesPage } from './schedules.js';
 
 /**
@@ -32,6 +33,13 @@ export function TeacherRouter(): ReactNode {
     switch (module.path) {
       case '/teacher/schedules':
         return <TeacherSchedulesPage />;
+      case '/teacher/quran':
+        // R73.1 — `?student=` is the deep link, not a second node.
+        return (
+          <TeacherQuranPage
+            studentId={new URLSearchParams(window.location.search).get('student')}
+          />
+        );
       case '/teacher/exams':
         // R70 — the marking half. The online paper builder stays out (§4.6).
         return <TeacherExamsPage />;

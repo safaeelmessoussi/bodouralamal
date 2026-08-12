@@ -718,6 +718,20 @@ model Subject {
   name         String @db.VarChar(120)
   displayOrder Int?   @map("display_order")
 
+  /// R73 — **which Subject's teaching authorises Quran progress** (§4.5, TD-2).
+  ///
+  /// §4.4c's *own students* is subject-blind, so without this a مؤطرة teaching
+  /// only Fiqh could log a مستفيدة's memorization. Matching on the NAME is
+  /// prohibited: R27 made Subjects editable reference data and §4.4b requires
+  /// rules *"checked generically … rather than hardcoded against a level name"*.
+  ///
+  /// **At most one LIVE Subject may carry it** — a partial unique index in SQL,
+  /// because §4.5's engine is singular and two would make *which* teaching
+  /// authorises a log ambiguous. It configures nothing else: no tracking mode,
+  /// no second engine, and no `subject_id` on `QuranProgressLog` (still a
+  /// defect per §7).
+  tracksQuranProgress Boolean @default(false) @map("tracks_quran_progress")
+
   version Int @default(0)
 
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)

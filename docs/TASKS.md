@@ -688,6 +688,14 @@
 - [x] **Breadcrumb across المستويات → مواد المستوى → حلقات المادة** — `PortalShell` takes an optional trail; passed in by the page, never derived from the URL, so it can only link nodes that exist
 - [x] **Post-R69 audit (2026-08-12):** the drill-down out of مواد المستوى still used the legacy path and navigated twice; «تنظيم المادة» survived as a row-action label for a screen now called «حلقات المواد»; `pickSubject` was substituted into the heading as if it were a Subject name
 
+### M4 — Quran Progress (2026-08-12)
+- [x] **R73 applied:** navigation node · `quranlog.create` · TD-2's Quran qualifier · `Subject.tracks_quran_progress` · TD-15.5's stale reason corrected
+- [x] **M4a:** BR-13 union (pure, tested against §4.5's own example) · synchronous recalculation · self-heal guard · Trash on delete · `/teacher/quran?student=`
+- [x] Authorization exactly as approved: Quran-teaching scope only; **teaching and assisting count equally**; Admin/Super Admin unchanged; **fails closed** when no Subject is marked
+- [x] Invariant: at most one live Subject may track Quran progress — partial unique index, proven to refuse a second
+- [ ] **M4b — `/dashboard/student/quran`** (student read-only view). Not started
+- [ ] **M4c — `LevelSurah` + BR-11 level completion.** Not started
+
 ### R72 — the Teacher's الجدولة write access (2026-08-12)
 - [x] **R72 applied:** §14.1's `/teacher/schedules` clause said *"do not create or edit schedules"* and gave TD-2's event grant no node. Clarified to mean Course Schedules; Activities are authored here
 - [x] Reuses `SchedulingDialog` with `types={['activity']}` — no second screen (R56)

@@ -24,6 +24,7 @@ import * as trash from './controllers/trash.controller.js';
 import * as contentCtl from './controllers/content.controller.js';
 import * as exams from './controllers/exam.controller.js';
 import * as grades from './controllers/grade.controller.js';
+import * as quran from './controllers/quran.controller.js';
 import * as childApplications from './controllers/child-application.controller.js';
 import * as students from './controllers/student.controller.js';
 import * as profile from './controllers/profile.controller.js';
@@ -428,6 +429,15 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
   guarded.put('/exams/:id/grades', grades.save(prisma));
   guarded.post('/exams/:id/grades/publish', grades.publish(prisma));
   guarded.post('/exams/:id/grades/:studentId/override', grades.override(prisma));
+
+  // §4.5 Quran memorization (M4a, R73). The coverage read hangs off the student
+  // because that is what it is about; the logs are their own collection because
+  // a correction names one log, not a student.
+  guarded.get('/quran-students', quran.students(prisma));
+  guarded.get('/students/:id/quran', quran.coverage(prisma));
+  guarded.post('/quran-logs', quran.create(prisma));
+  guarded.patch('/quran-logs/:id', quran.update(prisma));
+  guarded.delete('/quran-logs/:id', quran.remove(prisma));
 
   api.use(guarded);
 

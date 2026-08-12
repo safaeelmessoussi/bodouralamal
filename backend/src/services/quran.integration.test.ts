@@ -1,0 +1,307 @@
+import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+
+import { loadConfig } from '../lib/config.js';
+import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
+import type { Actor } from '../policies/actor.js';
+import type { RoleScope } from '../policies/branch-scope.js';
+import { correctLog, deleteLog, logProgress, readStudentCoverage } from './quran.service.js';
+
+/**
+ * **Quran memorization tracking (§4.5, BR-13; M4a, SRS Revision 73).**
+ *
+ * The two properties worth the cost of a database:
+ *
+ * * **R73.3's scope** — a مؤطرة reaches only the students whose **Quran** she
+ *   teaches. Asserted from both sides, and specifically for the مؤطرة who
+ *   teaches the same student **another Subject**, which §4.4c's subject-blind
+ *   *own students* would have admitted and the Owner rejected.
+ * * **The self-heal guard** — a cache row that lost its write is repaired on
+ *   read, so a stale aggregate is unobservable (R10) and TD-15 needs no lock.
+ */
+const config = loadConfig();
+const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);
+const TAG = '[quran-test]';
+
+let adminId: string;
+let branchA: string;
+let levelId: string;
+let groupA: string;
+let quranSubject: string;
+let fiqhSubject: string;
+let student: string;
+let quranTeacher: string;
+let fiqhTeacher: string;
+let assistant: string;
+
+const actorOf = (userId: string, scopes: RoleScope[]): Actor => ({
+  userId,
+  roles: scopes.map((s) => s.role),
+  roleScopes: scopes,
+});
+const superAdmin = (): Actor => actorOf(adminId, [{ role: 'super_admin', branches: null }]);
+const teacher = (id: string): Actor => actorOf(id, [{ role: 'teacher', branches: null }]);
+
+async function failure(run: () => Promise<unknown>): Promise<{ code?: string }> {
+  try {
+    await run();
+    return {};
+  } catch (e) {
+    return e as { code?: string };
+  }
+}
+
+async function person(label: string): Promise<string> {
+  return (
+    await prisma.user.create({
+      data: { nameArabic: `${TAG} ${label}`, accountStatus: 'active' },
+    })
+  ).id;
+}
+
+/** A schedule staffed by `who`, delivering `subjectId` to `groupA`. */
+async function staffedSchedule(subjectId: string, who: string, position: 'teacher' | 'assistant') {
+  const year = await prisma.academicYear.findFirstOrThrow({ where: { isCurrent: true } });
+  const schedule = await prisma.recurringCourseSchedule.create({
+    data: {
+      title: `${TAG} حصة`,
+      subjectId,
+      teachingMode: 'administrative_group',
+      administrativeGroupId: groupA,
+      branchId: branchA,
+      startTime: new Date('1970-01-01T09:00:00Z'),
+      endTime: new Date('1970-01-01T10:00:00Z'),
+      recurrence: 'weekly',
+      weekdays: ['monday'],
+      academicYearId: year.id,
+    },
+  });
+  await prisma.courseScheduleStaff.create({
+    data: { scheduleId: schedule.id, userId: who, position },
+  });
+  return schedule.id;
+}
+
+async function clear(): Promise<void> {
+  const users = await prisma.user.findMany({
+    where: { nameArabic: { startsWith: TAG } },
+    select: { id: true },
+  });
+  const ids = users.map((u) => u.id);
+  if (ids.length > 0) {
+    await prisma.quranProgressLog.deleteMany({
+      where: { OR: [{ studentId: { in: ids } }, { loggedById: { in: ids } }] },
+    });
+    await prisma.studentSurahProgress.deleteMany({ where: { studentId: { in: ids } } });
+    await prisma.enrollment.deleteMany({ where: { studentId: { in: ids } } });
+  }
+  const schedules = await prisma.recurringCourseSchedule.findMany({
+    where: { title: { startsWith: TAG } },
+    select: { id: true },
+  });
+  const sids = schedules.map((s) => s.id);
+  if (sids.length > 0) {
+    await prisma.courseScheduleStaff.deleteMany({ where: { scheduleId: { in: sids } } });
+    await prisma.recurringCourseSchedule.deleteMany({ where: { id: { in: sids } } });
+  }
+  if (ids.length > 0) {
+    await prisma.auditLog.deleteMany({ where: { actorUserId: { in: ids } } });
+    await prisma.trash.deleteMany({ where: { deletedById: { in: ids } } });
+    await prisma.user.deleteMany({ where: { id: { in: ids } } });
+  }
+  const levels = await prisma.level.findMany({
+    where: { name: { startsWith: TAG } },
+    select: { id: true },
+  });
+  await prisma.administrativeGroup.deleteMany({
+    where: { levelId: { in: levels.map((l) => l.id) } },
+  });
+  await prisma.levelSubject.deleteMany({ where: { levelId: { in: levels.map((l) => l.id) } } });
+  await prisma.level.deleteMany({ where: { id: { in: levels.map((l) => l.id) } } });
+  await prisma.subject.deleteMany({ where: { name: { startsWith: TAG } } });
+  await prisma.category.deleteMany({ where: { name: { startsWith: TAG } } });
+  await prisma.branch.deleteMany({ where: { name: { startsWith: TAG } } });
+}
+
+beforeEach(async () => {
+  await clear();
+  adminId = await person('مسؤولة');
+  const cat = await prisma.category.create({ data: { name: `${TAG} فئة` } });
+  levelId = (
+    await prisma.level.create({
+      data: { name: `${TAG} مستوى`, categoryId: cat.id, genderRestriction: 'any' },
+    })
+  ).id;
+  branchA = (
+    await prisma.branch.create({
+      data: { name: `${TAG} فرع`, operationalStartDate: new Date('2020-01-01') },
+    })
+  ).id;
+  groupA = (
+    await prisma.administrativeGroup.create({
+      data: { name: `${TAG} مجموعة`, levelId, branchId: branchA },
+    })
+  ).id;
+
+  // R73.4 — the marker, not the name. At most one live Subject may carry it.
+  quranSubject = (
+    await prisma.subject.create({ data: { name: `${TAG} قرآن`, tracksQuranProgress: true } })
+  ).id;
+  fiqhSubject = (await prisma.subject.create({ data: { name: `${TAG} فقه` } })).id;
+
+  student = await person('مستفيدة');
+  await prisma.enrollment.create({
+    data: { studentId: student, levelId, administrativeGroupId: groupA, branchId: branchA },
+  });
+
+  quranTeacher = await person('مؤطرة القرآن');
+  fiqhTeacher = await person('مؤطرة الفقه');
+  assistant = await person('مؤطرة مساعدة');
+  await staffedSchedule(quranSubject, quranTeacher, 'teacher');
+  await staffedSchedule(fiqhSubject, fiqhTeacher, 'teacher');
+  await staffedSchedule(quranSubject, assistant, 'assistant');
+});
+
+afterAll(async () => {
+  await clear();
+  await prisma.$disconnect();
+});
+
+const range = (start: number, end: number) => ({
+  studentId: student,
+  surahId: 1,
+  startAyah: start,
+  endAyah: end,
+  category: 'new_memorization' as const,
+});
+
+describe('R73.3 — Quran scope is the Quran teaching, not any teaching', () => {
+  it('the مؤطرة who teaches this student’s QURAN may log', async () => {
+    const coverage = await logProgress(prisma, teacher(quranTeacher), range(1, 4));
+    expect(coverage.merged_ayah_count).toBe(4);
+    // Al-Fatiha has 7 ayahs — the denominator is the Surah's own (§4.5).
+    expect(coverage.coverage_percent).toBe(57.14);
+  });
+
+  it('the مؤطرة who teaches the same student only FIQH may not', async () => {
+    // **The case the Owner rejected**, and the one §4.4c's subject-blind
+    // "own students" would have admitted: she teaches this مستفيدة, just not
+    // her Quran.
+    const denied = await failure(() => logProgress(prisma, teacher(fiqhTeacher), range(1, 4)));
+    // §20 rule 17 — out of scope is 404, never 403.
+    expect(denied.code).toBe('NOT_FOUND');
+  });
+
+  it('an ASSISTANT on the Quran schedule may log — position is not consulted', async () => {
+    // R43 gave co-teachers and assistants one table and one rule; R73 does not
+    // introduce a second, and the Owner's decision 6 requires exactly this.
+    const coverage = await logProgress(prisma, teacher(assistant), range(1, 3));
+    expect(coverage.merged_ayah_count).toBe(3);
+  });
+
+  it('a مؤطرة who staffs nothing reaches nobody', async () => {
+    const stranger = await person('غريبة');
+    const denied = await failure(() => logProgress(prisma, teacher(stranger), range(1, 2)));
+    expect(denied.code).toBe('NOT_FOUND');
+  });
+
+  it('with NO Subject marked, no مؤطرة has Quran scope — it fails closed', async () => {
+    // Failing open would reinstate exactly the behaviour R73.3 was written to
+    // stop, so an unconfigured association grants nobody rather than everybody.
+    await prisma.subject.update({
+      where: { id: quranSubject },
+      data: { tracksQuranProgress: false },
+    });
+    const denied = await failure(() => logProgress(prisma, teacher(quranTeacher), range(1, 2)));
+    expect(denied.code).toBe('NOT_FOUND');
+  });
+
+  it('a Super Admin is unaffected by the Subject rule', async () => {
+    const coverage = await logProgress(prisma, superAdmin(), range(1, 7));
+    expect(coverage.coverage_percent).toBe(100);
+  });
+});
+
+describe('BR-13 — coverage is a union, recomputed synchronously', () => {
+  it('does not inflate when ranges overlap, and updates in the same request', async () => {
+    await logProgress(prisma, teacher(quranTeacher), range(1, 5));
+    const after = await logProgress(prisma, teacher(quranTeacher), range(3, 7));
+    // [1–5] ∪ [3–7] = [1–7] = 7 ayahs, not 10.
+    expect(after.merged_ayah_count).toBe(7);
+    expect(after.coverage_percent).toBe(100);
+
+    // …and the cache row already holds it: the recalculation is synchronous,
+    // never deferred to a job (§4.5, R6/R8/R10).
+    const cached = await prisma.studentSurahProgress.findFirstOrThrow({
+      where: { studentId: student, surahId: 1 },
+    });
+    expect(cached.mergedAyahCount).toBe(7);
+  });
+
+  it('recomputes downwards when a log is corrected', async () => {
+    const coverage = await logProgress(prisma, teacher(quranTeacher), range(1, 7));
+    expect(coverage.merged_ayah_count).toBe(7);
+
+    const log = await prisma.quranProgressLog.findFirstOrThrow({ where: { studentId: student } });
+    const after = await correctLog(prisma, teacher(quranTeacher), log.id, { endAyah: 3 });
+    expect(after.merged_ayah_count).toBe(3);
+  });
+
+  it('recomputes to zero when the only log is deleted, and leaves a Trash entry', async () => {
+    await logProgress(prisma, teacher(quranTeacher), range(1, 7));
+    const log = await prisma.quranProgressLog.findFirstOrThrow({ where: { studentId: student } });
+
+    const after = await deleteLog(prisma, teacher(quranTeacher), log.id);
+    expect(after.merged_ayah_count).toBe(0);
+    expect(after.coverage_percent).toBe(0);
+
+    // R59 — a deletion a person deliberately performed gets its own entry.
+    expect(
+      await prisma.trash.count({ where: { targetEntity: 'QuranProgressLog', targetId: log.id } }),
+    ).toBe(1);
+    // The stamp is cleared with the last log; a leftover would make an empty
+    // coverage look freshly computed.
+    const cached = await prisma.studentSurahProgress.findFirstOrThrow({
+      where: { studentId: student, surahId: 1 },
+    });
+    expect(cached.lastLogId).toBeNull();
+  });
+
+  it('refuses an ayah past the end of the surah', async () => {
+    // Al-Fatiha has 7. The database trigger enforces it too (TD-6); the service
+    // turns it into a coded refusal rather than a driver error.
+    const denied = await failure(() =>
+      logProgress(prisma, teacher(quranTeacher), { ...range(1, 8) }),
+    );
+    expect(denied.code).toBe('VALIDATION_FAILED');
+  });
+});
+
+describe('R10 — the cache is self-healing, which is why TD-15 needs no lock', () => {
+  it('repairs a cache row that lost its write, on read', async () => {
+    await logProgress(prisma, teacher(quranTeacher), range(1, 7));
+
+    // Simulate the crash window between the log's commit and the cache upsert:
+    // the row holds a stale count and a stamp naming an older log.
+    await prisma.studentSurahProgress.updateMany({
+      where: { studentId: student, surahId: 1 },
+      data: { mergedAyahCount: 1, coveragePercent: 14.29, lastLogId: null },
+    });
+
+    const read = await readStudentCoverage(prisma, teacher(quranTeacher), student);
+    // The reader never sees the stale value — §4.5's guard recomputes first.
+    expect(read.surahs[0]?.merged_ayah_count).toBe(7);
+
+    const repaired = await prisma.studentSurahProgress.findFirstOrThrow({
+      where: { studentId: student, surahId: 1 },
+    });
+    // …and repairs it in place, so the next reader pays nothing.
+    expect(repaired.mergedAyahCount).toBe(7);
+    expect(repaired.lastLogId).not.toBeNull();
+  });
+
+  it('reads a student with no logs as no surahs, not an error', async () => {
+    const read = await readStudentCoverage(prisma, superAdmin(), student);
+    expect(read.surahs).toEqual([]);
+    expect(read.logs).toEqual([]);
+  });
+});

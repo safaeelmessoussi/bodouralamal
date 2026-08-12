@@ -175,14 +175,28 @@ export async function audienceSize(prisma: PrismaClient, spec: AudienceSpec): Pr
 export async function studentsTaughtBy(
   prisma: PrismaClient,
   teacherId: string,
+  /**
+   * **R73 — narrow to one Subject's teaching.** Absent, this is §4.4c's
+   * subject-blind set, which is what content, exams and social data all use.
+   * Supplied, it answers *"the students whose ⟨Subject⟩ she teaches"* — which
+   * TD-2's Quran row now requires, because a مؤطرة teaching a مستفيدة only Fiqh
+   * must not reach that مستفيدة's memorization.
+   *
+   * A **parameter on this resolver rather than a second one**: §4.4c is the
+   * single definition of what a member of staff may reach, and a parallel
+   * implementation is the drift its own wording warns about.
+   */
+  filter: { subjectId?: string } = {},
 ): Promise<Prisma.UserWhereInput> {
   const staffed = { some: { userId: teacherId, deletedAt: null } };
+  const subject = filter.subjectId === undefined ? {} : { subjectId: filter.subjectId };
 
   const entireLevel = await prisma.recurringCourseSchedule.findMany({
     where: {
       deletedAt: null,
       teachingMode: 'entire_level',
       staff: staffed,
+      ...subject,
     },
     select: { levelId: true, branchId: true },
   });
@@ -194,7 +208,14 @@ export async function studentsTaughtBy(
           deletedAt: null,
           administrativeGroup: {
             deletedAt: null,
-            schedules: { some: { deletedAt: null, teachingMode: 'administrative_group', staff: staffed } },
+            schedules: {
+              some: {
+                deletedAt: null,
+                teachingMode: 'administrative_group',
+                staff: staffed,
+                ...subject,
+              },
+            },
           },
         },
       },
@@ -205,7 +226,9 @@ export async function studentsTaughtBy(
           deletedAt: null,
           teachingGroup: {
             deletedAt: null,
-            schedules: { some: { deletedAt: null, teachingMode: 'teaching_group', staff: staffed } },
+            schedules: {
+              some: { deletedAt: null, teachingMode: 'teaching_group', staff: staffed, ...subject },
+            },
           },
         },
       },
@@ -406,6 +429,74 @@ export async function isResponsibleForEvent(
     select: { id: true },
   });
   return row !== null;
+}
+
+/**
+ * **The Subject whose teaching authorises Quran progress (§4.5, R73.4).**
+ *
+ * `null` when no Subject is marked, which is a real state: the association may
+ * not have configured it yet, and the honest consequence is that **no مؤطرة has
+ * Quran scope** rather than that every مؤطرة does. Failing open here would
+ * reinstate exactly the behaviour R73.3 was written to stop.
+ */
+export async function quranSubjectId(prisma: PrismaClient): Promise<string | null> {
+  const row = await prisma.subject.findFirst({
+    where: { tracksQuranProgress: true, deletedAt: null },
+    select: { id: true },
+  });
+  return row?.id ?? null;
+}
+
+/**
+ * **May this caller act on this مستفيدة's Quran progress?** (§4.5, TD-2 as
+ * qualified by R73.3.)
+ *
+ * The three roles resolve the way TD-2 qualifies each, and only the مؤطرة's arm
+ * differs from `assertCanAccessStudent`:
+ *
+ * - **Super Admin** — unscoped (§2.1).
+ * - **Admin** — their branches, via `Enrollment.branch_id` (R66). **Unchanged
+ *   by R73**: TD-2 grants them the row unqualified.
+ * - **مؤطرة** — she must staff a **live** schedule whose Subject carries
+ *   `tracks_quran_progress` **and whose audience contains this مستفيدة**, in any
+ *   of §4.4c's three modes. **Teaching and assisting count equally** — R43 gave
+ *   them one table and one rule, and `position` is not consulted here either.
+ *
+ * **Out of scope answers `404`, never `403`** (§20 rule 17): a response must
+ * never be usable to discover that a minor's record exists.
+ */
+export async function assertCanManageQuranProgress(
+  prisma: PrismaClient,
+  actor: ScopedActor,
+  studentId: string,
+): Promise<void> {
+  if (scope.isSuperAdmin(actor.roleScopes)) return;
+
+  if (scope.hasRole(actor.roleScopes, 'admin')) {
+    const managed = scope.branchesForRole(actor.roleScopes, 'admin');
+    if (managed === null) return;
+    const inScope = await prisma.enrollment.findFirst({
+      where: { studentId, deletedAt: null, branchId: { in: managed } },
+      select: { id: true },
+    });
+    if (inScope) return;
+    // Falls through deliberately: an Admin who also teaches Quran may still
+    // reach the student that way, checked below.
+  }
+
+  if (scope.hasRole(actor.roleScopes, 'teacher')) {
+    const subjectId = await quranSubjectId(prisma);
+    if (subjectId !== null) {
+      const where = await studentsTaughtBy(prisma, actor.userId, { subjectId });
+      const found = await prisma.user.findFirst({
+        where: { ...where, id: studentId, deletedAt: null },
+        select: { id: true },
+      });
+      if (found) return;
+    }
+  }
+
+  throw new AppError('NOT_FOUND', 'no such student');
 }
 
 /** What an exam names, for the §4.4c scope test (R58's shape). */
