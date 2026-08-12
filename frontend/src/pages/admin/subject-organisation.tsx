@@ -15,7 +15,7 @@ import { AdminLayout } from '../../components/admin/admin-layout.js';
 import { Button } from '../../components/ui/button.js';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
 import { Dialog } from '../../components/ui/dialog.js';
-import { TextField } from '../../components/ui/field.js';
+import { SelectField, TextField } from '../../components/ui/field.js';
 import { useSession } from '../../contexts/session.js';
 import { useActiveRole } from '../../contexts/active-role.js';
 import { t } from '../../i18n/index.js';
@@ -106,6 +106,12 @@ export function SubjectOrganisationPage({
     subjects.find((s) => s.id === subjectId)?.name ?? t('admin.subjectOrg.pickSubject');
 
   function go(nextSubject: string): void {
+    // **The placeholder navigates nowhere.** Choosing it used to send the
+    // browser to `/admin/levels/{id}/subjects/` — an empty second segment,
+    // which the router's optional capture does not match, so it fell through to
+    // `LevelSubjectsPage` and silently bounced the reader back to مواد المستوى.
+    // The same symptom as the mislabelled row action, from a different cause.
+    if (nextSubject === '') return;
     window.location.href = `/admin/levels/${levelId}/subjects/${nextSubject}`;
   }
 
@@ -198,17 +204,16 @@ export function SubjectOrganisationPage({
     >
       {notice ? <p role="status">{notice}</p> : null}
 
-      <label>
-        <span>{t('admin.schedules.subject')}</span>
-        <select value={subjectId ?? ''} onChange={(e) => go(e.target.value)}>
-          <option value="">{t('common.choose')}</option>
-          {subjects.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name}
-            </option>
-          ))}
-        </select>
-      </label>
+      {/* The shared primitive, not a hand-rolled `<label><select>`: label
+          association, the placeholder and error wiring belong to `field.tsx`
+          rather than to this screen remembering them. */}
+      <SelectField
+        label={t('admin.schedules.subject')}
+        value={subjectId ?? ''}
+        onChange={go}
+        placeholder={t('common.choose')}
+        options={subjects.map((subject) => ({ value: subject.id, label: subject.name }))}
+      />
 
       {!subjectId ? (
         <p className="state">{t('admin.subjectOrg.pickSubject')}</p>

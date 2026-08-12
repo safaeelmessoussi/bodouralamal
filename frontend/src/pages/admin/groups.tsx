@@ -145,10 +145,25 @@ export function GroupsPage(): ReactNode {
   const actions: RowAction<AdministrativeGroup>[] = [
     { label: t('admin.groups.roster'), onSelect: (r) => setRosterOf(r) },
     {
-      // §14.1's Subject Organisation node carries two ids, so no menu can link
-      // to it. Drilling in from a group is how it becomes reachable at all: the
-      // group names the Level, and the screen picks the Subject.
-      label: t('admin.subjectOrg.title'),
+      /**
+       * **The destination is right; the LABEL was wrong.**
+       *
+       * It borrowed the *next* screen's title, `admin.subjectOrg.title`, and
+       * promised «حلقات مادة» while navigating to «مواد المستوى». Two ids are
+       * needed to reach a Subject's circles — `TeachingGroup` is scoped to
+       * `(subject_id, level_id)` — and a group names only the Level, so the
+       * Subject list is not a detour on the way there: **it is the step where
+       * the second id is chosen.** The label now says what the click does.
+       *
+       * It had also started rendering a literal `{subject}` placeholder, since
+       * that title gained an interpolation earlier today — a borrowed string is
+       * a string that changes underneath you.
+       *
+       * `admin.levels.manageSubjects` is reused rather than a second key added:
+       * the Levels table's row action goes to the same screen, and two names
+       * for one destination is how a hierarchy stops being obvious.
+       */
+      label: t('admin.levels.manageSubjects'),
       onSelect: (r) => {
         window.location.href = `/admin/levels/${r.level_id}/subjects`;
       },
