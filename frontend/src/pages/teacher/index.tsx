@@ -5,6 +5,7 @@ import { TeacherLayout } from '../../components/teacher/teacher-layout.js';
 import { t } from '../../i18n/index.js';
 import { teacherModuleForPath } from '../../lib/teacher-modules.js';
 import { ContentPage } from '../content.js';
+import { TeacherExamsPage } from './exams.js';
 import { TeacherSchedulesPage } from './schedules.js';
 
 /**
@@ -31,6 +32,9 @@ export function TeacherRouter(): ReactNode {
     switch (module.path) {
       case '/teacher/schedules':
         return <TeacherSchedulesPage />;
+      case '/teacher/exams':
+        // R70 — the marking half. The online paper builder stays out (§4.6).
+        return <TeacherExamsPage />;
       case '/teacher/content':
         // The same screen the back office renders. The capability is identical;
         // only the chrome and what the server will accept differ (§4.9).

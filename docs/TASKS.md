@@ -688,6 +688,16 @@
 - [x] **Breadcrumb across المستويات → مواد المستوى → حلقات المادة** — `PortalShell` takes an optional trail; passed in by the page, never derived from the URL, so it can only link nodes that exist
 - [x] **Post-R69 audit (2026-08-12):** the drill-down out of مواد المستوى still used the legacy path and navigated twice; «تنظيم المادة» survived as a row-action label for a screen now called «حلقات المواد»; `pickSubject` was substituted into the heading as if it were a Subject name
 
+### M5a — in-school exam grading + Teacher scope (2026-08-12)
+- [x] **Audit first:** §4.6's model complete, R58's exam half built, §4.4c resolver already live. `Grade` had no service/route/adapter/screen — that was the whole gap
+- [x] **R70 drafted and applied:** `/admin/exam-grades?exam=` joins §14.1 · BR-7 reworded to *the exam's audience* · `grade.enter` joins TD-8 · TD-2's exam row splits in four
+- [x] Owner decisions: Course Schedules stay Admin (scope self-reference); Teachers create exams in §4.4c scope; **deletion stays Admin** — `Exam` has no `created_by`
+- [x] **R66 defect fixed:** `studentsTaughtBy` + `assertCanAccessStudent` resolved branch through the GROUP — ungrouped students were invisible to their own teacher
+- [x] **Found live, not by tests:** pre-R58 exams (null branch/subject) answered 500; now `EXAM_INCOMPLETE`, with the type narrowed so it cannot recur
+- [x] One shared `GradeSheetView` rendered by both entry points, with a source guard asserting neither page reimplements it
+- [x] Empty ≠ absent ≠ zero, structurally; /20 ↔ bp converted once on the server; BR-7 · BR-8 · BR-12 · TD-15 all covered
+- [ ] **Not implemented, and stated:** no UI for a Teacher to CREATE an Event — the server has supported it since R43 (`teacherEventScope`), and `/teacher/schedules` is read-only by design. الجدولة write access for Teachers needs its own slice
+
 ### Post-R69 UI fixes (2026-08-12)
 - [x] **`SUBJECT_NOT_IN_LEVEL` root-caused to the CLIENT.** The Subject selector listed every Subject on the platform instead of the Level's own; validation untouched
 - [x] A Level teaching nothing gets a named empty state linking to مواد المستوى, not an empty dropdown

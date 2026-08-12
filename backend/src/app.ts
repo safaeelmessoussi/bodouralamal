@@ -23,6 +23,7 @@ import * as taxonomy from './controllers/taxonomy.controller.js';
 import * as trash from './controllers/trash.controller.js';
 import * as contentCtl from './controllers/content.controller.js';
 import * as exams from './controllers/exam.controller.js';
+import * as grades from './controllers/grade.controller.js';
 import * as childApplications from './controllers/child-application.controller.js';
 import * as students from './controllers/student.controller.js';
 import * as profile from './controllers/profile.controller.js';
@@ -415,6 +416,15 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
   guarded.post('/exams', exams.create(prisma));
   guarded.patch('/exams/:id', exams.update(prisma));
   guarded.delete('/exams/:id', exams.remove(prisma));
+
+  // §4.6 grading (M5a, R70). Nested under the exam because a grade cannot exist
+  // without one — `Grade.exam_id` is NOT NULL with `ON DELETE RESTRICT`, and the
+  // path says so. Entering and publishing are separate routes because R70.4
+  // made them separate capabilities.
+  guarded.get('/exams/:id/grades', grades.sheet(prisma));
+  guarded.put('/exams/:id/grades', grades.save(prisma));
+  guarded.post('/exams/:id/grades/publish', grades.publish(prisma));
+  guarded.post('/exams/:id/grades/:studentId/override', grades.override(prisma));
 
   api.use(guarded);
 

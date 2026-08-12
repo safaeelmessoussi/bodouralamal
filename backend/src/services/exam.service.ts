@@ -4,6 +4,7 @@ import { page, pageWindow, type Page, type PageParams } from '../lib/pagination.
 import type { Actor } from '../policies/actor.js';
 import * as scope from '../policies/branch-scope.js';
 import { assertSubjectTaughtAtLevel } from '../policies/curriculum.js';
+import { assertExamInTeacherScope } from '../policies/roster-resolution.js';
 import * as audit from '../repositories/audit.repository.js';
 import * as trash from '../repositories/trash.repository.js';
 
@@ -42,10 +43,51 @@ import * as trash from '../repositories/trash.repository.js';
 
 const MANAGING_ROLE = 'admin';
 
+/** Whether the caller acts as staff rather than as a Teacher — the two take
+ *  different scope paths below, and this is the one place that decides. */
+function isAdminish(actor: Actor): boolean {
+  return scope.isSuperAdmin(actor.roleScopes) || scope.hasRole(actor.roleScopes, MANAGING_ROLE);
+}
+
+/**
+ * **Who may organise a sitting (TD-2 as split by R70.4).**
+ *
+ * This refused a Teacher every exam write, while §4.5 says *"teachers create
+ * exams manually"*, §2.1 that a Teacher *"schedules/grades exams"*, and TD-2
+ * granted it outright. Three normative statements against one implementation;
+ * R70.4 settles it in their favour and splits the matrix row in three so the
+ * three acts stop sharing one grant.
+ *
+ * **The role gate is here; the SCOPE is not**, because a Teacher's scope needs
+ * the database (§4.4c resolves it from the schedules they staff) and every
+ * caller already runs inside a transaction. `assertScope` below is the other
+ * half, and neither is sufficient alone.
+ */
 function assertCanManage(actor: Actor): void {
-  if (!scope.isSuperAdmin(actor.roleScopes) && !scope.hasRole(actor.roleScopes, MANAGING_ROLE)) {
-    throw new AppError('FORBIDDEN', 'scheduling an exam requires admin (TD-2)');
+  if (!isAdminish(actor) && !scope.hasRole(actor.roleScopes, 'teacher')) {
+    throw new AppError('FORBIDDEN', 'organising an exam requires staff (TD-2)');
   }
+}
+
+/**
+ * The scope half: an Admin is bound by branch, a Teacher by §4.4c.
+ *
+ * **Reused, never restated** — `assertExamInTeacherScope` lives beside the rest
+ * of §4.4c's derivation in `roster-resolution.ts`, which is the single
+ * implementation of *what a member of staff may reach*. A second answer here
+ * would be the drift §4.4c's own wording warns about.
+ */
+async function assertScope(
+  tx: Prisma.TransactionClient,
+  actor: Actor,
+  spec: { branchId: string; levelId: string; subjectId: string; administrativeGroupId: string | null },
+  notFoundMessage = 'no such branch',
+): Promise<void> {
+  if (isAdminish(actor)) {
+    scope.assertCanActOnBranch(actor.roleScopes, MANAGING_ROLE, spec.branchId, notFoundMessage);
+    return;
+  }
+  await assertExamInTeacherScope(tx as unknown as PrismaClient, actor.userId, spec);
 }
 
 export interface ExamStaffInput {
@@ -143,9 +185,16 @@ export async function createPhysicalExam(
   input: PhysicalExamInput,
 ): Promise<{ id: string }> {
   assertCanManage(actor);
-  scope.assertCanActOnBranch(actor.roleScopes, MANAGING_ROLE, input.branchId, 'no such branch');
 
   return prisma.$transaction(async (tx) => {
+    // Scope before coherence: a caller who may not act here learns nothing
+    // about whether the level, subject or room they named exists.
+    await assertScope(tx, actor, {
+      branchId: input.branchId,
+      levelId: input.levelId,
+      subjectId: input.subjectId,
+      administrativeGroupId: input.administrativeGroupId ?? null,
+    });
     await assertCoherent(tx, input);
 
     const exam = await tx.exam.create({
@@ -199,7 +248,14 @@ export async function updatePhysicalExam(
 
   const existing = await prisma.exam.findFirst({
     where: { id, deletedAt: null },
-    select: { branchId: true, mode: true, version: true },
+    select: {
+      branchId: true,
+      levelId: true,
+      subjectId: true,
+      administrativeGroupId: true,
+      mode: true,
+      version: true,
+    },
   });
   if (!existing) throw new AppError('NOT_FOUND', 'no such exam');
   if (existing.mode !== 'physical') {
@@ -207,12 +263,34 @@ export async function updatePhysicalExam(
       reason: 'ONLINE_NOT_AVAILABLE',
     });
   }
-  scope.assertCanActOnBranch(
-    actor.roleScopes,
-    MANAGING_ROLE,
-    existing.branchId ?? '',
+  // **The exam AS IT STANDS**, not as the caller wants it: authority to edit is
+  // decided by what is there, and the fields that could move it out of scope
+  // (`mode`, `level_id`, `subject_id`, `branch_id`) are all uneditable by the
+  // validator anyway. A named group IS editable, and is re-checked below.
+  await assertScope(
+    prisma as unknown as Prisma.TransactionClient,
+    actor,
+    {
+      branchId: existing.branchId ?? '',
+      levelId: existing.levelId,
+      subjectId: existing.subjectId ?? '',
+      administrativeGroupId: existing.administrativeGroupId,
+    },
     'no such exam',
   );
+  if (input.administrativeGroupId !== undefined) {
+    await assertScope(
+      prisma as unknown as Prisma.TransactionClient,
+      actor,
+      {
+        branchId: existing.branchId ?? '',
+        levelId: existing.levelId,
+        subjectId: existing.subjectId ?? '',
+        administrativeGroupId: input.administrativeGroupId,
+      },
+      'no such exam',
+    );
+  }
   // TD-15: a stale version is a coded conflict, never a silent overwrite.
   if (existing.version !== input.version) {
     throw new AppError('VERSION_CONFLICT', 'this exam was changed by someone else');
@@ -292,7 +370,14 @@ export async function updatePhysicalExam(
 }
 
 export async function deleteExam(prisma: PrismaClient, actor: Actor, id: string): Promise<void> {
-  assertCanManage(actor);
+  // **Deletion stays Admin and above (R70.4)**, where creating and editing are
+  // now open to a Teacher in scope. `Exam` carries no `created_by`, so *"your
+  // own but not another person's"* cannot be expressed against this schema —
+  // and R70 adds no column to make it sayable, because editing already covers
+  // the mistake a Teacher needs to correct.
+  if (!isAdminish(actor)) {
+    throw new AppError('FORBIDDEN', 'deleting an exam requires admin (TD-2, R70.4)');
+  }
   const existing = await prisma.exam.findFirst({
     where: { id, deletedAt: null },
     select: { branchId: true },

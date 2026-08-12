@@ -157,9 +157,11 @@ export async function audienceSize(prisma: PrismaClient, spec: AudienceSpec): Pr
  * **Two of the three arms stay fully relational; one cannot.** The
  * administrative-group and teaching-group arms reach the staff table through
  * the target's own `schedules` back-relation, so they never leave the database.
- * The entire-level arm needs `enrollment.administrativeGroup.branchId` to equal
- * `schedule.branchId`, and Prisma cannot correlate two sibling relations inside
- * one `where` — so those schedules' `(levelId, branchId)` pairs are read first.
+ * The entire-level arm needs `enrollment.branchId` to equal `schedule.branchId`
+ * (**`Enrollment.branch_id` since R66** — not the group's, which an ungrouped
+ * student does not have), and Prisma cannot correlate two sibling relations
+ * inside one `where` — so those schedules' `(levelId, branchId)` pairs are read
+ * first.
  *
  * **What that costs, stated honestly:** the teacher's own *assignments* are read
  * at one instant rather than joined. The **student** side stays fully live in
@@ -208,15 +210,17 @@ export async function studentsTaughtBy(
         },
       },
     },
+    // **R66 correction (R70.5).** This bound the branch through
+    // `administrativeGroup.branchId`, which was the only answer while every
+    // enrolment had a group. R66 moved the branch onto `Enrollment` and made
+    // the group optional — so this arm silently excluded **every student
+    // enrolled directly in an unsubdivided Level**, making them invisible to
+    // their own teacher. The branch is read where R66 put it.
     ...entireLevel
       .filter((s): s is { levelId: string; branchId: string } => s.levelId !== null)
       .map((s) => ({
         levelEnrollments: {
-          some: {
-            deletedAt: null,
-            levelId: s.levelId,
-            administrativeGroup: { deletedAt: null, branchId: s.branchId },
-          },
+          some: { deletedAt: null, levelId: s.levelId, branchId: s.branchId },
         },
       })),
   ];
@@ -352,6 +356,94 @@ export async function teacherEventScope(
   };
 }
 
+/** What an exam names, for the §4.4c scope test (R58's shape). */
+export interface ExamScopeSpec {
+  branchId: string;
+  levelId: string;
+  subjectId: string;
+  /** `null` is **the whole Level** (R58), never "no target". */
+  administrativeGroupId: string | null;
+}
+
+/**
+ * **Whether a Teacher may organise this exam sitting (§4.4c, TD-2 as split by
+ * R70.4).**
+ *
+ * §4.5 says *"teachers create exams manually"* and §2.1 that a Teacher
+ * *"schedules/grades exams"*; R70.4 states the scope those grants carry. It is
+ * §4.4c's existing derivation and nothing new — **the schedules they staff** —
+ * applied to the four things an exam names:
+ *
+ * | Named by the exam | Must be |
+ * |---|---|
+ * | branch | a branch they staff |
+ * | (level, subject) | taught together on a schedule they staff **at that branch** |
+ * | a named group | a group they staff, or one whose students they teach |
+ * | **no group — the whole Level** | a schedule they staff for that Level in `entire_level` mode |
+ *
+ * **The last row is the one worth stating.** A teacher of one group setting a
+ * paper for the entire Level would be examining students they do not teach, so
+ * the whole-Level target is granted only to somebody who already teaches the
+ * whole Level. `administrative_group_id = NULL` means *everyone*, and authority
+ * over everyone has to be held rather than inferred from authority over some.
+ *
+ * Admins and Super Admins never reach this: their scope is the branch, checked
+ * by `branch-scope.ts` as it is everywhere else.
+ */
+export async function assertExamInTeacherScope(
+  prisma: PrismaClient,
+  teacherId: string,
+  spec: ExamScopeSpec,
+): Promise<void> {
+  const schedules = await prisma.recurringCourseSchedule.findMany({
+    where: {
+      deletedAt: null,
+      branchId: spec.branchId,
+      subjectId: spec.subjectId,
+      staff: { some: { userId: teacherId, deletedAt: null } },
+    },
+    select: {
+      teachingMode: true,
+      levelId: true,
+      administrativeGroupId: true,
+      administrativeGroup: { select: { levelId: true } },
+      teachingGroup: { select: { levelId: true } },
+    },
+  });
+
+  const forThisLevel = schedules.filter(
+    (s) =>
+      (s.levelId ?? s.administrativeGroup?.levelId ?? s.teachingGroup?.levelId ?? null) ===
+      spec.levelId,
+  );
+
+  if (forThisLevel.length === 0) {
+    throw new AppError('FORBIDDEN', 'this level and subject are outside your teaching scope', {
+      reason: 'EXAM_OUT_OF_SCOPE',
+    });
+  }
+
+  if (spec.administrativeGroupId === null) {
+    // The whole Level — held, never inferred. See the docstring.
+    if (!forThisLevel.some((s) => s.teachingMode === 'entire_level')) {
+      throw new AppError('FORBIDDEN', 'you do not teach this whole level', {
+        reason: 'WHOLE_LEVEL_OUT_OF_SCOPE',
+      });
+    }
+    return;
+  }
+
+  // A named group: one they staff directly, or one whose students they teach
+  // through a Teaching Group — the same union `teacherEventScope` resolves,
+  // reused rather than restated.
+  const reachable = await teacherEventScope(prisma, teacherId);
+  if (!reachable.administrativeGroupIds.includes(spec.administrativeGroupId)) {
+    throw new AppError('FORBIDDEN', 'that group is outside your teaching scope', {
+      reason: 'GROUP_OUT_OF_SCOPE',
+    });
+  }
+}
+
 /**
  * **Whether a teacher may act on this student (§4.4c, TD-2, BR-16).**
  *
@@ -404,12 +496,11 @@ export async function assertCanAccessStudent(
     const managed = scope.branchesForRole(actor.roleScopes, 'admin');
     if (managed === null) return; // all-branches Admin
 
+    // R66 (R70.5) — `Enrollment.branch_id` is the single answer to *where is
+    // this student*. Resolving it through the group meant a branch-scoped Admin
+    // could not reach an ungrouped student at their own branch.
     const inScope = await prisma.enrollment.findFirst({
-      where: {
-        studentId,
-        deletedAt: null,
-        administrativeGroup: { deletedAt: null, branchId: { in: managed } },
-      },
+      where: { studentId, deletedAt: null, branchId: { in: managed } },
       select: { id: true },
     });
     if (inScope) return;

@@ -420,10 +420,17 @@ export const ar = {
     },
     // Each names WHAT is missing. The schedules entry names a specification gap
     // rather than unbuilt UI, because that is the honest reason.
+    exams: {
+      lede: 'الامتحانات التي تدخل في نطاق تدريسك. افتحي امتحانًا لإدخال النقاط.',
+      empty: 'لا توجد امتحانات في نطاق تدريسك.',
+      backToList: 'العودة إلى قائمة الامتحانات',
+    },
     blocked: {
       dashboard: 'تُبنى واجهات مساحة التدريس بعد اكتمال شاشات الحصص.',
       content: 'يتطلب هذا القسم واجهات رفع المحتوى (المرحلة السادسة)، وهي غير متوفرة بعد.',
-      exams: 'يتطلب هذا القسم واجهات بناء الامتحانات وتصحيحها (المرحلة الخامسة)، وهي غير متوفرة بعد.',
+      // R70 — the marking half is built; only §4.6's ONLINE paper builder is
+      // still declared and refused, so the reason names that and not grading.
+      exams: 'بناء الامتحانات عن بُعد غير متوفر بعد؛ إدخال النقاط متاح.',
     },
   },
   session: {
@@ -558,6 +565,7 @@ export const ar = {
       groups: 'مجموعات المستويات',
       // R69 — each of the two subject screens gets its own node; they were
       // reachable only through row actions borrowed by unrelated screens.
+      examGrades: 'نقاط الامتحانات',
       levelSubjects: 'مواد المستوى',
       teachingGroups: 'حلقات المواد',
       scheduling: 'الجدولة',
@@ -876,6 +884,37 @@ export const ar = {
         'المستوى «{name}» يضم {n} طالبة مسجلة، ولا يمكن حذفه قبل نقلهن إلى مستوى آخر.',
       deleteBlocked:
         'تعذّر الحذف: ما زالت هناك تسجيلات أو حلقات أو جداول أو امتحانات أو محتوى مرتبط بهذا المستوى.',
+    },
+    grades: {
+      lede: 'نقاط امتحان واحد. النقطة على سُلّم {scale} والحفظ مسودة حتى النشر.',
+      pickExam: 'اختاري امتحانًا لعرض ورقة النقاط.',
+      exam: 'الامتحان',
+      examSummary: 'بيانات الامتحان',
+      open: 'النقاط',
+      student: 'المستفيدة',
+      mark: 'النقطة (من {scale})',
+      absent: 'غائبة',
+      result: 'النتيجة',
+      status: 'الحالة',
+      passed: 'ناجحة',
+      failed: 'راسبة',
+      overridden: 'قرار يدوي',
+      statusDraft: 'مسودة',
+      statusPublished: 'منشورة',
+      wholeLevel: 'المستوى كامل',
+      recordedLate: 'سُجّل لاحقًا',
+      save: 'حفظ كمسودة',
+      publish: 'نشر النقاط',
+      republish: 'إعادة النشر',
+      saved: 'حُفظت النقاط كمسودة.',
+      savedWithAbsent: 'حُفظت النقاط كمسودة. سُجّلت {n} مستفيدة غائبة بنقطة صفر.',
+      published: 'نُشرت نقاط {n} مستفيدة.',
+      republished: 'أُعيد نشر نقاط {n} مستفيدة.',
+      noStudents: 'لا توجد مستفيدات في نطاق هذا الامتحان.',
+      nothingToPublish: 'لا توجد نقاط لنشرها. احفظي النقاط كمسودة أولًا.',
+      notInAudience: 'إحدى المستفيدات ليست ضمن نطاق هذا الامتحان.',
+      versionConflict: 'عُدّلت النقاط من جهة أخرى. أعيدي تحميل الصفحة.',
+      outOfScope: 'هذا الامتحان خارج نطاق تدريسك.',
     },
     levelSubjects: {
       title: 'مواد مستوى «{level}»',

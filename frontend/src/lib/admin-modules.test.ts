@@ -31,6 +31,10 @@ describe('the registry matches §14.1', () => {
         '/admin',
         '/admin/approvals',
         '/admin/branches',
+        // R70.1 — grade entry had NO node: §14.1 listed grading under
+        // `/teacher/exams` while R56/R58 put exam scheduling on
+        // `/admin/schedules`, so an Admin could reach no sheet at all.
+        '/admin/exam-grades',
         '/admin/level-subjects',
         '/admin/content',
         '/admin/groups',

@@ -11,6 +11,7 @@ import { BranchesPage } from './branches.js';
 import { ContentPage } from '../content.js';
 import { GroupsPage } from './groups.js';
 import { HijriCalendarPage } from './hijri-calendar.js';
+import { ExamGradesPage } from './exam-grades.js';
 import { LevelSubjectsPage } from './level-subjects.js';
 import { LevelsPage } from './levels.js';
 import { ScheduleSessionsPage } from './schedule-sessions.js';
@@ -48,6 +49,7 @@ export const IMPLEMENTED_ADMIN_PATHS: readonly string[] = [
   '/admin/schedules',
   '/admin/groups',
   '/admin/levels',
+  '/admin/exam-grades',
   '/admin/level-subjects',
   '/admin/teaching-groups',
   '/admin/categories',
@@ -119,6 +121,12 @@ export function AdminRouter(): ReactNode {
 
   const params = new URLSearchParams(window.location.search);
   const path = window.location.pathname.replace(/\/+$/, '') || '/';
+  // R70.1 — the grade sheet, with the exam id as `?exam=` (the `/resources`
+  // pattern). The page is a frame; the sheet itself is `GradeSheetView`, which
+  // the teacher portal renders too — one implementation, two ways in.
+  if (path === '/admin/exam-grades') {
+    return <ExamGradesPage examId={params.get('exam')} />;
+  }
   if (path === '/admin/level-subjects') {
     return <LevelSubjectsPage levelId={params.get('level')} />;
   }

@@ -64,11 +64,13 @@ export const TEACHER_MODULES: readonly TeacherModule[] = [
     status: 'ready',
   },
   {
+    // R70 — unblocked for **grading**. §4.6's online paper builder is still
+    // declared and refused, so what this node opens is the grade sheet, which
+    // is the same component `/admin/exam-grades` renders (R70.1).
     path: '/teacher/exams',
     labelKey: 'teacher.nav.exams',
     roles: TEACHER,
-    status: 'blocked',
-    blockedReasonKey: 'teacher.blocked.exams',
+    status: 'ready',
   },
 ];
 
