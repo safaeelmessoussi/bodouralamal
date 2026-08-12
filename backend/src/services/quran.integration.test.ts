@@ -4,7 +4,13 @@ import { loadConfig } from '../lib/config.js';
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
 import type { Actor } from '../policies/actor.js';
 import type { RoleScope } from '../policies/branch-scope.js';
-import { correctLog, deleteLog, logProgress, readStudentCoverage } from './quran.service.js';
+import {
+  correctLog,
+  deleteLog,
+  logProgress,
+  readOwnCoverage,
+  readStudentCoverage,
+} from './quran.service.js';
 
 /**
  * **Quran memorization tracking (§4.5, BR-13; M4a, SRS Revision 73).**
@@ -303,5 +309,54 @@ describe('R10 — the cache is self-healing, which is why TD-15 needs no lock', 
     const read = await readStudentCoverage(prisma, superAdmin(), student);
     expect(read.surahs).toEqual([]);
     expect(read.logs).toEqual([]);
+  });
+});
+
+describe('M4b — the student reads her own, and only her own', () => {
+  it('reads her own coverage with no scope question asked', async () => {
+    // The subject was established by `childContext` before this call — the
+    // service takes a verified id and never resolves one, exactly as
+    // `getStudentIdentity` does.
+    await logProgress(prisma, teacher(quranTeacher), range(1, 4));
+
+    const own = await readOwnCoverage(prisma, student);
+    expect(own.surahs[0]?.merged_ayah_count).toBe(4);
+    expect(own.logs).toHaveLength(1);
+  });
+
+  it('shows an empty state rather than an error before anything is logged', async () => {
+    const own = await readOwnCoverage(prisma, student);
+    expect(own.surahs).toEqual([]);
+    expect(own.logs).toEqual([]);
+  });
+
+  it('cannot reach another student — the STAFF path still refuses her', async () => {
+    // A student holds no staff role, so the id-carrying route is closed to her
+    // whatever id she supplies. The id-less route is the only one she has, and
+    // it takes its subject from the middleware rather than from her request.
+    const other = await person('مستفيدة أخرى');
+    const asStudent = actorOf(student, [{ role: 'student', branches: null }]);
+    const denied = await failure(() => readStudentCoverage(prisma, asStudent, other));
+    expect(denied.code).toBe('NOT_FOUND');
+  });
+
+  it('cannot reach another student through the staff path even for herself', async () => {
+    // Belt and braces: the student role grants nothing on the staff read, so
+    // even naming her own id there is refused. Her access is the `/me` route.
+    const asStudent = actorOf(student, [{ role: 'student', branches: null }]);
+    const denied = await failure(() => readStudentCoverage(prisma, asStudent, student));
+    expect(denied.code).toBe('NOT_FOUND');
+  });
+
+  it('leaves the مؤطرة and Admin paths exactly as they were', async () => {
+    await logProgress(prisma, teacher(quranTeacher), range(1, 4));
+    // The Quran مؤطرة still reads through the staff path…
+    expect((await readStudentCoverage(prisma, teacher(quranTeacher), student)).surahs).toHaveLength(1);
+    // …the Fiqh-only مؤطرة still does not…
+    expect((await failure(() => readStudentCoverage(prisma, teacher(fiqhTeacher), student))).code).toBe(
+      'NOT_FOUND',
+    );
+    // …and a Super Admin is unaffected.
+    expect((await readStudentCoverage(prisma, superAdmin(), student)).surahs).toHaveLength(1);
   });
 });

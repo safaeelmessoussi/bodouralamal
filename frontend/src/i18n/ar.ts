@@ -81,6 +81,20 @@ export const ar = {
   },
   // §5.3 (R62.10) — one screen, two contexts: the caller's own record, or the
   // child they are acting for. The banner names which.
+  student: {
+    quran: {
+      title: 'حفظي',
+      lede: 'ما سُجّل لك من حفظ ومراجعة. النسبة تُحتسب باتحاد المقاطع، فلا يرفعها تكرار المقطع نفسه.',
+      empty: 'لا يوجد حفظ مسجّل بعد. تُسجّله المؤطِّرة بعد السماع.',
+      history: 'السجل',
+      noLogs: 'لا توجد سجلات.',
+      surah: 'السورة',
+      range: 'المقطع',
+      category: 'النوع',
+      newMemorization: 'حفظ جديد',
+      revision: 'مراجعة',
+    },
+  },
   studentDashboard: {
     title: 'لوحة المستفيدة',
     viewingChild: 'تتابعين بيانات: {name}',

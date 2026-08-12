@@ -152,7 +152,41 @@ export async function readStudentCoverage(
   studentId: string,
 ): Promise<{ surahs: SurahCoverage[]; logs: QuranLogRow[] }> {
   await assertCanManageQuranProgress(prisma, actor, studentId);
+  return coverageFor(prisma, studentId);
+}
 
+/**
+ * `GET /students/me/quran` — **the acting student's own progress** (§4.5, §5.3;
+ * M4b).
+ *
+ * **This takes an already-VERIFIED student id and never resolves one**, exactly
+ * as `getStudentIdentity` does and for the same reason: the subject comes from
+ * `childContext`, which read it from an approved `FamilyLink` or from the JWT
+ * `sub`. TD-12 forbids trusting a student identifier from the request, so the
+ * route carries no `{id}` and there is nowhere for a caller to name somebody
+ * else.
+ *
+ * **`assertCanManageQuranProgress` is deliberately NOT called here.** That
+ * predicate answers *may this member of staff act on this student* and would
+ * refuse a student reading her own progress — the identity has already been
+ * established by the middleware, and asking a staff question about a student
+ * would be the wrong question with a misleading answer.
+ *
+ * **The engine is not duplicated**: this is the same read the مؤطرة's screen
+ * uses, including the self-heal guard, differing only in how the subject was
+ * established.
+ */
+export async function readOwnCoverage(
+  prisma: PrismaClient,
+  studentId: string,
+): Promise<{ surahs: SurahCoverage[]; logs: QuranLogRow[] }> {
+  return coverageFor(prisma, studentId);
+}
+
+async function coverageFor(
+  prisma: PrismaClient,
+  studentId: string,
+): Promise<{ surahs: SurahCoverage[]; logs: QuranLogRow[] }> {
   const logs = await prisma.quranProgressLog.findMany({
     where: { studentId, deletedAt: null },
     select: {

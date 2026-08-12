@@ -3,11 +3,13 @@ import { z } from 'zod';
 
 import type { PrismaClient } from '../generated/prisma/client.js';
 import { requireActor } from '../middleware/authenticate.js';
+import { requireActingStudent } from '../middleware/child-context.js';
 import {
   correctLog,
   deleteLog,
   listQuranStudents,
   logProgress,
+  readOwnCoverage,
   readStudentCoverage,
 } from '../services/quran.service.js';
 import { idParam, parse } from './parse.js';
@@ -90,5 +92,25 @@ export function remove(prisma: PrismaClient) {
 export function students(prisma: PrismaClient) {
   return async (req: Request, res: Response): Promise<void> => {
     res.json({ data: await listQuranStudents(prisma, requireActor(req)) });
+  };
+}
+
+/**
+ * `GET /students/me/quran` — the acting student's own progress (M4b).
+ *
+ * **`me` is the ACTING student, not the account** — for a parent those name
+ * different people (R63). **The route carries no `{id}`, and that is the
+ * security property**: `childContext` established the subject from an approved
+ * `FamilyLink` or the JWT `sub`, so there is nowhere in this request to name
+ * somebody else's child.
+ *
+ * **Read-only by construction.** §4.5: *"Students view read-only; only teachers
+ * log entries."* No write verb exists on this path — the capability is absent
+ * rather than guarded, which is the stronger form of the same rule.
+ */
+export function myCoverage(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const acting = requireActingStudent(req);
+    res.json({ data: await readOwnCoverage(prisma, acting.studentId) });
   };
 }

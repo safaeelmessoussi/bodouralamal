@@ -693,7 +693,8 @@
 - [x] **M4a:** BR-13 union (pure, tested against §4.5's own example) · synchronous recalculation · self-heal guard · Trash on delete · `/teacher/quran?student=`
 - [x] Authorization exactly as approved: Quran-teaching scope only; **teaching and assisting count equally**; Admin/Super Admin unchanged; **fails closed** when no Subject is marked
 - [x] Invariant: at most one live Subject may track Quran progress — partial unique index, proven to refuse a second
-- [ ] **M4b — `/dashboard/student/quran`** (student read-only view). Not started
+- [x] **M4b — `/dashboard/student/quran`**, read-only. `GET /students/me/quran` carries no id: the subject comes from `childContext`, so a parent sees the child they act for and nobody else
+- [x] The read is split (`coverageFor`) and shared — the staff path and the student path differ only in how the subject was established
 - [ ] **M4c — `LevelSurah` + BR-11 level completion.** Not started
 
 ### R72 — the Teacher's الجدولة write access (2026-08-12)

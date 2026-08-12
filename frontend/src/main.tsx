@@ -10,6 +10,7 @@ import { AdminRouter } from './pages/admin/index.js';
 import { SessionPage } from './pages/session.js';
 import { TeacherRouter } from './pages/teacher/index.js';
 import { CalendarPage } from './pages/calendar.js';
+import { StudentQuranPage } from './pages/dashboard/quran.js';
 import { StudentDashboard } from './pages/dashboard/student.js';
 import { RegisterChildPage } from './pages/profile/register-child.js';
 import { ProfilePage } from './pages/profile/index.js';
@@ -91,6 +92,15 @@ function App(): React.ReactNode {
       return (
         <PendingGuard>
           <StudentDashboard />
+        </PendingGuard>
+      );
+    case 'dashboard-student-quran':
+      // M4b — §14.1's *My Quran Progress*. Read-only (§4.5), and the read it
+      // calls carries no student id: the subject comes from the child context
+      // or the JWT, so a parent sees the child they act for and nobody else.
+      return (
+        <PendingGuard>
+          <StudentQuranPage />
         </PendingGuard>
       );
     case 'profile':

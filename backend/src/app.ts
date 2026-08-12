@@ -433,6 +433,9 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
   // §4.5 Quran memorization (M4a, R73). The coverage read hangs off the student
   // because that is what it is about; the logs are their own collection because
   // a correction names one log, not a student.
+  // M4b — the student's own read. `childContext` resolves the subject; the
+  // path carries no id, which is what stops a caller naming another student.
+  guarded.get('/students/me/quran', childContext(prisma), quran.myCoverage(prisma));
   guarded.get('/quran-students', quran.students(prisma));
   guarded.get('/students/:id/quran', quran.coverage(prisma));
   guarded.post('/quran-logs', quran.create(prisma));

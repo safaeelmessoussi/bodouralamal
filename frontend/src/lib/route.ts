@@ -30,6 +30,8 @@ export type Route =
   | 'screen-pending'
   /** §5.3's Student Dashboard — one route, two contexts (R62.10, R63). */
   | 'dashboard-student'
+  /** M4b — §14.1's *My Quran Progress*, read-only (§4.5). */
+  | 'dashboard-student-quran'
   /** §14.1, §5.2 (R65) — the PERSONAL section: role-independent, every account. */
   | 'profile'
   /** §14.1 (R65) — any account registers a child, from the personal section. */
@@ -85,6 +87,8 @@ export function resolveRoute(pathname: string): Route {
 
   // R62.10 delivered this one. A parent reaches it through the account
   // switcher with a child selected; a student reaches it as themselves.
+  // Before the bare dashboard, so the longer path is not swallowed by it.
+  if (path === '/dashboard/student/quran') return 'dashboard-student-quran';
   if (path === '/dashboard/student') return 'dashboard-student';
   // R65 — the personal section, and the child-registration page under it.
   // Registering is an act of a PERSON, so neither is under a role's area: R64

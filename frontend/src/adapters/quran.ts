@@ -44,6 +44,24 @@ export async function listQuranStudents(token: string | null): Promise<QuranStud
   return (await api<{ data: QuranStudent[] }>('/quran-students', { token })).data;
 }
 
+/**
+ * `GET /students/me/quran` — **the acting student's own progress** (M4b).
+ *
+ * **No id crosses the wire**, and that is the security property: the server
+ * takes the subject from the child context or the JWT, so a parent reads the
+ * child they are acting for and a student reads herself. There is nowhere in
+ * this request to name somebody else.
+ */
+export async function fetchMyCoverage(
+  token: string | null,
+): Promise<{ surahs: SurahCoverage[]; logs: QuranLogRow[] }> {
+  return (
+    await api<{ data: { surahs: SurahCoverage[]; logs: QuranLogRow[] } }>('/students/me/quran', {
+      token,
+    })
+  ).data;
+}
+
 export async function fetchCoverage(
   studentId: string,
   token: string | null,

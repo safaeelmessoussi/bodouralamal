@@ -136,3 +136,18 @@ describe('normalisePath', () => {
     expect(normalisePath('/')).toBe('/');
   });
 });
+
+/**
+ * M4b — §14.1's *My Quran Progress*. Pinned because the longer path must not be
+ * swallowed by the bare dashboard route, and because the screen it opens is the
+ * one place a student's own progress is readable.
+ */
+describe('the student’s Quran node (M4b)', () => {
+  it('resolves its own route', () => {
+    expect(resolveRoute('/dashboard/student/quran')).toBe('dashboard-student-quran');
+  });
+
+  it('does not swallow the dashboard itself', () => {
+    expect(resolveRoute('/dashboard/student')).toBe('dashboard-student');
+  });
+});
