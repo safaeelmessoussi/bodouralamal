@@ -14,6 +14,7 @@ Contributing to the platform.
 | [Testing](testing.md) | Four layers, what each is for, how to run them |
 | [CI/CD](ci-cd.md) | Every gate, what it catches, and why it was added |
 | [Documentation policy](documentation-policy.md) | Documentation as part of Done — the workflow and the per-change routing |
+| [SRS proposal — Revision 73](../SRS-PROPOSAL-R73.md) | Quran progress: a reachable node, `quranlog.create`, and Quran-specific scope. **Drafted, NOT applied** — §73.4 needs an Owner decision |
 | [M4 Quran Progress — audit](audit-2026-08-12-quran.md) | The schema, the 114 surahs, the CHECK **and the cross-table trigger** all exist; no code does. **Quran-as-Subject is already decided by R43** — progress is associated through scope, not a column. Awaiting Owner decisions |
 | [SRS proposal — Revision 71](../SRS-PROPOSAL-R71.md) | An event has somebody responsible for it. **Applied** — `EventStaff`, and event scope as a union |
 | [مؤطرات, responsibilities and scope — audit](audit-2026-08-12-roles.md) | The model already separates person · capability · scope. **One real gap: an Event has an audience but nobody responsible for it** — plus two terminology defects. Awaiting Owner approval |
