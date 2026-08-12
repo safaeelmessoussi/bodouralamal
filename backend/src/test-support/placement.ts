@@ -60,14 +60,43 @@ export async function provisionPlacement(
  * red tests that looked like a logic failure and were a teardown ordering bug.
  */
 export async function clearPlacement(prisma: PrismaClient, tag: string): Promise<void> {
+  // **Every Level pointing at this fixture's Categories, not only the ones it
+  // named.** A suite that creates its own Level against a fixture Category —
+  // R66.5's group-less placement test does — would otherwise hold the Category
+  // under RESTRICT and take the whole teardown with it.
   const levels = await prisma.level.findMany({
-    where: { name: { startsWith: tag } },
+    where: {
+      OR: [{ name: { startsWith: tag } }, { category: { name: { startsWith: tag } } }],
+    },
     select: { id: true },
   });
   const levelIds = levels.map((l) => l.id);
   await prisma.enrollment.deleteMany({ where: { levelId: { in: levelIds } } });
   await prisma.administrativeGroup.deleteMany({ where: { levelId: { in: levelIds } } });
   await prisma.level.deleteMany({ where: { id: { in: levelIds } } });
+
+  // R67 — a `ChildApplication` now names its OWN requested Category and Branch,
+  // both `ON DELETE RESTRICT`. Before the revision only the applicant's `User`
+  // row referenced them, so this fixture never had to sweep applications; now a
+  // suite that submitted one blocks its own Category delete. Swept by the
+  // fixture's rows rather than by tag, because an application carries no name.
+  const categories = await prisma.category.findMany({
+    where: { name: { startsWith: tag } },
+    select: { id: true },
+  });
+  const branches = await prisma.branch.findMany({
+    where: { name: { startsWith: tag } },
+    select: { id: true },
+  });
+  await prisma.childApplication.deleteMany({
+    where: {
+      OR: [
+        { requestedCategoryId: { in: categories.map((c) => c.id) } },
+        { requestedBranchId: { in: branches.map((b) => b.id) } },
+      ],
+    },
+  });
+
   await prisma.category.deleteMany({ where: { name: { startsWith: tag } } });
   await prisma.branch.deleteMany({ where: { name: { startsWith: tag } } });
 }

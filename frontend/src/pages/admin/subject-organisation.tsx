@@ -100,6 +100,10 @@ export function SubjectOrganisationPage({
   }, [load]);
 
   const levelName = levels.find((l) => l.id === levelId)?.name ?? levelId;
+  /** The heading names the Subject; falling back to the placeholder rather than
+   *  an id keeps it readable while the list is still loading. */
+  const subjectName =
+    subjects.find((s) => s.id === subjectId)?.name ?? t('admin.subjectOrg.pickSubject');
 
   function go(nextSubject: string): void {
     window.location.href = `/admin/levels/${levelId}/subjects/${nextSubject}`;
@@ -182,7 +186,9 @@ export function SubjectOrganisationPage({
 
   return (
     <AdminLayout
-      title={t('admin.subjectOrg.title')}
+      // The Subject in the heading, the Level in the lede — the two facts a
+      // reader needs to know which circle list they are looking at.
+      title={t('admin.subjectOrg.title').replace('{subject}', subjectName)}
       lede={t('admin.subjectOrg.lede').replace('{level}', levelName)}
       actions={
         canManageGroups && subjectId ? (

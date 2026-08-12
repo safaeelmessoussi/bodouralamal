@@ -679,6 +679,15 @@
 - [x] `ولي الأمر` untouched: about already-approved children, and no registration action inside it
 - [ ] **OWNER DECISION — account deletion (R54).** §4.10 says "two-step account self-deletion"; `docs/SRS-PROPOSAL-R54.md` is drafted and unapproved because it reverses R52's prohibition on permanent deletion. The personal section deliberately ships **no** deletion control. When the decision is taken, its screen belongs at `/profile`
 
+### R67 + UX pass (2026-08-12)
+- [x] **R67 — a child's branch and stage are the CHILD's.** Drafted, applied, implemented. No migration: `child_application` has held both per row since R62/R64
+- [x] Parent's `intended_branch_id`/`intended_category_id` derived from the first child (R67.3); adult path untouched
+- [x] **Found end-to-end, not by tests:** `POST /child-applications` had both optional while `/registrations` required them. Required on both now, 2 HTTP cases
+- [x] `.form__row` aligns on controls — fixes تاريخ بدء العمل / ترتيب العرض and إضافة دور / نطاق الفرع with one rule
+- [x] الفئات and المواد under الإدارة, Super-Admin-only; READ endpoints stay Admin-accessible (R61's `GET /admin/branches` precedent); Levels stays Admin-readable
+- [x] **مواد المستوى / تنظيم المادة audited: the problem was vocabulary.** «فوج» removed (22 strings) — one word per concept; headings name the Level and the Subject
+- [ ] **Remaining UX proposal for those two screens:** a breadcrumb (المستويات ← المستوى ← المادة) replacing the single back-link. Small, and deliberately not bundled with a copy change
+
 ### R66 — a student is enrolled in a Level; a Group is a subdivision (2026-08-11)
 - [x] SRS drafted, applied. §7 Enrollment amended; §5.2 and R43.3 corrected to `Enrollment.branch_id`
 - [x] Migration `20260811210000` — TD-6b expand → backfill → contract, derived values, fails loudly rather than relaxing the column

@@ -14,10 +14,8 @@ import { ApplicationHeader } from '../../components/header/application-header.js
 import { SiteFooter } from '../../components/site-footer.js';
 import { ConsentNotice } from '../../components/consent-notice.js';
 import { ErrorState } from '../../components/states.js';
-import { BranchSelector } from '../../components/ui/branch-selector.js';
 import { Button } from '../../components/ui/button.js';
 import { Container } from '../../components/ui/container.js';
-import { SelectField } from '../../components/ui/field.js';
 import { useSession } from '../../contexts/session.js';
 import { t } from '../../i18n/index.js';
 import { ApiError } from '../../lib/api.js';
@@ -66,8 +64,6 @@ export function RegisterChildPage(): ReactNode {
    *  page had lost the repeatable section, so a parent of three submitted three
    *  requests here while the public form took them in one. */
   const [children, setChildren] = useState<ChildForm[]>([EMPTY_CHILD]);
-  const [branchId, setBranchId] = useState<string | null>(null);
-  const [categoryId, setCategoryId] = useState<string | null>(null);
   const [dataProcessing, setDataProcessing] = useState(false);
 
   const [branches, setBranches] = useState<PublicBranch[]>([]);
@@ -104,7 +100,7 @@ export function RegisterChildPage(): ReactNode {
     void loadReference();
   }, [loadReference]);
 
-  const errors = validate(children, branchId, categoryId, dataProcessing);
+  const errors = validate(children, dataProcessing);
   const valid = Object.keys(errors).length === 0;
 
   async function submit(): Promise<void> {
@@ -117,11 +113,9 @@ export function RegisterChildPage(): ReactNode {
         // One translation, shared with `/register` (R65) — the branch and stage
         // are request-level answers this page asks per submission, so they are
         // attached here rather than living inside a child's fields.
-        children.map((child) => ({
-          ...toChildInput(child),
-          requested_branch_id: branchId!,
-          requested_category_id: categoryId!,
-        })),
+        // R67 — `toChildInput` already carries each child's own branch and
+        // stage; there is nothing request-level left to attach.
+        children.map(toChildInput),
         accessToken,
       );
       setDone(true);
@@ -184,35 +178,14 @@ export function RegisterChildPage(): ReactNode {
                 onChange={setChildren}
                 errors={errors}
                 touched={touched}
+                branches={branches}
+                categories={categories}
               />
 
-              <fieldset className="register-form__group">
-                <legend>{t('register.branchLegend')}</legend>
-                {/* R64 — the two the public form asks and this one used not to. */}
-                <BranchSelector
-                  branches={branches}
-                  value={branchId}
-                  onChange={setBranchId}
-                  label={t('register.branchLabel')}
-                  allowAll={false}
-                  emptyLabel={t('register.branchEmpty')}
-                  required
-                  hint={t('register.branchHint')}
-                  error={touched ? (errors['branch'] ?? null) : null}
-                />
-                <SelectField
-                  label={t('register.categoryLabel')}
-                  value={categoryId ?? ''}
-                  onChange={(value) => setCategoryId(value === '' ? null : value)}
-                  required
-                  options={[
-                    { value: '', label: t('register.categoryEmpty') },
-                    ...categories.map((category) => ({ value: category.id, label: category.name })),
-                  ]}
-                  hint={t('register.categoryHint')}
-                  error={touched ? (errors['category'] ?? null) : null}
-                />
-              </fieldset>
+              {/* R67 — **no request-level branch or stage.** Both moved onto each
+                  child above, so one submission can ask for two children at two
+                  branches in two stages. They were the last fields on this page
+                  that a family shared. */}
 
               <fieldset className="register-form__group">
                 <legend>{t('register.consentLegend')}</legend>
@@ -253,16 +226,12 @@ export function RegisterChildPage(): ReactNode {
  */
 export function validate(
   children: ChildForm[],
-  branchId: string | null,
-  categoryId: string | null,
   dataProcessing: boolean,
 ): Record<string, string> {
+  // R67 — the branch and stage moved onto each child, so the only thing left
+  // that belongs to the REQUEST is the consent that makes it lawful.
   const errors = validateChildren(children);
 
-  // R39/R64 — a choice, never a default: defaulting would ask for a branch
-  // nobody picked.
-  if (!branchId) errors['branch'] = t('register.errBranch');
-  if (!categoryId) errors['category'] = t('register.errCategory');
   // §4.1a — no lawful basis without it, so it is refused rather than warned about.
   if (!dataProcessing) errors['dataProcessing'] = t('register.errConsent');
 

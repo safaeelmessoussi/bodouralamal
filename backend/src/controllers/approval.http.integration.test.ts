@@ -96,13 +96,15 @@ async function submitBundle(
           last_name_arabic: `طفلة`,
           sex: 'female' as const,
           consent_media_release: true,
+          // R67 — the branch and stage belong to the child now. `intoBranchId`
+          // is what the branch-filter test varies.
+          requested_branch_id: intoBranchId ?? branchId,
+          requested_category_id: placement.categoryId,
         },
       ],
-      branch_id: intoBranchId ?? branchId,
       // R49 — the stage the parent chose for the child, which §4.1 step 1
       // preselects the first Level from. The fixture's placement Category, so
       // the preselection and the group the approval uses agree.
-      category_id: placement.categoryId,
       consents: { data_processing: true, media_release: true },
     },
     config.ONBOARDING_TOKEN_KEY,

@@ -94,6 +94,9 @@ function payload(firstName: string, mediaRelease = true): unknown {
         sex: 'female',
         schooling_stage: 'primary',
         consent_media_release: mediaRelease,
+        // R67 — required per child on this path too.
+        requested_branch_id: placement.branchId,
+        requested_category_id: placement.categoryId,
       },
     ],
     consent_data_processing: true,
@@ -178,6 +181,46 @@ describe('POST /child-applications', () => {
     const res = await call('POST', '/child-applications', undefined, payload(`${TAG}-مجهولة`));
     expect(res.status).toBe(401);
     expect(res.body.error?.code).toBe('AUTH_REQUIRED');
+  });
+
+  it('R67: refuses a child with no branch or no stage of its own', async () => {
+    // Both moved off the request onto each child, and moving a mandatory
+    // question does not make it answerable by silence.
+    const parent = await makeAdult('ناقصة');
+    for (const omit of ['requested_branch_id', 'requested_category_id'] as const) {
+      const body = payload(`${TAG}-${omit}`) as { children: Record<string, unknown>[] };
+      delete body.children[0]![omit];
+      const res = await call('POST', '/child-applications', parent.token, body);
+      expect(res.status, omit).toBe(400);
+    }
+  });
+
+  it('R67: one request may carry children at DIFFERENT branches and stages', async () => {
+    const other = await prisma.branch.create({ data: { name: `${TAG} مقر آخر` } });
+    const parent = await makeAdult('مختلفة');
+    const first = payload(`${TAG}-أولى`) as { children: Record<string, unknown>[] };
+    const second = payload(`${TAG}-ثانية`) as { children: Record<string, unknown>[] };
+    second.children[0]!['requested_branch_id'] = other.id;
+
+    const res = await call('POST', '/child-applications', parent.token, {
+      children: [first.children[0], second.children[0]],
+      consent_data_processing: true,
+    });
+    expect(res.status).toBe(201);
+
+    const rows = await prisma.childApplication.findMany({
+      where: { id: { in: res.body.application_ids! } },
+      orderBy: { createdAt: 'asc' },
+      select: { requestedBranchId: true, requestId: true },
+    });
+    expect(rows[0]!.requestedBranchId).toBe(placement.branchId);
+    expect(rows[1]!.requestedBranchId).toBe(other.id);
+    // One family, one request — the children are not interchangeable, but they
+    // arrived together (R62.1).
+    expect(rows[0]!.requestId).toBe(rows[1]!.requestId);
+
+    await prisma.childApplication.deleteMany({ where: { requestedBranchId: other.id } });
+    await prisma.branch.delete({ where: { id: other.id } });
   });
 
   it('refuses a body that omits the data-processing consent (§4.1a)', async () => {

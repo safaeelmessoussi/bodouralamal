@@ -53,9 +53,7 @@ let categoryId = '';
 const parentChild = (): Extract<RegistrationInput, { kind: 'parent_child' }> => ({
   kind: 'parent_child',
   parent: { first_name_arabic: `${TAG}`, last_name_arabic: `والدة`, phone: '+212 600 000 001', sex: 'female' as const },
-  children: [{ first_name_arabic: `${TAG}`, last_name_arabic: `طفلة`, sex: 'female' as const, consent_media_release: true }],
-  branch_id: branchId,
-  category_id: categoryId,
+  children: [{ first_name_arabic: `${TAG}`, last_name_arabic: `طفلة`, sex: 'female' as const, consent_media_release: true, requested_branch_id: branchId, requested_category_id: categoryId }],
   consents: { data_processing: true, media_release: true },
 });
 
@@ -206,9 +204,7 @@ describe('§7 Revision 40 — الاسم الشخصي / الاسم العائل�
       {
         kind: 'parent_child',
         parent: { first_name_arabic: `${TAG} أمينة`, last_name_arabic: 'بنعلي', sex: 'female' },
-        children: [{ first_name_arabic: `${TAG} سارة`, last_name_arabic: 'بنعلي', sex: 'female', consent_media_release: true }],
-        branch_id: branchId,
-        category_id: categoryId,
+        children: [{ first_name_arabic: `${TAG} سارة`, last_name_arabic: 'بنعلي', sex: 'female', consent_media_release: true, requested_branch_id: branchId, requested_category_id: categoryId }],
         consents: { data_processing: true, media_release: false },
       },
       KEY,
@@ -295,9 +291,76 @@ describe('§4.1 Revision 39 — the applicant chooses a Branch, and only a Branc
     const parsed = registrationSchema.safeParse({
       kind: 'adult',
       applicant: { first_name_arabic: 'خديجة', last_name_arabic: 'الاختبارية', sex: 'female' },
+      category_id: categoryId,
       consents: { data_processing: true },
     });
     expect(parsed.success).toBe(false);
+  });
+
+  it('R67: REQUIRES a branch and a stage on EVERY child, not on the request', async () => {
+    // They moved off the request onto each child, and moving a mandatory
+    // question does not make it answerable by silence — an approver must know,
+    // for each child, what was asked.
+    const base = parentChild();
+    for (const omit of ['requested_branch_id', 'requested_category_id'] as const) {
+      const child = { ...base.children[0]! };
+      delete (child as Record<string, unknown>)[omit];
+      const parsed = registrationSchema.safeParse({ ...base, children: [child] });
+      expect(parsed.success, omit).toBe(false);
+    }
+
+    // And the request-level pair is REFUSED rather than ignored, so a stale
+    // client learns it failed instead of believing the family answer applied.
+    const stale = registrationSchema.safeParse({
+      ...base,
+      branch_id: branchId,
+      category_id: categoryId,
+    });
+    expect(stale.success).toBe(false);
+  });
+
+  it('R67: two children may ask for DIFFERENT branches and stages', async () => {
+    // The whole point of the revision, asserted on the rows rather than on the
+    // form: a family is one request, and the children are not interchangeable.
+    const otherBranch = await prisma.branch.create({ data: { name: `${TAG} مقر ثانٍ` } });
+    const otherCategory = await prisma.category.create({ data: { name: `${TAG} فئة ثانية` } });
+    const { token } = issueOnboardingToken(identity(), KEY);
+    const base = parentChild();
+    const result = await register(
+      prisma,
+      token,
+      {
+        ...base,
+        children: [
+          base.children[0]!,
+          {
+            ...base.children[0]!,
+            first_name_arabic: `${TAG} الثانية`,
+            requested_branch_id: otherBranch.id,
+            requested_category_id: otherCategory.id,
+          },
+        ],
+      },
+      KEY,
+    );
+
+    const rows = await prisma.childApplication.findMany({
+      where: { id: { in: result.childApplicationIds } },
+      orderBy: { createdAt: 'asc' },
+      select: { requestedBranchId: true, requestedCategoryId: true },
+    });
+    expect(rows).toHaveLength(2);
+    expect(rows[0]!.requestedBranchId).toBe(branchId);
+    expect(rows[1]!.requestedBranchId).toBe(otherBranch.id);
+    expect(rows[1]!.requestedCategoryId).toBe(otherCategory.id);
+
+    // R67.3 — the applicant's own branch and stage come from the FIRST child.
+    const applicant = await prisma.user.findUniqueOrThrow({
+      where: { id: result.applicantId },
+      select: { intendedBranchId: true, intendedCategoryId: true },
+    });
+    expect(applicant.intendedBranchId).toBe(branchId);
+    expect(applicant.intendedCategoryId).toBe(categoryId);
   });
 
   it('persists the chosen branch as a REQUEST, granting no placement', async () => {
@@ -420,9 +483,7 @@ describe('§4.1b step 5 Revision 27 — registration captures sex before the Use
       {
         kind: 'parent_child',
         parent: { first_name_arabic: `${TAG}`, last_name_arabic: `والدة`, sex: 'female' },
-        children: [{ first_name_arabic: `${TAG}`, last_name_arabic: `ابن`, sex: 'male', consent_media_release: true }],
-        branch_id: branchId,
-        category_id: categoryId,
+        children: [{ first_name_arabic: `${TAG}`, last_name_arabic: `ابن`, sex: 'male', consent_media_release: true, requested_branch_id: branchId, requested_category_id: categoryId }],
         consents: { data_processing: true, media_release: true },
       },
       KEY,
@@ -460,6 +521,8 @@ describe('§4.1b step 5 Revision 27 — registration captures sex before the Use
     const parsed = registrationSchema.safeParse({
       kind: 'adult',
       applicant: { first_name_arabic: 'خديجة', last_name_arabic: 'الاختبارية' },
+      branch_id: branchId,
+      category_id: categoryId,
       consents: { data_processing: true },
     });
     expect(parsed.success).toBe(false);
@@ -469,6 +532,8 @@ describe('§4.1b step 5 Revision 27 — registration captures sex before the Use
     const parsed = registrationSchema.safeParse({
       kind: 'adult',
       applicant: { first_name_arabic: 'خديجة', last_name_arabic: 'الاختبارية', sex: 'other' },
+      branch_id: branchId,
+      category_id: categoryId,
       consents: { data_processing: true },
     });
     expect(parsed.success).toBe(false);
@@ -546,7 +611,7 @@ describe('§4.1b step 5 / TD-4.1 unified registration', () => {
     // R62.3b — the decision is PER CHILD now, so it lives on the child rather
     // than on the request beside `data_processing`.
     const base = parentChild();
-    const input = { ...base, children: [{ ...base.children[0]!, consent_media_release: false }] };
+    const input = { ...base, children: [{ ...base.children[0]!, consent_media_release: false, requested_branch_id: branchId, requested_category_id: categoryId }] };
     const result = await register(prisma, token, input, KEY);
 
     // Captured on the application immediately…

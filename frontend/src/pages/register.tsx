@@ -289,9 +289,17 @@ export function Register(): ReactNode {
                 onChange={setChildren}
                 errors={errors}
                 touched={touched}
+                branches={branches}
+                categories={categories}
               />
             ) : null}
 
+            {/* R67 — the ADULT path only. On the parent+child path both
+                questions are per child now, and the applicant's own branch is
+                derived from the first child's server-side: a parent enrols in
+                nothing, and asking twice would produce two answers that must
+                agree. */}
+            {kind === 'parent_child' ? null : (
             <fieldset className="register-form__group">
               <legend>{t('register.branchLegend')}</legend>
               <BranchSelector
@@ -327,6 +335,7 @@ export function Register(): ReactNode {
                 />
               )}
             </fieldset>
+            )}
 
             <fieldset className="register-form__group">
               <legend>{t('register.consentLegend')}</legend>
@@ -641,11 +650,14 @@ export function validate(state: FormState): Record<string, string> {
 
   // §4.1 Revision 39 — a choice, never a default. Defaulting would place
   // someone at a branch nobody picked.
-  if (!state.branchId) errors['branch'] = t('register.errBranch');
+  // R67 — the applicant's own branch, on the adult path only. The parent+child
+  // path asks it per child, and the server derives the applicant's from the
+  // first.
+  if (state.intent !== 'parent_child' && !state.branchId) errors['branch'] = t('register.errBranch');
 
   // R49 — required for a student, and meaningless for a staff request: a
   // teacher is admitted to no Level, and the server refuses the pair together.
-  if (state.intent !== 'teacher' && !state.categoryId)
+  if (state.intent === 'adult' && !state.categoryId)
     errors['category'] = t('register.errCategory');
 
   // §4.1: there is no lawful basis to create the record without this, so it is
@@ -702,10 +714,9 @@ function buildPayload(state: {
   return {
     kind: 'parent_child',
     parent: person(state.applicant),
+    // R67 — each child carries its own branch and stage; the request carries
+    // neither, and the server refuses one that does.
     children: state.children.map(toChildInput),
-    branch_id: state.branchId,
-    // The CHILDREN's stage: they are the ones who enrol.
-    category_id: state.categoryId,
     consents: { data_processing: true },
   };
 }

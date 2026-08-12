@@ -184,9 +184,7 @@ describe('a well-formed submission succeeds end to end', () => {
         {
           kind: 'parent_child',
           parent: person('أمينة', 'بنعلي'),
-          children: [{ ...person('سارة', 'بنعلي'), consent_media_release: false }],
-          branch_id: branchId,
-          category_id: categoryId,
+          children: [{ ...person('سارة', 'بنعلي'), consent_media_release: false, requested_branch_id: branchId, requested_category_id: categoryId }],
           consents: { data_processing: true, media_release: false },
         },
         freshToken(),

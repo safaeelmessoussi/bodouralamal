@@ -95,8 +95,23 @@ export const ADMIN_MODULES: readonly AdminModule[] = [
     // two cannot drift apart the way duplicated CRUD always has here.
     path: '/admin/categories',
     labelKey: 'admin.nav.categories',
-    section: 'academic',
-    roles: STAFF,
+    /**
+     * **Moved to الإدارة by the Owner (2026-08-12), and Super-Admin-only with
+     * it** — R61's section rule is structural, so placement decides authority
+     * and the test over `section: 'administration'` enforces it.
+     *
+     * The reason is what الإدارة already collects: **stable configuration**. The
+     * three Categories and the Subject list are curriculum *structure*, changed
+     * rarely and by one person, not operational data an Admin works with daily.
+     * Writes were already Super-Admin-only (R26/R55); this moves the screen to
+     * match.
+     *
+     * **The READ endpoint stays Admin-accessible**, exactly as R61 decided for
+     * `GET /admin/branches`: Levels, scheduling and the roster feed selectors
+     * from it, and gating the data rather than the screen would break them.
+     */
+    section: 'administration',
+    roles: SUPER_ONLY,
     status: 'ready',
   },
   {
@@ -109,8 +124,9 @@ export const ADMIN_MODULES: readonly AdminModule[] = [
   {
     path: '/admin/subjects',
     labelKey: 'admin.nav.subjects',
-    section: 'academic',
-    roles: STAFF,
+    /** With الفئات, and for the same reason — see the note there. */
+    section: 'administration',
+    roles: SUPER_ONLY,
     status: 'ready',
   },
   {

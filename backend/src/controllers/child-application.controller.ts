@@ -45,14 +45,22 @@ const submitSchema = z
             last_name_arabic: z.string().trim().min(1).max(60),
             sex: z.enum(['female', 'male']).optional(),
             schooling_stage: SCHOOLING_STAGE.optional(),
-            requested_category_id: z.uuid().optional(),
+            /**
+             * R67 — **required, on this path too.** They were optional while
+             * `/register` supplied one of each for the family and copied them
+             * onto every application; both are collected per child now, and an
+             * approver must know for EACH child what was asked. Optional here
+             * and required there would be one rule with two answers — which is
+             * exactly the divergence R64 and R65 were each written to repair.
+             */
+            requested_category_id: z.uuid(),
             /**
              * R64 — **the branch this child is asked to attend.** Revision 39
              * put the applicant's own branch on their `User` row; a parent who
              * already exists has no new row, so a second child arrived naming
              * none. A request, never a placement.
              */
-            requested_branch_id: z.uuid().optional(),
+            requested_branch_id: z.uuid(),
             /**
              * R62.3b — **per child**, because a parent may allow photographs of
              * one and refuse for another. Required rather than optional: BR-1
@@ -136,8 +144,8 @@ export function submit(prisma: PrismaClient) {
           lastNameArabic: c.last_name_arabic,
           ...(c.sex ? { sex: c.sex } : {}),
           ...(c.schooling_stage ? { schoolingStage: c.schooling_stage } : {}),
-          ...(c.requested_category_id ? { requestedCategoryId: c.requested_category_id } : {}),
-          ...(c.requested_branch_id ? { requestedBranchId: c.requested_branch_id } : {}),
+          requestedCategoryId: c.requested_category_id,
+          requestedBranchId: c.requested_branch_id,
           consentMediaRelease: c.consent_media_release,
         })),
       }),

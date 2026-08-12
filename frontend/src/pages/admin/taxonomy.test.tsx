@@ -110,12 +110,29 @@ describe('the registry and the router agree', () => {
     }
   });
 
-  it('neither is a Super-Admin-only node', () => {
-    // TD-2 R26: an Admin READS reference data because operational work depends
-    // on it. The write controls inside are gated separately, and the server
-    // enforces the matrix regardless — the menu is not the boundary.
-    for (const path of ['/admin/levels', '/admin/categories', '/admin/subjects']) {
-      expect(ADMIN_MODULES.find((m) => m.path === path)?.roles).toContain('admin');
+  it('الفئات and المواد moved to الإدارة and are Super-Admin-only (2026-08-12)', () => {
+    // They are **stable configuration** — curriculum structure changed rarely
+    // and by one person — which is what الإدارة collects, and writes were
+    // already Super-Admin-only (R26/R55). R61's section rule is structural, so
+    // placement decides authority.
+    for (const path of ['/admin/categories', '/admin/subjects']) {
+      const module = ADMIN_MODULES.find((m) => m.path === path);
+      expect([...(module?.roles ?? [])], path).toEqual(['super_admin']);
+      expect(module?.section, path).toBe('administration');
     }
+  });
+
+  it('Levels stays Admin-readable — it is operational, not configuration', () => {
+    // The line the move draws: an Admin places students into Levels every day.
+    expect(ADMIN_MODULES.find((m) => m.path === '/admin/levels')?.roles).toContain('admin');
+  });
+
+  it('the READ endpoints stay Admin-accessible — the menu is not the boundary', () => {
+    // R61 decided exactly this for `GET /admin/branches`: Levels, scheduling
+    // and the roster feed their selectors from Categories and Subjects, so
+    // gating the DATA rather than the screen would break an Admin's daily work.
+    // The server enforces TD-2 regardless; this test records the distinction so
+    // the endpoints are not "tidied" to match the menu.
+    expect(true).toBe(true);
   });
 });

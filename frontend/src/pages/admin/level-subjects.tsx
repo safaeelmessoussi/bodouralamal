@@ -123,8 +123,10 @@ export function LevelSubjectsPage({ levelId }: { levelId: string }): ReactNode {
 
   return (
     <AdminLayout
-      title={t('admin.levelSubjects.title')}
-      lede={t('admin.levelSubjects.lede').replace('{level}', level?.name ?? '')}
+      // R-UX — the heading names the Level, so it answers *where am I*
+      // without the reader parsing the lede for it.
+      title={t('admin.levelSubjects.title').replace('{level}', level?.name ?? '')}
+      lede={t('admin.levelSubjects.lede')}
       actions={
         <Button variant="secondary" onClick={() => (window.location.href = '/admin/levels')}>
           {t('admin.levelSubjects.backToLevels')}

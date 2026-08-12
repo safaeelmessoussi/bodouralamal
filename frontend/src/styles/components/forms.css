@@ -111,6 +111,14 @@
 .form__row {
   display: grid;
   gap: var(--space-4);
+  /* **`start`, and for the same reason `.datatable__toolbar` needs it.** A grid
+     item stretches by default, so two fields of unequal height distribute their
+     rows differently and their CONTROLS stop lining up — which is what put
+     تاريخ بدء العمل out of line with ترتيب العرض (one carries a hint and an
+     Arabic date echo, the other one hint line) and إضافة دور out of line with
+     نطاق الفرع (one has no hint at all). Aligning the tops aligns the labels,
+     and therefore the controls; a hint simply hangs below its own field. */
+  align-items: start;
 }
 @media (width >= 40rem) {
   .form__row {

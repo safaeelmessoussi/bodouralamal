@@ -148,8 +148,34 @@ export async function register(
       // calendar, but an association must be able to take registrations for a
       // premises before it opens — which is the entire point of recording an
       // opening date.
+      /**
+       * **R67 — where the applicant's own branch comes from.**
+       *
+       * On the adult path it is what they chose: they ARE the student. On the
+       * parent+child path there is no family-level branch any more, so it is
+       * taken from the **first child's** requested branch — a parent enrols in
+       * nothing, and the branch they are associated with is wherever their
+       * children go. Asking separately would put a request-level branch back on
+       * the form this revision removes it from.
+       */
+      const applicantBranchId =
+        input.kind === 'adult' ? input.branch_id : input.children[0]!.requested_branch_id;
+      /**
+       * **The same derivation, for the same reason (R67.3).**
+       *
+       * `intended_category_id` records *the stage the applicant asked for*, and
+       * a parent asks for none — they enrol in nothing. Leaving it null would
+       * blank the §14.2 queue item's stage for every family registration and
+       * take §4.1 step 1's Level preselection with it, so it is taken from the
+       * first child exactly as the branch is. **Per-child accuracy lives where
+       * approval reads it**: each `ChildApplication` carries its own, and that
+       * is what a decision is made from.
+       */
+      const applicantCategoryId =
+        input.kind === 'adult' ? input.category_id : input.children[0]!.requested_category_id;
+
       const branch = await tx.branch.findFirst({
-        where: { id: input.branch_id, deletedAt: null },
+        where: { id: applicantBranchId, deletedAt: null },
         select: { id: true },
       });
       if (!branch) {
@@ -162,7 +188,7 @@ export async function register(
       // that no longer exists. Checked inside the transaction so a delete
       // committed a moment ago cannot slip through — the FK alone would not
       // catch it, because a soft delete leaves the row.
-      const wantedCategoryId = input.category_id;
+      const wantedCategoryId = applicantCategoryId;
       if (wantedCategoryId !== undefined) {
         const category = await tx.category.findFirst({
           where: { id: wantedCategoryId, deletedAt: null },
@@ -201,12 +227,12 @@ export async function register(
           // On the applicant only: the parent chose one branch for the family,
           // and copying it onto the child would be a second value to keep in
           // step. The child's branch, once they have one, is their Group's.
-          intendedBranchId: input.branch_id,
+          intendedBranchId: applicantBranchId,
           // Revision 49 — on the APPLICANT row, exactly like the branch. On the
           // parent+child path the parent chose one stage for the application,
           // and the approval screen reads it from the bundle's applicant; a
           // copy on the child would be a second value to keep in step.
-          intendedCategoryId: input.category_id ?? null,
+          intendedCategoryId: applicantCategoryId ?? null,
           // Revision 49 (proposed) — what they ASKED to be. Written here for the
           // same reason `sex` is: the registration precedes the User, so it
           // lands in this transaction rather than being patched on. It grants
@@ -261,13 +287,12 @@ export async function register(
             lastNameArabic: c.last_name_arabic,
             sex: c.sex,
             ...(c.schooling_stage ? { schoolingStage: c.schooling_stage } : {}),
-            // One stage for the family, chosen once (§4.1) — the approver may
-            // place each child differently, which is R62.7's whole point.
-            requestedCategoryId: input.category_id,
-            // R64 — the same branch, recorded on the CHILD's request as well as
-            // on the applicant's own row. Two paths create these applications
-            // and the approver must not be able to tell which one did.
-            requestedBranchId: input.branch_id,
+            // R67 — **this child's own**, not the family's. They used to be one
+            // answer copied onto every application, so a parent could not ask
+            // for الطفل at تاركة for one child and اليافعون at أمرشيش for
+            // another — though the rows have held both per child since R62/R64.
+            requestedCategoryId: c.requested_category_id,
+            requestedBranchId: c.requested_branch_id,
             consentMediaRelease: c.consent_media_release,
           })),
         });

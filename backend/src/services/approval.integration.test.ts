@@ -87,13 +87,15 @@ async function submitBundle(
           last_name_arabic: `طفلة`,
           sex: 'female' as const,
           consent_media_release: true,
+          // R67 — the branch and stage are the CHILD's now. `intoBranchId` is
+          // what the branch-filter test varies, so it lands here rather than on
+          // a request-level field that no longer exists.
+          requested_branch_id: intoBranchId ?? branchId,
+          // The fixture's placement Category, so §4.1 step 1's preselection and
+          // the group the approval uses agree.
+          requested_category_id: placement.categoryId,
         },
       ],
-      branch_id: intoBranchId ?? branchId,
-      // R49 — the stage the parent chose for the child, which §4.1 step 1
-      // preselects the first Level from. The fixture's placement Category, so
-      // the preselection and the group the approval uses agree.
-      category_id: placement.categoryId,
       consents: { data_processing: true, media_release: true },
     },
     KEY,
@@ -190,8 +192,11 @@ describe('R66.5 — an approver places into a Level with no group', () => {
     // The capability the revision exists for. Before it, an approver facing a
     // Level nobody had subdivided could not admit anybody at all: the placement
     // demanded a group, and there was none to name.
+    // Named with the PLACEMENT tag so `clearPlacement` sweeps it even when an
+    // assertion fails before the explicit delete below — a leaked Level holds
+    // its Category under RESTRICT and takes the whole suite's teardown with it.
     const bare = await prisma.level.create({
-      data: { name: `${TAG} مستوى بلا مجموعة`, categoryId: placement.categoryId },
+      data: { name: `${PLACEMENT_TAG} مستوى بلا مجموعة`, categoryId: placement.categoryId },
     });
     const { parentId, applicationId } = await submitBundle();
     const admin = await makeAdmin('super_admin');

@@ -34,6 +34,9 @@ const child = {
   sex: 'female' as const,
   schoolingStage: '' as const,
   mediaRelease: '' as const,
+  // R67 — the branch and stage are the child's now, not the request's.
+  branchId: 'b1',
+  categoryId: 'c1',
 };
 const base = {
   // R49 — the FORM's three options, not the wire's two `kind`s.

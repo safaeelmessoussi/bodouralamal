@@ -17,6 +17,9 @@ const child = (over: Partial<ChildForm> = {}): ChildForm => ({
   lastNameArabic: 'بنعلي',
   sex: 'female',
   mediaRelease: 'no',
+  // R67 — required per child; a fixture omitting them is testing the refusal.
+  branchId: 'b1',
+  categoryId: 'c1',
   ...over,
 });
 
@@ -48,25 +51,48 @@ describe('the personal page applies the SAME child rules (R65)', () => {
   it('accepts several children at once — the behaviour it had lost', () => {
     // It submitted one child at a time while `/register` took a family in one
     // request; a parent of three made three requests from this page.
-    expect(validateProfileForm([child(), child()], 'b1', 'c1', true)).toEqual({});
+    expect(validateProfileForm([child(), child()], true)).toEqual({});
   });
 
   it('rejects the same way, on the same keys', () => {
-    const errors = validateProfileForm([child(), child({ sex: '' })], 'b1', 'c1', true);
+    const errors = validateProfileForm([child(), child({ sex: '' })], true);
     expect(errors).toHaveProperty('children.1.sex');
+  });
+
+  it('R67: each child needs its OWN branch and stage', () => {
+    // They were one answer for the whole family, copied onto every application,
+    // so a parent could not ask for two children at two branches.
+    const errors = validateChildren([child({ branchId: '' }), child({ categoryId: '' })]);
+    expect(errors).toHaveProperty('children.0.branchId');
+    expect(errors).toHaveProperty('children.1.categoryId');
+    expect(errors).not.toHaveProperty('children.0.categoryId');
+  });
+
+  it('R67: two children may differ in both', () => {
+    expect(
+      validateChildren([
+        child({ branchId: 'b1', categoryId: 'c1' }),
+        child({ branchId: 'b2', categoryId: 'c2' }),
+      ]),
+    ).toEqual({});
   });
 
   it('adds only the request-level answers this surface collects', () => {
     // R64 — the branch and the stage. `/register` asks them once for the
     // family; here they are asked per submission.
-    const errors = validateProfileForm([child()], null, null, false);
-    expect(Object.keys(errors).sort()).toEqual(['branch', 'category', 'dataProcessing']);
+    // R67 — only the consent is request-level now; the branch and stage moved
+    // onto each child.
+    const errors = validateProfileForm([child()], false);
+    expect(Object.keys(errors).sort()).toEqual(['dataProcessing']);
   });
 });
 
 describe('toChildInput — one translation to the wire', () => {
   it('omits an unanswered optional rather than sending an empty string', () => {
     const input = toChildInput(child());
+    // R67 — always sent, because validation refuses the form without them.
+    expect(input.requested_branch_id).toBe('b1');
+    expect(input.requested_category_id).toBe('c1');
     expect(input).not.toHaveProperty('nickname');
     expect(input).not.toHaveProperty('schooling_stage');
     expect(input).not.toHaveProperty('first_name_french');

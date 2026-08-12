@@ -37,6 +37,9 @@ export interface ChildForm {
   schoolingStage: '' | NonNullable<ChildInput['schooling_stage']>;
   /** Three-state: an unanswered release is not a refused one (BR-1). */
   mediaRelease: '' | 'yes' | 'no';
+  /** R67 — this child's own. They were one answer for the whole family. */
+  branchId: string;
+  categoryId: string;
 }
 
 export const EMPTY_CHILD: ChildForm = {
@@ -48,6 +51,8 @@ export const EMPTY_CHILD: ChildForm = {
   sex: '',
   schoolingStage: '',
   mediaRelease: '',
+  branchId: '',
+  categoryId: '',
 };
 
 /** The stages R62.7 defines, in the order a school year runs. */
@@ -154,11 +159,16 @@ export function ChildFields({
   onChange,
   errors,
   prefix,
+  branches,
+  categories,
 }: {
   value: ChildForm;
   onChange: (next: ChildForm) => void;
   errors: Record<string, string>;
   prefix: string;
+  /** R67 — asked per child, so both lists reach every child's fieldset. */
+  branches: { id: string; name: string }[];
+  categories: { id: string; name: string }[];
 }): ReactNode {
   const set = (patch: Partial<ChildForm>) => onChange({ ...value, ...patch });
 
@@ -179,6 +189,32 @@ export function ChildFields({
           label: t(`register.schoolingStage_${stage}`),
         }))}
         hint={t('register.schoolingStageHint')}
+      />
+
+      {/* R67 — **this child's** branch and stage. They used to be one answer
+          for the whole family, copied onto every application, so a parent could
+          not ask for two children at two branches or two stages. Both are
+          requests, never placements: the approver decides where each child
+          actually goes (R39, R66.5). */}
+      <SelectField
+        label={t('register.branchLabel')}
+        value={value.branchId}
+        onChange={(next) => set({ branchId: next })}
+        placeholder={t('register.branchEmpty')}
+        options={branches.map((b) => ({ value: b.id, label: b.name }))}
+        required
+        hint={t('register.branchHint')}
+        error={errors[`${prefix}.branchId`] ?? null}
+      />
+      <SelectField
+        label={t('register.categoryLabel')}
+        value={value.categoryId}
+        onChange={(next) => set({ categoryId: next })}
+        placeholder={t('register.categoryEmpty')}
+        options={categories.map((c) => ({ value: c.id, label: c.name }))}
+        required
+        hint={t('register.categoryHint')}
+        error={errors[`${prefix}.categoryId`] ?? null}
       />
 
       <SelectField
@@ -215,11 +251,15 @@ export function ChildrenFieldset({
   onChange,
   errors,
   touched,
+  branches,
+  categories,
 }: {
   children: ChildForm[];
   onChange: (next: ChildForm[]) => void;
   errors: Record<string, string>;
   touched: boolean;
+  branches: { id: string; name: string }[];
+  categories: { id: string; name: string }[];
 }): ReactNode {
   return (
     <>
@@ -235,6 +275,8 @@ export function ChildrenFieldset({
             onChange={(next) => onChange(children.map((c, i) => (i === index ? next : c)))}
             errors={touched ? errors : {}}
             prefix={`children.${index}`}
+            branches={branches}
+            categories={categories}
           />
           {children.length > 1 ? (
             <div className="register-form__actions">
@@ -294,6 +336,10 @@ export function validateChildren(children: ChildForm[]): Record<string, string> 
     if (child.mediaRelease === '') {
       errors[`${prefix}.mediaRelease`] = t('register.errMediaDecision');
     }
+    // R67 — a choice per child, never a default: defaulting would ask for a
+    // branch or a stage nobody picked, for a specific child.
+    if (child.branchId === '') errors[`${prefix}.branchId`] = t('register.errBranch');
+    if (child.categoryId === '') errors[`${prefix}.categoryId`] = t('register.errCategory');
   });
 
   return errors;
@@ -316,5 +362,8 @@ export function toChildInput(child: ChildForm): ChildInput {
     // R62.3b — always sent: validation refuses the form until every child has
     // an answer, so an unanswered release cannot reach here.
     consent_media_release: child.mediaRelease === 'yes',
+    // R67 — this child's own request, validated above.
+    requested_branch_id: child.branchId,
+    requested_category_id: child.categoryId,
   };
 }

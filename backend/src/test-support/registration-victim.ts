@@ -63,9 +63,17 @@ const prisma = base.$extends({
 const input: RegistrationInput = {
   kind: 'parent_child',
   parent: { first_name_arabic: `${tag}`, last_name_arabic: `والدة`, phone: '+212 600 000 009', sex: 'female' },
-  child: { first_name_arabic: `${tag}`, last_name_arabic: `طفلة`, sex: 'female' },
-  branch_id: branchId,
-  category_id: categoryId,
+  // R62 made this an array; R67 puts the branch and stage on each child.
+  children: [
+    {
+      first_name_arabic: `${tag}`,
+      last_name_arabic: `طفلة`,
+      sex: 'female',
+      consent_media_release: true,
+      requested_branch_id: branchId,
+      requested_category_id: categoryId,
+    },
+  ],
   consents: { data_processing: true, media_release: true },
 };
 

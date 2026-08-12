@@ -232,6 +232,23 @@ const childCore = z
      * `data_processing`.
      */
     consent_media_release: z.boolean(),
+    /**
+     * R67 — **the branch and the stage this CHILD is asking for.**
+     *
+     * They used to sit on the request, one for the whole family, and were
+     * copied onto every application — so a parent could not ask for الطفل at
+     * تاركة for one child and اليافعون at أمرشيش for another, though the rows
+     * have held both per child since R62/R64.
+     *
+     * **Required**, because they always were: moving a mandatory question does
+     * not make it answerable by silence, and an approver must know for EACH
+     * child what was asked (§4.1 step 1 preselects a Level from the Category;
+     * R39 makes the branch what the §14.2 queue filters on).
+     *
+     * **A request, never a placement** (R39, unchanged).
+     */
+    requested_branch_id: branchId,
+    requested_category_id: categoryId,
   })
   .strict();
 
@@ -249,14 +266,17 @@ export const parentChildRegistrationSchema = z
     parent: personCore,
     /** R62 — one or more. Twelve is a bound, not an expectation. */
     children: z.array(childCore).min(1).max(12),
-    branch_id: branchId,
     /**
-     * **The CHILDREN's stage, and required.** The children are the ones who
-     * enrol; the parent's access comes through the family link. Like
-     * `branch_id` it is top-level and recorded once — the parent makes one
-     * choice for the application, not one per person.
+     * **R67 — `branch_id` and `category_id` are gone from this path.** They were
+     * the family's single answer, copied onto every child; both are now on each
+     * child, where the questions actually belong. The applicant's own
+     * `intended_branch_id` is taken from the first child's requested branch
+     * (R67.3), because a parent enrols in nothing and the branch they are
+     * associated with is wherever their children go — asking separately would
+     * put a request-level branch back on the form this revision removes it
+     * from. The ADULT path keeps both top-level: there the applicant IS the
+     * student.
      */
-    category_id: categoryId,
     consents,
   })
   .strict();

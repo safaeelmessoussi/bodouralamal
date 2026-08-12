@@ -99,15 +99,16 @@ export interface ChildInput {
     | 'post_secondary'
     | 'not_in_school';
   /**
-   * R64 — **the branch and stage asked for, per child.**
+   * R67 — **the branch and stage this CHILD asks for. Required.**
    *
-   * Optional on the wire because `/register` supplies them once for the family
-   * and the server copies them onto each application; the `/dashboard/student`
-   * page collects them per request and sends them here. Both are **requests**,
-   * never placements — nothing reads either to choose, validate or refuse.
+   * They were optional while `/register` supplied one of each for the family
+   * and the server copied them onto every application. Both are collected per
+   * child now, so a parent can ask for الطفل at تاركة for one and اليافعون at
+   * أمرشيش for another. Still **requests, never placements** — nothing reads
+   * either to choose, validate or refuse (R39).
    */
-  requested_branch_id?: string;
-  requested_category_id?: string;
+  requested_branch_id: string;
+  requested_category_id: string;
   /**
    * R62.3b — **per child**, because a parent may permit photographs of one
    * child and refuse for another. A required *decision*; `false` is valid and
@@ -127,10 +128,13 @@ export interface ParentChildRegistration {
    * family at once.
    */
   children: ChildInput[];
-  branch_id: string;
-  /** The **children's** stage, and required: they are the ones who enrol. One
-   *  choice per application, recorded once — like `branch_id`. */
-  category_id: string;
+  /**
+   * **R67 — no `branch_id` and no `category_id` here.** They were the family's
+   * single answer; both live on each child now. The applicant's own
+   * `intended_branch_id` is derived server-side from the first child's, because
+   * a parent enrols in nothing and asking separately would put a request-level
+   * branch back on the form this revision removes it from.
+   */
   consents: { data_processing: boolean };
 }
 
