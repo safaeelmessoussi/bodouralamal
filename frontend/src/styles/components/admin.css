@@ -103,6 +103,36 @@
 .admin__title {
   font-size: var(--font-size-lg);
 }
+
+/* R69 — the trail above the heading. Quieter than the title it sits on: it
+   answers *where am I*, and must not compete with *what is this*. The `›`
+   separator is a mirrored character, so the bidi algorithm turns it toward the
+   reading direction and it needs no RTL special case. */
+.breadcrumb {
+  margin-block-end: var(--space-2);
+}
+.breadcrumb__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+.breadcrumb__item + .breadcrumb__item::before {
+  content: '›';
+  margin-inline-end: var(--space-2);
+  color: var(--color-border);
+}
+.breadcrumb__item a {
+  color: inherit;
+}
+.breadcrumb__item [aria-current='page'] {
+  color: var(--color-text);
+}
 .admin__actions {
   display: flex;
   flex-wrap: wrap;

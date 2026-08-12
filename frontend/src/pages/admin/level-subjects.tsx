@@ -9,6 +9,7 @@ import {
   type Level,
 } from '../../adapters/taxonomy.js';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
+import type { Crumb } from '../../components/portal/breadcrumb.js';
 import { Button } from '../../components/ui/button.js';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
 import { SelectField } from '../../components/ui/field.js';
@@ -18,8 +19,8 @@ import { t } from '../../i18n/index.js';
 import { ApiError } from '../../lib/api.js';
 
 /**
- * `/admin/levels/{levelId}/subjects` — **which Subjects this Level teaches**
- * (§4.4b, TD-3 extension 2026-08-05).
+ * `/admin/level-subjects?level=` — **which Subjects this Level teaches**
+ * (§4.4b, TD-3 extension 2026-08-05; R69 gave it this node).
  *
  * **This screen is the fix for `SUBJECT_NOT_IN_LEVEL`.** The platform shipped
  * with zero `LevelSubject` rows and nothing that could create one, so every
@@ -29,7 +30,7 @@ import { ApiError } from '../../lib/api.js';
  *
  * **A Subject with no Teaching Groups is taught to the whole Level.** Assigning
  * it here is what makes it *taught*; splitting it into groups is a separate,
- * optional decision taken on the تنظيم المادة screen this one links into. Those
+ * optional decision taken on the حلقات المواد screen this one links into. Those
  * are different questions and the screens keep them apart.
  *
  * **Removal is refused while Teaching Groups exist** for the pair, and the
@@ -127,8 +128,18 @@ export function LevelSubjectsPage({ levelId }: { levelId: string | null }): Reac
     }
   }
 
+  /** R69 — المستويات → مواد مستوى «X». Only once a Level is chosen: until
+   *  then this screen is not inside anything. */
+  const trail: Crumb[] = level
+    ? [
+        { label: t('admin.nav.levels'), href: '/admin/levels' },
+        { label: t('admin.levelSubjects.title').replace('{level}', level.name) },
+      ]
+    : [];
+
   return (
     <AdminLayout
+      breadcrumb={trail}
       // R-UX — the heading names the Level, so it answers *where am I*
       // without the reader parsing the lede for it.
       title={
@@ -208,9 +219,15 @@ export function LevelSubjectsPage({ levelId }: { levelId: string | null }): Reac
               {assigned.map((s) => (
                 <li key={s.id}>
                   <span>{s.name}</span>
+                  {/* R69's canonical route. This linked to the legacy
+                      `/admin/levels/{id}/subjects/{sid}` path, which still
+                      works — but only by bouncing through a redirect, so the
+                      platform's own main drill-down navigated twice. A
+                      redirect is for links already in the wild, not for the
+                      screen next door. */}
                   <a
                     className="btn btn--secondary"
-                    href={`/admin/levels/${levelId}/subjects/${s.id}`}
+                    href={`/admin/teaching-groups?level=${levelId}&subject=${s.id}`}
                   >
                     {t('admin.levelSubjects.organise')}
                   </a>

@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 
 import { ApplicationHeader } from '../header/application-header.js';
+import { Breadcrumb, type Crumb } from './breadcrumb.js';
 import { NoPermissionState } from '../states.js';
 
 /**
@@ -19,6 +20,7 @@ import { NoPermissionState } from '../states.js';
 export function PortalShell({
   title,
   lede,
+  breadcrumb,
   actions,
   sidebar,
   permitted,
@@ -26,6 +28,8 @@ export function PortalShell({
 }: {
   title: string;
   lede?: string | null;
+  /** The trail from the portal's hierarchy to this screen (R69 — see `Breadcrumb`). */
+  breadcrumb?: readonly Crumb[];
   /** Page-level controls — a "create" button belongs here, beside the heading. */
   actions?: ReactNode;
   sidebar: ReactNode;
@@ -41,6 +45,10 @@ export function PortalShell({
         <main id="main" className="admin__main">
           <div className="admin__head">
             <div>
+              {/* Above the heading, and only for a session that may open the
+                  module: a trail names a Level, which is not something the
+                  no-permission state should disclose. */}
+              {permitted && breadcrumb ? <Breadcrumb trail={breadcrumb} /> : null}
               <h1 className="admin__title">{title}</h1>
               {lede ? <p className="lede">{lede}</p> : null}
             </div>

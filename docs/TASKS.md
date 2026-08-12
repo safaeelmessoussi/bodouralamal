@@ -685,7 +685,8 @@
 - [x] `المستويات` → الإدارة, Super Admin screen; **read endpoint stays Admin-accessible** (the R61 branches rule)
 - [x] Both borrowed Subject row actions removed from `المستويات` and `مجموعات المستويات`
 - [x] Verified live: R66 direct + grouped enrolment, `entire_level` with no Circle, and R43.3's Super-Admin-structure / Admin-membership split
-- [ ] **Remaining UX proposal:** a breadcrumb across المستويات → مواد المستوى → حلقات المواد. Now that each has a node, the breadcrumb is a smaller and clearer change than it was
+- [x] **Breadcrumb across المستويات → مواد المستوى → حلقات المادة** — `PortalShell` takes an optional trail; passed in by the page, never derived from the URL, so it can only link nodes that exist
+- [x] **Post-R69 audit (2026-08-12):** the drill-down out of مواد المستوى still used the legacy path and navigated twice; «تنظيم المادة» survived as a row-action label for a screen now called «حلقات المواد»; `pickSubject` was substituted into the heading as if it were a Subject name
 
 ### R67 + UX pass (2026-08-12)
 - [x] **R67 — a child's branch and stage are the CHILD's.** Drafted, applied, implemented. No migration: `child_application` has held both per row since R62/R64
@@ -694,7 +695,7 @@
 - [x] `.form__row` aligns on controls — fixes تاريخ بدء العمل / ترتيب العرض and إضافة دور / نطاق الفرع with one rule
 - [x] الفئات and المواد under الإدارة, Super-Admin-only; READ endpoints stay Admin-accessible (R61's `GET /admin/branches` precedent); Levels stays Admin-readable
 - [x] **مواد المستوى / تنظيم المادة audited: the problem was vocabulary.** «فوج» removed (22 strings) — one word per concept; headings name the Level and the Subject
-- [ ] **Remaining UX proposal for those two screens:** a breadcrumb (المستويات ← المستوى ← المادة) replacing the single back-link. Small, and deliberately not bundled with a copy change
+- [x] Breadcrumb for those two screens — delivered in the post-R69 audit above
 
 ### R66 — a student is enrolled in a Level; a Group is a subdivision (2026-08-11)
 - [x] SRS drafted, applied. §7 Enrollment amended; §5.2 and R43.3 corrected to `Enrollment.branch_id`

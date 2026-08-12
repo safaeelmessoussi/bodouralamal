@@ -9,6 +9,7 @@ import {
   visibleModules,
   type AdminModule,
 } from '../../lib/admin-modules.js';
+import type { Crumb } from '../portal/breadcrumb.js';
 import { NavItem } from '../portal/nav-item.js';
 import { PortalShell } from '../portal/portal-shell.js';
 
@@ -33,11 +34,14 @@ import { PortalShell } from '../portal/portal-shell.js';
 export function AdminLayout({
   title,
   lede,
+  breadcrumb,
   actions,
   children,
 }: {
   title: string;
   lede?: string | null;
+  /** The trail from §14.1's hierarchy to this screen (R69 — see `Breadcrumb`). */
+  breadcrumb?: readonly Crumb[];
   /** Page-level controls — a "create" button belongs here, beside the heading. */
   actions?: ReactNode;
   children: ReactNode;
@@ -53,6 +57,7 @@ export function AdminLayout({
     <PortalShell
       title={title}
       lede={lede}
+      {...(breadcrumb ? { breadcrumb } : {})}
       actions={actions}
       permitted={permitted}
       sidebar={<AdminSidebar roles={roles} current={current} />}

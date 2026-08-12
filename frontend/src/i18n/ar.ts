@@ -165,6 +165,7 @@ export const ar = {
     deleted: 'تم الحذف.',
     saveFailed: 'تعذّر الحفظ.',
     loadFailed: 'تعذّر تحميل البيانات.',
+    breadcrumb: 'مسار التنقل',
     loading: 'جارٍ التحميل…',
     deleteFailed: 'تعذّر الحذف.',
     // TD-15: a stale version means someone else edited the row. Reloading is
@@ -887,7 +888,7 @@ export const ar = {
       assigned: 'تم إسناد المادة إلى المستوى.',
       alreadyAssigned: 'المادة مسندة أصلًا إلى هذا المستوى.',
       empty: 'لا تُدرَّس في هذا المستوى أي مادة بعد. أسندي مادة قبل إنشاء الحلقات أو الجداول.',
-      organise: 'تنظيم المادة',
+      organise: 'حلقات المادة',
       remove: 'إزالة',
       removed: 'تمت إزالة المادة من المستوى.',
       removeTitle: 'إزالة المادة',
@@ -926,7 +927,7 @@ export const ar = {
       create: 'إضافة حلقة',
       editTitle: 'تعديل الحلقة',
       pickLevel: 'اختاري المستوى ثم المادة لعرض حلقاتها.',
-      pickSubject: 'اختر مادة لعرض تنظيمها.',
+      pickSubject: 'اختاري مادة لعرض حلقاتها.',
       // A different claim from "everyone is placed": the question does not apply.
       notSplit: 'هذه المادة تُدرَّس للمستوى كاملاً — لا يوجد تقسيم، ولا مستفيدات بلا حلقة.',
       unassignedTitle: 'مستفيدات بلا حلقة',

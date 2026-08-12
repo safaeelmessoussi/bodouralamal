@@ -203,6 +203,34 @@ invented section.
 **No "log out everywhere" node exists, and none may be added.** The revoke-all capability is
 internal, used by suspension and deletion.
 
+### The sidebar answers *how do I get there*; the breadcrumb answers *where am I*
+
+The sitemap is a **flat list per section**, and a flat list cannot express that a
+Subject's circles live inside one Level's subjects, which live inside a Level.
+Revision 69 gave `مواد المستوى` and `حلقات المواد` a node each — that made them
+reachable, and left the hierarchy invisible. `PortalShell` therefore takes an
+optional `breadcrumb`, rendered above the heading by
+[`components/portal/breadcrumb.tsx`](../../frontend/src/components/portal/breadcrumb.tsx):
+
+```
+المستويات  ›  مواد مستوى «الثاني»  ›  حلقات مادة «الفقه»
+```
+
+Three rules make it safe to add anywhere:
+
+**The trail is passed in, never derived from the URL.** Deriving it would mean
+inventing an ancestor for any path that has none — which is how a breadcrumb
+grows a landing page that SRS §14.1 does not list (§20 rule 16). The page knows
+its own ids; ancestors are linked with the `?level=` deep link R69.3 defines, so
+every crumb points at a node that already exists.
+
+**A trail shorter than two items renders nothing.** `مواد المستوى` before a
+Level is chosen is not *inside* anything, and a one-item breadcrumb naming only
+the current screen is decoration.
+
+**It renders only for a session permitted to open the module.** A crumb names a
+Level, and the no-permission state must not disclose one.
+
 ### A deploy that never reaches the browser
 
 `index.html` was served with **no `Cache-Control` header at all**. Browsers then

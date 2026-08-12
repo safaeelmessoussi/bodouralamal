@@ -12,6 +12,7 @@ import {
   type TeachingGroup,
 } from '../../adapters/teaching-groups.js';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
+import type { Crumb } from '../../components/portal/breadcrumb.js';
 import { Button } from '../../components/ui/button.js';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
 import { Dialog } from '../../components/ui/dialog.js';
@@ -22,14 +23,16 @@ import { t } from '../../i18n/index.js';
 import { ApiError } from '../../lib/api.js';
 
 /**
- * `/admin/levels/{levelId}/subjects/{subjectId}` — Subject Organisation
- * (§14.1 Academic, §4.4c, BR-22).
+ * `/admin/teaching-groups?level=&subject=` — **حلقات المواد** (§14.1
+ * الشؤون التعليمية, §4.4c, BR-22).
  *
- * **A sub-view of the Levels module, not a sidebar entry.** §14.1 lists the node
- * but its path carries two ids, so nothing can link to it from a menu — it is
- * reached by drilling in, exactly as `/admin/groups/{id}/roster` is. The module
- * registry holds *navigation*; this is one of the internal views its docstring
- * says a module owns without registering each as a node.
+ * **Revision 69 gave this screen its own node.** It used to live at
+ * `/admin/levels/{levelId}/subjects/{subjectId}`, and because that path carried
+ * two ids no menu could link to it — so unrelated screens grew borrowed row
+ * actions to reach it, which is the defect R69 diagnosed. The ids are now
+ * **query parameters**, the `/resources?level=` precedent §14.1 already sets:
+ * a deep link rather than a second navigation node. The page asks for whatever
+ * the link did not supply, and the old paths redirect here.
  *
  * **The screen's whole job is BR-22.** A student enrolled in a Level whose
  * Subject is split, but holding no group for it, has **no sessions for that
@@ -101,10 +104,12 @@ export function SubjectOrganisationPage({
   }, [load]);
 
   const levelName = levels.find((l) => l.id === levelId)?.name ?? '';
-  /** The heading names the Subject; falling back to the placeholder rather than
-   *  an id keeps it readable while the list is still loading. */
-  const subjectName =
-    subjects.find((s) => s.id === subjectId)?.name ?? t('admin.subjectOrg.pickSubject');
+  /** The heading names the Subject. The fallback is EMPTY, not the "choose a
+   *  subject" sentence: that sentence is an instruction, and substituting it
+   *  into «حلقات مادة «…»» produced a heading that read as a subject named
+   *  *choose a subject to see its circles*. A name is missing for one render
+   *  while the list loads; a sentence in its place is wrong for good. */
+  const subjectName = subjects.find((s) => s.id === subjectId)?.name ?? '';
 
   function go(nextSubject: string): void {
     if (!levelId) return;
@@ -193,8 +198,25 @@ export function SubjectOrganisationPage({
     }
   }
 
+  /** R69 — المستويات → مواد مستوى «X» → حلقات مادة «Y». The middle crumb
+   *  carries `?level=`, the deep link R69.3 defines; nothing here is a route
+   *  that did not already exist (§20 rule 16). */
+  const trail: Crumb[] = levelId && levelName
+    ? [
+        { label: t('admin.nav.levels'), href: '/admin/levels' },
+        {
+          label: t('admin.levelSubjects.title').replace('{level}', levelName),
+          href: `/admin/level-subjects?level=${levelId}`,
+        },
+        ...(subjectId && subjectName
+          ? [{ label: t('admin.subjectOrg.title').replace('{subject}', subjectName) }]
+          : []),
+      ]
+    : [];
+
   return (
     <AdminLayout
+      breadcrumb={trail}
       // The Subject in the heading, the Level in the lede — the two facts a
       // reader needs to know which circle list they are looking at.
       title={
