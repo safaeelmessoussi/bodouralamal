@@ -116,6 +116,9 @@ async function cleanup(): Promise<void> {
   // Matching on name silently left them behind, and the Level delete then
   // failed on the FK. A teardown that filters on something the code under test
   // does not control is a teardown that misses exactly the rows under test.
+  // Before the groups they point at: `administrative_group_id` is RESTRICT, so
+  // a leftover schedule makes the group delete fail on a foreign key.
+  await prisma.recurringCourseSchedule.deleteMany({ where: { title: { startsWith: TAG } } });
   await prisma.teachingGroup.deleteMany({ where: { level: tagged } });
   await prisma.administrativeGroup.deleteMany({ where: { level: tagged } });
   await prisma.administrativeGroup.deleteMany({ where: { branch: tagged } });
@@ -453,6 +456,60 @@ describe('un-enrolment (TD-5)', () => {
 });
 
 describe('R66 — a Level MAY be left with no group', () => {
+  /**
+   * The two protections that survive, asserted as a pair.
+   *
+   * `LAST_GROUP_IN_LEVEL` was retired by R66 in the service, but the interface
+   * kept telling administrators a group could not be deleted *"if it was the
+   * only one in its Level"* — so a group refused for one of the reasons below
+   * was read as the retired rule still biting. These pin what actually refuses.
+   */
+  it('a group holding students is refused — ENROLMENTS_EXIST', async () => {
+    const { levelId, firstGroupId } = await level('مستوى بمستفيدة', amerchich);
+    const pupil = await student('مستفيدة تمنع الحذف');
+    await enrolStudent(prisma, superAdmin(), firstGroupId, pupil);
+
+    const e = await failure(() => deleteAdministrativeGroup(prisma, superAdmin(), firstGroupId));
+    expect(e.code).toBe('STATE_CONFLICT');
+    expect(e.details?.['reason']).toBe('ENROLMENTS_EXIST');
+    // And it is still there — a refusal that soft-deleted anyway would be worse
+    // than one that let the delete through.
+    expect(
+      await prisma.administrativeGroup.count({ where: { levelId, deletedAt: null } }),
+    ).toBe(1);
+  });
+
+  it('a group a course schedule targets is refused — SCHEDULES_EXIST', async () => {
+    // **The untested half.** This is the guard that actually refuses the oldest
+    // live groups — the ones created before R66, which are also the ones a
+    // timetable has had time to point at — and nothing asserted it until now.
+    const { levelId, firstGroupId } = await level('مستوى بجدول', amerchich);
+    const subjectId = await subject('مادة الجدول', levelId);
+    const year = await prisma.academicYear.findFirst({ where: { isCurrent: true } });
+
+    await prisma.recurringCourseSchedule.create({
+      data: {
+        title: `${TAG} حصة تمنع الحذف`,
+        subjectId,
+        teachingMode: 'administrative_group',
+        administrativeGroupId: firstGroupId,
+        branchId: amerchich,
+        startTime: new Date('1970-01-01T15:00:00Z'),
+        endTime: new Date('1970-01-01T16:30:00Z'),
+        recurrence: 'weekly',
+        weekdays: ['tuesday'],
+        academicYearId: year!.id,
+      },
+    });
+
+    const e = await failure(() => deleteAdministrativeGroup(prisma, superAdmin(), firstGroupId));
+    expect(e.code).toBe('STATE_CONFLICT');
+    expect(e.details?.['reason']).toBe('SCHEDULES_EXIST');
+    expect(
+      await prisma.administrativeGroup.count({ where: { levelId, deletedAt: null } }),
+    ).toBe(1);
+  });
+
   it('deleting an empty last group is allowed; the Level stays enrollable', async () => {
     // `LAST_GROUP_IN_LEVEL` retired. It only ever stopped a Level reaching the
     // state TD-4.6b prevented at creation, and that state is now ordinary.

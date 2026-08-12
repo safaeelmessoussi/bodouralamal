@@ -915,11 +915,12 @@ export const ar = {
       unenrol: 'إخراج',
       alreadyInLevel: 'المستفيدة مسجّلة في مجموعة أخرى داخل نفس المستوى. النقل يتم بإخراجها أولاً.',
       deleteTitle: 'حذف المجموعة',
-      deleteBody: 'لا يمكن حذف مجموعة تضم مستفيدات، أو يستهدفها جدول حصص، أو كانت الوحيدة في مستواها.',
+      deleteBody: 'لا يمكن حذف مجموعة تضم مستفيدات أو يستهدفها جدول حصص.',
       // Each refusal names its own cause — "فشل الحفظ" would hide which.
       refused_ENROLMENTS_EXIST: 'لا يمكن الحذف: المجموعة تضم مستفيدات مسجّلات.',
       refused_SCHEDULES_EXIST: 'لا يمكن الحذف: يستهدف هذه المجموعة جدول حصص.',
-      refused_LAST_GROUP_IN_LEVEL: 'لا يمكن الحذف: لا يجوز أن يبقى المستوى دون أي مجموعة.',
+      // R66 retired `LAST_GROUP_IN_LEVEL`; the server can no longer send it, so
+      // the string it would have rendered is gone with it.
     },
     subjectOrg: {
       title: 'حلقات مادة «{subject}»',
@@ -928,6 +929,8 @@ export const ar = {
       editTitle: 'تعديل الحلقة',
       pickLevel: 'اختاري المستوى ثم المادة لعرض حلقاتها.',
       pickSubject: 'اختاري مادة لعرض حلقاتها.',
+      noSubjects: 'لا تُدرَّس في هذا المستوى أي مادة، فلا توجد مادة تُقسَّم إلى حلقات. أسندي مادة إلى المستوى أولًا.',
+      assignSubjects: 'مواد المستوى',
       // A different claim from "everyone is placed": the question does not apply.
       notSplit: 'هذه المادة تُدرَّس للمستوى كاملاً — لا يوجد تقسيم، ولا مستفيدات بلا حلقة.',
       unassignedTitle: 'مستفيدات بلا حلقة',

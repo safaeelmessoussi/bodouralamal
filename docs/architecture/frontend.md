@@ -602,6 +602,25 @@ the guard, from the mistake R60 shipped.
 offered a control the server will refuse — the affordance follows the authority,
 which is the whole point of R60 reaching the client.
 
+**And the same rule governs DATA, not only roles: a selector feeding a
+validated pair must be populated from that pair's own source.** `حلقات المواد`
+listed its Subjects from `listSubjects` — every Subject on the platform,
+independent of the chosen Level — while the server requires the `(Level,
+Subject)` pair to exist before a Circle can split it (§4.4c). A Level teaching
+nothing therefore showed a full dropdown whose every option produced
+`SUBJECT_NOT_IN_LEVEL`. The fix is `listLevelSubjects(levelId)`, never a looser
+validation:
+
+> **A control that can only be refused is the defect.** When the server rejects
+> a combination the interface offered, the interface is wrong — read the
+> refusal as a statement about the *options*, not about the rule.
+
+The second half of that repair is what a screen does when the correct list is
+**empty**. An empty selector is not an answer; a Level that teaches nothing has
+nothing to split, so the screen says so and links to `مواد المستوى`, the node
+that fixes it. That is the same shape as the Levels table's `لا مواد` state —
+a named empty state carrying the one action that helps.
+
 **The wrong-role screen survives, for deep links only.** A bookmark or a shared
 URL into a portal the active role does not own still needs an answer, and §14.4
 forbids a blank page. Nothing *inside* the application navigates there any more.

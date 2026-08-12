@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 
 import { fetchCalendarBootstrap, type LevelRef } from '../../adapters/calendar.js';
-import { listSubjects, type SubjectRef } from '../../adapters/reference-data.js';
+import type { SubjectRef } from '../../adapters/reference-data.js';
+import { listLevelSubjects } from '../../adapters/taxonomy.js';
 import {
   addMember,
   createTeachingGroup,
@@ -15,7 +16,7 @@ import { AdminLayout } from '../../components/admin/admin-layout.js';
 import type { Crumb } from '../../components/portal/breadcrumb.js';
 import { Button } from '../../components/ui/button.js';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
-import { Dialog } from '../../components/ui/dialog.js';
+import { FormDialog } from '../../components/ui/form-dialog.js';
 import { SelectField, TextField } from '../../components/ui/field.js';
 import { useSession } from '../../contexts/session.js';
 import { useActiveRole } from '../../contexts/active-role.js';
@@ -77,8 +78,6 @@ export function SubjectOrganisationPage({
   useEffect(() => {
     void (async () => {
       const today = new Date().toISOString().slice(0, 10);
-      const [subjectList] = await Promise.all([listSubjects(accessToken)]);
-      setSubjects(subjectList);
       try {
         const bootstrap = await fetchCalendarBootstrap({ from: today, to: today });
         setLevels(bootstrap.levels);
@@ -87,6 +86,34 @@ export function SubjectOrganisationPage({
       }
     })();
   }, [accessToken]);
+
+  /**
+   * **The Subjects THIS Level teaches — not every Subject on the platform.**
+   *
+   * This offered `listSubjects`, the global list, so a Level with no assigned
+   * Subject still showed a full dropdown. Choosing one and saving produced
+   * `SUBJECT_NOT_IN_LEVEL` — the server was right every time: a Circle splits a
+   * Subject *within a Level*, and the pair has to exist first (§4.4c).
+   *
+   * The invariant was already written three lines into the Level selector
+   * below — *"a Subject is assigned to a Level, so carrying one across would
+   * name a pair that may not exist"* — and the options list simply did not
+   * follow it. R60's rule again: **the affordance follows the authority**, and
+   * validation stays exactly as strict as it was.
+   */
+  useEffect(() => {
+    if (!levelId) {
+      setSubjects([]);
+      return;
+    }
+    void (async () => {
+      try {
+        setSubjects(await listLevelSubjects(levelId, accessToken));
+      } catch {
+        setSubjects([]);
+      }
+    })();
+  }, [levelId, accessToken]);
 
   const load = useCallback(async () => {
     // R69 — both ids are chosen in the page now; nothing loads until they are.
@@ -233,7 +260,12 @@ export function SubjectOrganisationPage({
         ) : null
       }
     >
-      {notice ? <p role="status">{notice}</p> : null}
+      {/* Only while no dialog is open. A refusal raised by the form used to
+          render HERE, behind the modal the reader was still looking at — so
+          «هذه المادة غير مسندة إلى هذا المستوى» was invisible and the only
+          feedback was the raw conflict in the network tab. It is passed into
+          the dialog instead. */}
+      {notice && editing === null ? <p role="status">{notice}</p> : null}
 
       {/* The shared primitive, not a hand-rolled `<label><select>`: label
           association, the placeholder and error wiring belong to `field.tsx`
@@ -253,15 +285,27 @@ export function SubjectOrganisationPage({
         options={levels.map((l) => ({ value: l.id, label: l.name }))}
       />
 
-      <SelectField
-        label={t('admin.schedules.subject')}
-        value={subjectId ?? ''}
-        onChange={go}
-        placeholder={t('common.choose')}
-        options={subjects.map((subject) => ({ value: subject.id, label: subject.name }))}
-      />
+      {/* A Level that teaches nothing has nothing to split, so it gets the
+          answer rather than an empty control — and the one action that helps,
+          on the screen that owns it (R69). */}
+      {levelId && subjects.length === 0 ? (
+        <p className="state" role="status">
+          {t('admin.subjectOrg.noSubjects')}{' '}
+          <a href={`/admin/level-subjects?level=${levelId}`}>
+            {t('admin.subjectOrg.assignSubjects')}
+          </a>
+        </p>
+      ) : (
+        <SelectField
+          label={t('admin.schedules.subject')}
+          value={subjectId ?? ''}
+          onChange={go}
+          placeholder={t('common.choose')}
+          options={subjects.map((subject) => ({ value: subject.id, label: subject.name }))}
+        />
+      )}
 
-      {!subjectId ? (
+      {levelId && subjects.length === 0 ? null : !subjectId ? (
         <p className="state">{t('admin.subjectOrg.pickSubject')}</p>
       ) : error ? (
         <p className="state" role="alert">
@@ -332,6 +376,7 @@ export function SubjectOrganisationPage({
       <NameDialog
         open={editing !== null}
         group={editing === 'new' ? null : editing}
+        notice={editing === null ? null : notice}
         busy={busy}
         onSave={(name) => void save(name)}
         onCancel={() => setEditing(null)}
@@ -354,12 +399,15 @@ export function SubjectOrganisationPage({
 function NameDialog({
   open,
   group,
+  notice,
   busy,
   onSave,
   onCancel,
 }: {
   open: boolean;
   group: TeachingGroup | null;
+  /** The last attempt's refusal, shown inside the dialog that caused it. */
+  notice: string | null;
   busy: boolean;
   onSave: (name: string) => void;
   onCancel: () => void;
@@ -369,21 +417,23 @@ function NameDialog({
     setName(group?.name ?? '');
   }, [group, open]);
 
+  // **`FormDialog`, not a hand-rolled `Dialog`.** This was the last form in the
+  // back office assembling its own actions row: no `.form` wrapper, so the
+  // field sat on its own margins, and `.dialog__actions` instead of
+  // `.form__actions`, so the two buttons aligned differently from every other
+  // form. That is precisely the drift `FormDialog` was extracted to end — and
+  // one instance had survived it.
   return (
-    <Dialog
+    <FormDialog
       open={open}
-      onClose={onCancel}
       title={t(group ? 'admin.subjectOrg.editTitle' : 'admin.subjectOrg.create')}
+      notice={notice}
+      busy={busy}
+      disabled={name.trim() === ''}
+      onSubmit={() => onSave(name)}
+      onCancel={onCancel}
     >
       <TextField label={t('admin.groups.colName')} value={name} onChange={setName} required />
-      <div className="dialog__actions">
-        <Button variant="secondary" onClick={onCancel}>
-          {t('common.cancel')}
-        </Button>
-        <Button disabled={name.trim() === '' || busy} onClick={() => onSave(name)}>
-          {t('common.save')}
-        </Button>
-      </div>
-    </Dialog>
+    </FormDialog>
   );
 }

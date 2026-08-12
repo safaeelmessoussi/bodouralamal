@@ -688,6 +688,14 @@
 - [x] **Breadcrumb across المستويات → مواد المستوى → حلقات المادة** — `PortalShell` takes an optional trail; passed in by the page, never derived from the URL, so it can only link nodes that exist
 - [x] **Post-R69 audit (2026-08-12):** the drill-down out of مواد المستوى still used the legacy path and navigated twice; «تنظيم المادة» survived as a row-action label for a screen now called «حلقات المواد»; `pickSubject` was substituted into the heading as if it were a Subject name
 
+### Post-R69 UI fixes (2026-08-12)
+- [x] **`SUBJECT_NOT_IN_LEVEL` root-caused to the CLIENT.** The Subject selector listed every Subject on the platform instead of the Level's own; validation untouched
+- [x] A Level teaching nothing gets a named empty state linking to مواد المستوى, not an empty dropdown
+- [x] The form's refusal rendered behind the open dialog — passed into it now
+- [x] The circle form was the last hand-rolled `Dialog`; it uses `FormDialog`, which fixes the button alignment
+- [x] **R66's retired `LAST_GROUP_IN_LEVEL` removed from the interface** — warning text and the dead refusal string. Service already correct
+- [x] `SCHEDULES_EXIST` deletion guard tested for the first time; `ENROLMENTS_EXIST` added at service level
+
 ### R67 + UX pass (2026-08-12)
 - [x] **R67 — a child's branch and stage are the CHILD's.** Drafted, applied, implemented. No migration: `child_application` has held both per row since R62/R64
 - [x] Parent's `intended_branch_id`/`intended_category_id` derived from the first child (R67.3); adult path untouched
