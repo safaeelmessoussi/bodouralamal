@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 
 import { t } from '../../i18n/index.js';
+import { Button } from './button.js';
 import { EmptyState, ErrorState, NoResultsState } from '../states.js';
 
 /**
@@ -205,27 +206,20 @@ export function Pagination({ page, pageSize, total, onPage }: PaginationProps): 
 
   return (
     <nav className="pagination" aria-label={t('common.pagination')}>
-      <button
-        type="button"
-        className="btn btn--secondary"
-        disabled={page <= 1}
-        onClick={() => onPage(page - 1)}
-      >
+      {/* The shared button: `btn btn--secondary` written by hand here was a
+          second copy of the variant's own class list, and would have drifted
+          the first time the palette changed. */}
+      <Button variant="secondary" disabled={page <= 1} onClick={() => onPage(page - 1)}>
         {t('common.previous')}
-      </button>
+      </Button>
       {/* A live region, so stepping pages is announced rather than silently
           redrawing the table. */}
       <output className="pagination__status" aria-live="polite">
         {t('common.pageOf').replace('{page}', String(page)).replace('{pages}', String(pages))}
       </output>
-      <button
-        type="button"
-        className="btn btn--secondary"
-        disabled={page >= pages}
-        onClick={() => onPage(page + 1)}
-      >
+      <Button variant="secondary" disabled={page >= pages} onClick={() => onPage(page + 1)}>
         {t('common.next')}
-      </button>
+      </Button>
     </nav>
   );
 }

@@ -90,6 +90,35 @@ export async function preProvision(
       if (!branch) throw new AppError('NOT_FOUND', 'branch not found');
     }
 
+    /**
+     * **An email may be claimed by at most ONE live account** — and the unique
+     * index alone does not say that.
+     *
+     * `pre_provisioned_email` is unique among itself, but an account that has
+     * already **signed in** carries its address on `UserIdentity` and may have
+     * no `pre_provisioned_email` at all. So pre-provisioning an address that
+     * somebody is already using collided with nothing and was accepted: two
+     * live accounts then claimed one address, and §4.1b's binding step would
+     * have to choose between them at the next sign-in.
+     *
+     * **Reproduced before it was fixed** — `POST /admin/users` answered `201`
+     * for an address with a live active identity.
+     *
+     * Checked here rather than declared, because the invariant spans two tables
+     * and no unique index can express it. The window is the transaction's own;
+     * the partial unique index still catches the pre-provisioned half, and
+     * `bindIdentity`'s own uniqueness catches the identity half.
+     */
+    const claimed = await tx.userIdentity.findFirst({
+      where: { email, isActive: true, user: { deletedAt: null } },
+      select: { id: true },
+    });
+    if (claimed) {
+      throw new AppError('DUPLICATE', 'that email already belongs to an account', {
+        reason: 'EMAIL_ALREADY_CLAIMED',
+      });
+    }
+
     let user;
     try {
       user = await tx.user.create({

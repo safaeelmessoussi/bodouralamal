@@ -27,6 +27,7 @@ import { FormDialog } from '../../components/ui/form-dialog.js';
 import { NumberField, SearchInput, SelectField, TextField } from '../../components/ui/field.js';
 import { useSession } from '../../contexts/session.js';
 import { useActiveRole } from '../../contexts/active-role.js';
+import { LevelSelect } from '../../components/scope/level-select.js';
 import { t } from '../../i18n/index.js';
 import { ScopeSelectors } from '../../components/scope/scope-selectors.js';
 import { useScopeOptions } from '../../hooks/use-scope-options.js';
@@ -387,15 +388,11 @@ function GroupDialog({
       {/* The shared primitive rather than a bare `<select>`: label association,
           the placeholder option, required marking and error announcement are
           `field.tsx`'s job, not this screen's to remember. */}
-      <SelectField
-        label={t('admin.groups.colLevel')}
-        value={levelId}
-        onChange={setLevelId}
-        disabled={group !== null}
-        placeholder={t('common.choose')}
-        options={levels.map((level) => ({ value: level.id, label: level.name }))}
-        required
-      />
+      <LevelSelect
+          levels={levels}
+          value={levelId}
+          onChange={setLevelId}
+        />
 
       <SelectField
         label={t('admin.groups.colBranch')}

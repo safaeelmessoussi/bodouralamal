@@ -264,6 +264,74 @@ describe('§4.1b step 4b — staff pre-provisioning', () => {
 });
 
 
+describe('an email is claimed by at most one live account', () => {
+  it('refuses pre-provisioning an address that has ALREADY SIGNED IN', async () => {
+    // **The defect, reproduced.** `pre_provisioned_email` is unique among
+    // itself, but an account that has signed in carries its address on
+    // `UserIdentity` and may have no pre-provisioned value at all — so this
+    // collided with nothing and answered 201, leaving two live accounts
+    // claiming one address for §4.1b's binding step to choose between.
+    const admin = await makeStaff('admin');
+    const email = addr();
+
+    const signedIn = await prisma.user.create({
+      data: { nameArabic: `${TAG} صاحبة الحساب`, accountStatus: 'active' },
+    });
+    await prisma.userIdentity.create({
+      data: {
+        userId: signedIn.id,
+        provider: 'google',
+        providerSubjectId: `${TAG}-${email}`,
+        email,
+        isActive: true,
+      },
+    });
+
+    await expect(
+      preProvision(prisma, await actorFor(prisma, admin), { nameArabic: `${TAG} مكررة`, email }),
+    ).rejects.toMatchObject({ code: 'DUPLICATE' });
+
+    // …and nothing was created: the refusal is not a partial write.
+    expect(await prisma.user.count({ where: { preProvisionedEmail: email } })).toBe(0);
+  });
+
+  it('still refuses a second PRE-PROVISIONED account for one address', async () => {
+    // The half the partial unique index already covered, asserted so the new
+    // check cannot be mistaken for a replacement of it.
+    const admin = await makeStaff('admin');
+    const email = addr();
+    await preProvision(prisma, await actorFor(prisma, admin), { nameArabic: `${TAG} أولى`, email });
+    await expect(
+      preProvision(prisma, await actorFor(prisma, admin), { nameArabic: `${TAG} ثانية`, email }),
+    ).rejects.toMatchObject({ code: 'DUPLICATE' });
+  });
+
+  it('permits an address whose only identity is INACTIVE', async () => {
+    // A deactivated identity is not a claim: §4.1b deactivates rather than
+    // deletes, and refusing here would make an address permanently unusable.
+    const admin = await makeStaff('admin');
+    const email = addr();
+    const past = await prisma.user.create({
+      data: { nameArabic: `${TAG} حساب سابق`, accountStatus: 'suspended' },
+    });
+    await prisma.userIdentity.create({
+      data: {
+        userId: past.id,
+        provider: 'google',
+        providerSubjectId: `${TAG}-old-${email}`,
+        email,
+        isActive: false,
+      },
+    });
+
+    const created = await preProvision(prisma, await actorFor(prisma, admin), {
+      nameArabic: `${TAG} جديدة`,
+      email,
+    });
+    expect(created.preProvisionedEmail).toBe(email);
+  });
+});
+
 describe('§14.2 / TD-10 — user list, filters and search', () => {
   /** Seeds a person and returns their id; the trigger fills the shadow columns. */
   async function person(fields: {

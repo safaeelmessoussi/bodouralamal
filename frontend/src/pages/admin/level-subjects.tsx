@@ -15,6 +15,7 @@ import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
 import { SelectField } from '../../components/ui/field.js';
 import { useSession } from '../../contexts/session.js';
 import { useActiveRole } from '../../contexts/active-role.js';
+import { LevelSelect } from '../../components/scope/level-select.js';
 import { t } from '../../i18n/index.js';
 import { ApiError } from '../../lib/api.js';
 
@@ -158,15 +159,12 @@ export function LevelSubjectsPage({ levelId }: { levelId: string | null }): Reac
       {/* R69 — the page asks which Level, because it has a node now and a menu
           entry cannot supply an id. Always visible, so switching Level is one
           control rather than a trip back to المستويات. */}
-      <SelectField
-        label={t('admin.nav.levels')}
-        value={levelId ?? ''}
+      <LevelSelect
+        levels={levels}
+        value={levelId}
         onChange={(next) => {
-          if (next === '') return;
           window.location.href = `/admin/level-subjects?level=${next}`;
         }}
-        placeholder={t('common.choose')}
-        options={levels.map((l) => ({ value: l.id, label: `${l.category_name} — ${l.name}` }))}
       />
 
       {levelId === null ? (

@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 
 import { t } from '../i18n/index.js';
+import { Button } from './ui/button.js';
 
 /**
  * The §14.4 mandatory UI states, built once and reused (§14.3 forbids
@@ -41,7 +42,15 @@ export function ErrorState({ requestId, onRetry }: { requestId?: string; onRetry
           {t('states.requestId')}: <code>{requestId}</code>
         </p>
       ) : null}
-      {onRetry ? <button onClick={onRetry}>{t('states.offlineRetry')}</button> : null}
+      {onRetry ? (
+        // The shared button, not a bare element. These states are the platform's
+        // most-seen surfaces and were the only ones rendering an unstyled
+        // browser control — which is what made them look like a different
+        // product from the screens around them.
+        <Button variant="secondary" onClick={onRetry}>
+          {t('states.offlineRetry')}
+        </Button>
+      ) : null}
     </div>
   );
 }
@@ -52,7 +61,11 @@ export function NoResultsState({ onClear }: { onClear?: () => void }): ReactNode
   return (
     <div className="state">
       <p>{t('states.noResults')}</p>
-      {onClear ? <button onClick={onClear}>{t('states.clearFilters')}</button> : null}
+      {onClear ? (
+        <Button variant="secondary" onClick={onClear}>
+          {t('states.clearFilters')}
+        </Button>
+      ) : null}
     </div>
   );
 }

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 
-import { fetchCalendarBootstrap, type LevelRef } from '../../adapters/calendar.js';
+
 import type { SubjectRef } from '../../adapters/reference-data.js';
-import { listLevelSubjects } from '../../adapters/taxonomy.js';
+import { listLevelSubjects, listLevels, type Level } from '../../adapters/taxonomy.js';
 import {
   addMember,
   createTeachingGroup,
@@ -20,6 +20,7 @@ import { FormDialog } from '../../components/ui/form-dialog.js';
 import { SelectField, TextField } from '../../components/ui/field.js';
 import { useSession } from '../../contexts/session.js';
 import { useActiveRole } from '../../contexts/active-role.js';
+import { LevelSelect } from '../../components/scope/level-select.js';
 import { t } from '../../i18n/index.js';
 import { ApiError } from '../../lib/api.js';
 
@@ -66,7 +67,7 @@ export function SubjectOrganisationPage({
   const canManageGroups = roles.includes('super_admin');
   const canPlace = roles.some((r) => ['admin', 'super_admin'].includes(r));
 
-  const [levels, setLevels] = useState<LevelRef[]>([]);
+  const [levels, setLevels] = useState<Level[]>([]);
   const [subjects, setSubjects] = useState<SubjectRef[]>([]);
   const [split, setSplit] = useState<SubjectSplit | null>(null);
   const [error, setError] = useState(false);
@@ -77,10 +78,12 @@ export function SubjectOrganisationPage({
 
   useEffect(() => {
     void (async () => {
-      const today = new Date().toISOString().slice(0, 10);
       try {
-        const bootstrap = await fetchCalendarBootstrap({ from: today, to: today });
-        setLevels(bootstrap.levels);
+        // `listLevels`, not the calendar bootstrap: the bootstrap's `LevelRef`
+        // carries `category_id` and not `category_name`, so the shared selector
+        // would degrade to a bare name — and a Level name is not unique across
+        // Categories (§4.4b). One list, carrying what identifies a Level.
+        setLevels(await listLevels(accessToken));
       } catch {
         // The Level name falls back to its id; the page still works.
       }
@@ -272,17 +275,14 @@ export function SubjectOrganisationPage({
           rather than to this screen remembering them. */}
       {/* R69 — the Level is chosen here too. The screen has a node now, and a
           menu entry supplies neither id; `?level=&subject=` is the deep link. */}
-      <SelectField
-        label={t('admin.nav.levels')}
-        value={levelId ?? ''}
+      <LevelSelect
+        levels={levels}
+        value={levelId}
         onChange={(next) => {
-          if (next === '') return;
           // Changing the Level drops the Subject: a Subject is assigned to a
           // Level, so carrying one across would name a pair that may not exist.
           window.location.href = `/admin/teaching-groups?level=${next}`;
         }}
-        placeholder={t('common.choose')}
-        options={levels.map((l) => ({ value: l.id, label: l.name }))}
       />
 
       {/* A Level that teaches nothing has nothing to split, so it gets the

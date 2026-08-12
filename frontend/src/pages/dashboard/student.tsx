@@ -4,6 +4,7 @@ import { fetchOccurrences, type Occurrence } from '../../adapters/calendar.js';
 import { fetchStudentIdentity, type StudentIdentity } from '../../adapters/students.js';
 import { ApplicationHeader } from '../../components/header/application-header.js';
 import { SiteFooter } from '../../components/site-footer.js';
+import { ButtonLink } from '../../components/ui/button.js';
 import { EmptyState, ErrorState, LoadingState } from '../../components/states.js';
 import { Container } from '../../components/ui/container.js';
 import { useActiveChild } from '../../contexts/active-child.js';
@@ -98,6 +99,18 @@ export function StudentDashboard(): ReactNode {
       <main id="main" className="section">
         <Container>
           <h1>{t('studentDashboard.title')}</h1>
+
+          {/* §14.1 lists *My Quran Progress* under this dashboard, and M4b built
+              it — with nothing linking to it, which is the same defect R69 and
+              R70.1 each fixed once: a screen that exists and cannot be reached. */}
+          <p>
+            {/* The shared button rendered as a link — it emits an `<a>` when
+                `href` is present, so middle-click and "open in new tab" keep
+                working while the affordance matches every other action. */}
+            <ButtonLink href="/dashboard/student/quran" variant="secondary">
+              {t('student.quran.title')}
+            </ButtonLink>
+          </p>
 
           {/* R62.10 — persistent, and the first thing under the heading. */}
           {asParent ? (
