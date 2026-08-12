@@ -253,6 +253,17 @@ enum ExamStaffPosition {
   @@map("exam_staff_position")
 }
 
+/// R71 — who answers for an event. **Not `ScheduleStaffPosition`**: reusing
+/// `teacher | assistant` would call the مؤطرة running a celebration a teacher,
+/// the conflation §20 rule 22 exists to prevent, and the same reason
+/// `ExamStaffPosition` has its own values.
+enum EventStaffPosition {
+  responsible
+  assistant
+
+  @@map("event_staff_position")
+}
+
 enum ExamAccessPolicy {
   single_submission
   save_and_resume
@@ -294,6 +305,7 @@ enum ConsumedTokenPurpose {
 /// (§4.3, BR-5).
 model User {
   examStaff     ExamStaff[]
+  eventStaff    EventStaff[]  @relation("EventStaffUser")
   id            String        @id @default(uuid()) @db.Uuid
   accountStatus AccountStatus @default(pending) @map("account_status")
 
@@ -440,26 +452,26 @@ model User {
   staffedSchedules   CourseScheduleStaff[]
   staffedSessions    SessionStaff[]         @relation("SessionStaffUser")
 
-  parentLinks       FamilyLink[]            @relation("FamilyLinkParent")
-  childLinks        FamilyLink[]            @relation("FamilyLinkChild")
+  parentLinks FamilyLink[] @relation("FamilyLinkParent")
+  childLinks  FamilyLink[] @relation("FamilyLinkChild")
 
   /// R62 — child applications, in each of the four roles a User can play on one.
-  childApplicationsAsParent   ChildApplication[] @relation("ChildApplicationParent")
-  childApplicationsAsChild    ChildApplication[] @relation("ChildApplicationChild")
-  childApplicationsAsMatch    ChildApplication[] @relation("ChildApplicationMatch")
-  childApplicationsAsDecider  ChildApplication[] @relation("ChildApplicationDecider")
-  quranLogs         QuranProgressLog[]      @relation("QuranLogStudent")
-  quranLogsAuthored QuranProgressLog[]      @relation("QuranLogLoggedBy")
-  surahProgress     StudentSurahProgress[]
-  submissions       StudentExamSubmission[]
-  grades            Grade[]
-  consentsAsSubject ConsentRecord[]         @relation("ConsentStudent")
-  consentsGranted   ConsentRecord[]         @relation("ConsentGrantedBy")
-  consentsRevoked   ConsentRecord[]         @relation("ConsentRevokedBy")
-  auditEntries      AuditLog[]
-  trashEntries      Trash[]
-  rateLimitCounters RateLimitCounter[]
-  refreshTokens     RefreshToken[]
+  childApplicationsAsParent  ChildApplication[]      @relation("ChildApplicationParent")
+  childApplicationsAsChild   ChildApplication[]      @relation("ChildApplicationChild")
+  childApplicationsAsMatch   ChildApplication[]      @relation("ChildApplicationMatch")
+  childApplicationsAsDecider ChildApplication[]      @relation("ChildApplicationDecider")
+  quranLogs                  QuranProgressLog[]      @relation("QuranLogStudent")
+  quranLogsAuthored          QuranProgressLog[]      @relation("QuranLogLoggedBy")
+  surahProgress              StudentSurahProgress[]
+  submissions                StudentExamSubmission[]
+  grades                     Grade[]
+  consentsAsSubject          ConsentRecord[]         @relation("ConsentStudent")
+  consentsGranted            ConsentRecord[]         @relation("ConsentGrantedBy")
+  consentsRevoked            ConsentRecord[]         @relation("ConsentRevokedBy")
+  auditEntries               AuditLog[]
+  trashEntries               Trash[]
+  rateLimitCounters          RateLimitCounter[]
+  refreshTokens              RefreshToken[]
 
   @@index([accountStatus])
   @@index([deletedAt])
@@ -642,13 +654,13 @@ model Category {
   deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
   deletedById String?   @map("deleted_by") @db.Uuid
 
-  levels      Level[]
+  levels            Level[]
   /// R62 — the stage a parent applied to for a child. The administrator may
   /// change it: placement is an administrative decision, never a rule.
   childApplications ChildApplication[]
-  eventScopes EventCategory[]
+  eventScopes       EventCategory[]
   /// Revision 49 — applicants who asked for this stage. See `User`.
-  intendedBy  User[]          @relation("UserIntendedCategory")
+  intendedBy        User[]             @relation("UserIntendedCategory")
 
   @@index([displayOrder])
   @@map("category")
@@ -920,9 +932,9 @@ model StudentTeachingGroup {
 /// Level membership is stored NOWHERE ELSE. The withdrawn `StudentLevel`
 /// proposal would have been the second source of truth this design avoids.
 model Enrollment {
-  id                    String              @id @default(uuid()) @db.Uuid
-  studentId             String              @map("student_id") @db.Uuid
-  student               User                @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  id                    String               @id @default(uuid()) @db.Uuid
+  studentId             String               @map("student_id") @db.Uuid
+  student               User                 @relation(fields: [studentId], references: [id], onDelete: Restrict)
   /// Revision 66 — NULLABLE. A Level that needs no subdivision needs no group,
   /// and a student may be enrolled in it directly. A Group is required only
   /// when the Level is actually subdivided, exactly as a Teaching Group is
@@ -1219,7 +1231,7 @@ model FamilyLink {
   decidedById    String?   @map("decided_by") @db.Uuid
   decisionReason String?   @map("decision_reason") @db.VarChar(500)
 
-  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   /// Revision 68 — **a non-blocking review item, not a status.**
   ///
   /// Stamped on every approved live link of a student when that student binds
@@ -1283,8 +1295,8 @@ model ChildApplication {
   childUserId String? @map("child_user_id") @db.Uuid
   childUser   User?   @relation("ChildApplicationChild", fields: [childUserId], references: [id], onDelete: Restrict)
 
-  firstNameArabic String  @map("first_name_arabic") @db.VarChar(60)
-  lastNameArabic  String  @map("last_name_arabic") @db.VarChar(60)
+  firstNameArabic String          @map("first_name_arabic") @db.VarChar(60)
+  lastNameArabic  String          @map("last_name_arabic") @db.VarChar(60)
   sex             Sex?
   schoolingStage  SchoolingStage? @map("schooling_stage")
 
@@ -1326,7 +1338,7 @@ model ChildApplication {
   /// Bounded, and the only reason a parent is shown.
   rejectionReason ChildApplicationRejectionReason? @map("rejection_reason")
   /// Staff only. **Never returned to a parent in any payload.**
-  internalNote String? @map("internal_note") @db.VarChar(500)
+  internalNote    String?                          @map("internal_note") @db.VarChar(500)
 
   decidedAt   DateTime? @map("decided_at") @db.Timestamptz(6)
   decidedById String?   @map("decided_by") @db.Uuid
@@ -1521,6 +1533,12 @@ model Event {
   updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
   deletedById String?   @map("deleted_by") @db.Uuid
+
+  /// R71 — who is responsible for it, and who assists. An event had an
+  /// audience and nobody answerable for it, which left a مؤطرة running a
+  /// celebration with no way to be recorded and — because event scope derived
+  /// from TEACHING schedules — no way to manage it.
+  staff EventStaff[]
 
   branchScopes   EventBranch[]
   categoryScopes EventCategory[]
@@ -1887,6 +1905,34 @@ model ExamStaff {
   @@unique([examId, userId])
   @@index([userId])
   @@map("exam_staff")
+}
+
+/// R71 — who answers for an event. The shape `ExamStaff` and
+/// `CourseScheduleStaff` already use: one row per person, a position, and a
+/// tombstone rather than a delete.
+///
+/// **Reconciled by tombstone-and-revive (R59), never hard-deleted.** The unique
+/// pair is deliberately NOT filtered on `deleted_at`, so a returning assistant
+/// is revived rather than inserted — an insert would be refused. The
+/// reconciliation is one field of an *update*, so it earns no Trash entry.
+model EventStaff {
+  id      String @id @default(uuid()) @db.Uuid
+  eventId String @map("event_id") @db.Uuid
+  event   Event  @relation(fields: [eventId], references: [id], onDelete: Restrict)
+  userId  String @map("user_id") @db.Uuid
+  user    User   @relation("EventStaffUser", fields: [userId], references: [id], onDelete: Restrict)
+
+  position EventStaffPosition
+
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  deletedById String?   @map("deleted_by") @db.Uuid
+
+  /// One person holds one position on one event.
+  @@unique([eventId, userId])
+  /// "Which events does this مؤطرة answer for" is the scope query (R71.2).
+  @@index([userId, deletedAt])
+  @@map("event_staff")
 }
 
 model AuditLog {

@@ -1,7 +1,7 @@
 import type { Event, Prisma, PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
 import * as scope from '../policies/branch-scope.js';
-import { teacherEventScope } from '../policies/roster-resolution.js';
+import { isResponsibleForEvent, teacherEventScope } from '../policies/roster-resolution.js';
 import { page, pageWindow, type Page, type PageParams } from '../lib/pagination.js';
 import * as audit from '../repositories/audit.repository.js';
 import { updateWithVersion } from '../repositories/optimistic-lock.js';
@@ -195,6 +195,18 @@ export async function createEvent(
       });
     }
 
+    // **R71.3 — creating an event is what makes a مؤطرة answerable for it.**
+    // Structural, not a grant: assigning staff is otherwise Admin-and-above, and
+    // without this a مؤطرة who created an event would need an Admin to hand it
+    // back to her before she could edit it. An Admin creating an event is NOT
+    // recorded — their authority is their branch scope, and a row saying they
+    // personally answer for every event they set up would be a fiction.
+    if (!isAdmin(actor) && isTeacher(actor)) {
+      await tx.eventStaff.create({
+        data: { eventId: event.id, userId: actor.userId, position: 'responsible' },
+      });
+    }
+
     await audit.write(tx, {
       actorUserId: actor.userId,
       activeRole: actor.activeRole,
@@ -268,8 +280,20 @@ async function assertMayEdit(
 
   if (!isTeacher(actor)) throw new AppError('FORBIDDEN', 'editing events requires staff');
 
-  // A teacher's reach is groups only; any wider scope row puts the event beyond
-  // them even if one of its groups happens to be theirs.
+  // **R71.2 — responsibility grants event scope on its own.** This is the whole
+  // gap the audit found: a مؤطرة responsible for a celebration who teaches
+  // nothing had EMPTY event scope, because scope derived only from teaching
+  // schedules, and so could not manage the very event she answers for.
+  //
+  // **`responsible` only.** An `assistant` sees the event, including a Hidden
+  // one, and does not change it (R71.3) — the one place a `*Staff` position is
+  // authorization-bearing, because an event names ONE answerable person where a
+  // class has co-teachers who deliver it equally.
+  if (await isResponsibleForEvent(tx as unknown as PrismaClient, actor.userId, eventId)) return;
+
+  // Otherwise the pre-R71 rule, unchanged: a teacher's reach is groups only, and
+  // any wider scope row puts the event beyond them even if one of its groups
+  // happens to be theirs.
   if (branches.length > 0 || categories > 0 || levels > 0 || groups.length === 0) {
     throw new AppError('NOT_FOUND', 'no such event');
   }
@@ -375,6 +399,98 @@ export async function updateEvent(
  * of their own — they are the materialised reach of an event that no longer
  * applies.
  */
+export interface EventStaffInput {
+  userId: string;
+  position: 'responsible' | 'assistant';
+}
+
+/**
+ * `PUT /events/{id}/staff` — **who answers for this event** (§4.4, R71).
+ *
+ * **Admin and above (R71.4).** Being answerable for an event is not authority to
+ * decide who else answers for it — and granting it would let a مؤطرة with
+ * momentary edit rights make herself permanently responsible, which is scope she
+ * would then keep after the teaching assignment that gave her the edit expired.
+ * The one exception is structural rather than a grant: creating an event records
+ * the creator `responsible`, because creating it is what makes her answerable.
+ *
+ * **Replaced, not merged**, exactly as `ExamStaff` is: one call is one decision,
+ * and there is no window in which the event holds half of an intended change.
+ *
+ * **Tombstone and revive, never hard delete (R59).** These rows carry
+ * `deleted_at`, so TD-5 means an ordinary write never destroys them — and the
+ * `@@unique([eventId, userId])` pair is deliberately not filtered on it, so a
+ * returning assistant must be **revived**: an insert would be refused by the
+ * constraint. It earns **no Trash entry**, because reconciliation is one field
+ * of an update expressed as a tombstone, which is the distinction R59 draws for
+ * `SessionStaff` and `UserBranchRole`.
+ */
+export async function setEventStaff(
+  prisma: PrismaClient,
+  actor: Actor,
+  eventId: string,
+  staff: EventStaffInput[],
+): Promise<void> {
+  if (!isAdmin(actor)) {
+    throw new AppError('FORBIDDEN', 'assigning event staff requires admin (TD-2, R71.4)');
+  }
+
+  // At most one person answers for an event. The association's own description
+  // is *a main responsible مؤطرة and one or more assistants*, and two people
+  // named responsible is not a stricter version of that — it is a different
+  // arrangement nobody asked for.
+  if (staff.filter((p) => p.position === 'responsible').length > 1) {
+    throw new AppError('VALIDATION_FAILED', 'an event has one responsible مؤطرة', {
+      reason: 'ONE_RESPONSIBLE_ONLY',
+    });
+  }
+
+  await prisma.$transaction(async (tx) => {
+    const event = await tx.event.findFirst({ where: { id: eventId, deletedAt: null } });
+    if (!event) throw new AppError('NOT_FOUND', 'no such event');
+    await assertMayEdit(tx, actor, eventId);
+
+    const existing = await tx.eventStaff.findMany({ where: { eventId } });
+    const wanted = new Map(staff.map((p) => [p.userId, p.position]));
+
+    for (const row of existing) {
+      const position = wanted.get(row.userId);
+      if (position === undefined) {
+        if (row.deletedAt === null) {
+          await tx.eventStaff.update({
+            where: { id: row.id },
+            data: { deletedAt: new Date(), deletedById: actor.userId },
+          });
+        }
+      } else {
+        await tx.eventStaff.update({
+          where: { id: row.id },
+          data: { position, deletedAt: null, deletedById: null },
+        });
+      }
+    }
+
+    for (const person of staff) {
+      if (!existing.some((row) => row.userId === person.userId)) {
+        await tx.eventStaff.create({
+          data: { eventId, userId: person.userId, position: person.position },
+        });
+      }
+    }
+
+    // R71.4 — its own action type: *who answers for this celebration* is not an
+    // attribute edit, and `event.update` would bury the decision.
+    await audit.write(tx, {
+      actorUserId: actor.userId,
+      activeRole: actor.activeRole,
+      actionType: 'event.staff_change',
+      targetEntity: 'Event',
+      targetId: eventId,
+      detail: { positions: staff.map((p) => ({ user_id: p.userId, position: p.position })) },
+    });
+  });
+}
+
 export async function deleteEvent(
   prisma: PrismaClient,
   actor: Actor,

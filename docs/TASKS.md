@@ -688,6 +688,16 @@
 - [x] **Breadcrumb across المستويات → مواد المستوى → حلقات المادة** — `PortalShell` takes an optional trail; passed in by the page, never derived from the URL, so it can only link nodes that exist
 - [x] **Post-R69 audit (2026-08-12):** the drill-down out of مواد المستوى still used the legacy path and navigated twice; «تنظيم المادة» survived as a row-action label for a screen now called «حلقات المواد»; `pickSubject` was substituted into the heading as if it were a Subject name
 
+### R71 — an event has somebody responsible for it (2026-08-12)
+- [x] **Audit first:** the role model already separates person · capability · scope. No new Role, no capability table, no parallel authorization
+- [x] `EventStaff` + `EventStaffPosition` (`responsible | assistant`), shaped like `ExamStaff`, R59 tombstone-and-revive, no Trash entry
+- [x] **Event scope is a union** — events staffed ∪ §4.4c teaching scope — as one arm in `roster-resolution.ts`
+- [x] `responsible` edits; `assistant` sees only. The one place a `*Staff` position is authorization-bearing, and why
+- [x] Assigning staff is Admin+; **creating an event records the creator responsible**; deletion stays Admin (`Event` has no `created_by`)
+- [x] Six existing teardowns updated — `event_staff` is RESTRICT like every other event child
+- [x] **Terminology slice:** أستاذة → مؤطِّرة · طالبة → مستفيدة (9 places, incl. the privacy notice) · مشرف عام → مشرفة عامة · two drifted role dictionaries unified · **15th CI guard**
+- [ ] **Not built:** no UI for assigning event staff — `PUT /events/{id}/staff` has no screen yet. The scheduling form is where it belongs
+
 ### M5a — in-school exam grading + Teacher scope (2026-08-12)
 - [x] **Audit first:** §4.6's model complete, R58's exam half built, §4.4c resolver already live. `Grade` had no service/route/adapter/screen — that was the whole gap
 - [x] **R70 drafted and applied:** `/admin/exam-grades?exam=` joins §14.1 · BR-7 reworded to *the exam's audience* · `grade.enter` joins TD-8 · TD-2's exam row splits in four

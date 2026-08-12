@@ -14,7 +14,7 @@ import { expandEvent } from '../lib/recurrence.js';
  */
 export { expandEvent };
 import type { RoleScope } from '../policies/branch-scope.js';
-import { teacherEventScope } from '../policies/roster-resolution.js';
+import { eventsStaffedBy, teacherEventScope } from '../policies/roster-resolution.js';
 
 /**
  * Calendar read (SRS §4.4, TD-3.4, TD-11, §19.2).
@@ -226,8 +226,15 @@ async function visibilityFilter(
     // scope — one of their Administrative Groups, or the level, category or
     // branch of anything they teach, or a global event — and never one
     // belonging exclusively to groups they do not teach.
+    // R71.2 — the union's other arm. A مؤطرة sees an event she staffs whether
+    // or not her teaching scope reaches it: an assistant at a celebration for
+    // another branch's group must still find it in her own calendar. **Both
+    // positions see; only `responsible` may edit** (R71.3, `event.service.ts`).
+    const staffed = [...(await eventsStaffedBy(prisma, actor.userId)).keys()];
+
     const intersects = {
       OR: [
+        { id: { in: staffed } },
         { administrativeGroupScopes: { some: { administrativeGroupId: { in: groupIds } } } },
         { levelScopes: { some: { levelId: { in: levelIds } } } },
         { categoryScopes: { some: { categoryId: { in: categoryIds } } } },

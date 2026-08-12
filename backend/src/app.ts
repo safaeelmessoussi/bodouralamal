@@ -261,6 +261,9 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
   // R59.5 — the one Super-Admin-creatable entity that had no deletion at all.
   guarded.delete('/admin/hijri-calendar/:year/:month', hijri.deleteMonth(prisma));
   guarded.get('/admin/hijri-calendar/:year/history', hijri.history(prisma));
+  // R71 — who answers for an event. Its own route because assigning staff is
+  // its own capability (TD-2) and its own audit action, not an attribute edit.
+  guarded.put('/events/:id/staff', events.setStaff(prisma));
   guarded.delete('/events/:id', events.remove(prisma));
   guarded.get('/admin/branches/:id/event-backfill', events.listBackfill(prisma));
   guarded.post('/admin/branches/:id/event-backfill', events.applyBackfill(prisma));

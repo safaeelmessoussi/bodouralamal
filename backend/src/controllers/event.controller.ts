@@ -11,6 +11,7 @@ import {
   createEvent,
   deleteEvent,
   listEvents,
+  setEventStaff,
   updateEvent,
 } from '../services/event.service.js';
 import { eventDefinitionDto, pageOf } from './dto.js';
@@ -229,5 +230,36 @@ export function list(prisma: PrismaClient) {
       ...pageParamsFrom(req.query),
     });
     res.json(pageOf(result, eventDefinitionDto));
+  };
+}
+
+/**
+ * R71 — who answers for an event. The shape the exam and schedule staff
+ * payloads already use; `responsible` is capped at one **by the service**,
+ * where the domain rule belongs rather than in a schema that cannot explain it.
+ */
+const staffSchema = z
+  .object({
+    staff: z
+      .array(
+        z
+          .object({ user_id: z.string().uuid(), position: z.enum(['responsible', 'assistant']) })
+          .strict(),
+      )
+      .max(20),
+  })
+  .strict();
+
+/** `PUT /events/{id}/staff` — Admin and above (R71.4); the service enforces it. */
+export function setStaff(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const b = parse(staffSchema, req.body ?? {});
+    await setEventStaff(
+      prisma,
+      actorOf(req),
+      pathId(req),
+      b.staff.map((p) => ({ userId: p.user_id, position: p.position })),
+    );
+    res.status(204).end();
   };
 }

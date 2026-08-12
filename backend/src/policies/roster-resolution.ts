@@ -356,6 +356,58 @@ export async function teacherEventScope(
   };
 }
 
+/**
+ * **The events a مؤطرة answers for (§4.4, SRS Revision 71.2).**
+ *
+ * Event scope is a **union**, and this is the arm the audit found missing:
+ *
+ * ```
+ * events she may reach = events she staffs through EventStaff       ← here
+ *                      ∪ events her §4.4c teaching scope reaches    ← teacherEventScope
+ * ```
+ *
+ * Before R71 only the second arm existed, so a مؤطرة responsible for a
+ * celebration who taught nothing had **empty event scope and could manage
+ * nothing** — the association's own way of running an event was unrepresentable.
+ *
+ * **It lives here, beside the teaching derivation, deliberately.** §4.4c is the
+ * single definition of what a member of staff may reach; a second resolver in
+ * the event service would be the parallel authorization system R71 forbids.
+ *
+ * Returns the ids and the position held, because R71.3 makes position
+ * authorization-bearing for events — unlike `CourseScheduleStaff`, where a
+ * co-teacher and an assistant deliver the same class and R43 gave them one rule.
+ */
+export async function eventsStaffedBy(
+  prisma: PrismaClient,
+  userId: string,
+): Promise<Map<string, 'responsible' | 'assistant'>> {
+  const rows = await prisma.eventStaff.findMany({
+    where: { userId, deletedAt: null, event: { deletedAt: null } },
+    select: { eventId: true, position: true },
+  });
+  return new Map(rows.map((r) => [r.eventId, r.position]));
+}
+
+/**
+ * Whether this مؤطرة is **responsible** for the event — the position R71.3
+ * makes answerable, and therefore the one that carries the right to edit.
+ *
+ * An `assistant` deliberately returns `false`: they see the event, including a
+ * Hidden one, and do not change it.
+ */
+export async function isResponsibleForEvent(
+  prisma: PrismaClient,
+  userId: string,
+  eventId: string,
+): Promise<boolean> {
+  const row = await prisma.eventStaff.findFirst({
+    where: { userId, eventId, position: 'responsible', deletedAt: null },
+    select: { id: true },
+  });
+  return row !== null;
+}
+
 /** What an exam names, for the §4.4c scope test (R58's shape). */
 export interface ExamScopeSpec {
   branchId: string;

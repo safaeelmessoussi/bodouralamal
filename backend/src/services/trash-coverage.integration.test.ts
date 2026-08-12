@@ -80,6 +80,9 @@ async function clear(): Promise<void> {
   await prisma.eventCategory.deleteMany({ where: { eventId: { in: events } } });
   await prisma.eventLevel.deleteMany({ where: { eventId: { in: events } } });
   await prisma.eventAdministrativeGroup.deleteMany({ where: { eventId: { in: events } } });
+  // R71 — `event_staff` is RESTRICT like the other event children, so it
+  // goes before the event it points at.
+  await prisma.eventStaff.deleteMany({ where: { eventId: { in: events } } });
   await prisma.event.deleteMany({ where: { id: { in: events } } });
   await prisma.sessionStaff.deleteMany({ where: { session: { scheduleId: { in: schedules } } } });
   await prisma.session.deleteMany({ where: { scheduleId: { in: schedules } } });

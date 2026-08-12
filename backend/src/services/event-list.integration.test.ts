@@ -32,6 +32,9 @@ async function clear(): Promise<void> {
     await prisma.event.findMany({ where: { title: { startsWith: TAG } }, select: { id: true } })
   ).map((e) => e.id);
   await prisma.eventBranch.deleteMany({ where: { eventId: { in: events } } });
+  // R71 — `event_staff` is RESTRICT like the other event children, so it
+  // goes before the event it points at.
+  await prisma.eventStaff.deleteMany({ where: { eventId: { in: events } } });
   await prisma.event.deleteMany({ where: { id: { in: events } } });
   const ids = (
     await prisma.user.findMany({ where: { nameArabic: { startsWith: TAG } }, select: { id: true } })
