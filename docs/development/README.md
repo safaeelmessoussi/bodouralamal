@@ -14,6 +14,7 @@ Contributing to the platform.
 | [Testing](testing.md) | Four layers, what each is for, how to run them |
 | [CI/CD](ci-cd.md) | Every gate, what it catches, and why it was added |
 | [Documentation policy](documentation-policy.md) | Documentation as part of Done — the workflow and the per-change routing |
+| [Exams & assessment — audit and proposal](audit-2026-08-12-exams.md) | The model already exists and the exam half is built; **grade entry is the whole gap**. Retroactive recording needs nothing. Three small SRS clauses required — **awaiting Owner review** |
 | [Audit — 2026-08-11](audit-2026-08-11.md) | Level creation's branch coupling · per-child placement · the deletion model · deployment readiness. **Four questions audited to a decision, none implemented** |
 | [Engineering efficiency](engineering-efficiency.md) | Progress per unit of context — slicing, verification proportionality, and the five things it may never economise on |
 
