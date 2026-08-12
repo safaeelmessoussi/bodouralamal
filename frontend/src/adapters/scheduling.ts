@@ -6,7 +6,13 @@ import {
   updateCourseSchedule,
   type CourseSchedule,
 } from './course-schedules.js';
-import { createEvent, deleteEvent, updateEvent, type EventInput } from './events.js';
+import {
+  createEvent,
+  deleteEvent,
+  setEventStaff,
+  updateEvent,
+  type EventInput,
+} from './events.js';
 import { createExam, deleteExam, listExams, updateExam, type Exam } from './exams.js';
 import { WEEKDAYS } from '../components/scheduling/recurrence-editor.js';
 import { SCHEDULING_TYPE_SPECS } from './scheduling-types.js';
@@ -121,6 +127,8 @@ interface EventDefinitionWire {
   recurrence: string;
   recurrence_end_date: string | null;
   branch_ids: string[];
+  /** R71 — who answers for it. Empty for events created before R71. */
+  staff: { user_id: string; position: string }[];
   version: number;
 }
 
@@ -189,8 +197,12 @@ function fromEvent(row: EventDefinitionWire): SchedulingItem {
     staffCount: null,
     version: row.version,
     // An Event genuinely has none of these columns (§4.4). Null is the truth
-    // about it, not a gap waiting to be filled.
-    ids: EMPTY_IDS,
+    // about it, not a gap waiting to be filled — **except `staff`, which R71
+    // gave it**: an event now has somebody answerable for it.
+    ids: {
+      ...EMPTY_IDS,
+      staff: row.staff.map((x) => ({ user_id: x.user_id, position: x.position })),
+    },
   };
 }
 
@@ -322,6 +334,9 @@ export async function listSchedulingItems(
  * would put the fork back in every caller.
  */
 export interface SchedulingInput {
+  /** R71 — who answers for an EVENT. Sent through its own route after the
+   *  event exists, because assigning staff is its own capability (R71.4). */
+  eventStaff?: { user_id: string; position: 'responsible' | 'assistant' }[];
   type: SchedulingType;
   title: string;
   description: string | null;
@@ -477,9 +492,23 @@ export async function saveSchedulingItem(
     recurrence_end_date: input.repeatUntil,
     ...(existing ? {} : (input.scope ?? { global: true })),
   };
-  return existing
-    ? updateEvent(existing.id, existing.version, payload, token)
-    : createEvent(payload, token);
+  // **Two calls, and deliberately so.** R71 made assigning staff its own
+  // capability with its own audit action — *who answers for this celebration*
+  // is not an attribute edit — so it is a separate route rather than a key on
+  // the event payload.
+  //
+  // **A failed second call degrades to today's behaviour, not to corruption:**
+  // an event with nobody assigned is the ordinary state of every event created
+  // before R71, so the worst case is an event an Admin must staff again.
+  const saved = existing
+    ? await updateEvent(existing.id, existing.version, payload, token)
+    : await createEvent(payload, token);
+
+  if (input.eventStaff) {
+    const id = existing?.id ?? (saved as { id: string }).id;
+    await setEventStaff(id, input.eventStaff, token);
+  }
+  return saved;
 }
 
 export async function deleteSchedulingItem(

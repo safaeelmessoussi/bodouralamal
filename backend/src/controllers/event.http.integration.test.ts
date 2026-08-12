@@ -165,6 +165,34 @@ describe('POST /events', () => {
   });
 });
 
+describe('GET /events carries who answers for each one (R71)', () => {
+  it('publishes `staff`, and it survives assignment over the wire', async () => {
+    // The scheduling form prefills the responsible مؤطرة from this field; an
+    // adapter reading a key the API never sends compiles and fails only in a
+    // browser, which is the exact failure the contract guards exist for.
+    const branch = await makeBranch('فرع النشاط');
+    const created = await call('POST', '/events', superToken, payload({ branch_ids: [branch] }));
+    expect(created.status).toBe(201);
+    const eventId = (created.body as { id: string }).id;
+
+    let list = await call('GET', '/events', superToken);
+    let row = (list.body.data ?? []).find((e) => e['id'] === eventId)!;
+    // Empty is a real state: every event created before R71 has nobody
+    // assigned, and so does one an Admin has not staffed yet.
+    expect(row['staff']).toEqual([]);
+
+    const person = await withRole('مؤطرة مسؤولة', 'teacher');
+    const assigned = await call('PUT', `/events/${eventId}/staff`, superToken, {
+      staff: [{ user_id: person, position: 'responsible' }],
+    });
+    expect(assigned.status).toBe(204);
+
+    list = await call('GET', '/events', superToken);
+    row = (list.body.data ?? []).find((e) => e['id'] === eventId)!;
+    expect(row['staff']).toEqual([{ user_id: person, position: 'responsible' }]);
+  });
+});
+
 describe('DELETE /events/{id} and the backfill endpoints', () => {
   it('deletes an event and removes its scope rows (TD-5)', async () => {
     const branchId = await makeBranch('مراكش');

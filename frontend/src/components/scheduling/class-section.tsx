@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 
 import { ScopeSelectors } from '../scope/scope-selectors.js';
 import { SelectField } from '../ui/field.js';
+import { StaffPicker } from './staff-picker.js';
 import { t } from '../../i18n/index.js';
 import type { ScopeOptions } from '../../hooks/use-scope-options.js';
 import type { UserSummary } from '../../adapters/users.js';
@@ -161,12 +162,22 @@ export function ClassSection({
 }
 
 /**
- * The fields an **activity** needs (§4.4).
+ * The fields an **activity** needs (§4.4, extended by R71).
  *
- * Deliberately small: an Event has no room, no staff and no subject, and §4.4
- * calls it *"the non-teaching activity layer"*. What it does have is a
- * visibility tier and a scope, and inventing anything else here would be the
- * conflation §20 rule 22 forbids.
+ * Deliberately small: an Event has no room and no subject, and §4.4 calls it
+ * *"the non-teaching activity layer"*.
+ *
+ * **R71 gave it staff.** An event had an audience and nobody answerable for it,
+ * so *a main responsible مؤطرة and her assistants* — the association's own way
+ * of running a celebration — could not be recorded, and a مؤطرة responsible for
+ * one who teaches nothing could not manage it at all.
+ *
+ * **The control is `StaffPicker`, shared with the exam section**; only the
+ * words differ, because a مؤطرة responsible for a celebration is neither
+ * teaching it nor supervising a paper (§20 rule 22).
+ *
+ * **Assigning is Admin and above (R71.4)** — the picker renders disabled for
+ * anyone else, and the server refuses regardless: hiding is not enforcement.
  */
 export function ActivitySection({
   visibility,
@@ -177,6 +188,12 @@ export function ActivitySection({
   onScopeId,
   scopeOptions,
   locked,
+  staff,
+  responsibleId,
+  onResponsible,
+  assistantIds,
+  onAssistants,
+  canAssignStaff,
 }: {
   visibility: string;
   onVisibility: (v: string) => void;
@@ -189,6 +206,13 @@ export function ActivitySection({
    *  joins explicitly, and re-pointing them later would silently change who has
    *  been seeing the event. */
   locked: boolean;
+  staff: UserSummary[];
+  responsibleId: string;
+  onResponsible: (v: string) => void;
+  assistantIds: string[];
+  onAssistants: (ids: string[]) => void;
+  /** R71.4 — assigning staff is Admin and above. */
+  canAssignStaff: boolean;
 }): ReactNode {
   return (
     <>
@@ -234,6 +258,25 @@ export function ActivitySection({
           )}
         </>
       )}
+
+      {/* R71 — who answers for it. Rendered on edit as well as creation,
+          because staffing is a decision an Admin revisits: the responsible
+          مؤطرة changes without the celebration changing. */}
+      <StaffPicker
+        staff={staff}
+        leadLabel={t('admin.calendar.responsible')}
+        leadId={responsibleId}
+        onLead={onResponsible}
+        assistantsLabel={t('admin.calendar.eventAssistants')}
+        assistantsHint={
+          canAssignStaff
+            ? t('admin.calendar.eventAssistantsHint')
+            : t('admin.calendar.staffAdminOnly')
+        }
+        assistantIds={assistantIds}
+        onAssistants={onAssistants}
+        disabled={!canAssignStaff}
+      />
     </>
   );
 }

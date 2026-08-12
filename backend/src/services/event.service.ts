@@ -666,7 +666,14 @@ export async function listEvents(
   prisma: PrismaClient,
   actor: Actor,
   filters: { branchId?: string; from?: Date; to?: Date } & PageParams,
-): Promise<Page<Event & { branchScopes: { branchId: string }[] }>> {
+): Promise<
+  Page<
+    Event & {
+      branchScopes: { branchId: string }[];
+      staff: { userId: string; position: 'responsible' | 'assistant' }[];
+    }
+  >
+> {
   // TD-2: the same audience that may read the admin schedule list. A teacher
   // reaches events through the calendar at their own tier, not through this.
   if (!isAdmin(actor) && !isTeacher(actor)) {
@@ -709,7 +716,16 @@ export async function listEvents(
       take: window.take,
       // Soonest first: a scheduling list is read forwards from today.
       orderBy: [{ startDate: 'asc' }, { startTime: 'asc' }, { id: 'asc' }],
-      include: { branchScopes: { select: { branchId: true } } },
+      include: {
+        branchScopes: { select: { branchId: true } },
+        // R71 — live rows only. A tombstoned assignment is somebody who USED to
+        // answer for this, and prefilling the form with them would re-assign
+        // them on the next save.
+        staff: {
+          where: { deletedAt: null },
+          select: { userId: true, position: true },
+        },
+      },
     }),
     prisma.event.count({ where }),
   ]);

@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 
 import { ScopeSelectors } from '../scope/scope-selectors.js';
 import { SelectField } from '../ui/field.js';
+import { StaffPicker } from './staff-picker.js';
 import { t } from '../../i18n/index.js';
 import type { ScopeOptions } from '../../hooks/use-scope-options.js';
 import type { ExamMode, ExamStaffRef } from '../../adapters/exams.js';
@@ -126,45 +127,21 @@ export function ExamSection({
             ]}
           />
 
-          {/* §4.6 exam staff **supervise**; they do not teach. The vocabulary is
-              deliberately different from a class's teacher and assistants,
-              because the roles are different facts about a different event. */}
-          <SelectField
-            label={t('scheduling.exam.supervisor')}
-            value={supervisorId}
-            onChange={onSupervisor}
-            options={[
-              { value: '', label: t('common.choose') },
-              ...staff.map((x) => ({ value: x.id, label: x.name_arabic })),
-            ]}
+          {/* §4.6 exam staff **supervise**; they do not teach. The vocabulary
+              is deliberately different from a class's teacher and assistants,
+              because the roles are different facts about a different event —
+              which is why `StaffPicker` takes the words and owns only the
+              control (R71's extraction). */}
+          <StaffPicker
+            staff={staff}
+            leadLabel={t('scheduling.exam.supervisor')}
+            leadId={supervisorId}
+            onLead={onSupervisor}
+            assistantsLabel={t('scheduling.exam.assistants')}
+            assistantsHint={t('scheduling.exam.assistantsHint')}
+            assistantIds={assistantIds}
+            onAssistants={onAssistants}
           />
-
-          <fieldset className="field">
-            <legend className="field__label">{t('scheduling.exam.assistants')}</legend>
-            <div className="field__choices">
-              {staff
-                // One person holds one position on one exam; the server refuses
-                // the pair as a duplicate assignment.
-                .filter((x) => x.id !== supervisorId)
-                .map((x) => (
-                  <label key={x.id} className="field field--choice">
-                    <input
-                      type="checkbox"
-                      checked={assistantIds.includes(x.id)}
-                      onChange={(e) =>
-                        onAssistants(
-                          e.target.checked
-                            ? [...assistantIds, x.id]
-                            : assistantIds.filter((id) => id !== x.id),
-                        )
-                      }
-                    />
-                    <span>{x.name_arabic}</span>
-                  </label>
-                ))}
-            </div>
-            <p className="field__hint">{t('scheduling.exam.assistantsHint')}</p>
-          </fieldset>
         </>
       )}
     </>

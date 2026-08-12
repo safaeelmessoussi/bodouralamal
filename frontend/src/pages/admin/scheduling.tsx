@@ -39,6 +39,7 @@ import { FormDialog } from '../../components/ui/form-dialog.js';
 import { SelectField } from '../../components/ui/field.js';
 import { useScopeOptions } from '../../hooks/use-scope-options.js';
 import { useSession } from '../../contexts/session.js';
+import { useActiveRole } from '../../contexts/active-role.js';
 import { t } from '../../i18n/index.js';
 import { ApiError } from '../../lib/api.js';
 
@@ -462,6 +463,16 @@ function SchedulingDialog({
   const [supervisorId, setSupervisorId] = useState(
     item?.ids.staff.find((x) => x.position === 'supervisor')?.user_id ?? '',
   );
+  // R71 — who answers for an event. Prefilled from the item's own rows, so
+  // editing a celebration shows the مؤطرة already responsible for it.
+  // R60 — the ACTIVE role, so a Super Admin working as مؤطِّرة is not offered a
+  // control the server will refuse. R71.4 keeps event staffing with Admins.
+  const { activeRoles } = useActiveRole();
+  const canAssignStaff = activeRoles.some((r) => r === 'admin' || r === 'super_admin');
+
+  const [responsibleId, setResponsibleId] = useState(
+    item?.ids.staff.find((x) => x.position === 'responsible')?.user_id ?? '',
+  );
   const [visibility, setVisibility] = useState('public');
   const [scopeKind, setScopeKind] = useState('global');
   const [scopeId, setScopeId] = useState('');
@@ -606,6 +617,19 @@ function SchedulingDialog({
           // `null` is the whole Level sitting together (R58), not a gap.
           examGroupId: scope.value.groupId || null,
           examStaff: examStaffOf(supervisorId, assistantIds),
+          // R71 — sent only when this caller may set it; the server refuses
+          // otherwise, and sending it anyway would turn an ordinary save into
+          // a refusal for a مؤطرة editing her own event.
+          ...(canAssignStaff
+            ? {
+                eventStaff: [
+                  ...(responsibleId
+                    ? [{ user_id: responsibleId, position: 'responsible' as const }]
+                    : []),
+                  ...assistantIds.map((id) => ({ user_id: id, position: 'assistant' as const })),
+                ],
+              }
+            : {}),
           teachingMode: mode,
           targetId,
           branchId: scope.value.branchId,
@@ -713,6 +737,12 @@ function SchedulingDialog({
             onScopeKind={setScopeKind}
             scopeId={scopeId}
             onScopeId={setScopeId}
+            staff={teachers}
+            responsibleId={responsibleId}
+            onResponsible={setResponsibleId}
+            assistantIds={assistantIds}
+            onAssistants={setAssistantIds}
+            canAssignStaff={canAssignStaff}
             scopeOptions={
               scopeKind === 'branch'
                 ? scope.options.branchId.map((o) => ({ id: o.value, name: o.label }))

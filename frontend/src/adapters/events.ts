@@ -90,3 +90,22 @@ export async function updateEvent(
 export async function deleteEvent(id: string, token: string | null): Promise<void> {
   await api<void>(`/events/${id}`, { method: 'DELETE', token });
 }
+
+/**
+ * `PUT /events/{id}/staff` — **who answers for this event** (§4.4, R71).
+ *
+ * **Admin and above**, which the server enforces: being responsible for an
+ * event is not authority to decide who else answers for it (R71.4). The one
+ * structural exception happens server-side — creating an event records the
+ * creating مؤطرة `responsible` in the same transaction.
+ *
+ * Replaced, not merged: one call is one decision, and the server tombstones what
+ * is no longer wanted and revives what returns (R59).
+ */
+export async function setEventStaff(
+  id: string,
+  staff: { user_id: string; position: 'responsible' | 'assistant' }[],
+  token: string | null,
+): Promise<void> {
+  await api<void>(`/events/${id}/staff`, { method: 'PUT', token, body: { staff } });
+}

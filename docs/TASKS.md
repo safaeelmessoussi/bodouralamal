@@ -696,7 +696,9 @@
 - [x] Assigning staff is Admin+; **creating an event records the creator responsible**; deletion stays Admin (`Event` has no `created_by`)
 - [x] Six existing teardowns updated — `event_staff` is RESTRICT like every other event child
 - [x] **Terminology slice:** أستاذة → مؤطِّرة · طالبة → مستفيدة (9 places, incl. the privacy notice) · مشرف عام → مشرفة عامة · two drifted role dictionaries unified · **15th CI guard**
-- [ ] **Not built:** no UI for assigning event staff — `PUT /events/{id}/staff` has no screen yet. The scheduling form is where it belongs
+- [x] **UI shipped:** the responsible مؤطرة and her assistants are assigned on the scheduling form's `نشاط` branch
+- [x] `StaffPicker` **extracted** from the exam section and shared by both — one control, each caller's own vocabulary
+- [x] Event DTO carries `staff` (live rows only) so the form prefills who already answers for it
 
 ### M5a — in-school exam grading + Teacher scope (2026-08-12)
 - [x] **Audit first:** §4.6's model complete, R58's exam half built, §4.4c resolver already live. `Grade` had no service/route/adapter/screen — that was the whole gap
