@@ -122,9 +122,16 @@ describe('the registry and the router agree', () => {
     }
   });
 
-  it('Levels stays Admin-readable — it is operational, not configuration', () => {
-    // The line the move draws: an Admin places students into Levels every day.
-    expect(ADMIN_MODULES.find((m) => m.path === '/admin/levels')?.roles).toContain('admin');
+  it('R69: Levels joined the configuration section — it creates nothing operational', () => {
+    // Superseded the same day it was written, by a fuller audit. The earlier
+    // reasoning was "an Admin places students into Levels every day" — true,
+    // but they do it from the approval queue and the groups screen, each of
+    // which has its own Level selector fed by the still-Admin-readable
+    // endpoint. The Levels SCREEN only answers *which Levels exist*, and R66
+    // removed the last operational thing it did (creating a first group).
+    const levels = ADMIN_MODULES.find((m) => m.path === '/admin/levels')!;
+    expect([...levels.roles]).toEqual(['super_admin']);
+    expect(levels.section).toBe('administration');
   });
 
   it('the READ endpoints stay Admin-accessible — the menu is not the boundary', () => {

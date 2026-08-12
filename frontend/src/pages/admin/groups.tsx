@@ -144,30 +144,15 @@ export function GroupsPage(): ReactNode {
 
   const actions: RowAction<AdministrativeGroup>[] = [
     { label: t('admin.groups.roster'), onSelect: (r) => setRosterOf(r) },
-    {
-      /**
-       * **The destination is right; the LABEL was wrong.**
-       *
-       * It borrowed the *next* screen's title, `admin.subjectOrg.title`, and
-       * promised «حلقات مادة» while navigating to «مواد المستوى». Two ids are
-       * needed to reach a Subject's circles — `TeachingGroup` is scoped to
-       * `(subject_id, level_id)` — and a group names only the Level, so the
-       * Subject list is not a detour on the way there: **it is the step where
-       * the second id is chosen.** The label now says what the click does.
-       *
-       * It had also started rendering a literal `{subject}` placeholder, since
-       * that title gained an interpolation earlier today — a borrowed string is
-       * a string that changes underneath you.
-       *
-       * `admin.levels.manageSubjects` is reused rather than a second key added:
-       * the Levels table's row action goes to the same screen, and two names
-       * for one destination is how a hierarchy stops being obvious.
-       */
-      label: t('admin.levels.manageSubjects'),
-      onSelect: (r) => {
-        window.location.href = `/admin/levels/${r.level_id}/subjects`;
-      },
-    },
+    /**
+     * **R69 — the Subject action is gone from here.**
+     *
+     * It existed because `مواد المستوى` had no navigation node: its path
+     * carried a Level id, so no menu could reach it and unrelated screens grew
+     * borrowed row actions instead. It has its own node now, so this screen
+     * goes back to answering one question — *how is this Level subdivided, and
+     * who is in each group* — and touches no Subject at all (R69.5).
+     */
     ...(canWrite
       ? [
           { label: t('common.edit'), onSelect: (r: AdministrativeGroup) => setEditing(r) },

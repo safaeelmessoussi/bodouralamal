@@ -48,6 +48,8 @@ export const IMPLEMENTED_ADMIN_PATHS: readonly string[] = [
   '/admin/schedules',
   '/admin/groups',
   '/admin/levels',
+  '/admin/level-subjects',
+  '/admin/teaching-groups',
   '/admin/categories',
   '/admin/subjects',
   '/admin/users',
@@ -72,7 +74,19 @@ export const IMPLEMENTED_ADMIN_PATHS: readonly string[] = [
  * who is unplaced* (§4.4c, BR-22). Collapsing them into one screen would put an
  * alarm about unplaced students behind a dropdown.
  */
-const SUBJECT_ORG = /^\/admin\/levels\/([^/]+)\/subjects(?:\/([^/]+))?\/?$/;
+/**
+ * **R69 — the OLD paths, kept only to redirect.**
+ *
+ * `مواد المستوى` and `حلقات المواد` now have nodes of their own at
+ * `/admin/level-subjects` and `/admin/teaching-groups`, with the ids as query
+ * parameters — the pattern §14.1 already uses for `/resources`, and the only
+ * one a menu entry can reach, since a menu cannot supply an id.
+ *
+ * These carried the ids as path segments, which is why the screens had no node
+ * and why unrelated screens grew borrowed row actions to reach them. Bookmarks
+ * and any link already in the wild still work: they land on the canonical URL.
+ */
+const LEGACY_SUBJECT_PATHS = /^\/admin\/levels\/([^/]+)\/subjects(?:\/([^/]+))?\/?$/;
 
 /**
  * `/admin/schedules/{id}/sessions` — the occurrences of one recurring class, and
@@ -89,14 +103,27 @@ export function AdminRouter(): ReactNode {
   const scheduleSessions = SCHEDULE_SESSIONS.exec(window.location.pathname);
   if (scheduleSessions) return <ScheduleSessionsPage scheduleId={scheduleSessions[1]!} />;
 
-  const subjectOrg = SUBJECT_ORG.exec(window.location.pathname);
-  if (subjectOrg) {
-    const subjectId = subjectOrg[2];
-    return subjectId === undefined ? (
-      <LevelSubjectsPage levelId={subjectOrg[1]!} />
-    ) : (
-      <SubjectOrganisationPage levelId={subjectOrg[1]!} subjectId={subjectId} />
-    );
+  const legacy = LEGACY_SUBJECT_PATHS.exec(window.location.pathname);
+  if (legacy) {
+    const [, levelId, subjectId] = legacy;
+    const target =
+      subjectId === undefined
+        ? `/admin/level-subjects?level=${levelId!}`
+        : `/admin/teaching-groups?level=${levelId!}&subject=${subjectId}`;
+    // `replace`, not `assign`: the old URL should not sit in the history for
+    // Back to return to, or a reader bounces between two addresses for one
+    // screen.
+    window.location.replace(target);
+    return null;
+  }
+
+  const params = new URLSearchParams(window.location.search);
+  const path = window.location.pathname.replace(/\/+$/, '') || '/';
+  if (path === '/admin/level-subjects') {
+    return <LevelSubjectsPage levelId={params.get('level')} />;
+  }
+  if (path === '/admin/teaching-groups') {
+    return <SubjectOrganisationPage levelId={params.get('level')} subjectId={params.get('subject')} />;
   }
 
   const module = moduleForPath(window.location.pathname);

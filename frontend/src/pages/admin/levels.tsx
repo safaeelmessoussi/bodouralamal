@@ -144,7 +144,7 @@ export function LevelsPage(): ReactNode {
        */
       cell: (r) => (
         <a
-          href={`/admin/levels/${r.id}/subjects`}
+          href={`/admin/level-subjects?level=${r.id}`}
           aria-label={t('admin.levels.subjectsLinkLabel')
             .replace('{n}', String(r.subject_count))
             .replace('{level}', r.name)}
@@ -162,15 +162,12 @@ export function LevelsPage(): ReactNode {
   ];
 
   const actions: RowAction<Level>[] = [
-    // Available to an Admin as well: managing which Subjects a Level teaches and
-    // organising its groups is the operational work reading this screen exists
-    // for. The next screen gates its own write controls.
-    {
-      label: t('admin.levels.manageSubjects'),
-      onSelect: (r) => {
-        window.location.href = `/admin/levels/${r.id}/subjects`;
-      },
-    },
+    /**
+     * **R69 — Subject assignment left this screen.** `مواد المستوى` has its own
+     * node now, under الإدارة beside the other configuration. A Levels table
+     * that also assigned Subjects was answering two questions, and the second
+     * one had nowhere else to be asked.
+     */
     ...(canWrite
       ? [
           { label: t('common.edit'), onSelect: (r: Level) => setEditing(r) },

@@ -555,6 +555,10 @@ export const ar = {
       // a Teaching Group — a Subject's circle inside a Level — while this node
       // manages the administrative division OF a Level.
       groups: 'مجموعات المستويات',
+      // R69 — each of the two subject screens gets its own node; they were
+      // reachable only through row actions borrowed by unrelated screens.
+      levelSubjects: 'مواد المستوى',
+      teachingGroups: 'حلقات المواد',
       scheduling: 'الجدولة',
       levels: 'المستويات',
       categories: 'الفئات',
@@ -875,7 +879,7 @@ export const ar = {
     levelSubjects: {
       title: 'مواد مستوى «{level}»',
       lede: 'المواد التي تُدرَّس في هذا المستوى. المادة غير المسندة هنا لا يمكن إنشاء حلقة أو جدول لها.',
-      backToLevels: 'العودة إلى المستويات',
+      pickLevel: 'اختاري مستوى لعرض المواد التي تُدرَّس فيه.',
       addLabel: 'إسناد مادة',
       add: 'إسناد',
       addHint: 'المادة المسندة تُدرَّس لكل المستوى ما لم تُقسَّم إلى حلقات.',
@@ -921,6 +925,7 @@ export const ar = {
       lede: 'داخل مستوى «{level}». تُنشأ الحلقة فقط عند الحاجة إلى تقسيم المستوى؛ وبدونها تُدرَّس المادة للمستوى كاملاً.',
       create: 'إضافة حلقة',
       editTitle: 'تعديل الحلقة',
+      pickLevel: 'اختاري المستوى ثم المادة لعرض حلقاتها.',
       pickSubject: 'اختر مادة لعرض تنظيمها.',
       // A different claim from "everyone is placed": the question does not apply.
       notSplit: 'هذه المادة تُدرَّس للمستوى كاملاً — لا يوجد تقسيم، ولا مستفيدات بلا حلقة.',

@@ -31,6 +31,7 @@ describe('the registry matches §14.1', () => {
         '/admin',
         '/admin/approvals',
         '/admin/branches',
+        '/admin/level-subjects',
         '/admin/content',
         '/admin/groups',
         '/admin/levels',
@@ -41,6 +42,7 @@ describe('the registry matches §14.1', () => {
         // Owner's instruction. One implementation still serves both.
         '/admin/categories',
         '/admin/subjects',
+        '/admin/teaching-groups',
         // R52 — §14.1's Administration group gained the Trash node when the
         // Revision 6 deferral was superseded.
         '/admin/trash',
@@ -95,9 +97,32 @@ describe('role gating (TD-2)', () => {
     expect(paths).toContain('/superadmin/hijri-calendar');
   });
 
-  it('lets reference-data modules open for an Admin, who may read them (R26)', () => {
-    const levels = ADMIN_MODULES.find((m) => m.path === '/admin/levels')!;
-    expect(canAccess(levels, ['admin'])).toBe(true);
+  it('R69: the configuration SCREENS are Super Admin — the data behind them is not', () => {
+    // R26 says an Admin READS reference data because operational work depends
+    // on it, and that is still true: `GET /admin/levels`, categories and
+    // subjects all stay Admin-readable, which is what feeds the scheduling
+    // form, the approval queue's placement dialog and the groups screen.
+    //
+    // What R69 moved is the SCREEN. Gating the data rather than the screen
+    // would break an Admin's daily work — the distinction R61 drew for
+    // `GET /admin/branches` and this test now records so it is not "tidied"
+    // into agreement with the menu.
+    for (const path of ['/admin/levels', '/admin/categories', '/admin/subjects', '/admin/level-subjects']) {
+      const module = ADMIN_MODULES.find((m) => m.path === path)!;
+      expect([...module.roles], path).toEqual(['super_admin']);
+      expect(module.section, path).toBe('administration');
+    }
+  });
+
+  it('R69: the OPERATIONAL screens stay open to an Admin', () => {
+    // Subdivision is operational work: an Admin creates Administrative Groups
+    // and places students, and places students into circles (R43.3 — a
+    // circle's STRUCTURE is Super Admin, and that screen gates it internally).
+    for (const path of ['/admin/groups', '/admin/teaching-groups']) {
+      const module = ADMIN_MODULES.find((m) => m.path === path)!;
+      expect(canAccess(module, ['admin']), path).toBe(true);
+      expect(module.section, path).toBe('academic');
+    }
   });
 });
 

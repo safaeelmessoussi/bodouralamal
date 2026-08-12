@@ -41,7 +41,7 @@ import { ApiError } from '../../lib/api.js';
  * list and may still open the organisation screen, where placing students is
  * their job. The server enforces both.
  */
-export function LevelSubjectsPage({ levelId }: { levelId: string }): ReactNode {
+export function LevelSubjectsPage({ levelId }: { levelId: string | null }): ReactNode {
   const { accessToken } = useSession();
   const { activeRoles } = useActiveRole();
   // R60 — the ACTIVE role. A Super Admin working as مؤطِّرة must not be offered
@@ -49,6 +49,9 @@ export function LevelSubjectsPage({ levelId }: { levelId: string }): ReactNode {
   const canWrite = (activeRoles).includes('super_admin');
 
   const [level, setLevel] = useState<Level | null>(null);
+  /** R69 — the page picks its own Level now: it has a node, and a menu entry
+   *  cannot supply an id. `?level=` is the deep link, not a second node. */
+  const [levels, setLevels] = useState<Level[]>([]);
   const [assigned, setAssigned] = useState<SubjectRef[]>([]);
   const [all, setAll] = useState<SubjectRef[]>([]);
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
@@ -60,7 +63,7 @@ export function LevelSubjectsPage({ levelId }: { levelId: string }): ReactNode {
   const load = useCallback(async () => {
     try {
       const [mine, every, levels] = await Promise.all([
-        listLevelSubjects(levelId, accessToken),
+        levelId ? listLevelSubjects(levelId, accessToken) : Promise.resolve([]),
         listSubjects(accessToken),
         // The Level's own name. `listLevels` is the one read that has it; a
         // dedicated single-Level endpoint would be a second contract for the
@@ -69,6 +72,7 @@ export function LevelSubjectsPage({ levelId }: { levelId: string }): ReactNode {
       ]);
       setAssigned(mine);
       setAll(every);
+      setLevels(levels);
       setLevel(levels.find((l) => l.id === levelId) ?? null);
       setState('ready');
     } catch {
@@ -86,7 +90,9 @@ export function LevelSubjectsPage({ levelId }: { levelId: string }): ReactNode {
   const available = all.filter((s) => !assigned.some((a) => a.id === s.id));
 
   async function add(): Promise<void> {
-    if (!picked) return;
+    // Both writes need a Level; the controls only render once one is chosen,
+    // and this is the guard that makes that a fact rather than a layout detail.
+    if (!picked || !levelId) return;
     setBusy(true);
     setNotice(null);
     try {
@@ -106,7 +112,7 @@ export function LevelSubjectsPage({ levelId }: { levelId: string }): ReactNode {
   }
 
   async function remove(): Promise<void> {
-    if (!removing) return;
+    if (!removing || !levelId) return;
     setBusy(true);
     try {
       await unassignSubject(levelId, removing.id, accessToken);
@@ -125,13 +131,12 @@ export function LevelSubjectsPage({ levelId }: { levelId: string }): ReactNode {
     <AdminLayout
       // R-UX — the heading names the Level, so it answers *where am I*
       // without the reader parsing the lede for it.
-      title={t('admin.levelSubjects.title').replace('{level}', level?.name ?? '')}
-      lede={t('admin.levelSubjects.lede')}
-      actions={
-        <Button variant="secondary" onClick={() => (window.location.href = '/admin/levels')}>
-          {t('admin.levelSubjects.backToLevels')}
-        </Button>
+      title={
+        level
+          ? t('admin.levelSubjects.title').replace('{level}', level.name)
+          : t('admin.nav.levelSubjects')
       }
+      lede={t('admin.levelSubjects.lede')}
     >
       {notice ? (
         <p className="admin-notice" role="status" aria-live="polite">
@@ -139,14 +144,34 @@ export function LevelSubjectsPage({ levelId }: { levelId: string }): ReactNode {
         </p>
       ) : null}
 
-      {state === 'loading' ? <p className="state">{t('common.loading')}</p> : null}
+      {/* R69 — the page asks which Level, because it has a node now and a menu
+          entry cannot supply an id. Always visible, so switching Level is one
+          control rather than a trip back to المستويات. */}
+      <SelectField
+        label={t('admin.nav.levels')}
+        value={levelId ?? ''}
+        onChange={(next) => {
+          if (next === '') return;
+          window.location.href = `/admin/level-subjects?level=${next}`;
+        }}
+        placeholder={t('common.choose')}
+        options={levels.map((l) => ({ value: l.id, label: `${l.category_name} — ${l.name}` }))}
+      />
+
+      {levelId === null ? (
+        <p className="state">{t('admin.levelSubjects.pickLevel')}</p>
+      ) : null}
+
+      {levelId !== null && state === 'loading' ? (
+        <p className="state">{t('common.loading')}</p>
+      ) : null}
       {state === 'error' ? (
         <p className="state" role="alert">
           {t('common.loadFailed')}
         </p>
       ) : null}
 
-      {state === 'ready' ? (
+      {levelId !== null && state === 'ready' ? (
         <>
           {canWrite ? (
             <section className="form">

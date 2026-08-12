@@ -679,6 +679,14 @@
 - [x] `ولي الأمر` untouched: about already-approved children, and no registration action inside it
 - [ ] **OWNER DECISION — account deletion (R54).** §4.10 says "two-step account self-deletion"; `docs/SRS-PROPOSAL-R54.md` is drafted and unapproved because it reverses R52's prohibition on permanent deletion. The personal section deliberately ships **no** deletion control. When the decision is taken, its screen belongs at `/profile`
 
+### R69 — the two hierarchies get their own navigation (2026-08-12)
+- [x] **Audit first: the model and the authorization were already correct.** No schema, service, policy or TD-2 change
+- [x] `/admin/level-subjects` and `/admin/teaching-groups` join §14.1, ids as query parameters (the `/resources` pattern); old paths redirect
+- [x] `المستويات` → الإدارة, Super Admin screen; **read endpoint stays Admin-accessible** (the R61 branches rule)
+- [x] Both borrowed Subject row actions removed from `المستويات` and `مجموعات المستويات`
+- [x] Verified live: R66 direct + grouped enrolment, `entire_level` with no Circle, and R43.3's Super-Admin-structure / Admin-membership split
+- [ ] **Remaining UX proposal:** a breadcrumb across المستويات → مواد المستوى → حلقات المواد. Now that each has a node, the breadcrumb is a smaller and clearer change than it was
+
 ### R67 + UX pass (2026-08-12)
 - [x] **R67 — a child's branch and stage are the CHILD's.** Drafted, applied, implemented. No migration: `child_application` has held both per row since R62/R64
 - [x] Parent's `intended_branch_id`/`intended_category_id` derived from the first child (R67.3); adult path untouched

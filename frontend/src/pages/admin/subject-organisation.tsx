@@ -51,7 +51,7 @@ export function SubjectOrganisationPage({
   levelId,
   subjectId,
 }: {
-  levelId: string;
+  levelId: string | null;
   subjectId: string | null;
 }): ReactNode {
   const { accessToken } = useSession();
@@ -86,7 +86,8 @@ export function SubjectOrganisationPage({
   }, [accessToken]);
 
   const load = useCallback(async () => {
-    if (!subjectId) return;
+    // R69 — both ids are chosen in the page now; nothing loads until they are.
+    if (!levelId || !subjectId) return;
     setError(false);
     try {
       setSplit(await readSubjectSplit(levelId, subjectId, accessToken));
@@ -99,31 +100,33 @@ export function SubjectOrganisationPage({
     void load();
   }, [load]);
 
-  const levelName = levels.find((l) => l.id === levelId)?.name ?? levelId;
+  const levelName = levels.find((l) => l.id === levelId)?.name ?? '';
   /** The heading names the Subject; falling back to the placeholder rather than
    *  an id keeps it readable while the list is still loading. */
   const subjectName =
     subjects.find((s) => s.id === subjectId)?.name ?? t('admin.subjectOrg.pickSubject');
 
   function go(nextSubject: string): void {
+    if (!levelId) return;
     // **The placeholder navigates nowhere.** Choosing it used to send the
     // browser to `/admin/levels/{id}/subjects/` — an empty second segment,
     // which the router's optional capture does not match, so it fell through to
     // `LevelSubjectsPage` and silently bounced the reader back to مواد المستوى.
     // The same symptom as the mislabelled row action, from a different cause.
     if (nextSubject === '') return;
-    window.location.href = `/admin/levels/${levelId}/subjects/${nextSubject}`;
+    window.location.href = `/admin/teaching-groups?level=${levelId}&subject=${nextSubject}`;
   }
 
   async function save(name: string): Promise<void> {
-    if (!subjectId) return;
+    // R69 — both ids are chosen in the page now; nothing loads until they are.
+    if (!levelId || !subjectId) return;
     setBusy(true);
     setNotice(null);
     try {
       if (editing && editing !== 'new') {
         await updateTeachingGroup(editing.id, editing.version, { name }, accessToken);
       } else {
-        await createTeachingGroup(levelId, subjectId, { name }, accessToken);
+        await createTeachingGroup(levelId!, subjectId, { name }, accessToken);
       }
       setEditing(null);
       await load();
@@ -194,8 +197,14 @@ export function SubjectOrganisationPage({
     <AdminLayout
       // The Subject in the heading, the Level in the lede — the two facts a
       // reader needs to know which circle list they are looking at.
-      title={t('admin.subjectOrg.title').replace('{subject}', subjectName)}
-      lede={t('admin.subjectOrg.lede').replace('{level}', levelName)}
+      title={
+        levelId && subjectId
+          ? t('admin.subjectOrg.title').replace('{subject}', subjectName)
+          : t('admin.nav.teachingGroups')
+      }
+      lede={
+        levelName ? t('admin.subjectOrg.lede').replace('{level}', levelName) : t('admin.subjectOrg.pickLevel')
+      }
       actions={
         canManageGroups && subjectId ? (
           <Button onClick={() => setEditing('new')}>{t('admin.subjectOrg.create')}</Button>
@@ -207,6 +216,21 @@ export function SubjectOrganisationPage({
       {/* The shared primitive, not a hand-rolled `<label><select>`: label
           association, the placeholder and error wiring belong to `field.tsx`
           rather than to this screen remembering them. */}
+      {/* R69 — the Level is chosen here too. The screen has a node now, and a
+          menu entry supplies neither id; `?level=&subject=` is the deep link. */}
+      <SelectField
+        label={t('admin.nav.levels')}
+        value={levelId ?? ''}
+        onChange={(next) => {
+          if (next === '') return;
+          // Changing the Level drops the Subject: a Subject is assigned to a
+          // Level, so carrying one across would name a pair that may not exist.
+          window.location.href = `/admin/teaching-groups?level=${next}`;
+        }}
+        placeholder={t('common.choose')}
+        options={levels.map((l) => ({ value: l.id, label: l.name }))}
+      />
+
       <SelectField
         label={t('admin.schedules.subject')}
         value={subjectId ?? ''}

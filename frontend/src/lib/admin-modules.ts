@@ -117,8 +117,19 @@ export const ADMIN_MODULES: readonly AdminModule[] = [
   {
     path: '/admin/levels',
     labelKey: 'admin.nav.levels',
-    section: 'academic',
-    roles: STAFF,
+    /**
+     * **R69 — curriculum structure, so it sits with the other configuration.**
+     * Its writes have always been Super Admin, and R66 removed the last
+     * operational thing it did (creating a Level's first group). It answers
+     * *which Levels exist, in which Category* and nothing else now.
+     *
+     * The READ endpoint stays Admin-accessible: scheduling, the approval
+     * queue's placement dialog and the groups screen all feed selectors from
+     * it. Gating the DATA rather than the screen would break an Admin's daily
+     * work — the rule R61 set for `GET /admin/branches`.
+     */
+    section: 'administration',
+    roles: SUPER_ONLY,
     status: 'ready',
   },
   {
@@ -145,6 +156,35 @@ export const ADMIN_MODULES: readonly AdminModule[] = [
     path: '/admin/schedules',
     labelKey: 'admin.nav.scheduling',
     section: 'scheduling',
+    roles: STAFF,
+    status: 'ready',
+  },
+
+  {
+    /**
+     * **R69 — a node at last.** The screen existed and worked, but its path
+     * carried a Level id, so no menu could reach it: the only ways in were row
+     * actions borrowed by `المستويات` and `مجموعات المستويات`, neither of which
+     * is about Subjects. The Level is chosen in the page and travels as
+     * `?level=`, the pattern §14.1 already uses for `/resources`.
+     */
+    path: '/admin/level-subjects',
+    labelKey: 'admin.nav.levelSubjects',
+    section: 'administration',
+    roles: SUPER_ONLY,
+    status: 'ready',
+  },
+  {
+    /**
+     * **R69 — operational, and its own node.** Subdividing a Subject inside a
+     * Level and placing students into the circles. Structure is Super Admin and
+     * membership is Admin, branch-scoped (R43.3) — the screen gates its own
+     * write controls, which is why it belongs in the operational section rather
+     * than beside the configuration.
+     */
+    path: '/admin/teaching-groups',
+    labelKey: 'admin.nav.teachingGroups',
+    section: 'academic',
     roles: STAFF,
     status: 'ready',
   },
