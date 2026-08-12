@@ -1220,12 +1220,30 @@ model FamilyLink {
   decisionReason String?   @map("decision_reason") @db.VarChar(500)
 
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  /// Revision 68 — **a non-blocking review item, not a status.**
+  ///
+  /// Stamped on every approved live link of a student when that student binds
+  /// their FIRST `UserIdentity` (§4.3, R62.9): a minor with parents attached
+  /// has become a person with their own login, and an administrator decides
+  /// whether the links stand. Cleared when they do.
+  ///
+  /// **Nothing reads it for authorization.** The links keep working, the
+  /// student keeps their login, and `bindIdentity` cannot fail because of it —
+  /// which is what "non-blocking" has to mean to be worth the word.
+  ///
+  /// A separate nullable timestamp rather than a `status` value, because the
+  /// status is a decided value (TD-1): overloading it would make "is this link
+  /// approved" and "has anyone looked at this" one question.
+  identityReviewRaisedAt DateTime? @map("identity_review_raised_at") @db.Timestamptz(6)
+
   deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
   deletedById String?   @map("deleted_by") @db.Uuid
 
   // Uniqueness is scoped to non-deleted rows → partial index in SQL (TD-6).
   @@index([parentId, status])
   @@index([studentId, status])
+  /// R68 — the queue derives its items from this, so the lookup is indexed.
+  @@index([identityReviewRaisedAt])
   @@map("family_link")
 }
 

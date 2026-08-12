@@ -1068,6 +1068,9 @@ export const ar = {
       filterAll: 'كل الأنواع',
       typeRegistration: 'تسجيل جديد',
       typeChild: 'طلب تسجيل ابن/ابنة',
+      // R68 / §4.3 — a minor now has her own حساب. The links keep working until
+      // an administrator decides, which is what "غير معطِّلة" has to convey.
+      typeIdentityReview: 'مراجعة: أصبح للمستفيدة حساب خاص',
       childTitle: 'البتّ في طلب تسجيل الأبناء',
       childBody: 'يُبتّ في كل ابن/ابنة على حدة؛ يمكنك قبول واحد ورفض آخر في نفس الطلب.',
       childOutcome: 'القرار',

@@ -5,6 +5,7 @@ import { pageWindow, type Page } from '../lib/pagination.js';
 import { composeArabicName } from '../lib/person-name.js';
 import { assertFreshActive } from '../policies/freshness.policy.js';
 import * as audit from '../repositories/audit.repository.js';
+import * as trash from '../repositories/trash.repository.js';
 import { enrolAtPlacement, type PlacementInput } from './enrollment.service.js';
 import { applyRoleAssignments } from './user.service.js';
 
@@ -24,7 +25,11 @@ import { applyRoleAssignments } from './user.service.js';
 /** TD-2: approving is Admin or Super Admin, and nobody else. */
 const APPROVER_ROLES = ['admin', 'super_admin'] as const;
 
-export type ApprovalType = 'registration' | 'family-link' | 'child-application';
+export type ApprovalType =
+  | 'registration'
+  | 'family-link'
+  | 'child-application'
+  | 'identity-review';
 
 export interface ApprovalItem {
   id: string;
@@ -313,6 +318,72 @@ export async function listApprovals(
     }
   }
 
+  /**
+   * **R68 / §4.3 (R62.9) — a minor gained their own login.**
+   *
+   * One item per STUDENT, grouping every link stamped when they bound their
+   * first identity: the decision is about the arrangement, not about one row,
+   * and an administrator asked to decide each parent separately would be asked
+   * the same question twice.
+   *
+   * **Derived, exactly like the three above.** Nothing is enqueued; the item
+   * exists while a stamped, approved, live link does. That is what makes the
+   * queue incapable of offering something nobody can act on.
+   *
+   * **No branch filter reaches it** — the same reasoning Revision 43.3 gave for
+   * Teaching Groups: the entity has no branch of its own, and resolving one
+   * through the student's enrolment would make one filter mean two things.
+   */
+  if ((!type || type === 'identity-review') && !branchId) {
+    const flagged = await prisma.familyLink.findMany({
+      where: {
+        identityReviewRaisedAt: { not: null },
+        status: 'approved',
+        deletedAt: null,
+        student: { deletedAt: null },
+      },
+      include: {
+        student: { select: { id: true, nameArabic: true } },
+        parent: { select: { id: true, nameArabic: true } },
+      },
+      orderBy: [{ identityReviewRaisedAt: 'asc' }, { id: 'asc' }],
+    });
+
+    const byStudent = new Map<string, typeof flagged>();
+    for (const link of flagged) {
+      const group = byStudent.get(link.studentId) ?? [];
+      group.push(link);
+      byStudent.set(link.studentId, group);
+    }
+
+    total += byStudent.size;
+    for (const group of [...byStudent.values()].slice(skip, skip + take)) {
+      const first = group[0]!;
+      items.push({
+        // The STUDENT's id: the item is that person's arrangement, and it is
+        // what `decide()` resolves against.
+        id: first.studentId,
+        type: 'identity-review',
+        applicants: [
+          { id: first.student.id, nameArabic: first.student.nameArabic, role: 'applicant' },
+          ...group.map((link) => ({
+            id: link.parent.id,
+            nameArabic: link.parent.nameArabic,
+            role: 'parent' as const,
+          })),
+        ],
+        submittedAt: first.identityReviewRaisedAt!,
+        // Deciding this creates nothing. Rejection REMOVES links, and the count
+        // is what an approver needs to see before choosing.
+        bundle: { childCount: 0, linkCount: group.length },
+        branch: null,
+        requestedRole: null,
+        category: null,
+        children: [],
+      });
+    }
+  }
+
   return { data: items, meta: { page, page_size: pageSize, total } };
 }
 
@@ -567,6 +638,92 @@ export async function decide(
     // both succeed. The id spaces are distinct tables, so this locks nothing
     // when the id was a user.
     await tx.$queryRaw`SELECT id FROM "family_link" WHERE id = ${id}::uuid FOR UPDATE`;
+
+    /**
+     * **R68 / §4.3 (R62.9) — the identity-binding review.**
+     *
+     * The id is a STUDENT's, and the item exists while they hold stamped,
+     * approved, live links. Resolved here, after the `User` and `FamilyLink`
+     * lookups have both missed, because a student id names neither a pending
+     * applicant nor a pending link — and the queue item is the *arrangement*
+     * rather than any single row.
+     *
+     * **Approve means the links stand**; **reject means this person now acts
+     * for themselves**, so the links are soft-deleted — §4.3's revocation
+     * mechanism since Revision 16. Either way the stamp clears, because the
+     * administrator has decided and the item must leave the queue.
+     */
+    const flagged = await tx.familyLink.findMany({
+      where: {
+        studentId: id,
+        identityReviewRaisedAt: { not: null },
+        status: 'approved',
+        deletedAt: null,
+      },
+      // The whole row: a Trash snapshot on rejection needs it, and selecting
+      // narrowly here is how a snapshot ends up missing a column (§7).
+    });
+
+    if (flagged.length > 0) {
+      const now = new Date();
+      const linkIds = flagged.map((link) => link.id);
+
+      await tx.familyLink.updateMany({
+        where: { id: { in: linkIds } },
+        data: {
+          identityReviewRaisedAt: null,
+          // Rejection revokes: §4.3 (Revision 16) makes the soft delete the
+          // revocation, and the child-context middleware answers 404 on the
+          // very next request.
+          ...(decision.approve ? {} : { deletedAt: now, deletedById: actor.userId }),
+        },
+      });
+
+      await audit.write(tx, {
+        actorUserId: actor.userId,
+        activeRole: actor.activeRole,
+        // TD-8 (R68) — WHAT WAS DECIDED. The revocation below is what it did;
+        // one row would have had to mean both.
+        actionType: 'familylink.identity_review',
+        targetEntity: 'User',
+        targetId: id,
+        detail: {
+          outcome: decision.approve ? 'links_stand' : 'links_revoked',
+          link_ids: linkIds,
+          parent_ids: flagged.map((link) => link.parentId),
+          ...(decision.reason ? { reason: decision.reason } : {}),
+        },
+      });
+
+      if (!decision.approve) {
+        for (const link of flagged) {
+          // **TD-5/§7 — every soft delete writes a Trash snapshot.** Caught by
+          // the structural guard rather than by review: the revocation above
+          // is a tombstone like any other, and a revoked link with no
+          // snapshot is one an administrator could never restore.
+          await trash.snapshot(tx, {
+            targetEntity: 'FamilyLink',
+            targetId: link.id,
+            snapshot: JSON.parse(JSON.stringify(link)) as object,
+            deletedById: actor.userId,
+          });
+          await audit.write(tx, {
+            actorUserId: actor.userId,
+            activeRole: actor.activeRole,
+            actionType: 'familylink.revoke',
+            targetEntity: 'FamilyLink',
+            targetId: link.id,
+            detail: {
+              parent_id: link.parentId,
+              student_id: link.studentId,
+              reason: decision.reason ?? 'identity_review',
+            },
+          });
+        }
+      }
+
+      return { type: 'identity-review' as const, activated: flagged.length };
+    }
 
     const link = await tx.familyLink.findFirst({
       where: { id, status: 'pending', deletedAt: null },

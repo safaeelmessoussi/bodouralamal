@@ -66,6 +66,8 @@ const TYPE_LABEL: Record<ApprovalType, string> = {
   // child-registration request was labelled «ربط ابن»: the wrong act, and one
   // whose approval path is a different endpoint entirely (R64.5).
   'child-application': 'admin.approvals.typeChild',
+  // R68 — §4.3's identity-binding review.
+  'identity-review': 'admin.approvals.typeIdentityReview',
 };
 
 export function ApprovalTypeBadge({ type }: { type: ApprovalType }): ReactNode {

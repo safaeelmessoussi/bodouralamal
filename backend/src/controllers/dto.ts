@@ -995,7 +995,7 @@ export function academicYearRefDto(row: {
 
 export interface ApprovalDto {
   id: string;
-  type: 'registration' | 'family-link' | 'child-application';
+  type: 'registration' | 'family-link' | 'child-application' | 'identity-review';
   /**
    * What a self-service applicant asked to become (Revision 49) — `'teacher'`
    * or `null`. **A hint, never an authority**: it is what makes a staff request
@@ -1050,7 +1050,7 @@ export interface ApprovalDto {
  */
 export function approvalDto(row: {
   id: string;
-  type: 'registration' | 'family-link' | 'child-application';
+  type: 'registration' | 'family-link' | 'child-application' | 'identity-review';
   applicants: { id: string; nameArabic: string; role: 'applicant' | 'child' | 'parent' }[];
   submittedAt: Date;
   bundle: { childCount: number; linkCount: number };

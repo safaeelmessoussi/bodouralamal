@@ -658,7 +658,7 @@
 - [x] `ولي الأمر` is a group, not a clickable role: children by name + persistent «＋ تسجيل طفل»; one switcher, not two; a parent-only account gets it
 - [x] «＋ تسجيل طفل» dialog → `POST /child-applications`
 - [x] `/dashboard/student` — identity block, today's and upcoming sessions, persistent banner naming whose data is shown
-- [ ] Identity binding → non-blocking review item when a minor gains a login
+- [x] **Identity binding → non-blocking review item** (R68). Stamped inside the binding transaction; a fourth queue type, one item per student; approve = the links stand, reject = revoke. **R62 is complete.**
 
 ### R64 — the child-registration flow reconciled (2026-08-11)
 - [x] **The reported `NOT_FOUND` root-caused**: a child-application request id names no `User` and no `FamilyLink`; there is no bundle decision (R62.2). Server refuses it by name (`DECIDE_PER_CHILD`); the queue decides per child
@@ -766,7 +766,7 @@
 - [x] Server-side authority proven against crafted requests from admin/teacher/student/parent, for read, restore and purge
 - [x] Structural guards: every soft-deleting service writes a snapshot; every read of a soft-deletable model filters `deletedAt` — folded into the guard that already existed rather than shipped beside it
 - [x] Fixed a silent half-restore: one timestamp per deletion, and the restore keys on the record's own tombstone rather than the Trash entry's
-- [ ] **A branch created after Levels exist cannot be deleted** — TD-4.6d backfills `المجموعة 1` per Level, and a Level must keep its last group (`LAST_GROUP_IN_LEVEL`). Pre-existing interaction between two rules, not introduced here; recorded for the Owner
+- [x] ~~A branch created after Levels exist cannot be deleted~~ — **closed by R66**: TD-4.6d's backfill and `LAST_GROUP_IN_LEVEL` both retired, so a new branch gets no groups and deletes cleanly. Measured against the running stack with 20 Levels present
 - [ ] **`content.quarantine-purge` was never built** (R59.4) — BR-15's 90-day window is documented, depended on by two revisions, and not in force. Quarantine is currently permanent storage. Owner decision: switch on automatic destruction, or leave purging manual
 - [ ] `User` and `RecurringCourseSchedule` are not purgeable — `ACCOUNTABILITY_RECORD` and `CASCADE_CHILDREN`. The first is R54's decision and is about anonymisation, not row destruction
 

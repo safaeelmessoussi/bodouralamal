@@ -12,7 +12,13 @@ import { api } from '../lib/api.js';
  * find an applicant whose chosen branch is **wrong**, or absent, and correct it.
  */
 
-export type ApprovalType = 'registration' | 'family-link' | 'child-application';
+export type ApprovalType =
+  | 'registration'
+  | 'family-link'
+  | 'child-application'
+  /** R68 — a minor gained their own login; an administrator decides whether the
+   *  parent links stand. Non-blocking: they keep working until then. */
+  | 'identity-review';
 
 /**
  * One child inside a `child-application` item (R62.1).

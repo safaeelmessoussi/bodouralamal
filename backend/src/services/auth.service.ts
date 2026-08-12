@@ -95,6 +95,35 @@ export async function resolveLogin(
         providerSubjectId: identity.providerSubjectId,
         email,
       });
+      /**
+       * **R68 / §4.3 (R62.9) — a minor has just become a person with a login.**
+       *
+       * If this account has approved parent links, someone has been acting for
+       * them and now they can act for themselves. §4.3 is explicit that the
+       * links are **not revoked automatically**: a non-blocking review item is
+       * raised and an administrator decides.
+       *
+       * **Non-blocking is enforced here, not promised.** This is an
+       * `updateMany` over rows that may well be empty; it reads nothing, it
+       * refuses nothing, and no outcome of it can stop the login. The links go
+       * on working while the stamp is set.
+       *
+       * Inside the binding transaction so the marker and the identity commit
+       * together — a login that succeeded while the review was lost is exactly
+       * the silent state this exists to prevent.
+       */
+      const raised = await tx.familyLink.updateMany({
+        where: {
+          studentId: preProvisioned.user.id,
+          status: 'approved',
+          deletedAt: null,
+          // Idempotent: a re-entry after a partial failure re-stamps nothing,
+          // and an administrator's decision is never quietly undone.
+          identityReviewRaisedAt: null,
+        },
+        data: { identityReviewRaisedAt: new Date() },
+      });
+
       await audit.write(tx, {
         actorUserId: preProvisioned.user.id,
         actionType: audit.AUDIT_ACTIONS.identityBound,
@@ -102,7 +131,13 @@ export async function resolveLogin(
         targetId: preProvisioned.user.id,
         // `pre_provisioned_email` is retained, not cleared (§7), so the
         // provenance of how this account was created survives the binding.
-        detail: { provider: 'google', matched_by: 'pre_provisioned_email' },
+        detail: {
+          provider: 'google',
+          matched_by: 'pre_provisioned_email',
+          // Named on the binding row itself: *this* is the moment the review
+          // became necessary, and the trail should say so where it happened.
+          ...(raised.count > 0 ? { family_links_flagged_for_review: raised.count } : {}),
+        },
       });
     });
   } catch (error) {

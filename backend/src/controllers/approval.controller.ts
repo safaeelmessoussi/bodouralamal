@@ -74,7 +74,7 @@ const decisionSchema = z.object({
     .optional(),
 });
 const listSchema = z.object({
-  type: z.enum(['registration', 'family-link', 'child-application']).optional(),
+  type: z.enum(['registration', 'family-link', 'child-application', 'identity-review']).optional(),
   /** §14.2 / Revision 39 — a filter, never a scope (see the service). */
   branch_id: z.uuid().optional(),
   page: z.coerce.number().int().min(1).optional(),

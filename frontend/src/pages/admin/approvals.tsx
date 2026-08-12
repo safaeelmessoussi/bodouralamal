@@ -205,7 +205,11 @@ export function ApprovalsPage(): ReactNode {
         // alone, so it opens its own dialog for both outcomes.
         row.type === 'child-application'
           ? setChildDeciding(row)
-          : row.requested_role
+          : // R68 — approving means *the links stand*; nothing is created, so
+            // it needs neither a placement nor a role decision.
+            row.type === 'identity-review'
+            ? setDeciding({ row, approve: true })
+            : row.requested_role
             ? setStaffApproval(row)
             : row.type === 'registration'
               ? setPlacing(row)
@@ -313,6 +317,7 @@ export function ApprovalsPage(): ReactNode {
                 { value: 'registration', label: t('admin.approvals.typeRegistration') },
                 { value: 'family-link', label: t('admin.approvals.typeLink') },
                 { value: 'child-application', label: t('admin.approvals.typeChild') },
+                { value: 'identity-review', label: t('admin.approvals.typeIdentityReview') },
               ]}
               onChange={(value) => {
                 setTypeFilter(value as '' | ApprovalType);
