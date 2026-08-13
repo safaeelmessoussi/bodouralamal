@@ -693,7 +693,10 @@
 - [x] `التسجيلات` (`/admin/enrollments`) joins §14.1 — the Level view of the rows the group roster shows per group
 - [x] `enrolAtLevel` is a call to `enrolAtPlacement`; every rule stays in the service the approval path already uses
 - [x] Live-verified the exam consequence: enrolling a مستفيدة takes a whole-Level exam's sheet from 0 rows to 1, gradeable
-- [ ] **Not built:** no unenrolment path for a group-less enrolment — the group roster's removal is unchanged. Same class of gap, smaller
+- [x] **Group-less unenrolment built** (`unenrolById`), sharing one `releaseEnrollment` with the group-keyed path
+- [x] **Enrolment editing built** — into/out of/between groups and branch; `level_id` refused, because BR-21 makes the enrolment the (student, level) pair
+- [x] Enrolment rows show circles read-only; membership stays on حلقات المواد (§4.4c)
+- [ ] **Open gap, reported not invented:** nothing structurally identifies a beneficiary — minors hold no role, `intended_category_id` is unset, and one account is both teacher and student. The picker offers every active account. Needs an Owner decision, like R64.7 and R73.4
 - [x] **Assistant multi-select built** — `MultiSelectField`, a new atomic control, wired into `StaffPicker` so the exam, class and event forms all changed together
 
 ### UX slice — atomic components and the management-overview principle (2026-08-13)

@@ -3,7 +3,13 @@ import { z } from 'zod';
 
 import type { PrismaClient } from '../generated/prisma/client.js';
 import { requireActor } from '../middleware/authenticate.js';
-import { enrolAtLevel, listEnrollments } from '../services/enrollment.service.js';
+import {
+  enrolAtLevel,
+  listEnrollments,
+  unenrolById,
+  updateEnrollmentPlacement,
+} from '../services/enrollment.service.js';
+import { idParam } from './parse.js';
 import { parse } from './parse.js';
 
 /**
@@ -51,5 +57,42 @@ export function create(prisma: PrismaClient) {
         : { administrativeGroupId: b.administrative_group_id }),
     });
     res.status(201).json({ id: row.id });
+  };
+}
+
+/**
+ * `PATCH /admin/enrollments/{id}` — change the placement **within its Level**.
+ *
+ * **`level_id` is deliberately absent.** BR-21 makes `(student, level)` unique,
+ * so an enrolment *is* that pair: moving to another Level is ending one and
+ * beginning another, which the delete and create verbs already express.
+ * `.strict()` refuses the key rather than dropping it, so a client that sends
+ * one is told rather than silently ignored (the R55/R57 lesson).
+ */
+const patchSchema = z
+  .object({
+    administrative_group_id: z.string().uuid().nullable().optional(),
+    branch_id: z.string().uuid().optional(),
+  })
+  .strict();
+
+export function update(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const b = parse(patchSchema, req.body ?? {});
+    await updateEnrollmentPlacement(prisma, requireActor(req), idParam(req, 'id'), {
+      ...(b.administrative_group_id === undefined
+        ? {}
+        : { administrativeGroupId: b.administrative_group_id }),
+      ...(b.branch_id === undefined ? {} : { branchId: b.branch_id }),
+    });
+    res.status(204).end();
+  };
+}
+
+/** `DELETE /admin/enrollments/{id}` — end it, group or not (R66). */
+export function remove(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    await unenrolById(prisma, requireActor(req), idParam(req, 'id'));
+    res.status(204).end();
   };
 }

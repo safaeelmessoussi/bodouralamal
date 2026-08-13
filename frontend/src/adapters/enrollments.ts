@@ -18,6 +18,10 @@ export interface EnrollmentRowView {
   branch_name: string;
   administrative_group_id: string | null;
   administrative_group_name: string | null;
+  /** Read-only context. Circle membership is managed on حلقات المواد and is
+   *  independent of the group (§4.4c); it appears here only so
+   *  مستفيدة → مستوى → مجموعة → مادة → حلقة is legible in one place. */
+  circles: { subject_name: string; circle_name: string }[];
 }
 
 export async function listEnrollments(
@@ -46,4 +50,25 @@ export async function enrol(
   token: string | null,
 ): Promise<{ id: string }> {
   return api<{ id: string }>('/admin/enrollments', { method: 'POST', token, body: input });
+}
+
+/**
+ * `PATCH /admin/enrollments/{id}` — the placement **within its Level**.
+ *
+ * **No `level_id`.** BR-21 makes `(student, level)` unique, so an enrolment *is*
+ * that pair: moving to another Level is ending one and beginning another, which
+ * `remove` and `enrol` already express. The server refuses the key rather than
+ * dropping it.
+ */
+export async function updateEnrollment(
+  id: string,
+  patch: { administrative_group_id?: string | null; branch_id?: string },
+  token: string | null,
+): Promise<void> {
+  await api<void>(`/admin/enrollments/${id}`, { method: 'PATCH', token, body: patch });
+}
+
+/** Ends it, group or not — the case the group-keyed roster could not reach. */
+export async function endEnrollment(id: string, token: string | null): Promise<void> {
+  await api<void>(`/admin/enrollments/${id}`, { method: 'DELETE', token });
 }

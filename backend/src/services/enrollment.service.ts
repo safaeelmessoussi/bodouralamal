@@ -513,14 +513,18 @@ export async function enrolStudent(
 async function labelFor(
   tx: Prisma.TransactionClient,
   studentId: string,
-  administrativeGroupId: string,
+  /** `null` since R66 — an enrolment may have no group, and the label says so
+   *  rather than failing to compose. */
+  administrativeGroupId: string | null,
 ): Promise<string | null> {
   const [student, group] = await Promise.all([
     tx.user.findUnique({ where: { id: studentId }, select: { nameArabic: true } }),
-    tx.administrativeGroup.findUnique({
-      where: { id: administrativeGroupId },
-      select: { name: true },
-    }),
+    administrativeGroupId === null
+      ? Promise.resolve(null)
+      : tx.administrativeGroup.findUnique({
+          where: { id: administrativeGroupId },
+          select: { name: true },
+        }),
   ]);
   if (!student && !group) return null;
   return `${student?.nameArabic ?? '—'} — ${group?.name ?? '—'}`;
@@ -547,59 +551,102 @@ export async function unenrolStudent(
     });
     if (!row) throw new AppError('NOT_FOUND', 'student is not enrolled in this group');
 
-    // Enqueued BEFORE the write, while the student is still in the audience:
-    // afterwards this schedule no longer covers them, so a derived lookup would
-    // skip the very sessions whose gate just changed. The same reasoning the
-    // retiring roster service records for naming its group explicitly.
-    const sessions = await enqueueConsentReevaluationForStudent(tx, studentId);
+    await releaseEnrollment(tx, actor, row);
+  });
+}
 
-    const now = new Date();
-    await tx.enrollment.update({
-      where: { id: row.id },
-      data: { deletedAt: now, deletedById: actor.userId },
-    });
+/**
+ * `DELETE /admin/enrollments/{id}` — end an enrolment **by the enrolment**
+ * (R74 follow-up).
+ *
+ * **The group-keyed path above could not end a group-less enrolment**, because
+ * it identifies the row through an Administrative Group — and R66 made that
+ * optional. This resolves the row directly and hands it to the same routine, so
+ * the two entry points cannot drift: consent re-evaluation, circle-seat release,
+ * the Trash snapshot and the audit row are written once, in one place.
+ *
+ * Branch scope is asserted from **`Enrollment.branch_id`** (R66), which is the
+ * single answer to *where is this student* and exists whether or not a group
+ * does.
+ */
+export async function unenrolById(
+  prisma: PrismaClient,
+  actor: Actor,
+  enrollmentId: string,
+): Promise<void> {
+  assertCanManage(actor);
 
-    // Removed BECAUSE the enrolment was, so they are read before the write and
-    // carried inside the enrolment's snapshot rather than given tombstones of
-    // their own: R59 gives an entry to the deletion a person performed, and
-    // describes its consequences in that entry (§7's reinstatement list).
-    const seatRows = await tx.studentTeachingGroup.findMany({
-      where: { studentId, levelId: group.levelId, deletedAt: null },
-    });
-    const seats = await tx.studentTeachingGroup.updateMany({
-      where: { studentId, levelId: group.levelId, deletedAt: null },
-      data: { deletedAt: now, deletedById: actor.userId },
-    });
+  await prisma.$transaction(async (tx) => {
+    const row = await tx.enrollment.findFirst({ where: { id: enrollmentId, deletedAt: null } });
+    if (!row) throw new AppError('NOT_FOUND', 'no such enrolment');
+    scope.assertCanActOnBranch(actor.roleScopes, MANAGING_ROLE, row.branchId, 'no such enrolment');
 
-    // R59.2 — un-enrolling is a deliberate act by an Admin, so it reaches the
-    // one screen that answers *what was deleted and by whom*. It was audited and
-    // invisible there, which is precisely the row §7's runbook has to reinstate.
-    await trash.snapshot(tx, {
-      targetEntity: 'Enrollment',
-      targetId: row.id,
-      // **A join row has no name**, so the label is composed here from the two
-      // things it joins. Without it these entries are a page of UUIDs, which is
-      // the failure `labelOf` exists to prevent.
-      snapshot: JSON.parse(
-        JSON.stringify({ ...row, teachingGroupSeats: seatRows, label: await labelFor(tx, studentId, administrativeGroupId) }),
-      ) as object,
-      deletedById: actor.userId,
-    });
+    await releaseEnrollment(tx, actor, row);
+  });
+}
 
-    await audit.write(tx, {
-      actorUserId: actor.userId,
-      activeRole: actor.activeRole,
-      actionType: 'enrollment.delete',
-      targetEntity: 'Enrollment',
-      targetId: row.id,
-      detail: {
-        student_id: studentId,
-        level_id: group.levelId,
-        administrative_group_id: administrativeGroupId,
-        teaching_group_seats_removed: seats.count,
-        sessions_requeued: sessions.length,
-      },
-    });
+/**
+ * Everything ending an enrolment entails, written once.
+ *
+ * Extracted rather than copied when `unenrolById` arrived: the consent
+ * re-evaluation must be enqueued **while the student is still in the audience**,
+ * the circle seats must go **because** the enrolment did, and R59 requires the
+ * deliberate deletion to reach the Trash carrying the rows its cascade removed.
+ * A second implementation would have got one of those three subtly wrong.
+ */
+async function releaseEnrollment(
+  tx: Prisma.TransactionClient,
+  actor: Actor,
+  row: { id: string; studentId: string; levelId: string; administrativeGroupId: string | null },
+): Promise<void> {
+  // Enqueued BEFORE the write, while the student is still in the audience:
+  // afterwards this schedule no longer covers them, so a derived lookup would
+  // skip the very sessions whose gate just changed.
+  const sessions = await enqueueConsentReevaluationForStudent(tx, row.studentId);
+
+  const now = new Date();
+  await tx.enrollment.update({
+    where: { id: row.id },
+    data: { deletedAt: now, deletedById: actor.userId },
+  });
+
+  // Removed BECAUSE the enrolment was, so they are read before the write and
+  // carried inside the enrolment's snapshot rather than given tombstones of
+  // their own (R59, §7's reinstatement list).
+  const seatRows = await tx.studentTeachingGroup.findMany({
+    where: { studentId: row.studentId, levelId: row.levelId, deletedAt: null },
+  });
+  const seats = await tx.studentTeachingGroup.updateMany({
+    where: { studentId: row.studentId, levelId: row.levelId, deletedAt: null },
+    data: { deletedAt: now, deletedById: actor.userId },
+  });
+
+  await trash.snapshot(tx, {
+    targetEntity: 'Enrollment',
+    targetId: row.id,
+    snapshot: JSON.parse(
+      JSON.stringify({
+        ...row,
+        teachingGroupSeats: seatRows,
+        label: await labelFor(tx, row.studentId, row.administrativeGroupId),
+      }),
+    ) as object,
+    deletedById: actor.userId,
+  });
+
+  await audit.write(tx, {
+    actorUserId: actor.userId,
+    activeRole: actor.activeRole,
+    actionType: 'enrollment.delete',
+    targetEntity: 'Enrollment',
+    targetId: row.id,
+    detail: {
+      student_id: row.studentId,
+      level_id: row.levelId,
+      administrative_group_id: row.administrativeGroupId,
+      teaching_group_seats_removed: seats.count,
+      sessions_requeued: sessions.length,
+    },
   });
 }
 
@@ -728,6 +775,12 @@ export interface EnrollmentRowView {
   branch_name: string;
   administrative_group_id: string | null;
   administrative_group_name: string | null;
+  /** Read-only context: the circles she sits in **within this Level**. Circle
+   *  membership is managed on حلقات المواد and is independent of the group
+   *  (§4.4c — "nothing aligns them and nothing should try to"); it is shown
+   *  here only so مستفيدة → مستوى → مجموعة → مادة → حلقة is legible in one
+   *  place. */
+  circles: { subject_name: string; circle_name: string }[];
 }
 
 /**
@@ -770,7 +823,22 @@ export async function listEnrollments(
       levelId: true,
       branchId: true,
       administrativeGroupId: true,
-      student: { select: { nameArabic: true } },
+      student: {
+        select: {
+          nameArabic: true,
+          // The circles she sits in — read in the same query rather than one
+          // per row, which at 500 enrolments would be the N+1 §4.5 names.
+          teachingGroupSeats: {
+            where: { deletedAt: null, teachingGroup: { deletedAt: null } },
+            select: {
+              levelId: true,
+              teachingGroup: {
+                select: { name: true, subject: { select: { name: true } } },
+              },
+            },
+          },
+        },
+      },
       level: { select: { name: true, category: { select: { name: true } } } },
       branch: { select: { name: true } },
       administrativeGroup: { select: { name: true } },
@@ -790,6 +858,14 @@ export async function listEnrollments(
     branch_name: r.branch.name,
     administrative_group_id: r.administrativeGroupId,
     administrative_group_name: r.administrativeGroup?.name ?? null,
+    // Only the seats inside THIS Level: a circle is scoped to (Subject, Level),
+    // so another Level's seats describe a different enrolment entirely.
+    circles: r.student.teachingGroupSeats
+      .filter((seat) => seat.levelId === r.levelId)
+      .map((seat) => ({
+        subject_name: seat.teachingGroup.subject.name,
+        circle_name: seat.teachingGroup.name,
+      })),
   }));
 }
 
@@ -818,6 +894,106 @@ export async function enrolAtLevel(
       'roster_edit',
     ),
   );
+}
+
+/**
+ * `PATCH /admin/enrollments/{id}` — change a placement **within its Level**.
+ *
+ * **The Level is not editable, and that is the model rather than a limitation.**
+ * BR-21 makes `(student_id, level_id)` unique, so an `Enrollment` *is* the pair:
+ * moving a مستفيدة to another Level ends one enrolment and begins another, which
+ * the existing unenrol and enrol paths already express. Silently rewriting
+ * `level_id` would keep the row's history and circle seats attached to a Level
+ * she no longer studies.
+ *
+ * **What IS editable is the placement inside it**: the optional Administrative
+ * Group and the branch — including moving **into** a group, **out of** one, and
+ * between them, which `moveStudent` could not do because it took two group ids.
+ *
+ * **Circle seats are released when the group changes**, for the reason
+ * `releaseEnrollment` gives: a seat is a placement within this Level, and the
+ * student's subdivision has just changed. Seats survive a pure branch change,
+ * which moves nobody between subdivisions.
+ */
+export async function updateEnrollmentPlacement(
+  prisma: PrismaClient,
+  actor: Actor,
+  enrollmentId: string,
+  patch: { administrativeGroupId?: string | null; branchId?: string },
+): Promise<EnrollmentRow> {
+  assertCanManage(actor);
+
+  return prisma.$transaction(async (tx) => {
+    const row = await tx.enrollment.findFirst({ where: { id: enrollmentId, deletedAt: null } });
+    if (!row) throw new AppError('NOT_FOUND', 'no such enrolment');
+    // Authority over where she IS, before authority over where she is going.
+    scope.assertCanActOnBranch(actor.roleScopes, MANAGING_ROLE, row.branchId, 'no such enrolment');
+
+    const branchId = patch.branchId ?? row.branchId;
+    if (branchId !== row.branchId) {
+      const branch = await tx.branch.findFirst({
+        where: { id: branchId, deletedAt: null },
+        select: { id: true },
+      });
+      if (!branch) throw new AppError('NOT_FOUND', 'no such branch');
+      scope.assertCanActOnBranch(actor.roleScopes, MANAGING_ROLE, branchId, 'no such branch');
+    }
+
+    const groupId =
+      patch.administrativeGroupId === undefined ? row.administrativeGroupId : patch.administrativeGroupId;
+
+    if (groupId !== null) {
+      const group = await tx.administrativeGroup.findFirst({
+        where: { id: groupId, deletedAt: null },
+        select: { levelId: true, branchId: true },
+      });
+      if (!group) throw new AppError('NOT_FOUND', 'no such group');
+      // The composite FK guarantees the pair; refusing it here first is what
+      // gives an administrator something to act on (§7, R66).
+      if (group.levelId !== row.levelId) {
+        throw new AppError('VALIDATION_FAILED', 'that group belongs to another level', {
+          reason: 'GROUP_LEVEL_MISMATCH',
+        });
+      }
+      if (group.branchId !== branchId) {
+        throw new AppError('VALIDATION_FAILED', 'that group is at another branch', {
+          reason: 'GROUP_BRANCH_MISMATCH',
+        });
+      }
+    }
+
+    const groupChanged = groupId !== row.administrativeGroupId;
+    if (groupChanged) {
+      // The subdivision changed, so seats within this Level no longer describe
+      // where she sits — the same reasoning un-enrolment uses.
+      await tx.studentTeachingGroup.updateMany({
+        where: { studentId: row.studentId, levelId: row.levelId, deletedAt: null },
+        data: { deletedAt: new Date(), deletedById: actor.userId },
+      });
+    }
+
+    const updated = await tx.enrollment.update({
+      where: { id: row.id },
+      data: { administrativeGroupId: groupId, branchId },
+    });
+
+    await audit.write(tx, {
+      actorUserId: actor.userId,
+      activeRole: actor.activeRole,
+      actionType: 'enrollment.update',
+      targetEntity: 'Enrollment',
+      targetId: row.id,
+      detail: {
+        student_id: row.studentId,
+        level_id: row.levelId,
+        from: { administrative_group_id: row.administrativeGroupId, branch_id: row.branchId },
+        to: { administrative_group_id: groupId, branch_id: branchId },
+        teaching_group_seats_released: groupChanged,
+      },
+    });
+
+    return updated;
+  });
 }
 
 export async function levelsForStudent(

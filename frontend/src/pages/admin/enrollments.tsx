@@ -2,12 +2,19 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react';
 
 import { listAdministrativeGroups, type AdministrativeGroup } from '../../adapters/administrative-groups.js';
 import { listBranches, type Branch } from '../../adapters/branches-admin.js';
-import { enrol, listEnrollments, type EnrollmentRowView } from '../../adapters/enrollments.js';
+import {
+  endEnrollment,
+  enrol,
+  listEnrollments,
+  updateEnrollment,
+  type EnrollmentRowView,
+} from '../../adapters/enrollments.js';
 import { listLevels, type Level } from '../../adapters/taxonomy.js';
 import { searchUsers, type UserSummary } from '../../adapters/users.js';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
 import { LevelSelect, levelLabel } from '../../components/scope/level-select.js';
 import { Button } from '../../components/ui/button.js';
+import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
 import { FormDialog } from '../../components/ui/form-dialog.js';
 import { SelectField } from '../../components/ui/field.js';
 import { useSession } from '../../contexts/session.js';
@@ -55,6 +62,9 @@ export function EnrollmentsPage(): ReactNode {
   const [filterLevel, setFilterLevel] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [composing, setComposing] = useState(false);
+  const [editing, setEditing] = useState<EnrollmentRowView | null>(null);
+  const [ending, setEnding] = useState<EnrollmentRowView | null>(null);
+  const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
     setState('loading');
@@ -132,6 +142,8 @@ export function EnrollmentsPage(): ReactNode {
                 <th scope="col">{t('admin.nav.levels')}</th>
                 <th scope="col">{t('admin.nav.groups')}</th>
                 <th scope="col">{t('admin.enrollments.branch')}</th>
+                <th scope="col">{t('admin.enrollments.circles')}</th>
+                <th scope="col" />
               </tr>
             </thead>
             <tbody>
@@ -149,12 +161,77 @@ export function EnrollmentsPage(): ReactNode {
                     )}
                   </td>
                   <td>{r.branch_name}</td>
+                  <td>
+                    {/* Read-only. Circle membership is managed on حلقات المواد
+                        and is INDEPENDENT of the group (§4.4c — "nothing aligns
+                        them and nothing should try to"); it is shown here only
+                        so مستفيدة → مستوى → مجموعة → مادة → حلقة reads in one
+                        place. */}
+                    {r.circles.length === 0 ? (
+                      <span className="muted">{t('admin.enrollments.noCircles')}</span>
+                    ) : (
+                      <ul className="admin-list admin-list--plain">
+                        {r.circles.map((c) => (
+                          <li key={`${c.subject_name}-${c.circle_name}`}>
+                            {c.subject_name} — {c.circle_name}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </td>
+                  <td className="admin-table__actions">
+                    <Button variant="secondary" onClick={() => setEditing(r)}>
+                      {t('common.edit')}
+                    </Button>
+                    <Button variant="secondary" onClick={() => setEnding(r)}>
+                      {t('admin.enrollments.end')}
+                    </Button>
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         )
       ) : null}
+
+      {editing ? (
+        <PlacementDialog
+          row={editing}
+          token={accessToken}
+          onCancel={() => setEditing(null)}
+          onDone={(message) => {
+            setEditing(null);
+            setNotice(message);
+            void load();
+          }}
+        />
+      ) : null}
+
+      <ConfirmDialog
+        open={ending !== null}
+        title={t('admin.enrollments.endTitle')}
+        body={t('admin.enrollments.endBody')}
+        confirmLabel={t('admin.enrollments.end')}
+        danger
+        busy={busy}
+        onConfirm={() => {
+          void (async () => {
+            if (!ending) return;
+            setBusy(true);
+            try {
+              await endEnrollment(ending.id, accessToken);
+              setNotice(t('admin.enrollments.ended'));
+              await load();
+            } catch (error) {
+              setNotice(refusal(error));
+            } finally {
+              setBusy(false);
+              setEnding(null);
+            }
+          })();
+        }}
+        onCancel={() => setEnding(null)}
+      />
 
       {composing ? (
         <EnrolDialog
@@ -196,44 +273,58 @@ function EnrolDialog({
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
+  // **The list is loaded on open; search NARROWS it.** It used to be gated on
+  // two typed characters, so the dialog opened with an empty picker and no
+  // affordance saying why — the very defect the `حلقات المواد` redesign was
+  // about, reintroduced one screen over.
+  //
+  // **Everyone active is offered, and that is not an oversight.** There is no
+  // structural fact distinguishing a مستفيدة from any other account: minors
+  // hold no role at all (§4.3), `intended_category_id` is unset on every live
+  // row, and a مؤطرة may legitimately be enrolled — one of the association's
+  // accounts holds both `teacher` and `student` today. Filtering by role would
+  // hide exactly the students who most need enrolling.
   useEffect(() => {
-    if (query.trim().length < 2) {
-      setMatches([]);
-      return;
-    }
     const id = setTimeout(() => {
       void (async () => {
         try {
-          setMatches((await searchUsers(token, { q: query })).data);
+          setMatches((await searchUsers(token, query.trim() ? { q: query } : {})).data);
         } catch {
           setMatches([]);
         }
       })();
-    }, 250);
+    }, query.trim() ? 250 : 0);
     return () => clearTimeout(id);
   }, [query, token]);
 
   // §14.4/R55 — every selector is dependent: the Groups offered are those of the
   // chosen Level at the chosen branch, so the form cannot express a pair the
   // server refuses.
+  // **The Level alone is enough.** This required a branch too, so choosing a
+  // Level showed nothing until a second field was answered — and the groups of
+  // a Level already carry their branch, so demanding it first asked for
+  // something the answer contains.
   useEffect(() => {
-    if (!levelId || !branchId) {
+    if (!levelId) {
       setGroups([]);
       setGroupId('');
       return;
     }
     void (async () => {
       try {
-        const page = await listAdministrativeGroups(token, 1, {
-          level_id: levelId,
-          branch_id: branchId,
-        });
-        setGroups(page.data);
+        setGroups((await listAdministrativeGroups(token, 1, { level_id: levelId })).data);
       } catch {
         setGroups([]);
       }
     })();
-  }, [levelId, branchId, token]);
+  }, [levelId, token]);
+
+  // A group states its own branch (§7), so choosing one answers the branch
+  // rather than having to agree with a separate answer.
+  useEffect(() => {
+    const group = groups.find((g) => g.id === groupId);
+    if (group) setBranchId(group.branch_id);
+  }, [groupId, groups]);
 
   async function submit(): Promise<void> {
     if (!studentId || !levelId || !branchId) return;
@@ -314,4 +405,99 @@ function refusal(error: unknown): string {
   if (error.status === 409) return t('admin.enrollments.already');
   if (error.status === 404) return t('admin.enrollments.outOfScope');
   return t('common.saveFailed');
+}
+
+/**
+ * Changing a placement **within its Level**.
+ *
+ * **The Level is not offered, and that is the model rather than a limitation.**
+ * BR-21 makes `(student, level)` unique, so an enrolment *is* that pair: moving
+ * a مستفيدة to another Level means ending this enrolment and beginning another,
+ * which the two other actions on this screen already express. Rewriting
+ * `level_id` in place would leave her history and circle seats attached to a
+ * Level she no longer studies.
+ *
+ * **Changing the group releases her circle seats**, which the dialog says
+ * before it happens: a circle is a placement within this Level, and her
+ * subdivision is about to change (§4.4c).
+ */
+function PlacementDialog({
+  row,
+  token,
+  onCancel,
+  onDone,
+}: {
+  row: EnrollmentRowView;
+  token: string | null;
+  onCancel: () => void;
+  onDone: (message: string) => void;
+}): ReactNode {
+  const [groupId, setGroupId] = useState(row.administrative_group_id ?? '');
+  const [groups, setGroups] = useState<AdministrativeGroup[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        setGroups((await listAdministrativeGroups(token, 1, { level_id: row.level_id })).data);
+      } catch {
+        setGroups([]);
+      }
+    })();
+  }, [row.level_id, token]);
+
+  const changesGroup = (groupId === '' ? null : groupId) !== row.administrative_group_id;
+
+  return (
+    <FormDialog
+      open
+      title={t('admin.enrollments.editTitle')}
+      notice={notice}
+      busy={busy}
+      onSubmit={() => {
+        void (async () => {
+          setBusy(true);
+          setNotice(null);
+          try {
+            const group = groups.find((g) => g.id === groupId);
+            await updateEnrollment(
+              row.id,
+              {
+                administrative_group_id: groupId === '' ? null : groupId,
+                // A group states its own branch (§7); moving into one moves her
+                // to that branch, so the two answers cannot disagree.
+                ...(group ? { branch_id: group.branch_id } : {}),
+              },
+              token,
+            );
+            onDone(t('admin.enrollments.updated'));
+          } catch (error) {
+            setNotice(refusal(error));
+          } finally {
+            setBusy(false);
+          }
+        })();
+      }}
+      onCancel={onCancel}
+    >
+      <p className="lede">
+        {row.student_name} — {row.category_name} — {row.level_name}
+      </p>
+      <SelectField
+        label={t('admin.nav.groups')}
+        value={groupId}
+        onChange={setGroupId}
+        placeholder={t('admin.enrollments.levelOnly')}
+        options={groups.map((g) => ({ value: g.id, label: g.name }))}
+        hint={
+          changesGroup && row.circles.length > 0
+            ? t('admin.enrollments.seatsWarning')
+            : t('admin.enrollments.groupHint')
+        }
+      />
+      {/* The Level is deliberately absent — see the docstring. */}
+      <p className="field__hint">{t('admin.enrollments.levelFixed')}</p>
+    </FormDialog>
+  );
 }

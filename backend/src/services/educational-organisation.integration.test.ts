@@ -8,7 +8,12 @@ import {
   deleteAdministrativeGroup,
   listAdministrativeGroups,
 } from './administrative-group.service.js';
-import { enrolAtLevel, listEnrollments } from './enrollment.service.js';
+import {
+  enrolAtLevel,
+  listEnrollments,
+  unenrolById,
+  updateEnrollmentPlacement,
+} from './enrollment.service.js';
 import type { Actor } from '../policies/actor.js';
 import { createLevel, levelsWithoutGroups } from './level.service.js';
 import {
@@ -944,5 +949,150 @@ describe('R74 — the enrolment list is the LEVEL view of the same rows', () => 
     expect(row.category_name).toBeTruthy();
     expect(row.level_name).toContain('مستوى معروض');
     expect(row.administrative_group_name).toBeTruthy();
+  });
+});
+
+describe('R74 follow-up — an enrolment can be changed and ended', () => {
+  it('moves INTO a group, OUT of one, and between them', async () => {
+    // `moveStudent` took two group ids, so it could express none of these: R66
+    // made the group optional and left no way to add or drop one.
+    const { levelId, firstGroupId } = await level('مستوى للتعديل', amerchich);
+    const second = await createAdministrativeGroup(prisma, superAdmin(), {
+      name: `${TAG} مجموعة ثانية`,
+      levelId,
+      branchId: amerchich,
+    });
+    const pupil = await student('مستفيدة متنقلة');
+
+    // Starts group-less.
+    const row = await enrolAtLevel(prisma, superAdmin(), { studentId: pupil, levelId, branchId: amerchich });
+    expect(row.administrativeGroupId).toBeNull();
+
+    // …into a group…
+    await updateEnrollmentPlacement(prisma, superAdmin(), row.id, {
+      administrativeGroupId: firstGroupId,
+    });
+    expect(
+      (await prisma.enrollment.findUniqueOrThrow({ where: { id: row.id } })).administrativeGroupId,
+    ).toBe(firstGroupId);
+
+    // …between groups…
+    await updateEnrollmentPlacement(prisma, superAdmin(), row.id, {
+      administrativeGroupId: second.id,
+    });
+    expect(
+      (await prisma.enrollment.findUniqueOrThrow({ where: { id: row.id } })).administrativeGroupId,
+    ).toBe(second.id);
+
+    // …and back out to the Level itself, which R66 makes a real placement.
+    await updateEnrollmentPlacement(prisma, superAdmin(), row.id, { administrativeGroupId: null });
+    expect(
+      (await prisma.enrollment.findUniqueOrThrow({ where: { id: row.id } })).administrativeGroupId,
+    ).toBeNull();
+  });
+
+  it('refuses a group from another Level', async () => {
+    const a = await level('مستوى أ', amerchich);
+    const b = await level('مستوى ب', amerchich);
+    const pupil = await student('مستفيدة خاطئة');
+    const row = await enrolAtLevel(prisma, superAdmin(), {
+      studentId: pupil,
+      levelId: a.levelId,
+      branchId: amerchich,
+    });
+    const e = await failure(() =>
+      updateEnrollmentPlacement(prisma, superAdmin(), row.id, {
+        administrativeGroupId: b.firstGroupId,
+      }),
+    );
+    expect(e.code).toBe('VALIDATION_FAILED');
+  });
+
+  it('refuses an Admin acting outside their branches', async () => {
+    const { levelId } = await level('مستوى محمي', targa);
+    const pupil = await student('مستفيدة محمية');
+    const row = await enrolAtLevel(prisma, superAdmin(), { studentId: pupil, levelId, branchId: targa });
+    const e = await failure(() =>
+      updateEnrollmentPlacement(prisma, admin([amerchich]), row.id, { administrativeGroupId: null }),
+    );
+    expect(e.code).toBe('NOT_FOUND');
+  });
+
+  it('ends a GROUP-LESS enrolment — which the group-keyed path could not', async () => {
+    const created = await createLevel(prisma, superAdmin(), {
+      name: `${TAG} مستوى للإنهاء`,
+      categoryId,
+      genderRestriction: 'any',
+    });
+    const pupil = await student('مستفيدة منتهية');
+    const row = await enrolAtLevel(prisma, superAdmin(), {
+      studentId: pupil,
+      levelId: created.level.id,
+      branchId: amerchich,
+    });
+
+    await unenrolById(prisma, superAdmin(), row.id);
+
+    expect(await prisma.enrollment.count({ where: { id: row.id, deletedAt: null } })).toBe(0);
+    // R59 — a deliberate deletion reaches the Trash, and the same routine the
+    // group-keyed path uses wrote it.
+    expect(
+      await prisma.trash.count({ where: { targetEntity: 'Enrollment', targetId: row.id } }),
+    ).toBe(1);
+  });
+
+  it('releases circle seats when the GROUP changes, and keeps them otherwise', async () => {
+    const { levelId, firstGroupId } = await level('مستوى بحلقة', amerchich);
+    const subject = await prisma.subject.create({ data: { name: `${TAG} مادة الحلقة` } });
+    await prisma.levelSubject.create({ data: { levelId, subjectId: subject.id } });
+    const circle = await createTeachingGroup(prisma, superAdmin(), {
+      levelId,
+      subjectId: subject.id,
+      name: `${TAG} حلقة`,
+    });
+    const pupil = await student('مستفيدة بحلقة');
+    const row = await enrolAtLevel(prisma, superAdmin(), {
+      studentId: pupil,
+      levelId,
+      branchId: amerchich,
+      administrativeGroupId: firstGroupId,
+    });
+    await addMember(prisma, superAdmin(), circle.id, pupil);
+    expect(await prisma.studentTeachingGroup.count({ where: { studentId: pupil, deletedAt: null } })).toBe(1);
+
+    // A pure BRANCH change moves nobody between subdivisions, so the seat stays.
+    await updateEnrollmentPlacement(prisma, superAdmin(), row.id, { branchId: amerchich });
+    expect(await prisma.studentTeachingGroup.count({ where: { studentId: pupil, deletedAt: null } })).toBe(1);
+
+    // Changing the GROUP changes the subdivision, so the seat no longer
+    // describes where she sits — the same reasoning un-enrolment uses.
+    await updateEnrollmentPlacement(prisma, superAdmin(), row.id, { administrativeGroupId: null });
+    expect(await prisma.studentTeachingGroup.count({ where: { studentId: pupil, deletedAt: null } })).toBe(0);
+  });
+
+  it('reports a student’s circles on her enrolment row, scoped to that Level', async () => {
+    const { levelId, firstGroupId } = await level('مستوى للعرض', amerchich);
+    const subject = await prisma.subject.create({ data: { name: `${TAG} تفسير` } });
+    await prisma.levelSubject.create({ data: { levelId, subjectId: subject.id } });
+    const circle = await createTeachingGroup(prisma, superAdmin(), {
+      levelId,
+      subjectId: subject.id,
+      name: `${TAG} حلقة الصباح`,
+    });
+    const pupil = await student('مستفيدة معروضة الحلقات');
+    await enrolAtLevel(prisma, superAdmin(), {
+      studentId: pupil,
+      levelId,
+      branchId: amerchich,
+      administrativeGroupId: firstGroupId,
+    });
+    await addMember(prisma, superAdmin(), circle.id, pupil);
+
+    const view = (await listEnrollments(prisma, superAdmin(), { levelId })).find(
+      (r) => r.student_id === pupil,
+    )!;
+    expect(view.circles).toHaveLength(1);
+    expect(view.circles[0]?.subject_name).toContain('تفسير');
+    expect(view.circles[0]?.circle_name).toContain('حلقة الصباح');
   });
 });

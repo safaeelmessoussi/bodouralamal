@@ -307,6 +307,8 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
   // student through `enrolAtPlacement`.
   guarded.get('/admin/enrollments', enrollments.list(prisma));
   guarded.post('/admin/enrollments', enrollments.create(prisma));
+  guarded.patch('/admin/enrollments/:id', enrollments.update(prisma));
+  guarded.delete('/admin/enrollments/:id', enrollments.remove(prisma));
 
   // The roster (§5.6). Enrolment reads the Level FROM the group and enqueues
   // consent re-evaluation per session in the same transaction (§4.1a, TD-7).
