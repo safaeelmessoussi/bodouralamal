@@ -688,6 +688,12 @@
 - [x] **Breadcrumb across المستويات → مواد المستوى → حلقات المادة** — `PortalShell` takes an optional trail; passed in by the page, never derived from the URL, so it can only link nodes that exist
 - [x] **Post-R69 audit (2026-08-12):** the drill-down out of مواد المستوى still used the legacy path and navigated twice; «تنظيم المادة» survived as a row-action label for a screen now called «حلقات المواد»; `pickSubject` was substituted into the heading as if it were a Subject name
 
+### UX slice — atomic components and the management-overview principle (2026-08-13)
+- [x] Student Quran view linked from the dashboard; **one Level selector** (`{Category} — {Level}`) with three screens migrated
+- [x] **`إضافة حساب` kept** — TD-2 grants it and R68 depends on it — and its **duplicate-email defect fixed**: an address already signed in collided with nothing and was accepted
+- [x] `states.tsx` and `Pagination` converged on the shared `Button`; they were the platform's only unstyled controls
+- [x] **`حلقات المواد` rebuilt as a management overview** — no dropdown gate, Groups read-only, circles CRUD inline, BR-22 preserved. No normative change
+
 ### M4 — Quran Progress (2026-08-12)
 - [x] **R73 applied:** navigation node · `quranlog.create` · TD-2's Quran qualifier · `Subject.tracks_quran_progress` · TD-15.5's stale reason corrected
 - [x] **M4a:** BR-13 union (pure, tested against §4.5's own example) · synchronous recalculation · self-heal guard · Trash on delete · `/teacher/quran?student=`

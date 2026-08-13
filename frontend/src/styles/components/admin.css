@@ -318,3 +318,25 @@
   display: flex;
   justify-content: start;
 }
+
+/* The teaching-structure overview (حلقات المواد). An accordion rather than two
+   dropdowns: a management page shows the data it manages, and a filter narrows
+   what is visible rather than being the precondition for anything appearing. */
+.tree__level {
+  border-block-end: 1px solid var(--color-border);
+  padding-block: var(--space-2);
+}
+.tree__toggle {
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+}
+.tree__body {
+  padding-inline-start: var(--space-4);
+  border-inline-start: 2px solid var(--color-border);
+  margin-inline-start: var(--space-2);
+}
+.tree__subject {
+  padding-inline-start: var(--space-4);
+  border-inline-start: 2px solid var(--color-border);
+  margin-block: var(--space-3);
+}

@@ -17,7 +17,7 @@ import { LevelsPage } from './levels.js';
 import { ScheduleSessionsPage } from './schedule-sessions.js';
 import { SchedulingPage } from './scheduling.js';
 import { SettingsPage } from './settings.js';
-import { SubjectOrganisationPage } from './subject-organisation.js';
+import { TeachingStructurePage } from './teaching-structure.js';
 import { TaxonomyPage } from './taxonomy.js';
 import { TrashPage } from './trash.js';
 import { UsersPage } from './users.js';
@@ -131,7 +131,11 @@ export function AdminRouter(): ReactNode {
     return <LevelSubjectsPage levelId={params.get('level')} />;
   }
   if (path === '/admin/teaching-groups') {
-    return <SubjectOrganisationPage levelId={params.get('level')} subjectId={params.get('subject')} />;
+    // R69's node, rebuilt as a management overview: every accessible Level is
+    // listed on load, and `?level=`/`?subject=` open and focus rather than gate.
+    return (
+      <TeachingStructurePage levelId={params.get('level')} subjectId={params.get('subject')} />
+    );
   }
 
   const module = moduleForPath(window.location.pathname);
