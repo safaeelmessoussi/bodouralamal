@@ -8,6 +8,7 @@ import {
   moduleForPath,
   visibleModules,
 } from './admin-modules.js';
+import { t } from '../i18n/index.js';
 
 /**
  * The module registry is the single source for the back office's navigation,
@@ -231,5 +232,28 @@ describe('R61 — administration is Super Admin only by placement', () => {
     expect(forAdmin).toContain('/admin/groups');
     expect(forAdmin).toContain('/admin/users');
     expect(forAdmin).toContain('/admin/approvals');
+  });
+});
+
+
+/**
+ * Raw translation keys reaching the interface (2026-08-13).
+ *
+ * `t()` returns its argument when a key is missing, so a typo renders as
+ * `admin.nav.schedules` on screen rather than failing anywhere. The grade
+ * sheet's breadcrumb shipped exactly that.
+ */
+describe('every nav label a module declares actually exists', () => {
+  it('resolves to Arabic, never to the key itself', () => {
+    for (const module of ADMIN_MODULES) {
+      expect(t(module.labelKey), module.labelKey).not.toBe(module.labelKey);
+    }
+  });
+});
+
+describe('نقاط الامتحانات sits at the end of الشؤون التعليمية', () => {
+  it('is the last academic node', () => {
+    const academic = ADMIN_MODULES.filter((m) => m.section === 'academic').map((m) => m.path);
+    expect(academic[academic.length - 1]).toBe('/admin/exam-grades');
   });
 });

@@ -56,7 +56,15 @@ function draftFrom(row: GradeSheetRow, displayScale: number): Draft {
   };
 }
 
-export function GradeSheetView({ examId }: { examId: string }): ReactNode {
+export function GradeSheetView({
+  examId,
+  onScale,
+}: {
+  examId: string;
+  /** Reports the CONFIGURED scale (R14 — a `SystemSetting`, not a constant) so a
+   *  surrounding frame can name it without reading the sheet a second time. */
+  onScale?: (displayScale: number) => void;
+}): ReactNode {
   const { accessToken } = useSession();
 
   const [sheet, setSheet] = useState<GradeSheet | null>(null);
@@ -70,6 +78,7 @@ export function GradeSheetView({ examId }: { examId: string }): ReactNode {
     try {
       const next = await fetchGradeSheet(examId, accessToken);
       setSheet(next);
+      onScale?.(next.display_scale);
       setDrafts(
         Object.fromEntries(
           next.rows.map((r) => [r.student_id, draftFrom(r, next.display_scale)]),
@@ -81,7 +90,7 @@ export function GradeSheetView({ examId }: { examId: string }): ReactNode {
       // and this screen reports it rather than pre-empting it.
       setState(error instanceof ApiError && error.status === 403 ? 'forbidden' : 'error');
     }
-  }, [examId, accessToken]);
+  }, [examId, accessToken, onScale]);
 
   useEffect(() => {
     void load();
@@ -190,7 +199,13 @@ export function GradeSheetView({ examId }: { examId: string }): ReactNode {
         // Not an error: an exam whose audience is empty has nobody to mark, and
         // saying which is what stops it being read as a failed load.
         <p className="state" role="status">
-          {t('admin.grades.noStudents')}
+          {/* **Not a defect, and the wording says so.** The audience is R58's:
+              the named group, or the Level's students at the exam's branch
+              (`Enrollment.branch_id`, R66). An empty sheet means nobody is
+              enrolled there — which is a fact about enrolment, not about this
+              screen, so it names where enrolment is managed. */}
+          {t('admin.grades.noStudents')}{' '}
+          <a href="/admin/groups">{t('admin.grades.noStudentsAction')}</a>
         </p>
       ) : (
         <>

@@ -148,20 +148,6 @@ export const ADMIN_MODULES: readonly AdminModule[] = [
     status: 'ready',
   },
   {
-    /**
-     * R70.1 — grade entry had no node at all: §14.1 listed grading under
-     * `/teacher/exams` while R56/R58 put exam scheduling on `/admin/schedules`,
-     * so an Admin could reach no sheet. `?exam=` is the deep link, the pattern
-     * `/resources` set and R69 applied twice — a second path segment would be a
-     * node §14.1 does not list.
-     */
-    path: '/admin/exam-grades',
-    labelKey: 'admin.nav.examGrades',
-    section: 'academic',
-    roles: STAFF,
-    status: 'ready',
-  },
-  {
     // **R56 — one node for everything that appears on the calendar.** R51 put
     // Events and Course Schedules in one section; this makes them one screen,
     // with the type as a field on the form rather than a navigation decision.
@@ -198,6 +184,20 @@ export const ADMIN_MODULES: readonly AdminModule[] = [
      */
     path: '/admin/teaching-groups',
     labelKey: 'admin.nav.teachingGroups',
+    section: 'academic',
+    roles: STAFF,
+    status: 'ready',
+  },
+  {
+    /**
+     * R70.1 — grade entry had no node at all: §14.1 listed grading under
+     * `/teacher/exams` while R56/R58 put exam scheduling on `/admin/schedules`,
+     * so an Admin could reach no sheet. `?exam=` is the deep link, the pattern
+     * `/resources` set and R69 applied twice — a second path segment would be a
+     * node §14.1 does not list.
+     */
+    path: '/admin/exam-grades',
+    labelKey: 'admin.nav.examGrades',
     section: 'academic',
     roles: STAFF,
     status: 'ready',

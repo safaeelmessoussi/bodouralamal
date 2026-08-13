@@ -5,6 +5,7 @@ import { listAdministrativeGroups, type AdministrativeGroup } from '../adapters/
 import { listAcademicYears, type AcademicYearRef } from '../adapters/reference-data.js';
 import { listCategories, listLevelSubjects, listLevels, type Category, type Level } from '../adapters/taxonomy.js';
 import type { SubjectRef } from '../adapters/reference-data.js';
+import { levelLabel } from '../components/scope/level-select.js';
 
 /**
  * **The curriculum's dependency graph, in one place.**
@@ -261,7 +262,11 @@ export function useScopeOptions({
 
     return {
       categoryId: categories.map((c) => ({ value: c.id, label: c.name })),
-      levelId: levelPool.map((l) => ({ value: l.id, label: l.name })),
+      // One label for a Level everywhere (`{Category} — {Level}`): a Level name
+      // is not unique across Categories and not numbered uniformly (§4.4b), so
+      // the bare name genuinely fails to identify one. Shared with the atomic
+      // selector rather than spelled out again here.
+      levelId: levelPool.map((l) => ({ value: l.id, label: levelLabel(l) })),
       subjectId: subjects.map((s) => ({ value: s.id, label: s.name })),
       branchId: branches.map((b) => ({ value: b.id, label: b.name })),
       academicYearId: years.map((y) => ({ value: y.id, label: y.label })),

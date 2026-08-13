@@ -23,6 +23,8 @@ import { t } from '../../i18n/index.js';
 export function ExamGradesPage({ examId }: { examId: string | null }): ReactNode {
   const { accessToken } = useSession();
   const [exams, setExams] = useState<Exam[]>([]);
+  /** R14's canonical value until the sheet reports the configured one. */
+  const [displayScale, setDisplayScale] = useState(20);
 
   useEffect(() => {
     void (async () => {
@@ -40,7 +42,7 @@ export function ExamGradesPage({ examId }: { examId: string | null }): ReactNode
 
   const trail: Crumb[] = current
     ? [
-        { label: t('admin.nav.schedules'), href: '/admin/schedules' },
+        { label: t('admin.nav.scheduling'), href: '/admin/schedules' },
         { label: current.title },
       ]
     : [];
@@ -49,7 +51,10 @@ export function ExamGradesPage({ examId }: { examId: string | null }): ReactNode
     <AdminLayout
       breadcrumb={trail}
       title={current ? current.title : t('admin.nav.examGrades')}
-      lede={t('admin.grades.lede')}
+      // The scale is `SystemSetting` data (R14), so the lede cannot be a
+      // static string: `{scale}` is resolved from the sheet the page just read,
+      // and falls back to the association's own /20 before one has loaded.
+      lede={t('admin.grades.lede').replace('{scale}', String(displayScale))}
     >
       <SelectField
         label={t('admin.grades.exam')}
@@ -65,7 +70,7 @@ export function ExamGradesPage({ examId }: { examId: string | null }): ReactNode
       {examId === null ? (
         <p className="state">{t('admin.grades.pickExam')}</p>
       ) : (
-        <GradeSheetView examId={examId} />
+        <GradeSheetView examId={examId} onScale={setDisplayScale} />
       )}
     </AdminLayout>
   );
