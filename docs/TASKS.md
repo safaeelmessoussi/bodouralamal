@@ -688,6 +688,11 @@
 - [x] **Breadcrumb across المستويات → مواد المستوى → حلقات المادة** — `PortalShell` takes an optional trail; passed in by the page, never derived from the URL, so it can only link nodes that exist
 - [x] **Post-R69 audit (2026-08-12):** the drill-down out of مواد المستوى still used the legacy path and navigated twice; «تنظيم المادة» survived as a row-action label for a screen now called «حلقات المواد»; `pickSubject` was substituted into the heading as if it were a Subject name
 
+### End-to-end verification of the educational chain (2026-08-14)
+- [x] 30 assertions through the HTTP API: مستفيدة → مستوى → مقر → مجموعة → مادة → حلقة → امتحان → نقاط
+- [x] **Found and fixed:** a group-less student could join **no circle** — `studentBranchInLevel`'s `where` still required a live `administrativeGroup`, and a relation filter never matches a NULL relation
+- [x] Confirmed Administrative Group ≠ Teaching Circle, and that circle membership has **no** effect on exam eligibility in either direction
+
 ### R74 — enrolment gets a screen (2026-08-13)
 - [x] **The gap the audit named:** R66's `enrolInLevel` was reachable only through approval; the sole endpoint required a group
 - [x] `التسجيلات` (`/admin/enrollments`) joins §14.1 — the Level view of the rows the group roster shows per group

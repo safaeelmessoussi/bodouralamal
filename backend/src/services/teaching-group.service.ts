@@ -78,7 +78,13 @@ async function studentBranchInLevel(
       studentId,
       levelId,
       deletedAt: null,
-      administrativeGroup: { deletedAt: null },
+      // **R66, completed.** The `select` below was updated for R66 and this
+      // `where` was not: a relation filter does not match a NULL relation, so a
+      // student enrolled directly in an unsubdivided Level looked *not enrolled*
+      // and could not be placed in any circle at all. The predicate is
+      // `levelsForStudent`'s, which already says it correctly — the enrolment is
+      // live, and IF it has a group that group is live too.
+      OR: [{ administrativeGroupId: null }, { administrativeGroup: { deletedAt: null } }],
     },
     // R66 — R43.3 scoped this by `Enrollment → AdministrativeGroup.branch_id`,
     // calling it "a referent that does exist". It is now the enrolment's own

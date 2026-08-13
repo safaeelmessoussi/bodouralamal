@@ -1096,3 +1096,59 @@ describe('R74 follow-up — an enrolment can be changed and ended', () => {
     expect(view.circles[0]?.circle_name).toContain('حلقة الصباح');
   });
 });
+
+describe('R66 — a GROUP-LESS student can be placed in a circle', () => {
+  it('joins a circle when enrolled directly in the Level', async () => {
+    // **Found by the end-to-end walk, not by a unit test.** `studentBranchInLevel`
+    // had its `select` updated for R66 and its `where` left behind: a relation
+    // filter does not match a NULL relation, so a student enrolled directly in
+    // an unsubdivided Level read as *not enrolled* and could join no circle at
+    // all — R66 and §4.4c broken together, silently.
+    const created = await createLevel(prisma, superAdmin(), {
+      name: `${TAG} مستوى بلا تقسيم`,
+      categoryId,
+      genderRestriction: 'any',
+    });
+    const subject = await prisma.subject.create({ data: { name: `${TAG} مادة الحلقة الحرة` } });
+    await prisma.levelSubject.create({ data: { levelId: created.level.id, subjectId: subject.id } });
+    const circle = await createTeachingGroup(prisma, superAdmin(), {
+      levelId: created.level.id,
+      subjectId: subject.id,
+      name: `${TAG} حلقة`,
+    });
+
+    const pupil = await student('مستفيدة بلا مجموعة');
+    await enrolAtLevel(prisma, superAdmin(), {
+      studentId: pupil,
+      levelId: created.level.id,
+      branchId: amerchich,
+    });
+
+    await addMember(prisma, superAdmin(), circle.id, pupil);
+    expect(
+      await prisma.studentTeachingGroup.count({ where: { teachingGroupId: circle.id, deletedAt: null } }),
+    ).toBe(1);
+  });
+
+  it('still refuses a student not enrolled in that Level at all', async () => {
+    // The guard the broken predicate was standing in for, asserted so the fix
+    // is a correction rather than a removal.
+    const created = await createLevel(prisma, superAdmin(), {
+      name: `${TAG} مستوى آخر للحلقة`,
+      categoryId,
+      genderRestriction: 'any',
+    });
+    const subject = await prisma.subject.create({ data: { name: `${TAG} مادة أخرى` } });
+    await prisma.levelSubject.create({ data: { levelId: created.level.id, subjectId: subject.id } });
+    const circle = await createTeachingGroup(prisma, superAdmin(), {
+      levelId: created.level.id,
+      subjectId: subject.id,
+      name: `${TAG} حلقة معزولة`,
+    });
+    const stranger = await student('مستفيدة غير مسجلة');
+
+    const e = await failure(() => addMember(prisma, superAdmin(), circle.id, stranger));
+    expect(e.code).toBe('STATE_CONFLICT');
+    expect(e.details?.['reason']).toBe('NOT_ENROLLED_IN_LEVEL');
+  });
+});
