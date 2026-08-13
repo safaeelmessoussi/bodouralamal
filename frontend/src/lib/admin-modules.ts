@@ -141,6 +141,20 @@ export const ADMIN_MODULES: readonly AdminModule[] = [
     status: 'ready',
   },
   {
+    /**
+     * R74 — enrolment had no node. R66 made the group optional and gave the
+     * service `enrolInLevel`, but only the approval path called it, so a Level
+     * nobody had subdivided could not be enrolled into afterwards. Listed
+     * FIRST in this section because §7 (R66) makes the Level enrolment the
+     * primary fact and the group an optional subdivision of it.
+     */
+    path: '/admin/enrollments',
+    labelKey: 'admin.nav.enrollments',
+    section: 'academic',
+    roles: STAFF,
+    status: 'ready',
+  },
+  {
     path: '/admin/groups',
     labelKey: 'admin.nav.groups',
     section: 'academic',

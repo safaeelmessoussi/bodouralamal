@@ -688,6 +688,14 @@
 - [x] **Breadcrumb across المستويات → مواد المستوى → حلقات المادة** — `PortalShell` takes an optional trail; passed in by the page, never derived from the URL, so it can only link nodes that exist
 - [x] **Post-R69 audit (2026-08-12):** the drill-down out of مواد المستوى still used the legacy path and navigated twice; «تنظيم المادة» survived as a row-action label for a screen now called «حلقات المواد»; `pickSubject` was substituted into the heading as if it were a Subject name
 
+### R74 — enrolment gets a screen (2026-08-13)
+- [x] **The gap the audit named:** R66's `enrolInLevel` was reachable only through approval; the sole endpoint required a group
+- [x] `التسجيلات` (`/admin/enrollments`) joins §14.1 — the Level view of the rows the group roster shows per group
+- [x] `enrolAtLevel` is a call to `enrolAtPlacement`; every rule stays in the service the approval path already uses
+- [x] Live-verified the exam consequence: enrolling a مستفيدة takes a whole-Level exam's sheet from 0 rows to 1, gradeable
+- [ ] **Not built:** no unenrolment path for a group-less enrolment — the group roster's removal is unchanged. Same class of gap, smaller
+- [ ] **Not built:** the assistant multi-select in الجدولة
+
 ### UX slice — atomic components and the management-overview principle (2026-08-13)
 - [x] Student Quran view linked from the dashboard; **one Level selector** (`{Category} — {Level}`) with three screens migrated
 - [x] **`إضافة حساب` kept** — TD-2 grants it and R68 depends on it — and its **duplicate-email defect fixed**: an address already signed in collided with nothing and was accepted

@@ -609,6 +609,7 @@ export const ar = {
       groups: 'مجموعات المستويات',
       // R69 — each of the two subject screens gets its own node; they were
       // reachable only through row actions borrowed by unrelated screens.
+      enrollments: 'التسجيلات',
       examGrades: 'نقاط الامتحانات',
       levelSubjects: 'مواد المستوى',
       teachingGroups: 'حلقات المواد',
@@ -936,6 +937,23 @@ export const ar = {
         'المستوى «{name}» يضم {n} مستفيدة مسجلة، ولا يمكن حذفه قبل نقلهن إلى مستوى آخر.',
       deleteBlocked:
         'تعذّر الحذف: ما زالت هناك تسجيلات أو حلقات أو جداول أو امتحانات أو محتوى مرتبط بهذا المستوى.',
+    },
+    enrollments: {
+      lede: 'تسجيل المستفيدات في المستويات. المجموعة اختيارية: المستوى غير المقسّم يُسجَّل فيه مباشرة.',
+      add: '＋ تسجيل مستفيدة',
+      student: 'المستفيدة',
+      pickStudent: 'اختاري المستفيدة',
+      searchHint: 'ابحثي بالاسم…',
+      branch: 'المقر',
+      filterLevel: 'تصفية بالمستوى',
+      allLevels: 'كل المستويات',
+      noGroup: 'المستوى مباشرة',
+      levelOnly: 'المستوى مباشرة (بلا مجموعة)',
+      groupHint: 'اتركيها فارغة لتسجيلها في المستوى نفسه — وهو تسجيل صحيح بعد المراجعة 66.',
+      empty: 'لا توجد تسجيلات بعد.',
+      enrolled: 'تم التسجيل.',
+      already: 'المستفيدة مسجّلة في هذا المستوى أصلًا.',
+      outOfScope: 'المستوى أو المقر أو المجموعة خارج نطاقك.',
     },
     grades: {
       lede: 'نقاط امتحان واحد. النقطة على سُلّم {scale} والحفظ مسودة حتى النشر.',

@@ -22,6 +22,7 @@ import * as referenceData from './controllers/reference-data.controller.js';
 import * as taxonomy from './controllers/taxonomy.controller.js';
 import * as trash from './controllers/trash.controller.js';
 import * as contentCtl from './controllers/content.controller.js';
+import * as enrollments from './controllers/enrollment.controller.js';
 import * as exams from './controllers/exam.controller.js';
 import * as grades from './controllers/grade.controller.js';
 import * as quran from './controllers/quran.controller.js';
@@ -301,6 +302,12 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
   guarded.post('/admin/administrative-groups', administrativeGroups.create(prisma));
   guarded.patch('/admin/administrative-groups/:id', administrativeGroups.update(prisma));
   guarded.delete('/admin/administrative-groups/:id', administrativeGroups.remove(prisma));
+  // R74 — enrolment as the Level fact it is. NOT a second roster: the group
+  // roster below is the per-group view of these same rows, and both place a
+  // student through `enrolAtPlacement`.
+  guarded.get('/admin/enrollments', enrollments.list(prisma));
+  guarded.post('/admin/enrollments', enrollments.create(prisma));
+
   // The roster (§5.6). Enrolment reads the Level FROM the group and enqueues
   // consent re-evaluation per session in the same transaction (§4.1a, TD-7).
   guarded.get('/admin/administrative-groups/:id/roster', administrativeGroups.listRoster(prisma));

@@ -11,6 +11,7 @@ import { BranchesPage } from './branches.js';
 import { ContentPage } from '../content.js';
 import { GroupsPage } from './groups.js';
 import { HijriCalendarPage } from './hijri-calendar.js';
+import { EnrollmentsPage } from './enrollments.js';
 import { ExamGradesPage } from './exam-grades.js';
 import { LevelSubjectsPage } from './level-subjects.js';
 import { LevelsPage } from './levels.js';
@@ -49,6 +50,7 @@ export const IMPLEMENTED_ADMIN_PATHS: readonly string[] = [
   '/admin/schedules',
   '/admin/groups',
   '/admin/levels',
+  '/admin/enrollments',
   '/admin/exam-grades',
   '/admin/level-subjects',
   '/admin/teaching-groups',
@@ -177,6 +179,9 @@ export function AdminRouter(): ReactNode {
     // R56 — one screen for everything that appears on the calendar.
     case '/admin/schedules':
       return <SchedulingPage />;
+    case '/admin/enrollments':
+      // R74 — the Level view of the enrolment rows the roster shows per group.
+      return <EnrollmentsPage />;
     case '/admin/groups':
       return <GroupsPage />;
     case '/admin/levels':

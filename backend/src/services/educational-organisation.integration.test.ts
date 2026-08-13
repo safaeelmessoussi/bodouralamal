@@ -8,6 +8,7 @@ import {
   deleteAdministrativeGroup,
   listAdministrativeGroups,
 } from './administrative-group.service.js';
+import { enrolAtLevel, listEnrollments } from './enrollment.service.js';
 import type { Actor } from '../policies/actor.js';
 import { createLevel, levelsWithoutGroups } from './level.service.js';
 import {
@@ -790,5 +791,158 @@ describe('BR-22 — splits are per-Subject, and an unplaced student is never sil
 
     const all = await listUnassignedStudents(prisma, superAdmin(), levelId, quran);
     expect(all.unassigned.map((u) => u.studentId).sort()).toEqual([here, there].sort());
+  });
+});
+
+/**
+ * **R74 — enrolment as its own surface.**
+ *
+ * R66 made the Administrative Group optional and gave the service
+ * `enrolInLevel`, but only the approval path called it: the sole endpoint
+ * required a group, so a Level nobody had subdivided could not be enrolled into
+ * after approval. These assert the route's behaviour through the service it
+ * calls — and that **every rule stays where it already was**, because
+ * `enrolAtLevel` is a call to `enrolAtPlacement` and nothing else.
+ */
+describe('R74 — enrolling a مستفيدة at a placement', () => {
+  it('enrols into a GROUP-LESS Level — the case that had no route', async () => {
+    const created = await createLevel(prisma, superAdmin(), {
+      name: `${TAG} مستوى بلا مجموعة`,
+      categoryId,
+      genderRestriction: 'any',
+    });
+    const pupil = await student('مستفيدة بلا مجموعة');
+
+    const row = await enrolAtLevel(prisma, superAdmin(), {
+      studentId: pupil,
+      levelId: created.level.id,
+      branchId: amerchich,
+    });
+    expect(row.administrativeGroupId).toBeNull();
+    expect(row.branchId).toBe(amerchich);
+  });
+
+  it('enrols into a Level WITH a Group, and records the group', async () => {
+    const { levelId, firstGroupId } = await level('مستوى بمجموعة', amerchich);
+    const pupil = await student('مستفيدة بمجموعة');
+
+    const row = await enrolAtLevel(prisma, superAdmin(), {
+      studentId: pupil,
+      levelId,
+      branchId: amerchich,
+      administrativeGroupId: firstGroupId,
+    });
+    expect(row.administrativeGroupId).toBe(firstGroupId);
+  });
+
+  it('refuses a Group that belongs to another branch', async () => {
+    // The composite FK guarantees it in the database; `enrolInGroup` refuses it
+    // with an explanation first, which is what an administrator can act on.
+    const { firstGroupId } = await level('مستوى تاركة', targa);
+    const pupil = await student('مستفيدة خارج الفرع');
+    const e = await failure(() =>
+      enrolAtLevel(prisma, admin([amerchich]), {
+        studentId: pupil,
+        levelId: 'ignored',
+        branchId: amerchich,
+        administrativeGroupId: firstGroupId,
+      }),
+    );
+    expect(e.code).toBe('NOT_FOUND');
+  });
+
+  it('refuses a branch outside an Admin’s scope', async () => {
+    const created = await createLevel(prisma, superAdmin(), {
+      name: `${TAG} مستوى آخر`,
+      categoryId,
+      genderRestriction: 'any',
+    });
+    const pupil = await student('مستفيدة فرع آخر');
+    const e = await failure(() =>
+      enrolAtLevel(prisma, admin([targa]), {
+        studentId: pupil,
+        levelId: created.level.id,
+        branchId: amerchich,
+      }),
+    );
+    // §20 rule 17 — a branch out of scope is not discoverable.
+    expect(e.code).toBe('NOT_FOUND');
+  });
+
+  it('refuses a SECOND enrolment in the same Level (BR-21), with an explanation', async () => {
+    const created = await createLevel(prisma, superAdmin(), {
+      name: `${TAG} مستوى مكرر`,
+      categoryId,
+      genderRestriction: 'any',
+    });
+    const pupil = await student('مستفيدة مكررة');
+    await enrolAtLevel(prisma, superAdmin(), {
+      studentId: pupil,
+      levelId: created.level.id,
+      branchId: amerchich,
+    });
+    const e = await failure(() =>
+      enrolAtLevel(prisma, superAdmin(), {
+        studentId: pupil,
+        levelId: created.level.id,
+        branchId: amerchich,
+      }),
+    );
+    expect(e.code).toBe('STATE_CONFLICT');
+  });
+
+  it('permits enrolment in a SECOND, different Level', async () => {
+    // BR-21 is one enrolment per LEVEL, not one per student — §7 says a student
+    // belongs to one or more Levels.
+    const a = await createLevel(prisma, superAdmin(), { name: `${TAG} أول`, categoryId, genderRestriction: 'any' });
+    const b = await createLevel(prisma, superAdmin(), { name: `${TAG} ثانٍ`, categoryId, genderRestriction: 'any' });
+    const pupil = await student('مستفيدة بمستويين');
+    await enrolAtLevel(prisma, superAdmin(), { studentId: pupil, levelId: a.level.id, branchId: amerchich });
+    await enrolAtLevel(prisma, superAdmin(), { studentId: pupil, levelId: b.level.id, branchId: amerchich });
+    expect(await prisma.enrollment.count({ where: { studentId: pupil, deletedAt: null } })).toBe(2);
+  });
+});
+
+describe('R74 — the enrolment list is the LEVEL view of the same rows', () => {
+  it('shows an Admin only their branches’ enrolments', async () => {
+    const created = await createLevel(prisma, superAdmin(), {
+      name: `${TAG} مستوى للقائمة`,
+      categoryId,
+      genderRestriction: 'any',
+    });
+    const here = await student('مستفيدة أمرشيش');
+    const there = await student('مستفيدة تاركة');
+    await enrolAtLevel(prisma, superAdmin(), { studentId: here, levelId: created.level.id, branchId: amerchich });
+    await enrolAtLevel(prisma, superAdmin(), { studentId: there, levelId: created.level.id, branchId: targa });
+
+    const scoped = await listEnrollments(prisma, admin([amerchich]));
+    const ids = scoped.map((r) => r.student_id);
+    expect(ids).toContain(here);
+    expect(ids).not.toContain(there);
+
+    // …and a Super Admin sees both.
+    const all = (await listEnrollments(prisma, superAdmin())).map((r) => r.student_id);
+    expect(all).toContain(here);
+    expect(all).toContain(there);
+  });
+
+  it('carries the Category, the Level and the Group for the screen to read', async () => {
+    const { levelId, firstGroupId } = await level('مستوى معروض', amerchich);
+    const pupil = await student('مستفيدة معروضة');
+    await enrolAtLevel(prisma, superAdmin(), {
+      studentId: pupil,
+      levelId,
+      branchId: amerchich,
+      administrativeGroupId: firstGroupId,
+    });
+
+    const row = (await listEnrollments(prisma, superAdmin(), { levelId })).find(
+      (r) => r.student_id === pupil,
+    )!;
+    // مستفيدة → الفئة/المستوى → المجموعة, resolved server-side so the screen
+    // renders names rather than resolving ids itself.
+    expect(row.category_name).toBeTruthy();
+    expect(row.level_name).toContain('مستوى معروض');
+    expect(row.administrative_group_name).toBeTruthy();
   });
 });

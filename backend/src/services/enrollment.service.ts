@@ -717,6 +717,109 @@ export async function moveStudent(
  * is the bug the optional group would otherwise have introduced everywhere this
  * function is read.
  */
+export interface EnrollmentRowView {
+  id: string;
+  student_id: string;
+  student_name: string;
+  level_id: string;
+  level_name: string;
+  category_name: string;
+  branch_id: string;
+  branch_name: string;
+  administrative_group_id: string | null;
+  administrative_group_name: string | null;
+}
+
+/**
+ * `GET /admin/enrollments` — **the Level view of the enrolment rows** (§7 R66,
+ * §14.1 R74).
+ *
+ * **Not a second roster.** `listGroupRoster` is the per-group view of these very
+ * same rows; this is the per-Level one, which R66 made the primary fact — a
+ * student is enrolled in a **Level**, and a Group is an optional subdivision of
+ * it. Two readings of one table, never two tables.
+ *
+ * **Branch-scoped exactly as everything else is**: `Enrollment.branch_id` (R66),
+ * so an Admin sees their branches and a Super Admin sees all — the same
+ * predicate `assertCanAccessStudent` uses, expressed as a list.
+ *
+ * The screen shows its data on load, so this takes filters that **narrow** and
+ * never gate: absent, it answers with everything the caller may see.
+ */
+export async function listEnrollments(
+  prisma: PrismaClient,
+  actor: Actor,
+  filters: { levelId?: string; branchId?: string } = {},
+): Promise<EnrollmentRowView[]> {
+  assertCanManage(actor);
+
+  const reachable = scope.reachableBranches(actor.roleScopes, [MANAGING_ROLE]);
+  const rows = await prisma.enrollment.findMany({
+    where: {
+      deletedAt: null,
+      ...(filters.levelId ? { levelId: filters.levelId } : {}),
+      // Applied last so an explicit filter NARROWS a scoped caller and never
+      // widens one — the discipline `listEvents` and `listCourseSchedules` use.
+      ...(filters.branchId ? { branchId: filters.branchId } : {}),
+      ...(reachable === null ? {} : { branchId: { in: reachable } }),
+      student: { deletedAt: null },
+    },
+    select: {
+      id: true,
+      studentId: true,
+      levelId: true,
+      branchId: true,
+      administrativeGroupId: true,
+      student: { select: { nameArabic: true } },
+      level: { select: { name: true, category: { select: { name: true } } } },
+      branch: { select: { name: true } },
+      administrativeGroup: { select: { name: true } },
+    },
+    orderBy: [{ level: { name: 'asc' } }, { student: { nameArabic: 'asc' } }],
+    take: 500,
+  });
+
+  return rows.map((r) => ({
+    id: r.id,
+    student_id: r.studentId,
+    student_name: r.student.nameArabic,
+    level_id: r.levelId,
+    level_name: r.level.name,
+    category_name: r.level.category.name,
+    branch_id: r.branchId,
+    branch_name: r.branch.name,
+    administrative_group_id: r.administrativeGroupId,
+    administrative_group_name: r.administrativeGroup?.name ?? null,
+  }));
+}
+
+/**
+ * `POST /admin/enrollments` — enrol a مستفيدة at a placement (§7 R66, R74).
+ *
+ * **The whole function is a call to `enrolAtPlacement`**, which is the point:
+ * the approval path calls the same one, so a placement made here and a placement
+ * made at approval cannot diverge. Every rule lives there — the role gate, the
+ * **branch** assertion, R27's sex eligibility, BR-21's one-enrolment-per-Level
+ * refusal, and the Group's membership of the chosen Level and branch.
+ */
+export async function enrolAtLevel(
+  prisma: PrismaClient,
+  actor: Actor,
+  input: { studentId: string; levelId: string; branchId: string; administrativeGroupId?: string | null },
+): Promise<EnrollmentRow> {
+  return prisma.$transaction((tx) =>
+    enrolAtPlacement(
+      tx,
+      actor,
+      input.administrativeGroupId
+        ? { administrativeGroupId: input.administrativeGroupId }
+        : { levelId: input.levelId, branchId: input.branchId },
+      input.studentId,
+      'roster_edit',
+    ),
+  );
+}
+
 export async function levelsForStudent(
   prisma: PrismaClient,
   studentId: string,
