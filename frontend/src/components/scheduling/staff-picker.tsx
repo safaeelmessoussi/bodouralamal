@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 
 import { SelectField } from '../ui/field.js';
+import { MultiSelectField } from '../ui/multi-select.js';
 import { t } from '../../i18n/index.js';
 import type { UserSummary } from '../../adapters/users.js';
 
@@ -67,33 +68,27 @@ export function StaffPicker({
         ]}
       />
 
-      <fieldset className="field">
-        <legend className="field__label">{assistantsLabel}</legend>
-        <div className="field__choices">
-          {staff
-            // One person holds one position on one thing; the server refuses the
-            // pair as a duplicate assignment.
-            .filter((x) => x.id !== leadId)
-            .map((x) => (
-              <label key={x.id} className="field field--choice">
-                <input
-                  type="checkbox"
-                  checked={assistantIds.includes(x.id)}
-                  disabled={disabled}
-                  onChange={(e) =>
-                    onAssistants(
-                      e.target.checked
-                        ? [...assistantIds, x.id]
-                        : assistantIds.filter((id) => id !== x.id),
-                    )
-                  }
-                />
-                <span>{x.name_arabic}</span>
-              </label>
-            ))}
-        </div>
-        <p className="field__hint">{assistantsHint}</p>
-      </fieldset>
+      {/* **The assistants are a multi-select, not an expanded list** (2026-08-13).
+          Every person rendered as a checkbox reads fine for a handful and turns
+          the form into a page of checkboxes for a real roster — burying the
+          fields below it. `MultiSelectField` shows the chosen as chips and
+          filters the rest, so the control's height stops tracking the size of
+          the association.
+
+          **The lead is excluded here, not there**: one person holds one
+          position on one thing, and the server refuses the pair as a duplicate,
+          so offering somebody as both would be offering a refusal. The atomic
+          control has no opinion about *why* an option is absent. */}
+      <MultiSelectField
+        label={assistantsLabel}
+        options={staff
+          .filter((x) => x.id !== leadId)
+          .map((x) => ({ value: x.id, label: x.name_arabic }))}
+        selected={assistantIds}
+        onChange={onAssistants}
+        hint={assistantsHint}
+        disabled={disabled}
+      />
     </>
   );
 }

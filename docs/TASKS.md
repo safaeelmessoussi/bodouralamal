@@ -694,7 +694,7 @@
 - [x] `enrolAtLevel` is a call to `enrolAtPlacement`; every rule stays in the service the approval path already uses
 - [x] Live-verified the exam consequence: enrolling a مستفيدة takes a whole-Level exam's sheet from 0 rows to 1, gradeable
 - [ ] **Not built:** no unenrolment path for a group-less enrolment — the group roster's removal is unchanged. Same class of gap, smaller
-- [ ] **Not built:** the assistant multi-select in الجدولة
+- [x] **Assistant multi-select built** — `MultiSelectField`, a new atomic control, wired into `StaffPicker` so the exam, class and event forms all changed together
 
 ### UX slice — atomic components and the management-overview principle (2026-08-13)
 - [x] Student Quran view linked from the dashboard; **one Level selector** (`{Category} — {Level}`) with three screens migrated
