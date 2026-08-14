@@ -355,6 +355,14 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
   // Which Subjects a Level teaches (§4.4b). The join that gates Teaching Groups
   // had no write path at all, so `LevelSubject` was permanently empty and every
   // teaching-group creation answered SUBJECT_NOT_IN_LEVEL.
+  // M4c — the Quran-side curriculum join (§4.5, §7, BR-11). Beside the Subject
+  // one because it is the same kind of fact: Super Admin writes, Admin reads.
+  guarded.get('/admin/quran-surahs', referenceData.quranSurahs(prisma));
+  guarded.get('/admin/levels/:levelId/surahs', referenceData.levelSurahs(prisma));
+  guarded.put('/admin/levels/:levelId/surahs/:surahId', referenceData.assignSurah(prisma));
+  guarded.delete('/admin/levels/:levelId/surahs/:surahId', referenceData.unassignSurah(prisma));
+  guarded.get('/admin/levels/:levelId/completion', quran.completion(prisma));
+
   guarded.get('/admin/levels/:levelId/subjects', referenceData.levelSubjects(prisma));
   guarded.put('/admin/levels/:levelId/subjects/:subjectId', referenceData.assignSubject(prisma));
   guarded.delete(

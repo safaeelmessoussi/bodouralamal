@@ -222,3 +222,66 @@ export async function unassignSubject(
 ): Promise<void> {
   await api<void>(`/admin/levels/${levelId}/subjects/${subjectId}`, { method: 'DELETE', token });
 }
+
+/**
+ * `LevelSurah` — the **Quran-side curriculum join** (§4.5, §7, BR-11; M4c).
+ *
+ * R43 keeps it that way while the Quran is a Subject *for scheduling only*, so
+ * this sits beside the Subject calls rather than in a Quran adapter: it is
+ * curriculum structure, not progress. Super Admin writes; Admin reads.
+ */
+export interface LevelSurahRef {
+  surah_id: number;
+  name_arabic: string;
+  name_transliterated: string;
+  total_ayahs: number;
+}
+
+/** The seeded 114 (§4.5). Read, never hardcoded: a client-side copy of the
+ *  names would be a second source of truth for reference data. */
+export async function listQuranSurahs(token: string | null): Promise<LevelSurahRef[]> {
+  return (await api<{ data: LevelSurahRef[] }>('/admin/quran-surahs', { token })).data;
+}
+
+export async function listLevelSurahs(
+  levelId: string,
+  token: string | null,
+): Promise<LevelSurahRef[]> {
+  return (await api<{ data: LevelSurahRef[] }>(`/admin/levels/${levelId}/surahs`, { token })).data;
+}
+
+export async function assignSurah(
+  levelId: string,
+  surahId: number,
+  token: string | null,
+): Promise<void> {
+  await api<void>(`/admin/levels/${levelId}/surahs/${surahId}`, { method: 'PUT', token });
+}
+
+export async function unassignSurah(
+  levelId: string,
+  surahId: number,
+  token: string | null,
+): Promise<void> {
+  await api<void>(`/admin/levels/${levelId}/surahs/${surahId}`, { method: 'DELETE', token });
+}
+
+/** BR-11 for a Level's enrolled مستفيدات. `complete: null` = no syllabus yet. */
+export interface LevelCompletionRow {
+  student_id: string;
+  student_name: string;
+  complete: boolean | null;
+  configured_surahs: number;
+  completed_surahs: number;
+  final_exam_configured: boolean;
+  surahs: { surah_id: number; name_arabic: string; coverage_percent: number }[];
+}
+
+export async function fetchLevelCompletion(
+  levelId: string,
+  token: string | null,
+): Promise<LevelCompletionRow[]> {
+  return (
+    await api<{ data: LevelCompletionRow[] }>(`/admin/levels/${levelId}/completion`, { token })
+  ).data;
+}

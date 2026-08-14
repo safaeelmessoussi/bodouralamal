@@ -14,6 +14,7 @@ import { HijriCalendarPage } from './hijri-calendar.js';
 import { EnrollmentsPage } from './enrollments.js';
 import { ExamGradesPage } from './exam-grades.js';
 import { LevelSubjectsPage } from './level-subjects.js';
+import { LevelSurahsPage } from './level-surahs.js';
 import { LevelsPage } from './levels.js';
 import { ScheduleSessionsPage } from './schedule-sessions.js';
 import { SchedulingPage } from './scheduling.js';
@@ -53,6 +54,7 @@ export const IMPLEMENTED_ADMIN_PATHS: readonly string[] = [
   '/admin/enrollments',
   '/admin/exam-grades',
   '/admin/level-subjects',
+  '/admin/level-surahs',
   '/admin/teaching-groups',
   '/admin/categories',
   '/admin/subjects',
@@ -128,6 +130,10 @@ export function AdminRouter(): ReactNode {
   // the teacher portal renders too — one implementation, two ways in.
   if (path === '/admin/exam-grades') {
     return <ExamGradesPage examId={params.get('exam')} />;
+  }
+  if (path === '/admin/level-surahs') {
+    // M4c — `?level=` opens that Level, as everywhere else; it never gates.
+    return <LevelSurahsPage levelId={params.get('level')} />;
   }
   if (path === '/admin/level-subjects') {
     return <LevelSubjectsPage levelId={params.get('level')} />;

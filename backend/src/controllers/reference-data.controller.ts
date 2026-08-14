@@ -7,6 +7,10 @@ import {
   listAcademicYears,
   listLevelSubjects,
   unassignSubjectFromLevel,
+  assignSurahToLevel,
+  listLevelSurahs,
+  listQuranSurahs,
+  unassignSurahFromLevel,
 } from '../services/reference-data.service.js';
 // Subject's home is the taxonomy service — this endpoint is its selector
 // projection, not a second source for it.
@@ -69,5 +73,44 @@ export function unassignSubject(prisma: PrismaClient) {
       idParam(req, 'subjectId'),
     );
     res.status(204).end();
+  };
+}
+
+/** `GET /admin/levels/{id}/surahs` — the Level's Quran syllabus (§4.5, BR-11). */
+export function levelSurahs(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    res.json({ data: await listLevelSurahs(prisma, requireActor(req), idParam(req, 'levelId')) });
+  };
+}
+
+/** `PUT /admin/levels/{id}/surahs/{surahId}` — Super Admin (R26 curriculum). */
+export function assignSurah(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    await assignSurahToLevel(
+      prisma,
+      requireActor(req),
+      idParam(req, 'levelId'),
+      Number(req.params['surahId']),
+    );
+    res.status(204).end();
+  };
+}
+
+export function unassignSurah(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    await unassignSurahFromLevel(
+      prisma,
+      requireActor(req),
+      idParam(req, 'levelId'),
+      Number(req.params['surahId']),
+    );
+    res.status(204).end();
+  };
+}
+
+/** `GET /admin/quran-surahs` — the seeded 114 (§4.5's definitive denominator). */
+export function quranSurahs(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    res.json({ data: await listQuranSurahs(prisma, requireActor(req)) });
   };
 }

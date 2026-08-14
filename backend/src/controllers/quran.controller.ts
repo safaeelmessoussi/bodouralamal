@@ -9,6 +9,7 @@ import {
   deleteLog,
   listQuranStudents,
   logProgress,
+  levelCompletion,
   readOwnCoverage,
   readStudentCoverage,
 } from '../services/quran.service.js';
@@ -112,5 +113,12 @@ export function myCoverage(prisma: PrismaClient) {
   return async (req: Request, res: Response): Promise<void> => {
     const acting = requireActingStudent(req);
     res.json({ data: await readOwnCoverage(prisma, acting.studentId) });
+  };
+}
+
+/** `GET /admin/levels/{id}/completion` — BR-11 for a Level's enrolled مستفيدات. */
+export function completion(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    res.json({ data: await levelCompletion(prisma, requireActor(req), idParam(req, 'levelId')) });
   };
 }

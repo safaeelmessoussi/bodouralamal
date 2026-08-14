@@ -40,6 +40,8 @@ describe('the registry matches §14.1', () => {
         '/admin/enrollments',
         '/admin/exam-grades',
         '/admin/level-subjects',
+        // M4c — the Quran-side curriculum join (§4.5, §7, BR-11).
+        '/admin/level-surahs',
         '/admin/content',
         '/admin/groups',
         '/admin/levels',

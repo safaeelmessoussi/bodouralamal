@@ -717,7 +717,10 @@
 - [x] Invariant: at most one live Subject may track Quran progress — partial unique index, proven to refuse a second
 - [x] **M4b — `/dashboard/student/quran`**, read-only. `GET /students/me/quran` carries no id: the subject comes from `childContext`, so a parent sees the child they act for and nobody else
 - [x] The read is split (`coverageFor`) and shared — the staff path and the student path differ only in how the subject was established
-- [ ] **M4c — `LevelSurah` + BR-11 level completion.** Not started
+- [x] **M4c — `LevelSurah` + BR-11.** Syllabus management (Super Admin writes, Admin reads) and completion read from the existing engine
+- [x] Three states: no syllabus -> `complete: null`, deliberately not `false`
+- [x] **BR-11's final-exam clause is unreachable and reported as such** — nothing marks an exam as final (`round` is explicitly non-semantic, §4.6). No marker invented
+- [ ] **Owner decision, reported not invented:** a *final exam* marker on `Exam`, if BR-11's second clause is ever to fire. Same shape as R64.7, R73.4 and the beneficiary gap
 
 ### R72 — the Teacher's الجدولة write access (2026-08-12)
 - [x] **R72 applied:** §14.1's `/teacher/schedules` clause said *"do not create or edit schedules"* and gave TD-2's event grant no node. Clarified to mean Course Schedules; Activities are authored here

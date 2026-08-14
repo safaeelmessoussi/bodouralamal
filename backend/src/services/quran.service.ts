@@ -1,6 +1,7 @@
 import type { PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
 import type { Actor } from '../policies/actor.js';
+import * as scope from '../policies/branch-scope.js';
 import { computeCoverage, type AyahInterval } from '../policies/quran-coverage.js';
 import {
   assertCanManageQuranProgress,
@@ -89,7 +90,7 @@ export interface QuranLogRow {
  * one implementation means a repaired row and a freshly written one cannot
  * disagree.
  */
-async function recalculate(
+export async function recalculateFor(
   prisma: PrismaClient,
   studentId: string,
   surahId: number,
@@ -220,7 +221,7 @@ async function coverageFor(
     if (!row || row.lastLogId !== newest.id) {
       // **Self-heal.** The stamp disagrees with the logs, so the cache lost a
       // write; recompute and repair in place before the value is used.
-      surahs.push(await recalculate(prisma, studentId, surahId));
+      surahs.push(await recalculateFor(prisma, studentId, surahId));
       continue;
     }
     const meta = logs.find((l) => l.surahId === surahId)!.surah;
@@ -342,7 +343,7 @@ export async function logProgress(
   void created;
 
   // Immediately after commit, in the same request (§4.5, R10).
-  return recalculate(prisma, input.studentId, input.surahId);
+  return recalculateFor(prisma, input.studentId, input.surahId);
 }
 
 /** `PATCH /quran-logs/{id}` — a correction. TD-8 `quranlog.update`. */
@@ -398,7 +399,7 @@ export async function correctLog(
     });
   });
 
-  return recalculate(prisma, existing.studentId, existing.surahId);
+  return recalculateFor(prisma, existing.studentId, existing.surahId);
 }
 
 /** `DELETE /quran-logs/{id}` — TD-5 soft delete, TD-8 `quranlog.delete`. */
@@ -441,5 +442,118 @@ export async function deleteLog(
     });
   });
 
-  return recalculate(prisma, existing.studentId, existing.surahId);
+  return recalculateFor(prisma, existing.studentId, existing.surahId);
+}
+
+/**
+ * **BR-11 — Level completion (M4c).**
+ *
+ * > *"coverage 100% and, only if a final exam is configured for that level, that
+ * > exam passed. If no final exam is configured, coverage alone suffices."*
+ *
+ * ## It reads the existing engine; it computes no new percentage
+ *
+ * Completion is *the configured Surahs* × *the coverage §4.5 already derives*.
+ * `recalculateFor` is the same routine every mutation and every read uses, so a
+ * completion figure and a dashboard figure cannot disagree — and the **self-heal
+ * guard applies here too**, because a stale cache row would otherwise decide
+ * whether somebody has finished a Level.
+ *
+ * ## Three states, not two
+ *
+ * A Level with **no configured Surahs** is `not_configured` — deliberately not
+ * `complete`. Coverage of an empty syllabus is vacuously total, and reporting
+ * that as completion would let a Level nobody has configured mark every
+ * مستفيدة finished. BR-11 assumes a syllabus; where there is none the honest
+ * answer is that the question cannot be asked yet.
+ *
+ * ## The final-exam condition is structurally absent, and that is faithful
+ *
+ * **Nothing in the model marks an exam as a Level's final one.** `Exam` carries
+ * `round`, which §4.6 defines as *"an optional non-restricting selector used
+ * solely for sorting"* — explicitly not a semantic marker. So BR-11's second
+ * clause has no configuration to read, and the rule's own *"if no final exam is
+ * configured, coverage alone suffices"* is the only reachable branch. It is
+ * reported as `final_exam_configured: false` rather than silently omitted, so
+ * the day a marker is introduced the gap is visible rather than assumed away.
+ * **No marker was invented here.**
+ */
+export interface LevelCompletion {
+  student_id: string;
+  student_name: string;
+  /** `null` when the Level configures no Surahs — see the docstring. */
+  complete: boolean | null;
+  configured_surahs: number;
+  completed_surahs: number;
+  /** Always `false` today: nothing in the model can configure one (§4.6). */
+  final_exam_configured: boolean;
+  surahs: { surah_id: number; name_arabic: string; coverage_percent: number }[];
+}
+
+export async function levelCompletion(
+  prisma: PrismaClient,
+  actor: Actor,
+  levelId: string,
+): Promise<LevelCompletion[]> {
+  // Reading who has completed a Level is reading reference-adjacent operational
+  // data about a whole Level, so it takes the same gate the roster does rather
+  // than §4.5's per-student one.
+  if (!scope.isSuperAdmin(actor.roleScopes) && !scope.hasRole(actor.roleScopes, 'admin')) {
+    throw new AppError('FORBIDDEN', 'reading level completion requires admin (TD-2)');
+  }
+
+  const [configured, enrolments] = await Promise.all([
+    prisma.levelSurah.findMany({
+      where: { levelId, deletedAt: null },
+      select: { surah: { select: { surahId: true, nameArabic: true } } },
+      orderBy: { surahId: 'asc' },
+    }),
+    prisma.enrollment.findMany({
+      where: {
+        levelId,
+        deletedAt: null,
+        student: { deletedAt: null },
+        // R66 — an enrolment may have no group, and a relation filter never
+        // matches a NULL relation. The predicate `levelsForStudent` states.
+        OR: [{ administrativeGroupId: null }, { administrativeGroup: { deletedAt: null } }],
+        ...(scope.reachableBranches(actor.roleScopes, ['admin']) === null
+          ? {}
+          : { branchId: { in: scope.reachableBranches(actor.roleScopes, ['admin']) ?? [] } }),
+      },
+      select: { studentId: true, student: { select: { nameArabic: true } } },
+      orderBy: { student: { nameArabic: 'asc' } },
+    }),
+  ]);
+
+  const surahIds = configured.map((c) => c.surah.surahId);
+
+  return Promise.all(
+    enrolments.map(async (e) => {
+      const perSurah = await Promise.all(
+        surahIds.map(async (surahId) => {
+          // The same routine every read and write uses, so completion and the
+          // dashboard cannot disagree — and the R10 self-heal comes with it.
+          const coverage = await recalculateFor(prisma, e.studentId, surahId);
+          return {
+            surah_id: surahId,
+            name_arabic: coverage.name_arabic,
+            coverage_percent: coverage.coverage_percent,
+          };
+        }),
+      );
+      const completed = perSurah.filter((x) => x.coverage_percent >= 100).length;
+
+      return {
+        student_id: e.studentId,
+        student_name: e.student.nameArabic,
+        // BR-11: 100% of the configured syllabus. `null` where none is
+        // configured — the question cannot be asked yet.
+        complete: surahIds.length === 0 ? null : completed === surahIds.length,
+        configured_surahs: surahIds.length,
+        completed_surahs: completed,
+        final_exam_configured: false,
+        surahs: perSurah,
+      };
+    }),
+  );
 }

@@ -230,3 +230,156 @@ export async function unassignSubjectFromLevel(
     });
   });
 }
+
+/**
+ * **`LevelSurah` — which Surahs a Level's Quran curriculum covers (§4.5, §7,
+ * BR-11; M4c).**
+ *
+ * The **Quran-side curriculum join**, and R43 is explicit that it stays that:
+ * *"`LevelSurah` remains the Quran-side curriculum join"* while the Quran is a
+ * Subject **for scheduling only**. It is therefore beside `LevelSubject` here —
+ * the same shape, the same authorization, the same file — rather than in a
+ * Quran service, because it is curriculum structure and not progress.
+ *
+ * **Super Admin writes, Admin reads**, exactly as `LevelSubject` does (R26's
+ * reference-versus-operational split): a Level's Quran syllabus is configuration
+ * that defines the organisation, and BR-11 reads it to decide completion.
+ */
+export interface LevelSurahRef {
+  surah_id: number;
+  name_arabic: string;
+  name_transliterated: string;
+  total_ayahs: number;
+}
+
+/**
+ * `GET /admin/quran-surahs` — the seeded lookup of all 114 (§4.5).
+ *
+ * **Read rather than hardcoded.** §4.5 calls this table *"the definitive
+ * denominator"*, and a client-side copy of the names would be a second source of
+ * truth for reference data — the mistake §4.4b forbids for Levels and R27 for
+ * Categories. The picker needs to name Surahs a Level does **not** yet have, so
+ * it cannot read them from `LevelSurah`.
+ */
+export async function listQuranSurahs(
+  prisma: PrismaClient,
+  actor: Actor,
+): Promise<LevelSurahRef[]> {
+  assertCanReadReferenceData(actor);
+
+  const rows = await prisma.quranSurah.findMany({
+    select: { surahId: true, nameArabic: true, nameTransliterated: true, totalAyahs: true },
+    orderBy: { surahId: 'asc' },
+  });
+  return rows.map((r) => ({
+    surah_id: r.surahId,
+    name_arabic: r.nameArabic,
+    name_transliterated: r.nameTransliterated,
+    total_ayahs: r.totalAyahs,
+  }));
+}
+
+export async function listLevelSurahs(
+  prisma: PrismaClient,
+  actor: Actor,
+  levelId: string,
+): Promise<LevelSurahRef[]> {
+  assertCanReadReferenceData(actor);
+
+  const rows = await prisma.levelSurah.findMany({
+    where: { levelId, deletedAt: null },
+    select: {
+      surah: {
+        select: { surahId: true, nameArabic: true, nameTransliterated: true, totalAyahs: true },
+      },
+    },
+    // The mushaf's own order, which is the order anybody reciting expects.
+    orderBy: { surahId: 'asc' },
+  });
+  return rows.map((r) => ({
+    surah_id: r.surah.surahId,
+    name_arabic: r.surah.nameArabic,
+    name_transliterated: r.surah.nameTransliterated,
+    total_ayahs: r.surah.totalAyahs,
+  }));
+}
+
+/** Adds a Surah to a Level's Quran curriculum. Idempotent by revival, because
+ *  `@@unique([levelId, surahId])` is not filtered on `deleted_at`. */
+export async function assignSurahToLevel(
+  prisma: PrismaClient,
+  actor: Actor,
+  levelId: string,
+  surahId: number,
+): Promise<void> {
+  assertCanWriteCurriculum(actor);
+
+  await prisma.$transaction(async (tx) => {
+    const [level, surah] = await Promise.all([
+      tx.level.findFirst({ where: { id: levelId, deletedAt: null }, select: { id: true } }),
+      tx.quranSurah.findUnique({ where: { surahId }, select: { surahId: true } }),
+    ]);
+    if (!level) throw new AppError('NOT_FOUND', 'no such level');
+    if (!surah) throw new AppError('NOT_FOUND', 'no such surah');
+
+    const existing = await tx.levelSurah.findFirst({ where: { levelId, surahId } });
+    if (existing) {
+      if (existing.deletedAt === null) {
+        throw new AppError('DUPLICATE', 'that surah is already in this level');
+      }
+      // Revived rather than re-inserted: the unique pair still occupies the row,
+      // so an insert would be refused — the reconciliation `ExamStaff` uses.
+      await tx.levelSurah.update({
+        where: { id: existing.id },
+        data: { deletedAt: null, deletedById: null },
+      });
+    } else {
+      await tx.levelSurah.create({ data: { levelId, surahId } });
+    }
+
+    await audit.write(tx, {
+      actorUserId: actor.userId,
+      activeRole: actor.activeRole,
+      actionType: 'levelsurah.assign',
+      targetEntity: 'Level',
+      targetId: levelId,
+      detail: { surah_id: surahId },
+    });
+  });
+}
+
+/**
+ * Removes a Surah from a Level's curriculum (TD-5 soft delete).
+ *
+ * **Logged progress is untouched.** §4.5 records memorization against a
+ * *(student, surah)* pair and BR-13 derives coverage from the logs alone — so
+ * removing a Surah from the syllabus changes what BR-11 *requires*, never what
+ * a مستفيدة has *recited*. Deleting her logs here would destroy a record of
+ * something that happened.
+ */
+export async function unassignSurahFromLevel(
+  prisma: PrismaClient,
+  actor: Actor,
+  levelId: string,
+  surahId: number,
+): Promise<void> {
+  assertCanWriteCurriculum(actor);
+
+  await prisma.$transaction(async (tx) => {
+    const row = await tx.levelSurah.findFirst({ where: { levelId, surahId, deletedAt: null } });
+    if (!row) throw new AppError('NOT_FOUND', 'that surah is not in this level');
+
+    await tx.levelSurah.update({
+      where: { id: row.id },
+      data: { deletedAt: new Date(), deletedById: actor.userId },
+    });
+    await audit.write(tx, {
+      actorUserId: actor.userId,
+      activeRole: actor.activeRole,
+      actionType: 'levelsurah.unassign',
+      targetEntity: 'Level',
+      targetId: levelId,
+      detail: { surah_id: surahId },
+    });
+  });
+}

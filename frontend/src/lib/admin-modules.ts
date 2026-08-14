@@ -176,6 +176,22 @@ export const ADMIN_MODULES: readonly AdminModule[] = [
 
   {
     /**
+     * M4c — the Quran-side curriculum join (§4.5, §7, BR-11). Beside
+     * `مواد المستوى` in الإدارة because it is the same kind of fact and carries
+     * the same authorization: Super Admin writes, Admin reads (R26).
+     */
+    path: '/admin/level-surahs',
+    labelKey: 'admin.nav.levelSurahs',
+    section: 'administration',
+    // R61 — every node in this section is Super-Admin-only **by placement**,
+    // while its READ endpoint stays Admin-accessible: the rule R69 applied to
+    // `المستويات`, because gating the data rather than the screen would break
+    // an Admin's daily work.
+    roles: SUPER_ONLY,
+    status: 'ready',
+  },
+  {
+    /**
      * **R69 — a node at last.** The screen existed and worked, but its path
      * carried a Level id, so no menu could reach it: the only ways in were row
      * actions borrowed by `المستويات` and `مجموعات المستويات`, neither of which

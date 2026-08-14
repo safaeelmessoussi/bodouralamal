@@ -7,10 +7,16 @@ import type { RoleScope } from '../policies/branch-scope.js';
 import {
   correctLog,
   deleteLog,
+  levelCompletion,
   logProgress,
   readOwnCoverage,
   readStudentCoverage,
 } from './quran.service.js';
+import {
+  assignSurahToLevel,
+  listLevelSurahs,
+  unassignSurahFromLevel,
+} from './reference-data.service.js';
 
 /**
  * **Quran memorization tracking (§4.5, BR-13; M4a, SRS Revision 73).**
@@ -122,6 +128,7 @@ async function clear(): Promise<void> {
     where: { levelId: { in: levels.map((l) => l.id) } },
   });
   await prisma.levelSubject.deleteMany({ where: { levelId: { in: levels.map((l) => l.id) } } });
+  await prisma.levelSurah.deleteMany({ where: { levelId: { in: levels.map((l) => l.id) } } });
   await prisma.level.deleteMany({ where: { id: { in: levels.map((l) => l.id) } } });
   await prisma.subject.deleteMany({ where: { name: { startsWith: TAG } } });
   await prisma.category.deleteMany({ where: { name: { startsWith: TAG } } });
@@ -358,5 +365,111 @@ describe('M4b — the student reads her own, and only her own', () => {
     );
     // …and a Super Admin is unaffected.
     expect((await readStudentCoverage(prisma, superAdmin(), student)).surahs).toHaveLength(1);
+  });
+});
+
+/**
+ * **M4c — `LevelSurah` and BR-11.**
+ *
+ * BR-11: *"coverage 100% and, only if a final exam is configured for that level,
+ * that exam passed. If no final exam is configured, coverage alone suffices."*
+ * Completion is read from the **existing** engine — configured Surahs × the
+ * coverage §4.5 already derives — and no second percentage is computed.
+ */
+describe('M4c — LevelSurah is Super Admin curriculum', () => {
+  it('a Super Admin adds and removes a Surah', async () => {
+    await assignSurahToLevel(prisma, superAdmin(), levelId, 1);
+    expect((await listLevelSurahs(prisma, superAdmin(), levelId)).map((s) => s.surah_id)).toEqual([1]);
+
+    await unassignSurahFromLevel(prisma, superAdmin(), levelId, 1);
+    expect(await listLevelSurahs(prisma, superAdmin(), levelId)).toEqual([]);
+  });
+
+  it('revives a previously removed Surah rather than failing on the unique pair', async () => {
+    await assignSurahToLevel(prisma, superAdmin(), levelId, 2);
+    await unassignSurahFromLevel(prisma, superAdmin(), levelId, 2);
+    await assignSurahToLevel(prisma, superAdmin(), levelId, 2);
+    expect((await listLevelSurahs(prisma, superAdmin(), levelId)).map((s) => s.surah_id)).toEqual([2]);
+  });
+
+  it('refuses a مؤطرة and an Admin — curriculum is Super Admin (R26)', async () => {
+    expect((await failure(() => assignSurahToLevel(prisma, teacher(quranTeacher), levelId, 1))).code).toBe(
+      'FORBIDDEN',
+    );
+    const asAdmin = actorOf(adminId, [{ role: 'admin', branches: null }]);
+    expect((await failure(() => assignSurahToLevel(prisma, asAdmin, levelId, 1))).code).toBe('FORBIDDEN');
+    // …but an Admin may READ it: operational work depends on the syllabus.
+    expect(await listLevelSurahs(prisma, asAdmin, levelId)).toEqual([]);
+  });
+
+  it('removing a Surah leaves the logged progress untouched', async () => {
+    // §4.5 records against (student, surah) and BR-13 derives from the logs, so
+    // the syllabus decides what BR-11 REQUIRES, never what she has recited.
+    await assignSurahToLevel(prisma, superAdmin(), levelId, 1);
+    await logProgress(prisma, teacher(quranTeacher), range(1, 7));
+    await unassignSurahFromLevel(prisma, superAdmin(), levelId, 1);
+    expect(await prisma.quranProgressLog.count({ where: { studentId: student, deletedAt: null } })).toBe(1);
+  });
+});
+
+describe('M4c — BR-11 level completion', () => {
+  it('is NOT COMPUTABLE when the Level configures no Surahs', async () => {
+    // Vacuous 100% would let an unconfigured Level mark everybody finished, so
+    // the third state is the honest answer rather than a convenient one.
+    const rows = await levelCompletion(prisma, superAdmin(), levelId);
+    const mine = rows.find((r) => r.student_id === student)!;
+    expect(mine.complete).toBeNull();
+    expect(mine.configured_surahs).toBe(0);
+  });
+
+  it('is FALSE at 0% coverage of a configured syllabus', async () => {
+    await assignSurahToLevel(prisma, superAdmin(), levelId, 1);
+    const mine = (await levelCompletion(prisma, superAdmin(), levelId)).find(
+      (r) => r.student_id === student,
+    )!;
+    expect(mine.complete).toBe(false);
+    expect(mine.completed_surahs).toBe(0);
+  });
+
+  it('is FALSE at partial coverage', async () => {
+    await assignSurahToLevel(prisma, superAdmin(), levelId, 1);
+    // Al-Fatiha has 7 ayahs; four of them is 57.14%.
+    await logProgress(prisma, teacher(quranTeacher), range(1, 4));
+    const mine = (await levelCompletion(prisma, superAdmin(), levelId)).find(
+      (r) => r.student_id === student,
+    )!;
+    expect(mine.complete).toBe(false);
+    expect(mine.surahs[0]?.coverage_percent).toBe(57.14);
+  });
+
+  it('is TRUE at 100% of every configured Surah, with no final exam configured', async () => {
+    await assignSurahToLevel(prisma, superAdmin(), levelId, 1);
+    await logProgress(prisma, teacher(quranTeacher), range(1, 7));
+    const mine = (await levelCompletion(prisma, superAdmin(), levelId)).find(
+      (r) => r.student_id === student,
+    )!;
+    expect(mine.complete).toBe(true);
+    // BR-11's own words: "if no final exam is configured, coverage alone
+    // suffices" — and nothing in the model can configure one (§4.6 `round` is
+    // explicitly a non-restricting selector).
+    expect(mine.final_exam_configured).toBe(false);
+  });
+
+  it('needs EVERY configured Surah, not just one', async () => {
+    await assignSurahToLevel(prisma, superAdmin(), levelId, 1);
+    await assignSurahToLevel(prisma, superAdmin(), levelId, 114);
+    await logProgress(prisma, teacher(quranTeacher), range(1, 7));
+    const mine = (await levelCompletion(prisma, superAdmin(), levelId)).find(
+      (r) => r.student_id === student,
+    )!;
+    expect(mine.configured_surahs).toBe(2);
+    expect(mine.completed_surahs).toBe(1);
+    expect(mine.complete).toBe(false);
+  });
+
+  it('refuses a مؤطرة — completion is an Admin read', async () => {
+    expect((await failure(() => levelCompletion(prisma, teacher(quranTeacher), levelId))).code).toBe(
+      'FORBIDDEN',
+    );
   });
 });
