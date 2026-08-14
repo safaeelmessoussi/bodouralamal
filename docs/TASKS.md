@@ -688,6 +688,14 @@
 - [x] **Breadcrumb across المستويات → مواد المستوى → حلقات المادة** — `PortalShell` takes an optional trail; passed in by the page, never derived from the URL, so it can only link nodes that exist
 - [x] **Post-R69 audit (2026-08-12):** the drill-down out of مواد المستوى still used the legacy path and navigated twice; «تنظيم المادة» survived as a row-action label for a screen now called «حلقات المواد»; `pickSubject` was substituted into the heading as if it were a Subject name
 
+### The R66 group-less-enrolment bug class (2026-08-14)
+- [x] **P0 consent re-evaluation** — the `entire_level` arm skipped group-less students, so BR-2/§4.9's gate never re-ran for their sessions
+- [x] **P1 circle candidates** — `listUnassignedStudents` required a live group and scoped branches *through* it; now `Enrollment.branch_id`
+- [x] **P1 private library** — 3 sites hid a group-less student's own Level from her and her parent
+- [x] **Guard for the class**, proven to fail on reintroduction; states its blind spot (nested `enrollments.some`)
+- [x] All 14 enrolment queries classified; group-specific ones deliberately untouched
+- [ ] **Left deliberately:** `calendar.service.ts:676` prefill (P2, Owner-scoped out) — in the guard's allowlist with its reason
+
 ### End-to-end verification of the educational chain (2026-08-14)
 - [x] 30 assertions through the HTTP API: مستفيدة → مستوى → مقر → مجموعة → مادة → حلقة → امتحان → نقاط
 - [x] **Found and fixed:** a group-less student could join **no circle** — `studentBranchInLevel`'s `where` still required a live `administrativeGroup`, and a relation filter never matches a NULL relation

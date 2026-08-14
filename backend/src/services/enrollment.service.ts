@@ -102,7 +102,13 @@ export async function enqueueConsentReevaluationForStudent(
               some: {
                 studentId,
                 deletedAt: null,
-                administrativeGroup: { deletedAt: null },
+                // **R66 — a group-less enrolment is a valid enrolment.** A
+                // relation filter never matches a NULL relation, so requiring a
+                // live group here skipped every `entire_level` session of a
+                // student enrolled directly in an unsubdivided Level — and with
+                // them the consent re-evaluation BR-2/§4.9 rely on to force a
+                // recording private when consent changes.
+                OR: [{ administrativeGroupId: null }, { administrativeGroup: { deletedAt: null } }],
               },
             },
           },

@@ -136,7 +136,10 @@ async function privateLevelIds(prisma: PrismaClient, actor: LibraryActor): Promi
       where: {
         studentId: actor.actingStudentId,
         deletedAt: null,
-        administrativeGroup: { deletedAt: null },
+        // R66 — a group-less enrolment is a valid enrolment; a relation filter
+        // never matches a NULL relation, so this hid her own Level's private
+        // content from her.
+        OR: [{ administrativeGroupId: null }, { administrativeGroup: { deletedAt: null } }],
       },
       select: { levelId: true },
       distinct: ['levelId'],
@@ -154,7 +157,9 @@ async function privateLevelIds(prisma: PrismaClient, actor: LibraryActor): Promi
     where: {
       studentId: { in: studentIds },
       deletedAt: null,
-      administrativeGroup: { deletedAt: null },
+      // R66 — same rule for a parent's children: a group-less child's Level
+      // must reach their parent's library exactly as a grouped child's does.
+      OR: [{ administrativeGroupId: null }, { administrativeGroup: { deletedAt: null } }],
     },
     select: { levelId: true },
     distinct: ['levelId'],
@@ -165,11 +170,10 @@ async function privateLevelIds(prisma: PrismaClient, actor: LibraryActor): Promi
 /**
  * The branches whose content sorts first for this caller.
  *
- * Resolved through `Enrollment → AdministrativeGroup.branch_id` for a member and
- * through the role scopes for staff — §7 records that `branch_id` on the
- * Administrative Group is *the* answer to "which branch is this person at", and
- * names the §5.2 library ordering as one of the three things that resolve
- * through it.
+ * Resolved through **`Enrollment.branch_id`** for a member (R66 moved it there
+ * from the Administrative Group, precisely so an ungrouped student has one) and
+ * through the role scopes for staff. §5.2's library ordering is one of the three
+ * things R66 names as resolving through the enrolment's own column.
  */
 async function ownBranchIds(prisma: PrismaClient, actor: LibraryActor): Promise<string[]> {
   const staffBranches = scope.reachableBranches(actor.roleScopes, ['admin', 'teacher']);
@@ -179,9 +183,14 @@ async function ownBranchIds(prisma: PrismaClient, actor: LibraryActor): Promise<
   if (staffBranches !== null && staffBranches.length > 0) return staffBranches;
 
   const enrolments = await prisma.enrollment.findMany({
-    where: { studentId: actor.userId, deletedAt: null, administrativeGroup: { deletedAt: null } },
-    // R66 — the enrolment carries the branch; it used to be reached through
-    // the group, which is why an ungrouped student had none.
+    // R66 — the enrolment carries the branch. The `select` below was migrated
+    // and this `where` was not, so an ungrouped student still resolved to no
+    // branch and lost her own branch's ordering.
+    where: {
+      studentId: actor.userId,
+      deletedAt: null,
+      OR: [{ administrativeGroupId: null }, { administrativeGroup: { deletedAt: null } }],
+    },
     select: { branchId: true },
   });
   return [...new Set(enrolments.map((e) => e.branchId))];

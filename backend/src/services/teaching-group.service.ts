@@ -475,11 +475,16 @@ export async function listUnassignedStudents(
     where: {
       levelId,
       deletedAt: null,
-      administrativeGroup: {
-        deletedAt: null,
-        // `null` means all-branches (§7, Revision 24), NOT "no branches".
-        ...(branches === null ? {} : { branchId: { in: branches } }),
-      },
+      // **R66 — the enrolment is the primary fact and the group is optional.**
+      // This required a live group, so a student enrolled directly in an
+      // unsubdivided Level never appeared as a candidate: the server accepted
+      // her into a circle while the screen could not offer her.
+      OR: [{ administrativeGroupId: null }, { administrativeGroup: { deletedAt: null } }],
+      // **Branch-scoped from the ENROLMENT, not through the group** (R66, R43.3
+      // as amended): the group was the referent while every enrolment had one,
+      // and an ungrouped student has no group to be scoped through.
+      // `null` means all-branches (§7, Revision 24), NOT "no branches".
+      ...(branches === null ? {} : { branchId: { in: branches } }),
       student: {
         deletedAt: null,
         // The definition of unassigned: no live seat for THIS subject in THIS
