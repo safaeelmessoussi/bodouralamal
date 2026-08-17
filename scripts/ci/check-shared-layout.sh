@@ -34,31 +34,34 @@ def rule(css: str, selector: str) -> str:
 
 # ── 1. The primary action's position must not depend on the description ──────
 #
-# `align-items: end` bottom-aligned the header's two blocks, so the action sat
-# level with the LAST LINE of the description — and a two-line description on one
-# page put the button lower than the same button on the page beside it. Tying it
-# to the title instead makes its position a constant, because every back-office
-# title is one line.
+# **This guard was WRONG once and the correction is the point.** It asserted
+# `align-items: start` on a FLEX row, which was present and correct — while
+# `flex-wrap: wrap` put the action on its own line, so the button moved
+# 94px → 475px at 1440px and this check passed. A declaration being present is
+# not the property holding.
+#
+# The property is now structural: a two-column GRID cannot wrap, so the action's
+# row cannot be pushed by a taller sibling column. What is checked here is that
+# the structure survives; **the property itself is measured in a real browser** by
+# `scripts/dev/browser/measure-page-header.sh`, because layout is not observable
+# from source and this guard is the proof of that.
 head = rule(admin, 'admin__head')
 if not head:
     failures.append('.admin__head rule not found — the shared page header moved or was renamed')
 else:
-    if 'align-items: start' not in head:
-        failures.append('.admin__head must set `align-items: start` so the primary action tracks the TITLE')
-    if re.search(r'align-items:\s*(end|flex-end)', head):
-        failures.append('.admin__head must not bottom-align: the action would follow the description length')
+    if 'display: grid' not in head:
+        failures.append('.admin__head must be a grid: a flex row WRAPS the action below the description')
+    if 'grid-template-columns: 1fr auto' not in head:
+        failures.append('.admin__head needs `grid-template-columns: 1fr auto` — heading takes the space, action takes its width')
+    if re.search(r'flex-wrap:\s*wrap', head):
+        failures.append('.admin__head must not wrap — a wrapped action line sits below the WHOLE heading')
 
-# The other half of the same header fix: the text block takes the spare width and
-# the action block does not, so a description neither wraps early nor pushes the
-# button to the far margin.
 heading = rule(admin, 'admin__heading')
-if 'flex: 1 1 auto' not in heading:
-    failures.append('.admin__heading must grow (`flex: 1 1 auto`) or the description wraps early')
 if 'min-inline-size: 0' not in heading:
-    failures.append('.admin__heading needs `min-inline-size: 0` — a flex item will not shrink below its longest word')
+    failures.append('.admin__heading needs `min-inline-size: 0` — a grid item will not shrink below its longest word')
 actions = rule(admin, 'admin__actions')
-if 'flex: 0 0 auto' not in actions:
-    failures.append('.admin__actions must not grow (`flex: 0 0 auto`) or it is pushed to the far margin')
+if 'align-self: start' not in actions:
+    failures.append('.admin__actions must set `align-self: start` or it stretches/centres against a tall heading')
 
 # ── 2. No page redefines the shared header ──────────────────────────────────
 #

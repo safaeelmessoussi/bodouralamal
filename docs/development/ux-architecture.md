@@ -429,20 +429,35 @@ understood: `justify-content: space-between` pushed the action to the far margin
 and left the text at its flex basis, so a one-line description wrapped its **last
 word** onto a line of its own with visible space beside it.
 
-**The primary action does not move when the description grows.** The header
-**top-aligns**, so the action tracks the *title* — one line on every back-office
-page — and the description grows downwards past it. Bottom-aligning ties the
-button to the last line of the prose, so a two-line description on one page puts
-it lower than the same button on the page beside it: the control a reader reaches
-for most moves with the amount of text above it.
+**The primary action does not move when the description grows.** The header is a
+**two-column grid** — the heading takes the free space, the action takes its own
+width — with `align-self: start` pinning the action to the top of its cell. Its
+offset from the top of the header is then a constant: it cannot depend on the
+height of a sibling column.
 
-**Two traps worth knowing:**
+**It must not be a flex row, and this is the trap that cost two attempts.** The
+first fix set `align-items: start` on a flex row and looked right. But
+`.admin__head` also had `flex-wrap: wrap`: once the heading grows past the space
+beside it, the action **wraps onto its own line** — and a line below the heading
+sits below the *whole* heading, description included. Measured in Chrome at
+1440 px, the button moved **94 px → 475 px** between a one-line description and an
+eleven-line one. `align-items` never applied, because the two were never on one
+line to be aligned.
 
-* a flex item's default `min-width: auto` refuses to shrink below its longest
-  word, so `min-inline-size: 0` on the text block is what actually lets it use
-  the space — without it, growing the block changes nothing;
-* `align-items: end` reads as the tidier choice and is the one that breaks the
-  invariant.
+**A declaration being present is not the property holding.** The guard asserted
+the correct declaration and passed while the layout was broken. That is why this
+invariant is **measured in a real browser** —
+`scripts/dev/browser/measure-page-header.sh`, nine widths, both a one-line and a
+wrapping description — and the source guard only checks that the *structure*
+survives.
+
+Also still required: `min-inline-size: 0` on the heading, because a grid item's
+default `min-width: auto` refuses to shrink below its longest word — which is what
+made a one-line description wrap its last word with room to spare.
+
+**Below 44rem the header is one column** and the action sits under the text,
+because there is no room beside it. The measurement asserts that separately
+rather than applying the wide rule everywhere.
 
 Canonical: `.admin__head` / `.admin__heading` / `.admin__actions` in
 [`admin.css`](../../frontend/src/styles/components/admin.css), rendered by

@@ -152,41 +152,50 @@
  * is why this is a `max-inline-size` and not a fixed one, and why a narrow
  * viewport still wraps normally instead of overflowing.
  *
- * ## The primary action does not move when the description grows (2026-08-17)
+ * ## The primary action does not move when the description grows
  *
- * `align-items: end` bottom-aligned the two blocks, so the action sat level with
- * the **last line of the description** — and a two-line description on one page
- * put the button lower than the same button on the page beside it. The control a
- * reader reaches for most moved depending on how much prose happened to be above
- * it.
+ * **This took two attempts, and the first one is worth recording.**
  *
- * `align-items: start` ties the action to the **title**, which is one line on
- * every page in the back office. The description then grows *downwards, past it*,
- * and the button's position becomes a constant — which is the property asked for.
- * `padding-block-start` optically centres it on the title rather than hugging the
- * very top of the block.
+ * The first fix set `align-items: start` on a flex row, reasoning that
+ * top-aligning would tie the action to the title. The declaration was correct and
+ * **the layout still broke**, because `.admin__head` also had `flex-wrap: wrap`:
+ * the heading grows (`flex: 1 1 auto`) until the action no longer fits beside it,
+ * the action then **wraps onto its own flex line**, and a line below the heading
+ * sits below the *whole* heading — description included. Measured in Chrome at
+ * 1440 px, the button moved **94 px → 475 px** between a one-line description and
+ * an eleven-line one. `align-items` never applied, because the two were not on
+ * one line to be aligned.
  *
- * **This is why it belongs here and not on a page.** The stable position is a
- * relationship between two blocks in the shared header; a page-level fix would be
- * a page whose button agrees with the rest by coincidence.
+ * **Grid is the tool, because grid does not wrap.** Two columns — the heading
+ * takes the free space, the action takes its own width — and `align-self: start`
+ * pins the action to the top of its cell. The action's offset from the top of the
+ * header is then a constant: it cannot depend on the height of a sibling column.
+ *
+ * Below the narrow breakpoint the header collapses to one column, where the
+ * action *should* sit under the text because there is no room beside it.
+ *
+ * **The lesson generalises and is documented as rule T:** a declaration being
+ * present is not the property holding. This is why the invariant is measured in a
+ * real browser at several widths rather than asserted from the stylesheet.
  * ──────────────────────────────────────────────────────────────────────────── */
 
 .admin__head {
-  display: flex;
-  flex-wrap: wrap;
+  /* **Grid, not flex** — see the note above. A flex row wraps the action onto its
+     own line as soon as the heading grows past the space beside it, and a wrapped
+     line sits below the WHOLE heading, description included. Grid has two columns
+     always, so the action's row cannot be pushed by a taller sibling. */
+  display: grid;
+  grid-template-columns: 1fr auto;
   gap: var(--space-4) var(--space-6);
-  /* **Not `end`.** See *The primary action does not move* above: bottom-aligning
-     tied the button to the last line of the description, so its position changed
-     with the length of the prose beside it. */
   align-items: start;
   padding-block-end: var(--space-4);
   margin-block-end: var(--space-6);
   border-block-end: 1px solid var(--color-border);
 }
 .admin__heading {
-  flex: 1 1 auto;
-  /* See (1) above — without this the text block will not shrink below its
-     longest word, and the wrap this whole block exists to fix comes back. */
+  /* The free column. `min-inline-size: 0` is still required: a grid item's
+     default `min-width: auto` refuses to shrink below its longest word, which is
+     what made a one-line description wrap its last word with room to spare. */
   min-inline-size: 0;
 }
 .admin__title {
@@ -237,15 +246,24 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
-  /* See (2) in the header note above: it is exactly as wide as its buttons, so it
-     is not pushed to the far margin and does not leave a gap beside the
-     description. */
-  flex: 0 0 auto;
-  /* Optically level with the TITLE rather than hugging the top of the block —
-     the title's own line-height leaves it sitting slightly high otherwise. The
-     action's vertical position is therefore a function of the title alone, which
-     is identical on every page. */
+  /* The `auto` column: exactly as wide as its buttons, so it is neither pushed to
+     the far margin nor able to squeeze the description. */
+  /* Pinned to the TOP of its cell. Without this a short action block would be
+     stretched or centred against a tall heading, and its position would move with
+     the description again — by a different mechanism. */
+  align-self: start;
+  /* Optically level with the title rather than hugging the very top: the title's
+     own line-height leaves it sitting slightly high otherwise. */
   padding-block-start: 0.15rem;
+}
+
+/* Below the two-column breakpoint the header is one column, and the action
+   belongs under the text because there is no room beside it. Stated explicitly
+   rather than left to `grid-template-columns` collapsing by accident. */
+@media (max-width: 44rem) {
+  .admin__head {
+    grid-template-columns: 1fr;
+  }
 }
 
 .admin-panel {

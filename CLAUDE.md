@@ -173,6 +173,11 @@ You are working on the بذور الأمل Platform.
 - **A deep link must be consumed by the page it points at (AB).** Carry every half
   the destination needs, and **guard the pair** — `?content_id=` shipped for
   months reading nothing at all.
+- **A layout property must be measured in a browser, not asserted from CSS.** The
+  header guard asserted `align-items: start` — present, correct, and irrelevant,
+  because `flex-wrap` put the action on its own line. Run
+  `scripts/dev/browser/measure-page-header.sh` (drives the installed Chrome over
+  CDP; no dependency) before reporting any layout fix as verified.
 - **A guard must be able to read what it guards.** A CSS assertion written as a
   vitest glob passed for a whole commit while reading empty strings — `?raw` on a
   `.css` file yields `''` here. **The tell is a guard that has never failed**, not
