@@ -275,7 +275,9 @@ export const ar = {
     detailsCategory: 'الفئة',
     detailsLevel: 'المستوى',
     detailsRecurrence: 'التكرار',
-    detailsResources: 'الموارد المرفقة',
+    // The route from a class occurrence in the calendar to its own page, where
+    // R43's `SessionContent` materials and recordings live (2026-08-17).
+    detailsOpenSession: 'فتح صفحة الحصة وموادها',
     detailsInstructors: 'المؤطِّرات',
     detailsVisibility: 'مستوى الظهور',
     openDetails: 'عرض التفاصيل',

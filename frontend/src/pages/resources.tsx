@@ -160,6 +160,25 @@ function LevelView({ levelId }: { levelId: string }): ReactNode {
   const [filters, setFilters] = useState<ContentFilterState>(EMPTY_FILTERS);
   const [open, setOpen] = useState<ContentItem | null>(null);
 
+  /**
+   * **`?content=` opens one item on arrival** (2026-08-17).
+   *
+   * A session's materials link here — *"clicking a content opens it in the
+   * library"* — and until now the parameter they carried (`?content_id=`) was
+   * consumed by nothing at all: the link landed on the Category index, and the
+   * item was neither opened nor on the page.
+   *
+   * It is **focus, never a gate** (rule A): the Level's shelf renders in full
+   * whether or not the parameter is present, and an id that matches nothing here
+   * simply opens nothing rather than emptying the page. The effect runs once the
+   * content has loaded, because the item it opens is one of the loaded rows —
+   * the dialog renders the item, not an id.
+   */
+  const focusId = useMemo(
+    () => new URLSearchParams(window.location.search).get('content'),
+    [],
+  );
+
   useEffect(() => {
     let cancelled = false;
     setLoad({ kind: 'loading' });
@@ -177,6 +196,27 @@ function LevelView({ levelId }: { levelId: string }): ReactNode {
   }, [levelId]);
 
   const content = load.kind === 'ready' ? load.data : null;
+
+  // Opened once, when the shelf it belongs to has loaded. `focusId` is read at
+  // mount and never changes, so this cannot reopen a dialog the reader has shut.
+  const [focusHandled, setFocusHandled] = useState(false);
+  useEffect(() => {
+    if (focusHandled || focusId === null || content === null) return;
+    setFocusHandled(true);
+    // §5.2 groups a Level's shelf by academic year and then by branch, so the
+    // item is two levels down — searched rather than assumed to be anywhere in
+    // particular.
+    for (const year of content.years) {
+      for (const branch of year.branches) {
+        for (const item of branch.items) {
+          if (item.id === focusId) {
+            setOpen(item);
+            return;
+          }
+        }
+      }
+    }
+  }, [focusHandled, focusId, content]);
   const filtered = useMemo(
     () => (content ? applyFilters(content, filters) : null),
     [content, filters],

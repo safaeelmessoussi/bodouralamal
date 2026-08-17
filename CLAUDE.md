@@ -165,6 +165,14 @@ You are working on the بذور الأمل Platform.
   exists somewhere unreachable (Z)** — and whether the SRS has already *refused*
   the shape being asked for. The grading scale was seeded and unreachable; a
   per-exam scale was refused in terms by R58.
+- **A class occurrence's materials are `SessionContent` (AA).** A **Session**
+  references 0..N `EducationalContent`, many-to-many; **an Event has none** —
+  R43 retired `EducationalContent.event_id` deliberately. Content is referenced,
+  never owned: unlinking never deletes, and nothing is ever copied into an
+  occurrence. Surface it by **linking to the page that owns it**.
+- **A deep link must be consumed by the page it points at (AB).** Carry every half
+  the destination needs, and **guard the pair** — `?content_id=` shipped for
+  months reading nothing at all.
 - **A guard must be able to read what it guards.** A CSS assertion written as a
   vitest glob passed for a whole commit while reading empty strings — `?raw` on a
   `.css` file yields `''` here. **The tell is a guard that has never failed**, not

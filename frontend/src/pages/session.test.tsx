@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
+import SESSION from './session.tsx?raw';
+import RESOURCES from './resources.tsx?raw';
+
+/** Comments are not code — the idiom the scheduling parity guard established. */
+function code(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+}
+
 import type { SessionContentRef, SessionPage } from '../adapters/calendar.js';
 import { resolveRoute } from '../lib/route.js';
 
@@ -58,5 +66,34 @@ describe('the page contract', () => {
     // someone forgot to write any.
     const page: Pick<SessionPage, 'notes'> = { notes: null };
     expect(page.notes).toBeNull();
+  });
+});
+
+/**
+ * **A deep link must be consumed by the page it points at.**
+ *
+ * The session page linked its materials to `/resources?content_id={id}` and
+ * **nothing anywhere read that parameter**: the library routes on `?level=`, so
+ * the link landed on the Category index with the item neither opened nor even on
+ * the page. It compiled, it navigated, and it did nothing — which is why a dead
+ * parameter is worth a guard rather than a fix alone.
+ *
+ * Asserted as the pair: the link the session page emits, and the parameter the
+ * library reads. Either one alone can drift.
+ */
+describe('a session’s materials open in the library', () => {
+  it('links with BOTH halves — which shelf, and which item on it', () => {
+    // `level` is what the library routes on; `content` is what it focuses. The
+    // ref already carries `level_id`, so the link can name both.
+    expect(code(SESSION)).toContain('/resources?level=${item.level_id}&content=${item.id}');
+    // The dead parameter, asserted absent by name.
+    expect(code(SESSION)).not.toContain('content_id=');
+  });
+
+  it('the library reads the parameter the link sends', () => {
+    expect(code(RESOURCES)).toContain("get('content')");
+    // Focus, never a gate (rule A): the shelf renders whether or not it is set,
+    // so the read must not appear in a condition that guards the fetch.
+    expect(code(RESOURCES)).not.toMatch(/if\s*\(!focusId\)\s*return/);
   });
 });

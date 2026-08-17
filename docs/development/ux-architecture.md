@@ -366,6 +366,57 @@ second implementation** rather than the presence of the shared one: presence is
 satisfied by a screen that uses the shared component *and* keeps hand-rolled UI
 beside it — which one page did here, for a whole revision.
 
+## AA · An occurrence's materials belong to the Session, and the content is the source of truth
+
+```
+Session (a materialised class occurrence)
+  └── SessionContent  ──<  EducationalContent      0..N, many-to-many
+Event (activity)
+  └── (no content relationship — R43 retired it deliberately)
+```
+
+**Content is referenced, never owned** (§4.9, R43). One semester PDF is
+referenced by every session that uses it; unlinking a session **never deletes the
+file**, and a recording made in one session is an ordinary library item that
+happens to have been produced there.
+
+**Never copy content into an occurrence.** R43 retired
+`EducationalContent.event_id` precisely because it *"expressed one relationship,
+in one direction, to the wrong entity"* — and a per-occurrence copy would be that
+mistake with duplication added.
+
+**An Event has no content relationship at all.** Offering one on an activity is a
+door to a room that does not exist; the *kind* decides what a calendar occurrence
+may show.
+
+**Surface it by linking to the page that owns it**, not by widening the calendar
+read: `GET /calendar` returns a month's chrome, and shipping every occurrence's
+materials would make every reader pay for data almost none of them opens. Rule P
+applied to reads — expose what exists, never render it twice.
+
+Canonical: `SessionContent` · `POST /sessions/{id}/content` ·
+[`SessionMaterialsDialog`](../../frontend/src/components/content/session-materials-dialog.tsx)
+(link existing · upload-and-link · unlink) · `/calendar/sessions/{id}` ·
+`OccurrenceMaterials` in the calendar's details dialog.
+
+## AB · A deep link must be consumed by the page it points at
+
+A parameter nothing reads is worse than no link: it navigates, it looks
+deliberate, and it silently does nothing. `/resources?content_id=` shipped for
+months — the library routes on `?level=`, so the link landed on the Category
+index with the item neither opened nor on the page.
+
+**Carry every half the destination needs.** `?level=` says *which shelf*,
+`?content=` says *which item on it* — and the ref already carried `level_id`, so
+nothing had to be looked up.
+
+**And it stays focus, never a gate** (rule A): the destination renders in full
+whether or not the parameter is present, and an id matching nothing opens nothing
+rather than emptying the page.
+
+**Guard the pair.** `session.test.tsx` asserts both the link the source emits and
+the parameter the destination reads — either alone can drift.
+
 ## T · The page header is one block
 
 **Title, description and primary action form a header** — not two things at

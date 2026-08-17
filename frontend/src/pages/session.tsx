@@ -186,7 +186,16 @@ function ContentList({ title, items }: { title: string; items: SessionContentRef
       <ul>
         {items.map((item) => (
           <li key={item.id}>
-            <a href={`/resources?content_id=${item.id}`}>{item.title}</a>
+            {/* **The deep link the library actually honours** (fixed 2026-08-17).
+                This read `?content_id=`, which nothing anywhere consumed: the
+                library routes on `?level=`, so the link landed on the Category
+                index and the item a reader had just clicked was not opened, not
+                highlighted, and not even on the page.
+
+                `level_id` travels on the ref already, so the link can name both
+                halves — which Level's shelf to open, and which item on it. The
+                library reads `?content=` and opens its preview. */}
+            <a href={`/resources?level=${item.level_id}&content=${item.id}`}>{item.title}</a>
           </li>
         ))}
       </ul>

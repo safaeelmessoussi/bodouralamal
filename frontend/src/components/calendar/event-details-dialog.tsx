@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import type { Occurrence } from '../../adapters/calendar.js';
 import { OCCURRENCE_KIND_BADGE, OCCURRENCE_KIND_LABEL } from '../../adapters/calendar.js';
 import { t, tList } from '../../i18n/index.js';
+import { ButtonLink } from '../ui/button.js';
 import { Dialog } from '../ui/dialog.js';
 
 /**
@@ -147,7 +148,7 @@ export function EventDetailsDialog({
             ) : null}
           </dl>
 
-          <EventResources />
+          <OccurrenceMaterials occurrence={occurrence} />
         </>
       ) : null}
     </Dialog>
@@ -155,40 +156,54 @@ export function EventDetailsDialog({
 }
 
 /**
- * **A reserved area for content attached to an event — and the relationship it
- * names does not exist** (corrected 2026-08-17).
+ * **The way from a class occurrence to its materials** (2026-08-17).
  *
- * This cited `EducationalContent.event_id`, which **Revision 43 retired**: *"it
- * expressed one relationship, in one direction, to the wrong entity"*. R43
- * replaced it with `SessionContent` — content is referenced **many-to-many by a
- * SESSION**, which is a materialised occurrence of a Course Schedule. §7's
- * deletion table states the consequence outright: *"Revision 43: content no
- * longer attaches to Events."*
+ * ## What this replaced
  *
- * So this seam promises a link the model deliberately removed, on exactly the
- * question a reader of this file would come here to ask. The comment is corrected
- * rather than the component deleted, because the component itself is harmless —
- * it renders nothing — and because **whether an Event should regain a content
- * relationship is an open Owner decision** (2026-08-17). If it is taken, this is
- * where the list belongs; if it is not, this function should go.
+ * `EventResources`, a reserved area citing `EducationalContent.event_id` — a
+ * foreign key **Revision 43 retired**: *"it expressed one relationship, in one
+ * direction, to the wrong entity."* §7's deletion table states the consequence
+ * outright: *"content no longer attaches to Events."* The seam promised a
+ * relationship the model had deliberately removed, on exactly the question a
+ * reader of this file comes here to ask — and a dormant seam for a deleted
+ * relationship is an invitation to reinstate it by accident.
  *
- * **A `Session`'s materials are a different matter and already exist**:
- * `SessionContent`, `POST /sessions/{id}/content`, and `SessionMaterialsDialog`
- * on `/admin/schedules/{id}/sessions`. Surfacing those in the calendar needs no
- * schema change — see the audit.
+ * **What R43 put in its place is `SessionContent`** — content referenced
+ * many-to-many by a **Session**, the materialised occurrence of a Course
+ * Schedule. That is where a class's materials and recordings live, and
+ * `/calendar/sessions/{id}` already renders both.
+ *
+ * ## Why a link rather than the list itself
+ *
+ * The occurrence carries no content, and widening `GET /calendar` so every
+ * occurrence ships its materials would make a month's read pay for data almost no
+ * reader opens. The session page already exists, is already public-scoped, and is
+ * already what the student dashboard links to — so this is a route into it rather
+ * than a second rendering of it (rule P: expose, never duplicate).
+ *
+ * ## Only for a session
+ *
+ * An `activity` is an `Event`, and an Event has **no** content relationship
+ * (R43); an exam has its own surfaces (§4.6). Offering this on either would be a
+ * door to a room that does not exist, so the kind decides.
+ *
+ * **Whether an Event should regain a content relationship is an open Owner
+ * decision** (2026-08-17). If it is taken, the list belongs here and the kind
+ * check is what widens.
  */
-function EventResources({ resources = [] }: { resources?: { id: string; title: string }[] }): ReactNode {
-  if (resources.length === 0) return null;
+function OccurrenceMaterials({ occurrence }: { occurrence: Occurrence }): ReactNode {
+  if (occurrence.kind !== 'session') return null;
   return (
-    <section className="details__section" aria-labelledby="details-resources">
-      <h3 id="details-resources" className="details__section-title">
-        {t('calendar.detailsResources')}
+    <section className="details__section" aria-labelledby="details-materials">
+      <h3 id="details-materials" className="details__section-title">
+        {t('session.materials')}
       </h3>
-      <ul className="details__resources">
-        {resources.map((resource) => (
-          <li key={resource.id}>{resource.title}</li>
-        ))}
-      </ul>
+      {/* The shared button as a link — it emits an `<a>`, so middle-click and
+          "open in new tab" keep working while the affordance matches every other
+          action on the platform. */}
+      <ButtonLink variant="secondary" href={`/calendar/sessions/${occurrence.id}`}>
+        {t('calendar.detailsOpenSession')}
+      </ButtonLink>
     </section>
   );
 }
