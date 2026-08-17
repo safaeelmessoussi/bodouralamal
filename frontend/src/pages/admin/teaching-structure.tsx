@@ -29,6 +29,7 @@ import { FormDialog } from '../../components/ui/form-dialog.js';
 import { SearchInput, SelectField, TextField } from '../../components/ui/field.js';
 import { useSession } from '../../contexts/session.js';
 import { useActiveRole } from '../../contexts/active-role.js';
+import { isDirty } from '../../lib/form-dirty.js';
 import { t } from '../../i18n/index.js';
 import { ApiError } from '../../lib/api.js';
 
@@ -633,6 +634,13 @@ function CircleDialog({
   const needsPair = group === null;
   const complete = name.trim() !== '' && (!needsPair || (levelId !== '' && subjectId !== ''));
 
+  // Creating opens with everything blank, so any answer is a change; editing
+  // opens with the circle's own name.
+  const dirty = isDirty(
+    { name, levelId, subjectId },
+    { name: group?.name ?? '', levelId: group ? levelId : '', subjectId: group ? subjectId : '' },
+  );
+
   return (
     <FormDialog
       open={open}
@@ -640,6 +648,7 @@ function CircleDialog({
       notice={notice}
       busy={busy}
       disabled={!complete}
+      dirty={dirty}
       onSubmit={() => onSave(name)}
       onCancel={onCancel}
     >

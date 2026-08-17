@@ -27,6 +27,7 @@ import { SearchInput, SelectField } from '../../components/ui/field.js';
 import { MultiSelectField } from '../../components/ui/multi-select.js';
 import { useSession } from '../../contexts/session.js';
 import { useActiveRole } from '../../contexts/active-role.js';
+import { isDirty } from '../../lib/form-dirty.js';
 import { t } from '../../i18n/index.js';
 import { ApiError } from '../../lib/api.js';
 
@@ -363,12 +364,20 @@ function SyllabusDialog({
     })();
   }, [token]);
 
+  // Sorted on both sides: a Surah set is unordered, so a different ORDER of the
+  // same ids is not a change — comparing the raw arrays would report one.
+  const dirty = isDirty(
+    [...selected].sort(),
+    current.map((s) => String(s.surah_id)).sort(),
+  );
+
   return (
     <FormDialog
       open
       title={t('admin.levelSurahs.configureTitle')}
       notice={notice}
       busy={busy}
+      dirty={dirty}
       onSubmit={() => {
         void (async () => {
           setBusy(true);

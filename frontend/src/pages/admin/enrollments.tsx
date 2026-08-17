@@ -10,7 +10,12 @@ import {
   type EnrollmentRowView,
 } from '../../adapters/enrollments.js';
 import { listLevels, type Level } from '../../adapters/taxonomy.js';
-import { addMember, listCircles, type TeachingGroupRow } from '../../adapters/teaching-groups.js';
+import {
+  addMember,
+  listCircles,
+  removeMember,
+  type TeachingGroupRow,
+} from '../../adapters/teaching-groups.js';
 import { searchUsers, type UserSummary } from '../../adapters/users.js';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
 import { LevelSelect, levelLabel } from '../../components/scope/level-select.js';
@@ -26,6 +31,7 @@ import { SearchInput, SelectField } from '../../components/ui/field.js';
 import { MultiSelectField } from '../../components/ui/multi-select.js';
 import { SearchableSelect } from '../../components/ui/searchable-select.js';
 import { useSession } from '../../contexts/session.js';
+import { isDirty } from '../../lib/form-dirty.js';
 import { t } from '../../i18n/index.js';
 import { ApiError } from '../../lib/api.js';
 
@@ -463,12 +469,19 @@ function EnrolDialog({
     }
   }
 
+  // A create form opens blank, so anything entered is unsaved work.
+  const dirty = isDirty(
+    { studentId, levelId, branchId, groupId, circleIds: [...circleIds].sort() },
+    { studentId: '', levelId: null, branchId: '', groupId: '', circleIds: [] },
+  );
+
   return (
     <FormDialog
       open
       title={t('admin.enrollments.add')}
       notice={notice}
       busy={busy}
+      dirty={dirty}
       disabled={!studentId || !levelId || !branchId}
       onSubmit={() => void submit()}
       onCancel={onCancel}
@@ -557,18 +570,51 @@ function refusal(error: unknown): string {
 }
 
 /**
- * Changing a placement **within its Level**.
+ * Changing a placement **within its Level** — group, branch and circles.
  *
- * **The Level is not offered, and that is the model rather than a limitation.**
- * BR-21 makes `(student, level)` unique, so an enrolment *is* that pair: moving
- * a مستفيدة to another Level means ending this enrolment and beginning another,
- * which the two other actions on this screen already express. Rewriting
- * `level_id` in place would leave her history and circle seats attached to a
- * Level she no longer studies.
+ * ## What the model allows, and what this now offers (audited 2026-08-17)
  *
- * **Changing the group releases her circle seats**, which the dialog says
- * before it happens: a circle is a placement within this Level, and her
- * subdivision is about to change (§4.4c).
+ * The dialog offered only the group, while `updateEnrollmentPlacement` has
+ * accepted `{ administrativeGroupId, branchId }` all along — so **the branch was
+ * a capability the service supported and the interface withheld**, the same shape
+ * of gap R69, R70.1, R72 and R74 each closed once. Circles were managed on
+ * `حلقات المواد` only, which meant the one screen that shows a مستفيدة's whole
+ * placement could change none of it.
+ *
+ * | Field | Editable | Why |
+ * |---|---|---|
+ * | Administrative Group | **yes** | an optional subdivision of the Level (R66) |
+ * | Branch | **yes** | `Enrollment.branch_id` is the enrolment's own column (R66) |
+ * | Circles | **yes** | independent placements under `(Subject, Level)` (§4.4c) |
+ * | **Level** | **no — and that is the model** | see below |
+ *
+ * ## The Level is deliberately absent
+ *
+ * BR-21 makes `(student, level)` unique, so an enrolment **is** that pair: moving
+ * a مستفيدة to another Level means **ending this enrolment and beginning
+ * another**, which the two other actions on this screen already express.
+ * Rewriting `level_id` in place would leave her grades, her history and her
+ * circle seats attached to a Level she no longer studies — so the invariant is
+ * preserved by *not offering the control*, and the dialog says so rather than
+ * leaving the absence to look like an oversight.
+ *
+ * ## Branch and group cannot disagree
+ *
+ * A group states its own branch (§7). So choosing a group **sets** the branch and
+ * locks the control — two answers to one question is how they drift apart — while
+ * a Level-only enrolment may set its branch freely, because there is no group to
+ * take it from. That is R66 read forwards: the branch moved *onto the enrolment*
+ * precisely so an ungrouped student has one.
+ *
+ * ## Circles are changed by their own calls, and are not coupled to the group
+ *
+ * Adding and removing seats goes through `addMember` / `removeMember` — the
+ * endpoints `حلقات المواد` uses — and only the **difference** is written, so a
+ * seat nobody touched is not removed and re-added. **Changing the group releases
+ * her circle seats server-side**, which the dialog warns about before it happens:
+ * a circle is a placement within this Level and her subdivision is about to
+ * change. The two remain independent relationships — nothing here reads a group
+ * to decide a circle (§4.4c: *"nothing aligns them and nothing should try to"*).
  */
 function PlacementDialog({
   row,
@@ -582,21 +628,117 @@ function PlacementDialog({
   onDone: (message: string) => void;
 }): ReactNode {
   const [groupId, setGroupId] = useState(row.administrative_group_id ?? '');
+  const [branchId, setBranchId] = useState(row.branch_id);
   const [groups, setGroups] = useState<AdministrativeGroup[]>([]);
+  const [branches, setBranches] = useState<Branch[]>([]);
+  const [circles, setCircles] = useState<TeachingGroupRow[]>([]);
+  /** Her current seats, as the ids the circle endpoints take. */
+  const [circleIds, setCircleIds] = useState<string[]>([]);
+  const [pristineCircleIds, setPristineCircleIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
   useEffect(() => {
     void (async () => {
-      try {
-        setGroups((await listAdministrativeGroups(token, 1, { level_id: row.level_id })).data);
-      } catch {
-        setGroups([]);
-      }
+      const [groupPage, branchPage, circlePage] = await Promise.all([
+        listAdministrativeGroups(token, 1, { level_id: row.level_id }).catch(() => null),
+        // Only the branches this caller may act on, so the form cannot offer one
+        // the placement would refuse.
+        listBranches(token).catch(() => null),
+        // Keyed on the LEVEL alone — a circle is `(Subject, Level)` and has no
+        // branch and no relation to a group (§4.4c, R43.3).
+        listCircles(token, 1, { level_id: row.level_id }).catch(() => null),
+      ]);
+      setGroups(groupPage?.data ?? []);
+      setBranches(branchPage?.data ?? []);
+      const all = circlePage?.data ?? [];
+      setCircles(all);
+      // Her seats, matched from the row's own read: `EnrollmentRowView.circles`
+      // carries names rather than ids, so the ids come from the circle list.
+      const held = all
+        .filter((c) =>
+          row.circles.some(
+            (x) => x.subject_name === c.subject_name && x.circle_name === c.name,
+          ),
+        )
+        .map((c) => c.id);
+      setCircleIds(held);
+      setPristineCircleIds(held);
     })();
-  }, [row.level_id, token]);
+  }, [row.level_id, row.circles, token]);
+
+  // A group states its own branch (§7), so choosing one answers the branch.
+  useEffect(() => {
+    const group = groups.find((g) => g.id === groupId);
+    if (group) setBranchId(group.branch_id);
+  }, [groupId, groups]);
 
   const changesGroup = (groupId === '' ? null : groupId) !== row.administrative_group_id;
+  const dirty = isDirty(
+    { groupId, branchId, circleIds: [...circleIds].sort() },
+    {
+      groupId: row.administrative_group_id ?? '',
+      branchId: row.branch_id,
+      circleIds: [...pristineCircleIds].sort(),
+    },
+  );
+
+  async function submit(): Promise<void> {
+    setBusy(true);
+    setNotice(null);
+    try {
+      const group = groups.find((g) => g.id === groupId);
+      await updateEnrollment(
+        row.id,
+        {
+          administrative_group_id: groupId === '' ? null : groupId,
+          // The group's branch wins where there is one; otherwise the chosen
+          // branch, which is the whole point of R66's column.
+          branch_id: group ? group.branch_id : branchId,
+        },
+        token,
+      );
+
+      /**
+       * **Only the difference is written**, and removals go first.
+       *
+       * Re-asserting a seat she already holds would be refused as a duplicate,
+       * and re-writing every one would put changes nobody made into the audit
+       * trail. Removals precede additions so that moving her between two circles
+       * of the SAME Subject cannot momentarily hold both — which the server
+       * refuses with a `409`, correctly.
+       */
+      const before = new Set(pristineCircleIds);
+      const after = new Set(circleIds);
+      let failed = 0;
+      for (const id of before) {
+        if (!after.has(id)) {
+          try {
+            await removeMember(id, row.student_id, token);
+          } catch {
+            failed += 1;
+          }
+        }
+      }
+      for (const id of after) {
+        if (!before.has(id)) {
+          try {
+            await addMember(id, row.student_id, token);
+          } catch {
+            failed += 1;
+          }
+        }
+      }
+
+      onDone(
+        failed > 0 ? t('admin.enrollments.updatedCirclesPartly') : t('admin.enrollments.updated'),
+      );
+    } catch (error) {
+      setNotice(refusal(error));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <FormDialog
@@ -604,35 +746,14 @@ function PlacementDialog({
       title={t('admin.enrollments.editTitle')}
       notice={notice}
       busy={busy}
-      onSubmit={() => {
-        void (async () => {
-          setBusy(true);
-          setNotice(null);
-          try {
-            const group = groups.find((g) => g.id === groupId);
-            await updateEnrollment(
-              row.id,
-              {
-                administrative_group_id: groupId === '' ? null : groupId,
-                // A group states its own branch (§7); moving into one moves her
-                // to that branch, so the two answers cannot disagree.
-                ...(group ? { branch_id: group.branch_id } : {}),
-              },
-              token,
-            );
-            onDone(t('admin.enrollments.updated'));
-          } catch (error) {
-            setNotice(refusal(error));
-          } finally {
-            setBusy(false);
-          }
-        })();
-      }}
+      dirty={dirty}
+      onSubmit={() => void submit()}
       onCancel={onCancel}
     >
       <p className="lede">
         {row.student_name} — {row.category_name} — {row.level_name}
       </p>
+
       <SelectField
         label={t('admin.nav.groups')}
         value={groupId}
@@ -645,6 +766,37 @@ function PlacementDialog({
             : t('admin.enrollments.groupHint')
         }
       />
+
+      {/* **Editable only for a Level-only enrolment.** With a group chosen the
+          branch is the group's (§7), and offering it as a second answer is how
+          the two come to disagree. Disabled rather than hidden, so the reader can
+          see which branch she is at and why it is not theirs to change here
+          (§14.2 — an inapplicable control still teaches). */}
+      <SelectField
+        label={t('admin.enrollments.branch')}
+        value={branchId}
+        onChange={setBranchId}
+        disabled={groupId !== ''}
+        options={branches.map((b) => ({ value: b.id, label: b.name }))}
+        hint={
+          groupId !== ''
+            ? t('admin.enrollments.branchFromGroup')
+            : t('admin.enrollments.branchHint')
+        }
+      />
+
+      {circles.length === 0 ? (
+        <p className="field__hint">{t('admin.enrollments.circlesNone')}</p>
+      ) : (
+        <MultiSelectField
+          label={t('admin.enrollments.circlesOptional')}
+          options={circles.map((c) => ({ value: c.id, label: `${c.subject_name} — ${c.name}` }))}
+          selected={circleIds}
+          onChange={setCircleIds}
+          hint={t('admin.enrollments.circlesHint')}
+        />
+      )}
+
       {/* The Level is deliberately absent — see the docstring. */}
       <p className="field__hint">{t('admin.enrollments.levelFixed')}</p>
     </FormDialog>

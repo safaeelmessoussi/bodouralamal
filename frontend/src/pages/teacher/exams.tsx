@@ -87,8 +87,8 @@ export function TeacherExamsPage(): ReactNode {
   const visible = exams.filter((e) => needle === '' || e.title.toLowerCase().includes(needle));
 
   const columns: Column<Exam>[] = [
-    { key: 'title', header: t('admin.schedules.title'), cell: (e) => e.title },
-    { key: 'date', header: t('admin.exams.date'), cell: (e) => formatDate(e.date) },
+    { key: 'title', header: t('admin.grades.exam'), cell: (e) => e.title },
+    { key: 'date', header: t('admin.grades.colDate'), cell: (e) => formatDate(e.date) },
     { key: 'level', header: t('admin.nav.levels'), cell: (e) => e.level_name ?? '—' },
     {
       key: 'subject',
@@ -98,7 +98,7 @@ export function TeacherExamsPage(): ReactNode {
     },
     {
       key: 'audience',
-      header: t('admin.exams.audience'),
+      header: t('admin.grades.colAudience'),
       secondary: true,
       // R58 — a named group, or the whole Level at the exam's branch.
       cell: (e) => e.administrative_group_name ?? t('admin.grades.wholeLevel'),

@@ -44,7 +44,13 @@ export function PortalShell({
         {sidebar}
         <main id="main" className="admin__main">
           <div className="admin__head">
-            <div>
+            {/* **The heading block is a named element now** (2026-08-17), because
+                the header's layout depends on it: it grows to take the width the
+                action block does not need, so a one-line description stops
+                wrapping its last word with empty space beside it. An anonymous
+                `<div>` could not be targeted, which is why every page appeared to
+                need its own width. See `admin.css` under *The page header*. */}
+            <div className="admin__heading">
               {/* Above the heading, and only for a session that may open the
                   module: a trail names a Level, which is not something the
                   no-permission state should disclose. */}

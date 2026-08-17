@@ -39,6 +39,7 @@ import {
   withCategoryNames,
   type LevelOption,
 } from '../../components/scope/level-select.js';
+import { isDirty } from '../../lib/form-dirty.js';
 import { t } from '../../i18n/index.js';
 import { ScopeSelectors } from '../../components/scope/scope-selectors.js';
 import { useScopeOptions } from '../../hooks/use-scope-options.js';
@@ -379,6 +380,20 @@ function GroupDialog({
 
   const complete = name.trim() !== '' && levelId !== '' && branchId !== '';
 
+  /** The four fields the reset effect above writes — the same expressions. */
+  const dirty = isDirty(
+    { name, levelId, branchId, order },
+    {
+      name: group?.name ?? '',
+      levelId: group?.level_id ?? '',
+      branchId: group?.branch_id ?? '',
+      order:
+        group?.display_order !== null && group?.display_order !== undefined
+          ? String(group.display_order)
+          : '',
+    },
+  );
+
   return (
     /**
      * **`FormDialog`, not a hand-assembled `Dialog`** — this form was the last
@@ -397,6 +412,7 @@ function GroupDialog({
       title={t(group ? 'admin.groups.editTitle' : 'admin.groups.create')}
       busy={busy}
       disabled={!complete}
+      dirty={dirty}
       onCancel={onCancel}
       onSubmit={() =>
         onSave({

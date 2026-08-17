@@ -109,8 +109,8 @@ export function ExamGradesPage({ examId }: { examId: string | null }): ReactNode
   }, [exams, query, levelFilter]);
 
   const columns: Column<Exam>[] = [
-    { key: 'title', header: t('admin.schedules.title'), cell: (e) => e.title },
-    { key: 'date', header: t('admin.exams.date'), cell: (e) => formatDate(e.date) },
+    { key: 'title', header: t('admin.grades.exam'), cell: (e) => e.title },
+    { key: 'date', header: t('admin.grades.colDate'), cell: (e) => formatDate(e.date) },
     {
       key: 'level',
       // The shared label — `{Category} — {Level}` — so a Level reads the same
@@ -136,7 +136,7 @@ export function ExamGradesPage({ examId }: { examId: string | null }): ReactNode
     },
     {
       key: 'audience',
-      header: t('admin.exams.audience'),
+      header: t('admin.grades.colAudience'),
       secondary: true,
       // R58 — a named group, or the whole Level at the exam's branch. Saying
       // which is what makes an empty sheet legible later.

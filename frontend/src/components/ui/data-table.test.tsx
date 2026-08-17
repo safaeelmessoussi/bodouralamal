@@ -105,7 +105,14 @@ describe('DataTable — configuration, not code', () => {
       ],
     });
     expect(html).toContain('تعديل');
-    expect(html).toContain('is-danger');
+    // **The shared danger VARIANT, not a bespoke `is-danger` modifier**
+    // (2026-08-17). The actions used to be hand-written `btn btn--ghost` with
+    // `is-danger` bolted on; they render through `Button` now, so the
+    // destructive one carries the same `btn--danger` every irreversible action
+    // on the platform does. Asserting the variant rather than the old modifier
+    // is what keeps this a test of *"destructive actions look destructive
+    // platform-wide"* instead of a test of one table's private class name.
+    expect(html).toContain('btn--danger');
   });
 
   it('hides a row action that does not apply to that row', () => {

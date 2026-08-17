@@ -36,8 +36,40 @@
     position: sticky;
     /* Clears the sticky application header. */
     inset-block-start: calc(var(--header-height) + var(--space-4));
+
+    /* **The sidebar scrolls itself when it outgrows the viewport** (2026-08-17).
+       A sticky element taller than the screen is a menu whose last entries
+       cannot be reached at all — الإدارة's five nodes put the back office over
+       that line — and the page's own scroll does not help, because a sticky box
+       does not move with it.
+
+       `max-block-size` is the viewport minus the header it clears and a little
+       breathing room, so the box ends where the screen does. `overflow-y: auto`
+       then gives it its own scrollbar, and the browser's default scroll chaining
+       does the rest of what was asked: a wheel over the sidebar scrolls the
+       sidebar, and a wheel over the page scrolls the page, because they are two
+       independent scroll containers.
+
+       `overscroll-behavior: contain` is the part that stops the surprise — once
+       the sidebar reaches its end, further scrolling does NOT hand off to the
+       page underneath. Without it, reaching the bottom of the menu silently
+       starts scrolling the article behind it, which is exactly the
+       "unexpectedly scrolled the page" complaint.
+
+       **No JavaScript.** A wheel handler would have to re-derive what the
+       browser already knows, and would break keyboard scrolling and momentum
+       scrolling on the way. */
+    max-block-size: calc(100vh - var(--header-height) - var(--space-8));
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    /* Room for the scrollbar, so it does not sit on top of the labels. */
+    padding-inline-end: var(--space-2);
   }
 }
+/* Below the two-column breakpoint the sidebar is a normal block in the flow —
+   it is not sticky, so it must not be height-capped either, or it would become a
+   small scrolling box in the middle of the page. The rules above are inside the
+   media query for exactly that reason. */
 .admin-nav__group-title {
   font-size: var(--font-size-xs);
   font-weight: 700;
@@ -90,18 +122,65 @@
 .admin__main {
   min-width: 0;
 }
+/* ── The page header: title · description · primary action ──────────────────
+ *
+ * **The description reads across the width it has** (2026-08-17).
+ *
+ * The defect: `justify-content: space-between` on a two-child flex row put the
+ * action block hard against the far edge and let the text block shrink to its
+ * flex basis — so a one-line description wrapped its last word onto a line of
+ * its own with visibly empty space beside it. «…يُسجَّل فيه مباشرة» was the
+ * reported case, and الفئات and مقرر الحفظ did the same.
+ *
+ * Three things fix it together, and none of them is a per-page width:
+ *
+ *   1. **the text block grows** — `flex: 1 1 auto` with `min-inline-size: 0`, so
+ *      it takes the room the action does not need instead of sitting at its
+ *      content width. `min-inline-size: 0` is the part that is easy to omit: a
+ *      flex item's default `min-width: auto` refuses to shrink below its longest
+ *      word, which is what produces the odd wrap in the first place;
+ *   2. **the action block does not grow** — `flex: 0 0 auto`, so it is exactly
+ *      as wide as its button rather than being pushed to the margin, which is
+ *      what created the gap;
+ *   3. **`space-between` is gone.** With the text growing there is nothing left
+ *      to distribute, and the two blocks sit next to each other with one `gap`
+ *      between them — a header rather than two things at opposite ends.
+ *
+ * The description keeps a **reading measure** (`--measure-lede`): a line of
+ * Arabic running the full width of a 96rem page is hard to track back to the
+ * start of. So it uses the width available *up to* a comfortable maximum — which
+ * is why this is a `max-inline-size` and not a fixed one, and why a narrow
+ * viewport still wraps normally instead of overflowing.
+ * ──────────────────────────────────────────────────────────────────────────── */
+
 .admin__head {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--space-4);
+  gap: var(--space-4) var(--space-6);
   align-items: end;
-  justify-content: space-between;
   padding-block-end: var(--space-4);
   margin-block-end: var(--space-6);
   border-block-end: 1px solid var(--color-border);
 }
+.admin__heading {
+  flex: 1 1 auto;
+  /* See (1) above — without this the text block will not shrink below its
+     longest word, and the wrap this whole block exists to fix comes back. */
+  min-inline-size: 0;
+}
 .admin__title {
   font-size: var(--font-size-lg);
+  /* A two-line title breaks at a sensible point rather than leaving one word
+     stranded — the same problem as the description, one element up. */
+  text-wrap: balance;
+}
+/* The description, scoped to the header so the generic `.lede` used on public
+   pages keeps its own narrower measure. */
+.admin__head .lede {
+  max-inline-size: var(--measure-lede);
+  /* `pretty` keeps the last line from being a single short word where the
+     browser supports it, and is ignored where it does not. */
+  text-wrap: pretty;
 }
 
 /* R69 — the trail above the heading. Quieter than the title it sits on: it
@@ -217,6 +296,28 @@
   gap: var(--space-2);
   align-items: center;
   justify-content: end;
+}
+
+/* **A row action is a button, and now looks like one** (2026-08-17).
+ *
+ * The defect: `DataTable` rendered its actions as `btn btn--ghost`, which has no
+ * border and no background at rest — so «تعديل» and «حذف» sat in a cell full of
+ * ordinary text looking exactly like ordinary text. Nothing told a reader they
+ * were controls until the pointer happened to cross one.
+ *
+ * They render through the shared `Button` (`secondary`, or `danger` where the
+ * action is destructive), so the palette, the hover and the focus ring are the
+ * button system's. **This class only makes them row-sized** — a full-height
+ * button in every row of a dense table would double the table's height, which is
+ * the reason the ghost variant was reached for in the first place. Compact is the
+ * requirement; invisible was never the requirement.
+ *
+ * `white-space: nowrap` because an action label broken across two lines makes the
+ * row taller than the text in it, which is worse than a slightly wider column. */
+.row-action {
+  padding: 0.3rem var(--space-3);
+  font-size: var(--font-size-sm);
+  white-space: nowrap;
 }
 
 /* State in WORDS, not colour alone — it has to survive a monochrome screen. */

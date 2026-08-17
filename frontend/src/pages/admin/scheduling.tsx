@@ -44,6 +44,7 @@ import { SelectField } from '../../components/ui/field.js';
 import { useScopeOptions } from '../../hooks/use-scope-options.js';
 import { useSession } from '../../contexts/session.js';
 import { useActiveRole } from '../../contexts/active-role.js';
+import { isDirty } from '../../lib/form-dirty.js';
 import { t } from '../../i18n/index.js';
 import { ApiError } from '../../lib/api.js';
 
@@ -534,6 +535,74 @@ export function SchedulingDialog({
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  /**
+   * **Unsaved work here is the most expensive on the platform**, which is why the
+   * snapshot is exhaustive rather than a representative sample: this form carries
+   * eighteen fields including a recurrence pattern and two staff lists, and a
+   * `dirty` that missed one would silently discard exactly the change a reader
+   * had just made.
+   *
+   * **No timing hazard.** Every field above is initialised from `item` in its own
+   * `useState`, so the pristine side is the *same expressions*. This form has no
+   * reset effect, unlike the dialogs whose fields are written after first render —
+   * which is the reason `isDirty` takes both sides explicitly rather than
+   * capturing a baseline (see `lib/form-dirty.ts`).
+   *
+   * The staff lists are sorted on both sides: a set of assistants is unordered,
+   * so a reordering is not a change.
+   */
+  const pristine = {
+    type: item?.type ?? (initialType && types.includes(initialType) ? initialType : types[0] ?? 'class'),
+    title: item?.title ?? '',
+    description: item?.description ?? '',
+    allDay: item ? item.startTime === null : false,
+    startTime: item?.startTime ?? '09:00',
+    endTime: item?.endTime ?? '10:00',
+    endDate: item?.endDate ?? '',
+    recurrence: {
+      type: item?.recurrence ?? (item?.type === 'activity' ? 'none' : 'weekly'),
+      weekdays: item?.weekdays ?? [],
+      startDate: item?.startDate ?? '',
+      endDate: item?.repeatUntil ?? '',
+    },
+    mode: 'administrative_group',
+    roomId: item?.ids.roomId ?? '',
+    teacherId: item?.ids.staff.find((x) => x.position === 'teacher')?.user_id ?? '',
+    assistantIds: (item?.ids.staff ?? [])
+      .filter((x) => x.position === 'assistant')
+      .map((x) => x.user_id)
+      .sort(),
+    examMode: 'physical',
+    supervisorId: item?.ids.staff.find((x) => x.position === 'supervisor')?.user_id ?? '',
+    responsibleId: item?.ids.staff.find((x) => x.position === 'responsible')?.user_id ?? '',
+    visibility: 'public',
+    scopeKind: canAssignStaff ? 'global' : 'group',
+    scopeId: '',
+  };
+  const dirty = isDirty(
+    {
+      type,
+      title,
+      description,
+      allDay,
+      startTime,
+      endTime,
+      endDate,
+      recurrence,
+      mode,
+      roomId,
+      teacherId,
+      assistantIds: [...assistantIds].sort(),
+      examMode,
+      supervisorId,
+      responsibleId,
+      visibility,
+      scopeKind,
+      scopeId,
+    },
+    pristine,
+  );
+
   const scope = useScopeOptions({ token, fields: SCOPE_FIELDS, defaultCurrentYear: true });
 
   /**
@@ -724,6 +793,7 @@ export function SchedulingDialog({
       wide
       notice={notice}
       busy={busy}
+      dirty={dirty}
       onCancel={onCancel}
       onSubmit={() => void submit()}
     >

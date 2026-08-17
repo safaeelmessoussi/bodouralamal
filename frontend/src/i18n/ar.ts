@@ -217,6 +217,14 @@ export const ar = {
     // expects instead, and echoes the chosen date in Arabic underneath.
     dateFormatHint: 'التاريخ بصيغة: يوم/شهر/سنة',
     choose: 'اختر…',
+    // Losing a half-filled form to a stray click is the defect these exist for
+    // (2026-08-17). Phrased as a question about the FORM, not about the data:
+    // nothing is being deleted, so the wording must not borrow the vocabulary of
+    // deletion — «حذف» here would misdescribe what happens and would make the
+    // real delete confirmations read as less serious.
+    discardTitle: 'إغلاق النموذج؟',
+    discardBody: 'هناك تغييرات لم تُحفظ بعد، وستُفقد عند الإغلاق.',
+    discardConfirm: 'إغلاق دون حفظ',
     all: 'الكل',
     yes: 'نعم',
     no: 'لا',
@@ -1032,6 +1040,12 @@ export const ar = {
       enrolledWithCircles: 'تم التسجيل، وأُسندت المستفيدة إلى {n} حلقة.',
       enrolledCirclesPartly:
         'تم التسجيل، لكن تعذّر إسناد المستفيدة إلى بعض الحلقات. أسنديها من صفحة حلقات المواد.',
+      updatedCirclesPartly:
+        'حُدِّث التسجيل، لكن تعذّر تعديل بعض الحلقات. راجعيها من صفحة حلقات المواد.',
+      // R66 — الفرع صار عمودًا على التسجيل نفسه، فالمستفيدة المسجّلة في المستوى
+      // مباشرة لها فرع أيضًا. أما مع المجموعة فالفرع فرعُها (§7).
+      branchHint: 'مقر المستفيدة في هذا المستوى. يُعدَّل هنا لأن التسجيل في المستوى مباشرة.',
+      branchFromGroup: 'المقر مأخوذ من المجموعة المختارة، فلا يُعدَّل هنا.',
 
       // ── إنهاء التسجيل ───────────────────────────────────────────────────
       // Audited 2026-08-17: the implementation matches the SRS. What was
@@ -1056,6 +1070,14 @@ export const ar = {
       // whichever sheet happens to be open (2026-08-17).
       lede: 'نقاط امتحانات المستفيدات. النقطة على سُلّم {scale} والحفظ مسودة حتى النشر.',
       caption: 'الامتحانات ونقاطها',
+      // **The exam table's own column headers** (2026-08-17). The table was
+      // reading `admin.schedules.title`, `admin.exams.date` and
+      // `admin.exams.audience` — none of which exist, so `t()` rendered the keys
+      // themselves as headers. `admin.exams` is not a namespace at all
+      // (`teacher.exams` is), and `admin.schedules` has `subject` but no `title`.
+      // The headers belong to `admin.grades`, which owns this table.
+      colDate: 'التاريخ',
+      colAudience: 'الفئة المعنية',
       exam: 'الامتحان',
       examSummary: 'بيانات الامتحان',
       // `حلقات المواد` established it and this screen adopts it: the primary

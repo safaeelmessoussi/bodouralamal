@@ -138,16 +138,33 @@ export function DataTable<T>({
                       ),
                     )}
                     {hasActions ? (
+                      /**
+                       * **The row actions render through the shared `Button`**
+                       * (2026-08-17). They used to be a hand-written
+                       * `btn btn--ghost` element — the one exemption the atomic
+                       * guard carried — and it showed: `ghost` has no border and
+                       * no background at rest, so «تعديل» and «حذف» read as
+                       * ordinary text in a cell full of ordinary text. A reader
+                       * had no way to tell an action from a value.
+                       *
+                       * They are `secondary` now — bordered, so they look like
+                       * the controls they are — with `danger` for the
+                       * destructive one, the same variant every irreversible
+                       * action on the platform uses. `row-action` sizes them for
+                       * a table row and nothing else; the palette stays the
+                       * button system's, so a future change to it reaches here
+                       * automatically.
+                       */
                       <td className="admin-table__actions">
                         {available.map((action) => (
-                          <button
+                          <Button
                             key={action.label}
-                            type="button"
-                            className={action.danger ? 'btn btn--ghost is-danger' : 'btn btn--ghost'}
+                            variant={action.danger ? 'danger' : 'secondary'}
+                            className="row-action"
                             onClick={() => action.onSelect(row)}
                           >
                             {action.label}
-                          </button>
+                          </Button>
                         ))}
                       </td>
                     ) : null}

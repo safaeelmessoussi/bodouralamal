@@ -1,6 +1,8 @@
+import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
 import { ADD_GLYPH } from './button.js';
+import { Dialog } from './dialog.js';
 
 /**
  * **The atomic-component guards** — *one concept → one atomic component*, made
@@ -65,14 +67,17 @@ function stripComments(text: string): string {
 
 describe('one Button', () => {
   /**
-   * `data-table.tsx` renders the row-action buttons with the class list directly.
-   * That is the **one** exemption and it is bounded: those buttons live inside
-   * the shared table, so they cannot drift independently of it — there is no
-   * second table to disagree with. It would be removed by having `DataTable`
-   * compose `<Button variant="ghost">`, which is worth doing and is not this
-   * slice's scope.
+   * **`button.tsx` is now the ONLY exemption** (2026-08-17).
+   *
+   * `data-table.tsx` used to be the second: it rendered its row actions as a
+   * hand-written `btn btn--ghost`, and the note here said removing it was *"worth
+   * doing and not this slice's scope"*. It became this slice's scope the moment
+   * the Owner reported that «تعديل» and «حذف» did not look clickable — which is
+   * what `ghost` means in a cell full of text. The actions render through
+   * `Button` now, so the last hand-written class list is gone and the allowlist
+   * has one entry: the component that owns the classes.
    */
-  const ALLOWED = new Set(['components/ui/button.tsx', 'components/ui/data-table.tsx']);
+  const ALLOWED = new Set(['components/ui/button.tsx']);
 
   /**
    * **Both class vocabularies, because there were two.**
@@ -357,5 +362,82 @@ describe('the account-creation strings are gone, not merely unreferenced', () =>
     for (const key of DEAD) {
       expect(new RegExp(`^\\s+${key}:`, 'm').test(stripComments(block)), key).toBe(false);
     }
+  });
+});
+
+describe('unsaved form changes are protected by the shared dialog', () => {
+  /**
+   * **What is asserted here, and what is not.**
+   *
+   * The behaviour is an *interaction* — backdrop click, `Escape`, close, save —
+   * and this project renders with `renderToStaticMarkup`, with no jsdom and no
+   * event simulation. So the interaction itself is verified in the running
+   * application, and what is guarded here is the thing a test *can* hold: that
+   * the protection lives in the **shared component** and that no screen bypasses
+   * it.
+   *
+   * That is the property worth guarding anyway. A per-form implementation is a
+   * rule applied unevenly, and the form that forgot it would be the one somebody
+   * loses a roster in.
+   */
+  const FORM_DIALOG = stripComments(RAW['/src/components/ui/form-dialog.tsx'] ?? '');
+  const DIALOG = stripComments(RAW['/src/components/ui/dialog.tsx'] ?? '');
+
+  it('FormDialog makes a dirty form non-dismissible', () => {
+    expect(FORM_DIALOG).toContain('dismissible={!dirty}');
+  });
+
+  it('every deliberate way out routes through one guarded function', () => {
+    // Two call sites — the footer's cancel and the Dialog's own close/Escape —
+    // and both must go through the same check, or one of them is a way to lose
+    // the form that the other one prevents.
+    expect(FORM_DIALOG).toContain('onClose={requestClose}');
+    expect(FORM_DIALOG).toContain('onClick={requestClose}');
+    expect(FORM_DIALOG).toContain('if (dirty && !busy) setConfirming(true);');
+  });
+
+  it('asks with the shared ConfirmDialog, not a bespoke question', () => {
+    // The surface where a reader is already worried about losing work is the
+    // worst possible place for a dialog that looks unlike every other one.
+    expect(FORM_DIALOG).toContain('<ConfirmDialog');
+    expect(FORM_DIALOG).toContain('common.discardTitle');
+  });
+
+  it('Dialog honours dismissible on BOTH the backdrop and Escape', () => {
+    // Escape is intercepted through the native `cancel` event, which precedes
+    // `close` — preventing it stops the dismissal outright rather than closing
+    // and reopening, which would flash the dialog and lose focus placement.
+    expect(DIALOG).toContain("addEventListener('cancel'");
+    expect(DIALOG).toContain('event.preventDefault()');
+    expect(DIALOG).toContain('if (dismissible && event.target === ref.current)');
+  });
+
+  it('a non-dismissible dialog still renders its close button', () => {
+    // The escape hatch. A dialog a keyboard user cannot leave would be a worse
+    // defect than the one this feature fixes.
+    const html = renderToStaticMarkup(
+      <Dialog open={false} onClose={() => undefined} title="ت" dismissible={false}>
+        <p>ج</p>
+      </Dialog>,
+    );
+    expect(html).toContain('dialog__close');
+  });
+
+  it('every FormDialog caller reports its dirty state', () => {
+    /**
+     * **The guard that matters most**, because opting out is silent: `dirty`
+     * defaults to `false`, so a form that never passes it simply keeps the old
+     * lose-everything behaviour and nothing fails.
+     *
+     * Scoped to files that RENDER a `<FormDialog`, which is every form dialog on
+     * the platform. `ListDialog` and read-only `Dialog` callers are untouched —
+     * they hold nothing to lose.
+     */
+    const offenders = FILES.filter((f) => {
+      const code = stripComments(f.text);
+      if (f.path === 'components/ui/form-dialog.tsx') return false;
+      return code.includes('<FormDialog') && !/\bdirty=\{/.test(code);
+    }).map((f) => f.path);
+    expect(offenders).toEqual([]);
   });
 });

@@ -4,6 +4,19 @@
 :root {
   /* Layout constants. */
   --measure: 64ch;
+  /**
+   * The measure a PAGE DESCRIPTION reads at (2026-08-17).
+   *
+   * Wider than `--measure` because a lede is one or two lines rather than a
+   * passage, so it can run longer before the eye loses its way back to the start
+   * — and the defect this token was added for was a description wrapping its last
+   * word with room to spare beside it. Still bounded: a single line of Arabic
+   * spanning a 96rem back-office page is genuinely hard to track.
+   *
+   * A token rather than a literal in `admin.css`, so the two places that need a
+   * lede measure cannot disagree about it, and one change moves both.
+   */
+  --measure-lede: 92ch;
   --header-height: 4.25rem;
 }
 
