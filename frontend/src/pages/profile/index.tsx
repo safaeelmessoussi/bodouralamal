@@ -6,7 +6,7 @@ import { ApplicationHeader } from '../../components/header/application-header.js
 import { SiteFooter } from '../../components/site-footer.js';
 import { ErrorState, LoadingState } from '../../components/states.js';
 import { Badge } from '../../components/ui/badge.js';
-import { Button } from '../../components/ui/button.js';
+import { Button, ButtonLink } from '../../components/ui/button.js';
 import { Container } from '../../components/ui/container.js';
 import { TextField } from '../../components/ui/field.js';
 import { useSession } from '../../contexts/session.js';
@@ -202,9 +202,9 @@ function ChildSection({ applications }: { applications: MyChildApplication[] }):
       <p className="muted">{t('profile.childrenLede')}</p>
 
       <div className="register-form__actions">
-        <a className="button primary" href="/profile/register-child">
+        <ButtonLink variant="add" href="/profile/register-child">
           {t('child.register')}
-        </a>
+        </ButtonLink>
       </div>
 
       {applications.length === 0 ? null : (

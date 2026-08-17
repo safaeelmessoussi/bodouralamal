@@ -12,33 +12,68 @@ function code(source: string): string {
 /**
  * **A management page shows the data it manages.**
  *
- * `حلقات المواد` used to open as two empty dropdowns: an administrator had to
- * pick a Level and then a Subject before the page showed anything, so the only
- * way to learn what existed was to guess at it one pair at a time. The property
- * asserted here is the one that regressed easily — that no selector is a
- * precondition for the page's primary data.
+ * `حلقات المواد` has now been rebuilt on this rule twice. R69 removed **two empty
+ * dropdowns** that gated the whole page. The 2026-08-17 pass removed the
+ * **accordion** that replaced them — which showed its data but never as a list,
+ * so *"what circles exist"* was still a question answered by opening Levels one
+ * at a time.
+ *
+ * ## Why three assertions here were rewritten rather than deleted
+ *
+ * They pinned the **accordion's implementation**: the absence of a `<LevelSelect`
+ * element, the open-set literal `new Set(levelId ? [levelId] : [])`, and the lazy
+ * `if (detail[id] === undefined)` load. All three are gone, and the property they
+ * were protecting is not.
+ *
+ * That is the lesson worth keeping: **a guard should assert the property, not the
+ * shape of the code that currently has it.** `not.toContain('<LevelSelect')` was
+ * the clearest case — the redesign uses that very component as a **filter in the
+ * toolbar**, which is the rule's *fulfilment*, and the old assertion called it a
+ * violation. What follows asserts the rule directly: the data read is
+ * unconditional, and no copy tells the reader to choose before seeing anything.
  */
 describe('the overview shows its data without being filtered first', () => {
-  it('loads every accessible Level on mount', () => {
-    expect(code(PAGE)).toContain('listLevels(accessToken)');
+  it('reads the circles unconditionally, with no required filter', () => {
+    // `listCircles(accessToken, page, {…})` — every parameter narrows and none is
+    // required, which is what lets the table render on arrival.
+    expect(code(PAGE)).toContain('listCircles(accessToken, page');
   });
 
-  it('has no Level or Subject dropdown gating the page', () => {
-    // The two controls whose absence IS the feature.
-    expect(code(PAGE)).not.toContain('<LevelSelect');
+  it('never makes a selector a precondition for the read', () => {
+    // The shape a gate has: the fetch guarded on a chosen id. The redesign's
+    // filters flow INTO the read as optional parameters instead.
+    expect(code(PAGE)).not.toMatch(/if\s*\(!levelId\)\s*return/);
+    expect(code(PAGE)).not.toMatch(/if\s*\(!subjectId\)\s*return/);
+  });
+
+  it('has no copy instructing the reader to choose before seeing data', () => {
+    // The observable trace a gate always leaves — «اختاري … لعرض …».
     expect(code(PAGE)).not.toContain('admin.subjectOrg.pickLevel');
     expect(code(PAGE)).not.toContain('admin.subjectOrg.pickSubject');
+    expect(code(AR)).not.toContain('pickLevel:');
   });
 
-  it('opens the deep-linked Level instead of requiring a choice', () => {
-    // R69.3's `?level=` survives as focus, never as a gate.
-    expect(code(PAGE)).toContain('new Set(levelId ? [levelId] : [])');
+  it('keeps R69.3’s deep links as focus rather than as a gate', () => {
+    // `?level=` opens one Level's detail and `?subject=` scrolls to it; arriving
+    // without either still renders the table.
+    expect(code(PAGE)).toContain('/admin/teaching-groups?level=');
+    expect(code(PAGE)).toContain('subject-${subject.id}');
   });
 
-  it('loads a Level’s contents only when it is opened', () => {
-    // A split read per Subject across every Level would be a request storm for
-    // data nobody has asked to see.
-    expect(code(PAGE)).toContain('if (detail[id] === undefined) void loadLevel(id)');
+  it('loads a Level’s own breakdown only when that Level is opened', () => {
+    // Unchanged in substance: a split read per Subject across every Level would
+    // be a request storm for data nobody has asked to see. Asserted as the
+    // CONDITION now rather than as one line of it.
+    expect(code(PAGE)).toContain('void loadLevel(levelId)');
+    expect(code(PAGE)).toContain('detail[levelId] === undefined');
+  });
+
+  it('offers إضافة حلقة at the top, not only inside a Level', () => {
+    // The reason the accordion needed replacing as much as the dropdowns did: the
+    // create action existed only inside each Subject block, so a reader who had
+    // opened no Level was offered no way to add a circle at all.
+    expect(code(PAGE)).toContain('variant="add"');
+    expect(code(PAGE)).toContain('admin.subjectOrg.create');
   });
 });
 

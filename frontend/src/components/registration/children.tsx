@@ -296,7 +296,7 @@ export function ChildrenFieldset({
         {children.length < LIMITS.childrenPerRequest ? (
           <Button
             type="button"
-            variant="secondary"
+            variant="add"
             onClick={() => onChange([...children, EMPTY_CHILD])}
           >
             {t('register.childAdd')}

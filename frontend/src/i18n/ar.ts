@@ -48,7 +48,8 @@ export const ar = {
     none: 'لا يوجد أطفال مرتبطون',
     // R64 — a PAGE (§14.1), not an item in the account switcher: a switcher
     // lists the contexts you may work in, and registering is a task.
-    register: '＋ تسجيل طفل',
+    // The `＋` is the shared Add button's (`variant="add"`), not this label's.
+    register: 'تسجيل طفل',
     registerTitle: 'تسجيل ابن/ابنة',
     registerLede:
       'يُملأ هذا النموذج بنفس المعطيات المطلوبة في طلب الانضمام. يصل الطلب إلى الإدارة لمراجعته.',
@@ -82,6 +83,22 @@ export const ar = {
   // §5.3 (R62.10) — one screen, two contexts: the caller's own record, or the
   // child they are acting for. The banner names which.
   student: {
+    // §5.3 — نقاطي. PUBLISHED grades only; the draft is the مؤطِّرة's working
+    // note (BR-8) and never reaches this surface. No pass/fail wording here by
+    // decision (2026-08-17): the screen reports what she scored, not a verdict
+    // about her — and the business rules that DO decide progression are
+    // untouched in the model.
+    grades: {
+      title: 'نقاطي',
+      lede: 'نقاطك في الامتحانات المنشورة. النقطة على سُلّم {scale}.',
+      caption: 'النقاط المنشورة',
+      exam: 'الامتحان',
+      date: 'التاريخ',
+      subject: 'المادة',
+      mark: 'النقطة (من {scale})',
+      absent: 'غائبة',
+      empty: 'لا توجد نقاط منشورة بعد. تظهر النقطة هنا بعد أن تنشرها المؤطِّرة.',
+    },
     quran: {
       title: 'حفظي',
       lede: 'ما سُجّل لك من حفظ ومراجعة. النسبة تُحتسب باتحاد المقاطع، فلا يرفعها تكرار المقطع نفسه.',
@@ -100,7 +117,10 @@ export const ar = {
     viewingChild: 'تتابعين بيانات: {name}',
     chooseChild: 'اختاري الطفل الذي تتابعين بياناته من قائمة التبديل في الأعلى.',
     noChildren: 'لا يوجد أطفال معتمدون بعد.',
-    registerChild: '＋ تسجيل ابن/ابنة',
+    // Unreferenced since R65 moved child registration to the personal section —
+    // the Student Dashboard keeps no registration link. Kept as the catalogue's
+    // record of the label, without the glyph the shared button now owns.
+    registerChild: 'تسجيل ابن/ابنة',
     referenceCode: 'الرمز المرجعي',
     category: 'الفئة',
     level: 'المستوى',
@@ -108,6 +128,8 @@ export const ar = {
     notPlaced: 'لم يتم بعد إسناد فئة ومستوى. تتولى الإدارة ذلك بعد الموافقة.',
     moreEnrollments: 'وهناك {count} تسجيل آخر في مستوى مختلف.',
     upcoming: 'حصص اليوم والقادمة',
+    /** The accessible name of the dashboard's own sub-navigation. */
+    sections: 'أقسام لوحة المستفيدة',
   },
   landing: {
     // **The association's own words, not a written-for-the-web paraphrase.**
@@ -326,7 +348,7 @@ export const ar = {
     parent: 'بيانات ولي الأمر',
     child: 'بيانات الابن/الابنة',
     // R62.1 — one request may carry several children, decided one at a time.
-    childAdd: '＋ إضافة ابن/ابنة',
+    childAdd: 'إضافة ابن/ابنة',
     childRemove: 'حذف هذا الابن/الابنة',
     // R62.7 — informs the placement decision; it never decides it. The hint
     // says so, because a parent who believes this chooses the Category will
@@ -425,7 +447,7 @@ export const ar = {
   teacher: {
     schedules: {
       // R72 — the one kind TD-2 grants a مؤطرة on this screen.
-      addActivity: '＋ نشاط جديد',
+      addActivity: 'نشاط جديد',
       lede: 'الجداول التي تؤطّرينها. لعرض المستفيدات اضغطي على الجدول.',
       caption: 'حصصي',
       empty: 'لا توجد جداول مسندة إليك حالياً.',
@@ -433,17 +455,37 @@ export const ar = {
     nav: {
       label: 'أقسام التدريس',
       dashboard: 'مساحة التدريس',
-      schedules: 'حصصي',
-      content: 'المحتوى التعليمي',
+      // The BACK OFFICE's words for the same concepts (2026-08-17). «حصصي» and
+      // «المحتوى التعليمي» named the same things the admin menu calls «الجدولة»
+      // and «مكتبة المحتوى», so one platform had two vocabularies for one
+      // concept and a مؤطرة could not tell she was looking at the same feature.
+      // The PATHS are unchanged and so is her scope — `/teacher/schedules` and
+      // `/teacher/content` — because the words were what differed, not the
+      // authorization.
+      schedules: 'الجدولة',
+      content: 'مكتبة المحتوى',
       exams: 'الامتحانات',
       quran: 'تتبع الحفظ',
+    },
+    /** §14.1's grouping, applied to the teaching branch — the same headings the
+     *  back-office sidebar uses, so the two portals read alike. */
+    section: {
+      teaching: 'التدريس',
+      scheduling: 'الجدولة',
+      content: 'المحتوى',
     },
     // Each names WHAT is missing. The schedules entry names a specification gap
     // rather than unbuilt UI, because that is the honest reason.
     quran: {
       lede: 'تسجيل ما حفظته المستفيدة ومراجعتها. النسبة تُحتسب باتحاد المقاطع، فلا يرفعها تكرار المقطع نفسه.',
       student: 'المستفيدة',
-      pickStudent: 'اختاري مستفيدة لعرض تقدّمها.',
+      // The dropdown gate is gone: the page lists the مستفيدات in her scope
+      // (2026-08-17). What remains is the TABLE's vocabulary.
+      caption: 'المستفيدات في نطاق تأطيرك',
+      colStudent: 'المستفيدة',
+      searchPlaceholder: 'ابحثي باسم المستفيدة…',
+      openStudent: 'الحفظ',
+      backToStudents: 'كل المستفيدات',
       noStudents: 'لا توجد مستفيدات تُدرّسين لهنّ القرآن.',
       outOfScope: 'هذه المستفيدة خارج نطاق تدريسك للقرآن.',
       surah: 'السورة',
@@ -836,13 +878,19 @@ export const ar = {
       },
     },
     users: {
+      // **The pre-provisioning dialog's strings are gone with it** (2026-08-17):
+      // `create`, `created`, `emailHint`, `emailInvalid`, `noRole` and
+      // `createRoleHint`. The Document Owner removed staff-composed account
+      // creation from this screen, and a dead catalogue entry is not harmless —
+      // it ships in the bundle and is exactly what a future screen picks up and
+      // renders, which is how "do not create an alternative account-creation UI
+      // elsewhere" gets defeated by convenience. `POST /admin/users` and the
+      // `createUser` adapter are untouched.
       lede: 'إدارة الحسابات: البحث والتصفية والإنشاء والتعديل وإسناد الأدوار والنطاقات وإيقاف الحسابات.',
       caption: 'المستخدمون',
       colEmail: 'البريد الإلكتروني',
       colBranches: 'الفروع',
       noEmail: 'لا بريد (حساب بلا دخول)',
-      create: 'إضافة حساب',
-      created: 'تم إنشاء الحساب. سيُربط عند أول دخول بحساب Google المحدد.',
       editTitle: 'تعديل بيانات المستخدم',
       colName: 'الاسم',
       colNickname: 'الكنية',
@@ -854,7 +902,6 @@ export const ar = {
       allRoles: 'كل الأدوار',
       allStatuses: 'كل الحالات',
       allBranches: 'كل الفروع',
-      noRole: 'دون دور',
       // حساب بلا دور يستطيع الدخول ولا يصل إلى شيء — تُذكر الحالة لا تُخفى.
       noRoles: 'بلا دور',
       noRolesWarning: 'هذا الحساب بلا أي دور. سيتمكن صاحبه من الدخول دون الوصول إلى أي شيء.',
@@ -875,9 +922,6 @@ export const ar = {
         rejected: 'مرفوض',
       },
       email: 'بريد Google',
-      emailHint: 'العنوان المخوّل بالمطالبة بهذا الحساب. لا توجد كلمة مرور: يتم الربط عند أول دخول بهذا العنوان.',
-      emailInvalid: 'أدخلي عنوان بريد صالحًا.',
-      createRoleHint: 'يمكن إسناد الأدوار لاحقًا. إسناد دور «مديرة عامة» يتم من نافذة الأدوار بعد الموافقة على الحساب.',
       branchScope: 'نطاق الفرع',
       branchScopeHint: '«كل الفروع» تعني صلاحية غير مقيدة بفرع، لا غياب الفرع.',
       assignRoles: 'الأدوار',
@@ -943,17 +987,25 @@ export const ar = {
         'تعذّر الحذف: ما زالت هناك تسجيلات أو حلقات أو جداول أو امتحانات أو محتوى مرتبط بهذا المستوى.',
     },
     enrollments: {
-      lede: 'تسجيل المستفيدات في المستويات. المجموعة اختيارية: المستوى غير المقسّم يُسجَّل فيه مباشرة.',
-      add: '＋ تسجيل مستفيدة',
+      lede: 'تسجيل المستفيدات في المستويات. المجموعة والحلقات اختيارية: المستوى غير المقسّم يُسجَّل فيه مباشرة.',
+      // The `＋` is the shared Add button's now (`variant="add"`), not this
+      // string's: a glyph typed into a label is a glyph one screen can forget.
+      add: 'تسجيل مستفيدة',
       student: 'المستفيدة',
       pickStudent: 'اختاري المستفيدة',
       searchHint: 'ابحثي بالاسم…',
       branch: 'المقر',
+      caption: 'تسجيلات المستفيدات',
+      searchPlaceholder: 'ابحثي باسم المستفيدة…',
       filterLevel: 'تصفية بالمستوى',
       allLevels: 'كل المستويات',
       noGroup: 'المستوى مباشرة',
       levelOnly: 'المستوى مباشرة (بلا مجموعة)',
-      groupHint: 'اتركيها فارغة لتسجيلها في المستوى نفسه — وهو تسجيل صحيح بعد المراجعة 66.',
+      // The internal revision number is gone. It said «بعد المراجعة 66» — a
+      // number no reader of this screen can look up, and the platform's own
+      // rule is that engineering references never reach a user-facing surface.
+      // What replaces it is the MEANING that revision carries.
+      groupHint: 'اتركيها فارغة لتسجيلها في المستوى مباشرة.',
       empty: 'لا توجد تسجيلات بعد.',
       enrolled: 'تم التسجيل.',
       already: 'المستفيدة مسجّلة في هذا المستوى أصلًا.',
@@ -966,24 +1018,66 @@ export const ar = {
       levelFixed:
         'المستوى لا يُعدَّل هنا: التسجيل هو ارتباط المستفيدة بمستوى بعينه، فالانتقال إلى مستوى آخر يكون بإنهاء هذا التسجيل وإنشاء غيره.',
       seatsWarning: 'تغيير المجموعة يُخرج المستفيدة من حلقاتها في هذا المستوى.',
+
+      // ── الحلقات داخل نموذج التسجيل ──────────────────────────────────────
+      // The circles are offered in the placement form because that is where a
+      // مستفيدة's placement is decided. They remain a SEPARATE relationship:
+      // the form makes two calls in order, and nothing links a group to a
+      // circle (§4.4c).
+      circlesOptional: 'الحلقات (اختيارية)',
+      circlesHint:
+        'الحلقة تقسيم للمادة داخل المستوى، ومستقلة تمامًا عن المجموعة: يمكن أن تكون المستفيدة في مجموعة وفي حلقات موادّ مختلفة. اتركيها فارغة إن كانت المادة تُدرَّس للمستوى كاملاً.',
+      circlesPickLevel: 'اختاري المستوى أولًا لعرض حلقاته.',
+      circlesNone: 'لا توجد حلقات في هذا المستوى — تُدرَّس مواده للمستوى كاملاً.',
+      enrolledWithCircles: 'تم التسجيل، وأُسندت المستفيدة إلى {n} حلقة.',
+      enrolledCirclesPartly:
+        'تم التسجيل، لكن تعذّر إسناد المستفيدة إلى بعض الحلقات. أسنديها من صفحة حلقات المواد.',
+
+      // ── إنهاء التسجيل ───────────────────────────────────────────────────
+      // Audited 2026-08-17: the implementation matches the SRS. What was
+      // missing was the distinction between MOVING a placement and ENDING the
+      // enrolment, so the copy now names both, and states what is kept — a
+      // reader deciding on an irreversible-sounding action deserves to know it
+      // is recoverable, and from where.
       end: 'إنهاء التسجيل',
-      endTitle: 'إنهاء التسجيل',
-      endBody: 'ستخرج المستفيدة من المستوى ومن حلقاته. يظهر السجل في سلة المحذوفات.',
+      endTitle: 'إنهاء تسجيل المستفيدة في هذا المستوى',
+      endBody:
+        'إنهاء التسجيل يُخرج المستفيدة من هذا المستوى ومن حلقات موادّه. إن كان المقصود نقلها إلى مجموعة أخرى داخل المستوى نفسه فاستخدمي «تعديل التسجيل» بدلًا من هذا.',
+      endKeptTitle: 'ما يبقى محفوظًا',
+      endKept:
+        'السجل يُنقل إلى سلة المحذوفات ويمكن للمشرف العام استرجاعه · نقاط الامتحانات وسجل الحفظ لا تُحذف · يُسجَّل الإجراء في سجل المراجعة باسم من نفّذه.',
+      endRemovedTitle: 'ما ينتهي',
+      endRemoved:
+        'عضوية المستوى · مقاعد الحلقات في موادّ هذا المستوى · ظهور المستفيدة في نطاق امتحانات المستوى وجداوله.',
       ended: 'أُنهي التسجيل.',
     },
     grades: {
-      lede: 'نقاط امتحان واحد. النقطة على سُلّم {scale} والحفظ مسودة حتى النشر.',
-      pickExam: 'اختاري امتحانًا لعرض ورقة النقاط.',
+      // The page lists exams and opens one; the lede describes the page, not
+      // whichever sheet happens to be open (2026-08-17).
+      lede: 'نقاط امتحانات المستفيدات. النقطة على سُلّم {scale} والحفظ مسودة حتى النشر.',
+      caption: 'الامتحانات ونقاطها',
       exam: 'الامتحان',
       examSummary: 'بيانات الامتحان',
+      // `حلقات المواد` established it and this screen adopts it: the primary
+      // action names where scheduling actually lives rather than pretending
+      // this page owns it (§20 rule 16 — no invented capability).
+      scheduleExam: 'جدولة امتحان',
+      scheduleHint: 'تُجدول الامتحانات في صفحة الجدولة، ثم تُدخل نقاطها هنا.',
+      backToList: 'كل الامتحانات',
+      filterLevel: 'تصفية بالمستوى',
+      allLevels: 'كل المستويات',
+      searchPlaceholder: 'ابحثي بعنوان الامتحان…',
+      empty: 'لا توجد امتحانات في نطاقك بعد. تُجدول الامتحانات في صفحة الجدولة.',
       open: 'النقاط',
       student: 'المستفيدة',
       mark: 'النقطة (من {scale})',
       absent: 'غائبة',
-      result: 'النتيجة',
       status: 'الحالة',
-      passed: 'ناجحة',
-      failed: 'راسبة',
+      // `passed` / `failed` are deliberately GONE from this catalogue (Owner
+      // decision, 2026-08-17). `Grade.passed` and BR-12's override remain in
+      // the model and still decide retakes and progression; what is removed is
+      // labelling a مستفيدة «راسبة» on a grade sheet. A guard asserts the two
+      // keys stay absent, because re-adding them is a one-line regression.
       overridden: 'قرار يدوي',
       statusDraft: 'مسودة',
       statusPublished: 'منشورة',
@@ -1006,6 +1100,18 @@ export const ar = {
     },
     levelSurahs: {
       lede: 'السور المقرّرة على كل مستوى، وما أتمّته المستفيدات منها. إتمام المستوى يعني تغطية كل سورة مقرّرة بنسبة 100%.',
+      // The table (2026-08-17): every Level and its Surahs on arrival, rather
+      // than an accordion whose Surahs appeared only once a Level was opened.
+      caption: 'مقرّر الحفظ لكل مستوى',
+      colLevel: 'المستوى',
+      colSurahs: 'السور المقرّرة',
+      colCount: 'العدد',
+      searchPlaceholder: 'ابحثي باسم المستوى أو الفئة…',
+      filterCategory: 'تصفية بالفئة',
+      allCategories: 'كل الفئات',
+      noneYet: 'لا مقرّر بعد',
+      viewCompletion: 'إتمام المستفيدات',
+      backToLevels: 'كل المستويات',
       syllabus: 'السور المقرّرة',
       noSurahs: 'لا سور مقرّرة على هذا المستوى بعد.',
       ayahs: 'آية',
@@ -1026,7 +1132,18 @@ export const ar = {
     levelSubjects: {
       title: 'مواد مستوى «{level}»',
       lede: 'المواد التي تُدرَّس في هذا المستوى. المادة غير المسندة هنا لا يمكن إنشاء حلقة أو جدول لها.',
-      pickLevel: 'اختاري مستوى لعرض المواد التي تُدرَّس فيه.',
+      // The dropdown gate is gone: the page lists every Level with its Subjects
+      // (2026-08-17). What remains is the TABLE's vocabulary.
+      caption: 'مواد كل مستوى',
+      colLevel: 'المستوى',
+      colSubjects: 'المواد المُدرَّسة',
+      colCount: 'العدد',
+      searchPlaceholder: 'ابحثي باسم المستوى أو المادة…',
+      filterCategory: 'تصفية بالفئة',
+      allCategories: 'كل الفئات',
+      noneYet: 'لا مواد بعد',
+      manage: 'تعديل المواد',
+      backToLevels: 'كل المستويات',
       addLabel: 'إسناد مادة',
       add: 'إسناد',
       addHint: 'المادة المسندة تُدرَّس لكل المستوى ما لم تُقسَّم إلى حلقات.',
@@ -1056,7 +1173,14 @@ export const ar = {
       roster: 'المستفيدات',
       rosterTitle: 'مستفيدات المجموعة',
       rosterEmpty: 'لا توجد مستفيدات في هذه المجموعة.',
-      findStudent: 'البحث عن مستفيدة',
+      rosterCurrent: 'المسجّلات في المجموعة',
+      // The picker shows its candidates on opening and the search NARROWS them.
+      // It used to return nothing until two characters had been typed, so a
+      // reader who did not already know a name had no way in (2026-08-17).
+      findStudent: 'إضافة مستفيدة إلى المجموعة',
+      findStudentHint:
+        'كل الحسابات النشطة معروضة، ومن هنّ في المجموعة أصلًا مستثنيات. المستفيدة المسجّلة في مجموعة أخرى داخل نفس المستوى تُرفض عند الإضافة — النقل يتم بإخراجها أولًا.',
+      noCandidates: 'لا توجد حسابات نشطة يمكن إضافتها.',
       enrol: 'تسجيل',
       unenrol: 'إخراج',
       alreadyInLevel: 'المستفيدة مسجّلة في مجموعة أخرى داخل نفس المستوى. النقل يتم بإخراجها أولاً.',
@@ -1071,9 +1195,39 @@ export const ar = {
     subjectOrg: {
       title: 'حلقات مادة «{subject}»',
       lede: 'داخل مستوى «{level}». تُنشأ الحلقة فقط عند الحاجة إلى تقسيم المستوى؛ وبدونها تُدرَّس المادة للمستوى كاملاً.',
+      // The `＋` is the shared Add button's (`variant="add"`), not this string's.
       create: 'إضافة حلقة',
       editTitle: 'تعديل الحلقة',
-      overviewLede: 'البنية التعليمية كاملة: المستويات ومجموعاتها وموادها وحلقاتها. افتحي مستوى لعرض تفاصيله.',
+
+      // ── The flat table (2026-08-17) ─────────────────────────────────────
+      // The accordion showed its data but not as a list: there was no way to see
+      // what circles existed without opening Levels one at a time. The table
+      // answers that in one read; the Level's own breakdown — its groups, its
+      // subjects, BR-22's unassigned alarm — is what a row opens.
+      overviewLede:
+        'حلقات المواد في كل المستويات. الحلقة تقسيم للمادة داخل المستوى، ولا تُنشأ إلا عند الحاجة إلى تقسيمها؛ وبدونها تُدرَّس المادة للمستوى كاملاً.',
+      caption: 'حلقات المواد',
+      colCircle: 'الحلقة',
+      colLevel: 'المستوى',
+      colSubject: 'المادة',
+      colMembers: 'المستفيدات',
+      searchPlaceholder: 'ابحثي باسم الحلقة أو المستوى أو المادة…',
+      filterCategory: 'تصفية بالفئة',
+      allCategories: 'كل الفئات',
+      filterLevel: 'تصفية بالمستوى',
+      allLevels: 'كل المستويات',
+      filterSubject: 'تصفية بالمادة',
+      allSubjects: 'كل المواد',
+      empty: 'لا توجد حلقات بعد. تُدرَّس كل مادة للمستوى كاملاً حتى تُنشأ لها حلقات.',
+      openLevel: 'تفاصيل المستوى',
+      // **الفرع والمؤطِّرة ليستا عمودين هنا، وهذا مقصود**: الحلقة لا تنتمي إلى
+      // فرع (فالمستوى يمتد على الفروع)، والتأطير خصيصة جدول الحصص لا خصيصة
+      // الحلقة. عمودٌ لأيّهما يخلط التنظيم بالتنفيذ.
+      columnsNote:
+        'الحلقة لا تنتمي إلى فرع بعينه — المستوى يمتد على الفروع، والإسناد يُقيَّد بفرع تسجيل المستفيدة. والتأطير يُحدَّد في جدول الحصص، لا في الحلقة.',
+      levelDetailTitle: 'تفاصيل المستوى',
+      backToCircles: 'كل الحلقات',
+      circlesPickLevelFirst: 'اختاري المستوى أولًا',
       noLevels: 'لا توجد مستويات بعد.',
       noGroups: 'هذا المستوى غير مقسّم إلى مجموعات.',
       groupsElsewhere: 'تُدار المجموعات في',

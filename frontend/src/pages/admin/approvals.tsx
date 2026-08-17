@@ -14,6 +14,7 @@ import {
 } from '../../adapters/approvals.js';
 import { fetchBranches, type PublicBranch } from '../../adapters/branches.js';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
+import { levelLabel } from '../../components/scope/level-select.js';
 import { BranchSelector } from '../../components/ui/branch-selector.js';
 import {
   ApplicantList,
@@ -738,7 +739,10 @@ function PlacementDialog({
                    */
                   ...levels
                     .filter((l) => categoryFilter === '' || l.category_id === categoryFilter)
-                    .map((l) => ({ value: l.id, label: `${l.category_name} — ${l.name}` })),
+                    // The shared label rather than a third copy of its format —
+                    // this was one of them, and the day the format changes it
+                    // would have been the one that did not (2026-08-17).
+                    .map((l) => ({ value: l.id, label: levelLabel(l) })),
                 ]}
               />
               {picked && inLevel.length > 1 ? (

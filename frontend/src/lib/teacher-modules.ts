@@ -24,7 +24,28 @@ import {
  * they are authorised to use*, never by browsing reference-data endpoints. That
  * is why there is no Levels or Branches entry here and must not be one.
  */
-export type TeacherModule = PortalModule;
+/**
+ * §14.1's grouping, applied to the teaching branch (2026-08-17).
+ *
+ * The sidebar was a **flat list**, so a مؤطرة met «حصصي» and «المحتوى التعليمي»
+ * as four unrelated entries while the same concepts sat under «الجدولة» and
+ * «المحتوى» in the back office — one platform with two vocabularies and two
+ * shapes for one thing. Grouping is a *presentation* change and grants nothing:
+ * the paths, the roles and the server's §4.4c scope resolution are untouched.
+ *
+ * `teaching` is this branch's own — it collects what she does with the students
+ * she teaches (marking, Quran progress) and has no back-office counterpart,
+ * because the back office is not organised around one person's caseload.
+ */
+export type TeacherSection = 'teaching' | 'scheduling' | 'content';
+
+/** Rendered in exactly this order, like `ADMIN_SECTIONS`. */
+export const TEACHER_SECTIONS: readonly TeacherSection[] = ['teaching', 'scheduling', 'content'];
+
+export interface TeacherModule extends PortalModule {
+  /** `null` sits above the groups, like the back office's dashboard. */
+  section: TeacherSection | null;
+}
 
 const TEACHER = ['teacher'] as const;
 
@@ -41,27 +62,10 @@ export const TEACHER_MODULES: readonly TeacherModule[] = [
   {
     path: '/teacher',
     labelKey: 'teacher.nav.dashboard',
+    section: null,
     roles: TEACHER,
     status: 'blocked',
     blockedReasonKey: 'teacher.blocked.dashboard',
-  },
-  {
-    // §14.1: "Course Schedules … /teacher/schedules (teacher view)"; §5.6 line
-    // 753 defines its content — the schedules this teacher staffs, with their
-    // co-staff and roster access.
-    path: '/teacher/schedules',
-    labelKey: 'teacher.nav.schedules',
-    roles: TEACHER,
-    status: 'ready',
-  },
-  {
-    // §5.5: file attach with progress and retry, visibility honouring the
-    // Category default, and **no Global scope** — the server enforces all three
-    // (§4.9), and the screen renders its refusals rather than reimplementing them.
-    path: '/teacher/content',
-    labelKey: 'teacher.nav.content',
-    roles: TEACHER,
-    status: 'ready',
   },
   {
     // R70 — unblocked for **grading**. §4.6's online paper builder is still
@@ -69,6 +73,49 @@ export const TEACHER_MODULES: readonly TeacherModule[] = [
     // is the same component `/admin/exam-grades` renders (R70.1).
     path: '/teacher/exams',
     labelKey: 'teacher.nav.exams',
+    section: 'teaching',
+    roles: TEACHER,
+    status: 'ready',
+  },
+  {
+    /**
+     * §14.1: *"Course Schedules … /teacher/schedules (teacher view)"*; §5.6 line
+     * 753 defines its content — the schedules this teacher staffs, with their
+     * co-staff and roster access. R72 added Activity authoring in her own scope.
+     *
+     * **Labelled «الجدولة», the back office's own word** (2026-08-17). It read
+     * «حصصي», which named the same concept differently in the two portals. **No
+     * access changed**: the path is the same, the role is the same, and the
+     * schedules she receives are still exactly those §4.4c resolves from the
+     * ones she staffs — the server decides that, not this registry.
+     *
+     * **`/admin/schedules` is deliberately NOT offered to her.** That screen is
+     * every branch's scheduling, and putting it in this menu would be widening
+     * authorization to fix a vocabulary problem.
+     */
+    path: '/teacher/schedules',
+    labelKey: 'teacher.nav.schedules',
+    section: 'scheduling',
+    roles: TEACHER,
+    status: 'ready',
+  },
+  {
+    /**
+     * §5.5: file attach with progress and retry, visibility honouring the
+     * Category default, and **no Global scope** — the server enforces all three
+     * (§4.9), and the screen renders its refusals rather than reimplementing them.
+     *
+     * **Labelled «مكتبة المحتوى»**, for the same reason as the schedules node.
+     * §14.1 lists this path as *Upload / Record* and `/admin/content` as
+     * *Content Library*; the two are the same library seen from two authorities,
+     * and calling one «المحتوى التعليمي» made a مؤطرة believe she was looking at
+     * a different feature. **`/admin/content` is NOT offered to her** — that is
+     * the staff-wide library, and pointing her at it would be an authorization
+     * change dressed as a rename.
+     */
+    path: '/teacher/content',
+    labelKey: 'teacher.nav.content',
+    section: 'content',
     roles: TEACHER,
     status: 'ready',
   },

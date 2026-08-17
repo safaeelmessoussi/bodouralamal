@@ -56,6 +56,9 @@ interface Res {
     error?: { code?: string; details?: Record<string, unknown> };
     groups?: Record<string, unknown>[];
     unassigned?: Record<string, unknown>[];
+    /** The FLAT read's TD-10 envelope (2026-08-17). */
+    data?: Record<string, unknown>[];
+    meta?: { page: number; page_size: number; total: number };
   };
 }
 
@@ -95,6 +98,7 @@ let subjectElsewhere: string;
 let groupA: string;
 let groupB: string;
 /** Enrolled at branch A, so within `scopedAdmin`'s reach. */
+let categoryId: string;
 let studentA: string;
 /** Enrolled at branch B — outside it. */
 let studentB: string;
@@ -175,6 +179,7 @@ beforeAll(async () => {
   branchB = (await prisma.branch.create({ data: { name: `${TAG} فرع ب` } })).id;
 
   const category = await prisma.category.create({ data: { name: `${TAG} فئة` } });
+  categoryId = category.id;
   levelId = (
     await prisma.level.create({
       data: { name: `${TAG} مستوى`, categoryId: category.id, genderRestriction: 'any' },
@@ -595,5 +600,138 @@ describe('deletion reports what it released (BR-22, TD-5)', () => {
     // platform's account of who is taught what.
     const after = await call('GET', collection(subjectSplit), superAdmin);
     expect(after.body.unassigned!.some((u) => u.student_id === studentA)).toBe(true);
+  });
+});
+
+/**
+ * **`GET /admin/teaching-groups` — every circle, across Levels and Subjects.**
+ *
+ * The sibling of the pair-addressed read above, not a replacement for it. That
+ * one carries BR-22's unassigned alarm and **cannot be paginated** — a page
+ * boundary drawn through an alarm about students receiving no teaching would put
+ * some of them on page two. This one answers *what circles exist*, which has no
+ * natural bound, so it is paginated.
+ *
+ * **It grants nothing.** Same rows, same `assertCanManageMembership` gate, and
+ * every parameter narrows rather than widens — which is the property that lets
+ * `حلقات المواد` render its table before anything is chosen.
+ */
+describe('the flat circles read (2026-08-17)', () => {
+  it('returns circles across Levels and Subjects with no filter at all', async () => {
+    // The whole point: no parameter is required, so the screen has data on
+    // arrival. The fixtures span two Subjects of one Level.
+    const res = await call('GET', '/admin/teaching-groups', superAdmin);
+    expect(res.status).toBe(200);
+    expect(res.body.data!.length).toBeGreaterThan(0);
+    expect(res.body.meta!.page).toBe(1);
+    expect(typeof res.body.meta!.total).toBe('number');
+  });
+
+  it('names the Level and Category as separate fields, never pre-joined', () => {
+    // `levelLabel` owns the `{Category} — {Level}` format on the client. A server
+    // that shipped the joined string would be a second implementation of it, and
+    // the day the format changes it is the one that would not follow.
+    return call('GET', '/admin/teaching-groups', superAdmin).then((res) => {
+      const row = res.body.data![0]!;
+      expect(Object.keys(row).sort()).toEqual(
+        [...GROUP_KEYS, 'category_name', 'level_name', 'subject_name'].sort(),
+      );
+      expect(typeof row['category_name']).toBe('string');
+      expect(typeof row['level_name']).toBe('string');
+    });
+  });
+
+  it('carries no branch and no مؤطرة, because a circle has neither', async () => {
+    // R43.3: a circle belongs to a Subject and a Level, and a Level spans
+    // branches — that absence is WHY its authority is split. Staffing lives on a
+    // `CourseSchedule` (§4.4c). §20 rule 22 forbids conflating the organisational
+    // unit with its delivery, and either column would be that conflation.
+    const res = await call('GET', '/admin/teaching-groups', superAdmin);
+    const row = res.body.data![0]!;
+    expect(row).not.toHaveProperty('branch_id');
+    expect(row).not.toHaveProperty('branch_name');
+    expect(row).not.toHaveProperty('teacher_id');
+  });
+
+  it('rejects a branch filter, since there is no branch to filter on', async () => {
+    // Offering one would silently answer a DIFFERENT question — "circles at least
+    // one of whose members is enrolled at Marrakesh". The schema is not
+    // `.strict()` (TD-10's page params share the query object), so an unknown
+    // parameter is ignored rather than refused: what is asserted is that it does
+    // not NARROW anything, which is the property that matters.
+    const all = await call('GET', '/admin/teaching-groups', superAdmin);
+    const filtered = await call(`GET`, `/admin/teaching-groups?branch_id=${branchB}`, superAdmin);
+    expect(filtered.status).toBe(200);
+    expect(filtered.body.meta!.total).toBe(all.body.meta!.total);
+  });
+
+  it('every filter narrows, and none is required', async () => {
+    const all = await call('GET', '/admin/teaching-groups', superAdmin);
+
+    const byLevel = await call('GET', `/admin/teaching-groups?level_id=${levelId}`, superAdmin);
+    expect(byLevel.body.data!.every((r) => r['level_id'] === levelId)).toBe(true);
+
+    const bySubject = await call(
+      'GET',
+      `/admin/teaching-groups?subject_id=${subjectSplit}`,
+      superAdmin,
+    );
+    expect(bySubject.body.data!.every((r) => r['subject_id'] === subjectSplit)).toBe(true);
+    expect(bySubject.body.meta!.total).toBeLessThanOrEqual(all.body.meta!.total);
+
+    const byCategory = await call(
+      'GET',
+      `/admin/teaching-groups?category_id=${categoryId}`,
+      superAdmin,
+    );
+    expect(byCategory.body.data!.length).toBeGreaterThan(0);
+  });
+
+  it('searches the circle, its Level and its Subject', async () => {
+    // Those are the three things visible in the row, and a filter matching less
+    // than the reader can see reads as a broken filter.
+    const byCircle = await call('GET', `/admin/teaching-groups?q=${encodeURIComponent(TAG)}`, superAdmin);
+    expect(byCircle.body.data!.length).toBeGreaterThan(0);
+
+    const nonsense = await call('GET', '/admin/teaching-groups?q=zzzznomatch', superAdmin);
+    expect(nonsense.body.data).toEqual([]);
+    expect(nonsense.body.meta!.total).toBe(0);
+  });
+
+  it('is readable by an Admin and refused to a مؤطرة — the gate the nested read uses', async () => {
+    // R43.3: membership management is Admin and above. Asserted from both sides,
+    // because a read that is open to everyone is not the same rule as a read that
+    // happens to be reachable.
+    const admin = await call('GET', '/admin/teaching-groups', scopedAdmin);
+    expect(admin.status).toBe(200);
+
+    const teacher = await call('GET', '/admin/teaching-groups', teacherToken);
+    expect(teacher.status).toBe(403);
+  });
+
+  it('paginates per TD-10 and reports the unpaginated total', async () => {
+    const page = await call('GET', '/admin/teaching-groups?page=1&page_size=1', superAdmin);
+    expect(page.status).toBe(200);
+    expect(page.body.data!.length).toBeLessThanOrEqual(1);
+    expect(page.body.meta!.page_size).toBe(1);
+    // The total must be the whole set, never the page's length — a count derived
+    // from the page reports the page size as the total.
+    const all = await call('GET', '/admin/teaching-groups', superAdmin);
+    expect(page.body.meta!.total).toBe(all.body.meta!.total);
+  });
+
+  it('excludes soft-deleted circles', async () => {
+    const created = await call('POST', collection(subjectSplit), superAdmin, {
+      name: `${TAG} فوج مؤقت`,
+    });
+    const id = created.body.id as string;
+    expect((await call('GET', '/admin/teaching-groups', superAdmin)).body.data!.some(
+      (r) => r['id'] === id,
+    )).toBe(true);
+
+    await call('DELETE', `/admin/teaching-groups/${id}`, superAdmin);
+    expect((await call('GET', '/admin/teaching-groups', superAdmin)).body.data!.some(
+      (r) => r['id'] === id,
+    )).toBe(false);
   });
 });

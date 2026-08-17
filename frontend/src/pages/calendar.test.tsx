@@ -326,7 +326,13 @@ describe('the category and level filters', () => {
 
   it('disables the level select while the narrowed list is in flight', () => {
     const html = renderToStaticMarkup(
-      <LevelSelector levels={[]} value={null} busy={true} onChange={() => undefined} />,
+      <LevelSelector
+        levels={[]}
+        categories={[]}
+        value={null}
+        busy={true}
+        onChange={() => undefined}
+      />,
     );
     expect(html).toContain('disabled');
     expect(html).toContain('aria-busy="true"');
@@ -334,13 +340,20 @@ describe('the category and level filters', () => {
 
   it('renders exactly the levels it was given — it does no filtering of its own', () => {
     // §4.4: the narrowing is server-side, "so the client never filters a list it
-    // was handed". This component has no category prop at all, which is what
-    // makes that structurally true rather than merely intended.
+    // was handed". `categories` is passed for the LABEL only and never narrows
+    // the list, which is what the option count asserts: two levels in, two
+    // levels out, whatever the Category list contains.
     const html = renderToStaticMarkup(
       <LevelSelector
         levels={[
           { id: 'l1', name: 'المستوى 1', category_id: 'c1', display_order: 1 },
           { id: 'l2', name: 'المستوى 2', category_id: 'c1', display_order: 2 },
+        ]}
+        categories={[
+          { id: 'c1', name: 'المرأة', display_order: 1 },
+          // A Category with no Levels in the list, and a Level whose Category is
+          // absent below: neither may add or remove an option.
+          { id: 'c9', name: 'اليافعات', display_order: 2 },
         ]}
         value={null}
         busy={false}
@@ -348,6 +361,46 @@ describe('the category and level filters', () => {
       />,
     );
     expect(html.split('<option').length - 1).toBe(3); // "all" + two levels
+  });
+
+  it('labels each level {Category} — {Level}, the one platform format', () => {
+    // §4.4b: Level names are not unique across Categories, so a bare name does
+    // not identify one. This selector rendered bare names while every other
+    // selector rendered the pair — the same Level read differently depending on
+    // which screen you met it on (fixed 2026-08-17).
+    const html = renderToStaticMarkup(
+      <LevelSelector
+        levels={[
+          { id: 'l1', name: 'فرصة أمل', category_id: 'c1', display_order: 1 },
+          { id: 'l2', name: 'فرصة أمل', category_id: 'c2', display_order: 1 },
+        ]}
+        categories={[
+          { id: 'c1', name: 'المرأة', display_order: 1 },
+          { id: 'c2', name: 'اليافعات', display_order: 2 },
+        ]}
+        value={null}
+        busy={false}
+        onChange={() => undefined}
+      />,
+    );
+    expect(html).toContain('المرأة — فرصة أمل');
+    expect(html).toContain('اليافعات — فرصة أمل');
+  });
+
+  it('degrades to the bare name when the Category is not in the list', () => {
+    // A missing Category must not render a dangling em dash with nothing before
+    // it — `levelLabel`'s own rule, asserted through its caller.
+    const html = renderToStaticMarkup(
+      <LevelSelector
+        levels={[{ id: 'l1', name: 'فرصة أمل', category_id: 'c-unknown', display_order: 1 }]}
+        categories={[]}
+        value={null}
+        busy={false}
+        onChange={() => undefined}
+      />,
+    );
+    expect(html).toContain('فرصة أمل');
+    expect(html).not.toContain('— فرصة أمل');
   });
 });
 

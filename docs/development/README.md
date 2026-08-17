@@ -9,6 +9,7 @@ Contributing to the platform.
 | | |
 |---|---|
 | [**Engineering constitution**](engineering-constitution.md) | **The laws every implementation must satisfy — required reading before any production code** |
+| [**Platform UX & atomic design**](ux-architecture.md) | **Cross-cutting UI rules — data-first pages, one concept → one component, the Level label, scope, verdicts. Consult before implementing any UI request** |
 | [Getting started](getting-started.md) | From clone to a running stack |
 | [Conventions](conventions.md) | Layering, naming, TypeScript, commits, version policy |
 | [Testing](testing.md) | Four layers, what each is for, how to run them |
@@ -21,13 +22,16 @@ Contributing to the platform.
 | [SRS proposal — Revision 70](../SRS-PROPOSAL-R70.md) | Grade entry gets a home, an audience and an audit row. **Applied** — the M5a revision |
 | [Exams & assessment — audit and proposal](audit-2026-08-12-exams.md) | The model already exists and the exam half is built; **grade entry is the whole gap**. Retroactive recording needs nothing. Three small SRS clauses required — **awaiting Owner review** |
 | [Audit — 2026-08-11](audit-2026-08-11.md) | Level creation's branch coupling · per-child placement · the deletion model · deployment readiness. **Four questions audited to a decision, none implemented** |
+| [Platform-wide UX & IA correction — audit](audit-2026-08-17-ux-architecture.md) | The atomic foundation already existed; the defects were **drift at the edges**. Five dropdown-gated pages, a second button system, three copies of the Level label. **Applied** — two unlisted TD-3 reads reported in §Z |
 | [Engineering efficiency](engineering-efficiency.md) | Progress per unit of context — slicing, verification proportionality, and the five things it may never economise on |
 
-**Constitution or conventions?** [The constitution](engineering-constitution.md) states
-*what must be true of any implementation* — the generic-first law, atomic composition, the
+**Constitution, conventions, or UX architecture?** [The constitution](engineering-constitution.md)
+states *what must be true of any implementation* — the generic-first law, atomic composition, the
 reuse audit, the Definition of Done. [Conventions](conventions.md) states *how this codebase
-writes things down* — layering, naming, commits, the version policy. The first is why; the
-second is how. [Engineering efficiency](engineering-efficiency.md) is neither: it states *how
+writes things down* — layering, naming, commits, the version policy. [Platform UX & atomic
+design](ux-architecture.md) states *how the platform's surfaces behave and how its components
+compose* — it is the constitution's §2 made concrete, naming the concepts and what each one
+does. The first is why; the second is how; the third is what the UI must look and behave like. [Engineering efficiency](engineering-efficiency.md) is neither: it states *how
 to choose the work and the verification*, and is the only one of the three that constrains the
 process rather than the artefact.
 

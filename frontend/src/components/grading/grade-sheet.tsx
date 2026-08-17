@@ -168,6 +168,12 @@ export function GradeSheetView({
 
   return (
     <>
+      {/* **The exam is named ONCE on this screen.**
+          It used to be the page's `<h1>` *and* the first line of this block, so
+          «سواعد» appeared twice, three lines apart. The frame now keeps
+          «نقاط الامتحانات» as its title — the page is about grades whichever
+          exam is open — and the exam's identity is context, which is what this
+          block is for. */}
       <section className="admin-notice" aria-label={t('admin.grades.examSummary')}>
         <strong>{sheet.exam.title}</strong>
         {' — '}
@@ -215,7 +221,9 @@ export function GradeSheetView({
                 <th scope="col">{t('admin.grades.student')}</th>
                 <th scope="col">{t('admin.grades.mark').replace('{scale}', String(scale))}</th>
                 <th scope="col">{t('admin.grades.absent')}</th>
-                <th scope="col">{t('admin.grades.result')}</th>
+                {/* **No النتيجة column** (Owner decision, 2026-08-17). See the
+                    note on the status cell below for what changed and what
+                    deliberately did not. */}
                 <th scope="col">{t('admin.grades.status')}</th>
               </tr>
             </thead>
@@ -262,19 +270,28 @@ export function GradeSheetView({
                         }
                       />
                     </td>
-                    <td>
-                      {row.passed === null ? (
-                        // No row yet — genuinely unknown, not a fail.
-                        <span className="muted">—</span>
-                      ) : (
-                        <Badge tone={row.passed ? 'ok' : 'warn'}>
-                          {t(row.passed ? 'admin.grades.passed' : 'admin.grades.failed')}
-                          {row.manual_pass_fail_override !== null
-                            ? ` · ${t('admin.grades.overridden')}`
-                            : ''}
-                        </Badge>
-                      )}
-                    </td>
+                    {/* **The pass/fail badge is gone, and the business logic is
+                        not** (Owner decision, 2026-08-17).
+
+                        `Grade.passed`, `manual_pass_fail_override`, BR-12's
+                        *"a manual override always wins"* and the
+                        `POST …/override` endpoint are all untouched: they are
+                        how the association decides retakes, progression and
+                        re-enrolment, and removing them would be removing a
+                        rule rather than a label.
+
+                        What is removed is **labelling a مستفيدة «راسبة» on a
+                        grade sheet**. A mark is a fact; «راسبة» is a verdict
+                        about a person, and the platform states the fact.
+
+                        `row.passed` therefore stays in the contract, unread by
+                        this component. That is deliberate: the day a screen
+                        needs the verdict — a progression report, say — it
+                        reads it from the server rather than recomputing it
+                        from the mark, which would be a second grading rule
+                        (R8/R12). **The override is still surfaced**, because
+                        it is provenance rather than a verdict: it says a human
+                        decided this row, which a reader of the sheet needs. */}
                     <td>
                       <Badge tone={row.status === 'published' ? 'ok' : 'neutral'}>
                         {t(
@@ -283,6 +300,12 @@ export function GradeSheetView({
                             : 'admin.grades.statusDraft',
                         )}
                       </Badge>
+                      {row.manual_pass_fail_override !== null ? (
+                        <>
+                          {' '}
+                          <Badge tone="neutral">{t('admin.grades.overridden')}</Badge>
+                        </>
+                      ) : null}
                     </td>
                   </tr>
                 );

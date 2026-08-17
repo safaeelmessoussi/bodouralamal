@@ -262,3 +262,42 @@ describe('نقاط الامتحانات sits at the end of الشؤون التع
     expect(academic[academic.length - 1]).toBe('/admin/exam-grades');
   });
 });
+
+/**
+ * **The الإدارة order is a Document Owner decision, so it is pinned** (2026-08-17).
+ *
+ * §14.1 orders this section along the dependency chain (R69) — الفئات → المستويات
+ * → المواد → مواد المستوى — and the Owner extended it with مقرر الحفظ, the Quran
+ * syllabus layer that sits on top of the Level↔Subject pairing.
+ *
+ * It is asserted as a **sequence, not as a set of independent placements**,
+ * because the defect it guards against is a reordering: `مقرر الحفظ` shipped
+ * between المواد and مواد المستوى, so the menu read the curriculum out of order,
+ * and nothing failed. A test over the whole prefix is what makes the order a
+ * fact rather than an intention.
+ */
+describe('الإدارة is ordered along the curriculum dependency chain', () => {
+  const CURRICULUM_ORDER = [
+    '/admin/categories',
+    '/admin/levels',
+    '/admin/subjects',
+    '/admin/level-subjects',
+    '/admin/level-surahs',
+  ] as const;
+
+  it('lists the five curriculum nodes in exactly this sequence', () => {
+    const administration = ADMIN_MODULES.filter((m) => m.section === 'administration').map(
+      (m) => m.path,
+    );
+    expect(administration.slice(0, CURRICULUM_ORDER.length)).toEqual([...CURRICULUM_ORDER]);
+  });
+
+  it('places مواد المستوى before مقرر الحفظ', () => {
+    // The specific inversion the Owner corrected, stated on its own so a failure
+    // names the decision rather than a whole array.
+    const paths = ADMIN_MODULES.map((m) => m.path);
+    expect(paths.indexOf('/admin/level-subjects')).toBeLessThan(
+      paths.indexOf('/admin/level-surahs'),
+    );
+  });
+});

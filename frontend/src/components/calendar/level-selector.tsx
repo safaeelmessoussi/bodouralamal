@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react';
 
-import type { LevelRef } from '../../adapters/calendar.js';
+import type { CategoryRef, LevelRef } from '../../adapters/calendar.js';
 import { t } from '../../i18n/index.js';
-import { SelectField } from '../ui/field.js';
+import { LevelSelect, withCategoryNames } from '../scope/level-select.js';
 
 /**
  * Level filter, **dependent on the selected category**.
@@ -18,30 +18,47 @@ import { SelectField } from '../ui/field.js';
  * arriving. The control is disabled rather than hidden, so the row does not
  * reflow and the user can see what is happening.
  *
+ * ## It renders `{Category} — {Level}` now, and here is why it did not
+ *
+ * This component argued that the Category prefix was unnecessary because the
+ * list is category-narrowed server-side. **That is only true once a Category has
+ * been chosen** — and `الكل` is the calendar's default, so the common case was a
+ * list spanning every Category with bare names. §4.4b is explicit that Level
+ * names are not unique across Categories, so *فرصة أمل* could appear twice with
+ * nothing to tell the two apart.
+ *
+ * So it composes the shared `LevelSelect` and passes the Category names the
+ * bootstrap **already returns in the same payload**. Once a Category is chosen
+ * the prefix is redundant rather than wrong — one repeated word is a far smaller
+ * cost than an ambiguous option, and a label that changes shape depending on a
+ * sibling control is a third variant of the format the platform has exactly one
+ * of.
+ *
  * Level numbering is **not uniform across categories** (§4.4b — no category is
  * guaranteed a level 0), which is another reason the names are rendered as given
  * rather than derived from an index.
  */
 export function LevelSelector({
   levels,
+  categories,
   value,
   busy,
   onChange,
 }: {
   levels: LevelRef[];
+  /** From the same bootstrap payload as `levels`, purely to complete the label. */
+  categories: CategoryRef[];
   value: string | null;
   busy: boolean;
   onChange: (levelId: string | null) => void;
 }): ReactNode {
-  // Built on the shared `SelectField` (Revision 39) — generated id, and `busy`
-  // is the primitive's own concern now rather than this file's.
   return (
-    <SelectField
+    <LevelSelect
       label={t('calendar.levelLabel')}
-      value={value ?? ''}
+      levels={withCategoryNames(levels, categories)}
+      value={value}
       onChange={(next) => onChange(next === '' ? null : next)}
       placeholder={t('calendar.allLevels')}
-      options={levels.map((level) => ({ value: level.id, label: level.name }))}
       busy={busy}
       disabled={levels.length === 0}
     />

@@ -52,12 +52,26 @@ export async function listQuranStudents(token: string | null): Promise<QuranStud
  * child they are acting for and a student reads herself. There is nowhere in
  * this request to name somebody else.
  */
+/**
+ * `GET /students/me/quran` — the **acting** student's coverage.
+ *
+ * **`activeChildId` is required by the endpoint's contract and was not being
+ * sent** (fixed 2026-08-17). The route mounts `childContext`, so §4.3 resolves
+ * the subject from the header or the JWT `sub` — and with the header omitted a
+ * parent-only account received `400 VALIDATION_FAILED`, while an account holding
+ * both roles was shown **its own** progress instead of the child's. The server
+ * was right throughout; the client simply never named which child it was acting
+ * for. `fetchStudentIdentity` has always passed it, which is why the identity
+ * block on the same dashboard worked and this screen did not.
+ */
 export async function fetchMyCoverage(
   token: string | null,
+  activeChildId: string | null,
 ): Promise<{ surahs: SurahCoverage[]; logs: QuranLogRow[] }> {
   return (
     await api<{ data: { surahs: SurahCoverage[]; logs: QuranLogRow[] } }>('/students/me/quran', {
       token,
+      activeChildId,
     })
   ).data;
 }

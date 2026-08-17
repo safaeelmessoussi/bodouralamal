@@ -328,6 +328,15 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
   // no branch to scope by, so its CRUD is Super Admin, while membership is Admin
   // scoped by the branch the STUDENT is enrolled at — both asserted in the
   // service, never here.
+  //
+  // **The FLAT read is a sibling of the nested one, not a replacement.** The
+  // pair-addressed collection carries BR-22's unassigned alarm and cannot be
+  // paginated; this one answers *what circles exist* across Levels and Subjects
+  // so `حلقات المواد` can show its data before anything is chosen, and is
+  // paginated because that question has no natural bound. Same rows, same
+  // `assertCanManageMembership` gate, every parameter a narrowing filter.
+  // Declared BEFORE the parameterised paths so no `:levelId` can shadow it.
+  guarded.get('/admin/teaching-groups', teachingGroups.listAll(prisma));
   guarded.get(
     '/admin/levels/:levelId/subjects/:subjectId/teaching-groups',
     teachingGroups.list(prisma),
@@ -446,6 +455,15 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
   guarded.put('/exams/:id/grades', grades.save(prisma));
   guarded.post('/exams/:id/grades/publish', grades.publish(prisma));
   guarded.post('/exams/:id/grades/:studentId/override', grades.override(prisma));
+
+  // §5.3 — **the student's own published grades.** TD-3.3 already names *grades*
+  // among the student-context reads resolved per §4.3, and `/students/me/quran`
+  // below ships under the same clause: `childContext` resolves the subject and
+  // the path carries no id, which is what stops a caller naming another student
+  // (TD-12, the property R63.3 argued for). PUBLISHED only — a draft is a
+  // مؤطرة's working note (BR-8) and is absent from the query, not filtered out
+  // of its result.
+  guarded.get('/students/me/grades', childContext(prisma), grades.myGrades(prisma));
 
   // §4.5 Quran memorization (M4a, R73). The coverage read hangs off the student
   // because that is what it is about; the logs are their own collection because

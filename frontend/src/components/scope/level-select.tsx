@@ -39,6 +39,33 @@ export function levelLabel(level: LevelOption): string {
   return level.category_name ? `${level.category_name} — ${level.name}` : level.name;
 }
 
+/**
+ * **Joins a Category name onto Levels that carry only a Category id.**
+ *
+ * The calendar bootstrap returns `levels[{ id, name, category_id }]` **and**
+ * `categories[{ id, name }]` — the name is right there in the same payload, one
+ * join away, and two screens fed `LevelSelect` from it anyway and so rendered
+ * bare names while every other selector rendered `{Category} — {Level}`. The
+ * same Level therefore read differently depending on which screen you met it on,
+ * which is precisely what `levelLabel` was extracted to end.
+ *
+ * **This is not client-side filtering** (§4.4's rule): the set of Levels is
+ * exactly what the server returned, in its order. Only the label is completed.
+ * A Level whose Category is absent from the list degrades to its bare name
+ * rather than rendering a dangling em dash.
+ */
+export function withCategoryNames(
+  levels: readonly { id: string; name: string; category_id: string }[],
+  categories: readonly { id: string; name: string }[],
+): LevelOption[] {
+  const nameOf = new Map(categories.map((c) => [c.id, c.name]));
+  return levels.map((level) => ({
+    id: level.id,
+    name: level.name,
+    category_name: nameOf.get(level.category_id) ?? null,
+  }));
+}
+
 export function LevelSelect({
   levels,
   value,

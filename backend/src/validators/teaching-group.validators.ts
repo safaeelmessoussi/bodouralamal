@@ -14,6 +14,30 @@ import { displayOrder, entityName, uuid, version } from './common.js';
  * decided on.
  */
 
+/**
+ * `GET /admin/teaching-groups` — **every parameter narrows, none is required.**
+ *
+ * That is the whole contract, and it is the point: the flat read exists so a
+ * management screen can show its data before anything is chosen, so a required
+ * filter here would reintroduce the gate at the API instead of in the UI.
+ *
+ * **No `branch_id`.** A circle carries no branch (R43.3), and *"circles at
+ * Marrakesh"* could only mean *"circles at least one of whose members is
+ * enrolled at Marrakesh"* — a different question, answered silently. §20 rule 22
+ * forbids conflating the organisational unit with its delivery.
+ *
+ * Not `.strict()`, because TD-10's `page` / `page_size` arrive on the same query
+ * object and are read by `pageParamsFrom` rather than by this schema.
+ */
+export const listTeachingGroupsQuerySchema = z.object({
+  level_id: uuid.optional(),
+  subject_id: uuid.optional(),
+  category_id: uuid.optional(),
+  /** Free text over the circle, its Level and its Subject — the three things
+   *  visible in the row. Bounded so a query cannot be an unbounded scan term. */
+  q: z.string().trim().min(1).max(120).optional(),
+});
+
 /** Path-derived Level and Subject; the body carries only what a group *is*. */
 export const createTeachingGroupSchema = z
   .object({

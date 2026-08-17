@@ -108,7 +108,29 @@ export function SchedulingPage(): ReactNode {
   const [typeFilter, setTypeFilter] = useState<SchedulingType | ''>('');
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [editing, setEditing] = useState<SchedulingItem | 'new' | null>(null);
+  /**
+   * **`?new=1&kind=` opens the create form, prefilled** (2026-08-17).
+   *
+   * `نقاط الامتحانات` does not own exam creation — an exam is scheduled here,
+   * because R56 made this the one node for everything that appears on the
+   * calendar — so its primary action links *here* rather than growing a second
+   * authoring form. The parameter carries the reader's intent across that
+   * hand-off; without it they would arrive on a list and have to find the
+   * button and re-choose the kind they had already chosen.
+   *
+   * It **prefills and does not lock**: the kind stays editable, because arriving
+   * with an intent is not the same as being committed to it. Read once, on
+   * mount, so a later render cannot reopen a dialog the reader has closed.
+   */
+  const [editing, setEditing] = useState<SchedulingItem | 'new' | null>(() =>
+    new URLSearchParams(window.location.search).get('new') === '1' ? 'new' : null,
+  );
+  const [initialType] = useState<SchedulingType | null>(() => {
+    const kind = new URLSearchParams(window.location.search).get('kind');
+    return kind !== null && AVAILABLE_TYPES.includes(kind as SchedulingType)
+      ? (kind as SchedulingType)
+      : null;
+  });
   const [deleting, setDeleting] = useState<SchedulingItem | null>(null);
 
   const listScope = useScopeOptions({ token: accessToken, fields: LIST_SCOPE });
@@ -228,7 +250,7 @@ export function SchedulingPage(): ReactNode {
       title={t('admin.nav.scheduling')}
       lede={t('scheduling.lede')}
       actions={
-        <Button variant="primary" onClick={() => setEditing('new')}>
+        <Button variant="add" onClick={() => setEditing('new')}>
           {t('scheduling.create')}
         </Button>
       }
@@ -305,6 +327,7 @@ export function SchedulingPage(): ReactNode {
       {editing ? (
         <SchedulingDialog
           item={editing === 'new' ? null : editing}
+          {...(editing === 'new' && initialType ? { initialType } : {})}
           token={accessToken}
           onCancel={() => setEditing(null)}
           onSaved={() => {
@@ -440,6 +463,7 @@ export function SchedulingDialog({
   onCancel,
   onSaved,
   types = AVAILABLE_TYPES,
+  initialType,
 }: {
   item: SchedulingItem | null;
   token: string | null;
@@ -447,9 +471,20 @@ export function SchedulingDialog({
   onSaved: () => void;
   /** R72 — the kinds this caller may create. One kind locks the field. */
   types?: readonly SchedulingType[];
+  /**
+   * The kind a *creating* caller arrived intending, from `?kind=`.
+   *
+   * **Prefill, not a lock** — `types` is what constrains what may be created,
+   * and conflating "I came here to book an exam" with "I may only book exams"
+   * would turn a convenience into an authorization statement. Ignored while
+   * editing, where the kind is the item's own and is not a choice at all.
+   */
+  initialType?: SchedulingType;
 }): ReactNode {
   const editing = item !== null;
-  const [type, setType] = useState<SchedulingType>(item?.type ?? types[0] ?? 'class');
+  const [type, setType] = useState<SchedulingType>(
+    item?.type ?? (initialType && types.includes(initialType) ? initialType : types[0] ?? 'class'),
+  );
   const [title, setTitle] = useState(item?.title ?? '');
   const [description, setDescription] = useState(item?.description ?? '');
   const [allDay, setAllDay] = useState(item ? item.startTime === null : false);

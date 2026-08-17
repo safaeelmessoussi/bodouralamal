@@ -236,7 +236,7 @@ export function BranchesPage(): ReactNode {
       lede={t('admin.branches.lede')}
       actions={
         canWrite ? (
-          <Button variant="primary" onClick={() => setEditing('new')}>
+          <Button variant="add" onClick={() => setEditing('new')}>
             {t('admin.branches.create')}
           </Button>
         ) : null

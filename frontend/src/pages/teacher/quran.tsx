@@ -12,7 +12,8 @@ import {
 import { TeacherLayout } from '../../components/teacher/teacher-layout.js';
 import { Button } from '../../components/ui/button.js';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
-import { SelectField, TextField } from '../../components/ui/field.js';
+import { DataTable } from '../../components/ui/data-table.js';
+import { SearchInput, SelectField, TextField } from '../../components/ui/field.js';
 import { useSession } from '../../contexts/session.js';
 import { t } from '../../i18n/index.js';
 import { ApiError } from '../../lib/api.js';
@@ -42,6 +43,7 @@ export function TeacherQuranPage({ studentId }: { studentId: string | null }): R
   const [logs, setLogs] = useState<QuranLogRow[]>([]);
   const [state, setState] = useState<'idle' | 'loading' | 'ready' | 'error' | 'forbidden'>('idle');
   const [notice, setNotice] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
   const [busy, setBusy] = useState(false);
   const [removing, setRemoving] = useState<QuranLogRow | null>(null);
 
@@ -122,25 +124,25 @@ export function TeacherQuranPage({ studentId }: { studentId: string | null }): R
 
   const student = students.find((s) => s.id === studentId) ?? null;
 
+  const needle = query.trim().toLowerCase();
+  const visible = students.filter(
+    (s) => needle === '' || s.name_arabic.toLowerCase().includes(needle),
+  );
+
   return (
     <TeacherLayout
-      title={student ? student.name_arabic : t('teacher.nav.quran')}
+      // **The title stays the page's own**, whichever مستفيدة is open — the rule
+      // `نقاط الامتحانات` follows. Her name is stated in the block below, once.
+      title={t('teacher.nav.quran')}
       lede={t('teacher.quran.lede')}
+      actions={
+        student ? (
+          <Button variant="secondary" onClick={() => (window.location.href = '/teacher/quran')}>
+            {t('teacher.quran.backToStudents')}
+          </Button>
+        ) : null
+      }
     >
-      {/* R73.1 — the page asks which مستفيدة, because a menu entry cannot supply
-          an id. The list is the server's own scope predicate. */}
-      <SelectField
-        label={t('teacher.quran.student')}
-        value={studentId ?? ''}
-        onChange={(next) => {
-          if (next === '') return;
-          window.location.href = `/teacher/quran?student=${next}`;
-        }}
-        placeholder={t('common.choose')}
-        options={students.map((s) => ({ value: s.id, label: s.name_arabic }))}
-        hint={students.length === 0 ? t('teacher.quran.noStudents') : undefined}
-      />
-
       {notice ? (
         <p className="admin-notice" role="status" aria-live="polite">
           {notice}
@@ -148,7 +150,47 @@ export function TeacherQuranPage({ studentId }: { studentId: string | null }): R
       ) : null}
 
       {!studentId ? (
-        <p className="state">{t('teacher.quran.pickStudent')}</p>
+        /**
+         * **The مستفيدات in her scope, listed** (2026-08-17).
+         *
+         * R73.1 had this screen ask *which مستفيدة* in a dropdown, because a menu
+         * entry cannot supply an id — a reasonable step that left the page opening
+         * onto «اختاري مستفيدة لعرض تقدّمها» and nothing else. The list is the
+         * server's own §4.4c scope predicate either way; showing it is strictly
+         * more use than hiding it behind a control.
+         *
+         * **One column, and that is honest rather than thin.** `/quran-students`
+         * returns `{ id, name_arabic }`; a coverage column would mean a coverage
+         * read per student, which the endpoint does not offer and which is not
+         * worth widening it for inside this pass. Recorded rather than faked.
+         */
+        <DataTable
+          caption={t('teacher.quran.caption')}
+          columns={[
+            { key: 'name', header: t('teacher.quran.colStudent'), cell: (s) => s.name_arabic },
+          ]}
+          rows={visible}
+          rowKey={(s) => s.id}
+          status={students.length === 0 && state === 'loading' ? 'loading' : 'ready'}
+          actions={[
+            {
+              label: t('teacher.quran.openStudent'),
+              // `?student=` is R73.1's deep link, kept exactly as it was.
+              onSelect: (s) => {
+                window.location.href = `/teacher/quran?student=${s.id}`;
+              },
+            },
+          ]}
+          filtered={needle !== ''}
+          onClearFilters={() => setQuery('')}
+          toolbar={
+            <SearchInput
+              value={query}
+              onChange={setQuery}
+              placeholder={t('teacher.quran.searchPlaceholder')}
+            />
+          }
+        />
       ) : state === 'loading' ? (
         <p className="state">{t('common.loading')}</p>
       ) : state === 'forbidden' ? (

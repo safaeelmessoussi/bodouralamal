@@ -8,6 +8,9 @@ import {
 import { ApplicationHeader } from '../../components/header/application-header.js';
 import { SiteFooter } from '../../components/site-footer.js';
 import { Container } from '../../components/ui/container.js';
+import { DataTable, type Column } from '../../components/ui/data-table.js';
+import { useActiveChild } from '../../contexts/active-child.js';
+import { useActiveRole } from '../../contexts/active-role.js';
 import { useSession } from '../../contexts/session.js';
 import { t } from '../../i18n/index.js';
 
@@ -25,27 +28,38 @@ import { t } from '../../i18n/index.js';
  * else. The `?student=` deep link that the مؤطرة's screen needs would be a
  * liability here, so it does not exist.
  *
+ * **The child context has to be SENT, though** (fixed 2026-08-17). The header
+ * was omitted, so a parent-only account received a `400` and one holding both
+ * roles was shown its own progress instead of the child's. The rule is
+ * `StudentDashboard`'s and is not restated: act as parent → name the active
+ * child; act as student → send nothing, because sending a child id then would
+ * be asking for someone else's record.
+ *
  * **The engine is not duplicated.** This renders the same read the مؤطرة's
  * screen uses, including §4.5's self-heal guard; only how the subject was
  * established differs.
  */
 export function StudentQuranPage(): ReactNode {
   const { accessToken } = useSession();
+  const { activeRole } = useActiveRole();
+  const { activeChildId } = useActiveChild();
   const [surahs, setSurahs] = useState<SurahCoverage[]>([]);
   const [logs, setLogs] = useState<QuranLogRow[]>([]);
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
 
+  const childHeader = activeRole === 'parent' ? activeChildId : null;
+
   const load = useCallback(async () => {
     setState('loading');
     try {
-      const data = await fetchMyCoverage(accessToken);
+      const data = await fetchMyCoverage(accessToken, childHeader);
       setSurahs(data.surahs);
       setLogs(data.logs);
       setState('ready');
     } catch {
       setState('error');
     }
-  }, [accessToken]);
+  }, [accessToken, childHeader]);
 
   useEffect(() => {
     void load();
@@ -86,42 +100,44 @@ export function StudentQuranPage(): ReactNode {
       )}
 
       <h2>{t('student.quran.history')}</h2>
-      {logs.length === 0 ? (
-        <p className="state" role="status">
-          {t('student.quran.noLogs')}
-        </p>
-      ) : (
-        <table className="admin-table">
-          <thead>
-            <tr>
-              <th scope="col">{t('student.quran.surah')}</th>
-              <th scope="col">{t('student.quran.range')}</th>
-              <th scope="col">{t('student.quran.category')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {logs.map((l) => (
-              <tr key={l.id}>
-                <td>{surahs.find((s) => s.surah_id === l.surah_id)?.name_arabic ?? l.surah_id}</td>
-                <td>
-                  {l.start_ayah}–{l.end_ayah}
-                </td>
-                <td>
-                  {t(
-                    l.category === 'revision'
-                      ? 'student.quran.revision'
-                      : 'student.quran.newMemorization',
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-            </table>
-          )}
+      {/* The shared table (2026-08-17). This was hand-rolled `admin-table`
+          markup with its own empty paragraph, so a read-only list rendered
+          differently here than on every other list in the platform. */}
+      <DataTable
+        caption={t('student.quran.history')}
+        columns={logColumns(surahs)}
+        rows={logs}
+        rowKey={(l) => l.id}
+        status="ready"
+      />
         </>
       )}
     </Frame>
   );
+}
+
+/**
+ * The log history's columns.
+ *
+ * A function of the coverage list because the log carries a `surah_id` and the
+ * NAME lives on the coverage row — §4.5's seeded lookup is the one source for
+ * those 114 names, and a copy here would be a second one.
+ */
+function logColumns(surahs: SurahCoverage[]): Column<QuranLogRow>[] {
+  return [
+    {
+      key: 'surah',
+      header: t('student.quran.surah'),
+      cell: (l) => surahs.find((s) => s.surah_id === l.surah_id)?.name_arabic ?? String(l.surah_id),
+    },
+    { key: 'range', header: t('student.quran.range'), cell: (l) => `${l.start_ayah}–${l.end_ayah}` },
+    {
+      key: 'category',
+      header: t('student.quran.category'),
+      cell: (l) =>
+        t(l.category === 'revision' ? 'student.quran.revision' : 'student.quran.newMemorization'),
+    },
+  ];
 }
 
 /** The same frame the Student Dashboard uses — header, measure, footer. */

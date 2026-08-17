@@ -4,6 +4,7 @@ import { AdminLayout } from '../../components/admin/admin-layout.js';
 import { Icon } from '../../components/ui/icon.js';
 import { ModulePending } from '../../components/portal/nav-item.js';
 import { useActiveRole } from '../../contexts/active-role.js';
+import { Button, ButtonLink } from '../../components/ui/button.js';
 import { t } from '../../i18n/index.js';
 import { moduleForPath, visibleModules } from '../../lib/admin-modules.js';
 import { ApprovalsPage } from './approvals.js';
@@ -305,16 +306,15 @@ function WrongRole({
         // a switch that would do nothing.
         <p className="muted">{t('roles.wrongRoleNoRole')}</p>
       ) : (
-        <button
-          type="button"
-          className="btn btn--primary"
+        <Button
+          variant="primary"
           onClick={() => {
             setActiveRole(target);
             window.location.reload();
           }}
         >
           {t('roles.wrongRoleSwitch').replace('{role}', t(`roles.${target}`))}
-        </button>
+        </Button>
       )}
     </div>
   );
@@ -325,9 +325,9 @@ function AdminNotFound(): ReactNode {
     <AdminLayout title={t('admin.notFound')}>
       <div className="state" role="status">
         <p>{t('admin.notFoundBody')}</p>
-        <a className="btn btn--secondary" href="/admin">
+        <ButtonLink variant="secondary" href="/admin">
           {t('admin.nav.dashboard')}
-        </a>
+        </ButtonLink>
       </div>
     </AdminLayout>
   );

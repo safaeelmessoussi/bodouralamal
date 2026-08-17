@@ -3,10 +3,13 @@ import type { Request, Response } from 'express';
 import type { PrismaClient } from '../generated/prisma/client.js';
 import { requireActor } from '../middleware/authenticate.js';
 import * as teachingGroups from '../services/teaching-group.service.js';
+import { pageParamsFrom } from '../lib/pagination.js';
 import {
+  pageOf,
   teachingGroupDeletionDto,
   teachingGroupDto,
   teachingGroupMemberDto,
+  teachingGroupRowDto,
   unassignedStudentDto,
   type TeachingGroupListDto,
 } from './dto.js';
@@ -14,6 +17,7 @@ import { idParam, parse } from './parse.js';
 import {
   addTeachingGroupMemberSchema,
   createTeachingGroupSchema,
+  listTeachingGroupsQuerySchema,
   updateTeachingGroupSchema,
 } from '../validators/teaching-group.validators.js';
 
@@ -64,6 +68,31 @@ export function list(prisma: PrismaClient) {
       unassigned: unassigned.unassigned.map(unassignedStudentDto),
     };
     res.json(body);
+  };
+}
+
+/**
+ * `GET /admin/teaching-groups` — **every circle the caller may see**, paginated.
+ *
+ * The sibling of `list` above rather than a replacement for it: that one answers
+ * *"how is this Subject split, and who is unplaced"* and carries BR-22's alarm;
+ * this one answers *"what circles exist"* and carries a page. Neither can be
+ * derived from the other without either an N+1 or a page boundary through an
+ * alarm, which is why both exist.
+ */
+export function listAll(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const filters = parse(listTeachingGroupsQuerySchema, req.query);
+    const result = await teachingGroups.listAllTeachingGroups(prisma, requireActor(req), {
+      // Absent stays absent — the service's `where` builder distinguishes "not
+      // filtering by Level" from "filtering by no Level".
+      ...(filters.level_id !== undefined ? { levelId: filters.level_id } : {}),
+      ...(filters.subject_id !== undefined ? { subjectId: filters.subject_id } : {}),
+      ...(filters.category_id !== undefined ? { categoryId: filters.category_id } : {}),
+      ...(filters.q !== undefined ? { q: filters.q } : {}),
+      ...pageParamsFrom(req.query),
+    });
+    res.json(pageOf(result, teachingGroupRowDto));
   };
 }
 

@@ -236,7 +236,7 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
       title={t(`${portal}.nav.content`)}
       lede={t('content.lede')}
       actions={
-        <Button variant="primary" onClick={() => setUploading(true)}>
+        <Button variant="add" onClick={() => setUploading(true)}>
           {t('content.upload.action')}
         </Button>
       }

@@ -1,5 +1,6 @@
 import type { Prisma, PrismaClient, TeachingGroup } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
+import { page, pageWindow, type Page, type PageParams } from '../lib/pagination.js';
 import { assertSubjectTaughtAtLevel } from '../policies/curriculum.js';
 import * as scope from '../policies/branch-scope.js';
 import * as audit from '../repositories/audit.repository.js';
@@ -114,6 +115,135 @@ export async function listTeachingGroups(
     include: { _count: { select: { members: { where: { deletedAt: null } } } } },
   });
   return rows.map(({ _count, ...g }) => ({ ...g, memberCount: _count.members }));
+}
+
+/**
+ * **Every circle the caller may see, across Levels and Subjects.**
+ *
+ * ## Why a second read, when `listTeachingGroups` exists
+ *
+ * `listTeachingGroups` is addressed by `(Level, Subject)` because that pair is
+ * what a split *is* — and that is exactly why it cannot answer *"what circles
+ * exist"*. A screen wanting one table had to ask **Levels × Subjects** times,
+ * which is why `حلقات المواد` was built as an accordion that loads a Level at a
+ * time: the shape of the read decided the shape of the screen.
+ *
+ * This is the **same rows, the same gate, a wider filter**. It grants nothing
+ * new: `assertCanManageMembership` is the identical check the nested read
+ * performs, and every parameter here narrows rather than widens.
+ *
+ * ## A circle has no branch, and this read does not invent one
+ *
+ * R43.3's structural point — *"a Teaching Group carries no branch … so 'within
+ * your branch scope' has no referent"* — is why there is **no `branchId`
+ * filter and no branch column**. A branch reaches a circle only through the
+ * enrolments of its members, and offering *"circles at Marrakesh"* would mean
+ * *"circles at least one of whose members is enrolled at Marrakesh"* — a
+ * different question, silently answered. §20 rule 22 forbids conflating the
+ * organisational unit with its delivery, and a branch on a circle is that
+ * conflation.
+ *
+ * For the same reason there is **no مؤطرة column**: staffing lives on
+ * `CourseSchedule` (§4.4c), which is what resolves *who teaches* — a circle is
+ * an audience, not a class.
+ *
+ * ## `q` matches the circle, its Level and its Subject
+ *
+ * Because those are the three things visible in the row, and a filter that
+ * matches less than the reader can see reads as a broken filter.
+ */
+export interface TeachingGroupRow {
+  id: string;
+  name: string;
+  displayOrder: number | null;
+  levelId: string;
+  levelName: string;
+  categoryName: string;
+  subjectId: string;
+  subjectName: string;
+  memberCount: number;
+  version: number;
+}
+
+export async function listAllTeachingGroups(
+  prisma: PrismaClient,
+  actor: Actor,
+  filters: {
+    levelId?: string;
+    subjectId?: string;
+    categoryId?: string;
+    q?: string;
+  } & PageParams,
+): Promise<Page<TeachingGroupRow>> {
+  assertCanManageMembership(actor);
+
+  // TD-10's single implementation, not a `skip`/`take` of this file's own.
+  const window = pageWindow(filters);
+
+  const q = filters.q?.trim() ?? '';
+  const where: Prisma.TeachingGroupWhereInput = {
+    deletedAt: null,
+    ...(filters.levelId ? { levelId: filters.levelId } : {}),
+    ...(filters.subjectId ? { subjectId: filters.subjectId } : {}),
+    ...(filters.categoryId ? { level: { categoryId: filters.categoryId } } : {}),
+    ...(q === ''
+      ? {}
+      : {
+          OR: [
+            { name: { contains: q, mode: 'insensitive' } },
+            { level: { name: { contains: q, mode: 'insensitive' } } },
+            { subject: { name: { contains: q, mode: 'insensitive' } } },
+          ],
+        }),
+  };
+
+  // One query for the page and one for the count — never a count derived from
+  // the page, which would report the page size as the total.
+  const [rows, total] = await Promise.all([
+    prisma.teachingGroup.findMany({
+      where,
+      // Category, then Level, then Subject, then the circle's own order: the
+      // reading order of the hierarchy the rows belong to, so a table sorts the
+      // way the menu does. **The Category comes first because
+      // `Level.displayOrder` is scoped WITHIN its Category** (§2.2) — ordering
+      // by it across Categories interleaves them, and a table where اليافعات 1
+      // sits between المرأة 1 and المرأة 2 is a table nobody can read.
+      orderBy: [
+        { level: { category: { displayOrder: 'asc' } } },
+        { level: { category: { name: 'asc' } } },
+        { level: { displayOrder: 'asc' } },
+        { level: { name: 'asc' } },
+        { subject: { name: 'asc' } },
+        { displayOrder: 'asc' },
+        { name: 'asc' },
+      ],
+      skip: window.skip,
+      take: window.take,
+      include: {
+        level: { select: { id: true, name: true, category: { select: { name: true } } } },
+        subject: { select: { id: true, name: true } },
+        _count: { select: { members: { where: { deletedAt: null } } } },
+      },
+    }),
+    prisma.teachingGroup.count({ where }),
+  ]);
+
+  return page(
+    rows.map((g) => ({
+      id: g.id,
+      name: g.name,
+      displayOrder: g.displayOrder,
+      levelId: g.level.id,
+      levelName: g.level.name,
+      categoryName: g.level.category.name,
+      subjectId: g.subject.id,
+      subjectName: g.subject.name,
+      memberCount: g._count.members,
+      version: g.version,
+    })),
+    window,
+    total,
+  );
 }
 
 export async function createTeachingGroup(

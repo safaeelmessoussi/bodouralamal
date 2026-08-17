@@ -124,6 +124,38 @@ You are working on the بذور الأمل Platform.
 - Which page to update for which kind of change is listed in
   `docs/development/documentation-policy.md` — read it once per session, as you
   do §20.
+
+## Platform UX & Atomic Design Rules (binding for any UI work)
+- **Before implementing any UI request, read
+  `docs/development/ux-architecture.md`.** It is cross-cutting, it is where the
+  platform's UI decisions live, and a request is to be **interpreted against it**
+  rather than implemented as an isolated change. Read it as you do §20 and the
+  constitution — targeted, not thorough — and it wins over any local instinct.
+- The nineteen rules it states are lettered A–S. The four that regress most often,
+  named here so they are in front of you without a read:
+  - **Data-first (A, F).** A management page shows the data it manages
+    immediately. **Never gate primary data behind a dropdown.** Filters narrow
+    what is visible; they are never the precondition for it appearing — and the
+    API side of the same rule is that **every filter parameter is optional**.
+  - **One concept → one atomic component (C, S).** Never hand-write a shared
+    component's markup or classes. A different appearance is a **documented
+    variant** on the shared component, never a second implementation. If the
+    shared component cannot serve the case, **improve the shared component**.
+  - **`{Category} — {Level}`, through `levelLabel`, everywhere (D).** Level names
+    are not unique across Categories (§4.4b), so a bare name does not identify a
+    Level.
+  - **No engineering reference in user-facing text (M).** No `§`, `TD-`, `BR-`,
+    revision number or commit hash on any screen a beneficiary, parent or مؤطرة
+    sees. Comments citing the SRS are correct and stay.
+- **Components never decide authorization (O).** The caller passes the permitted
+  dataset, the component renders it, the server is the authority. **Never widen a
+  permission to make a UI work** — and when a label misleads, fix the label.
+- **The recurring defect on this project is a complete capability with no reach**
+  (P): six instances so far. When a screen looks impossible, check whether the
+  service already does it and only the route or node is missing.
+- Every rule there is guarded, and the guards are listed at the foot of that page.
+  **When a guard fails because the code changed shape, restate the property — do
+  not delete the guard.**
 - **One source of truth per concept.** Never restate a rule that already lives
   somewhere; link to it. On this project every duplicated requirement has
   drifted, and the copy that drifts still passes its own tests.

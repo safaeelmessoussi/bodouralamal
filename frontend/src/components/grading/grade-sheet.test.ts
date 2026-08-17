@@ -54,8 +54,31 @@ describe('the sheet keeps empty distinguishable from zero', () => {
     expect(code(SHEET)).toContain("draft.mark.trim() === '' ? null");
   });
 
-  it('renders an unknown result as unknown, never as a fail', () => {
-    expect(code(SHEET)).toContain('row.passed === null');
+  /**
+   * **This assertion replaced its predecessor rather than being deleted.**
+   *
+   * It used to read `expect(code(SHEET)).toContain('row.passed === null')` — the
+   * branch that rendered an unmarked student's result as «—» instead of «راسبة».
+   * The Owner removed the result column entirely (2026-08-17), so that branch is
+   * gone and with it the failure mode it prevented.
+   *
+   * The rule underneath it is **stronger now and is asserted as such**: the sheet
+   * renders no verdict about a person at all, marked or not. `row.passed` remains
+   * in the contract and BR-12's override remains in the model; this screen simply
+   * does not read them. The catalogue half of the same guard lives in
+   * `ui/atomic-components.test.ts`.
+   */
+  it('renders no pass/fail verdict at all, for any row', () => {
+    expect(code(SHEET)).not.toContain('row.passed');
+    expect(code(SHEET)).not.toContain('admin.grades.passed');
+    expect(code(SHEET)).not.toContain('admin.grades.failed');
+  });
+
+  it('still surfaces a manual override, because provenance is not a verdict', () => {
+    // BR-12: a human decided this row, which a reader of the sheet needs to
+    // know. That is a fact about the RECORD, not a label on the student.
+    expect(code(SHEET)).toContain('manual_pass_fail_override');
+    expect(code(SHEET)).toContain('admin.grades.overridden');
   });
 });
 

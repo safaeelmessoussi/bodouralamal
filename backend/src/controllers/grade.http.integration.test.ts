@@ -578,3 +578,166 @@ describe('retroactively recorded exams (R70.5)', () => {
     expect((sheet.body.data as { exam: Record<string, unknown> }).exam['recorded_late']).toBe(false);
   });
 });
+
+/**
+ * **§5.3 — a مستفيدة sees her own published grades** (`GET /students/me/grades`).
+ *
+ * §5.3 and §14.1 have listed `/dashboard/student/grades` since R62 and **nothing
+ * rendered it**: a مؤطرة could publish a grade and the student it was about had
+ * no way to see it. TD-3.3 already names *grades* among the student-context reads
+ * resolved per §4.3, which is the clause `GET /students/me/quran` also ships
+ * under, so this closes a surface rather than opening a contract.
+ *
+ * The four properties below are the whole of it, and each is asserted from **both
+ * sides** — the draft is invisible *and* the published one is visible; the child's
+ * parent can read it *and* a stranger's parent cannot.
+ */
+describe('the student’s own published grades (§5.3)', () => {
+  /** A fresh sitting, so publishing here cannot disturb the suite's other tests. */
+  let ownExam: string;
+
+  beforeAll(async () => {
+    const created = await call('POST', '/exams', superToken, {
+      title: `${TAG} امتحان المستفيدة`,
+      date: '2098-04-01',
+      start_time: '09:00',
+      end_time: '10:00',
+      level_id: levelId,
+      subject_id: subjectId,
+      academic_year_id: academicYearId,
+      branch_id: branchA,
+      room_id: roomA,
+      administrative_group_id: groupA,
+    });
+    expect(created.status).toBe(201);
+    ownExam = (created.body as { id: string }).id;
+
+    // 15/20 for the first student, absent for the second — the two shapes the
+    // row can take (BR-7).
+    const saved = await call('PUT', `/exams/${ownExam}/grades`, superToken, {
+      entries: [
+        { student_id: studentOne, mark: 15, absent: false },
+        { student_id: studentTwo, mark: null, absent: true },
+      ],
+    });
+    expect(saved.status).toBe(200);
+  });
+
+  it('a DRAFT grade is invisible to the student it is about (BR-8)', async () => {
+    // Not merely hidden by the client: the server's query selects
+    // `status: 'published'`, so there is nothing to hide.
+    //
+    // **Scoped to THIS exam rather than asserting an empty list.** The suite's
+    // publish/amend tests above legitimately leave `studentOne` holding a
+    // published grade for the main sitting, so an empty-list assertion was
+    // asserting the fixtures rather than the rule — and it would have passed only
+    // as long as no earlier test published anything.
+    const res = await call('GET', '/students/me/grades', bearer(studentOne, [
+      { role: 'student', branches: null },
+    ]));
+    expect(res.status).toBe(200);
+    const rows = res.body.data as unknown as Record<string, unknown>[];
+    expect(rows.some((r) => r['exam_id'] === ownExam)).toBe(false);
+  });
+
+  it('the same grade becomes visible once published, on the association’s scale', async () => {
+    const published = await call('POST', `/exams/${ownExam}/grades/publish`, superToken);
+    expect(published.status).toBe(200);
+
+    const res = await call('GET', '/students/me/grades', bearer(studentOne, [
+      { role: 'student', branches: null },
+    ]));
+    expect(res.status).toBe(200);
+    const rows = res.body.data as unknown as Record<string, unknown>[];
+    const row = rows.find((r) => r['exam_id'] === ownExam);
+    expect(row).toBeDefined();
+    // R8/R14 — the mark crosses the wire on the display scale, converted once by
+    // the server from the 7500 basis points it stores. Basis points never appear.
+    expect(row!['mark']).toBe(15);
+    expect(row!['absent']).toBe(false);
+    expect((res.body.meta as Record<string, unknown>)['display_scale']).toBe(20);
+  });
+
+  it('carries no pass/fail verdict — a mark is a fact, «راسبة» is a verdict', async () => {
+    // The Owner's decision of 2026-08-17. `Grade.passed` and BR-12's override are
+    // untouched in the model and still shown on the STAFF sheet; the projection
+    // is what changed, and it is asserted as an exact key set so a field added by
+    // reflex to a screen a child looks at is caught here.
+    const res = await call('GET', '/students/me/grades', bearer(studentOne, [
+      { role: 'student', branches: null },
+    ]));
+    const rows = res.body.data as unknown as Record<string, unknown>[];
+    const row = rows.find((r) => r['exam_id'] === ownExam)!;
+    expect(Object.keys(row).sort()).toEqual([
+      'absent',
+      'date',
+      'exam_id',
+      'exam_title',
+      'level_name',
+      'subject_name',
+      'mark',
+    ].sort());
+    expect(row).not.toHaveProperty('passed');
+    expect(row).not.toHaveProperty('manual_pass_fail_override');
+    expect(row).not.toHaveProperty('value_bp');
+    expect(row).not.toHaveProperty('status');
+  });
+
+  it('an absent student reads her absence, not a zero', async () => {
+    // BR-7 stores the absentee as a real `0` so draft averages are not inflated
+    // by omission — and reporting that 0 as a mark would tell her she scored
+    // nothing on a sitting she did not attend.
+    const res = await call('GET', '/students/me/grades', bearer(studentTwo, [
+      { role: 'student', branches: null },
+    ]));
+    const rows = res.body.data as unknown as Record<string, unknown>[];
+    const row = rows.find((r) => r['exam_id'] === ownExam)!;
+    expect(row['absent']).toBe(true);
+  });
+
+  it('one student never sees another’s grade', async () => {
+    // There is no id in the path, so this is not a check that could be bypassed —
+    // it is the absence of anywhere to name someone else (TD-12, R63.3).
+    //
+    // Asserted as a DIFFERENCE between the two callers on the same exam, not as
+    // the absence of a particular number: two students may legitimately score the
+    // same mark, so `mark !== 15` would be a coincidence test.
+    const one = await call('GET', '/students/me/grades', bearer(studentOne, [
+      { role: 'student', branches: null },
+    ]));
+    const two = await call('GET', '/students/me/grades', bearer(studentTwo, [
+      { role: 'student', branches: null },
+    ]));
+    const rowFor = (res: Res): Record<string, unknown> =>
+      (res.body.data as unknown as Record<string, unknown>[]).find(
+        (r) => r['exam_id'] === ownExam,
+      )!;
+
+    // One row each for this sitting — never both students' rows on one list.
+    expect(
+      (one.body.data as unknown as Record<string, unknown>[]).filter(
+        (r) => r['exam_id'] === ownExam,
+      ),
+    ).toHaveLength(1);
+    expect(
+      (two.body.data as unknown as Record<string, unknown>[]).filter(
+        (r) => r['exam_id'] === ownExam,
+      ),
+    ).toHaveLength(1);
+
+    // And each reads her OWN outcome: a mark for the one who sat it, an absence
+    // for the one who did not.
+    expect(rowFor(one)['absent']).toBe(false);
+    expect(rowFor(one)['mark']).toBe(15);
+    expect(rowFor(two)['absent']).toBe(true);
+  });
+
+  it('a parent-only caller with no child header is refused (§4.3)', async () => {
+    const res = await call('GET', '/students/me/grades', bearer(await makeUser('والدة بلا طفل'), [
+      { role: 'parent', branches: null },
+    ]));
+    // `400 VALIDATION_FAILED` — the same answer `GET /students/me` gives, because
+    // it is the same middleware resolving the same question (R63.6).
+    expect(res.status).toBe(400);
+  });
+});

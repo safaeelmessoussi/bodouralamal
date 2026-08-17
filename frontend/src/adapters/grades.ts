@@ -96,3 +96,44 @@ export async function overridePassFail(
     body: input,
   });
 }
+
+/**
+ * `GET /students/me/grades` — **a مستفيدة's own published grades** (§5.3).
+ *
+ * ## Why there is no id in the call
+ *
+ * The acting student is resolved server-side from the JWT or, for a parent, from
+ * `X-Active-Child-ID` (§4.3) — passed through the one API caller that may set
+ * that header, exactly as `fetchStudentIdentity` does. The client never names a
+ * student, which is what makes *"could a parent read another child's marks"* a
+ * question with no code path rather than a check to review.
+ *
+ * ## What the row deliberately does not carry
+ *
+ * **No pass/fail.** The staff sheet keeps it — BR-8's publication states and
+ * BR-12's override are untouched in the model — but this screen reports what she
+ * scored, not a verdict about her (Owner decision, 2026-08-17).
+ *
+ * **No draft.** Not hidden here: absent from the server's query.
+ */
+export interface PublishedGrade {
+  exam_id: string;
+  exam_title: string;
+  date: string;
+  level_name: string;
+  subject_name: string | null;
+  /** Already on the display scale — the server converted from basis points. */
+  mark: number;
+  absent: boolean;
+}
+
+export async function fetchMyGrades(
+  token: string | null,
+  activeChildId: string | null,
+): Promise<{ rows: PublishedGrade[]; displayScale: number }> {
+  const body = await api<{ data: PublishedGrade[]; meta: { display_scale: number } }>(
+    '/students/me/grades',
+    { token, activeChildId },
+  );
+  return { rows: body.data, displayScale: body.meta.display_scale };
+}

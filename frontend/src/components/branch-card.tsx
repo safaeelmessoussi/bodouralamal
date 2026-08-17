@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 
 import type { PublicBranch } from '../adapters/branches.js';
 import { t } from '../i18n/index.js';
-import { ButtonLink } from './ui/button.js';
+import { Button, ButtonLink } from './ui/button.js';
 
 /**
  * One branch, exactly as the backend describes it.
@@ -47,13 +47,13 @@ export function BranchCard({ branch }: { branch: PublicBranch }): ReactNode {
            * with an explanatory title says *why* instead of leaving a dead
            * control. A fabricated map link would be worse than no link.
            */
-          <span
-            className="btn btn--secondary is-disabled"
-            aria-disabled="true"
-            title={t('branches.mapUnavailable')}
-          >
+          /* The shared button, disabled — not a `<span>` wearing its classes
+             (2026-08-17). `<button disabled>` IS the semantics of *"this action
+             exists here and is unavailable"*: it carries the role, the state and
+             the accessible name, all of which a styled span withholds. */
+          <Button variant="secondary" disabled title={t('branches.mapUnavailable')}>
             {t('branches.viewOnMap')}
-          </span>
+          </Button>
         )}
       </div>
     </article>

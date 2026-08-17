@@ -327,6 +327,34 @@ alone** when the Hijri month has not been published. No placeholder, no computed
 default width is a reading measure, which is right for an event record and too narrow for a
 day's timetable.
 
+### The rules these components exist to keep
+
+**The behavioural contract of each shared component — and the page-shape rules
+they compose into — live in [Platform UX & atomic
+design](../development/ux-architecture.md), not here.** That page is the one a
+future UI change is interpreted against; this section stays a *register of what
+exists*, because a component list and a set of rules drift apart the moment they
+are maintained in one place.
+
+The three additions of 2026-08-17 are worth naming in the register, since each
+replaced something hand-rolled:
+
+* **`SearchableSelect`** — one choice from a large set, **showing its options on
+  open**. The gap it filled had been met by *typed-search workflows*: a picker
+  returning nothing until two characters were entered, which offers nothing at all
+  to a reader who does not already know the name.
+* **`Button variant="add"`** — the `＋` convention, emitted by the variant so a
+  caller never types it. It had lived in a *translation string* for exactly one
+  screen.
+* **`withCategoryNames`** — joins a Category name onto Levels carrying only
+  `category_id`, so `levelLabel` can render `{Category} — {Level}` from the
+  calendar bootstrap without a second label format.
+
+And one deletion: **`.button` / `.button.primary` in `status-pages.css` was a
+second complete button system**, across ten call sites on the registration, status
+and profile pages — its own class name, its own padding, and none of `ghost`,
+`danger` or `add`. Every one of them now renders `ButtonLink`.
+
 ## The calendar page, as a worked example
 
 The most complete screen in the client, and the one whose decisions generalise furthest.

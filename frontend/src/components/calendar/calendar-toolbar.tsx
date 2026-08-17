@@ -49,7 +49,16 @@ export function CalendarToolbar({
     <div className="cal-toolbar" role="group" aria-label={t('calendar.filtersLabel')}>
       <BranchSelector branches={branches} value={branchId} onChange={onBranchChange} />
       <CategorySelector categories={categories} value={categoryId} onChange={onCategoryChange} />
-      <LevelSelector levels={levels} value={levelId} busy={levelsBusy} onChange={onLevelChange} />
+      {/* The Categories are passed through purely to complete the Level label —
+          `{Category} — {Level}`, the platform's one format. They come from the
+          same bootstrap payload as `levels`; see `LevelSelector`. */}
+      <LevelSelector
+        levels={levels}
+        categories={categories}
+        value={levelId}
+        busy={levelsBusy}
+        onChange={onLevelChange}
+      />
     </div>
   );
 }

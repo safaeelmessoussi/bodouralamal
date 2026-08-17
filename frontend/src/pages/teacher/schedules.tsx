@@ -120,7 +120,7 @@ export function TeacherSchedulesPage(): ReactNode {
       title={t('teacher.nav.schedules')}
       lede={t('teacher.schedules.lede')}
       actions={
-        <Button variant="primary" onClick={() => setComposing(true)}>
+        <Button variant="add" onClick={() => setComposing(true)}>
           {t('teacher.schedules.addActivity')}
         </Button>
       }

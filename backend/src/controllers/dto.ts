@@ -274,6 +274,58 @@ export function teachingGroupDto(row: {
 }
 
 /**
+ * A circle **listed across Levels and Subjects**, for the `حلقات المواد` table.
+ *
+ * `TeachingGroupDto` carries only the two ids, which is right for the read
+ * addressed *by* that pair — the caller already knows them. A flat table does
+ * not, so the row names them, and the Level is named as
+ * `{Category} — {Level}`'s two parts rather than as one pre-joined string: the
+ * client owns that label (`levelLabel`), and a second implementation of it on
+ * the server is exactly the drift the shared component exists to prevent.
+ *
+ * **Still no `branch_id`, and still no مؤطرة** — see the note above
+ * `teachingGroupDto` for the first, and §4.4c for the second: staffing is a
+ * property of a `CourseSchedule`, not of the audience it teaches.
+ */
+export interface TeachingGroupRowDto extends TeachingGroupDto {
+  level_name: string;
+  category_name: string;
+  subject_name: string;
+}
+
+export function teachingGroupRowDto(row: {
+  id: string;
+  name: string;
+  levelId: string;
+  levelName: string;
+  categoryName: string;
+  subjectId: string;
+  subjectName: string;
+  displayOrder: number | null;
+  memberCount: number;
+  version: number;
+}): TeachingGroupRowDto {
+  // **Field by field, not `...teachingGroupDto(row)`** (§16.2, R38). The spread
+  // read as harmless reuse and is exactly what the rule forbids: it makes this
+  // contract inherit whatever the other one grows, so a field added there
+  // appears on the flat read without anyone deciding it should. The `interface
+  // extends` above is the right place to share the shape — a type cannot leak a
+  // value.
+  return {
+    id: row.id,
+    name: row.name,
+    level_id: row.levelId,
+    subject_id: row.subjectId,
+    display_order: row.displayOrder,
+    member_count: row.memberCount,
+    version: row.version,
+    level_name: row.levelName,
+    category_name: row.categoryName,
+    subject_name: row.subjectName,
+  };
+}
+
+/**
  * A student enrolled in the Level who holds no seat in this split Subject
  * (BR-22).
  *

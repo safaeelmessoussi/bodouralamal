@@ -11,7 +11,12 @@ import {
   type AdministrativeGroup,
   type RosterEntry,
 } from '../../adapters/administrative-groups.js';
-import { fetchCalendarBootstrap, type BranchRef, type LevelRef } from '../../adapters/calendar.js';
+import {
+  fetchCalendarBootstrap,
+  type BranchRef,
+  type CategoryRef,
+  type LevelRef,
+} from '../../adapters/calendar.js';
 import { searchUsers, type UserSummary } from '../../adapters/users.js';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
 import { Button } from '../../components/ui/button.js';
@@ -24,10 +29,16 @@ import {
 } from '../../components/ui/data-table.js';
 import { Dialog } from '../../components/ui/dialog.js';
 import { FormDialog } from '../../components/ui/form-dialog.js';
-import { NumberField, SearchInput, SelectField, TextField } from '../../components/ui/field.js';
+import { NumberField, SelectField, TextField } from '../../components/ui/field.js';
+import { SearchableSelect } from '../../components/ui/searchable-select.js';
 import { useSession } from '../../contexts/session.js';
 import { useActiveRole } from '../../contexts/active-role.js';
-import { LevelSelect } from '../../components/scope/level-select.js';
+import {
+  LevelSelect,
+  levelLabel,
+  withCategoryNames,
+  type LevelOption,
+} from '../../components/scope/level-select.js';
 import { t } from '../../i18n/index.js';
 import { ScopeSelectors } from '../../components/scope/scope-selectors.js';
 import { useScopeOptions } from '../../hooks/use-scope-options.js';
@@ -71,6 +82,7 @@ export function GroupsPage(): ReactNode {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [levels, setLevels] = useState<LevelRef[]>([]);
+  const [categories, setCategories] = useState<CategoryRef[]>([]);
   const [branches, setBranches] = useState<BranchRef[]>([]);
   /** One graph, shared with the schedules and content screens. */
   const scope = useScopeOptions({ token: accessToken, fields: GROUP_SCOPE });
@@ -110,6 +122,11 @@ export function GroupsPage(): ReactNode {
       try {
         const bootstrap = await fetchCalendarBootstrap({ from: today, to: today });
         setLevels(bootstrap.levels);
+        // The Category NAMES, so the Level label reads `{Category} — {Level}`
+        // like every other selector (§4.4b — Level names are not unique across
+        // Categories). The bootstrap already returns them; this picker was
+        // simply not joining them (2026-08-17).
+        setCategories(bootstrap.categories);
         setBranches(bootstrap.branches);
       } catch {
         // The pickers stay empty and the page still lists groups. A reference
@@ -121,12 +138,19 @@ export function GroupsPage(): ReactNode {
   const nameOf = (list: { id: string; name: string }[], id: string): string =>
     list.find((x) => x.id === id)?.name ?? id;
 
+  /** Levels with their Category name joined on — see `withCategoryNames`. */
+  const labelledLevels = withCategoryNames(levels, categories);
+
   const columns: Column<AdministrativeGroup>[] = [
     { key: 'name', header: t('admin.groups.colName'), cell: (r) => r.name },
     {
       key: 'level',
       header: t('admin.groups.colLevel'),
-      cell: (r) => nameOf(levels, r.level_id),
+      // The shared label, so the column reads what the selector offers.
+      cell: (r) => {
+        const level = labelledLevels.find((l) => l.id === r.level_id);
+        return level ? levelLabel(level) : r.level_id;
+      },
     },
     {
       key: 'branch',
@@ -235,7 +259,7 @@ export function GroupsPage(): ReactNode {
       // different places depending on which screen you were on.
       actions={
         canWrite ? (
-          <Button variant="primary" onClick={() => setEditing('new')}>
+          <Button variant="add" onClick={() => setEditing('new')}>
             {t('admin.groups.create')}
           </Button>
         ) : null
@@ -280,7 +304,7 @@ export function GroupsPage(): ReactNode {
       <GroupDialog
         open={editing !== null}
         group={editing === 'new' ? null : editing}
-        levels={levels}
+        levels={labelledLevels}
         branches={branches}
         busy={busy}
         onSave={(input) => void save(input)}
@@ -324,7 +348,7 @@ function GroupDialog({
 }: {
   open: boolean;
   group: AdministrativeGroup | null;
-  levels: LevelRef[];
+  levels: LevelOption[];
   branches: BranchRef[];
   busy: boolean;
   onSave: (input: {
@@ -388,11 +412,7 @@ function GroupDialog({
       {/* The shared primitive rather than a bare `<select>`: label association,
           the placeholder option, required marking and error announcement are
           `field.tsx`'s job, not this screen's to remember. */}
-      <LevelSelect
-          levels={levels}
-          value={levelId}
-          onChange={setLevelId}
-        />
+      <LevelSelect levels={levels} value={levelId} onChange={setLevelId} />
 
       <SelectField
         label={t('admin.groups.colBranch')}
@@ -414,10 +434,34 @@ function GroupDialog({
 /**
  * The roster (§5.6 enrollment screen).
  *
- * **BR-21 is the interesting refusal**: a student already in another group of
- * the same Level is a `409` naming that group, because the intended action was
- * almost certainly a move. The message says so rather than reporting a generic
- * failure.
+ * ## The picker shows its candidates (2026-08-17)
+ *
+ * It used to be a **typed-search workflow**: `searchUsers` was called only once
+ * two characters had been entered, so the dialog opened with an empty list and
+ * no affordance saying why. A reader who did not already know the name they were
+ * looking for had no way in at all — which is the platform-wide rule this pass
+ * enforced everywhere: **search narrows what is offered; it is never what makes
+ * options exist.**
+ *
+ * It is now the shared `SearchableSelect`, loaded on open.
+ *
+ * ## Who is offered, and why it is not filtered by role
+ *
+ * **Every active account, minus those already on this roster.** There is no
+ * structural fact distinguishing a مستفيدة from any other account: minors hold
+ * no role at all (§4.3), `intended_category_id` is unset on every live row, and
+ * a مؤطرة may legitimately be enrolled — one of the association's accounts holds
+ * both `teacher` and `student` today. Filtering by role would hide exactly the
+ * students who most need enrolling. (Recorded as an open Owner decision — R64.7's
+ * structural marker.)
+ *
+ * ## BR-21 is the interesting refusal, and it stays the server's
+ *
+ * A student already in another group of the **same Level** is a `409`, because
+ * the intended action was almost certainly a move. The client cannot compute
+ * that — it would need every group's roster in the Level — so the picker offers
+ * the candidate and the message names the refusal, which is what the hint above
+ * the control says before it happens.
  */
 function RosterDialog({
   group,
@@ -431,9 +475,10 @@ function RosterDialog({
   token: string | null;
 }): ReactNode {
   const [entries, setEntries] = useState<RosterEntry[]>([]);
-  const [query, setQuery] = useState('');
   const [candidates, setCandidates] = useState<UserSummary[]>([]);
+  const [picked, setPicked] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
     if (!group) return;
@@ -443,28 +488,39 @@ function RosterDialog({
 
   useEffect(() => {
     setNotice(null);
-    setQuery('');
-    setCandidates([]);
+    setPicked('');
     void load();
   }, [load]);
 
-  async function search(value: string): Promise<void> {
-    setQuery(value);
-    if (value.trim().length < 2) {
+  // **Loaded on open, not on keystroke.** One read of the accounts the server
+  // lets this caller see; the control filters that list client-side.
+  useEffect(() => {
+    if (!group || !canWrite) {
       setCandidates([]);
       return;
     }
-    const result = await searchUsers(token, { q: value.trim() });
-    setCandidates(result.data);
-  }
+    void (async () => {
+      try {
+        setCandidates((await searchUsers(token, {})).data);
+      } catch {
+        setCandidates([]);
+      }
+    })();
+  }, [group, canWrite, token]);
+
+  /** Already on this roster — excluded, because offering them offers a refusal. */
+  const onRoster = new Set(entries.map((e) => e.student_id));
+  const offerable = candidates
+    .filter((c) => !onRoster.has(c.id))
+    .map((c) => ({ value: c.id, label: c.name_arabic }));
 
   async function enrol(studentId: string): Promise<void> {
-    if (!group) return;
+    if (!group || studentId === '') return;
+    setBusy(true);
     setNotice(null);
     try {
       await enrolStudent(group.id, studentId, token);
-      setQuery('');
-      setCandidates([]);
+      setPicked('');
       await load();
     } catch (error) {
       const reason =
@@ -476,43 +532,56 @@ function RosterDialog({
           ? t('admin.groups.alreadyInLevel')
           : t('common.saveFailed'),
       );
+    } finally {
+      setBusy(false);
     }
   }
 
   return (
     <Dialog open={group !== null} onClose={onClose} title={t('admin.groups.rosterTitle')} wide>
-      {notice ? <p role="status">{notice}</p> : null}
+      {notice ? (
+        <p className="admin-notice" role="status" aria-live="polite">
+          {notice}
+        </p>
+      ) : null}
 
       {canWrite ? (
         <>
-          <SearchInput
+          {/* The shared searchable single-select — the same control every large
+              picker on the platform uses. It opens with its options present. */}
+          <SearchableSelect
             label={t('admin.groups.findStudent')}
-            value={query}
-            onChange={(v) => void search(v)}
+            options={offerable}
+            value={picked}
+            onChange={setPicked}
+            hint={t('admin.groups.findStudentHint')}
+            emptyLabel={t('admin.groups.noCandidates')}
+            disabled={busy}
           />
-          <ul>
-            {candidates.map((c) => (
-              <li key={c.id}>
-                {c.name_arabic}{' '}
-                <Button variant="secondary" onClick={() => void enrol(c.id)}>
-                  {t('admin.groups.enrol')}
-                </Button>
-              </li>
-            ))}
-          </ul>
+          <div className="form__actions">
+            <Button
+              variant="add"
+              disabled={picked === '' || busy}
+              onClick={() => void enrol(picked)}
+            >
+              {t('admin.groups.enrol')}
+            </Button>
+          </div>
         </>
       ) : null}
 
+      <h3>{t('admin.groups.rosterCurrent')}</h3>
       {entries.length === 0 ? (
-        <p>{t('admin.groups.rosterEmpty')}</p>
+        <p className="state">{t('admin.groups.rosterEmpty')}</p>
       ) : (
-        <ul>
+        <ul className="admin-list">
           {entries.map((e) => (
             <li key={e.id}>
-              {e.name ?? e.student_id}
+              <span>{e.name ?? e.student_id}</span>
               {canWrite ? (
                 <Button
                   variant="secondary"
+                  disabled={busy}
                   onClick={() => {
                     void (async () => {
                       if (!group) return;

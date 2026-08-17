@@ -304,6 +304,102 @@ export async function readGradeSheet(
   };
 }
 
+/**
+ * **What a مستفيدة sees of her own attainment** — §5.3's
+ * `My Grades & Exams (/dashboard/student/grades)`, *"published grades"*.
+ *
+ * ## Published only, and *absent* rather than *hidden*
+ *
+ * `status: 'published'` is in the **`where`**, not in a filter applied to a
+ * fetched list. A draft grade is a مؤطرة's working note (BR-8), and the
+ * difference between *not selected* and *selected then dropped* is the
+ * difference between a rule and a habit: the first cannot be undone by a
+ * refactor that forgets why the filter was there.
+ *
+ * ## No pass/fail
+ *
+ * The row carries the mark and nothing that labels the person. `Grade.status`,
+ * `passed` and BR-12's override are **untouched in the model and on the staff
+ * sheet** — they are how the association decides retakes and progression — but a
+ * student's own screen reports what she scored, not a verdict about her. This is
+ * the Owner's decision of 2026-08-17, and it removes no business logic
+ * whatsoever.
+ *
+ * ## The subject is resolved, never named by the caller
+ *
+ * `studentId` arrives from `childContext` middleware — the JWT `sub`, or an
+ * approved `FamilyLink` child (§4.3) — exactly as `GET /students/me` and
+ * `GET /students/me/quran` receive theirs. **There is no path parameter and this
+ * function performs no authorization**, because there is nothing here for a
+ * caller to name: TD-12's property is that the identifier was never in their
+ * hands (R63.3). A caller who could pass an arbitrary id would need a scope
+ * check; one who cannot, does not.
+ *
+ * ## Not audited
+ *
+ * R63.6's reasoning, unchanged: a student reading her own mark is ordinary use,
+ * not a security-sensitive act, and TD-8 gains no row.
+ */
+export interface PublishedGradeRow {
+  exam_id: string;
+  exam_title: string;
+  date: string;
+  level_name: string;
+  subject_name: string | null;
+  /** On the association's display scale, never basis points (R8/R14). */
+  mark: number;
+  absent: boolean;
+}
+
+export async function readPublishedGrades(
+  prisma: PrismaClient,
+  studentId: string,
+): Promise<{ rows: PublishedGradeRow[]; displayScale: number }> {
+  const scale = await readGradingScale(prisma);
+
+  const grades = await prisma.grade.findMany({
+    where: {
+      studentId,
+      // The rule, in the query. See the docstring.
+      status: 'published',
+      // A soft-deleted exam's grades are not history a student should be shown:
+      // the sitting was withdrawn (R59), and the mark went with it.
+      exam: { deletedAt: null },
+    },
+    // Most recent sitting first — a student opens this to see what just came
+    // back, not to read a chronicle from the beginning.
+    orderBy: [{ exam: { date: 'desc' } }],
+    select: {
+      valueBp: true,
+      absent: true,
+      exam: {
+        select: {
+          id: true,
+          title: true,
+          date: true,
+          level: { select: { name: true } },
+          subject: { select: { name: true } },
+        },
+      },
+    },
+  });
+
+  return {
+    displayScale: scale.displayScale,
+    rows: grades.map((g) => ({
+      exam_id: g.exam.id,
+      exam_title: g.exam.title,
+      date: g.exam.date.toISOString().slice(0, 10),
+      level_name: g.exam.level.name,
+      subject_name: g.exam.subject?.name ?? null,
+      // The one conversion, and it is the same arithmetic the staff sheet's
+      // display uses (R8 keeps the rounding on the WRITE path; this is a read).
+      mark: (g.valueBp * scale.displayScale) / 10_000,
+      absent: g.absent,
+    })),
+  };
+}
+
 export interface GradeEntry {
   studentId: string;
   /** `null` **leaves the student unmarked**; BR-7 then makes them absent-zero. */

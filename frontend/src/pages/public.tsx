@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { ApplicationHeader } from '../components/header/application-header.js';
 import { Logo } from '../components/ui/logo.js';
 import { SiteFooter } from '../components/site-footer.js';
+import { ButtonLink } from '../components/ui/button.js';
 import { t } from '../i18n/index.js';
 
 /**
@@ -41,9 +42,9 @@ export function Login(): ReactNode {
           {t(messageKey)}
         </p>
       ) : null}
-      <a className="button primary" href="/api/v1/auth/google">
+      <ButtonLink variant="primary" href="/api/v1/auth/google">
         {t('landing.ctaLogin')}
-      </a>
+      </ButtonLink>
     </main>
   );
 }
@@ -87,9 +88,9 @@ export function NotBuiltYet(): ReactNode {
         <h1>{t('states.notBuiltTitle')}</h1>
         <p className="lede">{t('states.notBuiltBody')}</p>
         <p>
-          <a className="button primary" href="/">
+          <ButtonLink variant="primary" href="/">
             {t('nav.home')}
-          </a>
+          </ButtonLink>
         </p>
       </main>
       <SiteFooter />
@@ -116,9 +117,9 @@ export function NotFound(): ReactNode {
       <Logo showText={false} />
       <h1>{t('states.notFoundTitle')}</h1>
       <p>{t('states.notFoundBody')}</p>
-      <a className="button primary" href="/">
+      <ButtonLink variant="primary" href="/">
         {t('nav.home')}
-      </a>
+      </ButtonLink>
     </main>
   );
 }
@@ -139,9 +140,9 @@ export function ScreenPending(): ReactNode {
       <Logo showText={false} />
       <h1>{t('states.pendingScreenTitle')}</h1>
       <p>{t('states.pendingScreenBody')}</p>
-      <a className="button secondary" href="/">
+      <ButtonLink variant="secondary" href="/">
         {t('nav.home')}
-      </a>
+      </ButtonLink>
     </main>
   );
 }

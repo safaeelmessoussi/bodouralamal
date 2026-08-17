@@ -33,21 +33,14 @@
   font-size: 0.85rem;
   color: var(--color-text-muted);
 }
-.button {
-  display: inline-block;
-  padding: 0.65rem var(--space-5);
-  border: 1px solid var(--color-primary);
-  border-radius: var(--radius-md);
-  background: var(--color-surface);
-  color: var(--color-primary);
-  font: inherit;
-  text-decoration: none;
-  cursor: pointer;
-}
-.button.primary {
-  background: var(--color-primary);
-  color: var(--color-text-inverse);
-}
+/* **`.button` / `.button.primary` were a SECOND button system, and are gone**
+   (2026-08-17). Ten call sites across the registration, status and profile pages
+   used them: a different class name, a different padding, a different border
+   rule and no `ghost`, `danger` or `add` variant at all — so the platform had two
+   answers to "what does a button look like" and the status pages got the one
+   nobody else maintained. Every one of them now renders `ButtonLink`, which is
+   the same element (`<a>`) with the one palette. Nothing replaces this block:
+   `button.css` already styles them. */
 .logo {
   display: block;
   height: auto;

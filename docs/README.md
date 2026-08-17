@@ -50,8 +50,9 @@ divergence stays invisible until something breaks. One statement, many reference
 6. [Getting started](development/getting-started.md) — running the stack locally
 7. [Conventions](development/conventions.md) — the rules code review will hold you to
 8. [Engineering constitution](development/engineering-constitution.md) — **the laws every implementation must satisfy**
-9. [Documentation policy](development/documentation-policy.md) — why this directory is part of the definition of Done
-10. [Engineering efficiency](development/engineering-efficiency.md) — choosing the workflow, and the five things it may never economise on
+9. [Platform UX & atomic design](development/ux-architecture.md) — **the cross-cutting UI rules; consult before any UI request**
+10. [Documentation policy](development/documentation-policy.md) — why this directory is part of the definition of Done
+11. [Engineering efficiency](development/engineering-efficiency.md) — choosing the workflow, and the five things it may never economise on
 
 ### Everything else — in the sections below.
 
@@ -112,6 +113,7 @@ The technical core. Written for an engineer who has never seen the repository.
 |---|---|
 | [Getting started](development/getting-started.md) | From clone to a running stack |
 | [Conventions](development/conventions.md) | Layering, naming, TypeScript, commits |
+| [**Platform UX & atomic design**](development/ux-architecture.md) | **Data-first pages · one concept → one component · the Level label · filters that narrow · scope · verdicts** |
 | [Testing](development/testing.md) | The four layers, what each is for, and how to run them |
 | [CI/CD](development/ci-cd.md) | Every gate, what it catches, and why it was added |
 | [**Engineering constitution**](development/engineering-constitution.md) | **The laws every implementation must satisfy — required reading** |

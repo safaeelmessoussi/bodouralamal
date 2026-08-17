@@ -1,4 +1,5 @@
 import { api } from '../lib/api.js';
+import type { Page } from './administrative-groups.js';
 
 /**
  * Teaching Groups — the subject-specific split inside a Level (§4.4c, BR-22,
@@ -124,4 +125,49 @@ export async function removeMember(
     method: 'DELETE',
     token,
   });
+}
+
+/**
+ * A circle **listed across Levels and Subjects** — the `حلقات المواد` table row.
+ *
+ * `TeachingGroup` above carries only the two ids, which is right for the read
+ * addressed *by* that pair: the caller already knows them. A flat table does
+ * not, so the row names them — as the Category and the Level **separately**,
+ * because `levelLabel` owns the `{Category} — {Level}` format and a
+ * pre-joined string from the server would be a second implementation of it.
+ *
+ * **No branch and no مؤطرة, and neither is an omission.** A circle carries no
+ * branch (R43.3 — that absence is *why* its authority is split), and staffing is
+ * a property of a `CourseSchedule` rather than of the audience it teaches
+ * (§4.4c, §20 rule 22).
+ */
+export interface TeachingGroupRow extends TeachingGroup {
+  level_name: string;
+  category_name: string;
+  subject_name: string;
+}
+
+export interface CircleFilters {
+  level_id?: string;
+  subject_id?: string;
+  category_id?: string;
+  q?: string;
+}
+
+/**
+ * `GET /admin/teaching-groups` — **every parameter narrows, none is required.**
+ *
+ * That is what lets the screen show its data on arrival. Calling it with no
+ * filters is the normal case, not a fallback.
+ */
+export async function listCircles(
+  token: string | null,
+  page = 1,
+  filters: CircleFilters = {},
+): Promise<Page<TeachingGroupRow>> {
+  const params = new URLSearchParams({ page: String(page), page_size: '25' });
+  for (const [key, value] of Object.entries(filters)) {
+    if (value) params.set(key, value);
+  }
+  return api<Page<TeachingGroupRow>>(`/admin/teaching-groups?${params.toString()}`, { token });
 }

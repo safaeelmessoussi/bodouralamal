@@ -10,13 +10,21 @@ import {
   type EnrollmentRowView,
 } from '../../adapters/enrollments.js';
 import { listLevels, type Level } from '../../adapters/taxonomy.js';
+import { addMember, listCircles, type TeachingGroupRow } from '../../adapters/teaching-groups.js';
 import { searchUsers, type UserSummary } from '../../adapters/users.js';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
 import { LevelSelect, levelLabel } from '../../components/scope/level-select.js';
 import { Button } from '../../components/ui/button.js';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
+import {
+  DataTable,
+  type Column,
+  type RowAction,
+} from '../../components/ui/data-table.js';
 import { FormDialog } from '../../components/ui/form-dialog.js';
-import { SelectField } from '../../components/ui/field.js';
+import { SearchInput, SelectField } from '../../components/ui/field.js';
+import { MultiSelectField } from '../../components/ui/multi-select.js';
+import { SearchableSelect } from '../../components/ui/searchable-select.js';
 import { useSession } from '../../contexts/session.js';
 import { t } from '../../i18n/index.js';
 import { ApiError } from '../../lib/api.js';
@@ -60,6 +68,7 @@ export function EnrollmentsPage(): ReactNode {
   const [branches, setBranches] = useState<Branch[]>([]);
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [filterLevel, setFilterLevel] = useState<string | null>(null);
+  const [query, setQuery] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
   const [composing, setComposing] = useState(false);
   const [editing, setEditing] = useState<EnrollmentRowView | null>(null);
@@ -97,12 +106,68 @@ export function EnrollmentsPage(): ReactNode {
     })();
   }, [accessToken]);
 
+  /** Client-side narrowing by name; the Level narrows server-side already. */
+  const visible = rows.filter((r) => {
+    const needle = query.trim().toLowerCase();
+    return needle === '' || r.student_name.toLowerCase().includes(needle);
+  });
+
+  const columns: Column<EnrollmentRowView>[] = [
+    { key: 'student', header: t('admin.enrollments.student'), cell: (r) => r.student_name },
+    {
+      key: 'level',
+      header: t('admin.nav.levels'),
+      // The shared label — `{Category} — {Level}` — so a Level reads the same
+      // here as in every selector (§4.4b).
+      cell: (r) =>
+        levelLabel({ id: r.level_id, name: r.level_name, category_name: r.category_name }),
+    },
+    {
+      key: 'group',
+      header: t('admin.nav.groups'),
+      cell: (r) =>
+        r.administrative_group_name ?? (
+          // R66 — a Level nobody has subdivided is ordinary, and an enrolment
+          // without a group is a placement, not a gap.
+          <span className="muted">{t('admin.enrollments.noGroup')}</span>
+        ),
+    },
+    { key: 'branch', header: t('admin.enrollments.branch'), secondary: true, cell: (r) => r.branch_name },
+    {
+      key: 'circles',
+      header: t('admin.enrollments.circles'),
+      // Read-only here. Circle membership is INDEPENDENT of the group (§4.4c —
+      // "nothing aligns them and nothing should try to"); it is shown so
+      // مستفيدة → مستوى → مجموعة → مادة → حلقة reads in one place, and it is
+      // managed on حلقات المواد and offered at placement time.
+      cell: (r) =>
+        r.circles.length === 0 ? (
+          <span className="muted">{t('admin.enrollments.noCircles')}</span>
+        ) : (
+          <ul className="admin-list admin-list--plain">
+            {r.circles.map((c) => (
+              <li key={`${c.subject_name}-${c.circle_name}`}>
+                {c.subject_name} — {c.circle_name}
+              </li>
+            ))}
+          </ul>
+        ),
+    },
+  ];
+
+  const actions: RowAction<EnrollmentRowView>[] = [
+    { label: t('common.edit'), onSelect: (r) => setEditing(r) },
+    // Destructive, so it carries the shared danger treatment — the enrolment is
+    // soft-deleted into Trash (R59), which the confirmation states in full.
+    { label: t('admin.enrollments.end'), danger: true, onSelect: (r) => setEnding(r) },
+  ];
+
   return (
     <AdminLayout
       title={t('admin.nav.enrollments')}
       lede={t('admin.enrollments.lede')}
       actions={
-        <Button variant="primary" onClick={() => setComposing(true)}>
+        <Button variant="add" onClick={() => setComposing(true)}>
           {t('admin.enrollments.add')}
         </Button>
       }
@@ -113,86 +178,37 @@ export function EnrollmentsPage(): ReactNode {
         </p>
       ) : null}
 
-      {/* A filter, not a gate: the list above is already loaded. */}
-      <LevelSelect
-        levels={levels}
-        value={filterLevel}
-        onChange={(next) => setFilterLevel(next === '' ? null : next)}
-        label={t('admin.enrollments.filterLevel')}
-        placeholder={t('admin.enrollments.allLevels')}
+      <DataTable
+        caption={t('admin.enrollments.caption')}
+        columns={columns}
+        rows={visible}
+        rowKey={(r) => r.id}
+        status={state === 'ready' ? 'ready' : state}
+        actions={actions}
+        onRetry={() => void load()}
+        filtered={query.trim() !== '' || filterLevel !== null}
+        onClearFilters={() => {
+          setQuery('');
+          setFilterLevel(null);
+        }}
+        toolbar={
+          <>
+            <SearchInput
+              value={query}
+              onChange={setQuery}
+              placeholder={t('admin.enrollments.searchPlaceholder')}
+            />
+            {/* A filter, not a gate: the table is already loaded. */}
+            <LevelSelect
+              levels={levels}
+              value={filterLevel}
+              onChange={(next) => setFilterLevel(next === '' ? null : next)}
+              label={t('admin.enrollments.filterLevel')}
+              placeholder={t('admin.enrollments.allLevels')}
+            />
+          </>
+        }
       />
-
-      {state === 'loading' ? <p className="state">{t('common.loading')}</p> : null}
-      {state === 'error' ? (
-        <p className="state" role="alert">
-          {t('common.loadFailed')}
-        </p>
-      ) : null}
-
-      {state === 'ready' ? (
-        rows.length === 0 ? (
-          <p className="state" role="status">
-            {t('admin.enrollments.empty')}
-          </p>
-        ) : (
-          <table className="admin-table">
-            <thead>
-              <tr>
-                <th scope="col">{t('admin.enrollments.student')}</th>
-                <th scope="col">{t('admin.nav.levels')}</th>
-                <th scope="col">{t('admin.nav.groups')}</th>
-                <th scope="col">{t('admin.enrollments.branch')}</th>
-                <th scope="col">{t('admin.enrollments.circles')}</th>
-                <th scope="col" />
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => (
-                <tr key={r.id}>
-                  <td>{r.student_name}</td>
-                  {/* The shared label — `{Category} — {Level}` — so a Level reads
-                      the same here as in every selector (§4.4b). */}
-                  <td>{levelLabel({ id: r.level_id, name: r.level_name, category_name: r.category_name })}</td>
-                  <td>
-                    {r.administrative_group_name ?? (
-                      // R66 — a Level nobody has subdivided is ordinary, and an
-                      // enrolment without a group is a placement, not a gap.
-                      <span className="muted">{t('admin.enrollments.noGroup')}</span>
-                    )}
-                  </td>
-                  <td>{r.branch_name}</td>
-                  <td>
-                    {/* Read-only. Circle membership is managed on حلقات المواد
-                        and is INDEPENDENT of the group (§4.4c — "nothing aligns
-                        them and nothing should try to"); it is shown here only
-                        so مستفيدة → مستوى → مجموعة → مادة → حلقة reads in one
-                        place. */}
-                    {r.circles.length === 0 ? (
-                      <span className="muted">{t('admin.enrollments.noCircles')}</span>
-                    ) : (
-                      <ul className="admin-list admin-list--plain">
-                        {r.circles.map((c) => (
-                          <li key={`${c.subject_name}-${c.circle_name}`}>
-                            {c.subject_name} — {c.circle_name}
-                          </li>
-                        ))}
-                      </ul>
-                    )}
-                  </td>
-                  <td className="admin-table__actions">
-                    <Button variant="secondary" onClick={() => setEditing(r)}>
-                      {t('common.edit')}
-                    </Button>
-                    <Button variant="secondary" onClick={() => setEnding(r)}>
-                      {t('admin.enrollments.end')}
-                    </Button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )
-      ) : null}
 
       {editing ? (
         <PlacementDialog
@@ -207,10 +223,37 @@ export function EnrollmentsPage(): ReactNode {
         />
       ) : null}
 
+      {/**
+       * **إنهاء التسجيل — audited 2026-08-17, and the semantics were already
+       * right.**
+       *
+       * `unenrolStudent` → `releaseEnrollment` soft-deletes the `Enrollment`,
+       * releases that enrolment's circle seats, writes the R59 Trash entry and
+       * leaves the audit trail. **It is not and must not become a hard delete**,
+       * and nothing about it changed in this pass.
+       *
+       * What was missing was that the copy did not distinguish **moving a
+       * placement** from **ending the enrolment**, and did not say what survives.
+       * Both are recoverable-looking actions with very different consequences,
+       * and the earlier single sentence — *"she leaves the level and its circles;
+       * the record appears in Trash"* — was accurate and told a reader nothing
+       * about her grades or her Quran log.
+       */}
       <ConfirmDialog
         open={ending !== null}
         title={t('admin.enrollments.endTitle')}
         body={t('admin.enrollments.endBody')}
+        details={
+          // A definition list, because these are two answers to two questions —
+          // run together in a paragraph they read as one long warning and get
+          // skimmed, which is the opposite of the intent.
+          <dl className="detail-list">
+            <dt>{t('admin.enrollments.endKeptTitle')}</dt>
+            <dd>{t('admin.enrollments.endKept')}</dd>
+            <dt>{t('admin.enrollments.endRemovedTitle')}</dt>
+            <dd>{t('admin.enrollments.endRemoved')}</dd>
+          </dl>
+        }
         confirmLabel={t('admin.enrollments.end')}
         danger
         busy={busy}
@@ -263,20 +306,24 @@ function EnrolDialog({
   onCancel: () => void;
   onDone: (message: string) => void;
 }): ReactNode {
-  const [query, setQuery] = useState('');
   const [matches, setMatches] = useState<UserSummary[]>([]);
   const [studentId, setStudentId] = useState('');
   const [levelId, setLevelId] = useState<string | null>(null);
   const [branchId, setBranchId] = useState('');
   const [groupId, setGroupId] = useState('');
   const [groups, setGroups] = useState<AdministrativeGroup[]>([]);
+  /** The Level's circles, across its Subjects — offered, never required. */
+  const [circles, setCircles] = useState<TeachingGroupRow[]>([]);
+  const [circleIds, setCircleIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
-  // **The list is loaded on open; search NARROWS it.** It used to be gated on
-  // two typed characters, so the dialog opened with an empty picker and no
-  // affordance saying why — the very defect the `حلقات المواد` redesign was
-  // about, reintroduced one screen over.
+  // **The list is loaded once, on open; search NARROWS it in the control.** It
+  // used to be gated on two typed characters, so the dialog opened with an empty
+  // picker and no affordance saying why — the defect the `حلقات المواد` redesign
+  // was about, reintroduced one screen over. The debounce that fetched per
+  // keystroke went with it: `SearchableSelect` filters the loaded list, so there
+  // is no request to debounce.
   //
   // **Everyone active is offered, and that is not an oversight.** There is no
   // structural fact distinguishing a مستفيدة from any other account: minors
@@ -285,17 +332,14 @@ function EnrolDialog({
   // accounts holds both `teacher` and `student` today. Filtering by role would
   // hide exactly the students who most need enrolling.
   useEffect(() => {
-    const id = setTimeout(() => {
-      void (async () => {
-        try {
-          setMatches((await searchUsers(token, query.trim() ? { q: query } : {})).data);
-        } catch {
-          setMatches([]);
-        }
-      })();
-    }, query.trim() ? 250 : 0);
-    return () => clearTimeout(id);
-  }, [query, token]);
+    void (async () => {
+      try {
+        setMatches((await searchUsers(token, {})).data);
+      } catch {
+        setMatches([]);
+      }
+    })();
+  }, [token]);
 
   // §14.4/R55 — every selector is dependent: the Groups offered are those of the
   // chosen Level at the chosen branch, so the form cannot express a pair the
@@ -326,6 +370,58 @@ function EnrolDialog({
     if (group) setBranchId(group.branch_id);
   }, [groupId, groups]);
 
+  /**
+   * **The Level's circles, keyed by Level ALONE — not by the group.**
+   *
+   * A circle is `(Subject, Level)` and carries **no branch** and **no relation to
+   * an Administrative Group** (§4.4c, R43.3). So the Level is the whole key, and
+   * the group selected above is irrelevant here: reloading this list when the
+   * group changed would imply a dependency the model does not have, which is
+   * exactly the artificial relationship the Owner ruled out.
+   *
+   * The chosen circles are cleared when the Level changes, because a seat in
+   * another Level's circle is a pair the server refuses — a stale id left in
+   * state is how an impossible pair reaches it.
+   */
+  useEffect(() => {
+    setCircleIds([]);
+    if (!levelId) {
+      setCircles([]);
+      return;
+    }
+    void (async () => {
+      try {
+        // `page_size` is the endpoint's own; one Level's circles across its
+        // Subjects are a handful, so one page is the whole answer.
+        setCircles((await listCircles(token, 1, { level_id: levelId })).data);
+      } catch {
+        setCircles([]);
+      }
+    })();
+  }, [levelId, token]);
+
+  /**
+   * **Two existing server calls, in order — never one new one.**
+   *
+   * The enrolment is created first because a circle seat *requires* it:
+   * `addMember` resolves the student's branch through `Enrollment.branch_id`
+   * (R66) and refuses `NOT_ENROLLED_IN_LEVEL` outright. So the order is not a
+   * convenience, it is the dependency.
+   *
+   * **Every rule stays server-side.** `enrolAtPlacement` still applies the role
+   * gate, the branch assertion, R27's sex eligibility and BR-21's
+   * one-enrolment-per-Level refusal; `addMember` still applies R43.3's
+   * branch-scoped membership check and still refuses a second seat in the same
+   * Subject with a `409`. This function orchestrates; it decides nothing.
+   *
+   * **A failed seat does not undo the enrolment**, and that is deliberate rather
+   * than a missing transaction. The two are independent relationships (§4.4c —
+   * *"nothing aligns them and nothing should try to"*), and an enrolment is
+   * valuable on its own: rolling it back because one circle was full would
+   * discard the placement the administrator definitely wanted in order to
+   * protect one they merely also wanted. The outcome is reported by name and the
+   * seats can be added from `حلقات المواد`.
+   */
   async function submit(): Promise<void> {
     if (!studentId || !levelId || !branchId) return;
     setBusy(true);
@@ -341,7 +437,25 @@ function EnrolDialog({
         },
         token,
       );
-      onDone(t('admin.enrollments.enrolled'));
+
+      let placed = 0;
+      let refused = 0;
+      for (const circleId of circleIds) {
+        try {
+          await addMember(circleId, studentId, token);
+          placed += 1;
+        } catch {
+          refused += 1;
+        }
+      }
+
+      onDone(
+        refused > 0
+          ? t('admin.enrollments.enrolledCirclesPartly')
+          : placed > 0
+            ? t('admin.enrollments.enrolledWithCircles').replace('{n}', String(placed))
+            : t('admin.enrollments.enrolled'),
+      );
     } catch (error) {
       setNotice(refusal(error));
     } finally {
@@ -359,21 +473,27 @@ function EnrolDialog({
       onSubmit={() => void submit()}
       onCancel={onCancel}
     >
-      <label className="field">
-        <span className="field__label">{t('admin.enrollments.student')}</span>
-        <input
-          className="field__input"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder={t('admin.enrollments.searchHint')}
-        />
-      </label>
-      <SelectField
-        label={t('admin.enrollments.pickStudent')}
+      {/* **One control, not a hand-rolled search box above a select.**
+          This was a raw `<input className="field__input">` — no label
+          association, no hint slot, no error wiring — feeding a separate
+          `SelectField`, so choosing a مستفيدة meant operating two controls that
+          looked like two questions. `SearchableSelect` is the platform's one
+          answer to *one choice from many*: it opens with its options present and
+          the search narrows them.
+
+          **Everyone active is offered, and that is not an oversight.** There is
+          no structural fact distinguishing a مستفيدة from any other account:
+          minors hold no role at all (§4.3), `intended_category_id` is unset on
+          every live row, and a مؤطرة may legitimately be enrolled — one of the
+          association's accounts holds both `teacher` and `student` today.
+          Filtering by role would hide exactly the students who need enrolling. */}
+      <SearchableSelect
+        label={t('admin.enrollments.student')}
+        options={matches.map((m) => ({ value: m.id, label: m.name_arabic }))}
         value={studentId}
         onChange={setStudentId}
-        placeholder={t('common.choose')}
-        options={matches.map((m) => ({ value: m.id, label: m.name_arabic }))}
+        hint={t('admin.enrollments.searchHint')}
+        required
       />
 
       <LevelSelect levels={levels} value={levelId} onChange={setLevelId} />
@@ -396,6 +516,35 @@ function EnrolDialog({
         options={groups.map((g) => ({ value: g.id, label: g.name }))}
         hint={t('admin.enrollments.groupHint')}
       />
+
+      {/* **The circles, in the same form, as a SEPARATE question.**
+          §14.1's placement workflow now offers every placement concept in one
+          place — but they remain independent relationships, and the control says
+          so: a مستفيدة may sit in a group *and* in a Quran circle *and* in a
+          Tajweed circle, and none of the three implies the others (§4.4c).
+
+          The option label is `{Subject} — {circle}`, because a circle's name is
+          unique only within its Subject and the Subject is what a reader is
+          actually choosing between. The shared multi-select, so 20 circles are a
+          searchable list rather than 20 checkboxes. */}
+      {levelId === null ? (
+        <p className="field__hint">{t('admin.enrollments.circlesPickLevel')}</p>
+      ) : circles.length === 0 ? (
+        // Not a gap: a Level whose Subjects are taught whole has no circles, and
+        // that is the ordinary case (§4.4c — an unsplit Subject is `entire_level`).
+        <p className="field__hint">{t('admin.enrollments.circlesNone')}</p>
+      ) : (
+        <MultiSelectField
+          label={t('admin.enrollments.circlesOptional')}
+          options={circles.map((c) => ({
+            value: c.id,
+            label: `${c.subject_name} — ${c.name}`,
+          }))}
+          selected={circleIds}
+          onChange={setCircleIds}
+          hint={t('admin.enrollments.circlesHint')}
+        />
+      )}
     </FormDialog>
   );
 }

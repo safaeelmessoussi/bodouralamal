@@ -218,7 +218,7 @@ export function TaxonomyPage({ kind }: { kind: TaxonomyKind }): ReactNode {
       lede={t(spec.ledeKey)}
       actions={
         canWrite ? (
-          <Button variant="primary" onClick={() => setEditing('new')}>
+          <Button variant="add" onClick={() => setEditing('new')}>
             {t(spec.createKey)}
           </Button>
         ) : null

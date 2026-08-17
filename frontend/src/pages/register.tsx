@@ -14,7 +14,7 @@ import { ConsentNotice } from '../components/consent-notice.js';
 import { ErrorState } from '../components/states.js';
 import { BranchSelector } from '../components/ui/branch-selector.js';
 import { fetchCalendarBootstrap, type CategoryRef } from '../adapters/calendar.js';
-import { Button } from '../components/ui/button.js';
+import { Button, ButtonLink } from '../components/ui/button.js';
 import { Container } from '../components/ui/container.js';
 import { SelectField, TextArea, TextField } from '../components/ui/field.js';
 import {
@@ -193,12 +193,12 @@ export function Register(): ReactNode {
           <p>{t('register.submittedBody')}</p>
           <p className="muted">{t('register.submittedNext')}</p>
           <div className="auth-page__links">
-            <a className="button primary" href="/">
+            <ButtonLink variant="primary" href="/">
               {t('nav.home')}
-            </a>
-            <a className="button secondary" href="/login">
+            </ButtonLink>
+            <ButtonLink variant="secondary" href="/login">
               {t('nav.login')}
-            </a>
+            </ButtonLink>
           </div>
         </main>
         <SiteFooter />
@@ -214,12 +214,12 @@ export function Register(): ReactNode {
           <h1>{t('register.noTokenTitle')}</h1>
           <p>{t('register.noTokenBody')}</p>
           <div className="auth-page__links">
-            <a className="button primary" href="/api/v1/auth/google">
+            <ButtonLink variant="primary" href="/api/v1/auth/google">
               {t('register.startOver')}
-            </a>
-            <a className="button secondary" href="/">
+            </ButtonLink>
+            <ButtonLink variant="secondary" href="/">
               {t('nav.home')}
-            </a>
+            </ButtonLink>
           </div>
         </main>
         <SiteFooter />

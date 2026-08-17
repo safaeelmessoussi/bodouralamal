@@ -100,17 +100,26 @@ export function StudentDashboard(): ReactNode {
         <Container>
           <h1>{t('studentDashboard.title')}</h1>
 
-          {/* §14.1 lists *My Quran Progress* under this dashboard, and M4b built
-              it — with nothing linking to it, which is the same defect R69 and
-              R70.1 each fixed once: a screen that exists and cannot be reached. */}
-          <p>
+          {/* §14.1 lists *My Quran Progress* and *My Grades & Exams* under this
+              dashboard. M4b built the first with nothing linking to it and
+              nothing built the second at all — the same defect R69 and R70.1
+              each fixed once: a screen that exists and cannot be reached.
+
+              **These are the dashboard's own children, not a duplicate menu.**
+              A student portal has no sidebar, so this is the only navigation
+              these two nodes have — which is what makes it a hierarchy rather
+              than a second access path to a sibling. */}
+          <nav className="admin__actions" aria-label={t('studentDashboard.sections')}>
             {/* The shared button rendered as a link — it emits an `<a>` when
                 `href` is present, so middle-click and "open in new tab" keep
                 working while the affordance matches every other action. */}
             <ButtonLink href="/dashboard/student/quran" variant="secondary">
               {t('student.quran.title')}
             </ButtonLink>
-          </p>
+            <ButtonLink href="/dashboard/student/grades" variant="secondary">
+              {t('student.grades.title')}
+            </ButtonLink>
+          </nav>
 
           {/* R62.10 — persistent, and the first thing under the heading. */}
           {asParent ? (

@@ -14,7 +14,7 @@ import { ApplicationHeader } from '../../components/header/application-header.js
 import { SiteFooter } from '../../components/site-footer.js';
 import { ConsentNotice } from '../../components/consent-notice.js';
 import { ErrorState } from '../../components/states.js';
-import { Button } from '../../components/ui/button.js';
+import { Button, ButtonLink } from '../../components/ui/button.js';
 import { Container } from '../../components/ui/container.js';
 import { useSession } from '../../contexts/session.js';
 import { t } from '../../i18n/index.js';
@@ -144,9 +144,9 @@ export function RegisterChildPage(): ReactNode {
               act for. */}
           <p>{t('child.registerSubmitted')}</p>
           <div className="auth-page__links">
-            <a className="button primary" href="/profile">
+            <ButtonLink variant="primary" href="/profile">
               {t('child.backToProfile')}
-            </a>
+            </ButtonLink>
           </div>
         </main>
         <SiteFooter />

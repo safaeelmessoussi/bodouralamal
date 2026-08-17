@@ -32,6 +32,8 @@ export type Route =
   | 'dashboard-student'
   /** M4b — §14.1's *My Quran Progress*, read-only (§4.5). */
   | 'dashboard-student-quran'
+  /** §5.3's *My Grades & Exams* — PUBLISHED grades, read-only (2026-08-17). */
+  | 'dashboard-student-grades'
   /** §14.1, §5.2 (R65) — the PERSONAL section: role-independent, every account. */
   | 'profile'
   /** §14.1 (R65) — any account registers a child, from the personal section. */
@@ -89,6 +91,9 @@ export function resolveRoute(pathname: string): Route {
   // switcher with a child selected; a student reaches it as themselves.
   // Before the bare dashboard, so the longer path is not swallowed by it.
   if (path === '/dashboard/student/quran') return 'dashboard-student-quran';
+  // §5.3 has listed this node since R62 and nothing rendered it; the grades were
+  // publishable and unreachable by the مستفيدة they were about.
+  if (path === '/dashboard/student/grades') return 'dashboard-student-grades';
   if (path === '/dashboard/student') return 'dashboard-student';
   // R65 — the personal section, and the child-registration page under it.
   // Registering is an act of a PERSON, so neither is under a role's area: R64

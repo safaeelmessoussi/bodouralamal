@@ -319,3 +319,36 @@
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
 }
+
+/* The atomic single-choice searchable select (2026-08-17). Deliberately the same
+   furniture as the multi-select above — a bounded, scrollable, bordered list
+   under a search box — because they are one concept differing only in how many
+   answers they take, and two visual treatments would make that difference look
+   like a different kind of control. The list is a COLUMN rather than wrapping
+   chips: an option here is a whole answer, and a reader scans candidates down
+   rather than across. */
+.searchable-select__chosen {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+  margin: 0 0 var(--space-2);
+}
+.searchable-select__options {
+  display: grid;
+  gap: 0.15rem;
+  list-style: none;
+  margin: var(--space-2) 0 0;
+  padding: var(--space-2);
+  max-block-size: 14rem;
+  overflow-y: auto;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+/* Full-width rows, start-aligned: the label is the target, so the whole row is
+   the target rather than only the text inside it. */
+.searchable-select__options .btn {
+  justify-content: start;
+  width: 100%;
+  padding-block: var(--space-2);
+}

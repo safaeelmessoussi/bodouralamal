@@ -37,6 +37,17 @@
   background: var(--color-primary-soft);
   color: var(--color-primary);
 }
+/* The add/create marker (2026-08-17). `add` IS `primary` — same emphasis, same
+   palette — and this modifier only sets the glyph apart from the label it
+   precedes, so «＋ إضافة حلقة» does not read as one run-together word. The
+   platform's create actions all render through it, which is what stops the
+   convention being remembered on six screens and forgotten on the seventh. */
+.btn--add > [aria-hidden='true']:first-child {
+  font-weight: 400;
+  /* The glyph is full-width (U+FF0B) and sits optically high beside Arabic
+     text; a hair of translation lines it up with the label's centre. */
+  transform: translateY(0.05em);
+}
 .btn--block {
   width: 100%;
   justify-content: center;

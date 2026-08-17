@@ -24,6 +24,15 @@ import { TextArea } from './field.js';
  * — a client refusing what the server accepts is a bug in the client (§1.1). The
  * defaults stay the consent values, so no existing caller changes behaviour.
  *
+ * **`details` is how a consequential action explains itself** (2026-08-17).
+ * `body` is one sentence and must stay one — *"are you sure"* is not the place
+ * for a paragraph — but ending an enrolment is recoverable, releases circle
+ * seats, and keeps grades and Quran logs, and a reader deciding on it deserves to
+ * know which. So the shared dialog gained ONE optional slot rather than a second
+ * dialog growing beside it: a screen that needed to explain a consequence would
+ * otherwise hand-roll its own confirmation, and «are you sure» would stop being
+ * asked the same way everywhere — the exact property this component exists for.
+ *
  * It renders and reports; it does not delete anything. The caller owns the
  * action (§3.2).
  */
@@ -36,6 +45,15 @@ export function ConfirmDialog({
   open,
   title,
   body,
+  /**
+   * Optional consequence detail, under `body` and above any justification.
+   *
+   * For *what this action keeps and what it ends* — the two facts that decide
+   * whether somebody proceeds. Deliberately a node, so a caller may render a
+   * definition list rather than a run-on sentence; deliberately optional, so the
+   * ordinary delete confirmation stays one sentence.
+   */
+  details,
   confirmLabel,
   danger = false,
   /** When set, a justification is required and passed back on confirm. */
@@ -50,6 +68,7 @@ export function ConfirmDialog({
   open: boolean;
   title: string;
   body: string;
+  details?: ReactNode;
   confirmLabel?: string;
   danger?: boolean;
   reasonLabel?: string;
@@ -77,6 +96,8 @@ export function ConfirmDialog({
     <Dialog open={open} onClose={onCancel} title={title}>
       <div className="confirm">
         <p className="confirm__body">{body}</p>
+
+        {details ?? null}
 
         {needsReason ? (
           <TextArea

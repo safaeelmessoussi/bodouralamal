@@ -4,13 +4,11 @@ import { listBranches, type Branch } from '../../adapters/branches-admin.js';
 import {
   ACCOUNT_STATUSES,
   ROLES,
-  createUser,
   reactivateUser,
   searchUsers,
   setUserRoles,
   suspendUser,
   updateUser,
-  type Role,
   type RoleAssignment,
   type UserSummary,
 } from '../../adapters/users.js';
@@ -72,7 +70,6 @@ export function UsersPage(): ReactNode {
   const [statusFilter, setStatusFilter] = useState('');
 
   const [editing, setEditing] = useState<UserSummary | null>(null);
-  const [creating, setCreating] = useState(false);
   const [assigning, setAssigning] = useState<UserSummary | null>(null);
   const [suspending, setSuspending] = useState<UserSummary | null>(null);
   const [reactivating, setReactivating] = useState<UserSummary | null>(null);
@@ -213,7 +210,6 @@ export function UsersPage(): ReactNode {
       setAssigning(null);
       setSuspending(null);
       setReactivating(null);
-      setCreating(false);
       await load();
       setNotice(t(okKey));
     } catch (error) {
@@ -236,11 +232,26 @@ export function UsersPage(): ReactNode {
     <AdminLayout
       title={t('admin.nav.users')}
       lede={t('admin.users.lede')}
-      actions={
-        <Button variant="primary" onClick={() => setCreating(true)}>
-          {t('admin.users.create')}
-        </Button>
-      }
+      /**
+       * **No create button, by the Document Owner's decision (2026-08-17).**
+       *
+       * An account comes into existence through §4.1's registration and its
+       * approval — the applicant states who they are, consent is captured
+       * against the text version in force at submission (§4.1a, R62.3), and an
+       * administrator decides. A staff-composed account skips all of that, and
+       * two ways of creating an account is how the two field sets diverge, which
+       * is the exact failure R64 was written to repair on the child path.
+       *
+       * **`POST /admin/users` and `createUser` are deliberately UNTOUCHED.**
+       * They serve pre-provisioning (§4.1b step 4b — a staff account that binds
+       * its Google identity on first login) and are covered by their own tests.
+       * Removing a capability because its button was removed would be removing a
+       * rule nobody decided to change; this removes an entry point.
+       *
+       * **And no alternative account-creation UI is added anywhere else.** That
+       * would be this same button under another name.
+       */
+      actions={null}
     >
       {notice ? (
         <p className="admin-notice" role="status" aria-live="polite">
@@ -307,15 +318,6 @@ export function UsersPage(): ReactNode {
           onSave={(input) =>
             void run(() => updateUser(editing.id, editing.version, input, accessToken), 'common.saved')
           }
-        />
-      ) : null}
-
-      {creating ? (
-        <CreateDialog
-          branches={branches}
-          busy={busy}
-          onCancel={() => setCreating(false)}
-          onSave={(input) => void run(() => createUser(input, accessToken), 'admin.users.created')}
         />
       ) : null}
 
@@ -454,120 +456,18 @@ function ProfileDialog({
 }
 
 /**
- * Pre-provisioning (§4.1b step 4b).
+ * **`CreateDialog` was removed with the button it opened** (2026-08-17).
  *
- * **There is no password anywhere**, and the form says so: under Google-only
- * authentication staff record the address *authorised to claim* the account, and
- * the binding happens on that address's first sign-in. `super_admin` is not
- * offered — promoting an approved account is `RolesDialog`'s job.
- */
-function CreateDialog({
-  branches,
-  busy,
-  onSave,
-  onCancel,
-}: {
-  branches: Branch[];
-  busy: boolean;
-  onSave: (input: {
-    name_arabic: string;
-    email: string;
-    role?: Exclude<Role, 'super_admin'>;
-    branch_id?: string;
-    pre_approved?: boolean;
-  }) => void;
-  onCancel: () => void;
-}): ReactNode {
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [role, setRole] = useState('');
-  const [branchId, setBranchId] = useState('');
-  const [touched, setTouched] = useState(false);
-
-  const errors = {
-    name: name.trim() === '' ? t('common.required') : null,
-    email: !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim()) ? t('admin.users.emailInvalid') : null,
-  };
-  const valid = Object.values(errors).every((e) => e === null);
-
-  return (
-    <Dialog open onClose={onCancel} title={t('admin.users.create')}>
-      <div className="form">
-        <TextField
-          label={t('admin.users.colName')}
-          value={name}
-          onChange={setName}
-          required
-          error={touched ? errors.name : null}
-        />
-        <TextField
-          label={t('admin.users.email')}
-          type="email"
-          value={email}
-          onChange={setEmail}
-          required
-          error={touched ? errors.email : null}
-          hint={t('admin.users.emailHint')}
-        />
-        <SelectField
-          label={t('admin.users.colRoles')}
-          value={role}
-          onChange={setRole}
-          options={[
-            { value: '', label: t('admin.users.noRole') },
-            ...ROLES.filter((r) => r !== 'super_admin').map((r) => ({
-              value: r,
-              label: t(`admin.users.role.${r}`),
-            })),
-          ]}
-          hint={t('admin.users.createRoleHint')}
-        />
-        <SelectField
-          label={t('admin.users.branchScope')}
-          value={branchId}
-          onChange={setBranchId}
-          options={[
-            { value: '', label: t('admin.users.allBranches') },
-            ...branches.map((b) => ({ value: b.id, label: b.name })),
-          ]}
-          hint={t('admin.users.branchScopeHint')}
-        />
-        <div className="form__actions">
-          <Button variant="secondary" onClick={onCancel}>
-            {t('common.cancel')}
-          </Button>
-          <Button
-            variant="primary"
-            disabled={busy}
-            onClick={() => {
-              setTouched(true);
-              if (!valid) return;
-              onSave({
-                name_arabic: name.trim(),
-                email: email.trim().toLowerCase(),
-                ...(role ? { role: role as Exclude<Role, 'super_admin'> } : {}),
-                ...(branchId ? { branch_id: branchId } : {}),
-              });
-            }}
-          >
-            {t('common.save')}
-          </Button>
-        </div>
-      </div>
-    </Dialog>
-  );
-}
-
-/**
- * The whole assignment set, edited as a set.
+ * It composed the pre-provisioning form of §4.1b step 4b — name, the address
+ * authorised to claim the account, an optional role and branch scope. The
+ * Document Owner removed staff-composed account creation from this screen, so a
+ * dialog nobody can open is dead code and is not kept "for later": if
+ * pre-provisioning is given a home again it will be a decision with a screen of
+ * its own, and a stale copy of this form would be the thing that diverges from
+ * §4.1's field set in the meantime.
  *
- * Rows are added and removed locally and saved in **one** call, mirroring the
- * `PUT`: an administrator moving a teacher between branches makes one decision,
- * and add-then-remove would leave a window in which the person held both scopes
- * or neither.
- *
- * **Administrator roles are hidden for an Admin** rather than shown and refused
- * — granting one is privilege propagation, and the server refuses it regardless.
+ * **`POST /admin/users` and the `createUser` adapter are untouched**, tested,
+ * and remain the way a pre-provisioned account is made.
  */
 function RolesDialog({
   user,

@@ -750,6 +750,27 @@
 - [x] `StaffPicker` **extracted** from the exam section and shared by both — one control, each caller's own vocabulary
 - [x] Event DTO carries `staff` (live rows only) so the form prefills who already answers for it
 
+### Platform-wide UX & information-architecture pass (2026-08-17)
+- [x] **Audit first, and it decided the size:** the atomic foundation already existed — `Button`, `DataTable`, the five §14.4 states, `levelLabel`, `MultiSelectField`, `FormDialog`, `ConfirmDialog`. **The defects were drift at the edges**, so this was a migration, not a construction. Audit: `docs/development/audit-2026-08-17-ux-architecture.md`
+- [x] **Five dropdown-gated pages converted to data-first:** `نقاط الامتحانات` · `حلقات المواد` · `مقرر الحفظ` · `مواد المستوى` · `/teacher/quran`. Deep links survive as **focus, never as gates**
+- [x] **A second complete button system removed** — `.button` / `.button.primary` in `status-pages.css`, ten call sites, its own padding and none of `ghost`/`danger`/`add`. Plus five files hand-writing `btn btn--*`, including a `<span>` styled as a disabled button
+- [x] **`Button variant="add"`** — the `＋` had lived in a *translation string* for exactly one screen. The variant emits it, so a caller cannot forget it
+- [x] **`SearchableSelect`** — one choice from many, **options visible on open**. It replaced two typed-search workflows that returned nothing until two characters were entered
+- [x] **Three copies of the Level label reduced to one**; `withCategoryNames` completes the label from the payload the caller already had. The calendar filter and the groups page had rendered bare names
+- [x] **No pass/fail verdict on the grade sheet.** `Grade.passed`, `manual_pass_fail_override` and BR-12 **untouched in the model** — the override is still surfaced, because provenance is not a verdict
+- [x] **§5.3's `/dashboard/student/grades` finally rendered.** In §14.1 since R62 with nothing implementing it. `GET /students/me/grades` selects `published` **in the query**, so a draft is absent rather than hidden
+- [x] **Optional circles in the placement workflow** — two existing calls in order, keyed on the **Level alone**. No Group↔Circle relationship, no schema change
+- [x] **«إنهاء التسجيل» audited: the implementation was already correct.** Copy now distinguishes it from changing a placement and states what survives; `ConfirmDialog` gained one optional `details` slot
+- [x] **The «66» was one string** — a revision number on a form hint. A sweep of every catalogue *value* found no other leak
+- [x] **الإدارة reordered** to الفئات → المستويات → المواد → **مواد المستوى → مقرر الحفظ** — §14.1's own dependency order for the first four
+- [x] **The مؤطرة's labels aligned with the back office's** («الجدولة», «مكتبة المحتوى») and her sidebar grouped like it. **No access changed**; `/admin/content` deliberately not offered
+- [x] **`إضافة حساب` removed from المستخدمون**, with its dialog and six orphaned catalogue strings. `POST /admin/users` and the adapter untouched
+- [x] **19 lettered rules documented and guarded** — `docs/development/ux-architecture.md`, plus a *Platform UX & Atomic Design Rules* section in `CLAUDE.md`
+- [x] **Two defects found while wiring, neither in scope:** `fetchMyCoverage` never sent `X-Active-Child-ID` (a parent-only account got a `400`; one holding both roles saw its own progress); `admin.users.create` survived as an orphaned catalogue entry shipping in the bundle
+- [x] **Three guards restated rather than deleted** — they pinned the accordion's implementation, and one read the redesign's *use* of `LevelSelect` as a filter as a violation of the rule it fulfils
+- [ ] **Awaiting Owner decision (non-blocking):** `GET /admin/teaching-groups` and `GET /students/me/grades` are unlisted in TD-3 — see the audit's §Z, which also records that **`/admin/level-surahs` is not in §14.1**
+- [ ] **Not done, and stated:** a مؤطرة's Quran list shows names only — a coverage column needs `/quran-students` widened. `DataTable` still hand-writes its row-action button classes. Three editable tables remain outside the shared primitive, with their reasons in the guard's allowlist; **a fourth is the signal to build an editable-table primitive**
+
 ### M5a — in-school exam grading + Teacher scope (2026-08-12)
 - [x] **Audit first:** §4.6's model complete, R58's exam half built, §4.4c resolver already live. `Grade` had no service/route/adapter/screen — that was the whole gap
 - [x] **R70 drafted and applied:** `/admin/exam-grades?exam=` joins §14.1 · BR-7 reworded to *the exam's audience* · `grade.enter` joins TD-8 · TD-2's exam row splits in four

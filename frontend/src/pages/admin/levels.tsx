@@ -237,7 +237,7 @@ export function LevelsPage(): ReactNode {
       lede={t('admin.levels.lede')}
       actions={
         canWrite ? (
-          <Button variant="primary" onClick={() => setEditing('new')}>
+          <Button variant="add" onClick={() => setEditing('new')}>
             {t('admin.levels.create')}
           </Button>
         ) : null

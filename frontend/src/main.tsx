@@ -10,6 +10,7 @@ import { AdminRouter } from './pages/admin/index.js';
 import { SessionPage } from './pages/session.js';
 import { TeacherRouter } from './pages/teacher/index.js';
 import { CalendarPage } from './pages/calendar.js';
+import { StudentGradesPage } from './pages/dashboard/grades.js';
 import { StudentQuranPage } from './pages/dashboard/quran.js';
 import { StudentDashboard } from './pages/dashboard/student.js';
 import { RegisterChildPage } from './pages/profile/register-child.js';
@@ -101,6 +102,15 @@ function App(): React.ReactNode {
       return (
         <PendingGuard>
           <StudentQuranPage />
+        </PendingGuard>
+      );
+    case 'dashboard-student-grades':
+      // §5.3's *My Grades & Exams*. PUBLISHED grades only — the draft is the
+      // مؤطِّرة's working note (BR-8) and the server's query excludes it, so this
+      // screen cannot show one. Same child-context rule as the dashboard above.
+      return (
+        <PendingGuard>
+          <StudentGradesPage />
         </PendingGuard>
       );
     case 'profile':

@@ -1,12 +1,14 @@
 import type { Request, Response } from 'express';
 
 import type { PrismaClient } from '../generated/prisma/client.js';
+import { requireActingStudent } from '../middleware/child-context.js';
 import { requireActor } from '../middleware/authenticate.js';
 import { markToBp, readGradingScale } from '../policies/grading.js';
 import {
   overridePassFail,
   publishGrades,
   readGradeSheet,
+  readPublishedGrades,
   saveGradeDraft,
   type GradeEntry,
 } from '../services/grade.service.js';
@@ -51,6 +53,27 @@ export function save(prisma: PrismaClient) {
 export function publish(prisma: PrismaClient) {
   return async (req: Request, res: Response): Promise<void> => {
     res.json({ data: await publishGrades(prisma, requireActor(req), idParam(req, 'id')) });
+  };
+}
+
+/**
+ * `GET /students/me/grades` — **the acting student's published grades** (§5.3).
+ *
+ * `requireActingStudent` is the same resolution `GET /students/me` and
+ * `GET /students/me/quran` use: the JWT `sub`, or an approved `FamilyLink` child
+ * named by `X-Active-Child-ID` (§4.3). **`requireActor` is deliberately not
+ * called** — this endpoint takes no actor-scoped decision, because there is no
+ * identifier in the request for a caller to have chosen. That absence is the
+ * security property TD-12 asks for (R63.3).
+ *
+ * The scale travels with the rows because it is `SystemSetting` data (R14), not
+ * a constant a client may assume.
+ */
+export function myGrades(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const acting = requireActingStudent(req);
+    const result = await readPublishedGrades(prisma, acting.studentId);
+    res.json({ data: result.rows, meta: { display_scale: result.displayScale } });
   };
 }
 

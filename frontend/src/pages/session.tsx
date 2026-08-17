@@ -3,6 +3,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { fetchSessionPage, type SessionContentRef, type SessionPage } from '../adapters/calendar.js';
 import { ApplicationHeader } from '../components/header/application-header.js';
 import { SiteFooter } from '../components/site-footer.js';
+import { ButtonLink } from '../components/ui/button.js';
 import { t } from '../i18n/index.js';
 import { formatDate } from '../lib/format-date.js';
 import { ApiError } from '../lib/api.js';
@@ -58,9 +59,9 @@ export function SessionPage(): ReactNode {
         {state === 'missing' ? (
           <div className="state" role="status">
             <p>{t('session.notFound')}</p>
-            <a className="btn btn--secondary" href="/calendar">
+            <ButtonLink variant="secondary" href="/calendar">
               {t('session.backToCalendar')}
-            </a>
+            </ButtonLink>
           </div>
         ) : null}
         {state === 'error' ? (

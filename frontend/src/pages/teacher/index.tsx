@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 
 import { ModulePending } from '../../components/portal/nav-item.js';
 import { TeacherLayout } from '../../components/teacher/teacher-layout.js';
+import { ButtonLink } from '../../components/ui/button.js';
 import { t } from '../../i18n/index.js';
 import { teacherModuleForPath } from '../../lib/teacher-modules.js';
 import { ContentPage } from '../content.js';
@@ -67,9 +68,9 @@ function TeacherNotFound(): ReactNode {
     <TeacherLayout title={t('admin.notFound')}>
       <div className="state" role="status">
         <p>{t('admin.notFoundBody')}</p>
-        <a className="btn btn--secondary" href="/teacher">
+        <ButtonLink variant="secondary" href="/teacher">
           {t('teacher.nav.dashboard')}
-        </a>
+        </ButtonLink>
       </div>
     </TeacherLayout>
   );
