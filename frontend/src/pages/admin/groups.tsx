@@ -86,7 +86,9 @@ export function GroupsPage(): ReactNode {
   const [categories, setCategories] = useState<CategoryRef[]>([]);
   const [branches, setBranches] = useState<BranchRef[]>([]);
   /** One graph, shared with the schedules and content screens. */
-  const scope = useScopeOptions({ token: accessToken, fields: GROUP_SCOPE });
+  // A filter — `ScopeSelectors` below is `mode="filter"`, and the hook is told
+  // the same thing so the two cannot disagree about what this row of controls is.
+  const scope = useScopeOptions({ token: accessToken, fields: GROUP_SCOPE, mode: 'filter' });
   const levelFilter = scope.value.levelId;
   const branchFilter = scope.value.branchId;
   const [editing, setEditing] = useState<AdministrativeGroup | 'new' | null>(null);

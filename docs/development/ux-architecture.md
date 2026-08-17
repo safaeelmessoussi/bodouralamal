@@ -481,8 +481,41 @@ filter behind *«اختاري المستوى أولًا»* and asked a question 
 Subject — the reader removed one constraint, not the other. Moving to *another*
 Level still clears it, because that Level may not teach it.
 
-Canonical: `useScopeOptions({ subjectsUnscoped })` +
-`ScopeSelectors`' `mode`.
+**The mechanism is `mode`, not a per-field flag** (2026-08-18). It began as a
+`subjectsUnscoped` boolean and that was the wrong shape: **opt-in, per caller**,
+so `مكتبة المحتوى` received it and `الجدولة` did not — the Subject control
+rendered enabled and empty, reading «لا مواد مسندة إلى هذا المستوى» with no Level
+chosen. One screen right, the next wrong, which is the drift `useScopeOptions`
+exists to prevent.
+
+`mode` is a fact the caller **already knows and already passes to
+`ScopeSelectors`**, so saying it to the hook is stating one thing once. It
+defaults to `form` — the strict direction, so a caller that forgets gets the
+behaviour that cannot produce a refused pair. **A guard asserts the two agree**:
+any page rendering `ScopeSelectors` with `mode="filter"` must construct its scope
+with `mode: 'filter'`.
+
+Canonical: `useScopeOptions({ mode })` + `ScopeSelectors`' `mode`, guarded by
+[`use-scope-options.test.ts`](../../frontend/src/hooks/use-scope-options.test.ts).
+
+### The dependent-selector contract
+
+Every dependency in the graph answers the same seven questions, and
+`useScopeOptions` answers them **once** so no page re-derives them:
+
+| | |
+|---|---|
+| **Parent selected** | children reload from the parent's own read |
+| **Parent changed** | children clear **eagerly**, in `set`, so no render shows a stale child under a new parent |
+| **Parent cleared** | children clear — **except** a filter's Subject, because widening a question is not retracting half of it |
+| **Child no longer offered** | cleared by reconciliation; a stale id is what reaches the server as an impossible pair |
+| **Loading** | the field is `busy` — disabled and announced, never silently empty |
+| **Empty** | its own sentence (*this Level teaches no subjects*), never a bare empty dropdown |
+| **Unmet dependency** | names the missing parent (*choose a level first*) — in a **form**; a filter has none |
+
+**Never add a dependency a contract does not have.** `GET /library` and the
+scheduling list both take `level_id` and `subject_id` as independent optionals;
+the gate was a client-side invention on both screens.
 
 ## T · The page header is one block
 

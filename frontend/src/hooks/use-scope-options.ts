@@ -115,15 +115,26 @@ export interface UseScopeOptionsInput {
    *  filter silently hides rows. */
   defaultCurrentYear?: boolean;
   /**
-   * **Offer every Subject when no Level is chosen** — for a FILTER.
+   * **Whether these selectors narrow a list or fill a form** (2026-08-18).
    *
-   * A form must not offer a Subject the chosen Level does not teach (§4.4b), so
-   * it leaves this `false` and the control stays empty until a Level is picked.
-   * A filter has no such constraint: *"everything about تفسير"* is a legitimate
-   * question with no Level in mind, and `GET /library` accepts the two as
-   * independent optionals.
+   * This replaced a `subjectsUnscoped` boolean, and the reason is the defect that
+   * boolean produced: it was **opt-in per caller**, so `مكتبة المحتوى` got it and
+   * `الجدولة` did not — one screen right, the next wrong, which is the drift this
+   * hook exists to prevent.
+   *
+   * `mode` is a fact the caller **already knows and already passes to
+   * `ScopeSelectors`**, so passing it here is stating one thing once rather than
+   * remembering a second thing. A guard asserts the two agree.
+   *
+   * | | `form` (default) | `filter` |
+   * |---|---|---|
+   * | Subject with no Level | **empty** — offering one the Level does not teach is offering `SUBJECT_NOT_AT_LEVEL` (§4.4b) | **every Subject** — *"everything about تفسير"* is a legitimate question |
+   * | Clearing the Level | clears the Subject — with no Level there is no valid Subject to hold | **keeps** it — widening a question is not retracting half of it |
+   *
+   * Defaulting to `form` is the safe direction: a caller that forgets it gets the
+   * stricter behaviour, never a pair the server refuses.
    */
-  subjectsUnscoped?: boolean;
+  mode?: 'form' | 'filter';
 }
 
 /**
@@ -143,8 +154,9 @@ export function useScopeOptions({
   fields,
   initial,
   defaultCurrentYear = false,
-  subjectsUnscoped = false,
+  mode = 'form',
 }: UseScopeOptionsInput): ScopeOptions {
+  const subjectsUnscoped = mode === 'filter';
   /**
    * **The field list is depended on by CONTENT, never by identity.**
    *

@@ -134,7 +134,20 @@ export function SchedulingPage(): ReactNode {
   });
   const [deleting, setDeleting] = useState<SchedulingItem | null>(null);
 
-  const listScope = useScopeOptions({ token: accessToken, fields: LIST_SCOPE });
+  /**
+   * **A FILTER, and it must say so** (2026-08-18).
+   *
+   * This is the defect the `subjectsUnscoped` boolean produced: it was opt-in, so
+   * `مكتبة المحتوى` received it and this screen did not — the Subject control
+   * rendered enabled and empty, reading «لا مواد مسندة إلى هذا المستوى» with no
+   * Level chosen. `mode` is the same word already passed to `ScopeSelectors`
+   * below, so the two cannot disagree, and a guard asserts they do not.
+   */
+  const listScope = useScopeOptions({
+    token: accessToken,
+    fields: LIST_SCOPE,
+    mode: 'filter',
+  });
 
   const load = useCallback(async () => {
     setStatus('loading');

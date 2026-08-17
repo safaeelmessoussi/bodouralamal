@@ -4,6 +4,13 @@ import HOOK from './use-scope-options.ts?raw';
 import SELECTORS from '../components/scope/scope-selectors.tsx?raw';
 import CONTENT from '../pages/content.tsx?raw';
 
+/** Every page, so the mode-agreement guard below sees all of them. */
+const PAGES = import.meta.glob('/src/pages/**/*.tsx', {
+  query: '?raw',
+  import: 'default',
+  eager: true,
+}) as Record<string, string>;
+
 /** Comments are not code — the idiom the scheduling parity guard established. */
 function code(source: string): string {
   return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
@@ -33,10 +40,37 @@ describe('the Subject filter does not require a Level', () => {
     expect(code(HOOK)).toContain('listLevelSubjects(value.levelId, token)');
   });
 
-  it('is opt-in, so a form keeps the dependency that protects it', () => {
-    expect(code(HOOK)).toContain('subjectsUnscoped');
-    // The form default: with no Level chosen there is no valid Subject to hold.
-    expect(code(HOOK)).toMatch(/subjectsUnscoped\s*=\s*false/);
+  it('is driven by `mode`, and defaults to the strict one', () => {
+    // A form must not offer a Subject the chosen Level does not teach, so a
+    // caller that says nothing gets that behaviour rather than the permissive one.
+    expect(code(HOOK)).toMatch(/mode\s*=\s*'form'/);
+    expect(code(HOOK)).toContain("const subjectsUnscoped = mode === 'filter'");
+  });
+
+  it('every page tells the HOOK the same mode it tells the SELECTORS', () => {
+    /**
+     * **The guard for the defect that produced this rule.**
+     *
+     * It began as a `subjectsUnscoped` boolean — opt-in, per caller — so
+     * `مكتبة المحتوى` received it and `الجدولة` did not: the Subject control
+     * rendered enabled and empty, reading «لا مواد مسندة إلى هذا المستوى» with no
+     * Level chosen. One screen right, the next wrong, which is exactly the drift
+     * `useScopeOptions` was extracted to prevent.
+     *
+     * `mode` is now one fact the caller already knew. What can still go wrong is
+     * saying it **twice and differently** — `mode="filter"` on the selectors and
+     * nothing on the hook — so that is what is asserted: any file rendering
+     * `ScopeSelectors` with `mode="filter"` must also construct its scope with
+     * `mode: 'filter'`.
+     */
+    const offenders = Object.entries(PAGES)
+      .filter(([, text]) => {
+        const c = code(text);
+        if (!/mode=["']filter["']/.test(c)) return false;
+        return !/useScopeOptions\([\s\S]*?mode:\s*'filter'/.test(c);
+      })
+      .map(([path]) => path);
+    expect(offenders).toEqual([]);
   });
 
   it('the shared selector ignores the dependency only in filter mode', () => {
@@ -45,8 +79,8 @@ describe('the Subject filter does not require a Level', () => {
     expect(code(SELECTORS)).toContain('subjectId: [{ field: ');
   });
 
-  it('the content library opts in', () => {
-    expect(code(CONTENT)).toContain('subjectsUnscoped: true');
+  it('the content library declares itself a filter', () => {
+    expect(code(CONTENT)).toContain("mode: 'filter'");
   });
 
   it('clearing the Level keeps the Subject, but moving Level clears it', () => {

@@ -93,7 +93,7 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
      * optionals. Choosing a Level still narrows the Subjects to the ones it
      * teaches — the narrowing is the useful half and it is kept.
      */
-    subjectsUnscoped: true,
+    mode: 'filter',
     defaultCurrentYear: true,
   });
   const { levelId, subjectId, academicYearId, branchId } = scope.value;
