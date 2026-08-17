@@ -72,7 +72,25 @@ afterAll(async () => {
 describe('TD-2 / §5.6 — Super Admin only', () => {
   it('lets a Super Admin read and write', async () => {
     const su = await makeUser('super_admin');
-    expect(await listSettings(prisma, await actorFor(prisma, su))).toHaveLength(1);
+    /**
+     * **The allow-list grew from one to three** (2026-08-17): the grading scale
+     * and the passing grade joined `legal.consent_text_version`.
+     *
+     * §7 describes `SystemSetting` as *"runtime-editable"* and names the grading
+     * scale among its contents; R14 puts both values in it and nowhere else. The
+     * rows were seeded by §15.1 and reachable by **nothing in the product** — the
+     * same gap that made this list exist for the consent version.
+     *
+     * Asserted as the exact key SET rather than a length, because what matters is
+     * *which* settings are reachable: a length still passes when one is swapped
+     * for another, and this list is an authorization surface.
+     */
+    const listed = await listSettings(prisma, await actorFor(prisma, su));
+    expect(listed.map((row) => row.key).sort()).toEqual([
+      'grading.display_scale',
+      'grading.passing_grade_bp',
+      'legal.consent_text_version',
+    ]);
     const saved = await updateSetting(prisma, await actorFor(prisma, su), CONSENT_TEXT_VERSION_KEY, '2026-08-v1', 0);
     expect(saved.value).toBe('2026-08-v1');
   });
@@ -109,7 +127,17 @@ describe('the writable surface is an allow-list', () => {
     // key exists somewhere, and a typo must create nothing.
     const su = await makeUser('super_admin');
     await expect(
-      updateSetting(prisma, await actorFor(prisma, su), 'grading.display_scale', '20', 0),
+      // **`grading.display_scale` is writable now**, so it can no longer stand for
+      // an unreachable key. `content.quarantine_purge_days` is a real
+      // `SystemSetting` concern that this API deliberately does not expose — a
+      // retention window is an operational decision, not a screen control.
+      updateSetting(
+        prisma,
+        await actorFor(prisma, su),
+        'content.quarantine_purge_days',
+        '90',
+        0,
+      ),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
     await expect(updateSetting(prisma, await actorFor(prisma, su), 'made.up.key', 'x', 0)).rejects.toMatchObject({
       code: 'NOT_FOUND',
@@ -214,3 +242,83 @@ describe('§4.1a — changing the setting never rewrites a stored consent', () =
 
   });
 });
+
+/**
+ * **The grading scale, now that it is reachable** (2026-08-17).
+ *
+ * §7 has always described `SystemSetting` as *"runtime-editable"* and named the
+ * grading scale in it; R14 fixes the association's values there **and nowhere
+ * else**, explicitly so neither `Level` nor `Category` carries a column. What was
+ * missing was any way to change it in the product.
+ *
+ * **A per-exam maximum mark is a different thing and R58 already refused it** — *"a
+ * second answer to what `grading.display_scale` already owns"*, deliberately not
+ * added to `Exam`. So *"is this exam out of 10 or 20"* is a platform question, and
+ * these are the rows that answer it.
+ */
+describe('the grading scale is configurable, and integer-only (R14, §20 rule 3)', () => {
+  it('accepts a change of scale and stores it as a NUMBER', async () => {
+    const su = await makeUser('super_admin');
+    const saved = await updateSetting(
+      prisma,
+      await actorFor(prisma, su),
+      'grading.display_scale',
+      '10',
+      await versionOf(prisma, 'grading.display_scale'),
+    );
+    // The wire carries a string so one control serves both kinds…
+    expect(saved.value).toBe('10');
+    expect(saved.kind).toBe('integer');
+    // …and the STORAGE keeps a number, which is what `readGradingScale`
+    // type-checks for. A string there would make it silently fall back to its
+    // default and ignore the change that had just been made.
+    const row = await prisma.systemSetting.findUniqueOrThrow({
+      where: { key: 'grading.display_scale' },
+    });
+    expect(typeof row.value).toBe('number');
+    expect(row.value).toBe(10);
+
+    // Restored, so the rest of the suite sees the association's own /20.
+    await updateSetting(
+      prisma,
+      await actorFor(prisma, su),
+      'grading.display_scale',
+      '20',
+      await versionOf(prisma, 'grading.display_scale'),
+    );
+  });
+
+  it('refuses a fraction — §20 rule 3 keeps scoring integer-only end to end', async () => {
+    const su = await makeUser('super_admin');
+    await expect(
+      updateSetting(
+        prisma,
+        await actorFor(prisma, su),
+        'grading.display_scale',
+        '20.5',
+        await versionOf(prisma, 'grading.display_scale'),
+      ),
+    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+  });
+
+  it('refuses a passing grade outside the basis-point range', async () => {
+    const su = await makeUser('super_admin');
+    for (const bad of ['-1', '10001', 'abc']) {
+      await expect(
+        updateSetting(
+          prisma,
+          await actorFor(prisma, su),
+          'grading.passing_grade_bp',
+          bad,
+          await versionOf(prisma, 'grading.passing_grade_bp'),
+        ),
+      ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+    }
+  });
+});
+
+/** The current version of a setting, for TD-15's optimistic check. */
+async function versionOf(client: typeof prisma, key: string): Promise<number> {
+  const row = await client.systemSetting.findUnique({ where: { key } });
+  return row?.version ?? 0;
+}

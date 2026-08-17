@@ -9,6 +9,7 @@ import {
   teachingGroupDeletionDto,
   teachingGroupDto,
   teachingGroupMemberDto,
+  circleMemberDto,
   teachingGroupRowDto,
   unassignedStudentDto,
   type TeachingGroupListDto,
@@ -93,6 +94,20 @@ export function listAll(prisma: PrismaClient) {
       ...pageParamsFrom(req.query),
     });
     res.json(pageOf(result, teachingGroupRowDto));
+  };
+}
+
+/**
+ * `GET /admin/teaching-groups/{id}/members` — the circle's roster.
+ *
+ * Completes a collection whose `POST` and `DELETE` were already specified
+ * (TD-3.12) and whose `GET` was missing, which is why the `DELETE` had no caller:
+ * nothing could show who was in a circle in order to take them out.
+ */
+export function listMembers(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const rows = await teachingGroups.listMembers(prisma, requireActor(req), idParam(req, 'id'));
+    res.json({ data: rows.map(circleMemberDto) });
   };
 }
 

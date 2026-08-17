@@ -22,6 +22,23 @@ export interface SubjectRef {
    * is what let that screen reuse this endpoint instead of a parallel read.
    */
   version: number;
+  /**
+   * **The Levels that teach this Subject** (2026-08-17).
+   *
+   * `GET /admin/subjects` carries it so `المواد` can show the dependency that
+   * makes deletion refusable: a Subject paired with any Level cannot be deleted,
+   * and an administrator meeting that refusal previously had no way to see which
+   * Levels to unpair on `مواد المستوى`.
+   *
+   * The Category travels **beside** the Level rather than joined into it, because
+   * `levelLabel` owns the `{Category} — {Level}` format (§4.4b — Level names are
+   * not unique across Categories) and a pre-joined string would be a second
+   * implementation of it.
+   *
+   * Absent from `GET /admin/levels/{id}/subjects`, which answers *which subjects
+   * does THIS Level teach* and has no use for the reverse join.
+   */
+  levels?: { id: string; name: string; category_name: string }[];
 }
 
 export interface AcademicYearRef {

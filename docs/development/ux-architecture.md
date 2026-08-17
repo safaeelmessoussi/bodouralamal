@@ -53,7 +53,7 @@ Title                            Title
 **The observable trace of a gate is its copy**: *«اختاري X لعرض Y»* — choose
 something in order to see something. A page that renders its data never needs
 that sentence, which is why
-[`atomic-components.test.ts`](../../frontend/src/components/ui/atomic-components.test.ts)
+[`atomic-components.test.tsx`](../../frontend/src/components/ui/atomic-components.test.tsx)
 scans for it.
 
 **A detail view does not replace the list.** The list stays reachable and stays
@@ -366,6 +366,137 @@ second implementation** rather than the presence of the shared one: presence is
 satisfied by a screen that uses the shared component *and* keeps hand-rolled UI
 beside it — which one page did here, for a whole revision.
 
+## T · The page header is one block
+
+**Title, description and primary action form a header** — not two things at
+opposite ends of a rule.
+
+The description **grows into the width it has**, up to a reading measure
+(`--measure-lede`); the action block is **exactly as wide as its buttons**. The
+defect this fixes is subtle and was reported three times before it was
+understood: `justify-content: space-between` pushed the action to the far margin
+and left the text at its flex basis, so a one-line description wrapped its **last
+word** onto a line of its own with visible space beside it.
+
+**The trap worth knowing:** a flex item's default `min-width: auto` refuses to
+shrink below its longest word. `min-inline-size: 0` on the text block is what
+actually allows it to use the space — without it, growing the block changes
+nothing.
+
+Canonical: `.admin__head` / `.admin__heading` in
+[`admin.css`](../../frontend/src/styles/components/admin.css), rendered by
+[`PortalShell`](../../frontend/src/components/portal/portal-shell.tsx). **Never
+solve this per page**, and never with `<br>`.
+
+## U · Unsaved work is never lost to a stray click
+
+A form dialog **holding changes** does not close on a backdrop click, asks before
+closing on `Escape` or the close button, and closes silently when nothing has
+been typed.
+
+| Way out | With changes | Without |
+|---|---|---|
+| Backdrop | ignored | closes |
+| `Escape` · Close · إلغاء | asks | closes |
+| Successful save | closes | — |
+
+**Why the backdrop is ignored rather than asking:** a backdrop click is very
+often not an intention, and answering every one with a question trains a reader
+to dismiss questions. `Escape` and the close button *are* intentions.
+
+**The dialog is never inescapable** — the close button always leads out in at
+most two clicks.
+
+Canonical: `dismissible` on
+[`Dialog`](../../frontend/src/components/ui/dialog.tsx) is the *mechanism*;
+[`FormDialog`](../../frontend/src/components/ui/form-dialog.tsx) makes the
+*decision* from its `dirty` prop and asks with the shared `ConfirmDialog`. Each
+form reports `dirty` through
+[`isDirty`](../../frontend/src/lib/form-dirty.ts) — **which takes both sides**,
+because these dialogs write their fields in an effect *after* first render, so a
+captured baseline reports *dirty* the instant an edit dialog is populated.
+
+**`dirty` defaults to `false`**, so a form that omits it silently keeps the old
+lose-everything behaviour. That is why it is guarded rather than left to
+convention.
+
+## V · A row action looks like an action
+
+Table row actions are **bordered buttons**, sized for a row — not borderless
+text in a cell full of text. Destructive ones carry the shared `danger` variant,
+so *irreversible* looks the same everywhere.
+
+The defect: `DataTable` rendered them as `ghost`, which has no border and no
+background at rest, so «تعديل» and «حذف» were indistinguishable from data until
+the pointer crossed them.
+
+Canonical: the `actions` configuration of
+[`DataTable`](../../frontend/src/components/ui/data-table.tsx), rendering the
+shared `Button` with `.row-action` for sizing only. The focus ring is the
+platform's global `:focus-visible` and needs nothing per component. **Never style
+a row action per page.**
+
+## W · The sidebar and the page scroll independently
+
+A sidebar taller than the viewport **scrolls itself**, and reaching its end does
+**not** hand off to the page underneath.
+
+Three CSS declarations, no JavaScript: a `max-block-size` of the viewport minus
+the header, `overflow-y: auto`, and — the one that removes the surprise —
+`overscroll-behavior: contain`. A wheel handler would re-derive what the browser
+already knows and break keyboard and momentum scrolling on the way.
+
+Canonical: `.admin-nav` in
+[`admin.css`](../../frontend/src/styles/components/admin.css), **inside the
+two-column media query**: below that breakpoint the sidebar is a normal block in
+the flow and must not become a small scrolling box mid-page.
+
+## X · A missing translation key must fail a test, not ship
+
+`t()` returns **its own argument** when a key is missing. That is deliberate — a
+raw key is loud where a blank string is silent — but it means **a typo ships as
+user-facing text and nothing fails**.
+
+`نقاط الامتحانات` rendered a table headed `admin.schedules.title`,
+`admin.exams.date`, `admin.exams.audience`; the same three keys had been wrong on
+`/teacher/exams` first, so it **propagated by being copied** — the shape a missing
+guard always produces.
+
+Canonical: [`i18n/resolves.test.ts`](../../frontend/src/i18n/resolves.test.ts)
+resolves every **literal** `t()` and `tList()` key in the application against the
+catalogue. Computed keys (`` t(`admin.section.${x}`) ``) are out of its reach and
+belong to the registry guard that enumerates their values — that limit is stated
+in the guard rather than left to be discovered.
+
+## Y · Show the dependency that refuses the action
+
+Where a rule refuses an action because of a relationship, **show the
+relationship** — and show it as the *things*, not as a count.
+
+`المواد` lists each Subject's linked Levels because a paired Subject cannot be
+deleted: a number tells an administrator they are blocked; the names tell them
+what to unpair, and where. (`الفئات` keeps a count, correctly — *how many Levels*
+is the whole question there.)
+
+**Showing a constraint never relaxes it.** The refusal, its authorization and its
+error stay exactly where they were.
+
+## Z · Configuration the SRS already calls editable must be reachable
+
+`SystemSetting` is described in §7 as **runtime-editable**, and the grading scale
+has lived there since R14 — seeded by §15.1 and reachable by **nothing in the
+product**, exactly as `legal.consent_text_version` was before R42.
+
+**Before adding a field for a missing control, check whether the value already
+exists somewhere unreachable.** The recurring shape in **P** has a settings twin:
+a value the specification already places, with no surface to change it.
+
+**And check whether the SRS has already refused the shape being asked for.** A
+*per-exam* maximum mark is not this: R58 rejected it in terms — *"a second answer
+to what `grading.display_scale` already owns"* — so the question *"is this exam
+out of 10 or 20"* is platform-wide by decision, not by omission.
+
+
 ---
 
 ## The guards
@@ -376,7 +507,8 @@ system's internals, break on every restyle, and catch nothing.
 
 | Guard | What it pins |
 |---|---|
-| [`ui/atomic-components.test.ts`](../../frontend/src/components/ui/atomic-components.test.ts) | one Button (both class vocabularies, and no second system in CSS) · the `＋` convention, in code and in the catalogue · one table, with reasoned exceptions · one Level label · no engineering reference in a user-facing string · no data gate in the copy · no pass/fail on the sheet · no account creation on `المستخدمون` |
+| [`ui/atomic-components.test.tsx`](../../frontend/src/components/ui/atomic-components.test.tsx) | one Button (both class vocabularies, and no second system in CSS) · the `＋` convention, in code and in the catalogue · one table, with reasoned exceptions · one Level label · no engineering reference in a user-facing string · no data gate in the copy · no pass/fail on the sheet · no account creation on `المستخدمون`, **in code and in the catalogue** · **the dirty-state wiring, and that no form omits `dirty`** |
+| [`i18n/resolves.test.ts`](../../frontend/src/i18n/resolves.test.ts) | **every literal `t()` key resolves** — and that `t()` still returns the key on a miss, which is the behaviour the guard exists to police |
 | [`lib/admin-modules.test.ts`](../../frontend/src/lib/admin-modules.test.ts) | §14.1's sitemap · R61's section rule · **the الإدارة curriculum order** · every label resolves |
 | [`lib/teacher-modules.test.ts`](../../frontend/src/lib/teacher-modules.test.ts) | the teaching nodes, their sections, and **no `/admin/*` path in her menu** |
 | [`pages/admin/teaching-structure.test.ts`](../../frontend/src/pages/admin/teaching-structure.test.ts) | the circles page reads unconditionally · R69.3's deep links are focus, not gates · BR-22 survives · R43.3 authorization |

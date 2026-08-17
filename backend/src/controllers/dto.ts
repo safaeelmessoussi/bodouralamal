@@ -274,6 +274,37 @@ export function teachingGroupDto(row: {
 }
 
 /**
+ * One student's seat in a circle — the roster row.
+ *
+ * The same three facts `rosterEntryDto` publishes for an Administrative Group, and
+ * deliberately not more: the screen's question is *who is in this circle*, and a
+ * roster is not a place to widen what is known about a person.
+ *
+ * **`student_id` is the key, not a seat id.** Removal is
+ * `DELETE …/members/{studentId}` — the path names the student, so publishing a
+ * join-row id would be publishing an identifier nothing takes.
+ */
+export interface CircleMemberDto {
+  student_id: string;
+  /** The staff-facing legal name; a roster is not a public surface (§7). */
+  name: string | null;
+  /** An instant, correctly — a placement happens at a moment (cf. TD-11). */
+  added_at: string;
+}
+
+export function circleMemberDto(row: {
+  studentId: string;
+  name: string | null;
+  addedAt: Date;
+}): CircleMemberDto {
+  return {
+    student_id: row.studentId,
+    name: row.name,
+    added_at: row.addedAt.toISOString(),
+  };
+}
+
+/**
  * A circle **listed across Levels and Subjects**, for the `حلقات المواد` table.
  *
  * `TeachingGroupDto` carries only the two ids, which is right for the read
@@ -887,6 +918,56 @@ export function subjectRefDto(row: {
   return { id: row.id, name: row.name, display_order: row.displayOrder, version: row.version };
 }
 
+/**
+ * A Subject **with the Levels that teach it** — `/admin/subjects` only.
+ *
+ * ## Why the wider shape is a separate DTO
+ *
+ * `subjectRefDto` serves both the global Subject list **and** a Level's own
+ * subjects, and the second has no use for a reverse join. Widening the shared
+ * projection would have put every Level of every Subject onto a read whose whole
+ * question is *which subjects does THIS Level teach* — so the two are separate
+ * projections of one service result rather than two reads of one table.
+ *
+ * ## Why it exists at all
+ *
+ * A Subject paired with any Level **cannot be deleted** — the rule is unchanged
+ * and stays enforced in the service. What was missing is that an administrator
+ * meeting that refusal could not see what it was about, or which Levels to unpair
+ * on `مواد المستوى`. The dependency is now visible before the attempt rather than
+ * explained after it.
+ *
+ * **The Category travels beside the Level, not joined into it.** §4.4b makes Level
+ * names non-unique across Categories, so the client's `levelLabel` needs both
+ * halves — and a pre-joined `«الفئة — المستوى»` string here would be a second
+ * implementation of a format the client owns.
+ *
+ * Field by field, never a spread (§16.2, R38).
+ */
+export interface SubjectWithLevelsDto extends SubjectRefDto {
+  levels: { id: string; name: string; category_name: string }[];
+}
+
+export function subjectWithLevelsDto(row: {
+  id: string;
+  name: string;
+  displayOrder: number | null;
+  version: number;
+  levels: { id: string; name: string; categoryName: string }[];
+}): SubjectWithLevelsDto {
+  return {
+    id: row.id,
+    name: row.name,
+    display_order: row.displayOrder,
+    version: row.version,
+    levels: row.levels.map((level) => ({
+      id: level.id,
+      name: level.name,
+      category_name: level.categoryName,
+    })),
+  };
+}
+
 /* ── Curriculum taxonomy (§5.6 Categories & Subjects, §14.1) ─────────────── */
 
 export interface CategoryDto {
@@ -1149,6 +1230,19 @@ export interface SettingDto {
    *  which the write path refuses. For the consent version, null is the state
    *  in which no registration can be accepted at all (§4.1a). */
   value: string | null;
+  /**
+   * **How the screen should render the control** (2026-08-17).
+   *
+   * The allow-list gained integer settings — the grading scale — and a number
+   * typed into a free-text box is a number the server has to refuse after the
+   * fact. Publishing the *kind* lets the form offer the right control, and keeps
+   * that decision on the server where the allow-list already lives: a client
+   * inferring it from the key would be a second copy of the same knowledge.
+   *
+   * `value` stays a **string** whatever the kind, so one control and one audit
+   * format serve both. The storage keeps a number a number.
+   */
+  kind: 'text' | 'integer';
   /** TD-15: sent back on save; a stale one is a `409`. */
   version: number;
 }
@@ -1158,6 +1252,7 @@ export function settingDto(row: {
   label_key: string;
   hint_key: string;
   value: string | null;
+  kind: 'text' | 'integer';
   version: number;
 }): SettingDto {
   return {
@@ -1165,6 +1260,7 @@ export function settingDto(row: {
     label_key: row.label_key,
     hint_key: row.hint_key,
     value: row.value,
+    kind: row.kind,
     version: row.version,
   };
 }

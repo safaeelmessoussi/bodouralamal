@@ -54,10 +54,24 @@ describe('the overview shows its data without being filtered first', () => {
   });
 
   it('keeps R69.3’s deep links as focus rather than as a gate', () => {
-    // `?level=` opens one Level's detail and `?subject=` scrolls to it; arriving
-    // without either still renders the table.
-    expect(code(PAGE)).toContain('/admin/teaching-groups?level=');
+    /**
+     * **Restated 2026-08-17: this asserted that the page EMITS the link.**
+     *
+     * It read `toContain('/admin/teaching-groups?level=')`, which the row action
+     * «تفاصيل المستوى» happened to produce. The Owner replaced that action with
+     * «المستفيدات», so the string went — and the property never depended on it.
+     * R69.3's guarantee is that an **inbound** `?level=` / `?subject=` is
+     * honoured, which is about what the page *reads*, not what it links to.
+     *
+     * Asserted on the consumption now: both parameters arrive as props, the Level
+     * they name opens, and its Subject is the scroll target. Arriving with
+     * neither still renders the table, which the unconditional-read test above
+     * covers.
+     */
+    expect(code(PAGE)).toContain('levelId,\n  subjectId,');
+    expect(code(PAGE)).toContain('levels.find((l) => l.id === levelId)');
     expect(code(PAGE)).toContain('subject-${subject.id}');
+    expect(code(PAGE)).toContain('subject.id === subjectId');
   });
 
   it('loads a Level’s own breakdown only when that Level is opened', () => {

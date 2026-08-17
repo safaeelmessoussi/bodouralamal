@@ -499,6 +499,67 @@ export async function addMember(
 
 /** Removes a student from a split. They return to the Subject's `unassigned`
  *  list (BR-22) — never silently classless. */
+/**
+ * **Who is in one circle.**
+ *
+ * ## Why this read was missing, and why it is not a new capability
+ *
+ * `POST /admin/teaching-groups/{id}/members` and
+ * `DELETE …/members/{studentId}` have both existed since R43 (TD-3.12), so the
+ * collection is specified — **it simply had no `GET`**. The consequence showed up
+ * in the interface: `readSubjectSplit` reports a `member_count` per circle and
+ * BR-22's *unassigned* list, so a screen could say *how many* are in a circle and
+ * *who is in none*, but never *who is in this one* — which is exactly what is
+ * needed to take somebody out of it. The `DELETE` route had no frontend caller at
+ * all for that reason.
+ *
+ * This completes the collection rather than opening a new one: same path, same
+ * `assertCanManageMembership` gate, same branch scoping through the student's
+ * enrolment.
+ *
+ * ## Not paginated
+ *
+ * A circle is a subdivision of one Level's enrolment — tens of students, and the
+ * screen's whole question is *the roster*. TD-10's page boundary through a roster
+ * would hide members behind a control nobody needs, which is the same argument
+ * the pair-addressed split read makes for its own list.
+ */
+export interface CircleMember {
+  studentId: string;
+  name: string | null;
+  addedAt: Date;
+}
+
+export async function listMembers(
+  prisma: PrismaClient,
+  actor: Actor,
+  teachingGroupId: string,
+): Promise<CircleMember[]> {
+  assertCanManageMembership(actor);
+
+  const group = await prisma.teachingGroup.findFirst({
+    where: { id: teachingGroupId, deletedAt: null },
+    select: { id: true },
+  });
+  // §20 rule 17 — a circle out of reach is NOT_FOUND, never a 403 confirming it
+  // exists somewhere.
+  if (!group) throw new AppError('NOT_FOUND', 'no such teaching group');
+
+  const rows = await prisma.studentTeachingGroup.findMany({
+    where: { teachingGroupId, deletedAt: null, student: { deletedAt: null } },
+    orderBy: { student: { nameArabic: 'asc' } },
+    select: { studentId: true, addedAt: true, student: { select: { nameArabic: true } } },
+  });
+
+  return rows.map((row) => ({
+    studentId: row.studentId,
+    // The staff-facing legal name, as on every other roster: §7's public
+    // display-identity rule governs public surfaces, and this is not one.
+    name: row.student.nameArabic,
+    addedAt: row.addedAt,
+  }));
+}
+
 export async function removeMember(
   prisma: PrismaClient,
   actor: Actor,

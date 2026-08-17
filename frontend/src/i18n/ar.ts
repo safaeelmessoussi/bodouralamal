@@ -705,6 +705,10 @@ export const ar = {
       subjectsLede: 'المواد المتاحة للإسناد إلى المستويات. المادة غير المسندة لا تُدرَّس في أي مستوى.',
       colName: 'الاسم',
       colLevels: 'المستويات',
+      // NAMED rather than counted, because the reason to show the pairing is that
+      // it is what refuses deletion — and the remedy needs to know which Levels.
+      colSubjectLevels: 'المستويات التي تُدرَّس فيها',
+      noLevels: 'غير مسندة إلى أي مستوى',
       colOrder: 'الترتيب',
       orderHint: 'اتركيه فارغًا للترتيب الأبجدي.',
       categoryNameHint: 'مرحلة تعليمية عامة (طفل، يافع، بالغ) — دون أي إشارة إلى الجنس.',
@@ -954,15 +958,20 @@ export const ar = {
       notFound: 'هذا المستخدم غير موجود أو خارج نطاقك.',
     },
     levels: {
-      lede: 'المستويات داخل كل فئة. إنشاء مستوى يُنشئ معه «المجموعة 1» في الفرع الذي تختارينه.',
+      // **Corrected 2026-08-17: the old text described behaviour that no longer
+      // exists.** It promised that creating a Level also creates «المجموعة 1» in
+      // a chosen branch — true before R66 made the Administrative Group optional,
+      // and false since. `createLevel` creates a Level and nothing else, and the
+      // success notice already says what to do next. A description that overstates
+      // what an action does is worse than none: it teaches a rule the platform
+      // does not have.
+      lede: 'المستويات داخل كل فئة، وهي ما تُسجَّل فيه المستفيدات. المستوى يُنشأ وحده؛ وتقسيمه إلى مجموعات أو حلقات خطوة مستقلة تُتخذ عند الحاجة إليها فقط.',
       caption: 'المستويات',
       create: 'إضافة مستوى',
       editTitle: 'تعديل المستوى',
       colName: 'الاسم',
       colCategory: 'الفئة',
       colGender: 'الفئة المستهدفة',
-      colGroups: 'المجموعات',
-      colSubjects: 'المواد',
       colStudents: 'المستفيدات المسجلات',
       colOrder: 'الترتيب',
       allCategories: 'كل الفئات',
@@ -983,7 +992,6 @@ export const ar = {
       // الحالة بكلمة لا برقم صامت.
       // The link's accessible name: a bare «0» is not a usable link name, and
       // the action belongs in the name rather than in the cell (WCAG 2.4.4).
-      subjectsLinkLabel: 'مواد مستوى «{level}»: {n} — فتح صفحة المواد',
       created: 'تمّ إنشاء المستوى. أنشئي مجموعة له عند الحاجة إلى تقسيمه.',
       createdWithGroup: 'تم إنشاء المستوى، ومعه «{group}» في فرع {branch}.',
       deleted: 'تم حذف المستوى ومجموعاته الفارغة.',
@@ -1000,7 +1008,6 @@ export const ar = {
       // string's: a glyph typed into a label is a glyph one screen can forget.
       add: 'تسجيل مستفيدة',
       student: 'المستفيدة',
-      pickStudent: 'اختاري المستفيدة',
       searchHint: 'ابحثي بالاسم…',
       branch: 'المقر',
       caption: 'تسجيلات المستفيدات',
@@ -1014,13 +1021,11 @@ export const ar = {
       // rule is that engineering references never reach a user-facing surface.
       // What replaces it is the MEANING that revision carries.
       groupHint: 'اتركيها فارغة لتسجيلها في المستوى مباشرة.',
-      empty: 'لا توجد تسجيلات بعد.',
       enrolled: 'تم التسجيل.',
       already: 'المستفيدة مسجّلة في هذا المستوى أصلًا.',
       outOfScope: 'المستوى أو المقر أو المجموعة خارج نطاقك.',
       circles: 'الحلقات',
       noCircles: 'لا حلقات',
-      edit: 'تعديل التسجيل',
       editTitle: 'تعديل التسجيل',
       updated: 'حُدِّث التسجيل.',
       levelFixed:
@@ -1127,59 +1132,39 @@ export const ar = {
       caption: 'مقرّر الحفظ لكل مستوى',
       colLevel: 'المستوى',
       colSurahs: 'السور المقرّرة',
-      colCount: 'العدد',
       searchPlaceholder: 'ابحثي باسم المستوى أو الفئة…',
       filterCategory: 'تصفية بالفئة',
       allCategories: 'كل الفئات',
       noneYet: 'لا مقرّر بعد',
-      viewCompletion: 'إتمام المستفيدات',
-      backToLevels: 'كل المستويات',
       syllabus: 'السور المقرّرة',
-      noSurahs: 'لا سور مقرّرة على هذا المستوى بعد.',
-      ayahs: 'آية',
       configure: 'تعديل المقرّر',
       configureTitle: 'السور المقرّرة على المستوى',
       configureHint: 'اختاري السور التي يشملها مقرّر الحفظ في هذا المستوى.',
       saved: 'حُفظ المقرّر.',
-      removed: 'أُزيلت السورة من المقرّر. سجلّ الحفظ لا يتأثر.',
       superAdminOnly: 'تعديل المقرّر من صلاحيات المشرفة العامة.',
-      completion: 'إتمام المستوى',
-      covered: 'السور المكتملة',
-      status: 'الحالة',
-      complete: 'أتمّت المستوى',
-      incomplete: 'لم تُتمّ بعد',
-      notConfigured: 'لا مقرّر بعد',
-      noStudents: 'لا مستفيدات مسجّلات في هذا المستوى.',
     },
     levelSubjects: {
-      title: 'مواد مستوى «{level}»',
       lede: 'المواد التي تُدرَّس في هذا المستوى. المادة غير المسندة هنا لا يمكن إنشاء حلقة أو جدول لها.',
       // The dropdown gate is gone: the page lists every Level with its Subjects
       // (2026-08-17). What remains is the TABLE's vocabulary.
       caption: 'مواد كل مستوى',
       colLevel: 'المستوى',
       colSubjects: 'المواد المُدرَّسة',
-      colCount: 'العدد',
       searchPlaceholder: 'ابحثي باسم المستوى أو المادة…',
       filterCategory: 'تصفية بالفئة',
       allCategories: 'كل الفئات',
       noneYet: 'لا مواد بعد',
       manage: 'تعديل المواد',
-      backToLevels: 'كل المستويات',
-      addLabel: 'إسناد مادة',
-      add: 'إسناد',
+      manageTitle: 'مواد المستوى',
+      saved: 'حُفظت مواد المستوى.',
+      superAdminOnly: 'تعديل مواد المستوى من صلاحيات المشرفة العامة.',
+      organiseHint: 'تقسيم المادة إلى حلقات يتم في',
+      // Names WHICH subject was refused: this is a set-at-a-time control, so
+      // «تعذّرت إحدى الإزالات» would leave the reader to find out which by trying.
+      removeBlockedNamed:
+        'حُفظت المواد، لكن تعذّرت إزالة: {names} — لأن لها حلقات أو جداول في هذا المستوى. أزيلي الحلقات أولًا.',
       addHint: 'المادة المسندة تُدرَّس لكل المستوى ما لم تُقسَّم إلى حلقات.',
-      noneLeft: 'كل المواد المتاحة مسندة إلى هذا المستوى.',
-      assigned: 'تم إسناد المادة إلى المستوى.',
-      alreadyAssigned: 'المادة مسندة أصلًا إلى هذا المستوى.',
       empty: 'لا تُدرَّس في هذا المستوى أي مادة بعد. أسندي مادة قبل إنشاء الحلقات أو الجداول.',
-      organise: 'حلقات المادة',
-      remove: 'إزالة',
-      removed: 'تمت إزالة المادة من المستوى.',
-      removeTitle: 'إزالة المادة',
-      removeBody: 'سيتم إلغاء تدريس مادة «{name}» في هذا المستوى.',
-      removeBlocked:
-        'تعذّرت الإزالة: توجد حلقات تقسّم هذه المادة في هذا المستوى. احذفي الحلقات أولًا.',
     },
     groups: {
       lede: 'المجموعات الإدارية داخل كل مستوى. المجموعة تنظيمية فقط: لا قاعة ولا أستاذ ولا سعة.',
@@ -1241,13 +1226,29 @@ export const ar = {
       filterSubject: 'تصفية بالمادة',
       allSubjects: 'كل المواد',
       empty: 'لا توجد حلقات بعد. تُدرَّس كل مادة للمستوى كاملاً حتى تُنشأ لها حلقات.',
-      openLevel: 'تفاصيل المستوى',
+      // **«المستفيدات» replaced «تفاصيل المستوى»** (Owner decision, 2026-08-17):
+      // the row is a CIRCLE, and its roster is what an administrator comes to
+      // this table to manage — the same act «مستفيدات المجموعة» performs for an
+      // Administrative Group, on the independent relationship a circle is.
+      //
+      // Named `membersAction` because `members` is already taken by the
+      // «{n} مستفيدة» count inside `SubjectCircles` — a label and an action are
+      // different strings and the catalogue must not make one stand for both.
+      membersAction: 'المستفيدات',
+      membersTitle: 'مستفيدات الحلقة',
+      membersCurrent: 'المسجّلات في هذه الحلقة',
+      membersEmpty: 'لا مستفيدات في هذه الحلقة بعد.',
+      addMember: 'إضافة مستفيدة إلى الحلقة',
+      addMemberHint:
+        'المعروضات هنا مسجّلات في مستوى الحلقة وبلا حلقة في هذه المادة. المستفيدة التي لها حلقة أخرى في المادة نفسها تُنقل بإخراجها من حلقتها أولًا — والحلقة مستقلة عن المجموعة الإدارية تمامًا.',
+      noCandidates: 'كل المسجّلات في هذا المستوى لهن حلقة في هذه المادة.',
+      memberAdded: 'أُسندت المستفيدة إلى الحلقة.',
+      memberRemoved: 'أُخرجت المستفيدة من الحلقة.',
       // **الفرع والمؤطِّرة ليستا عمودين هنا، وهذا مقصود**: الحلقة لا تنتمي إلى
       // فرع (فالمستوى يمتد على الفروع)، والتأطير خصيصة جدول الحصص لا خصيصة
       // الحلقة. عمودٌ لأيّهما يخلط التنظيم بالتنفيذ.
       columnsNote:
         'الحلقة لا تنتمي إلى فرع بعينه — المستوى يمتد على الفروع، والإسناد يُقيَّد بفرع تسجيل المستفيدة. والتأطير يُحدَّد في جدول الحصص، لا في الحلقة.',
-      levelDetailTitle: 'تفاصيل المستوى',
       backToCircles: 'كل الحلقات',
       circlesPickLevelFirst: 'اختاري المستوى أولًا',
       noLevels: 'لا توجد مستويات بعد.',
@@ -1476,6 +1477,15 @@ export const ar = {
       notConfigured: 'غير مضبوط — التسجيل متوقف',
       current: 'القيمة الحالية: {value}',
       saved: 'تم حفظ الإعداد وتسجيله في سجل المراجعة.',
+      // §7 يصف SystemSetting بأنه «قابل للتعديل في التشغيل» ويسمّي سُلّم النقاط
+      // ضمن محتواه، والمراجعة 14 تثبّت القيمتين فيه وحده. الصفان مزروعان منذ
+      // §15.1 ولم يكن في المنصة ما يصل إليهما (2026-08-17).
+      displayScaleLabel: 'سُلّم النقاط',
+      displayScaleHint:
+        'السُّلّم الذي تُعرض عليه نقاط الامتحانات — 20 أو 10 أو غيرهما. النقاط تُخزَّن كنسبة من مجموع الامتحان، فتغيير السُّلّم يغيّر طريقة عرض النقاط السابقة ولا يغيّر قيمتها ولا يحذف شيئًا. السُّلّم واحد للمنصة كلها، لا لكل امتحان.',
+      passingGradeLabel: 'حدّ النجاح (من 10000)',
+      passingGradeHint:
+        'حدّ النجاح كنسبة من مجموع الامتحان بالعشرة آلاف: 5000 تعني نصف المجموع. لا يتغيّر بتغيير سُلّم العرض، لأنه نسبة لا نقطة.',
       errEmpty: 'لا يمكن ترك القيمة فارغة.',
       errRejected: 'لم يقبل الخادم هذه القيمة. يرجى مراجعتها.',
     },

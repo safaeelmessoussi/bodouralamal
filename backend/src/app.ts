@@ -347,6 +347,9 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
   );
   guarded.patch('/admin/teaching-groups/:id', teachingGroups.update(prisma));
   guarded.delete('/admin/teaching-groups/:id', teachingGroups.remove(prisma));
+  // The roster read completes a collection whose POST and DELETE were already
+  // specified (TD-3.12) — its absence is why the DELETE below had no caller.
+  guarded.get('/admin/teaching-groups/:id/members', teachingGroups.listMembers(prisma));
   guarded.post('/admin/teaching-groups/:id/members', teachingGroups.addMember(prisma));
   guarded.delete(
     '/admin/teaching-groups/:id/members/:studentId',

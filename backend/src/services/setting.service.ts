@@ -3,6 +3,7 @@ import { AppError } from '../lib/errors.js';
 import type { Actor } from '../policies/actor.js';
 import { assertFreshActive } from '../policies/freshness.policy.js';
 import * as audit from '../repositories/audit.repository.js';
+import { DISPLAY_SCALE_KEY, PASSING_GRADE_BP_KEY } from '../policies/grading.js';
 import { CONSENT_TEXT_VERSION_KEY } from './registration.service.js';
 
 /**
@@ -25,7 +26,34 @@ export interface WritableSetting {
   /** Shown beside the value; the screen must not hardcode its own copy. */
   labelKey: string;
   hintKey: string;
-  validate: (value: unknown) => string;
+  /**
+   * Normalises and refuses. Returns the value **as it will be stored**.
+   *
+   * `string | number` rather than `string` (2026-08-17): `SystemSetting.value` is
+   * `Json` and §15.1 seeds the grading scale as a **number** (`20`, `5000`).
+   * Coercing those to strings here would change the shape every existing reader
+   * of `grading.*` expects — `readGradingScale` type-checks for `number` and
+   * would silently fall back to its default, quietly ignoring the setting a
+   * Super Admin had just changed.
+   */
+  validate: (value: unknown) => string | number;
+  /** How the screen should render the control. Numbers are not free text. */
+  kind: 'text' | 'integer';
+}
+
+/**
+ * A stored `Json` value as the wire carries it.
+ *
+ * `SystemSetting.value` is `Json`, and the two kinds in use are a string (the
+ * consent text version) and a number (the grading scale). Both are rendered as
+ * **strings** on the wire so one control and one audit format serve both — the
+ * *storage* keeps the number a number, which is what `readGradingScale` reads.
+ * Anything else (an object, an array, `null`) is *not configured*.
+ */
+function settingValue(value: unknown): string | null {
+  if (typeof value === 'string') return value;
+  if (typeof value === 'number') return String(value);
+  return null;
 }
 
 /**
@@ -42,6 +70,7 @@ export const WRITABLE_SETTINGS: WritableSetting[] = [
     key: CONSENT_TEXT_VERSION_KEY,
     labelKey: 'admin.settings.consentVersionLabel',
     hintKey: 'admin.settings.consentVersionHint',
+    kind: 'text',
     validate: (value) => {
       if (typeof value !== 'string') {
         throw new AppError('VALIDATION_FAILED', 'consent text version must be a string', {
@@ -61,7 +90,71 @@ export const WRITABLE_SETTINGS: WritableSetting[] = [
       return trimmed;
     },
   },
+
+  /**
+   * **The grading scale, exposed rather than invented** (2026-08-17).
+   *
+   * §7 describes `SystemSetting` as *"application-level, **runtime-editable**"*
+   * and names *"the grading scale and passing-grade defaults"* among its
+   * contents; R14 fixes the association's values at `/20` and `5000` bp and
+   * places them **in `SystemSetting` only**, explicitly so that neither `Level`
+   * nor `Category` carries a column for them. The rows have been seeded since
+   * §15.1 and were reachable by **nothing in the product** — the same shape of
+   * gap as `legal.consent_text_version`, which is why this list exists at all.
+   *
+   * **A per-exam maximum mark is NOT this, and R58 already refused it**: *"a
+   * second answer to what `grading.display_scale` already owns"*, deliberately
+   * not added to `Exam`. So *"is this exam out of 10 or 20"* is a platform
+   * question, and this is where it is answered.
+   *
+   * **Changing the scale re-reads every stored grade, and does not rewrite one.**
+   * Grades are basis points of the exam total (§4.6) — that is exactly why R8
+   * stores them that way — so 7500 bp reads as 15/20 or 7.5/10 with no migration
+   * and no data loss. The hint says so, because a Super Admin changing this is
+   * changing how past marks are *displayed*.
+   *
+   * **`grading.passing_grade_bp` is basis points and is NOT rescaled with it.**
+   * It is 50% of the exam total either way; a scale change does not move the pass
+   * mark, and coupling them here would be inventing a rule R14 does not state.
+   *
+   * §7 also specifies **per-level overrides** as `SystemSetting` rows keyed per
+   * level. Those are not built — `readGradingScale` reads the two global keys —
+   * and that gap is recorded rather than half-implemented here.
+   */
+  {
+    key: DISPLAY_SCALE_KEY,
+    labelKey: 'admin.settings.displayScaleLabel',
+    hintKey: 'admin.settings.displayScaleHint',
+    kind: 'integer',
+    validate: (value) => integerSetting(value, 'display scale', 1, 100),
+  },
+  {
+    key: PASSING_GRADE_BP_KEY,
+    labelKey: 'admin.settings.passingGradeLabel',
+    hintKey: 'admin.settings.passingGradeHint',
+    kind: 'integer',
+    // 0–10,000 is the whole basis-point range (§20 rule 3 — integers only).
+    validate: (value) => integerSetting(value, 'passing grade', 0, 10_000),
+  },
 ];
+
+/**
+ * An integer setting, refused rather than coerced.
+ *
+ * Accepts a number or a numeric string, because a form sends the latter — but
+ * **refuses a fraction**: §20 rule 3 requires scoring to stay integer-only end to
+ * end, and a scale of `20.5` or a pass mark of `5000.5` would put a rounding
+ * decision somewhere nobody chose.
+ */
+function integerSetting(value: unknown, what: string, min: number, max: number): number {
+  const n = typeof value === 'number' ? value : Number(String(value).trim());
+  if (!Number.isInteger(n) || n < min || n > max) {
+    throw new AppError('VALIDATION_FAILED', `${what} must be an integer between ${min} and ${max}`, {
+      issues: [{ path: 'value', message: `expected an integer between ${min} and ${max}` }],
+    });
+  }
+  return n;
+}
 
 export interface SettingRow {
   key: string;
@@ -69,6 +162,8 @@ export interface SettingRow {
   hint_key: string;
   /** `null` when never configured — distinct from an empty string, which is refused. */
   value: string | null;
+  /** Which control the screen should render — see `SettingDto`. */
+  kind: 'text' | 'integer';
   version: number;
 }
 
@@ -99,7 +194,11 @@ export async function listSettings(
       key: definition.key,
       label_key: definition.labelKey,
       hint_key: definition.hintKey,
-      value: typeof row?.value === 'string' ? row.value : null,
+      // **A number is a value too** (2026-08-17). This read `typeof === 'string'`,
+      // so the grading scale — seeded as `20` — would have listed as `null` and
+      // the screen would have shown *"not configured"* for a row that is.
+      value: settingValue(row?.value),
+      kind: definition.kind,
       version: row?.version ?? 0,
     };
   });
@@ -133,7 +232,7 @@ export async function updateSetting(
 
   return prisma.$transaction(async (tx) => {
     const existing = await tx.systemSetting.findUnique({ where: { key } });
-    const previous = typeof existing?.value === 'string' ? existing.value : null;
+    const previous = settingValue(existing?.value);
 
     // TD-15: a stale version means another Super Admin changed it while this
     // form was open. Refusing beats silently overwriting their decision — and
@@ -175,7 +274,10 @@ export async function updateSetting(
       key: saved.key,
       label_key: definition.labelKey,
       hint_key: definition.hintKey,
-      value: normalized,
+      // Rendered as the wire renders it; `normalized` is what was STORED, and
+      // for an integer setting that is a number.
+      value: settingValue(normalized),
+      kind: definition.kind,
       version: saved.version,
     };
   });

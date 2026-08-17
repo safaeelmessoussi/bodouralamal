@@ -121,3 +121,34 @@ describe('a key never renders as user-facing text', () => {
     expect(suspicious).toEqual([]);
   });
 });
+
+/**
+ * **The other direction — a key nobody uses still ships — is NOT guarded here,
+ * and the reason is recorded rather than left as an omission** (2026-08-17).
+ *
+ * The defect is real and has appeared three times: `admin.users.create`
+ * («إضافة حساب») outlived the button it labelled and was found by a *bundle
+ * probe* that read it as the control still being there; removing the completion
+ * view and the in-page level-subjects editor orphaned twenty-three more, each
+ * removed by hand and verified against the served bundle.
+ *
+ * **A general guard was written and then withdrawn.** Scanning for a leaf that no
+ * source file mentions flags **~213 keys**, the great majority of which are alive
+ * and reached by computed key — `t(\`profile.childStatus.${status}\`)`,
+ * `t(\`calendar.recurrence.${type}\`)`, the module registries' `labelKey` data,
+ * and the server's `message_key` values resolved from the wire. Making it pass
+ * would need an allow-list of roughly two hundred prefixes, and **an allow-list
+ * that large is one nobody maintains** — it would be updated by adding entries
+ * until it stopped failing, which is the failure mode this project's own
+ * documentation warns about for exactly this kind of guard.
+ *
+ * So the narrow, checkable case is guarded instead: `atomic-components.test.tsx`
+ * asserts that the account-creation strings specifically stay absent, because
+ * that is where an orphan would be *re-rendered by a future screen* rather than
+ * merely shipped.
+ *
+ * **The ~213 unreferenced leaves are a real cleanup task**, reported to the
+ * Document Owner rather than half-solved here. Closing it properly means giving
+ * the computed families a machine-readable home — a keyed map per family rather
+ * than a template literal — which is a refactor with its own scope.
+ */

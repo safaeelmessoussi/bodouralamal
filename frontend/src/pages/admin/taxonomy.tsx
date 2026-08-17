@@ -13,6 +13,7 @@ import {
   type TaxonomyInput,
 } from '../../adapters/taxonomy.js';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
+import { levelLabel } from '../../components/scope/level-select.js';
 import { Button } from '../../components/ui/button.js';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
 import { DataTable, type Column, type RowAction, type TableStatus } from '../../components/ui/data-table.js';
@@ -118,7 +119,54 @@ const KINDS: Record<TaxonomyKind, KindSpec> = {
     create: createSubject,
     update: updateSubject,
     remove: deleteSubject,
-    extraColumns: [],
+    extraColumns: [
+      {
+        key: 'levels',
+        header: 'admin.taxonomy.colSubjectLevels',
+        /**
+         * **The dependency, named rather than counted** (Owner decision,
+         * 2026-08-17).
+         *
+         * The Category above carries a `level_count`, and that is right for it:
+         * *how many Levels* is the whole question. For a Subject it is not — the
+         * reason to show the pairing is that **it is what makes deletion
+         * refusable**, and the remedy is to unpair specific Levels on
+         * `مواد المستوى`. A number tells an administrator they are blocked; the
+         * names tell them what to do about it.
+         *
+         * Rendered as chips so a Subject taught at a dozen Levels stays a
+         * readable cell rather than a paragraph, and each reads
+         * `{Category} — {Level}` through the shared label — §4.4b makes a bare
+         * Level name ambiguous, and this is precisely a list where two Categories
+         * may each contribute a *فرصة أمل*.
+         *
+         * **The deletion rule and its authorization are unchanged.** This makes a
+         * server-side constraint visible; it does not relax it.
+         */
+        cell: (r) => {
+          const levels = (r as SubjectRef).levels ?? [];
+          if (levels.length === 0) {
+            // Not a gap: an unpaired Subject is ordinary — and it is the one
+            // state in which deletion will actually succeed, so saying so is
+            // more use than an em dash.
+            return <span className="muted">{t('admin.taxonomy.noLevels')}</span>;
+          }
+          return (
+            <ul className="chip-list">
+              {levels.map((level) => (
+                <li key={level.id} className="chip">
+                  {levelLabel({
+                    id: level.id,
+                    name: level.name,
+                    category_name: level.category_name,
+                  })}
+                </li>
+              ))}
+            </ul>
+          );
+        },
+      },
+    ],
   },
 };
 

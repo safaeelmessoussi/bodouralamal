@@ -12,8 +12,6 @@ import {
 } from '../../adapters/taxonomy.js';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
 import { levelLabel } from '../../components/scope/level-select.js';
-import { Button, ButtonLink } from '../../components/ui/button.js';
-import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
 import {
   DataTable,
   type Column,
@@ -21,8 +19,11 @@ import {
   type TableStatus,
 } from '../../components/ui/data-table.js';
 import { SearchInput, SelectField } from '../../components/ui/field.js';
+import { FormDialog } from '../../components/ui/form-dialog.js';
+import { MultiSelectField } from '../../components/ui/multi-select.js';
 import { useSession } from '../../contexts/session.js';
 import { useActiveRole } from '../../contexts/active-role.js';
+import { isDirty } from '../../lib/form-dirty.js';
 import { t } from '../../i18n/index.js';
 import { ApiError } from '../../lib/api.js';
 
@@ -83,10 +84,8 @@ export function LevelSubjectsPage({ levelId }: { levelId: string | null }): Reac
   const [status, setStatus] = useState<TableStatus>('loading');
   const [query, setQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
-  const [picked, setPicked] = useState('');
-  const [removing, setRemoving] = useState<{ level: Level; subject: SubjectRef } | null>(null);
+  const [editing, setEditing] = useState<Row | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
     setStatus('loading');
@@ -118,7 +117,19 @@ export function LevelSubjectsPage({ levelId }: { levelId: string | null }): Reac
     void load();
   }, [load]);
 
-  const open = levelId ? (rows.find((r) => r.level.id === levelId) ?? null) : null;
+  /**
+   * **`?level=` opens that Level's editor** — focus, never a gate: the table is
+   * rendered either way, and arriving without the parameter shows every Level.
+   *
+   * R69 introduced this parameter because a menu entry cannot carry an id. It now
+   * lands where the row action lands, so the deep link and the click mean the same
+   * thing instead of one of them opening a view the other does not.
+   */
+  useEffect(() => {
+    if (!levelId || !canWrite) return;
+    const row = rows.find((r) => r.level.id === levelId);
+    if (row) setEditing(row);
+  }, [levelId, canWrite, rows]);
 
   /** Client-side narrowing of a list already loaded in full. */
   const visible = useMemo(() => {
@@ -131,47 +142,6 @@ export function LevelSubjectsPage({ levelId }: { levelId: string | null }): Reac
           r.subjects.some((s) => s.name.toLowerCase().includes(needle))),
     );
   }, [rows, query, categoryFilter]);
-
-  // Offered = every live Subject minus the ones already on the open Level.
-  // Narrowing the page's own already-fetched list, not filtering reference data
-  // the server owns — the distinction the calendar's category→level rule draws.
-  const available = open ? all.filter((s) => !open.subjects.some((a) => a.id === s.id)) : [];
-
-  async function add(): Promise<void> {
-    if (!picked || !open) return;
-    setBusy(true);
-    setNotice(null);
-    try {
-      await assignSubject(open.level.id, picked, accessToken);
-      setPicked('');
-      await load();
-      setNotice(t('admin.levelSubjects.assigned'));
-    } catch (error) {
-      // A 409 here is DUPLICATE — someone assigned it in another tab. The list is
-      // simply stale, so reloading is the whole remedy.
-      const duplicate = error instanceof ApiError && error.status === 409;
-      setNotice(t(duplicate ? 'admin.levelSubjects.alreadyAssigned' : 'common.saveFailed'));
-      if (duplicate) await load();
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function remove(): Promise<void> {
-    if (!removing) return;
-    setBusy(true);
-    try {
-      await unassignSubject(removing.level.id, removing.subject.id, accessToken);
-      await load();
-      setNotice(t('admin.levelSubjects.removed'));
-    } catch (error) {
-      const blocked = error instanceof ApiError && error.status === 409;
-      setNotice(t(blocked ? 'admin.levelSubjects.removeBlocked' : 'common.deleteFailed'));
-    } finally {
-      setBusy(false);
-      setRemoving(null);
-    }
-  }
 
   const columns: Column<Row>[] = [
     { key: 'level', header: t('admin.levelSubjects.colLevel'), cell: (r) => levelLabel(r.level) },
@@ -188,23 +158,32 @@ export function LevelSubjectsPage({ levelId }: { levelId: string | null }): Reac
           r.subjects.map((s) => s.name).join(' · ')
         ),
     },
-    {
-      key: 'count',
-      header: t('admin.levelSubjects.colCount'),
-      numeric: true,
-      secondary: true,
-      cell: (r) => r.subjects.length,
-    },
+    /* **No «العدد» column** (Owner decision, 2026-08-17). The cell beside it
+       already NAMES every item, so a count of the same list is the same fact
+       twice — and the shorter of the two is the one a reader has to translate
+       back into the answer they wanted. Removed rather than replaced: a
+       different count would be the same redundancy under another heading. */
   ];
 
-  const actions: RowAction<Row>[] = [
-    {
-      label: t('admin.levelSubjects.manage'),
-      onSelect: (r) => {
-        window.location.href = `/admin/level-subjects?level=${r.level.id}`;
-      },
-    },
-  ];
+  /**
+   * **«تعديل المواد» opens a dialog, not a second view** (Owner decision,
+   * 2026-08-17).
+   *
+   * It used to navigate to an in-page editor built from an inline
+   * `<section className="form">` — a `SelectField`, an add button, and a `<ul>`
+   * with a remove button per row. Functionally fine and **architecturally the
+   * odd one out**: every other edit on the platform is a `FormDialog`, so this
+   * one screen taught a different interaction for the same act, and its spacing,
+   * its buttons and its validation came from nothing shared.
+   *
+   * It is now the same `FormDialog` + `MultiSelectField` shape `مقرر الحفظ` uses
+   * for exactly the same concept — *assign a set of reference items to a Level* —
+   * which is the atomic answer: one concept, one component, and a future change
+   * to either reaches both.
+   */
+  const actions: RowAction<Row>[] = canWrite
+    ? [{ label: t('admin.levelSubjects.manage'), onSelect: (r: Row) => setEditing(r) }]
+    : [];
 
   return (
     <AdminLayout
@@ -218,16 +197,17 @@ export function LevelSubjectsPage({ levelId }: { levelId: string | null }): Reac
       // crumb was a second access path to a screen one click away.
       title={t('admin.nav.levelSubjects')}
       lede={t('admin.levelSubjects.lede')}
-      actions={
-        open ? (
-          <Button
-            variant="secondary"
-            onClick={() => (window.location.href = '/admin/level-subjects')}
-          >
-            {t('admin.levelSubjects.backToLevels')}
-          </Button>
-        ) : null
-      }
+      /**
+       * **No primary action.** This page pairs existing Levels with existing
+       * Subjects; it creates neither. Levels are created on `المستويات` and
+       * Subjects on `المواد`, so a create control here would have to invent one
+       * of the two (§20 rule 16).
+       *
+       * The «كل المستويات» button went with the in-page editor it returned from —
+       * the editor is a dialog now, so there is one view and nothing to go back
+       * from.
+       */
+      actions={null}
     >
       {notice ? (
         <p className="admin-notice" role="status" aria-live="polite">
@@ -235,68 +215,7 @@ export function LevelSubjectsPage({ levelId }: { levelId: string | null }): Reac
         </p>
       ) : null}
 
-      {open ? (
-        <>
-          <section className="admin-notice" aria-label={t('admin.levelSubjects.colSubjects')}>
-            <strong>{levelLabel(open.level)}</strong>
-          </section>
-
-          {canWrite ? (
-            <section className="form">
-              <SelectField
-                label={t('admin.levelSubjects.addLabel')}
-                value={picked}
-                onChange={setPicked}
-                options={[
-                  { value: '', label: t('common.choose') },
-                  ...available.map((s) => ({ value: s.id, label: s.name })),
-                ]}
-                hint={
-                  available.length === 0
-                    ? t('admin.levelSubjects.noneLeft')
-                    : t('admin.levelSubjects.addHint')
-                }
-              />
-              <Button variant="add" disabled={busy || picked === ''} onClick={() => void add()}>
-                {t('admin.levelSubjects.add')}
-              </Button>
-            </section>
-          ) : null}
-
-          {open.subjects.length === 0 ? (
-            <p className="state" role="status">
-              {t('admin.levelSubjects.empty')}
-            </p>
-          ) : (
-            <ul className="admin-list">
-              {open.subjects.map((s) => (
-                <li key={s.id}>
-                  <span>{s.name}</span>
-                  {/* R69's canonical route — not the legacy
-                      `/admin/levels/{id}/subjects/{sid}` path, which still works
-                      but only by bouncing through a redirect. A redirect is for
-                      links already in the wild, not for the screen next door. */}
-                  <ButtonLink
-                    variant="secondary"
-                    href={`/admin/teaching-groups?level=${open.level.id}&subject=${s.id}`}
-                  >
-                    {t('admin.levelSubjects.organise')}
-                  </ButtonLink>
-                  {canWrite ? (
-                    <Button
-                      variant="secondary"
-                      onClick={() => setRemoving({ level: open.level, subject: s })}
-                    >
-                      {t('admin.levelSubjects.remove')}
-                    </Button>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          )}
-        </>
-      ) : (
-        <DataTable
+      <DataTable
           caption={t('admin.levelSubjects.caption')}
           columns={columns}
           rows={visible}
@@ -325,19 +244,148 @@ export function LevelSubjectsPage({ levelId }: { levelId: string | null }): Reac
               />
             </>
           }
-        />
-      )}
-
-      <ConfirmDialog
-        open={removing !== null}
-        title={t('admin.levelSubjects.removeTitle')}
-        body={t('admin.levelSubjects.removeBody').replace('{name}', removing?.subject.name ?? '')}
-        confirmLabel={t('admin.levelSubjects.remove')}
-        danger
-        busy={busy}
-        onConfirm={() => void remove()}
-        onCancel={() => setRemoving(null)}
       />
+
+      {editing ? (
+        <SubjectsDialog
+          row={editing}
+          all={all}
+          token={accessToken}
+          onCancel={() => setEditing(null)}
+          onDone={(message) => {
+            setEditing(null);
+            setNotice(message);
+            void load();
+          }}
+        />
+      ) : null}
+
     </AdminLayout>
+  );
+}
+
+/**
+ * **Which Subjects a Level teaches, as a set.**
+ *
+ * Deliberately the **same shape** `مقرر الحفظ`'s `SyllabusDialog` uses, because
+ * it is the same concept — *assign a set of reference items to a Level* — and one
+ * concept gets one interaction. `FormDialog` + `MultiSelectField`, the difference
+ * written rather than the whole set, and the refusals reported by name.
+ *
+ * ## Only the difference is written
+ *
+ * Re-asserting a pairing that already exists would be refused as a duplicate, and
+ * re-writing every one would put changes nobody made into the audit trail. So the
+ * dialog diffs its selection against what the Level had and issues one call per
+ * actual change.
+ *
+ * **Removals are the interesting half.** `unassignSubject` is refused with a
+ * `409` while Teaching Groups exist for the pair — those circles split a Subject
+ * the Level would no longer teach, leaving their members holding seats in a
+ * subject that is not offered. That refusal is surfaced **naming the Subject**,
+ * because *"one of your removals was refused"* is not actionable and this is a
+ * set-at-a-time control where several could be.
+ *
+ * ## Authorization
+ *
+ * Super Admin writes (R43.3 — curriculum structure). The dialog is only opened
+ * for a caller whose **active** role admits it (R60), and the server enforces it
+ * regardless: a `403` is reported as a refusal rather than pre-empted.
+ */
+function SubjectsDialog({
+  row,
+  all,
+  token,
+  onCancel,
+  onDone,
+}: {
+  row: Row;
+  /** Every live Subject — the caller already holds the list. */
+  all: SubjectRef[];
+  token: string | null;
+  onCancel: () => void;
+  onDone: (message: string) => void;
+}): ReactNode {
+  const pristine = row.subjects.map((s) => s.id);
+  const [selected, setSelected] = useState<string[]>(pristine);
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  // Sorted on both sides: the pairing is a set, so a different order of the same
+  // ids is not a change.
+  const dirty = isDirty([...selected].sort(), [...pristine].sort());
+
+  async function submit(): Promise<void> {
+    setBusy(true);
+    setNotice(null);
+    const before = new Set(pristine);
+    const after = new Set(selected);
+    const blocked: string[] = [];
+    try {
+      for (const id of after) {
+        if (!before.has(id)) await assignSubject(row.level.id, id, token);
+      }
+      for (const id of before) {
+        if (!after.has(id)) {
+          try {
+            await unassignSubject(row.level.id, id, token);
+          } catch (error) {
+            // A `409` here is `SCHEDULES_EXIST`/circles — a real refusal about a
+            // specific Subject, not a failed request. Collected and named.
+            if (error instanceof ApiError && error.status === 409) {
+              blocked.push(all.find((s) => s.id === id)?.name ?? id);
+            } else {
+              throw error;
+            }
+          }
+        }
+      }
+      onDone(
+        blocked.length > 0
+          ? t('admin.levelSubjects.removeBlockedNamed').replace('{names}', blocked.join('، '))
+          : t('admin.levelSubjects.saved'),
+      );
+    } catch (error) {
+      setNotice(
+        error instanceof ApiError && error.status === 403
+          ? t('admin.levelSubjects.superAdminOnly')
+          : t('common.saveFailed'),
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <FormDialog
+      open
+      title={t('admin.levelSubjects.manageTitle')}
+      notice={notice}
+      busy={busy}
+      dirty={dirty}
+      onSubmit={() => void submit()}
+      onCancel={onCancel}
+    >
+      <p className="lede">{levelLabel(row.level)}</p>
+      <MultiSelectField
+        label={t('admin.levelSubjects.colSubjects')}
+        options={all.map((s) => ({ value: s.id, label: s.name }))}
+        selected={selected}
+        onChange={setSelected}
+        hint={t('admin.levelSubjects.addHint')}
+        emptyLabel={t('admin.levelSubjects.noneYet')}
+      />
+      {/* The circles hand-off, kept: this dialog pairs Subjects with a Level and
+          does not split them into circles (R69.5). It names the screen that does,
+          which is a cross-hierarchy hand-off rather than duplicate navigation. */}
+      {row.subjects.length > 0 ? (
+        <p className="field__hint">
+          {t('admin.levelSubjects.organiseHint')}{' '}
+          <a href={`/admin/teaching-groups?level=${row.level.id}`}>
+            {t('admin.nav.teachingGroups')}
+          </a>
+        </p>
+      ) : null}
+    </FormDialog>
   );
 }

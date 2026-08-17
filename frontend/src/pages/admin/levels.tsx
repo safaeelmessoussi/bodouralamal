@@ -110,49 +110,31 @@ export function LevelsPage(): ReactNode {
       secondary: true,
       cell: (r) => (r.display_order ?? '—') as ReactNode,
     },
-    {
-      key: 'groups',
-      header: t('admin.levels.colGroups'),
-      numeric: true,
-      secondary: true,
-      cell: (r) => r.group_count as ReactNode,
-    },
-    {
-      key: 'subjects',
-      header: t('admin.levels.colSubjects'),
-      numeric: true,
-      /**
-       * **The count IS the way in** — the link stays, because an administrator
-       * told *this Level teaches no subjects* should be able to act on the very
-       * number they are reading.
-       *
-       * **But it renders a NUMBER, not a sentence.** It used to print
-       * «لا مواد — أسنِدي» when the count was zero, in a column declared
-       * `numeric` — which is `text-align: end` with `tabular-nums`, styling
-       * meant for digits. Three things broke at once: a fourteen-character
-       * phrase sat in a column sized for single digits; the column stopped
-       * being scannable, because comparing Levels at a glance is exactly what a
-       * count column is for and one row was prose; and it duplicated the row
-       * action «مواد المستوى», which is where a reader looks for an action and
-       * which carries a proper label.
-       *
-       * The imperative also broke `badge.tsx`'s stated rule the other way
-       * about: **state is carried in words, never in colour alone** — but a
-       * data cell is not where those words belong. `0` is unambiguous, and the
-       * accessible name below is what stops it being an unlabelled link
-       * (WCAG 2.4.4).
-       */
-      cell: (r) => (
-        <a
-          href={`/admin/level-subjects?level=${r.id}`}
-          aria-label={t('admin.levels.subjectsLinkLabel')
-            .replace('{n}', String(r.subject_count))
-            .replace('{level}', r.name)}
-        >
-          {r.subject_count}
-        </a>
-      ),
-    },
+    /**
+     * **«المجموعات» and «المواد» are gone from this table** (Owner decision,
+     * 2026-08-17).
+     *
+     * Each was a count of a relationship **another page owns**:
+     * `مجموعات المستويات` manages the groups and `مواد المستوى` manages the
+     * Level↔Subject pairing. A number here answered *how many* while the
+     * question a reader brings to those relationships is *which*, and the only
+     * action either column offered — the subject count doubling as a link — was
+     * already a row action with a proper label two columns over.
+     *
+     * So this table answers what it is for: **which Levels exist, in which
+     * Category, with what admission rule and in what order** (R69.4's
+     * one-responsibility-per-screen rule, applied to the columns rather than to
+     * the actions).
+     *
+     * **`enrollment_count` stays**, and the distinction is worth stating: a
+     * Level's enrolled مستفيدات are a fact *about the Level itself* — it is what
+     * makes a Level real, and it is what deletion is refused on. The other two
+     * were facts about pages elsewhere.
+     *
+     * **Nothing was removed from the backend.** `group_count` and
+     * `subject_count` are still on the DTO, still tested, and still read by the
+     * deletion refusals. This removes two columns, not two capabilities.
+     */
     {
       key: 'students',
       header: t('admin.levels.colStudents'),

@@ -19,6 +19,13 @@ export interface Setting {
   hint_key: string;
   /** `null` when never configured — distinct from empty, which is refused. */
   value: string | null;
+  /**
+   * Which control to render (2026-08-17). The allow-list gained integer settings
+   * — the grading scale — and the server publishes the kind rather than leaving
+   * the client to infer it from the key, which would be a second copy of a
+   * server-side decision.
+   */
+  kind: 'text' | 'integer';
   /** TD-15: sent back on save; a stale one is a `409`. */
   version: number;
 }

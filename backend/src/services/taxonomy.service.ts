@@ -65,6 +65,35 @@ export interface SubjectRef {
 }
 
 /**
+ * A Subject **with the Levels that teach it** (2026-08-17).
+ *
+ * A separate interface rather than a widened `SubjectRef`, because
+ * `listLevelSubjects` returns the narrow shape and has no business computing a
+ * reverse join: a Level's own subjects do not need every Level each of them is
+ * paired with. One service, two intentional projections — not two reads.
+ */
+export interface SubjectWithLevels extends SubjectRef {
+  /**
+   * **The Levels that teach this Subject.**
+   *
+   * Added so `/admin/subjects` can show the dependency that makes deletion
+   * refusable. The rule is unchanged — a Subject paired with any Level cannot be
+   * deleted — but an administrator meeting that refusal had **no way to see what
+   * it was about**, and the remedy (unpair it on `مواد المستوى`) needs to know
+   * *which* Levels.
+   *
+   * `LevelSubject` is the join, and the Category comes with the Level because
+   * §4.4b makes Level names non-unique across Categories — the client's
+   * `levelLabel` needs both halves, and shipping a pre-joined string would be a
+   * second implementation of that format.
+   *
+   * **One query, not one per Subject.** The include is part of the same
+   * `findMany`, so this is an extra join rather than an N+1.
+   */
+  levels: { id: string; name: string; categoryName: string }[];
+}
+
+/**
  * Every live Subject, ordered as the platform orders reference data.
  *
  * **Not paginated, deliberately.** A selector must offer every option or it is
@@ -72,16 +101,59 @@ export interface SubjectRef {
  * hidden second page. The set is bounded by the curriculum — tens of rows, not
  * thousands — which is the condition that makes TD-10 the wrong tool here.
  */
-export async function listSubjects(prisma: PrismaClient, actor: Actor): Promise<SubjectRef[]> {
+export async function listSubjects(
+  prisma: PrismaClient,
+  actor: Actor,
+): Promise<SubjectWithLevels[]> {
   assertCanRead(actor);
 
-  return prisma.subject.findMany({
+  const rows = await prisma.subject.findMany({
     where: { deletedAt: null },
     // BR-19: `display_order` first, then the natively `ar-x-icu` collated name —
     // correct Arabic ordering with no per-query COLLATE (§20 rule 13).
     orderBy: [{ displayOrder: { sort: 'asc', nulls: 'last' } }, { name: 'asc' }, { id: 'asc' }],
-    select: { id: true, name: true, displayOrder: true, version: true },
+    select: {
+      id: true,
+      name: true,
+      displayOrder: true,
+      version: true,
+      // Live pairings only, and live Levels only: a soft-deleted Level does not
+      // block anything, so listing it would name a dependency that is not there.
+      levels: {
+        where: { deletedAt: null, level: { deletedAt: null } },
+        select: {
+          level: {
+            select: {
+              id: true,
+              name: true,
+              displayOrder: true,
+              category: { select: { name: true, displayOrder: true } },
+            },
+          },
+        },
+      },
+    },
   });
+
+  return rows.map((subject) => ({
+    id: subject.id,
+    name: subject.name,
+    displayOrder: subject.displayOrder,
+    version: subject.version,
+    levels: subject.levels
+      // Category then Level, the reading order of the hierarchy — and the
+      // Category first because `Level.displayOrder` is scoped WITHIN its Category
+      // (§2.2), so ordering by it across Categories interleaves them.
+      .map((pair) => pair.level)
+      .sort(
+        (a, b) =>
+          (a.category.displayOrder ?? 0) - (b.category.displayOrder ?? 0) ||
+          a.category.name.localeCompare(b.category.name, 'ar') ||
+          (a.displayOrder ?? 0) - (b.displayOrder ?? 0) ||
+          a.name.localeCompare(b.name, 'ar'),
+      )
+      .map((level) => ({ id: level.id, name: level.name, categoryName: level.category.name })),
+  }));
 }
 
 export async function createSubject(

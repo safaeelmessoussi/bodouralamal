@@ -8,17 +8,22 @@ import {
   createTeachingGroup,
   deleteTeachingGroup,
   listCircles,
+  listMembers,
   readSubjectSplit,
+  removeMember,
   updateTeachingGroup,
+  type CircleMember,
   type SubjectSplit,
   type TeachingGroup,
   type TeachingGroupRow,
+  type UnassignedStudent,
 } from '../../adapters/teaching-groups.js';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
 import { SubjectCircles } from '../../components/scope/subject-circles.js';
 import { LevelSelect, levelLabel } from '../../components/scope/level-select.js';
 import { Button } from '../../components/ui/button.js';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
+import { Dialog } from '../../components/ui/dialog.js';
 import {
   DataTable,
   type Column,
@@ -27,6 +32,7 @@ import {
 } from '../../components/ui/data-table.js';
 import { FormDialog } from '../../components/ui/form-dialog.js';
 import { SearchInput, SelectField, TextField } from '../../components/ui/field.js';
+import { SearchableSelect } from '../../components/ui/searchable-select.js';
 import { useSession } from '../../contexts/session.js';
 import { useActiveRole } from '../../contexts/active-role.js';
 import { isDirty } from '../../lib/form-dirty.js';
@@ -124,6 +130,8 @@ export function TeachingStructurePage({
     { levelId: string; subjectId: string; group: TeachingGroup | null } | null
   >(null);
   const [deleting, setDeleting] = useState<{ levelId: string; group: TeachingGroup } | null>(null);
+  /** The circle whose roster is open — the row action's target. */
+  const [rosterOf, setRosterOf] = useState<TeachingGroupRow | null>(null);
 
   useEffect(() => {
     void (async () => {
@@ -277,12 +285,23 @@ export function TeachingStructurePage({
 
   const actions: RowAction<TeachingGroupRow>[] = [
     {
-      // Opens the Level view, which is where BR-22's alarm and the placement
-      // controls live. `?level=&subject=` is R69.3's deep link, kept working.
-      label: t('admin.subjectOrg.openLevel'),
-      onSelect: (r) => {
-        window.location.href = `/admin/teaching-groups?level=${r.level_id}&subject=${r.subject_id}`;
-      },
+      /**
+       * **«المستفيدات» replaced «تفاصيل المستوى»** (Owner decision, 2026-08-17).
+       *
+       * The row is a **circle**, and its roster is what an administrator comes to
+       * this table to manage — the same act `مستفيدات المجموعة` performs for an
+       * Administrative Group. The old action navigated to the Level's whole
+       * breakdown, which is a different question and one the reader had not asked;
+       * that view is still reachable through `?level=`, which the Subject column's
+       * own context and R69.3's deep links preserve.
+       *
+       * **The two relationships stay independent.** This dialog places a student
+       * into a circle by `(student, circle)` — the circle already carries its
+       * `(Subject, Level)` — and reads *nothing* about her Administrative Group.
+       * §4.4c: *"nothing aligns them and nothing should try to."*
+       */
+      label: t('admin.subjectOrg.membersAction'),
+      onSelect: (r) => setRosterOf(r),
     },
     ...(canManageGroups
       ? [
@@ -431,6 +450,14 @@ export function TeachingStructurePage({
         onPair={(l, s) => setEditing((e) => (e ? { ...e, levelId: l, subjectId: s } : e))}
         onSave={(name) => void save(name)}
         onCancel={() => setEditing(null)}
+      />
+
+      <CircleRosterDialog
+        circle={rosterOf}
+        canPlace={canPlace}
+        token={accessToken}
+        onClose={() => setRosterOf(null)}
+        onChanged={() => void load()}
       />
 
       <ConfirmDialog
@@ -679,5 +706,186 @@ function CircleDialog({
       ) : null}
       <TextField label={t('admin.groups.colName')} value={name} onChange={setName} required />
     </FormDialog>
+  );
+}
+
+/**
+ * **Who is in one circle, and who could be** — the circle's roster.
+ *
+ * The counterpart of `مستفيدات المجموعة` for the *other*, independent placement.
+ * Same shape deliberately: a searchable picker of eligible students above, the
+ * current members below, one add and one remove.
+ *
+ * ## The two relationships are not coupled, and this is where that is easiest to
+ * get wrong
+ *
+ * A circle is `(Subject, Level)` and an Administrative Group subdivides a Level;
+ * **neither determines the other** (§4.4c, §20 rule 22). So the candidates come
+ * from `readSubjectSplit`'s **`unassigned`** list — *enrolled in this Level, with
+ * no seat in this Subject* — which is BR-22's own list and says nothing whatever
+ * about anybody's group. A student in Administrative Group 1 and a student in no
+ * group at all are equally offerable, which is the property R66's bug class was
+ * about.
+ *
+ * ## Why `unassigned` is the right source
+ *
+ * The server refuses a second seat in the same Subject with a `409`, so a student
+ * who already has one would be an option that can only fail. `unassigned` is
+ * exactly the complement, computed by the service that owns the rule — the client
+ * does not re-derive it, and cannot drift from it.
+ *
+ * **Options are shown on open and the search narrows them** — the platform's rule
+ * for every picker; a typed-search workflow offers nothing to a reader who does
+ * not already know the name.
+ *
+ * ## Authorization
+ *
+ * R43.3 — membership is Admin and above, scoped by the branch the **student** is
+ * enrolled at. The controls follow the **active** role (R60) and the server
+ * enforces it regardless; a refusal is rendered rather than pre-empted.
+ */
+function CircleRosterDialog({
+  circle,
+  canPlace,
+  token,
+  onClose,
+  onChanged,
+}: {
+  circle: TeachingGroupRow | null;
+  canPlace: boolean;
+  token: string | null;
+  onClose: () => void;
+  /** The table shows `member_count`, so it is refreshed when this changes it. */
+  onChanged: () => void;
+}): ReactNode {
+  const [members, setMembers] = useState<CircleMember[]>([]);
+  const [candidates, setCandidates] = useState<UnassignedStudent[]>([]);
+  const [picked, setPicked] = useState('');
+  const [notice, setNotice] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    if (!circle) return;
+    // The roster and the candidate list together: the dialog's question is *who
+    // is in, and who could be*, and half an answer reads as a failed load.
+    const [roster, split] = await Promise.all([
+      listMembers(circle.id, token).catch(() => [] as CircleMember[]),
+      readSubjectSplit(circle.level_id, circle.subject_id, token).catch(() => null),
+    ]);
+    setMembers(roster);
+    setCandidates(split?.unassigned ?? []);
+  }, [circle, token]);
+
+  useEffect(() => {
+    setNotice(null);
+    setPicked('');
+    void load();
+  }, [load]);
+
+  async function place(): Promise<void> {
+    if (!circle || picked === '') return;
+    setBusy(true);
+    setNotice(null);
+    try {
+      await addMember(circle.id, picked, token);
+      setPicked('');
+      setNotice(t('admin.subjectOrg.memberAdded'));
+      await load();
+      onChanged();
+    } catch (error) {
+      const clash = error instanceof ApiError && error.status === 409;
+      setNotice(t(clash ? 'admin.subjectOrg.alreadySplit' : 'common.saveFailed'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function release(studentId: string): Promise<void> {
+    if (!circle) return;
+    setBusy(true);
+    setNotice(null);
+    try {
+      await removeMember(circle.id, studentId, token);
+      setNotice(t('admin.subjectOrg.memberRemoved'));
+      await load();
+      onChanged();
+    } catch {
+      setNotice(t('common.deleteFailed'));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Dialog
+      open={circle !== null}
+      onClose={onClose}
+      title={t('admin.subjectOrg.membersTitle')}
+      wide
+    >
+      {circle ? (
+        <p className="lede">
+          {circle.subject_name} — {circle.name}
+          {' · '}
+          {levelLabel({
+            id: circle.level_id,
+            name: circle.level_name,
+            category_name: circle.category_name,
+          })}
+        </p>
+      ) : null}
+
+      {notice ? (
+        <p className="admin-notice" role="status" aria-live="polite">
+          {notice}
+        </p>
+      ) : null}
+
+      {canPlace ? (
+        <>
+          {/* The shared searchable single-select — the same control every large
+              picker on the platform uses, opening with its options present. */}
+          <SearchableSelect
+            label={t('admin.subjectOrg.addMember')}
+            options={candidates.map((c) => ({
+              value: c.student_id,
+              label: c.name ?? c.student_id,
+            }))}
+            value={picked}
+            onChange={setPicked}
+            hint={t('admin.subjectOrg.addMemberHint')}
+            emptyLabel={t('admin.subjectOrg.noCandidates')}
+            disabled={busy}
+          />
+          <div className="form__actions">
+            <Button variant="add" disabled={picked === '' || busy} onClick={() => void place()}>
+              {t('admin.groups.enrol')}
+            </Button>
+          </div>
+        </>
+      ) : null}
+
+      <h3>{t('admin.subjectOrg.membersCurrent')}</h3>
+      {members.length === 0 ? (
+        <p className="state">{t('admin.subjectOrg.membersEmpty')}</p>
+      ) : (
+        <ul className="admin-list">
+          {members.map((m) => (
+            <li key={m.student_id}>
+              <span>{m.name ?? m.student_id}</span>
+              {canPlace ? (
+                <Button
+                  variant="secondary"
+                  disabled={busy}
+                  onClick={() => void release(m.student_id)}
+                >
+                  {t('admin.groups.unenrol')}
+                </Button>
+              ) : null}
+            </li>
+          ))}
+        </ul>
+      )}
+    </Dialog>
   );
 }

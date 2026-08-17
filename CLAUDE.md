@@ -153,9 +153,23 @@ You are working on the بذور الأمل Platform.
 - **The recurring defect on this project is a complete capability with no reach**
   (P): six instances so far. When a screen looks impossible, check whether the
   service already does it and only the route or node is missing.
+- **Unsaved work is never lost to a stray click (U).** A `FormDialog` holding
+  changes does not close on a backdrop click and asks before closing otherwise.
+  **Every form must pass `dirty`** — it defaults to `false`, so omitting it
+  silently restores the old lose-everything behaviour; that is why it is guarded.
+- **A missing translation key ships as user-facing text (X).** `t()` returns its
+  own argument on a miss, so a typo is invisible to the type checker and to
+  review. `i18n/resolves.test.ts` resolves every literal key; **run it before
+  believing any screen's copy.**
+- **Before adding a field for a missing control, check whether the value already
+  exists somewhere unreachable (Z)** — and whether the SRS has already *refused*
+  the shape being asked for. The grading scale was seeded and unreachable; a
+  per-exam scale was refused in terms by R58.
 - Every rule there is guarded, and the guards are listed at the foot of that page.
   **When a guard fails because the code changed shape, restate the property — do
-  not delete the guard.**
+  not delete the guard.** Three were restated this way on 2026-08-17: they pinned
+  an accordion, a row action's URL and a removed badge — none of which was the
+  property.
 - **One source of truth per concept.** Never restate a rule that already lives
   somewhere; link to it. On this project every duplicated requirement has
   drifted, and the copy that drifts still passes its own tests.

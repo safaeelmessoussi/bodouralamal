@@ -15,7 +15,7 @@ import {
 // Subject's home is the taxonomy service — this endpoint is its selector
 // projection, not a second source for it.
 import { listSubjects } from '../services/taxonomy.service.js';
-import { academicYearRefDto, subjectRefDto } from './dto.js';
+import { academicYearRefDto, subjectRefDto, subjectWithLevelsDto } from './dto.js';
 import { idParam } from './parse.js';
 
 /**
@@ -32,7 +32,11 @@ import { idParam } from './parse.js';
 export function subjects(prisma: PrismaClient) {
   return async (req: Request, res: Response): Promise<void> => {
     const rows = await listSubjects(prisma, requireActor(req));
-    res.json({ data: rows.map(subjectRefDto) });
+    // The WIDER projection: each Subject with the Levels that teach it, so
+    // `/admin/subjects` can show the dependency that makes deletion refusable
+    // (2026-08-17). `levelSubjects` below keeps the narrow one — a Level's own
+    // subjects have no use for the reverse join.
+    res.json({ data: rows.map(subjectWithLevelsDto) });
   };
 }
 

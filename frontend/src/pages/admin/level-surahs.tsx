@@ -3,19 +3,15 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import { listCategories, type Category } from '../../adapters/taxonomy.js';
 import {
   assignSurah,
-  fetchLevelCompletion,
   listLevelSurahs,
   listLevels,
   listQuranSurahs,
   unassignSurah,
   type Level,
-  type LevelCompletionRow,
   type LevelSurahRef,
 } from '../../adapters/taxonomy.js';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
 import { levelLabel } from '../../components/scope/level-select.js';
-import { Badge } from '../../components/ui/badge.js';
-import { Button } from '../../components/ui/button.js';
 import {
   DataTable,
   type Column,
@@ -84,12 +80,6 @@ export function LevelSurahsPage({ levelId }: { levelId: string | null }): ReactN
   const [editing, setEditing] = useState<Row | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
-  /** Completion for the one Level a reader has opened — never for all of them. */
-  const [completion, setCompletion] = useState<{
-    rows: LevelCompletionRow[];
-    state: 'loading' | 'ready' | 'error';
-  } | null>(null);
-
   const load = useCallback(async () => {
     setStatus('loading');
     try {
@@ -119,24 +109,22 @@ export function LevelSurahsPage({ levelId }: { levelId: string | null }): ReactN
     void load();
   }, [load]);
 
-  const loadCompletion = useCallback(
-    async (id: string) => {
-      setCompletion({ rows: [], state: 'loading' });
-      try {
-        setCompletion({ rows: await fetchLevelCompletion(id, accessToken), state: 'ready' });
-      } catch {
-        setCompletion({ rows: [], state: 'error' });
-      }
-    },
-    [accessToken],
-  );
-
-  // `?level=` opens that Level's completion on arrival — focus, never a gate:
-  // the table above is rendered either way.
+  /**
+   * **`?level=` opens that Level's syllabus editor** — focus, never a gate: the
+   * table is rendered either way, and a caller arriving without the parameter
+   * sees every Level.
+   *
+   * It used to open a completion view, which left this page with two
+   * responsibilities. With completion gone (see the note on `actions`) the
+   * parameter points at the one thing this page does, which is also what the row
+   * action does — so the deep link and the click land in the same place instead
+   * of the link quietly meaning something else.
+   */
   useEffect(() => {
-    if (levelId) void loadCompletion(levelId);
-    else setCompletion(null);
-  }, [levelId, loadCompletion]);
+    if (!levelId || !canWrite) return;
+    const row = rows.find((r) => r.level.id === levelId);
+    if (row) setEditing(row);
+  }, [levelId, canWrite, rows]);
 
   /** Client-side narrowing of a list already loaded in full. */
   const visible = useMemo(() => {
@@ -147,8 +135,6 @@ export function LevelSurahsPage({ levelId }: { levelId: string | null }): ReactN
         (needle === '' || levelLabel(r.level).toLowerCase().includes(needle)),
     );
   }, [rows, query, categoryFilter]);
-
-  const open = levelId ? (rows.find((r) => r.level.id === levelId) ?? null) : null;
 
   const columns: Column<Row>[] = [
     { key: 'level', header: t('admin.levelSurahs.colLevel'), cell: (r) => levelLabel(r.level) },
@@ -167,48 +153,48 @@ export function LevelSurahsPage({ levelId }: { levelId: string | null }): ReactN
           r.surahs.map((s) => s.name_arabic).join(' · ')
         ),
     },
-    {
-      key: 'count',
-      header: t('admin.levelSurahs.colCount'),
-      numeric: true,
-      secondary: true,
-      cell: (r) => r.surahs.length,
-    },
+    /* **No «العدد» column** (Owner decision, 2026-08-17). The cell beside it
+       already NAMES every item, so a count of the same list is the same fact
+       twice — and the shorter of the two is the one a reader has to translate
+       back into the answer they wanted. Removed rather than replaced: a
+       different count would be the same redundancy under another heading. */
   ];
 
-  const actions: RowAction<Row>[] = [
-    {
-      label: t('admin.levelSurahs.viewCompletion'),
-      onSelect: (r) => {
-        window.location.href = `/admin/level-surahs?level=${r.level.id}`;
-      },
-    },
-    // R26 — curriculum is Super Admin. The affordance follows the ACTIVE role
-    // (R60); the server enforces it regardless.
-    ...(canWrite
-      ? [{ label: t('admin.levelSurahs.configure'), onSelect: (r: Row) => setEditing(r) }]
-      : []),
-  ];
+  /**
+   * **«إتمام المستفيدات» left this page** (Owner decision, 2026-08-17).
+   *
+   * This screen answers one question — **which Surahs are prescribed for which
+   * Level** — and per-student completion is a different one. It belongs to the
+   * Quran-progress surfaces that already own it: `/teacher/quran` for a مؤطرة and
+   * `/dashboard/student/quran` for the مستفيدة herself.
+   *
+   * **The engine is untouched.** `levelCompletion`, BR-11, the `complete: null`
+   * third state and R10's self-heal all remain, tested, on
+   * `GET /admin/levels/{id}/completion`. This removes a *presentation* of them
+   * from a curriculum page — and with it the only reason this screen needed a
+   * detail view at all, which is why `?level=` no longer opens one.
+   */
+  const actions: RowAction<Row>[] = canWrite
+    ? // R26 — curriculum is Super Admin. The affordance follows the ACTIVE role
+      // (R60); the server enforces it regardless.
+      [{ label: t('admin.levelSurahs.configure'), onSelect: (r: Row) => setEditing(r) }]
+    : [];
 
   return (
     <AdminLayout
       title={t('admin.nav.levelSurahs')}
       lede={t('admin.levelSurahs.lede')}
-      actions={
-        // **No add button, and that is not an omission.** This page configures an
-        // existing Level's syllabus; it creates no Level and no Surah. Levels are
-        // created on `المستويات` and the 114 Surahs are seeded reference data
-        // (§4.5 calls that table the definitive denominator). A create control
-        // here would have to invent one of the two.
-        open ? (
-          <Button
-            variant="secondary"
-            onClick={() => (window.location.href = '/admin/level-surahs')}
-          >
-            {t('admin.levelSurahs.backToLevels')}
-          </Button>
-        ) : null
-      }
+      /**
+       * **No primary action, and that is not an omission.** This page configures
+       * an existing Level's syllabus; it creates no Level and no Surah. Levels
+       * are created on `المستويات` and the 114 Surahs are seeded reference data
+       * (§4.5 calls that table the definitive denominator), so a create control
+       * here would have to invent one of the two.
+       *
+       * The «كل المستويات» button went with the detail view it returned from —
+       * there is one view now.
+       */
+      actions={null}
     >
       {notice ? (
         <p className="admin-notice" role="status" aria-live="polite">
@@ -216,10 +202,7 @@ export function LevelSurahsPage({ levelId }: { levelId: string | null }): ReactN
         </p>
       ) : null}
 
-      {open ? (
-        <CompletionView level={open.level} surahs={open.surahs} completion={completion} />
-      ) : (
-        <DataTable
+      <DataTable
           caption={t('admin.levelSurahs.caption')}
           columns={columns}
           rows={visible}
@@ -248,8 +231,7 @@ export function LevelSurahsPage({ levelId }: { levelId: string | null }): ReactN
               />
             </>
           }
-        />
-      )}
+      />
 
       {editing ? (
         <SyllabusDialog
@@ -268,63 +250,19 @@ export function LevelSurahsPage({ levelId }: { levelId: string | null }): ReactN
   );
 }
 
-/** One Level's syllabus and its enrolled مستفيدات' completion (BR-11). */
-function CompletionView({
-  level,
-  surahs,
-  completion,
-}: {
-  level: Level;
-  surahs: LevelSurahRef[];
-  completion: { rows: LevelCompletionRow[]; state: 'loading' | 'ready' | 'error' } | null;
-}): ReactNode {
-  const columns: Column<LevelCompletionRow>[] = [
-    { key: 'student', header: t('admin.enrollments.student'), cell: (r) => r.student_name },
-    {
-      key: 'covered',
-      header: t('admin.levelSurahs.covered'),
-      numeric: true,
-      cell: (r) => `${r.completed_surahs}/${r.configured_surahs}`,
-    },
-    {
-      key: 'status',
-      header: t('admin.levelSurahs.status'),
-      cell: (r) =>
-        r.complete === null ? (
-          // BR-11 cannot be asked without a syllabus, and saying "incomplete"
-          // would be an answer nobody is entitled to give.
-          <span className="muted">{t('admin.levelSurahs.notConfigured')}</span>
-        ) : (
-          <Badge tone={r.complete ? 'ok' : 'neutral'}>
-            {t(r.complete ? 'admin.levelSurahs.complete' : 'admin.levelSurahs.incomplete')}
-          </Badge>
-        ),
-    },
-  ];
-
-  return (
-    <>
-      <section className="admin-notice" aria-label={t('admin.levelSurahs.syllabus')}>
-        <strong>{levelLabel(level)}</strong>
-        {' — '}
-        {surahs.length === 0
-          ? t('admin.levelSurahs.noSurahs')
-          : surahs.map((s) => `${s.name_arabic} (${s.total_ayahs})`).join(' · ')}
-      </section>
-
-      <h2>{t('admin.levelSurahs.completion')}</h2>
-      {/* The shared table, so the completion list has the platform's own
-          loading, error and empty states rather than three of its own. */}
-      <DataTable
-        caption={t('admin.levelSurahs.completion')}
-        columns={columns}
-        rows={completion?.rows ?? []}
-        rowKey={(r) => r.student_id}
-        status={completion === null ? 'loading' : completion.state}
-      />
-    </>
-  );
-}
+/**
+ * **`CompletionView` was removed with the responsibility it carried**
+ * (2026-08-17).
+ *
+ * It rendered one Level's syllabus above a table of its enrolled مستفيدات and
+ * their BR-11 completion — accurate, and on the wrong page: this screen answers
+ * *which Surahs are prescribed for which Level*, and per-student progress belongs
+ * to the surfaces that own it (`/teacher/quran`, `/dashboard/student/quran`).
+ *
+ * **`levelCompletion`, BR-11, the `complete: null` third state and R10's
+ * self-heal are all untouched** on `GET /admin/levels/{id}/completion`, with
+ * their integration tests. A presentation was removed; no engine was.
+ */
 
 /**
  * Choosing the Level's Surahs.

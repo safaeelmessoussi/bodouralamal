@@ -4,7 +4,7 @@ import { listSettings, updateSetting, type Setting } from '../../adapters/settin
 import { AdminLayout } from '../../components/admin/admin-layout.js';
 import { ErrorState } from '../../components/states.js';
 import { Button } from '../../components/ui/button.js';
-import { TextField } from '../../components/ui/field.js';
+import { NumberField, TextField } from '../../components/ui/field.js';
 import { useSession } from '../../contexts/session.js';
 import { t } from '../../i18n/index.js';
 import { ApiError } from '../../lib/api.js';
@@ -138,14 +138,34 @@ function SettingEditor({
 
   return (
     <section className="settings-item">
-      <TextField
-        label={t(setting.label_key)}
-        value={draft}
-        onChange={setDraft}
-        required
-        hint={t(setting.hint_key)}
-        error={error}
-      />
+      {/* **The control the SERVER named** (2026-08-17). The allow-list gained
+          integer settings — the grading scale, which §7 has always described as
+          runtime-editable — and a number typed into a free-text field is a number
+          the server has to refuse after the fact. `NumberField` is the platform's
+          own integer control, so the keyboard, the spinner and the mobile numeric
+          pad come with it; the kind travels on the wire because *which settings
+          are writable* is already a server decision and a client inferring the
+          control from the key would be a second copy of it. */}
+      {setting.kind === 'integer' ? (
+        <NumberField
+          label={t(setting.label_key)}
+          value={draft}
+          onChange={setDraft}
+          required
+          min={0}
+          hint={t(setting.hint_key)}
+          error={error}
+        />
+      ) : (
+        <TextField
+          label={t(setting.label_key)}
+          value={draft}
+          onChange={setDraft}
+          required
+          hint={t(setting.hint_key)}
+          error={error}
+        />
+      )}
       <p className="settings-item__meta">
         {setting.value === null ? (
           // Never configured is a different fact from "set to something" and is

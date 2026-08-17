@@ -65,6 +65,12 @@ async function clear(): Promise<void> {
   const ids = users.map((u) => u.id);
   if (ids.length > 0) {
     await prisma.auditLog.deleteMany({ where: { actorUserId: { in: ids } } });
+    // **`Trash.deleted_by` is `ON DELETE RESTRICT`** (R59), so a user who
+    // soft-deleted anything cannot be removed while their Trash row survives.
+    // This suite gained a test that unassigns a Subject — a soft delete — and the
+    // cleanup then failed on the constraint. Every other suite that deletes
+    // through the API already clears Trash first; this one had never needed to.
+    await prisma.trash.deleteMany({ where: { deletedById: { in: ids } } });
     await prisma.user.deleteMany({ where: { id: { in: ids } } });
   }
 }
@@ -96,11 +102,83 @@ afterAll(async () => {
 });
 
 describe('GET /admin/subjects', () => {
-  it('returns exactly the four selector fields', async () => {
+  it('returns exactly the selector fields, plus the Levels that teach it', async () => {
+    /**
+     * **`levels` was added 2026-08-17 and the key set is still asserted exactly.**
+     *
+     * The point of pinning it has never been the *number* of fields — it is that
+     * a column added to the Prisma model cannot appear here by accident (§16.2's
+     * allow-list projection). So the assertion grows by one deliberate entry
+     * rather than being loosened to `toContain`, which would stop catching the
+     * thing it exists for.
+     *
+     * `levels` is here because a Subject paired with any Level **cannot be
+     * deleted**, and an administrator meeting that refusal had no way to see which
+     * Levels to unpair. It is on THIS read and not on
+     * `/admin/levels/{id}/subjects`, whose question is the other direction.
+     */
     const res = await call('/admin/subjects', superAdmin);
     expect(res.status).toBe(200);
     const row = res.body.data!.find((r) => r.id === subjectId)!;
-    expect(Object.keys(row).sort()).toEqual(['display_order', 'id', 'name', 'version']);
+    expect(Object.keys(row).sort()).toEqual([
+      'display_order',
+      'id',
+      'levels',
+      'name',
+      'version',
+    ]);
+  });
+
+  it('names each linked Level with its Category, and joins neither into the other', async () => {
+    // §4.4b — Level names are not unique across Categories, so the client's
+    // `levelLabel` needs both halves. A pre-joined «الفئة — المستوى» string here
+    // would be a second implementation of a format the client owns.
+    const res = await call('/admin/subjects', superAdmin);
+    const row = res.body.data!.find((r) => r.id === subjectId)!;
+    const levels = row['levels'] as unknown as Record<string, unknown>[];
+    expect(Array.isArray(levels)).toBe(true);
+    for (const level of levels) {
+      expect(Object.keys(level).sort()).toEqual(['category_name', 'id', 'name']);
+      expect(typeof level['category_name']).toBe('string');
+      // Not pre-joined: the Level's own name carries no separator.
+      expect(String(level['name'])).not.toContain('—');
+    }
+  });
+
+  it('excludes a Level from the list once the pairing is removed', async () => {
+    // The dependency shown must be the LIVE one: a soft-deleted pairing blocks
+    // nothing, so listing it would name a constraint that is not there.
+    //
+    // **The pairing is created here rather than assumed.** The suite's fixtures
+    // build a Level and a Subject but do not pair them — the assignment tests
+    // below do that themselves — so a first draft of this test asserted a link
+    // the fixtures had never made.
+    await httpCall(BASE, 'PUT', `/admin/levels/${levelId}/subjects/${subjectId}`, {
+      token: superAdmin,
+    });
+
+    const before = await call('/admin/subjects', superAdmin);
+    const linked = (
+      (before.body.data!.find((r) => r.id === subjectId)!['levels'] as unknown as {
+        id: string;
+      }[]) ?? []
+    ).map((l) => l.id);
+    expect(linked).toContain(levelId);
+
+    await httpCall(BASE, 'DELETE', `/admin/levels/${levelId}/subjects/${subjectId}`, {
+      token: superAdmin,
+    });
+    const after = await call('/admin/subjects', superAdmin);
+    const stillLinked = (
+      (after.body.data!.find((r) => r.id === subjectId)!['levels'] as unknown as {
+        id: string;
+      }[]) ?? []
+    ).map((l) => l.id);
+    expect(stillLinked).not.toContain(levelId);
+
+    // Left UNPAIRED, which is the state the fixtures hand over: the assignment
+    // tests below create the pairing themselves and would meet a `409 DUPLICATE`
+    // if this one left it behind.
   });
 
   it('carries `version`, which is what stopped a second Subject list existing', async () => {

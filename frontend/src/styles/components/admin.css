@@ -216,6 +216,10 @@
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
+  /* See (2) in the header note above: it is exactly as wide as its buttons, so it
+     is not pushed to the far margin and does not leave a gap beside the
+     description. */
+  flex: 0 0 auto;
 }
 
 .admin-panel {
@@ -440,6 +444,32 @@
   padding-inline-start: var(--space-4);
   border-inline-start: 2px solid var(--color-border);
   margin-block: var(--space-3);
+}
+
+/* **Chips inside a table cell** (2026-08-17). A Subject's linked Levels, and any
+   future set-valued cell: several short labels that must stay readable when there
+   are a dozen of them and must not turn the row into a paragraph.
+   
+   Deliberately NOT `.badge`: a badge carries a state or a kind, and colouring a
+   plain data value with a status treatment is how those two meanings start
+   drifting (see the note above `.badge--class`). This is a neutral container for
+   *one of several values*, and it says nothing more. */
+.chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.chip {
+  padding: 0.1rem var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-background);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-xs);
+  white-space: nowrap;
 }
 
 /* A list inside a table cell: the enrolment row's circles, which are read-only

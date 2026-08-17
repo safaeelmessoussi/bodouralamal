@@ -56,7 +56,7 @@ interface Res {
     error?: { code?: string; details?: Record<string, unknown> };
     groups?: Record<string, unknown>[];
     unassigned?: Record<string, unknown>[];
-    /** The FLAT read's TD-10 envelope (2026-08-17). */
+    /** The FLAT read's TD-10 envelope, and the roster read's (2026-08-17). */
     data?: Record<string, unknown>[];
     meta?: { page: number; page_size: number; total: number };
   };
@@ -733,5 +733,123 @@ describe('the flat circles read (2026-08-17)', () => {
     expect((await call('GET', '/admin/teaching-groups', superAdmin)).body.data!.some(
       (r) => r['id'] === id,
     )).toBe(false);
+  });
+});
+
+/**
+ * **`GET /admin/teaching-groups/{id}/members` — the roster read** (2026-08-17).
+ *
+ * The collection's `POST` and `DELETE` have been specified since R43; the `GET`
+ * was missing, which is why the `DELETE` had no caller — nothing could show who
+ * was in a circle in order to take them out. This completes the collection: same
+ * path, same gate, same branch scoping.
+ */
+describe('one circle’s roster', () => {
+  /**
+   * **A student of this describe's own**, and the reason is a rule rather than
+   * tidiness: §4.4c allows **at most one seat per (student, subject, level)**, and
+   * the tests above legitimately leave `studentA` holding one in `subjectSplit`.
+   * Reusing her here made `addMember` answer `409` — correctly — and the roster
+   * assertions then failed on a fixture, not on the code. The first draft of these
+   * tests did exactly that.
+   */
+  let rosterStudent: string;
+
+  beforeAll(async () => {
+    rosterStudent = await makeUser('طالبة القائمة', 'female');
+    await enrol(rosterStudent, groupA);
+  });
+
+  it('lists who is in the circle, and nobody else', async () => {
+    const group = await call('POST', collection(subjectSplit), superAdmin, {
+      name: `${TAG} فوج للقائمة`,
+    });
+    const id = group.body.id as string;
+
+    const empty = await call('GET', `/admin/teaching-groups/${id}/members`, superAdmin);
+    expect(empty.status).toBe(200);
+    // A circle nobody is in is an empty roster, never an error.
+    expect(empty.body.data).toEqual([]);
+
+    const added = await call('POST', `/admin/teaching-groups/${id}/members`, superAdmin, {
+      student_id: rosterStudent,
+    });
+    // Asserted, so a refused placement fails HERE rather than as a confusing
+    // empty roster three lines down — which is how the fixture clash above
+    // presented itself.
+    expect(added.status).toBe(201);
+    const one = await call('GET', `/admin/teaching-groups/${id}/members`, superAdmin);
+    expect(one.body.data).toHaveLength(1);
+    expect(one.body.data![0]!['student_id']).toBe(rosterStudent);
+
+    // `studentB` is enrolled in the same Level and is NOT in this circle — the
+    // read must not widen to the Level's enrolment.
+    expect(one.body.data!.some((r) => r['student_id'] === studentB)).toBe(false);
+    await call('DELETE', `/admin/teaching-groups/${id}/members/${rosterStudent}`, superAdmin);
+  });
+
+  it('carries the roster’s three facts and nothing more', async () => {
+    // One circle per test, and the seat released at the end of each — §4.4c
+    // allows her only one in this Subject, so leaving it would refuse the next.
+    const group = await call('POST', collection(subjectSplit), superAdmin, {
+      name: `${TAG} فوج للحقول`,
+    });
+    expect(
+      (
+        await call('POST', `/admin/teaching-groups/${group.body.id}/members`, superAdmin, {
+          student_id: rosterStudent,
+        })
+      ).status,
+    ).toBe(201);
+    const res = await call('GET', `/admin/teaching-groups/${group.body.id}/members`, superAdmin);
+    // A roster is not a place to widen what is known about a person: stated as an
+    // exact key set so a field added by reflex is caught here.
+    expect(Object.keys(res.body.data![0]!).sort()).toEqual(['added_at', 'name', 'student_id']);
+    await call('DELETE', `/admin/teaching-groups/${group.body.id}/members/${rosterStudent}`, superAdmin);
+  });
+
+  it('drops a released seat rather than tombstoning it into the list', async () => {
+    const group = await call('POST', collection(subjectSplit), superAdmin, {
+      name: `${TAG} فوج للإخراج`,
+    });
+    const id = group.body.id as string;
+    expect(
+      (
+        await call('POST', `/admin/teaching-groups/${id}/members`, superAdmin, {
+          student_id: rosterStudent,
+        })
+      ).status,
+    ).toBe(201);
+    const removed = await call(
+      'DELETE',
+      `/admin/teaching-groups/${id}/members/${rosterStudent}`,
+      superAdmin,
+    );
+    expect(removed.status).toBe(204);
+
+    const after = await call('GET', `/admin/teaching-groups/${id}/members`, superAdmin);
+    expect(after.body.data).toEqual([]);
+    // And she is back on BR-22's unassigned list — released, not vanished.
+    const split = await call('GET', collection(subjectSplit), superAdmin);
+    expect(split.body.unassigned!.some((u) => u.student_id === rosterStudent)).toBe(true);
+  });
+
+  it('is Admin and above, and refused to a مؤطرة (R43.3)', async () => {
+    const group = await call('POST', collection(subjectSplit), superAdmin, {
+      name: `${TAG} فوج للصلاحيات`,
+    });
+    const id = group.body.id as string;
+    expect((await call('GET', `/admin/teaching-groups/${id}/members`, scopedAdmin)).status).toBe(200);
+    expect((await call('GET', `/admin/teaching-groups/${id}/members`, teacherToken)).status).toBe(403);
+  });
+
+  it('answers 404 for a circle that does not exist — no existence leak', async () => {
+    // §20 rule 17: never a 403 that would confirm the id belongs to something.
+    const res = await call(
+      'GET',
+      '/admin/teaching-groups/00000000-0000-4000-8000-000000000000/members',
+      superAdmin,
+    );
+    expect(res.status).toBe(404);
   });
 });

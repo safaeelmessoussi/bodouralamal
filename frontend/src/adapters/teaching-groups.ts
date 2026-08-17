@@ -171,3 +171,32 @@ export async function listCircles(
   }
   return api<Page<TeachingGroupRow>>(`/admin/teaching-groups?${params.toString()}`, { token });
 }
+
+/**
+ * One student's seat in a circle.
+ *
+ * `student_id` is the key rather than a join-row id, because removal is
+ * `DELETE …/members/{studentId}` — the path names the student.
+ */
+export interface CircleMember {
+  student_id: string;
+  name: string | null;
+  added_at: string;
+}
+
+/**
+ * `GET /admin/teaching-groups/{id}/members` — who is in one circle.
+ *
+ * The read that was missing: `POST` and `DELETE` on this collection have existed
+ * since R43, so a screen could place a student and (in principle) remove one, but
+ * nothing could show **who was in a circle** — which is why the `DELETE` had no
+ * caller at all. Not paginated: a circle is a subdivision of one Level's
+ * enrolment, and the screen's whole question is the roster.
+ */
+export async function listMembers(
+  circleId: string,
+  token: string | null,
+): Promise<CircleMember[]> {
+  return (await api<{ data: CircleMember[] }>(`/admin/teaching-groups/${circleId}/members`, { token }))
+    .data;
+}
