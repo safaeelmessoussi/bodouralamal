@@ -758,6 +758,78 @@ export interface SessionPage {
  * anonymous visitor sees a public session's existence and details, never its
  * private recordings.
  */
+/**
+ * **Which sessions reference one piece of content** — `SessionContent` read
+ * backwards (2026-08-17).
+ *
+ * ## Why the reverse direction needs a read at all
+ *
+ * `SessionContent` is many-to-many and has always been navigable both ways in
+ * the data; only the *forward* direction had a surface. §4.9's point is that
+ * **content is referenced, never owned** — *"one semester PDF is referenced by
+ * every session that uses it"* — and a reader looking at that PDF in the library
+ * had no way to see the sentence's other half.
+ *
+ * **No new relationship, no second join, no denormalised column.** The content
+ * remains the source of truth; this is a projection of rows that already exist.
+ *
+ * ## Visibility: the content gates, the sessions do not
+ *
+ * The two are gated by different rules and conflating them would leak in one
+ * direction or hide in the other:
+ *
+ * * **The content** passes `visibleContentIds` — §4.9's tiers, the same rule the
+ *   library list and the session page apply. A caller who may not see the item
+ *   receives `404`, never an empty list: an empty list would confirm the id
+ *   exists (§20 rule 17).
+ * * **The sessions** are the public timetable. R43 made occurrences browsable by
+ *   anonymous visitors, and this returns the same `sessionOccurrence` projection
+ *   `GET /calendar` and the session page already return — so it exposes nothing
+ *   a caller could not read by opening the calendar.
+ *
+ * That asymmetry is the specification's, not this function's: *"an anonymous
+ * visitor sees a public session's existence and details, never its private
+ * recordings."*
+ *
+ * ## Not paginated
+ *
+ * A content item is referenced by the sessions of the schedules that use it —
+ * tens at most, bounded by a term. The question is *which sessions*, and a page
+ * boundary through that answer would hide the ones a reader is looking for.
+ */
+export async function listSessionsForContent(
+  prisma: PrismaClient,
+  actor: CalendarActor | null,
+  contentId: string,
+): Promise<Occurrence[]> {
+  // The content itself must be visible before its references are named. A caller
+  // who may not see it gets the same 404 a nonexistent id gets.
+  const visible = await visibleContentIds(prisma, actor, [contentId]);
+  if (!visible.has(contentId)) throw new AppError('NOT_FOUND', 'no such content');
+
+  const links = await prisma.sessionContent.findMany({
+    where: {
+      contentId,
+      deletedAt: null,
+      session: { deletedAt: null, schedule: { deletedAt: null } },
+    },
+    select: { session: { include: SESSION_OCCURRENCE_INCLUDE } },
+    // Most recent first: a reader asking *where was this used* is usually asking
+    // about the last time before the first.
+    orderBy: { session: { date: 'desc' } },
+  });
+  if (links.length === 0) return [];
+
+  const dates = links.map((l) => l.session.date);
+  const monthStarts = await publishedMonthStarts(
+    prisma,
+    new Date(Math.min(...dates.map((d) => d.getTime()))),
+    new Date(Math.max(...dates.map((d) => d.getTime()))),
+  );
+
+  return links.map((l) => sessionOccurrence(l.session, monthStarts));
+}
+
 export async function readSessionPage(
   prisma: PrismaClient,
   actor: CalendarActor | null,

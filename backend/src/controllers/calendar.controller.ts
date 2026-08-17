@@ -4,6 +4,7 @@ import { z } from 'zod';
 import type { PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
 import {
+  listSessionsForContent,
   prefilledFilters,
   readCalendar,
   readSessionPage,
@@ -135,6 +136,28 @@ const contentDto = (c: SessionPageContent): Record<string, unknown> => ({
   subject_id: c.subjectId,
   level_id: c.levelId,
 });
+
+/**
+ * `GET /library/{id}/sessions` — **which class sessions reference this content.**
+ *
+ * `SessionContent` read backwards. Mounted beside the library rather than the
+ * calendar because the **subject** of the question is the content: a reader is
+ * looking at an item and asking where it is used.
+ *
+ * **The content gates and the sessions do not** — the item passes §4.9's tiers
+ * (a caller who may not see it gets `404`, never an empty list, so the id is not
+ * confirmed), while the occurrences are the public timetable R43 made browsable
+ * and are returned through the very projection `GET /calendar` uses.
+ */
+export function contentSessions(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const id = z.uuid().safeParse(req.params['id']);
+    if (!id.success) throw new AppError('VALIDATION_FAILED', 'id must be a uuid');
+
+    const sessions = await listSessionsForContent(prisma, calendarActor(req), id.data);
+    res.json({ data: sessions.map(occurrenceDto) });
+  };
+}
 
 /**
  * `GET /calendar/sessions/{id}` (TD-3.4) — the §5.2 Session page.

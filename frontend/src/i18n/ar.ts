@@ -1692,6 +1692,9 @@ export const ar = {
     // Deliberately distinct from an error: nothing is wrong, the file simply
     // cannot be served yet.
     previewUnavailable: 'المعاينة غير متاحة بعد لهذا الملف.',
+    // §4.9 — «المحتوى مرجوع إليه، لا مملوك»: النشرة الواحدة تُرجع إليها كل حصة
+    // تستعملها. هذا هو الشقّ الثاني من الجملة (2026-08-17).
+    usedInSessions: 'الحصص التي تستعمل هذا المحتوى',
     previewDownloadOnly: 'هذا النوع من الملفات يُنزَّل ولا يُعرض داخل المنصة.',
     previewUnsupported: 'متصفحك لا يدعم تشغيل هذا الملف — يمكنك تنزيله.',
   },

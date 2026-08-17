@@ -1,4 +1,5 @@
 import { api } from '../lib/api.js';
+import type { Occurrence } from './calendar.js';
 
 /**
  * The educational-content adapter (§4.9, §5.2, TD-3.13).
@@ -339,3 +340,25 @@ export async function fetchContentUrl(
   }
 }
 
+
+/**
+ * `GET /library/{id}/sessions` — **which class sessions reference this content.**
+ *
+ * `SessionContent` read backwards. §4.9 says content is *referenced, never
+ * owned* — *"one semester PDF is referenced by every session that uses it"* — and
+ * this is the other half of that sentence. **No new relationship**: it projects
+ * rows the join already holds.
+ *
+ * **The content gates; the sessions do not.** An item the caller may not see
+ * answers `404` (never an empty list, which would confirm the id exists), while
+ * the occurrences returned are the public timetable R43 made browsable — in the
+ * very shape `GET /calendar` returns.
+ */
+export async function fetchContentSessions(
+  contentId: string,
+  token: string | null,
+): Promise<Occurrence[]> {
+  return (
+    await api<{ data: Occurrence[] }>(`/library/${contentId}/sessions`, { token })
+  ).data;
+}

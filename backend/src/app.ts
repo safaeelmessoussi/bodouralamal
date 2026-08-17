@@ -189,6 +189,15 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
   // and never unlocks anything. An invalid token is ignored rather than refused,
   // so this endpoint never answers 401.
   api.get('/library', optionalAuthenticate(config), libraryCtl.list(prisma));
+  // `SessionContent` read backwards: which class sessions reference this item
+  // (2026-08-17). §4.9 says content is *referenced, never owned* — this is the
+  // other half of that sentence, and it adds no relationship. Public at the
+  // caller's tier, like the library list and the session page beside it.
+  api.get(
+    '/library/:id/sessions',
+    optionalAuthenticate(config),
+    calendar.contentSessions(prisma),
+  );
 
   const guarded = express.Router();
   guarded.use(authenticate(config));

@@ -321,3 +321,97 @@ describe('lookup failures', () => {
     expect(res.status).toBe(200);
   });
 });
+
+/**
+ * **`GET /library/{id}/sessions` — `SessionContent` read backwards** (2026-08-17).
+ *
+ * §4.9 says content is **referenced, never owned**: *"one semester PDF is
+ * referenced by every session that uses it."* Only the forward half had a
+ * surface, so a reader looking at that PDF in the library could not see the
+ * sentence's other half.
+ *
+ * **No new relationship** — this projects rows `SessionContent` already holds.
+ * The interesting property is the **asymmetry of the two visibility rules**, and
+ * every test below is about it.
+ */
+describe('which sessions reference a content (§4.9, R43)', () => {
+  it('names the session that links it, for anyone who may see the content', async () => {
+    const res = await call(`/library/${content.publicPdf}/sessions`);
+    expect(res.status).toBe(200);
+    expect(res.body.data!.map((o) => o['id'])).toContain(sessionId);
+  });
+
+  it('returns the SAME occurrence projection the calendar returns', async () => {
+    // One mapper, not a second shape for the same fact: a reader gets the date,
+    // the times, the level, the subject and the audience exactly as the grid and
+    // the session page state them.
+    const res = await call(`/library/${content.publicPdf}/sessions`);
+    const occurrence = res.body.data!.find((o) => o['id'] === sessionId)!;
+    for (const key of ['id', 'kind', 'title', 'date', 'start_time', 'end_time']) {
+      expect(Object.keys(occurrence), key).toContain(key);
+    }
+    expect(occurrence['kind']).toBe('session');
+    // Enough to identify the sitting without opening it.
+    expect(typeof occurrence['date']).toBe('string');
+  });
+
+  it('answers 404 — not an empty list — for content the caller may not see', async () => {
+    // §20 rule 17: an empty list would confirm the id exists. The hidden PDF is
+    // invisible to an anonymous caller and to a student, and visible to the
+    // teacher who staffs the session.
+    expect((await call(`/library/${content.hiddenPdf}/sessions`)).status).toBe(404);
+    expect((await call(`/library/${content.hiddenPdf}/sessions`, studentToken)).status).toBe(404);
+
+    const asTeacher = await call(`/library/${content.hiddenPdf}/sessions`, teacherToken);
+    expect(asTeacher.status).toBe(200);
+    expect(asTeacher.body.data!.map((o) => o['id'])).toContain(sessionId);
+  });
+
+  it('gates on the CONTENT, never on the sessions', async () => {
+    /**
+     * The asymmetry, asserted directly. The occurrences are the **public
+     * timetable** — R43 made them browsable by anonymous visitors — so once the
+     * content is visible, the sessions referencing it are too. Hiding them would
+     * withhold what the same caller can read by opening the calendar; widening
+     * the content check would leak a private item's existence.
+     */
+    const anon = await call(`/library/${content.publicPdf}/sessions`);
+    const student = await call(`/library/${content.publicPdf}/sessions`, studentToken);
+    expect(anon.status).toBe(200);
+    expect(student.status).toBe(200);
+    expect(anon.body.data!.map((o) => o['id']).sort()).toEqual(
+      student.body.data!.map((o) => o['id']).sort(),
+    );
+  });
+
+  it('is empty for a content nothing references — 0 is a real answer', async () => {
+    // The `0` of 0..N. An unreferenced item is ordinary, not an error.
+    const orphan = await makeContent('غير مرتبط', 'public', 'application/pdf');
+    const res = await call(`/library/${orphan}/sessions`);
+    expect(res.status).toBe(200);
+    expect(res.body.data).toEqual([]);
+  });
+
+  it('drops the session when the link is removed, and keeps the content', async () => {
+    // Unlinking never deletes (TD-3.12). The reverse read must reflect that in
+    // both halves: the session goes, the content stays readable.
+    const item = await makeContent('مؤقت', 'public', 'application/pdf');
+    await prisma.sessionContent.create({ data: { sessionId, contentId: item } });
+    expect((await call(`/library/${item}/sessions`)).body.data).toHaveLength(1);
+
+    await prisma.sessionContent.updateMany({
+      where: { sessionId, contentId: item },
+      data: { deletedAt: new Date() },
+    });
+    const after = await call(`/library/${item}/sessions`);
+    expect(after.status).toBe(200);
+    expect(after.body.data).toEqual([]);
+  });
+
+  it('refuses a malformed id and answers 404 for an unknown one', async () => {
+    expect((await call('/library/not-a-uuid/sessions')).status).toBe(400);
+    expect(
+      (await call('/library/00000000-0000-4000-8000-000000000000/sessions')).status,
+    ).toBe(404);
+  });
+});

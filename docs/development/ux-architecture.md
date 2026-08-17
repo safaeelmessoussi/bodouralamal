@@ -394,7 +394,20 @@ read: `GET /calendar` returns a month's chrome, and shipping every occurrence's
 materials would make every reader pay for data almost none of them opens. Rule P
 applied to reads — expose what exists, never render it twice.
 
+**The relationship is navigable both ways, from one join.** `GET /library/{id}/sessions`
+reads `SessionContent` backwards so a library item can name the classes that use
+it — §4.9's sentence has two halves and both are now surfaces. **No second
+relationship, no denormalised column**: it projects rows that already exist.
+
+**Two visibility rules, and conflating them leaks or hides.** The **content**
+gates through `visibleContentIds` (§4.9's tiers) — an item the caller may not see
+answers `404`, never an empty list, which would confirm the id exists (§20
+rule 17). The **sessions** do not gate: they are the public timetable R43 made
+browsable, returned through the very projection `GET /calendar` uses, so the read
+exposes nothing a caller could not get by opening the calendar.
+
 Canonical: `SessionContent` · `POST /sessions/{id}/content` ·
+`GET /library/{id}/sessions` ·
 [`SessionMaterialsDialog`](../../frontend/src/components/content/session-materials-dialog.tsx)
 (link existing · upload-and-link · unlink) · `/calendar/sessions/{id}` ·
 `OccurrenceMaterials` in the calendar's details dialog.

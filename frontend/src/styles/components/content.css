@@ -422,3 +422,18 @@
     justify-content: center;
   }
 }
+
+/* **Where a content item is used** (2026-08-17) — `SessionContent` read
+   backwards, rendered as context beneath the preview rather than beside it.
+   Separated by a rule because it answers a different question from the file
+   above it: *what is this* versus *where does it belong*. */
+.preview__sessions {
+  margin-block-start: var(--space-5);
+  padding-block-start: var(--space-4);
+  border-block-start: 1px solid var(--color-border);
+}
+.preview__sessions h3 {
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+  margin-block-end: var(--space-2);
+}

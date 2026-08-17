@@ -1,6 +1,12 @@
 import { useEffect, useState, type ReactNode } from 'react';
 
-import { fetchContentUrl, type ContentItem } from '../../adapters/content.js';
+import type { Occurrence } from '../../adapters/calendar.js';
+import {
+  fetchContentSessions,
+  fetchContentUrl,
+  type ContentItem,
+} from '../../adapters/content.js';
+import { formatDate } from '../../lib/format-date.js';
 import { t } from '../../i18n/index.js';
 import { Button } from '../ui/button.js';
 import { Dialog } from '../ui/dialog.js';
@@ -145,6 +151,8 @@ export function ContentPreviewDialog({
               </Button>
             ) : null}
           </div>
+
+          <UsedInSessions item={item} token={accessToken} />
         </div>
       ) : null}
     </Dialog>
@@ -183,4 +191,83 @@ function PreviewSurface({ item, url }: { item: ContentItem; url: string }): Reac
     case 'document':
       return null;
   }
+}
+
+/**
+ * **Where this content is used** — `SessionContent` read backwards (2026-08-17).
+ *
+ * §4.9 states the relationship in one sentence — *"content is referenced, never
+ * owned … one semester PDF is referenced by every session that uses it"* — and
+ * only the forward half had a surface. A reader looking at that PDF could not see
+ * which classes it belongs to.
+ *
+ * ## Loaded with the dialog, not with the list
+ *
+ * The same reasoning the presigned URL follows: a list of twenty cards would fire
+ * twenty reads for relationships nobody has asked to see. This runs when an item
+ * is opened, which is when the question is actually being asked.
+ *
+ * ## Silent on failure, and that is deliberate
+ *
+ * This is **context beside a preview**, not the preview itself. A reader opened
+ * this dialog to see the content; a failed side-read must not put an error banner
+ * over a file that loaded perfectly well. An empty section renders nothing at all
+ * — which is also the honest rendering of *"no session references this"*, the
+ * `0` of 0..N and an ordinary state for a library item.
+ *
+ * **Each session links into the calendar's own page for it**, which is where its
+ * materials, its recordings and its details already live (rule P — expose what
+ * exists, never render it twice).
+ */
+function UsedInSessions({
+  item,
+  token,
+}: {
+  item: ContentItem;
+  token: string | null;
+}): ReactNode {
+  const [sessions, setSessions] = useState<Occurrence[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setSessions([]);
+    void (async () => {
+      try {
+        const rows = await fetchContentSessions(item.id, token);
+        if (!cancelled) setSessions(rows);
+      } catch {
+        // Deliberately silent — see the docstring.
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [item.id, token]);
+
+  if (sessions.length === 0) return null;
+
+  return (
+    <section className="preview__sessions" aria-labelledby="preview-sessions">
+      <h3 id="preview-sessions">{t('content.usedInSessions')}</h3>
+      <ul className="admin-list admin-list--plain">
+        {sessions.map((occurrence) => (
+          <li key={occurrence.id}>
+            <a href={`/calendar/sessions/${occurrence.id}`}>
+              {/* Enough to identify the sitting without opening it: what it is,
+                  when, and which curriculum it belongs to. The date is formatted
+                  by the platform's one formatter (Arabic, TD-11). */}
+              {occurrence.title} — {formatDate(occurrence.date)}
+              {occurrence.start_time ? ` · ${occurrence.start_time}` : ''}
+            </a>
+            {occurrence.level_name || occurrence.subject_name ? (
+              <span className="muted">
+                {' '}
+                {[occurrence.subject_name, occurrence.level_name].filter(Boolean).join(' · ')}
+              </span>
+            ) : null}
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
 }
