@@ -39,7 +39,10 @@ export interface Column<T> {
 export interface RowAction<T> {
   label: string;
   onSelect: (row: T) => void;
-  /** Destructive actions are styled apart and always confirm (§14.2). */
+  /**
+   * Destructive actions are styled apart, always confirm (§14.2), **and always
+   * sort last** — see `orderActions`.
+   */
   danger?: boolean;
   /** Per-row availability — an action that cannot apply is hidden, not disabled
    *  without explanation. */
@@ -67,6 +70,41 @@ export interface DataTableProps<T> {
   pagination?: PaginationProps;
 }
 
+/**
+ * **One order for row actions, everywhere** (Owner decision, 2026-08-17):
+ *
+ * ```
+ * contextual actions  →  تعديل  →  destructive
+ * ```
+ *
+ * ## Why the table sorts them and the pages do not
+ *
+ * The order was each page's declaration order, so `المستخدمون` read
+ * *تعديل · الأدوار · إيقاف الحساب* while its neighbours read something else —
+ * and a reader who has learnt where *delete* sits on one screen has learnt
+ * nothing about the next. Sorting **here** makes the rule true for every table
+ * that already exists and every one added later, with no caller changing.
+ *
+ * ## How each action is classified
+ *
+ * * **destructive** — `danger: true`, which the caller already sets because it
+ *   drives the variant and the confirmation.
+ * * **edit** — the action whose label is the platform's single shared edit label,
+ *   `common.edit`. There is exactly one, by the same rule that gives the platform
+ *   one Button and one Level label, and a guard asserts no page invents a second
+ *   spelling of it.
+ * * **contextual** — everything else, in the order the page declared it. A page
+ *   with several knows their relative sense; the rule is only about where the
+ *   two universal ones go.
+ *
+ * The sort is **stable**, so declaration order survives within each group.
+ */
+export function orderActions<T>(actions: readonly RowAction<T>[]): RowAction<T>[] {
+  const editLabel = t('common.edit');
+  const rank = (a: RowAction<T>): number => (a.danger ? 2 : a.label === editLabel ? 1 : 0);
+  return [...actions].sort((a, b) => rank(a) - rank(b));
+}
+
 export function DataTable<T>({
   caption,
   columns,
@@ -81,6 +119,8 @@ export function DataTable<T>({
   pagination,
 }: DataTableProps<T>): ReactNode {
   const hasActions = actions.length > 0;
+  // The platform's one ordering rule — see `orderActions`.
+  const ordered = orderActions(actions);
 
   return (
     <div className="datatable">
@@ -120,7 +160,9 @@ export function DataTable<T>({
             </thead>
             <tbody>
               {rows.map((row) => {
-                const available = actions.filter((a) => (a.available ? a.available(row) : true));
+                // Ordered before filtering, so a row whose contextual action is
+                // unavailable still shows the remaining two in the same places.
+                const available = ordered.filter((a) => (a.available ? a.available(row) : true));
                 return (
                   <tr key={rowKey(row)}>
                     {columns.map((column, index) =>

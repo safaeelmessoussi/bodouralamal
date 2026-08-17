@@ -6,7 +6,7 @@ import { t } from '../../i18n/index.js';
 import { api } from '../../lib/api.js';
 import { Button } from '../ui/button.js';
 import { Dialog } from '../ui/dialog.js';
-import { SelectField } from '../ui/field.js';
+import { SearchableSelect } from '../ui/searchable-select.js';
 import { FileUploader } from './file-uploader.js';
 
 /**
@@ -119,22 +119,31 @@ export function SessionMaterialsDialog({
         onRemove={(id) => void run(() => unlinkSessionContent(sessionId ?? '', id, token))}
       />
 
-      <div className="form__row">
-        <SelectField
-          label={t('session.materialsLinkExisting')}
-          value={choice}
-          onChange={setChoice}
-          options={[
-            { value: '', label: t('session.materialsChooseItem') },
-            // Already-attached items are absent rather than disabled: the list
-            // answers *what can I add*, and an option that does nothing is noise.
-            ...options
-              .filter((o) => !attached.has(o.id))
-              .map((o) => ({ value: o.id, label: o.title })),
-          ]}
-        />
+      {/* **The picker-plus-action shape the platform already has** (2026-08-17).
+          This was `.form__row` — a two-column grid meant for two FIELDS — holding
+          a `SelectField` and a bare button. `align-items: start` then lined the
+          button up with the select's *label* rather than its control, which is
+          what made it look wrong; and the picker was a `SelectField` over up to a
+          hundred library items, where rule E asks for the searchable control.
+
+          It is now exactly what `مستفيدات المجموعة` and the circle roster use:
+          `SearchableSelect`, then the action in `form__actions`. No new class, no
+          new style — the alignment comes from the shape being right. */}
+      <SearchableSelect
+        label={t('session.materialsLinkExisting')}
+        // Already-attached items are absent rather than disabled: the list
+        // answers *what can I add*, and an option that does nothing is noise.
+        options={options
+          .filter((o) => !attached.has(o.id))
+          .map((o) => ({ value: o.id, label: o.title }))}
+        value={choice}
+        onChange={setChoice}
+        emptyLabel={t('session.materialsNoneToAdd')}
+        disabled={busy}
+      />
+      <div className="form__actions">
         <Button
-          variant="primary"
+          variant="add"
           disabled={busy || choice === '' || sessionId === null}
           onClick={() =>
             void run(async () => {

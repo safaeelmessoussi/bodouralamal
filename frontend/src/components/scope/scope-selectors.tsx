@@ -80,9 +80,24 @@ export function ScopeSelectors({
   return (
     <>
       {fields.map((field) => {
-        const unmetDependency = (REQUIRES[field] ?? []).find(
-          (dep) => scope.value[dep.field] === '',
-        );
+        /**
+         * **A filter's Subject has no unmet dependency** (Owner, 2026-08-17).
+         *
+         * The `subjectId → levelId` edge exists so a FORM cannot offer a pair the
+         * server refuses (`SUBJECT_NOT_AT_LEVEL`). A filter asks a different
+         * question — *"everything about تفسير"* is legitimate with no Level in
+         * mind — and `GET /library` has always taken the two as independent
+         * optionals, so the gate was a client-side invention.
+         *
+         * The edge stays in `REQUIRES` because it is true of forms, which is
+         * where it does its work; what changes is that a filter does not read it
+         * for this one field. `useScopeOptions({ subjectsUnscoped: true })` is
+         * what fills the control in that case.
+         */
+        const ignoreDependency = mode === 'filter' && field === 'subjectId';
+        const unmetDependency = ignoreDependency
+          ? undefined
+          : (REQUIRES[field] ?? []).find((dep) => scope.value[dep.field] === '');
         const list = [...(extraOptions[field] ?? []), ...scope.options[field]];
         const isEmpty = !unmetDependency && !scope.loading[field] && list.length === 0;
 

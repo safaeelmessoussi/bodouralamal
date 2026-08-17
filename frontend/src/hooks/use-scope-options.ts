@@ -2,7 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { listBranches, type Branch } from '../adapters/branches-admin.js';
 import { listAdministrativeGroups, type AdministrativeGroup } from '../adapters/administrative-groups.js';
-import { listAcademicYears, type AcademicYearRef } from '../adapters/reference-data.js';
+import {
+  listAcademicYears,
+  listSubjects,
+  type AcademicYearRef,
+} from '../adapters/reference-data.js';
 import { listCategories, listLevelSubjects, listLevels, type Category, type Level } from '../adapters/taxonomy.js';
 import type { SubjectRef } from '../adapters/reference-data.js';
 import { levelLabel } from '../components/scope/level-select.js';
@@ -110,6 +114,16 @@ export interface UseScopeOptionsInput {
    *  nearly every write belongs to. Off for filter bars, where defaulting a
    *  filter silently hides rows. */
   defaultCurrentYear?: boolean;
+  /**
+   * **Offer every Subject when no Level is chosen** — for a FILTER.
+   *
+   * A form must not offer a Subject the chosen Level does not teach (§4.4b), so
+   * it leaves this `false` and the control stays empty until a Level is picked.
+   * A filter has no such constraint: *"everything about تفسير"* is a legitimate
+   * question with no Level in mind, and `GET /library` accepts the two as
+   * independent optionals.
+   */
+  subjectsUnscoped?: boolean;
 }
 
 /**
@@ -129,6 +143,7 @@ export function useScopeOptions({
   fields,
   initial,
   defaultCurrentYear = false,
+  subjectsUnscoped = false,
 }: UseScopeOptionsInput): ScopeOptions {
   /**
    * **The field list is depended on by CONTENT, never by identity.**
@@ -206,19 +221,45 @@ export function useScopeOptions({
     };
   }, [token, wants, needsLevels, defaultCurrentYear]);
 
-  /* ── Subjects depend on the Level, and on nothing else ────────────────── */
+  /**
+   * ## Subjects depend on the Level — **when a Level is being chosen**
+   *
+   * A Subject reaches a Level only through `LevelSubject` (§4.4b, R43), so a
+   * **form** must offer only the Subjects the chosen Level teaches: offering
+   * others is offering the `SUBJECT_NOT_AT_LEVEL` refusal, which is the defect
+   * this whole hook was extracted for.
+   *
+   * **A filter is a different question, and the dependency does not apply to it**
+   * (Owner, 2026-08-17). *"Show me everything about تفسير"* is legitimate with no
+   * Level in mind, and `GET /library` has always accepted `level_id` and
+   * `subject_id` as **independent optionals** — so the gate was a client-side
+   * invention, not a contract. `مكتبة المحتوى` disabled the Subject filter behind
+   * *«اختاري المستوى أولًا»* and answered a question nobody had to ask.
+   *
+   * So with no Level chosen the options are **every live Subject**, and choosing
+   * a Level narrows them to that Level's. The caller says which mode it is in;
+   * `ScopeSelectors` passes `mode` through for exactly this.
+   *
+   * **The two reads are different endpoints on purpose**: `listSubjects` is the
+   * platform's Subject list and `listLevelSubjects` is one Level's pairing. This
+   * picks between them; it does not filter one to fake the other.
+   */
   useEffect(() => {
     if (!wants('subjectId')) return;
-    if (value.levelId === '') {
-      setSubjects([]);
-      return;
-    }
     let cancelled = false;
     setLoadingSubjects(true);
     void (async () => {
       try {
-        const taught = await listLevelSubjects(value.levelId, token);
-        if (!cancelled) setSubjects(taught);
+        const list =
+          value.levelId === ''
+            ? // No Level chosen. In a FORM this stays empty — `ScopeSelectors`
+              // disables the control and says which answer is missing — and in a
+              // FILTER it is every Subject.
+              subjectsUnscoped
+              ? await listSubjects(token)
+              : []
+            : await listLevelSubjects(value.levelId, token);
+        if (!cancelled) setSubjects(list);
       } finally {
         if (!cancelled) setLoadingSubjects(false);
       }
@@ -226,7 +267,7 @@ export function useScopeOptions({
     return () => {
       cancelled = true;
     };
-  }, [value.levelId, token, wants]);
+  }, [value.levelId, token, wants, subjectsUnscoped]);
 
   /* ── Groups depend on Level AND Branch together (§4.4c) ───────────────── */
   useEffect(() => {
@@ -313,6 +354,14 @@ export function useScopeOptions({
     });
   }, [options, ready, loadingSubjects, loadingGroups, value.levelId, value.branchId]);
 
+  /**
+   * Read inside `set`, which must stay referentially stable — a `useCallback`
+   * that depended on the flag would change identity and re-run every effect
+   * keyed on it, which is the bug this hook's own docstring records for `fields`.
+   */
+  const unscopedSubjectsRef = useRef(subjectsUnscoped);
+  unscopedSubjectsRef.current = subjectsUnscoped;
+
   const set = useCallback((field: ScopeField, next: string) => {
     setValue((current) => {
       if (current[field] === next) return current;
@@ -326,7 +375,22 @@ export function useScopeOptions({
         updated.groupId = '';
       }
       if (field === 'levelId') {
-        updated.subjectId = '';
+        /**
+         * **Clearing the Level keeps the Subject when Subjects are unscoped**
+         * (Owner, 2026-08-17).
+         *
+         * Moving to *another* Level still clears it — that Level may not teach
+         * it, and a stale id is what reaches the server as an impossible pair.
+         * But **clearing** the Level in a filter is the reader *widening* their
+         * question, not retracting their Subject: they asked for تفسير and then
+         * removed the Level constraint, and discarding تفسير would throw away
+         * the half they did not touch.
+         *
+         * In a form (`subjectsUnscoped: false`) it clears either way, because
+         * with no Level there is no valid Subject to hold.
+         */
+        const wideningAFilter = next === '' && unscopedSubjectsRef.current;
+        if (!wideningAFilter) updated.subjectId = '';
         updated.groupId = '';
       }
       if (field === 'branchId') {

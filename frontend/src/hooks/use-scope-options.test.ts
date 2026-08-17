@@ -1,74 +1,69 @@
 import { describe, expect, it } from 'vitest';
 
-import { scopeFieldKey } from './use-scope-options.js';
-import SOURCE from './use-scope-options.ts?raw';
+import HOOK from './use-scope-options.ts?raw';
+import SELECTORS from '../components/scope/scope-selectors.tsx?raw';
+import CONTENT from '../pages/content.tsx?raw';
+
+/** Comments are not code — the idiom the scheduling parity guard established. */
+function code(source: string): string {
+  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+}
 
 /**
- * **The dependency that took `/admin/schedules` down.**
+ * **A filter may ask about a Subject with no Level; a form may not.**
  *
- * The page passed its field list as an inline array literal, so it was a new
- * reference every render. `wants` was keyed on that array, the loading effects
- * were keyed on `wants`, and those effects set state — which re-rendered, which
- * made a new array, forever. `/branches`, `/admin/levels` and
- * `/admin/academic-years` were requested continuously and then began to fail,
- * which looked like a server fault and was not: the loop tripped Nginx's per-IP
- * edge limit (TD-13), so the rate limiter was doing its job against a client
- * defect.
+ * The `subjectId → levelId` edge exists so a **form** cannot offer a pair the
+ * server refuses (`SUBJECT_NOT_AT_LEVEL`, §4.4b) — that is the defect
+ * `useScopeOptions` was extracted for and it is unchanged. But `مكتبة المحتوى`
+ * disabled its Subject filter behind *«اختاري المستوى أولًا»*, asking a question
+ * the contract never required: `GET /library` takes `level_id` and `subject_id`
+ * as **independent optionals**.
  *
- * **Every other caller happened to pass a module constant**, which is precisely
- * why it survived review: the convention concealed a hook that punished anyone
- * who did the obvious thing.
- *
- * So the fix is not "always pass a constant" — that is the convention that
- * already failed. It is that **identity cannot matter**, and this is where that
- * property is checked directly, rather than inferred from counting renders.
+ * These are source assertions, and deliberately so: the property is *which read
+ * runs* and *which dependency is consulted*, neither of which a statically
+ * rendered tree shows. The behaviour itself is verified against the running API
+ * and in the browser.
  */
-describe('the field list is a dependency by content, never by identity', () => {
-  it('gives two distinct arrays with the same fields the same key', () => {
-    // The exact shape of the bug: two literals, equal content, different
-    // references. Before the fix these were different dependencies on every
-    // render; now they are one.
-    expect(scopeFieldKey(['branchId', 'levelId'])).toBe(scopeFieldKey(['branchId', 'levelId']));
+describe('the Subject filter does not require a Level', () => {
+  it('reads every Subject when no Level is chosen, and the Level’s when one is', () => {
+    // Two different endpoints, chosen between — not one filtered to fake the
+    // other. `listSubjects` is the platform's Subject list; `listLevelSubjects`
+    // is one Level's pairing.
+    expect(code(HOOK)).toContain('listSubjects(token)');
+    expect(code(HOOK)).toContain('listLevelSubjects(value.levelId, token)');
   });
 
-  it('ignores the order the caller happened to write', () => {
-    // The same data is requested either way, so re-ordering must not re-fetch.
-    expect(scopeFieldKey(['levelId', 'branchId'])).toBe(scopeFieldKey(['branchId', 'levelId']));
+  it('is opt-in, so a form keeps the dependency that protects it', () => {
+    expect(code(HOOK)).toContain('subjectsUnscoped');
+    // The form default: with no Level chosen there is no valid Subject to hold.
+    expect(code(HOOK)).toMatch(/subjectsUnscoped\s*=\s*false/);
   });
 
-  it('still distinguishes genuinely different field lists', () => {
-    // The guarantee has to cut both ways: a screen that starts asking for
-    // Subjects must actually load them.
-    expect(scopeFieldKey(['branchId'])).not.toBe(scopeFieldKey(['branchId', 'subjectId']));
-    expect(scopeFieldKey([])).not.toBe(scopeFieldKey(['branchId']));
+  it('the shared selector ignores the dependency only in filter mode', () => {
+    expect(code(SELECTORS)).toContain("mode === 'filter' && field === 'subjectId'");
+    // The edge itself stays — it is true of forms, which is where it works.
+    expect(code(SELECTORS)).toContain('subjectId: [{ field: ');
   });
 
-  it('is stable for a module constant too — the fix regresses no caller', () => {
-    const SHARED = ['branchId', 'levelId', 'subjectId'] as const;
-    expect(scopeFieldKey(SHARED)).toBe(scopeFieldKey(SHARED));
-    expect(scopeFieldKey(SHARED)).toBe(scopeFieldKey(['subjectId', 'branchId', 'levelId']));
-  });
-});
-
-describe('the hook actually uses that key', () => {
-  /**
-   * The test above proves the mechanism **exists**; on its own it would still
-   * pass if somebody keyed the callback back on the array. That is the gap that
-   * let the original defect through — a property nobody checked was *used* —
-   * so it is checked here, at the one line where identity could creep back.
-   */
-  const code = SOURCE.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
-
-  it('depends on the content key, not on the array reference', () => {
-    expect(code).toContain('[fieldKey]');
-    // `[fields]` as a dependency array is the exact regression: a new literal
-    // every render, an effect that sets state, and the loop is back.
-    expect(/\[\s*fields\s*\]/.test(code), 'a dependency array keys on `fields`').toBe(false);
+  it('the content library opts in', () => {
+    expect(code(CONTENT)).toContain('subjectsUnscoped: true');
   });
 
-  it('never puts a raw object or array prop in a dependency array', () => {
-    // `initial` is safe only because it is read once in a `useState`
-    // initializer; depending on it would reintroduce the same class of bug.
-    expect(/\[\s*initial\s*\]/.test(code), 'a dependency array keys on `initial`').toBe(false);
+  it('clearing the Level keeps the Subject, but moving Level clears it', () => {
+    /**
+     * Widening a filter is not retracting the Subject: a reader who asked for
+     * تفسير and then removed the Level constraint did not un-ask for تفسير.
+     * Moving to *another* Level still clears it, because that Level may not teach
+     * it and a stale id is what reaches the server as an impossible pair.
+     */
+    expect(code(HOOK)).toContain("const wideningAFilter = next === '' && unscopedSubjectsRef.current");
+    expect(code(HOOK)).toContain('if (!wideningAFilter) updated.subjectId');
+  });
+
+  it('reads the flag through a ref, so `set` stays referentially stable', () => {
+    // This hook's own docstring records what an unstable callback costs here:
+    // a `useCallback` keyed on the flag would change identity and re-run every
+    // effect that depends on it.
+    expect(code(HOOK)).toContain('unscopedSubjectsRef');
   });
 });

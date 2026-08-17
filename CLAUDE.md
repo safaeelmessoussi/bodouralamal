@@ -173,6 +173,11 @@ You are working on the بذور الأمل Platform.
 - **A deep link must be consumed by the page it points at (AB).** Carry every half
   the destination needs, and **guard the pair** — `?content_id=` shipped for
   months reading nothing at all.
+- **Row actions are ordered by `DataTable` (AC):** contextual → تعديل →
+  destructive. Never reorder them per page.
+- **A dependency between selectors belongs to forms, not filters (AE).** Check the
+  API contract before adding a gate — `مكتبة المحتوى` disabled a filter the
+  endpoint never required.
 - **A layout property must be measured in a browser, not asserted from CSS.** The
   header guard asserted `align-items: start` — present, correct, and irrelevant,
   because `flex-wrap` put the action on its own line. Run

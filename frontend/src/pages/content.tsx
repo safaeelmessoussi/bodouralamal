@@ -85,6 +85,15 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
   const scope = useScopeOptions({
     token: accessToken,
     fields: SCOPE_FIELDS,
+    /**
+     * **This is a filter, so a Subject may be chosen with no Level**
+     * (Owner, 2026-08-17). The control was disabled behind
+     * *«اختاري المستوى أولًا»*, which asked a question the contract never
+     * required: `GET /library` takes `level_id` and `subject_id` as independent
+     * optionals. Choosing a Level still narrows the Subjects to the ones it
+     * teaches — the narrowing is the useful half and it is kept.
+     */
+    subjectsUnscoped: true,
     defaultCurrentYear: true,
   });
   const { levelId, subjectId, academicYearId, branchId } = scope.value;

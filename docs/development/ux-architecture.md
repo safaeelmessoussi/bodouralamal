@@ -430,6 +430,60 @@ rather than emptying the page.
 **Guard the pair.** `session.test.tsx` asserts both the link the source emits and
 the parameter the destination reads — either alone can drift.
 
+## AC · One order for row actions
+
+```
+contextual action(s)  →  تعديل  →  destructive
+```
+
+**Enforced by `DataTable`, not by each page's declaration order** — because
+declaration order is exactly what drifted: `المستخدمون` read
+*تعديل · الأدوار · إيقاف الحساب* while its neighbours read something else, and a
+reader who has learnt where *delete* sits on one screen had learnt nothing about
+the next.
+
+Classification needs nothing new from callers: **destructive** is the `danger`
+flag they already set, **edit** is the platform's single shared `common.edit`
+label, and everything else is contextual in the order the page chose. The sort is
+**stable**, so a page with several contextual actions keeps their relative sense —
+the rule is only about where the two universal ones go.
+
+Ordering happens **before** per-row availability, so a row that hides its
+contextual action still reads تعديل → destructive rather than reshuffling.
+
+Canonical: `orderActions` in
+[`ui/data-table.tsx`](../../frontend/src/components/ui/data-table.tsx).
+
+## AD · A picker with an action is a picker, then an action
+
+`SearchableSelect` (or the field), **then** the action in `form__actions`. Never
+a `.form__row` holding a field and a bare button: that grid is for **two fields**
+and aligns its items to the top, so the button lines up with the field's *label*
+rather than its control — which is what made `إرفاق` in `مواد الحصة` look wrong.
+
+The alignment comes from **the shape being right**, not from a new class. It is
+the same arrangement `مستفيدات المجموعة`, the circle roster and the enrolment
+dialog use, and browser measurement confirms the button then matches its
+neighbours exactly — same height, same radius, same type size.
+
+## AE · A dependency between selectors belongs to forms, not to filters
+
+`subjectId → levelId` exists so a **form** cannot offer a pair the server refuses
+(`SUBJECT_NOT_AT_LEVEL`, §4.4b). A **filter** asks a different question —
+*"everything about تفسير"* is legitimate with no Level in mind — and
+`GET /library` has always taken the two as **independent optionals**, so the gate
+was a client-side invention rather than a contract.
+
+**Check the contract before adding a gate.** `مكتبة المحتوى` disabled its Subject
+filter behind *«اختاري المستوى أولًا»* and asked a question nothing required.
+
+**Widening is not retracting.** Clearing the Level in a filter **keeps** the
+Subject — the reader removed one constraint, not the other. Moving to *another*
+Level still clears it, because that Level may not teach it.
+
+Canonical: `useScopeOptions({ subjectsUnscoped })` +
+`ScopeSelectors`' `mode`.
+
 ## T · The page header is one block
 
 **Title, description and primary action form a header** — not two things at

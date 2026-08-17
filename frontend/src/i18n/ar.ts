@@ -547,12 +547,20 @@ export const ar = {
     recordings: 'التسجيلات',
     materials: 'المواد المرفقة',
     // إدارة مواد الحصة (§4.9, TD-3.12). الإزالة تفكّ الارتباط ولا تحذف الملف.
-    materialsAction: 'المواد',
+    // **«المواد» said nothing about what the action does** (Owner, 2026-08-17):
+    // on a row of class sessions it reads as *subjects*, which is a different
+    // concept entirely (`مواد المستوى`). The label names the act — attaching
+    // educational content to this session — and the short form is chosen because
+    // it sits in a row-action cell beside تعديل and إلغاء, where the platform's
+    // other action labels are two words at most.
+    materialsAction: 'إرفاق محتوى',
     materialsTitle: 'مواد الحصة',
     materialsNone: 'لا توجد مواد مرفقة بهذه الحصة.',
     materialsLink: 'إرفاق',
     materialsLinkExisting: 'إرفاق مادة موجودة',
-    materialsChooseItem: 'اختاري مادة…',
+    // The picker's own empty answer: every library item in this session's scope
+    // is already attached. Distinct from "no library items exist".
+    materialsNoneToAdd: 'كل محتوى هذا المستوى والمادة مرفق بالحصة أصلًا.',
     materialsUploadNew: 'رفع ملف جديد',
     materialsRemove: 'إزالة من الحصة',
     materialsFailed: 'تعذّر تنفيذ العملية. يرجى إعادة المحاولة.',

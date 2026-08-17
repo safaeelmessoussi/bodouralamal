@@ -2,7 +2,8 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
 import { ConfirmDialog } from './confirm-dialog.js';
-import { DataTable, type Column } from './data-table.js';
+import { DataTable, orderActions, type Column } from './data-table.js';
+import { t } from '../../i18n/index.js';
 import { SearchInput, TextArea, TextField } from './field.js';
 
 /**
@@ -240,5 +241,67 @@ describe('ConfirmDialog', () => {
       />,
     );
     expect(html).toContain('btn--danger');
+  });
+});
+
+describe('row actions are ordered the same way in every table', () => {
+  /**
+   * **The rule (Owner, 2026-08-17):** contextual actions → تعديل → destructive.
+   *
+   * It is enforced **here** rather than in each page's declaration, because
+   * declaration order is exactly what had drifted: `المستخدمون` read
+   * *تعديل · الأدوار · إيقاف الحساب* while other tables read something else, and
+   * a reader who has learnt where *delete* sits on one screen had learnt nothing
+   * about the next.
+   */
+  const roles = { label: 'الأدوار', onSelect: () => undefined };
+  const edit = { label: t('common.edit'), onSelect: () => undefined };
+  const suspend = { label: 'إيقاف الحساب', danger: true, onSelect: () => undefined };
+
+  it('puts a contextual action first, edit next, destructive last', () => {
+    // The Owner's exact example, in its reported (wrong) order.
+    expect(orderActions([edit, roles, suspend]).map((a) => a.label)).toEqual([
+      'الأدوار',
+      t('common.edit'),
+      'إيقاف الحساب',
+    ]);
+  });
+
+  it('leaves edit-then-delete alone, because it already obeys the rule', () => {
+    const remove = { label: t('common.delete'), danger: true, onSelect: () => undefined };
+    expect(orderActions([edit, remove]).map((a) => a.label)).toEqual([
+      t('common.edit'),
+      t('common.delete'),
+    ]);
+  });
+
+  it('is stable — several contextual actions keep the order the page chose', () => {
+    // The rule is only about where the two universal actions go. A page with
+    // several contextual ones knows their relative sense; re-sorting them would
+    // be the table overriding a decision it cannot make.
+    const a = { label: 'المستفيدات', onSelect: () => undefined };
+    const b = { label: 'النقاط', onSelect: () => undefined };
+    expect(orderActions([b, a, edit]).map((x) => x.label)).toEqual([
+      'النقاط',
+      'المستفيدات',
+      t('common.edit'),
+    ]);
+  });
+
+  it('applies to the rendered table, not merely to the helper', () => {
+    const html = table({ actions: [edit, roles, suspend] });
+    const order = ['الأدوار', t('common.edit'), 'إيقاف الحساب'].map((l) => html.indexOf(l));
+    expect(order.every((i) => i >= 0)).toBe(true);
+    expect([...order].sort((x, y) => x - y)).toEqual(order);
+  });
+
+  it('keeps the remaining two in place when a contextual action is unavailable', () => {
+    // Ordering happens before per-row availability, so a row that hides its
+    // contextual action still reads تعديل → destructive rather than reshuffling.
+    const html = table({
+      actions: [{ ...roles, available: () => false }, edit, suspend],
+    });
+    expect(html).not.toContain('الأدوار');
+    expect(html.indexOf(t('common.edit'))).toBeLessThan(html.indexOf('إيقاف الحساب'));
   });
 });
