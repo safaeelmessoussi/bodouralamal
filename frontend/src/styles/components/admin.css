@@ -151,13 +151,34 @@
  * start of. So it uses the width available *up to* a comfortable maximum — which
  * is why this is a `max-inline-size` and not a fixed one, and why a narrow
  * viewport still wraps normally instead of overflowing.
+ *
+ * ## The primary action does not move when the description grows (2026-08-17)
+ *
+ * `align-items: end` bottom-aligned the two blocks, so the action sat level with
+ * the **last line of the description** — and a two-line description on one page
+ * put the button lower than the same button on the page beside it. The control a
+ * reader reaches for most moved depending on how much prose happened to be above
+ * it.
+ *
+ * `align-items: start` ties the action to the **title**, which is one line on
+ * every page in the back office. The description then grows *downwards, past it*,
+ * and the button's position becomes a constant — which is the property asked for.
+ * `padding-block-start` optically centres it on the title rather than hugging the
+ * very top of the block.
+ *
+ * **This is why it belongs here and not on a page.** The stable position is a
+ * relationship between two blocks in the shared header; a page-level fix would be
+ * a page whose button agrees with the rest by coincidence.
  * ──────────────────────────────────────────────────────────────────────────── */
 
 .admin__head {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-4) var(--space-6);
-  align-items: end;
+  /* **Not `end`.** See *The primary action does not move* above: bottom-aligning
+     tied the button to the last line of the description, so its position changed
+     with the length of the prose beside it. */
+  align-items: start;
   padding-block-end: var(--space-4);
   margin-block-end: var(--space-6);
   border-block-end: 1px solid var(--color-border);
@@ -220,6 +241,11 @@
      is not pushed to the far margin and does not leave a gap beside the
      description. */
   flex: 0 0 auto;
+  /* Optically level with the TITLE rather than hugging the top of the block —
+     the title's own line-height leaves it sitting slightly high otherwise. The
+     action's vertical position is therefore a function of the title alone, which
+     is identical on every page. */
+  padding-block-start: 0.15rem;
 }
 
 .admin-panel {

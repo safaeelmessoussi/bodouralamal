@@ -155,13 +155,27 @@ export function EventDetailsDialog({
 }
 
 /**
- * The reserved area for §4.9 educational content attached to an event
- * (`EducationalContent.event_id`).
+ * **A reserved area for content attached to an event — and the relationship it
+ * names does not exist** (corrected 2026-08-17).
  *
- * It renders nothing until there is something to render — an empty box would be
- * noise on every event that has no attachment, which is currently all of them.
- * The seam is the point: when the contract carries attachments, they become a
- * list here and the dialog's layout does not move.
+ * This cited `EducationalContent.event_id`, which **Revision 43 retired**: *"it
+ * expressed one relationship, in one direction, to the wrong entity"*. R43
+ * replaced it with `SessionContent` — content is referenced **many-to-many by a
+ * SESSION**, which is a materialised occurrence of a Course Schedule. §7's
+ * deletion table states the consequence outright: *"Revision 43: content no
+ * longer attaches to Events."*
+ *
+ * So this seam promises a link the model deliberately removed, on exactly the
+ * question a reader of this file would come here to ask. The comment is corrected
+ * rather than the component deleted, because the component itself is harmless —
+ * it renders nothing — and because **whether an Event should regain a content
+ * relationship is an open Owner decision** (2026-08-17). If it is taken, this is
+ * where the list belongs; if it is not, this function should go.
+ *
+ * **A `Session`'s materials are a different matter and already exist**:
+ * `SessionContent`, `POST /sessions/{id}/content`, and `SessionMaterialsDialog`
+ * on `/admin/schedules/{id}/sessions`. Surfacing those in the calendar needs no
+ * schema change — see the audit.
  */
 function EventResources({ resources = [] }: { resources?: { id: string; title: string }[] }): ReactNode {
   if (resources.length === 0) return null;

@@ -378,15 +378,27 @@ understood: `justify-content: space-between` pushed the action to the far margin
 and left the text at its flex basis, so a one-line description wrapped its **last
 word** onto a line of its own with visible space beside it.
 
-**The trap worth knowing:** a flex item's default `min-width: auto` refuses to
-shrink below its longest word. `min-inline-size: 0` on the text block is what
-actually allows it to use the space — without it, growing the block changes
-nothing.
+**The primary action does not move when the description grows.** The header
+**top-aligns**, so the action tracks the *title* — one line on every back-office
+page — and the description grows downwards past it. Bottom-aligning ties the
+button to the last line of the prose, so a two-line description on one page puts
+it lower than the same button on the page beside it: the control a reader reaches
+for most moves with the amount of text above it.
 
-Canonical: `.admin__head` / `.admin__heading` in
+**Two traps worth knowing:**
+
+* a flex item's default `min-width: auto` refuses to shrink below its longest
+  word, so `min-inline-size: 0` on the text block is what actually lets it use
+  the space — without it, growing the block changes nothing;
+* `align-items: end` reads as the tidier choice and is the one that breaks the
+  invariant.
+
+Canonical: `.admin__head` / `.admin__heading` / `.admin__actions` in
 [`admin.css`](../../frontend/src/styles/components/admin.css), rendered by
 [`PortalShell`](../../frontend/src/components/portal/portal-shell.tsx). **Never
-solve this per page**, and never with `<br>`.
+solve this per page**, and never with `<br>`. Guarded by
+`scripts/ci/check-shared-layout.sh`, which also refuses a page stylesheet that
+redefines the header.
 
 ## U · Unsaved work is never lost to a stray click
 
@@ -516,6 +528,23 @@ system's internals, break on every restyle, and catch nothing.
 | [`ui/data-table.test.tsx`](../../frontend/src/components/ui/data-table.test.tsx) | all five states, and the action column |
 | `grade.http.integration.test.ts` | a student reads published grades and **not drafts**, one student never reads another's, the projection carries no verdict |
 | `teaching-group.http.integration.test.ts` | the flat read grants nothing, every filter narrows, TD-10 pagination, Admin-only |
+
+### A guard must be able to read what it guards
+
+**Verify that a new guard can actually see its input before trusting it.** A CSS
+assertion written as a vitest glob passed for a whole commit while reading
+**empty strings**: `import.meta.glob(..., { query: '?raw' })` yields `''` for a
+`.css` file under this project's configuration, so every assertion over the text
+succeeded and the guard was counted as protection while certifying nothing.
+
+The tell is a guard that **has never failed**, not even once while being written.
+A guard worth keeping fails when you first point it at the defect it exists for —
+which is why each of these was proven against a reintroduced fault.
+
+CSS invariants therefore live in `scripts/ci/`, beside `check-design-tokens.sh`,
+which already scans stylesheets. `node:fs` inside a test is not the alternative:
+`scheduling-parity.test.tsx` records why a test must not pull Node's types onto
+the application's type surface.
 
 **When a guard fails because the code changed shape, restate the property — do
 not delete the guard.** Three assertions on the circles page pinned the

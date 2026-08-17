@@ -165,6 +165,11 @@ You are working on the بذور الأمل Platform.
   exists somewhere unreachable (Z)** — and whether the SRS has already *refused*
   the shape being asked for. The grading scale was seeded and unreachable; a
   per-exam scale was refused in terms by R58.
+- **A guard must be able to read what it guards.** A CSS assertion written as a
+  vitest glob passed for a whole commit while reading empty strings — `?raw` on a
+  `.css` file yields `''` here. **The tell is a guard that has never failed**, not
+  even while being written. Prove a new guard against the defect it exists for, or
+  do not count it as protection. CSS invariants go in `scripts/ci/`.
 - Every rule there is guarded, and the guards are listed at the foot of that page.
   **When a guard fails because the code changed shape, restate the property — do
   not delete the guard.** Three were restated this way on 2026-08-17: they pinned

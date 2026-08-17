@@ -101,20 +101,26 @@ describe('one Button', () => {
     expect(offenders).toEqual([]);
   });
 
-  it('no stylesheet defines a second button system', () => {
-    // The CSS half of the same rule. `.button` was the one that existed; asserting
-    // its absence is what stops it being reintroduced by a page that needs "just
-    // a link that looks like a button".
-    const css = import.meta.glob('/src/styles/**/*.css', {
-      query: '?raw',
-      import: 'default',
-      eager: true,
-    }) as Record<string, string>;
-    for (const [path, text] of Object.entries(css)) {
-      if (path.endsWith('button.css')) continue;
-      expect(text, path).not.toMatch(/^\.button\b/m);
-    }
-  });
+  /**
+   * **The CSS half of this rule lives in `scripts/ci/check-shared-layout.sh`, and
+   * the reason is a defect worth recording** (2026-08-17).
+   *
+   * It was written here first — iterating an `import.meta.glob` over the
+   * stylesheets and asserting no `.button` rule survives. **It passed vacuously.**
+   * Under this project's vitest configuration `?raw` on a `.css` file yields an
+   * **empty string**, so every assertion ran against `''` and every one passed;
+   * the guard was reported as protecting the single button system while
+   * certifying nothing at all.
+   *
+   * `node:fs` is not the alternative — `scheduling-parity.test.tsx` records why a
+   * test must not pull Node's types onto the application's type surface. So CSS
+   * invariants moved to a shell guard beside `check-design-tokens.sh`, which
+   * already scans stylesheets for the same kind of rule.
+   *
+   * **A guard that cannot read what it guards is worse than no guard**, because
+   * it is counted as protection. That is the lesson, and it is why this note stays
+   * instead of the assertion being quietly deleted.
+   */
 });
 
 describe('one add/create convention', () => {
@@ -441,3 +447,12 @@ describe('unsaved form changes are protected by the shared dialog', () => {
     expect(offenders).toEqual([]);
   });
 });
+
+/**
+ * **The page-header invariants are in `scripts/ci/check-shared-layout.sh`.**
+ *
+ * They are CSS declarations — `align-items` on one rule decides whether the
+ * primary action tracks the title or the last line of the description — and this
+ * file cannot read CSS (see the note under *one Button* above). They are asserted
+ * where they can actually be read.
+ */
