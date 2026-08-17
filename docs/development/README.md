@@ -22,6 +22,7 @@ Contributing to the platform.
 | [SRS proposal — Revision 70](../SRS-PROPOSAL-R70.md) | Grade entry gets a home, an audience and an audit row. **Applied** — the M5a revision |
 | [Exams & assessment — audit and proposal](audit-2026-08-12-exams.md) | The model already exists and the exam half is built; **grade entry is the whole gap**. Retroactive recording needs nothing. Three small SRS clauses required — **awaiting Owner review** |
 | [Audit — 2026-08-11](audit-2026-08-11.md) | Level creation's branch coupling · per-child placement · the deletion model · deployment readiness. **Four questions audited to a decision, none implemented** |
+| [SRS proposal — Revision 75](../SRS-PROPOSAL-R75.md) | The in-app audio recorder, brought forward for **class sessions only**. **Drafted, NOT applied** — it reinstates risk R-4, which is the Owner's to accept |
 | [Platform-wide UX & IA correction — audit](audit-2026-08-17-ux-architecture.md) | The atomic foundation already existed; the defects were **drift at the edges**. Five dropdown-gated pages, a second button system, three copies of the Level label. **Applied** — two unlisted TD-3 reads reported in §Z |
 | [Engineering efficiency](engineering-efficiency.md) | Progress per unit of context — slicing, verification proportionality, and the five things it may never economise on |
 
