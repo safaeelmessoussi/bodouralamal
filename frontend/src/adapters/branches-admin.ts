@@ -58,8 +58,44 @@ export interface BranchInput {
   google_maps_url?: string | null;
 }
 
-export async function listBranches(token: string | null, page = 1): Promise<Page<Branch>> {
-  return api<Page<Branch>>(`/admin/branches?page=${page}&page_size=25`, { token });
+/**
+ * R76 — `sort` is the **server's** sort, not the client's.
+ *
+ * Omitting it returns BR-19's own order, which is also the **canonical** order:
+ * the only state in which manual reordering is offered, because under any other
+ * sort the visible sequence is not the business one.
+ */
+export async function listBranches(
+  token: string | null,
+  page = 1,
+  sort: { by: string; dir: 'asc' | 'desc' } | null = null,
+): Promise<Page<Branch>> {
+  const params = new URLSearchParams({ page: String(page), page_size: '25' });
+  if (sort) {
+    params.set('sort_by', sort.by);
+    params.set('sort_dir', sort.dir);
+  }
+  return api<Page<Branch>>(`/admin/branches?${params.toString()}`, { token });
+}
+
+/**
+ * `PATCH /admin/branches/order` — **the branches, in the order given** (R76.4).
+ *
+ * The body is the sequence; the server assigns positions from it, so a duplicate
+ * or gapped `display_order` is impossible rather than something this client must
+ * avoid producing. Returns the resulting order, so the caller re-renders from the
+ * server's answer rather than its own optimistic guess.
+ */
+export async function reorderBranches(
+  ids: readonly string[],
+  token: string | null,
+): Promise<string[]> {
+  const body = await api<{ data: { ids: string[] } }>('/admin/branches/order', {
+    method: 'PATCH',
+    token,
+    body: { ids },
+  });
+  return body.data.ids;
 }
 
 export async function createBranch(input: BranchInput, token: string | null): Promise<Branch> {

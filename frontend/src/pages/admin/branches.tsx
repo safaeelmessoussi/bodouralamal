@@ -16,7 +16,13 @@ import {
 import { AdminLayout } from '../../components/admin/admin-layout.js';
 import { Button } from '../../components/ui/button.js';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
-import { DataTable, type Column, type RowAction, type TableStatus } from '../../components/ui/data-table.js';
+import {
+  DataTable,
+  type Column,
+  type RowAction,
+  type SortState,
+  type TableStatus,
+} from '../../components/ui/data-table.js';
 import { Dialog } from '../../components/ui/dialog.js';
 import {
   DateField,
@@ -65,17 +71,25 @@ export function BranchesPage(): ReactNode {
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  /**
+   * `null` is BR-19's own order — and the **canonical** one, which is the only
+   * state in which dragging is offered (R76.8): under a column sort the visible
+   * sequence is not the business order, so dropping into it would persist a
+   * position the reader never intended.
+   */
+  const [sort, setSort] = useState<SortState | null>(null);
+
   const load = useCallback(async () => {
     setStatus('loading');
     try {
-      const result = await listBranches(accessToken, page);
+      const result = await listBranches(accessToken, page, sort);
       setRows(result.data);
       setTotal(result.meta.total);
       setStatus('ready');
     } catch {
       setStatus('error');
     }
-  }, [accessToken, page]);
+  }, [accessToken, page, sort]);
 
   useEffect(() => {
     void load();
@@ -95,7 +109,15 @@ export function BranchesPage(): ReactNode {
   }, [rows, query]);
 
   const columns: Column<Branch>[] = [
-    { key: 'name', header: t('admin.branches.colName'), cell: (r) => r.name },
+    {
+      key: 'name',
+      header: t('admin.branches.colName'),
+      // R76.1 — the ENDPOINT's field name. The server refuses anything outside
+      // its own allow-list, so a wrong value here fails loudly at the API rather
+      // than sorting by something unintended.
+      sortKey: 'name',
+      cell: (r) => r.name,
+    },
     {
       key: 'address',
       header: t('admin.branches.colAddress'),
@@ -105,6 +127,8 @@ export function BranchesPage(): ReactNode {
     {
       key: 'start',
       header: t('admin.branches.colStart'),
+      // The other thing an administrator scans a branch list for.
+      sortKey: 'operational_start_date',
       secondary: true,
       cell: (r) =>
         r.operational_start_date ? (
@@ -161,13 +185,10 @@ export function BranchesPage(): ReactNode {
           <span className="muted">{t('common.notSet')}</span>
         ),
     },
-    {
-      key: 'order',
-      header: t('admin.branches.colOrder'),
-      numeric: true,
-      secondary: true,
-      cell: (r) => (r.display_order ?? '—') as ReactNode,
-    },
+    /* **No «الترتيب» column** (R76.8). A persisted order is expressed by
+       DRAGGING a row, not by reading a number out of a cell and typing it into a
+       form — and the number was never meaningful to a reader anyway. The
+       `display_order` field itself is untouched: it is what the drag writes. */
   ];
 
   // Hidden entirely for an Admin, rather than shown disabled: §14.2 gates the
@@ -256,6 +277,14 @@ export function BranchesPage(): ReactNode {
         status={status}
         actions={actions}
         onRetry={() => void load()}
+        sort={sort}
+        onSort={(next) => {
+          setSort(next);
+          // Back to page 1: row 26 of the old order is not row 26 of the new one,
+          // and leaving the reader on a page that no longer means anything is
+          // worse than moving them.
+          setPage(1);
+        }}
         filtered={query.trim() !== ''}
         onClearFilters={() => setQuery('')}
         toolbar={

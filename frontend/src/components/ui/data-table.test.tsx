@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
 import { ConfirmDialog } from './confirm-dialog.js';
-import { DataTable, orderActions, type Column } from './data-table.js';
+import { DataTable, orderActions, type Column, type SortState } from './data-table.js';
 import { t } from '../../i18n/index.js';
 import { SearchInput, TextArea, TextField } from './field.js';
 
@@ -303,5 +303,77 @@ describe('row actions are ordered the same way in every table', () => {
     });
     expect(html).not.toContain('الأدوار');
     expect(html.indexOf(t('common.edit'))).toBeLessThan(html.indexOf('إيقاف الحساب'));
+  });
+});
+
+describe('sortable column headers (R76.8)', () => {
+  const sortable: Column<Row>[] = [
+    { key: 'name', header: 'الاسم', sortKey: 'name', cell: (r) => r.name },
+    { key: 'plain', header: 'العنوان', cell: () => 'x' },
+  ];
+  const render = (sort: SortState | null, onSort?: (n: SortState | null) => void): string =>
+    renderToStaticMarkup(
+      <DataTable
+        caption="ج"
+        columns={sortable}
+        rows={[{ id: '1', name: 'أ', count: 1 }]}
+        rowKey={(r) => r.id}
+        status="ready"
+        sort={sort}
+        {...(onSort ? { onSort } : {})}
+      />,
+    );
+
+  it('makes a sortable header a real button, and leaves the others plain', () => {
+    // A button — not a click handler on the cell — so it is focusable,
+    // keyboard-reachable and announced as a control.
+    const html = render(null, () => undefined);
+    expect(html).toContain('datatable__sort');
+    // The plain column has no control, and the actions column never gets one.
+    expect(html.match(/datatable__sort"/g)?.length).toBe(1);
+  });
+
+  it('announces the direction on the CELL, where it belongs', () => {
+    // `aria-sort` is a property of the column, so a screen reader announces it on
+    // entering the cell rather than only on reaching the control inside it.
+    expect(render({ by: 'name', dir: 'asc' }, () => undefined)).toContain('aria-sort="ascending"');
+    expect(render({ by: 'name', dir: 'desc' }, () => undefined)).toContain('aria-sort="descending"');
+    // Sortable but not active.
+    expect(render(null, () => undefined)).toContain('aria-sort="none"');
+  });
+
+  it('marks a non-sortable column with no aria-sort at all', () => {
+    // `none` would claim it is sortable and merely unsorted.
+    const html = render(null, () => undefined);
+    expect(html.match(/aria-sort/g)?.length).toBe(1);
+  });
+
+  it('renders plain text when the caller offers no onSort', () => {
+    // Both or neither: a table showing a sort it cannot change would be lying
+    // about the control.
+    const html = render({ by: 'name', dir: 'asc' });
+    expect(html).not.toContain('datatable__sort"');
+    expect(html).toContain('الاسم');
+  });
+
+  it('cycles asc → desc → asc, never back to unsorted', () => {
+    /**
+     * A third state a reader cannot distinguish from ascending would make the
+     * third click look broken. Asserted on the callback rather than the markup,
+     * because the cycle is the behaviour.
+     */
+    const seen: (SortState | null)[] = [];
+    const toggle = (from: SortState | null): void => {
+      const active = from !== null && from.by === 'name' ? from.dir : null;
+      seen.push({ by: 'name', dir: active === 'asc' ? 'desc' : 'asc' });
+    };
+    toggle(null);
+    toggle(seen[0]!);
+    toggle(seen[1]!);
+    expect(seen).toEqual([
+      { by: 'name', dir: 'asc' },
+      { by: 'name', dir: 'desc' },
+      { by: 'name', dir: 'asc' },
+    ]);
   });
 });

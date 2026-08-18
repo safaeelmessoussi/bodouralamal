@@ -34,6 +34,22 @@ export interface Column<T> {
   /** Hidden below the narrow breakpoint — for columns that are context rather
    *  than identity. The first column should never set this. */
   secondary?: boolean;
+  /**
+   * **The contract field this column sorts by** (R76.1) — `sort_by=<this>`.
+   *
+   * Its presence is what makes the header a button; a column without it stays
+   * plain text, and the actions column never has one. It is the **endpoint's**
+   * field name, not the column key and not a database column: the server refuses
+   * anything outside its own allow-list, so a wrong value here fails loudly at
+   * the API rather than sorting by something unintended.
+   */
+  sortKey?: string;
+}
+
+/** The active sort, as the page holds it and the server receives it. */
+export interface SortState {
+  by: string;
+  dir: 'asc' | 'desc';
 }
 
 export interface RowAction<T> {
@@ -66,6 +82,16 @@ export interface DataTableProps<T> {
   onClearFilters?: () => void;
   /** Shown above the table — the search box and any filter controls. */
   toolbar?: ReactNode;
+  /**
+   * The active sort, and how to change it. **Both or neither**: a table that
+   * shows a sort it cannot change would be lying about the control.
+   *
+   * `null` means the collection's own default order (BR-19) — which is also the
+   * **canonical order**, the only state in which manual reordering is offered
+   * (R76.8).
+   */
+  sort?: SortState | null;
+  onSort?: (next: SortState | null) => void;
   /** TD-10 pagination, when the caller has more than one page. */
   pagination?: PaginationProps;
 }
@@ -116,6 +142,8 @@ export function DataTable<T>({
   filtered = false,
   onClearFilters,
   toolbar,
+  sort = null,
+  onSort,
   pagination,
 }: DataTableProps<T>): ReactNode {
   const hasActions = actions.length > 0;
@@ -147,8 +175,23 @@ export function DataTable<T>({
                     key={column.key}
                     scope="col"
                     className={cellClass(column)}
+                    /**
+                     * **`aria-sort` on the header, not on the button** — it is a
+                     * property of the column, and a screen reader announces it
+                     * when the reader enters the cell rather than only when they
+                     * reach the control inside it.
+                     */
+                    aria-sort={
+                      column.sortKey && sort?.by === column.sortKey
+                        ? sort.dir === 'asc'
+                          ? 'ascending'
+                          : 'descending'
+                        : column.sortKey
+                          ? 'none'
+                          : undefined
+                    }
                   >
-                    {column.header}
+                    {renderHeader(column, sort, onSort)}
                   </th>
                 ))}
                 {hasActions ? (
@@ -222,6 +265,62 @@ export function DataTable<T>({
         <Pagination {...pagination} />
       ) : null}
     </div>
+  );
+}
+
+/**
+ * A header cell's contents: the sort control where the column offers one, and
+ * plain text where it does not.
+ *
+ * Split out so the `sortKey` narrowing survives into the toggle callback — bound
+ * once, here, rather than re-asserted with `!` at each use.
+ */
+function renderHeader<T>(
+  column: Column<T>,
+  sort: SortState | null,
+  onSort: ((next: SortState | null) => void) | undefined,
+): ReactNode {
+  const by = column.sortKey;
+  if (by === undefined || onSort === undefined) return column.header;
+  const active = sort !== null && sort.by === by ? sort.dir : null;
+  return (
+    <SortHeader
+      label={column.header}
+      active={active}
+      // R76.8's cycle: first press ascending, second descending, third ascending
+      // again — never back to "unsorted", which a reader cannot tell apart from
+      // ascending and which would make the third click look broken.
+      onToggle={() => onSort({ by, dir: active === 'asc' ? 'desc' : 'asc' })}
+    />
+  );
+}
+
+/**
+ * A sortable column's heading — **a real button inside the `<th>`**.
+ *
+ * Not a click handler on the cell: a button is focusable, reachable by keyboard,
+ * announced as a control, and carries the platform's `:focus-visible` ring for
+ * free. The cell keeps `aria-sort`, which is the column's property.
+ *
+ * The arrow is `aria-hidden`: the direction is already announced by `aria-sort`,
+ * and reading "up arrow" aloud after "ascending" is reading punctuation.
+ */
+function SortHeader({
+  label,
+  active,
+  onToggle,
+}: {
+  label: string;
+  active: 'asc' | 'desc' | null;
+  onToggle: () => void;
+}): ReactNode {
+  return (
+    <button type="button" className="datatable__sort" onClick={onToggle}>
+      {label}
+      <span aria-hidden="true" className="datatable__sort-arrow">
+        {active === 'asc' ? '▲' : active === 'desc' ? '▼' : '⇅'}
+      </span>
+    </button>
   );
 }
 

@@ -523,3 +523,42 @@
   margin: 0;
   padding: 0;
 }
+
+/* **A sortable column heading** (R76.8, 2026-08-18).
+ *
+ * A real `<button>` inside the `<th>` rather than a click handler on the cell:
+ * focusable, keyboard-reachable, announced as a control, and carrying the
+ * platform's global `:focus-visible` ring for nothing. It inherits the header's
+ * own type — a sortable column must not look like a different column — and only
+ * the arrow is added.
+ *
+ * `justify-content: space-between` puts the arrow at the far edge of the cell in
+ * both directions, so a column of arrows lines up in RTL as it does in LTR. */
+.datatable__sort {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  justify-content: space-between;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-align: start;
+}
+.datatable__sort:hover {
+  color: var(--color-primary);
+}
+/* The inactive glyph is quieter than the active one: a column that COULD be
+   sorted should be discoverable without competing with the one that IS. */
+.datatable__sort-arrow {
+  flex: none;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+.admin-table th[aria-sort='ascending'] .datatable__sort-arrow,
+.admin-table th[aria-sort='descending'] .datatable__sort-arrow {
+  color: var(--color-primary);
+}
