@@ -241,6 +241,32 @@ The optimistic order is held until **the rows that come back agree with it** —
 releasing it when the request resolves would flash the old order for the length
 of the refetch, which reads as the drop having failed. A refusal drops it at once.
 
+### Which tables sort, and which deliberately do not
+
+Sorting is **server-side wherever it exists** (R76.1), so making a column
+sortable is an endpoint contract and not a table prop. The audit that decided
+the current set:
+
+| Sorts | Fields |
+|---|---|
+| الفروع · الفئات · المواد · المستويات · المجموعات الإدارية | R76's original five |
+| حلقات المواد | `name` · `level` · `subject` (R78) |
+| المستخدمون | `name` · `created_at` |
+| التسجيلات | `student` · `level` · `branch` |
+
+**Deliberately not sortable, and the reason matters more than the list.** A
+grade sheet, a Quran log editor and the Hijri month editor hold **live form
+controls bound to per-row draft state** — reordering them mid-edit would move a
+reader's own unsaved work under them. A Level's surahs and a Level's subjects are
+**assignment screens** whose order is the curriculum's, not a reader's. And a
+student's own grades and progress are read in the order the domain gives them.
+
+`account_status` was considered for المستخدمون and left out: its *alphabetical*
+order (`active`, `pending`, `suspended`) is not its meaningful one, so the column
+would look ordered and be arbitrary — the status **filter** already answers the
+question a reader actually has. That is the general test: **a column is sortable
+when its ordering means something, not when the data happens to permit one.**
+
 > [`SRS R76`] · `components/ui/reorderable.ts` (the rules, as pure functions,
 > because this project's component tests have no layout engine) ·
 > [API contracts](../architecture/api.md#manual-ordering-takes-the-sequence-not-per-row-numbers)

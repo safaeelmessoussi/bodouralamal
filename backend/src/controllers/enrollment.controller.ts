@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express';
+import { sortParamsFrom } from '../lib/sorting.js';
 import { z } from 'zod';
 
 import type { PrismaClient } from '../generated/prisma/client.js';
@@ -30,7 +31,15 @@ const createSchema = z
   .strict();
 
 const querySchema = z
-  .object({ level_id: z.string().uuid().optional(), branch_id: z.string().uuid().optional() })
+  .object({
+    level_id: z.string().uuid().optional(),
+    branch_id: z.string().uuid().optional(),
+    // R76.1 — parsed by the shared resolver, which refuses anything outside
+    // this endpoint's own allow-list. Declared here so `.strict()` does not
+    // reject the two parameters before the resolver ever sees them.
+    sort_by: z.string().optional(),
+    sort_dir: z.string().optional(),
+  })
   .strict();
 
 export function list(prisma: PrismaClient) {
@@ -40,6 +49,7 @@ export function list(prisma: PrismaClient) {
       data: await listEnrollments(prisma, requireActor(req), {
         ...(q.level_id ? { levelId: q.level_id } : {}),
         ...(q.branch_id ? { branchId: q.branch_id } : {}),
+        ...sortParamsFrom(req.query),
       }),
     });
   };

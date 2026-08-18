@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import type { SortState } from '../../components/ui/data-table.js';
 
 import { listBranches, type Branch } from '../../adapters/branches-admin.js';
 import {
@@ -64,6 +65,7 @@ export function UsersPage(): ReactNode {
   const [branches, setBranches] = useState<Branch[]>([]);
   const [status, setStatus] = useState<TableStatus>('loading');
   const [page, setPage] = useState(1);
+  const [sort, setSort] = useState<SortState | null>(null);
   const [total, setTotal] = useState(0);
   const [query, setQuery] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
@@ -91,6 +93,7 @@ export function UsersPage(): ReactNode {
           ...(statusFilter ? { status: statusFilter } : {}),
         },
         page,
+        sort,
       );
       setRows(result.data);
       setTotal(result.meta.total);
@@ -98,7 +101,7 @@ export function UsersPage(): ReactNode {
     } catch {
       setStatus('error');
     }
-  }, [accessToken, query, roleFilter, statusFilter, page]);
+  }, [accessToken, query, roleFilter, statusFilter, page, sort]);
 
   useEffect(() => {
     void load();
@@ -120,7 +123,12 @@ export function UsersPage(): ReactNode {
   }
 
   const columns: Column<UserSummary>[] = [
-    { key: 'name', header: t('admin.users.colName'), cell: (r) => r.name_arabic },
+    {
+      key: 'name',
+      header: t('admin.users.colName'),
+      sortKey: 'name',
+      cell: (r) => r.name_arabic,
+    },
     {
       key: 'email',
       header: t('admin.users.colEmail'),
@@ -267,6 +275,14 @@ export function UsersPage(): ReactNode {
         status={status}
         actions={actions}
         onRetry={() => void load()}
+        sort={sort}
+        onSort={(next) => {
+          setSort(next);
+          // Back to page 1: row 26 of the old order is not row 26 of the new
+          // one, and leaving the reader on a page that no longer means anything
+          // is worse than moving them.
+          setPage(1);
+        }}
         filtered={query.trim() !== '' || roleFilter !== '' || statusFilter !== ''}
         onClearFilters={() =>
           refilter(() => {

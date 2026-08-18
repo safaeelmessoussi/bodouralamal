@@ -1,4 +1,6 @@
 import { api } from '../lib/api.js';
+import { applySort } from './reorder.js';
+import type { SortState } from '../components/ui/data-table.js';
 
 /**
  * Enrolment — **مستفيدة → Level**, with an optional Group (§7 R66, §14.1 R74).
@@ -27,9 +29,11 @@ export interface EnrollmentRowView {
 export async function listEnrollments(
   token: string | null,
   filters: { level_id?: string } = {},
+  sort: SortState | null = null,
 ): Promise<EnrollmentRowView[]> {
   const params = new URLSearchParams();
   for (const [k, v] of Object.entries(filters)) if (v) params.set(k, v);
+  applySort(params, sort);
   const query = params.toString();
   return (
     await api<{ data: EnrollmentRowView[] }>(`/admin/enrollments${query ? `?${query}` : ''}`, {

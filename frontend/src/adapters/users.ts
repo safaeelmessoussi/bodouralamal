@@ -1,4 +1,6 @@
 import { api } from '../lib/api.js';
+import { applySort } from './reorder.js';
+import type { SortState } from '../components/ui/data-table.js';
 
 /**
  * User search (§5.6, §14.2, TD-3.2).
@@ -61,11 +63,13 @@ export async function searchUsers(
   token: string | null,
   query: UserQuery = {},
   page = 1,
+  sort: SortState | null = null,
 ): Promise<Page<UserSummary>> {
   const params = new URLSearchParams({ page: String(page), page_size: '25' });
   for (const [key, value] of Object.entries(query)) {
     if (value) params.set(key, value);
   }
+  applySort(params, sort);
   return api<Page<UserSummary>>(`/admin/users?${params.toString()}`, { token });
 }
 

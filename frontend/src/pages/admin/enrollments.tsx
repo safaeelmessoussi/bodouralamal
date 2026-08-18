@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import type { SortState } from '../../components/ui/data-table.js';
 
 import { listAdministrativeGroups, type AdministrativeGroup } from '../../adapters/administrative-groups.js';
 import { listBranches, type Branch } from '../../adapters/branches-admin.js';
@@ -74,6 +75,8 @@ export function EnrollmentsPage(): ReactNode {
   const [branches, setBranches] = useState<Branch[]>([]);
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [filterLevel, setFilterLevel] = useState<string | null>(null);
+  // `null` is BR-19's order, which the server keeps when nothing is asked.
+  const [sort, setSort] = useState<SortState | null>(null);
   const [query, setQuery] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
   const [composing, setComposing] = useState(false);
@@ -85,7 +88,7 @@ export function EnrollmentsPage(): ReactNode {
     setState('loading');
     try {
       const [list, levelList] = await Promise.all([
-        listEnrollments(accessToken, filterLevel ? { level_id: filterLevel } : {}),
+        listEnrollments(accessToken, filterLevel ? { level_id: filterLevel } : {}, sort),
         listLevels(accessToken),
       ]);
       setRows(list);
@@ -94,7 +97,7 @@ export function EnrollmentsPage(): ReactNode {
     } catch {
       setState('error');
     }
-  }, [accessToken, filterLevel]);
+  }, [accessToken, filterLevel, sort]);
 
   useEffect(() => {
     void load();
@@ -119,10 +122,16 @@ export function EnrollmentsPage(): ReactNode {
   });
 
   const columns: Column<EnrollmentRowView>[] = [
-    { key: 'student', header: t('admin.enrollments.student'), cell: (r) => r.student_name },
+    {
+      key: 'student',
+      header: t('admin.enrollments.student'),
+      sortKey: 'student',
+      cell: (r) => r.student_name,
+    },
     {
       key: 'level',
       header: t('admin.nav.levels'),
+      sortKey: 'level',
       // The shared label — `{Category} — {Level}` — so a Level reads the same
       // here as in every selector (§4.4b).
       cell: (r) =>
@@ -192,6 +201,8 @@ export function EnrollmentsPage(): ReactNode {
         status={state === 'ready' ? 'ready' : state}
         actions={actions}
         onRetry={() => void load()}
+        sort={sort}
+        onSort={setSort}
         filtered={query.trim() !== '' || filterLevel !== null}
         onClearFilters={() => {
           setQuery('');

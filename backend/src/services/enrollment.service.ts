@@ -1,4 +1,5 @@
 import type { Prisma, PrismaClient } from '../generated/prisma/client.js';
+import { resolveSort, type SortableFields, type SortParams } from '../lib/sorting.js';
 import { AppError } from '../lib/errors.js';
 import { page, pageWindow, type Page, type PageParams } from '../lib/pagination.js';
 import * as scope from '../policies/branch-scope.js';
@@ -805,10 +806,24 @@ export interface EnrollmentRowView {
  * The screen shows its data on load, so this takes filters that **narrow** and
  * never gate: absent, it answers with everything the caller may see.
  */
+/**
+ * What `/admin/enrollments` may be sorted by (R76.1) — **this endpoint's own
+ * allow-list**. `student` and `level` are the two the التسجيلات table shows as
+ * identity; `branch` orders by where the student actually is (R66).
+ */
+export const ENROLLMENT_SORT_FIELDS: SortableFields = {
+  student: (dir) => [{ student: { nameArabic: dir } }],
+  level: (dir) => [{ level: { name: dir } }],
+  branch: (dir) => [{ branch: { name: dir } }],
+};
+
+/** BR-19's reading order for this list, which an unparameterised call keeps. */
+const ENROLLMENT_DEFAULT_ORDER = [{ level: { name: 'asc' } }, { student: { nameArabic: 'asc' } }];
+
 export async function listEnrollments(
   prisma: PrismaClient,
   actor: Actor,
-  filters: { levelId?: string; branchId?: string } = {},
+  filters: { levelId?: string; branchId?: string } & SortParams = {},
 ): Promise<EnrollmentRowView[]> {
   assertCanManage(actor);
 
@@ -849,7 +864,7 @@ export async function listEnrollments(
       branch: { select: { name: true } },
       administrativeGroup: { select: { name: true } },
     },
-    orderBy: [{ level: { name: 'asc' } }, { student: { nameArabic: 'asc' } }],
+    orderBy: resolveSort(ENROLLMENT_SORT_FIELDS, filters, ENROLLMENT_DEFAULT_ORDER) as never,
     take: 500,
   });
 

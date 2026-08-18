@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express';
+import { sortParamsFrom } from '../lib/sorting.js';
 import { z } from 'zod';
 
 import type { PrismaClient } from '../generated/prisma/client.js';
@@ -91,6 +92,7 @@ export function list(prisma: PrismaClient) {
       ...(status ? { status } : {}),
       ...(page ? { page } : {}),
       ...(page_size ? { pageSize: page_size } : {}),
+      ...sortParamsFrom(req.query),
     });
 
     res.json({ data: result.data.map(userDto), meta: result.meta });

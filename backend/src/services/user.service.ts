@@ -1,4 +1,5 @@
 import type { Prisma, PrismaClient } from '../generated/prisma/client.js';
+import { resolveSort, type SortableFields, type SortParams } from '../lib/sorting.js';
 import { AppError, uniqueViolationFields } from '../lib/errors.js';
 import { pageWindow, type Page } from '../lib/pagination.js';
 import { MIN_QUERY_LENGTH, normalizePhone, normalizeSearchText } from '../lib/search-normalize.js';
@@ -222,10 +223,27 @@ export interface UserListItem {
 }
 
 /** TD-10: default 25, max 100. */
+/**
+ * What `/admin/users` may be sorted by (R76.1) — **this endpoint's own
+ * allow-list**, and deliberately narrow.
+ *
+ * `name` and `created_at` only. `account_status` was considered and left out: it
+ * is an enum whose *alphabetical* order (`active`, `pending`, `suspended`) is not
+ * its meaningful one, so a sort by it would look ordered and be arbitrary — the
+ * status filter already answers the question a reader actually has.
+ */
+export const USER_SORT_FIELDS: SortableFields = {
+  name: (dir) => [{ nameArabic: dir }],
+  created_at: (dir) => [{ createdAt: dir }],
+};
+
+/** BR-19's order — the collated name, which is correct Arabic order natively. */
+const USER_DEFAULT_ORDER = [{ nameArabic: 'asc' }];
+
 export async function listUsers(
   prisma: PrismaClient,
   caller: Actor,
-  filters: UserListFilters = {},
+  filters: UserListFilters & SortParams = {},
 ): Promise<Page<UserListItem>> {
   // TD-12: browsing beneficiary records is a user-management surface, so the
   // caller's status and role are re-read from live rows on every request.
@@ -323,7 +341,9 @@ export async function listUsers(
       // TD-10: `name_arabic` is natively collated ar-x-icu (TD-6a), so this is
       // correct Arabic order with no per-query COLLATE workaround. `id` is the
       // deterministic tiebreaker that keeps pagination stable.
-      orderBy: [{ nameArabic: 'asc' }, { id: 'asc' }],
+      // The `id` tiebreaker is appended by `resolveSort` (R76.3), so it is not
+      // repeated here — one place decides it for every endpoint.
+      orderBy: resolveSort(USER_SORT_FIELDS, filters, USER_DEFAULT_ORDER) as never,
       skip,
       take,
     }),
