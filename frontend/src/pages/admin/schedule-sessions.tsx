@@ -271,6 +271,10 @@ export function ScheduleSessionsPage({ scheduleId }: { scheduleId: string }): Re
       {scope ? (
         <SessionMaterialsDialog
           sessionId={materialsFor}
+          // R75.6 — the default recording name is derived from the session it
+          // belongs to: the class and the day it was held. A recording called
+          // "تسجيل 4" tells a reader nothing a year later.
+          sessionName={sessionLabel(rows.find((r) => r.id === materialsFor))}
           scope={scope}
           token={accessToken}
           onClose={() => setMaterialsFor(null)}
@@ -278,6 +282,18 @@ export function ScheduleSessionsPage({ scheduleId }: { scheduleId: string }): Re
       ) : null}
     </AdminLayout>
   );
+}
+
+/**
+ * The name a recording of this occurrence gets by default (R75.6).
+ *
+ * The subject and the date, which is what a reader needs a year later — a file
+ * called *تسجيل 4* answers nothing. It is a **default and never an invariant**:
+ * nothing reads it back, and the ordinary content-edit flow changes it.
+ */
+function sessionLabel(session: { subject_name?: string | null; date: string } | undefined): string {
+  if (session === undefined) return '';
+  return [session.subject_name, session.date].filter(Boolean).join(' — ');
 }
 
 /**

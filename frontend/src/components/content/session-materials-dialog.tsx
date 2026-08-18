@@ -7,6 +7,7 @@ import { api } from '../../lib/api.js';
 import { Button } from '../ui/button.js';
 import { Dialog } from '../ui/dialog.js';
 import { SearchableSelect } from '../ui/searchable-select.js';
+import { AudioRecorder } from './audio-recorder.js';
 import { FileUploader } from './file-uploader.js';
 
 /**
@@ -30,6 +31,9 @@ import { FileUploader } from './file-uploader.js';
  */
 export interface SessionMaterialsProps {
   sessionId: string | null;
+  /** R75.6 derives a recording's default name from the session: its title and
+   *  its date, which the calling screen already holds. */
+  sessionName?: string;
   /** The session's teaching scope, so an upload lands where the class is. */
   scope: { levelId: string; subjectId: string; academicYearId: string; branchId: string | null };
   token: string | null;
@@ -43,6 +47,7 @@ interface LibraryOption {
 
 export function SessionMaterialsDialog({
   sessionId,
+  sessionName = '',
   scope,
   token,
   onClose,
@@ -52,6 +57,7 @@ export function SessionMaterialsDialog({
   const [options, setOptions] = useState<LibraryOption[]>([]);
   const [choice, setChoice] = useState('');
   const [uploading, setUploading] = useState(false);
+  const [recording, setRecording] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -180,6 +186,46 @@ export function SessionMaterialsDialog({
       ) : (
         <Button variant="secondary" onClick={() => setUploading(true)} disabled={busy}>
           {t('session.materialsUploadNew')}
+        </Button>
+      )}
+
+      {/* **R75 — recording is a second WAY to produce a library item, beside the
+          uploader and never instead of it.** Both end in the same
+          `initiate → PUT → complete` pipeline and the same `SessionContent`
+          link, which is why they sit together here rather than on a screen of
+          their own: what a teacher is doing is *attaching this week's audio*,
+          and where the bytes came from is an implementation detail of that.
+
+          The recorder renders its own *not supported* state, so no condition
+          lives here — a check in this file would be a second opinion about the
+          browser, and the two would disagree the first time either changed. */}
+      {recording ? (
+        <AudioRecorder
+          meta={{
+            level_id: scope.levelId,
+            subject_id: scope.subjectId,
+            academic_year_id: scope.academicYearId,
+            branch_id: scope.branchId,
+          }}
+          token={token}
+          baseName={sessionName}
+          // R75.6 — the suffix is chosen from what is ALREADY LINKED, so two
+          // people saving at once cannot land on the same name.
+          existingTitles={[...linked, ...recordings].map((c) => c.title)}
+          onSaved={(contentId) =>
+            void run(async () => {
+              // Upload then link, in that order and for the same reason the
+              // uploader has: a failed link leaves a usable file in the library
+              // rather than an orphaned object.
+              await linkSessionContent(sessionId ?? '', contentId, token);
+              setRecording(false);
+            })
+          }
+          onCancel={() => setRecording(false)}
+        />
+      ) : (
+        <Button variant="secondary" onClick={() => setRecording(true)} disabled={busy || uploading}>
+          {t('recorder.title')}
         </Button>
       )}
     </Dialog>

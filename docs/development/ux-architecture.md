@@ -274,6 +274,50 @@ The unread marker is an inline-start border — **a shape, not only a colour**
 
 > [`SRS R77`] · [API contracts](../reference/api-endpoints.md#notifications)
 
+## AH · Recording is a second WAY to make a library item, never a second model
+
+A saved recording is an ordinary `EducationalContent` with an `audio/*` MIME
+(§4.9 as amended by Revision 75), created through the **existing**
+`initiate → PUT → complete` pipeline and linked through the **existing**
+`SessionContent` join. No new entity, no new endpoint, no new storage path — so
+the consent gate, the visibility tiers, the quarantine-on-replace rule and R14's
+upload quota all apply without being restated, because it is the same pipeline.
+
+That is also why the recorder sits **beside the uploader in the same dialog**
+rather than on a screen of its own. What a teacher is doing is *attaching this
+week's audio*; where the bytes came from is an implementation detail of that.
+The phone-record-and-upload path is untouched — this adds one and removes none.
+
+**Where it cannot work, it is not offered and the reason is stated** (§14.4). The
+component renders its own unsupported state, so no caller checks the browser: a
+condition in the dialog would be a second opinion about `MediaRecorder`, and the
+two would disagree the first time either changed. Every such message names the
+phone path, because a person told only *this does not work* has been told nothing
+they can act on.
+
+**Pause produces one file, and the clock is not the duration.** `pause()` /
+`resume()` keep a single `MediaRecorder`. Some containers then record a duration
+that ignores the paused time, which is exactly why the elapsed reading is **UI
+only** — nothing writes it anywhere and `EducationalContent` has no duration
+column. The clock is `aria-live="off"`: a reading announced every second is a
+screen reader nobody can use, and the *state* changes are what carry the meaning.
+
+**Risk R-4 is accepted, and the guard covers what a guard can reach.** iOS
+suspends `MediaRecorder` on screen lock or backgrounding and can truncate without
+error — that residual risk is the specification's. What the interface removes is
+the *silent* loss: a standing warning while recording, a `visibilitychange`
+notice, and a `beforeunload` guard. The warning is styled as a **condition, not
+an error** — danger colouring would make a normal state look like a fault and
+leave nothing to say when one occurs.
+
+**A failed save keeps the recording.** There is no resume (Risk R-9), so a retry
+re-uploads from zero — but discarding the blob would make one network failure
+cost the class.
+
+> [`SRS R75`] · `lib/recorder.ts` holds the rules as pure functions, for the same
+> reason [AF](#af--ordering-a-list-sort-is-a-question-drag-is-a-decision) does:
+> the component tests have no `MediaRecorder` and no layout engine.
+
 ## I · Empty states
 
 Use the shared states. **Never hand-code an empty state or its button** — the

@@ -4,11 +4,10 @@
 
 **The in-app audio recorder, brought forward for class sessions.**
 
-**Status:** drafted 2026-08-17 on the Document Owner's explicit instruction
-(*"my current product requirement is now to implement the recorder for CLASS
-SESSIONS … make the minimum necessary revision"*). **Not applied.** `docs/SRS.md`
-is immutable to the implementer; this is the text for the Owner to approve, and
-the wording below is exactly what would be inserted.
+**Status:** **APPLIED** to `docs/SRS.md` on 2026-08-18, on the Document Owner's
+instruction (*"Implement the audio recorder … prepare the required SRS revision
+for the iOS/screen-lock risk … If SRS changes are required, draft/apply revisions
+per repository rules"*). This document is retained as the decision record.
 
 ---
 
@@ -124,7 +123,7 @@ was written as a deferral note rather than as a specification:
 | **TD-2 rows** | **None** — the recorder inherits the session's link authority. |
 | **Schema change** | **None.** |
 
-## 5 · What the Owner is being asked to approve
+## 5 · What was approved
 
 1. Moving the recorder from §10.1 into §4.9, **for `Session` only**.
 2. **Reinstating and accepting risk R-4** in its re-scoped form.

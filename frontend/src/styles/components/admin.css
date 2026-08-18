@@ -654,3 +654,31 @@
   color: var(--color-text-inverse);
   font-size: var(--font-size-sm);
 }
+
+/* **The in-app recorder** (§4.9 as amended by R75, 2026-08-18).
+ *
+ * The warning is styled as a standing condition rather than an error: the risk
+ * is present for as long as the recording is, and it has not *happened*. Danger
+ * colouring would make a normal state look like a fault, and would then have
+ * nothing left to say when one occurs. */
+.recorder {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+.recorder__elapsed {
+  margin: 0;
+  font-size: var(--font-size-xl);
+  /* Digits that do not shift the layout as the clock ticks. */
+  font-variant-numeric: tabular-nums;
+}
+.recorder__warning {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-inline-start: 3px solid var(--color-accent);
+  background: var(--color-background);
+  color: var(--color-text-secondary);
+}
