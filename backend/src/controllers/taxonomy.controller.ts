@@ -2,10 +2,13 @@ import type { Request, Response } from 'express';
 
 import type { PrismaClient } from '../generated/prisma/client.js';
 import { requireActor } from '../middleware/authenticate.js';
+import { sortParamsFrom } from '../lib/sorting.js';
+import { reorderSchema, reorderWithinSchema } from '../validators/reorder.validators.js';
 import {
   createLevel,
   deleteLevel,
   listLevels,
+  reorderLevels,
   updateLevel,
 } from '../services/level.service.js';
 import {
@@ -14,6 +17,7 @@ import {
   deleteCategory,
   deleteSubject,
   listCategories,
+  reorderCategories,
   updateCategory,
   updateSubject,
 } from '../services/taxonomy.service.js';
@@ -53,8 +57,17 @@ import { uuid } from '../validators/common.js';
 
 export function categories(prisma: PrismaClient) {
   return async (req: Request, res: Response): Promise<void> => {
-    const rows = await listCategories(prisma, requireActor(req));
+    const rows = await listCategories(prisma, requireActor(req), sortParamsFrom(req.query));
     res.json({ data: rows.map(categoryDto) });
+  };
+}
+
+/** `PATCH /admin/categories/order` — the categories, in the order given (R76.4). */
+export function reorderCategoriesHandler(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const body = parse(reorderSchema, req.body ?? {});
+    const ids = await reorderCategories(prisma, requireActor(req), body.ids);
+    res.json({ data: { ids } });
   };
 }
 
@@ -142,8 +155,24 @@ export function levels(prisma: PrismaClient) {
       prisma,
       requireActor(req),
       categoryId !== undefined ? { categoryId } : {},
+      sortParamsFrom(req.query),
     );
     res.json({ data: rows.map(levelDto) });
+  };
+}
+
+/**
+ * `PATCH /admin/levels/order` — one Category's Levels, in the order given.
+ *
+ * **The Category is required**, because §2.2 scopes `Level.display_order` to its
+ * parent: a global sequence across every Level would write positions that mean
+ * nothing beside each other.
+ */
+export function reorderLevelsHandler(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const body = parse(reorderWithinSchema, req.body ?? {});
+    const ids = await reorderLevels(prisma, requireActor(req), body.within, body.ids);
+    res.json({ data: { ids } });
   };
 }
 

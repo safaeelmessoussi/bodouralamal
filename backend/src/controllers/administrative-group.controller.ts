@@ -2,6 +2,8 @@ import type { Request, Response } from 'express';
 
 import type { PrismaClient } from '../generated/prisma/client.js';
 import { pageParamsFrom } from '../lib/pagination.js';
+import { sortParamsFrom } from '../lib/sorting.js';
+import { reorderWithinSchema } from '../validators/reorder.validators.js';
 import { requireActor } from '../middleware/authenticate.js';
 import * as groups from '../services/administrative-group.service.js';
 import * as enrolments from '../services/enrollment.service.js';
@@ -41,8 +43,23 @@ export function list(prisma: PrismaClient) {
       ...(filters.level_id !== undefined ? { levelId: filters.level_id } : {}),
       ...(filters.branch_id !== undefined ? { branchId: filters.branch_id } : {}),
       ...pageParamsFrom(req.query),
+      ...sortParamsFrom(req.query),
     });
     res.json(pageOf(result, administrativeGroupDto));
+  };
+}
+
+/** `PATCH /admin/administrative-groups/order` — one Level's groups (R76.4). */
+export function reorderGroups(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const body = parse(reorderWithinSchema, req.body ?? {});
+    const ids = await groups.reorderAdministrativeGroups(
+      prisma,
+      requireActor(req),
+      body.within,
+      body.ids,
+    );
+    res.json({ data: { ids } });
   };
 }
 

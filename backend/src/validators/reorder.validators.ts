@@ -26,3 +26,21 @@ export const reorderSchema = z
     ids: z.array(uuid).max(500),
   })
   .strict();
+
+/**
+ * A reorder **within a parent** — Levels within a Category, Administrative
+ * Groups within a Level.
+ *
+ * `within` is required rather than inferred from the ids, and that is the point:
+ * `display_order` on these two is scoped to the parent (§2.2), so the server must
+ * know which collection the sequence claims to be **before** it reads the live
+ * set to compare against. Deriving the parent from the first id would let a
+ * request that mixes two parents look valid until the set check, and would report
+ * the wrong collection in the refusal.
+ */
+export const reorderWithinSchema = z
+  .object({
+    within: uuid,
+    ids: z.array(uuid).max(500),
+  })
+  .strict();

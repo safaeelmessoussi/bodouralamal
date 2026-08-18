@@ -1,5 +1,7 @@
 import type { Category, PrismaClient, Subject } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
+import { applyOrder } from '../lib/reorder.js';
+import { resolveSort, type SortableFields, type SortParams } from '../lib/sorting.js';
 import * as scope from '../policies/branch-scope.js';
 import * as audit from '../repositories/audit.repository.js';
 import { assertNoBlockingReferences, updateWithVersion } from '../repositories/optimistic-lock.js';
@@ -101,17 +103,30 @@ export interface SubjectWithLevels extends SubjectRef {
  * hidden second page. The set is bounded by the curriculum — tens of rows, not
  * thousands — which is the condition that makes TD-10 the wrong tool here.
  */
+/** What `/admin/subjects` may be sorted by (R76.1) — contract names, not columns. */
+export const SUBJECT_SORT_FIELDS: SortableFields = { name: (dir) => [{ name: dir }] };
+
+/** What `/admin/categories` may be sorted by (R76.1). */
+export const CATEGORY_SORT_FIELDS: SortableFields = { name: (dir) => [{ name: dir }] };
+
+/** BR-19's order, which an unparameterised list still receives (R76.2). */
+const REFERENCE_DEFAULT_ORDER = [
+  { displayOrder: { sort: 'asc', nulls: 'last' } },
+  { name: 'asc' },
+];
+
 export async function listSubjects(
   prisma: PrismaClient,
   actor: Actor,
+  sort: SortParams = {},
 ): Promise<SubjectWithLevels[]> {
   assertCanRead(actor);
 
   const rows = await prisma.subject.findMany({
     where: { deletedAt: null },
-    // BR-19: `display_order` first, then the natively `ar-x-icu` collated name —
-    // correct Arabic ordering with no per-query COLLATE (§20 rule 13).
-    orderBy: [{ displayOrder: { sort: 'asc', nulls: 'last' } }, { name: 'asc' }, { id: 'asc' }],
+    // R76 — the caller's sort if they asked for one, else BR-19's order, with
+    // `id` appended either way so the sequence is deterministic.
+    orderBy: resolveSort(SUBJECT_SORT_FIELDS, sort, REFERENCE_DEFAULT_ORDER) as never,
     select: {
       id: true,
       name: true,
@@ -276,12 +291,16 @@ export interface CategoryRef {
  * unrelated screen shape a public, cached payload — the reasoning already
  * recorded for `GET /admin/subjects`.
  */
-export async function listCategories(prisma: PrismaClient, actor: Actor): Promise<CategoryRef[]> {
+export async function listCategories(
+  prisma: PrismaClient,
+  actor: Actor,
+  sort: SortParams = {},
+): Promise<CategoryRef[]> {
   assertCanRead(actor);
 
   const rows = await prisma.category.findMany({
     where: { deletedAt: null },
-    orderBy: [{ displayOrder: { sort: 'asc', nulls: 'last' } }, { name: 'asc' }, { id: 'asc' }],
+    orderBy: resolveSort(CATEGORY_SORT_FIELDS, sort, REFERENCE_DEFAULT_ORDER) as never,
     select: {
       id: true,
       name: true,
@@ -419,4 +438,55 @@ export async function deleteCategory(prisma: PrismaClient, actor: Actor, id: str
       detail: { name: category.name },
     });
   });
+}
+
+/**
+ * `PATCH /admin/categories/order` and `PATCH /admin/subjects/order` (R76.4).
+ *
+ * The same contract the branches use, on the same shared helper: the body is the
+ * **sequence**, positions are the server's, and the request is refused unless it
+ * names the exact live set.
+ *
+ * **Authority is this file's own `assertCanWrite`** — reference-data writes are
+ * Super Admin (R26), and reorder inherits that rather than adding a TD-2 row.
+ * Neither entity is branch-scoped, so the live set is simply every live row.
+ */
+export async function reorderCategories(
+  prisma: PrismaClient,
+  actor: Actor,
+  ids: readonly string[],
+): Promise<string[]> {
+  assertCanWrite(actor);
+  return applyOrder(
+    prisma,
+    {
+      liveIds: async (tx) =>
+        (await tx.category.findMany({ where: { deletedAt: null }, select: { id: true } })).map(
+          (r) => r.id,
+        ),
+      write: (tx, id, displayOrder) =>
+        tx.category.update({ where: { id }, data: { displayOrder } }),
+    },
+    ids,
+  );
+}
+
+export async function reorderSubjects(
+  prisma: PrismaClient,
+  actor: Actor,
+  ids: readonly string[],
+): Promise<string[]> {
+  assertCanWrite(actor);
+  return applyOrder(
+    prisma,
+    {
+      liveIds: async (tx) =>
+        (await tx.subject.findMany({ where: { deletedAt: null }, select: { id: true } })).map(
+          (r) => r.id,
+        ),
+      write: (tx, id, displayOrder) =>
+        tx.subject.update({ where: { id }, data: { displayOrder } }),
+    },
+    ids,
+  );
 }

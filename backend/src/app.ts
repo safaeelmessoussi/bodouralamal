@@ -312,6 +312,7 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
   // authenticates, it does not authorise.
   guarded.get('/admin/administrative-groups', administrativeGroups.list(prisma));
   guarded.post('/admin/administrative-groups', administrativeGroups.create(prisma));
+  guarded.patch('/admin/administrative-groups/order', administrativeGroups.reorderGroups(prisma));
   guarded.patch('/admin/administrative-groups/:id', administrativeGroups.update(prisma));
   guarded.delete('/admin/administrative-groups/:id', administrativeGroups.remove(prisma));
   // R74 — enrolment as the Level fact it is. NOT a second roster: the group
@@ -401,13 +402,16 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
   // does not store.
   guarded.get('/admin/categories', taxonomy.categories(prisma));
   guarded.post('/admin/categories', taxonomy.createCategoryHandler(prisma));
+  guarded.patch('/admin/categories/order', taxonomy.reorderCategoriesHandler(prisma));
   guarded.patch('/admin/categories/:id', taxonomy.updateCategoryHandler(prisma));
   guarded.delete('/admin/categories/:id', taxonomy.deleteCategoryHandler(prisma));
   guarded.post('/admin/subjects', taxonomy.createSubjectHandler(prisma));
+  guarded.patch('/admin/subjects/order', referenceData.reorderSubjectsHandler(prisma));
   guarded.patch('/admin/subjects/:id', taxonomy.updateSubjectHandler(prisma));
   guarded.delete('/admin/subjects/:id', taxonomy.deleteSubjectHandler(prisma));
   guarded.get('/admin/levels', taxonomy.levels(prisma));
   guarded.post('/admin/levels', taxonomy.createLevelHandler(prisma));
+  guarded.patch('/admin/levels/order', taxonomy.reorderLevelsHandler(prisma));
   guarded.patch('/admin/levels/:id', taxonomy.updateLevelHandler(prisma));
   guarded.delete('/admin/levels/:id', taxonomy.deleteLevelHandler(prisma));
 

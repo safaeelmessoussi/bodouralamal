@@ -4,11 +4,11 @@
 
 **List sorting, and manual reordering, as contracts.**
 
-**Status:** drafted 2026-08-18 on the Document Owner's approval of the
-architectural direction (*"TABLE SORTING → SERVER-SIDE · MANUAL ORDERING → NEW
-REORDER CONTRACT"*). **Not applied** — `docs/SRS.md` is immutable to the
-implementer; this is the text to approve, and it is what the implementation
-follows.
+**Status:** **APPLIED** to `docs/SRS.md` on 2026-08-18, on the Document Owner's
+explicit instruction (*"I approve proceeding with the direction already
+implemented in R76 … Apply R76 to the SRS if that is the established workflow"*).
+This document is retained as the decision record — the reasoning behind the
+revision, which the SRS entry itself states in compressed form.
 
 ---
 
@@ -95,7 +95,7 @@ only as a field on create/update** — there is no reorder operation anywhere.
 | **Default behaviour** | **Unchanged.** BR-19 remains the answer to an unparameterised list. |
 | **Injection surface** | **None added**: `sort_by` is an allow-listed contract name, refused if unknown. |
 
-## 5 · What the Owner is being asked to approve
+## 5 · What was approved
 
 1. `sort_by` / `sort_dir` on list contracts, allow-listed per endpoint.
 2. `PATCH /admin/{resource}/order` taking the **sequence**, refused unless it is
@@ -104,8 +104,11 @@ only as a field on create/update** — there is no reorder operation anywhere.
 4. **Five** orderable resources; `TeachingGroup` excluded.
 5. §14.2's interaction rules, including **drag only in canonical order**.
 
-## 6 · If this is not approved
+## 6 · Rollback
 
-Nothing is half-built: without (1) the tables keep BR-19's order and no header is
-a button; without (4) the `الترتيب` column stays and ordering continues through
-the edit form.
+Both halves are **additive and independently reversible**. Removing the sort
+parameters returns every collection to BR-19's order, which is what an
+unparameterised request already receives — no stored data depends on them.
+Removing the reorder endpoint leaves `display_order` exactly as it is, since the
+column predates this revision and the edit forms still write it. **No migration
+was required in either direction.**

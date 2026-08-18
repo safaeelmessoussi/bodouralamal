@@ -1,5 +1,7 @@
 import type { Level, PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
+import { applyOrder } from '../lib/reorder.js';
+import { resolveSort, type SortableFields, type SortParams } from '../lib/sorting.js';
 import * as scope from '../policies/branch-scope.js';
 import * as audit from '../repositories/audit.repository.js';
 import { assertNoBlockingReferences, updateWithVersion } from '../repositories/optimistic-lock.js';
@@ -100,22 +102,41 @@ export interface LevelSummary {
  * by the curriculum, and a Levels screen that hides its second page is a screen
  * that cannot answer "does this Level already exist".
  */
+/**
+ * What `/admin/levels` may be sorted by (R76.1).
+ *
+ * `category` orders by the **Category's own** columns — a relation traversal the
+ * client neither names nor knows about, which is the point of the allow-list
+ * mapping a contract name to an expression rather than to a column.
+ */
+export const LEVEL_SORT_FIELDS: SortableFields = {
+  name: (dir) => [{ name: dir }],
+  category: (dir) => [{ category: { displayOrder: { sort: dir, nulls: 'last' } } }, { category: { name: dir } }],
+};
+
+/**
+ * BR-19's order for Levels — Category first, because `Level.display_order` is
+ * scoped WITHIN its Category (§2.2) and ordering by it across Categories
+ * interleaves them.
+ */
+const LEVEL_DEFAULT_ORDER = [
+  { category: { displayOrder: { sort: 'asc', nulls: 'last' } } },
+  { category: { name: 'asc' } },
+  { displayOrder: { sort: 'asc', nulls: 'last' } },
+  { name: 'asc' },
+];
+
 export async function listLevels(
   prisma: PrismaClient,
   actor: Actor,
   filters: { categoryId?: string } = {},
+  sort: SortParams = {},
 ): Promise<LevelSummary[]> {
   assertCanReadReferenceData(actor);
 
   const rows = await prisma.level.findMany({
     where: { deletedAt: null, ...(filters.categoryId ? { categoryId: filters.categoryId } : {}) },
-    orderBy: [
-      { category: { displayOrder: { sort: 'asc', nulls: 'last' } } },
-      { category: { name: 'asc' } },
-      { displayOrder: { sort: 'asc', nulls: 'last' } },
-      { name: 'asc' },
-      { id: 'asc' },
-    ],
+    orderBy: resolveSort(LEVEL_SORT_FIELDS, sort, LEVEL_DEFAULT_ORDER) as never,
     select: {
       id: true,
       name: true,
@@ -349,4 +370,36 @@ export async function levelsWithoutGroups(
     select: { id: true, name: true },
     orderBy: { displayOrder: 'asc' },
   });
+}
+
+/**
+ * `PATCH /admin/levels/order` (R76.4).
+ *
+ * **Ordered within a Category, and the request says which** — §2.2 scopes
+ * `Level.display_order` to its parent, so a global sequence across every Level
+ * would write positions that mean nothing next to each other. The live set is
+ * therefore that Category's Levels, and the exact-set rule refuses a sequence
+ * naming a Level from another one.
+ */
+export async function reorderLevels(
+  prisma: PrismaClient,
+  actor: Actor,
+  categoryId: string,
+  ids: readonly string[],
+): Promise<string[]> {
+  assertCanManageReferenceData(actor);
+  return applyOrder(
+    prisma,
+    {
+      liveIds: async (tx) =>
+        (
+          await tx.level.findMany({
+            where: { deletedAt: null, categoryId },
+            select: { id: true },
+          })
+        ).map((r) => r.id),
+      write: (tx, id, displayOrder) => tx.level.update({ where: { id }, data: { displayOrder } }),
+    },
+    ids,
+  );
 }

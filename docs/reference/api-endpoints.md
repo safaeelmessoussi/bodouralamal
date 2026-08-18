@@ -246,6 +246,7 @@ they receive reference information through the operational APIs they are authori
 | `PATCH` `DELETE` | `/admin/branches/{id}` | 👤 |
 | `GET` `POST` | `/admin/branches/{id}/rooms` | 👤 write · 🔒 read |
 | `PATCH` `DELETE` | `/admin/rooms/{id}` | 👤 |
+| `PATCH` | `/admin/branches/order` | 👤 — `{ ids }`, the whole live set |
 
 ### Curriculum taxonomy — Categories, Subjects, Levels
 
@@ -261,6 +262,9 @@ are (the Revision 21 pattern). SRS wording is drafted in
 | `PATCH` `DELETE` | `/admin/subjects/{id}` | 👤 |
 | `GET` `POST` | `/admin/levels` | 👤 write · 🔒 read |
 | `PATCH` `DELETE` | `/admin/levels/{id}` | 👤 |
+| `PATCH` | `/admin/categories/order` | 👤 — `{ ids }` |
+| `PATCH` | `/admin/subjects/order` | 👤 — `{ ids }` |
+| `PATCH` | `/admin/levels/order` | 👤 — `{ within: categoryId, ids }`, one Category's Levels |
 
 **`POST /admin/levels` creates the Level *and* its first Administrative Group** (TD-4.6b) in
 one transaction, which is why it takes a `branch_id` the Level itself never stores: a Level
@@ -322,6 +326,7 @@ authenticates; it does not authorise.
 | `GET` `POST` | `/admin/administrative-groups` | `?level_id=` `?branch_id=` narrow **within** the caller's scope and can never reach outside it. A malformed filter is `400`, not an empty list |
 | `GET` `POST` | `/admin/administrative-groups/{id}/roster` | Enrolment reads the Level **from the group** and **enqueues consent re-evaluation** per session. **No capacity check exists** |
 | `DELETE` | `/admin/administrative-groups/{id}/roster/{studentId}` | Soft-deletes the enrolment **only** — grades, submissions and Quran logs survive. Subject-split seats for that Level go with it |
+| `PATCH` | `/admin/administrative-groups/order` | `{ within: levelId, ids }` — one Level's groups, within the caller's branch scope |
 | `PATCH` `DELETE` | `/admin/administrative-groups/{id}` | Only `name` and `display_order` are editable. Deletion is blocked by enrolments, by a schedule targeting the group, and by the **last group in a Level** — a Level created with one must never be emptied back to none |
 
 A group is exactly `id`, `name`, `level_id`, `branch_id`, `display_order`, `version`. The write

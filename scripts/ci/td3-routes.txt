@@ -100,6 +100,7 @@ PATCH /admin/branches/{id}                    # §5.6; Super Admin only incl. di
 DELETE /admin/branches/{id}                   # §5.6; Super Admin only (TD-2 R26); guarded by TD-5
 GET /admin/branches/{id}/rooms                # §5.6 "Branches & Rooms", §14.2 row action "Rooms"
 POST /admin/branches/{id}/rooms               # §5.6; Super Admin only (reference data, TD-2 R26)
+PATCH /admin/branches/order                   # R76.4; the sequence, not per-row numbers; write authority inherited
 PATCH /admin/rooms/{id}                       # §5.6; Super Admin only (TD-2 R26)
 DELETE /admin/rooms/{id}                      # §5.6; Super Admin only (TD-2 R26); guarded by TD-5
 
@@ -128,13 +129,16 @@ GET /admin/categories                         # §5.6 "Categories & Subjects", �
 POST /admin/categories                        # §5.6; Super Admin only (reference data, TD-2 R26)
 PATCH /admin/categories/{id}                  # §5.6; TD-15 optimistic locking
 DELETE /admin/categories/{id}                 # §5.6; TD-5, refused while Levels reference it
+PATCH /admin/categories/order                 # R76.4; the sequence; refused unless the exact live set
 POST /admin/subjects                          # §5.6 "Categories & Subjects"; Super Admin (TD-2 R26)
 PATCH /admin/subjects/{id}                    # §5.6; TD-15
 DELETE /admin/subjects/{id}                   # §5.6; TD-5, refused while anything still teaches it
+PATCH /admin/subjects/order                   # R76.4; the sequence; refused unless the exact live set
 GET /admin/levels                             # §5.6 "Levels", §14.1 مستويات; Admin+ read (TD-2 R26)
 POST /admin/levels                            # §5.6; Super Admin; TD-4.6b — Level + المجموعة 1 atomically
 PATCH /admin/levels/{id}                      # §5.6; TD-15; category_id deliberately not editable
 DELETE /admin/levels/{id}                     # §5.6; TD-5; cascades its own empty groups (TD-4.6b inverse)
+PATCH /admin/levels/order                     # R76.4; one Category's Levels — display_order is parent-scoped (§2.2)
 
 # ── Educational organisation & delivery (TD-3.12, Revision 43)
 #    These REPLACE the nine /admin/groups routes of the retired model, which the
@@ -146,6 +150,7 @@ GET /admin/administrative-groups              # TD-3.12, §4.4c; operational (Ad
 POST /admin/administrative-groups             # TD-3.12, §4.4c; no capacity exists (BR-23)
 PATCH /admin/administrative-groups/{id}       # TD-3.12; TD-15 optimistic locking; Level/Branch not editable
 DELETE /admin/administrative-groups/{id}      # TD-3.12; TD-5, guarded by enrolments, schedules, and §4.4b last-group
+PATCH /admin/administrative-groups/order      # R76.4; one Level's groups, within the caller's branch scope
 GET /admin/administrative-groups/{id}/roster  # TD-3.12, §5.6 enrollment screen
 POST /admin/administrative-groups/{id}/roster # TD-3.12; enqueues consent.reevaluate per session (§4.1a, TD-7)
 DELETE /admin/administrative-groups/{id}/roster/{studentId}  # TD-3.12; TD-5 soft-delete of the enrolment row only

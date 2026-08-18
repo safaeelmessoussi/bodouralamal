@@ -14,9 +14,11 @@ import {
 } from '../services/reference-data.service.js';
 // Subject's home is the taxonomy service — this endpoint is its selector
 // projection, not a second source for it.
-import { listSubjects } from '../services/taxonomy.service.js';
+import { listSubjects, reorderSubjects } from '../services/taxonomy.service.js';
+import { sortParamsFrom } from '../lib/sorting.js';
+import { reorderSchema } from '../validators/reorder.validators.js';
 import { academicYearRefDto, subjectRefDto, subjectWithLevelsDto } from './dto.js';
-import { idParam } from './parse.js';
+import { idParam, parse } from './parse.js';
 
 /**
  * Reference-data selectors (TD-3 extension, Document Owner decision 2026-08-05).
@@ -31,12 +33,21 @@ import { idParam } from './parse.js';
 
 export function subjects(prisma: PrismaClient) {
   return async (req: Request, res: Response): Promise<void> => {
-    const rows = await listSubjects(prisma, requireActor(req));
+    const rows = await listSubjects(prisma, requireActor(req), sortParamsFrom(req.query));
     // The WIDER projection: each Subject with the Levels that teach it, so
     // `/admin/subjects` can show the dependency that makes deletion refusable
     // (2026-08-17). `levelSubjects` below keeps the narrow one — a Level's own
     // subjects have no use for the reverse join.
     res.json({ data: rows.map(subjectWithLevelsDto) });
+  };
+}
+
+/** `PATCH /admin/subjects/order` — the subjects, in the order given (R76.4). */
+export function reorderSubjectsHandler(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const body = parse(reorderSchema, req.body ?? {});
+    const ids = await reorderSubjects(prisma, requireActor(req), body.ids);
+    res.json({ data: { ids } });
   };
 }
 

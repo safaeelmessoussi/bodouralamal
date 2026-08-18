@@ -9,6 +9,10 @@
 #
 # Prerequisites:
 #   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+#
+# Any arguments are forwarded to vitest, so one file can be run alone:
+#   bash scripts/dev/test-integration.sh src/controllers/reorder.http.integration.test.ts
+# Paths are relative to `backend/`, which is where vitest runs.
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
 
@@ -34,4 +38,4 @@ if ! (exec 3<>/dev/tcp/127.0.0.1/5433) 2>/dev/null; then
 fi
 
 cd backend
-exec npm run test:integration
+exec npm run test:integration -- "$@"

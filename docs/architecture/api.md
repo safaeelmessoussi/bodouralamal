@@ -157,6 +157,71 @@ shape.
 > Implementation: `backend/src/lib/pagination.ts` ·
 > [Backend](backend.md#pagination-lives-in-one-module)
 
+## Sorting is a contract, never a column name
+
+`?sort_by=<field>&sort_dir=asc|desc`, snake_case like `page_size` beside it. Absent, the
+collection keeps BR-19's order exactly — this is a capability, not a new default.
+
+**`sort_by` names a field the endpoint promises**, and every endpoint declares its own
+**allow-list** mapping that public name to an ordering expression. A name outside the list is
+`400 VALIDATION_FAILED` — never ignored, never passed through. There is therefore no path
+from a query string to a column: not a sanitised one, an **absent** one, which is the only
+version that stays true under later refactoring. `sort_dir` without `sort_by` is refused too,
+because it asks the server to guess.
+
+The allow-list is **per endpoint** rather than shared. A shared table would quietly let every
+list accept every other list's fields, which is how an allow-list stops being one — so
+`sort_by=category` sorts Levels and is refused on Categories.
+
+**Sorting is the database's**, never the client's: a client sorting a page of a paginated
+collection would order that page and misreport it as the collection's order.
+
+> [`SRS R76.1–R76.3`] · Implementation: `backend/src/lib/sorting.ts`
+
+## Manual ordering takes the sequence, not per-row numbers
+
+`PATCH /admin/{resource}/order` with `{ "ids": [...] }` — the order itself. The server writes
+`display_order` from each id's **position**, so duplicate and gapped values are *structurally
+impossible* rather than validated against, and no client does arithmetic that races another
+client doing the same.
+
+The sequence must be **the exact live set** in the caller's scope. A partial one cannot say
+where the omitted rows belong — prepend, append, or leave the old numbers to interleave? —
+so it is refused, naming which ids were `DUPLICATE_ID`, `UNKNOWN_ID` or `INCOMPLETE_ORDER`,
+because *"invalid order"* is not something a caller can act on. A foreign id answers exactly
+like a nonexistent one (§20 rule 17).
+
+One transaction, and **idempotent**: the same sequence twice produces the same rows, so a
+retry after a dropped response is safe. Two administrators reordering at once resolve
+last-writer-wins **on the whole sequence**, which is the honest outcome for an ordering;
+TD-15's per-row `version` is deliberately not used, because it answers *"did this row change
+under me"* and a reorder is a statement about the collection.
+
+Two of the five resources are **scoped to a parent** — `display_order` on `Level` lives
+within its Category and on `AdministrativeGroup` within its Level (§2.2) — so their body
+carries `within`, the parent's id. It is required rather than inferred from the ids: the
+server must know which collection the sequence claims to be *before* it reads the live set to
+compare against.
+
+| Resource | Body |
+|---|---|
+| `PATCH /admin/branches/order` | `{ ids }` |
+| `PATCH /admin/categories/order` | `{ ids }` |
+| `PATCH /admin/subjects/order` | `{ ids }` |
+| `PATCH /admin/levels/order` | `{ within: categoryId, ids }` |
+| `PATCH /admin/administrative-groups/order` | `{ within: levelId, ids }` |
+
+`TeachingGroup` carries the column and is deliberately **not** orderable: no interface has
+ever set it, so the gesture would invent a workflow rather than expose one.
+
+Authority is **inherited** from the resource's existing write authority — whoever may edit a
+Branch may reorder Branches — and TD-2 gains no row.
+
+Each `order` route is declared **before** its `/:id` sibling, since Express matches in
+declaration order and the literal would otherwise arrive as a malformed id.
+
+> [`SRS R76.4–R76.7`] · Implementation: `backend/src/lib/reorder.ts`
+
 ## Authentication semantics, decided once
 
 Two middlewares, one rule each — stated project-wide rather than per endpoint, because

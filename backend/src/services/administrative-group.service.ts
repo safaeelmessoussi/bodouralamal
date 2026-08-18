@@ -1,5 +1,7 @@
 import type { AdministrativeGroup, Prisma, PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
+import { applyOrder } from '../lib/reorder.js';
+import { resolveSort, type SortableFields, type SortParams } from '../lib/sorting.js';
 import { page, pageWindow, type Page, type PageParams } from '../lib/pagination.js';
 import * as scope from '../policies/branch-scope.js';
 import * as audit from '../repositories/audit.repository.js';
@@ -56,10 +58,16 @@ export interface AdministrativeGroupInput {
   displayOrder?: number | null;
 }
 
+/** What `/admin/administrative-groups` may be sorted by (R76.1). */
+export const GROUP_SORT_FIELDS: SortableFields = { name: (dir) => [{ name: dir }] };
+
+/** BR-19's order (R76.2). */
+const GROUP_DEFAULT_ORDER = [{ displayOrder: 'asc' }, { name: 'asc' }];
+
 export async function listAdministrativeGroups(
   prisma: PrismaClient,
   actor: Actor,
-  filters: { levelId?: string; branchId?: string } & PageParams,
+  filters: { levelId?: string; branchId?: string } & PageParams & SortParams,
 ): Promise<Page<AdministrativeGroup>> {
   assertCanManage(actor);
 
@@ -80,9 +88,9 @@ export async function listAdministrativeGroups(
       where,
       skip: window.skip,
       take: window.take,
-      // BR-19: `display_order` first, then the natively `ar-x-icu` collated
-      // name — correct Arabic ordering with no per-query COLLATE (§20 rule 13).
-      orderBy: [{ displayOrder: 'asc' }, { name: 'asc' }],
+      // R76 — the caller's sort if given, else BR-19's, with `id` appended so
+      // offset pagination stays deterministic.
+      orderBy: resolveSort(GROUP_SORT_FIELDS, filters, GROUP_DEFAULT_ORDER) as never,
     }),
     prisma.administrativeGroup.count({ where }),
   ]);
@@ -258,3 +266,44 @@ export async function deleteAdministrativeGroup(
  * state ordinary, so the backfill has nothing to repair — and creating a branch
  * no longer makes placement decisions nobody asked for.
  */
+
+/**
+ * `PATCH /admin/administrative-groups/order` (R76.4).
+ *
+ * **Ordered within a Level, and the request says which.** A group's position is
+ * meaningful among the other groups of its own Level — a global sequence across
+ * every Level would write positions that mean nothing beside each other.
+ *
+ * **The live set is additionally narrowed to the caller's branches**, through the
+ * same `branchesForRole` the list uses, so a branch-scoped Admin reorders the
+ * groups they can see and the exact-set rule refuses a sequence naming any other.
+ */
+export async function reorderAdministrativeGroups(
+  prisma: PrismaClient,
+  actor: Actor,
+  levelId: string,
+  ids: readonly string[],
+): Promise<string[]> {
+  assertCanManage(actor);
+  const branches = scope.branchesForRole(actor.roleScopes, MANAGING_ROLE);
+
+  return applyOrder(
+    prisma,
+    {
+      liveIds: async (tx) =>
+        (
+          await tx.administrativeGroup.findMany({
+            where: {
+              deletedAt: null,
+              levelId,
+              ...(branches === null ? {} : { branchId: { in: branches } }),
+            },
+            select: { id: true },
+          })
+        ).map((r) => r.id),
+      write: (tx, id, displayOrder) =>
+        tx.administrativeGroup.update({ where: { id }, data: { displayOrder } }),
+    },
+    ids,
+  );
+}
