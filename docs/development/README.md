@@ -13,6 +13,7 @@ Contributing to the platform.
 | [Getting started](getting-started.md) | From clone to a running stack |
 | [Conventions](conventions.md) | Layering, naming, TypeScript, commits, version policy |
 | [Testing](testing.md) | Four layers, what each is for, how to run them |
+| [QA inventory](qa-inventory.md) | What exists, how each part is verified, and where the browser gaps are |
 | [CI/CD](ci-cd.md) | Every gate, what it catches, and why it was added |
 | [Documentation policy](documentation-policy.md) | Documentation as part of Done — the workflow and the per-change routing |
 | [SRS proposal — Revision 73](../SRS-PROPOSAL-R73.md) | Quran progress: a reachable node, `quranlog.create`, and Quran-specific scope. **Drafted, NOT applied** — §73.4 needs an Owner decision |
