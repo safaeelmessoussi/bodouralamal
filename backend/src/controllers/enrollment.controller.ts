@@ -73,16 +73,25 @@ export function create(prisma: PrismaClient) {
 /**
  * `PATCH /admin/enrollments/{id}` — change the placement **within its Level**.
  *
- * **`level_id` is deliberately absent.** BR-21 makes `(student, level)` unique,
- * so an enrolment *is* that pair: moving to another Level is ending one and
- * beginning another, which the delete and create verbs already express.
- * `.strict()` refuses the key rather than dropping it, so a client that sends
- * one is told rather than silently ignored (the R55/R57 lesson).
+ * **`level_id` AND `branch_id` are deliberately absent** (2026-08-18).
+ *
+ * An enrolment **is** `beneficiary + Level + Branch`. BR-21 makes
+ * `(student, level)` unique, and R66 made `branch_id` the single answer to
+ * *where is this student* — so changing either is not an edit of this
+ * enrolment, it is a different enrolment. That move is already expressible:
+ * **إنهاء التسجيل**, then **تسجيل مستفيدة** at the Level and Branch wanted.
+ *
+ * What remains editable is the *subdivision inside* the enrolment: the optional
+ * Administrative Group, and the Teaching Circles, which are managed on their own
+ * screen.
+ *
+ * `.strict()` refuses the keys rather than dropping them, so a client that sends
+ * one is **told** rather than silently ignored (the R55/R57 lesson) — and a
+ * forged request cannot move a beneficiary between branches.
  */
 const patchSchema = z
   .object({
     administrative_group_id: z.string().uuid().nullable().optional(),
-    branch_id: z.string().uuid().optional(),
   })
   .strict();
 
@@ -93,7 +102,6 @@ export function update(prisma: PrismaClient) {
       ...(b.administrative_group_id === undefined
         ? {}
         : { administrativeGroupId: b.administrative_group_id }),
-      ...(b.branch_id === undefined ? {} : { branchId: b.branch_id }),
     });
     res.status(204).end();
   };

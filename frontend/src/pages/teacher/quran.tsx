@@ -17,6 +17,7 @@ import { SearchInput, SelectField, TextField } from '../../components/ui/field.j
 import { useSession } from '../../contexts/session.js';
 import { t } from '../../i18n/index.js';
 import { ApiError } from '../../lib/api.js';
+import { Feedback } from '../../components/ui/feedback.js';
 
 /**
  * `/teacher/quran?student=` — **تتبع الحفظ** (§4.5, BR-13; M4a, R73.1).
@@ -144,9 +145,9 @@ export function TeacherQuranPage({ studentId }: { studentId: string | null }): R
       }
     >
       {notice ? (
-        <p className="admin-notice" role="status" aria-live="polite">
+        <Feedback>
           {notice}
-        </p>
+        </Feedback>
       ) : null}
 
       {!studentId ? (

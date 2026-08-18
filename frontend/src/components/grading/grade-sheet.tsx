@@ -12,6 +12,7 @@ import { t } from '../../i18n/index.js';
 import { ApiError } from '../../lib/api.js';
 import { Badge } from '../ui/badge.js';
 import { Button } from '../ui/button.js';
+import { Feedback } from '../ui/feedback.js';
 
 /**
  * **The grade sheet — one component, reached from two places** (§4.6, SRS
@@ -196,9 +197,9 @@ export function GradeSheetView({
       </section>
 
       {notice ? (
-        <p className="admin-notice" role="status" aria-live="polite">
+        <Feedback>
           {notice}
-        </p>
+        </Feedback>
       ) : null}
 
       {sheet.rows.length === 0 ? (

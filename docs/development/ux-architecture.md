@@ -448,6 +448,26 @@ a hard delete. The UI must distinguish it from *changing a placement*, and state
 what is kept — a reader deciding on an irreversible-sounding action deserves to
 know it is recoverable, and from where.
 
+### The identity of an enrolment is not editable
+
+`Student → Level → Branch` **is** the enrolment. Editing the Level or the Branch
+does not move a student — it silently rewrites which fact the row records, and
+every grade, circle seat and exam scope hanging off it now belongs to a placement
+that never happened. So «تعديل التسجيل» edits the **optional** parts only: the
+administrative group and the teaching circles.
+
+Moving a student is therefore two acts, and the confirmation says so: **إنهاء
+التسجيل**, then **تسجيل مستفيدة** in the new Level or Branch. That is not a
+workaround for a missing field; it is the only sequence that leaves an honest
+history, because it records that one placement ended and another began.
+
+**The contract refuses it, not the form** — see [AF](#af--an-identity-field-is-refused-by-the-server-not-hidden-by-the-form).
+
+The confirmation answers three questions, not one: what ends · what is kept
+(**the beneficiary herself, and her enrolments in other Levels**) · and what may
+be done next. The third is what makes the dialog a step in a route rather than a
+dead end, and it was the one missing when the edit form stopped offering Level.
+
 ## M · User-facing text
 
 **No engineering reference ever reaches a user-facing surface**: no `§4.4c`, no
@@ -811,6 +831,39 @@ Canonical: `.admin-nav` in
 two-column media query**: below that breakpoint the sidebar is a normal block in
 the flow and must not become a small scrolling box mid-page.
 
+### And it keeps its place across a navigation
+
+Every portal navigation is a **full document load** — there is no client router,
+and introducing one to fix a scroll position would be the wrong size of answer.
+So the sidebar starts each page at `scrollTop: 0`, and a menu long enough to
+scroll then hides the very entry that was just clicked.
+
+Two facts must hold together afterwards, and they are **not** the same fact:
+
+1. **the position is preserved**, so nothing appears to jump; and
+2. **the active entry is visible**, because *where am I* must be answerable.
+
+(1) is restored first and (2) corrects it **only when it must**, by the smallest
+movement that brings the entry inside the box. Centring the entry on every load
+satisfies (2) while destroying (1) — the menu would lurch on every navigation,
+which is the complaint and not the fix.
+
+**The page never moves.** `scrollIntoView` scrolls every scrollable ancestor, so
+revealing a menu entry would also scroll the article beside it; writing
+`scrollTop` on the container moves that container and nothing else.
+
+Canonical: [`lib/nav-scroll.ts`](../../frontend/src/lib/nav-scroll.ts), applied
+once in `PortalShell` — a behaviour each portal had to opt into is a behaviour
+that would be missing from the next one ([AE](#ae--a-dependency-between-selectors-belongs-to-forms-not-to-filters)).
+
+**Trap, measured in Chrome 2026-08-18:** the first version positioned the entry
+with `offsetTop`, which is measured against the nearest **positioned** ancestor —
+and the sidebar is `position: sticky`, so the offset was already relative to the
+nav and subtracting the nav's own removed a distance that was never in it. The
+menu landed at `scrollTop: 70` with the active entry still out of sight, and no
+stylesheet could have shown it. Two `getBoundingClientRect()` calls have no such
+dependency.
+
 ## X · A missing translation key must fail a test, not ship
 
 `t()` returns **its own argument** when a key is missing. That is deliberate — a
@@ -859,6 +912,109 @@ out of 10 or 20"* is platform-wide by decision, not by omission.
 
 ---
 
+## AF · An identity field is refused by the server, not hidden by the form
+
+When a field defines **what a row is**, removing its control is half a fix. The
+route still accepts it, so a forged request — a replayed payload, a stale tab, a
+script — still rewrites the identity, and the screen that no longer offers it is
+the reason nobody looks there when the data goes wrong.
+
+**Remove it from the schema, not only from the form.** The controller's body
+schema is `.strict()`, so an absent key is not merely ignored: the request is
+**refused** with `VALIDATION_FAILED`, and a caller learns its assumption is wrong
+instead of watching a silent no-op. The service's patch type narrows to match, so
+the old branch cannot be reached even from inside.
+
+**Then prove the refusal with a forged request** — the UI test proves the control
+is gone, which is exactly what a forged request does not care about. See
+`enrollment.http.integration.test.ts`: it sends `level_id` and `branch_id`, and
+asserts both that the call is refused **and that the stored row is unchanged**.
+
+And the screen still **shows** the value, as text, with one line saying why it is
+not editable here and which route does change it. A field that vanishes without
+explanation reads as a missing feature.
+
+## AG · One scrolling region per overlay
+
+A dialog scrolls in **exactly one place**: its body. The header stays, the footer
+stays reachable, and the content between them moves.
+
+Two nested scrollers produce two scrollbars side by side — and the outer one,
+overflowing by a couple of pixels, scrolls nothing anyone wants while stealing
+the wheel. **Hiding a scrollbar in CSS does not fix this**; the ownership has to
+be correct, or the same overlay is still two boxes fighting for one gesture.
+
+The shape is: the `<dialog>` is a flex column with `overflow: hidden` and a
+`max-block-size`; every flex child that must shrink carries **`min-height: 0`**
+— the part that is easy to miss, because without it a flex item refuses to
+shrink below its content and pushes the overflow back out to the shell; and only
+`.dialog__body` has `overflow-y: auto`, with `overscroll-behavior: contain`.
+
+Canonical: [`dialog.css`](../../frontend/src/styles/components/dialog.css).
+Bounded option lists inside a form (`select__options`) are **deliberate** nested
+scrollers and are not this defect — the rule is about the dialog's own shell.
+
+**Measured, never asserted from CSS.** The defect that produced this rule was the
+`<dialog>` overflowing by **2px** while its body overflowed by ~300; no
+stylesheet reading finds that. `verify-ux-slice.mjs` filters the elements that
+genuinely scroll (`overflowY` is `auto`/`scroll` **and** `scrollHeight -
+clientHeight > 1`) at desktop and at 390px.
+
+## AH · A message belongs where the action is
+
+Four kinds of message exist, they answer different questions, and they belong in
+different places:
+
+| kind | question | where |
+|---|---|---|
+| **action** | *did the thing I just clicked work* | beside the controls that did it — `Feedback` |
+| **field** | *what is wrong with THIS value* | under the input — `Field`'s `error` |
+| **page** | *why is there nothing here* | in place of the content — `ErrorState` |
+| **form** | *why will this form not submit* | above the form's own buttons — `FormDialog`'s `notice` |
+
+The first kind was hand-written **25 times across 20 files**, every copy a
+`<p className="admin-notice" role="status" aria-live="polite">`. They had already
+drifted: some carried `aria-live` and some did not, so on those screens a screen
+reader was never told the action had succeeded — the defect [C](#c--one-concept--one-atomic-component)
+predicts, and nothing had said so.
+
+Canonical: [`ui/feedback.tsx`](../../frontend/src/components/ui/feedback.tsx).
+Being in the right place is not enough — **it has to be seen**: a refusal
+rendered above a long table, while the reader is at the bottom of it, is a
+refusal nobody reads and a click that looks ignored. The component brings itself
+into view on change, by the least scroll that works (`block: 'nearest'`), and
+does nothing when it is already visible.
+
+A `<div>` reusing the *style* for standing content is not an action message and
+does not use the component — it would inherit a `role="status"` that is wrong for
+it. Those exceptions are named in the guard's allowlist, with reasons.
+
+## AI · Controls are grouped, not scattered
+
+Related controls form **one segmented group** with a border, shared dividers and
+borderless parts — not a row of independent buttons. The group is the bordered
+thing; the parts are inside it, which is what makes them read as one control with
+sections rather than as several calls to action.
+
+**One emphasis per group, at most.** The calendar rendered five buttons at
+`min-width: 7.5rem`, two of them `primary`, and they dominated the page they
+existed to navigate. Now: `[ قائمة | تقويم ]` and `[ السابق | اليوم | التالي ]`,
+every part `ghost`, the **selected view** filled because *which view am I in*
+must be answerable at a glance, and «اليوم» carrying the accent on its label only
+— it is the one that returns you to a known place.
+
+Canonical: `.cal-segmented` in
+[`calendar.css`](../../frontend/src/styles/components/calendar.css), used by
+`CalendarNav` and `ViewSwitch`, and therefore by the public, admin, teacher and
+student calendars alike. `border-inline-start` on every child but the first puts
+the dividers on the correct side in RTL with no second rule; the focus ring uses
+`outline-offset: -2px` so the group's `overflow: hidden` cannot clip it.
+
+**Verified as rendered boxes**, because size is the complaint and CSS cannot
+answer it: the widest control measures **73px** where the minimum used to be
+120px, each group occupies one row at 1440px and at 390px, and the ring stays
+inside the clipping group.
+
 ## The guards
 
 Rules that are not checked drift back. These are behavioural or registry-level,
@@ -867,13 +1023,17 @@ system's internals, break on every restyle, and catch nothing.
 
 | Guard | What it pins |
 |---|---|
-| [`ui/atomic-components.test.tsx`](../../frontend/src/components/ui/atomic-components.test.tsx) | one Button (both class vocabularies, and no second system in CSS) · the `＋` convention, in code and in the catalogue · one table, with reasoned exceptions · one Level label · no engineering reference in a user-facing string · no data gate in the copy · no pass/fail on the sheet · no account creation on `المستخدمون`, **in code and in the catalogue** · **the dirty-state wiring, and that no form omits `dirty`** |
+| [`ui/atomic-components.test.tsx`](../../frontend/src/components/ui/atomic-components.test.tsx) | one Button (both class vocabularies, and no second system in CSS) · the `＋` convention, in code and in the catalogue · one table, with reasoned exceptions · one Level label · no engineering reference in a user-facing string · no data gate in the copy · no pass/fail on the sheet · no account creation on `المستخدمون`, **in code and in the catalogue** · **the dirty-state wiring, and that no form omits `dirty`** · **AH — one action message, and that it still announces politely** |
 | [`i18n/resolves.test.ts`](../../frontend/src/i18n/resolves.test.ts) | **every literal `t()` key resolves** — and that `t()` still returns the key on a miss, which is the behaviour the guard exists to police |
 | [`lib/admin-modules.test.ts`](../../frontend/src/lib/admin-modules.test.ts) | §14.1's sitemap · R61's section rule · **the الإدارة curriculum order** · every label resolves |
 | [`lib/teacher-modules.test.ts`](../../frontend/src/lib/teacher-modules.test.ts) | the teaching nodes, their sections, and **no `/admin/*` path in her menu** |
 | [`pages/admin/teaching-structure.test.ts`](../../frontend/src/pages/admin/teaching-structure.test.ts) | the circles page reads unconditionally · R69.3's deep links are focus, not gates · BR-22 survives · R43.3 authorization |
 | [`components/grading/grade-sheet.test.ts`](../../frontend/src/components/grading/grade-sheet.test.ts) | empty ≠ zero · the scale is the server's · **no verdict, and the override still shown** |
 | [`ui/data-table.test.tsx`](../../frontend/src/components/ui/data-table.test.tsx) | all five states, and the action column |
+| [`lib/nav-scroll.test.ts`](../../frontend/src/lib/nav-scroll.test.ts) | **W** — the sidebar preserves its position *and* reveals the active entry, by the least movement; never past either end |
+| [`pages/calendar.test.tsx`](../../frontend/src/pages/calendar.test.tsx) | **AI** — one segmented group, one emphasis, no call to action among the month controls |
+| [`enrollment.http.integration.test.ts`](../../backend/src/controllers/enrollment.http.integration.test.ts) | **AF/L** — a forged `level_id` or `branch_id` is refused *and changes nothing*; the group may still be set and cleared; ending one enrolment leaves the other and the beneficiary |
+| [`scripts/dev/browser/verify-ux-slice.mjs`](../../scripts/dev/browser/verify-ux-slice.mjs) | **AG/AI/W** as **rendered boxes** — scroll ownership at two viewports, control geometry on two calendars, sidebar `scrollTop` across a real navigation |
 | `grade.http.integration.test.ts` | a student reads published grades and **not drafts**, one student never reads another's, the projection carries no verdict |
 | `teaching-group.http.integration.test.ts` | the flat read grants nothing, every filter narrows, TD-10 pagination, Admin-only |
 

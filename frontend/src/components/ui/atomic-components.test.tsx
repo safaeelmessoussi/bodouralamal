@@ -65,6 +65,48 @@ function stripComments(text: string): string {
   return text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 }
 
+describe('one action message', () => {
+  /**
+   * **The same rule as the button, on the concept that had drifted furthest**
+   * (2026-08-18).
+   *
+   * `<p className="admin-notice" role="status" aria-live="polite">` was
+   * hand-written **25 times across 20 files** — every management screen, the
+   * uploader, the grade sheet, the teacher's Quran log. They had already drifted
+   * apart: some carried `aria-live`, some did not, so on those screens a screen
+   * reader was never told the action had succeeded, and nothing said so.
+   *
+   * `Feedback` owns the markup now. The two `<div>`/`<section>` panels that reuse
+   * the *style* for standing content are not action messages and are exempt —
+   * they are structure, not an announcement, and the component would give them a
+   * `role="status"` that is wrong for them.
+   */
+  const ALLOWED = new Set([
+    'components/ui/feedback.tsx',
+    // A standing panel listing unassigned students — content, not an outcome.
+    'components/scope/subject-circles.tsx',
+    // The exam summary header on the grade sheet — likewise standing content.
+    'components/grading/grade-sheet.tsx',
+  ]);
+
+  it('nothing hand-writes an action message', () => {
+    const offenders = FILES.filter(
+      (f) => !ALLOWED.has(f.path) && /<p className="admin-notice/.test(stripComments(f.text)),
+    ).map((f) => f.path);
+    expect(offenders).toEqual([]);
+  });
+
+  it('the component still exists and announces politely', () => {
+    // Guards the property the copies had lost. Without this, `Feedback` could be
+    // reduced to a bare paragraph and every screen would go silent at once —
+    // which is the risk of centralising, and the reason to guard the centre.
+    const source = RAW['/src/components/ui/feedback.tsx'] ?? '';
+    expect(source).not.toBe('');
+    expect(source).toContain("role: 'status'");
+    expect(source).toContain("'aria-live': 'polite'");
+  });
+});
+
 describe('one Button', () => {
   /**
    * **`button.tsx` is now the ONLY exemption** (2026-08-17).

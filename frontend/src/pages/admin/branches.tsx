@@ -36,6 +36,7 @@ import { useActiveRole } from '../../contexts/active-role.js';
 import { t } from '../../i18n/index.js';
 import { formatDate } from '../../lib/format-date.js';
 import { ApiError } from '../../lib/api.js';
+import { Feedback } from '../../components/ui/feedback.js';
 
 /**
  * `/admin/branches` — Branches (§5.6, §14.2, Revision 26).
@@ -264,9 +265,9 @@ export function BranchesPage(): ReactNode {
       }
     >
       {notice ? (
-        <p className="admin-notice" role="status" aria-live="polite">
+        <Feedback>
           {notice}
-        </p>
+        </Feedback>
       ) : null}
 
       <DataTable
@@ -439,9 +440,9 @@ function RoomsDialog({
       title={t('admin.branches.roomsTitle').replace('{branch}', branch.name)}
     >
       {notice ? (
-        <p className="admin-notice" role="status" aria-live="polite">
+        <Feedback>
           {notice}
-        </p>
+        </Feedback>
       ) : null}
 
       {state === 'loading' ? <p className="state">{t('common.loading')}</p> : null}

@@ -7,6 +7,7 @@ import { t } from '../../i18n/index.js';
 import type { ScopeOptions } from '../../hooks/use-scope-options.js';
 import type { ExamMode, ExamStaffRef } from '../../adapters/exams.js';
 import type { UserSummary } from '../../adapters/users.js';
+import { Feedback } from '../ui/feedback.js';
 
 /**
  * The fields a **physical exam sitting** needs (§4.6 as amended by R58).
@@ -94,9 +95,9 @@ export function ExamSection({
           student audience, an open/close window and submission settings are a
           shape nobody has decided yet, and showing them would promise it. */}
       {mode === 'online' ? (
-        <p className="admin-notice" role="status">
+        <Feedback>
           {t('scheduling.exam.onlineSoon')}
-        </p>
+        </Feedback>
       ) : (
         <>
           <ScopeSelectors

@@ -175,6 +175,17 @@ You are working on the بذور الأمل Platform.
   months reading nothing at all.
 - **Row actions are ordered by `DataTable` (AC):** contextual → تعديل →
   destructive. Never reorder them per page.
+- **Identity is refused by the server, not hidden by the form (AF).** Removing a
+  control leaves the route accepting the field, so a forged request still
+  rewrites what the row *is*. Narrow the `.strict()` schema and the service type,
+  then **prove it with a forged request that asserts the row is unchanged** — a
+  UI test cannot, because a forged request never opens the UI. Show the value as
+  text with one line saying which route does change it.
+- **One message per kind, in the place that kind belongs (AH).** Action → beside
+  the controls (`Feedback`) · field → under the input · page → in place of the
+  content · form → above the form's buttons. It was hand-written 25 times across
+  20 files and had already drifted: some copies announced to a screen reader and
+  some did not.
 - **A dependency between selectors belongs to forms, not filters (AE).** Check the
   API contract before adding a gate. The mechanism is **`mode`**, passed to both
   `useScopeOptions` and `ScopeSelectors` and guarded to agree — it was a per-caller

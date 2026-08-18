@@ -46,6 +46,7 @@ import { t } from '../../i18n/index.js';
 import { ScopeSelectors } from '../../components/scope/scope-selectors.js';
 import { useScopeOptions } from '../../hooks/use-scope-options.js';
 import { ApiError } from '../../lib/api.js';
+import { Feedback } from '../../components/ui/feedback.js';
 
 /**
  * `/admin/groups` — Administrative Groups and their rosters (§4.4c, §5.6).
@@ -276,9 +277,9 @@ export function GroupsPage(): ReactNode {
           rendered a bare `<p role="status">`, which carried none of the spacing
           or colour the rest of the platform gives a result message. */}
       {notice ? (
-        <p className="admin-notice" role="status" aria-live="polite">
+        <Feedback>
           {notice}
-        </p>
+        </Feedback>
       ) : null}
 
       <DataTable
@@ -567,9 +568,9 @@ function RosterDialog({
   return (
     <Dialog open={group !== null} onClose={onClose} title={t('admin.groups.rosterTitle')} wide>
       {notice ? (
-        <p className="admin-notice" role="status" aria-live="polite">
+        <Feedback>
           {notice}
-        </p>
+        </Feedback>
       ) : null}
 
       {canWrite ? (

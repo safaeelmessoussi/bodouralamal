@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import type { SortState } from '../../components/ui/data-table.js';
 
-import { listAdministrativeGroups, type AdministrativeGroup } from '../../adapters/administrative-groups.js';
+import {
+  listAdministrativeGroups,
+  type AdministrativeGroup,
+} from '../../adapters/administrative-groups.js';
 import { listBranches, type Branch } from '../../adapters/branches-admin.js';
 import {
   endEnrollment,
@@ -22,11 +25,7 @@ import { AdminLayout } from '../../components/admin/admin-layout.js';
 import { LevelSelect, levelLabel } from '../../components/scope/level-select.js';
 import { Button } from '../../components/ui/button.js';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
-import {
-  DataTable,
-  type Column,
-  type RowAction,
-} from '../../components/ui/data-table.js';
+import { DataTable, type Column, type RowAction } from '../../components/ui/data-table.js';
 import { FormDialog } from '../../components/ui/form-dialog.js';
 import { SearchInput, SelectField } from '../../components/ui/field.js';
 import { MultiSelectField } from '../../components/ui/multi-select.js';
@@ -35,6 +34,7 @@ import { useSession } from '../../contexts/session.js';
 import { isDirty } from '../../lib/form-dirty.js';
 import { t } from '../../i18n/index.js';
 import { ApiError } from '../../lib/api.js';
+import { Feedback } from '../../components/ui/feedback.js';
 
 /**
  * `/admin/enrollments` — **التسجيلات** (§7 R66, §14.1 R74).
@@ -135,7 +135,11 @@ export function EnrollmentsPage(): ReactNode {
       // The shared label — `{Category} — {Level}` — so a Level reads the same
       // here as in every selector (§4.4b).
       cell: (r) =>
-        levelLabel({ id: r.level_id, name: r.level_name, category_name: r.category_name }),
+        levelLabel({
+          id: r.level_id,
+          name: r.level_name,
+          category_name: r.category_name,
+        }),
     },
     {
       key: 'group',
@@ -147,7 +151,12 @@ export function EnrollmentsPage(): ReactNode {
           <span className="muted">{t('admin.enrollments.noGroup')}</span>
         ),
     },
-    { key: 'branch', header: t('admin.enrollments.branch'), secondary: true, cell: (r) => r.branch_name },
+    {
+      key: 'branch',
+      header: t('admin.enrollments.branch'),
+      secondary: true,
+      cell: (r) => r.branch_name,
+    },
     {
       key: 'circles',
       header: t('admin.enrollments.circles'),
@@ -174,7 +183,11 @@ export function EnrollmentsPage(): ReactNode {
     { label: t('common.edit'), onSelect: (r) => setEditing(r) },
     // Destructive, so it carries the shared danger treatment — the enrolment is
     // soft-deleted into Trash (R59), which the confirmation states in full.
-    { label: t('admin.enrollments.end'), danger: true, onSelect: (r) => setEnding(r) },
+    {
+      label: t('admin.enrollments.end'),
+      danger: true,
+      onSelect: (r) => setEnding(r),
+    },
   ];
 
   return (
@@ -187,11 +200,7 @@ export function EnrollmentsPage(): ReactNode {
         </Button>
       }
     >
-      {notice ? (
-        <p className="admin-notice" role="status" aria-live="polite">
-          {notice}
-        </p>
-      ) : null}
+      {notice ? <Feedback>{notice}</Feedback> : null}
 
       <DataTable
         caption={t('admin.enrollments.caption')}
@@ -269,6 +278,13 @@ export function EnrollmentsPage(): ReactNode {
             <dd>{t('admin.enrollments.endKept')}</dd>
             <dt>{t('admin.enrollments.endRemovedTitle')}</dt>
             <dd>{t('admin.enrollments.endRemoved')}</dd>
+            {/* The third question this dialog is opened with, and the one the
+                earlier copy left unanswered: *and then what*. Ending is now the
+                ONLY route to another Level or Branch (the edit dialog no longer
+                offers them), so the confirmation has to name the route it is
+                half of, or it reads as a dead end. */}
+            <dt>{t('admin.enrollments.endNextTitle')}</dt>
+            <dd>{t('admin.enrollments.endNext')}</dd>
           </dl>
         }
         confirmLabel={t('admin.enrollments.end')}
@@ -708,7 +724,6 @@ function PlacementDialog({
   onDone: (message: string) => void;
 }): ReactNode {
   const [groupId, setGroupId] = useState(row.administrative_group_id ?? '');
-  const [branchId, setBranchId] = useState(row.branch_id);
   const [groups, setGroups] = useState<AdministrativeGroup[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [circles, setCircles] = useState<TeachingGroupRow[]>([]);
@@ -737,9 +752,7 @@ function PlacementDialog({
       // carries names rather than ids, so the ids come from the circle list.
       const held = all
         .filter((c) =>
-          row.circles.some(
-            (x) => x.subject_name === c.subject_name && x.circle_name === c.name,
-          ),
+          row.circles.some((x) => x.subject_name === c.subject_name && x.circle_name === c.name),
         )
         .map((c) => c.id);
       setCircleIds(held);
@@ -747,18 +760,11 @@ function PlacementDialog({
     })();
   }, [row.level_id, row.circles, token]);
 
-  // A group states its own branch (§7), so choosing one answers the branch.
-  useEffect(() => {
-    const group = groups.find((g) => g.id === groupId);
-    if (group) setBranchId(group.branch_id);
-  }, [groupId, groups]);
-
   const changesGroup = (groupId === '' ? null : groupId) !== row.administrative_group_id;
   const dirty = isDirty(
-    { groupId, branchId, circleIds: [...circleIds].sort() },
+    { groupId, circleIds: [...circleIds].sort() },
     {
       groupId: row.administrative_group_id ?? '',
-      branchId: row.branch_id,
       circleIds: [...pristineCircleIds].sort(),
     },
   );
@@ -767,15 +773,11 @@ function PlacementDialog({
     setBusy(true);
     setNotice(null);
     try {
-      const group = groups.find((g) => g.id === groupId);
+      // Only the subdivision: the route refuses `level_id` and `branch_id`
+      // outright, and sending either would be a `400` rather than a move.
       await updateEnrollment(
         row.id,
-        {
-          administrative_group_id: groupId === '' ? null : groupId,
-          // The group's branch wins where there is one; otherwise the chosen
-          // branch, which is the whole point of R66's column.
-          branch_id: group ? group.branch_id : branchId,
-        },
+        { administrative_group_id: groupId === '' ? null : groupId },
         token,
       );
 
@@ -847,30 +849,28 @@ function PlacementDialog({
         }
       />
 
-      {/* **Editable only for a Level-only enrolment.** With a group chosen the
-          branch is the group's (§7), and offering it as a second answer is how
-          the two come to disagree. Disabled rather than hidden, so the reader can
-          see which branch she is at and why it is not theirs to change here
-          (§14.2 — an inapplicable control still teaches). */}
-      <SelectField
-        label={t('admin.enrollments.branch')}
-        value={branchId}
-        onChange={setBranchId}
-        disabled={groupId !== ''}
-        options={branches.map((b) => ({ value: b.id, label: b.name }))}
-        hint={
-          groupId !== ''
-            ? t('admin.enrollments.branchFromGroup')
-            : t('admin.enrollments.branchHint')
-        }
-      />
+      {/* **The Level and the Branch are CONTEXT, not controls** (2026-08-18).
+          An enrolment IS `beneficiary + Level + Branch`; changing either is a
+          different enrolment, which إنهاء التسجيل and تسجيل مستفيدة already
+          express. Shown rather than hidden, because a reader needs to know which
+          enrolment they are editing — and the copy names the way to move her. */}
+      {/* The identity line above already names the beneficiary, her Category and
+          her Level; the branch joins it here so all three read together. */}
+      <p className="muted">
+        {t('admin.enrollments.branch')}:{' '}
+        {branches.find((b) => b.id === row.branch_id)?.name ?? row.branch_id}
+      </p>
+      <p className="field__hint">{t('admin.enrollments.identityFixed')}</p>
 
       {circles.length === 0 ? (
         <p className="field__hint">{t('admin.enrollments.circlesNone')}</p>
       ) : (
         <MultiSelectField
           label={t('admin.enrollments.circlesOptional')}
-          options={circles.map((c) => ({ value: c.id, label: `${c.subject_name} — ${c.name}` }))}
+          options={circles.map((c) => ({
+            value: c.id,
+            label: `${c.subject_name} — ${c.name}`,
+          }))}
           selected={circleIds}
           onChange={setCircleIds}
           hint={t('admin.enrollments.circlesHint')}

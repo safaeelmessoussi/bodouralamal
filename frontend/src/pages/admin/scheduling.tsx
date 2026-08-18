@@ -48,6 +48,7 @@ import { useActiveRole } from '../../contexts/active-role.js';
 import { isDirty } from '../../lib/form-dirty.js';
 import { t } from '../../i18n/index.js';
 import { ApiError } from '../../lib/api.js';
+import { Feedback } from '../../components/ui/feedback.js';
 
 /**
  * `/admin/scheduling` — **الجدولة, the single scheduling entry point**
@@ -271,9 +272,9 @@ export function SchedulingPage(): ReactNode {
       }
     >
       {notice ? (
-        <p className="admin-notice" role="status" aria-live="polite">
+        <Feedback>
           {notice}
-        </p>
+        </Feedback>
       ) : null}
 
       {/* **The shared switch.** This was inline markup here, and the public

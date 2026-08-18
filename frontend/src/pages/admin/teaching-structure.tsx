@@ -40,6 +40,7 @@ import { useActiveRole } from '../../contexts/active-role.js';
 import { isDirty } from '../../lib/form-dirty.js';
 import { t } from '../../i18n/index.js';
 import { ApiError } from '../../lib/api.js';
+import { Feedback } from '../../components/ui/feedback.js';
 
 /**
  * `/admin/teaching-groups` — **حلقات المواد** (§14.1, §4.4c, BR-22, R43.3, R69).
@@ -364,9 +365,9 @@ export function TeachingStructurePage({
       }
     >
       {notice ? (
-        <p className="admin-notice" role="status" aria-live="polite">
+        <Feedback>
           {notice}
-        </p>
+        </Feedback>
       ) : null}
 
       {openLevel ? (
@@ -880,9 +881,9 @@ function CircleRosterDialog({
       ) : null}
 
       {notice ? (
-        <p className="admin-notice" role="status" aria-live="polite">
+        <Feedback>
           {notice}
-        </p>
+        </Feedback>
       ) : null}
 
       {canPlace ? (

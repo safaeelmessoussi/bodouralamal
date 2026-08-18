@@ -4,6 +4,7 @@ import { Button } from './button.js';
 import { ConfirmDialog } from './confirm-dialog.js';
 import { Dialog } from './dialog.js';
 import { t } from '../../i18n/index.js';
+import { Feedback } from './feedback.js';
 
 /**
  * **The shape every form dialog in the back office shares.**
@@ -119,9 +120,9 @@ export function FormDialog({
         dismissible={!dirty}
       >
         {notice ? (
-          <p className="admin-notice" role="status" aria-live="polite">
+          <Feedback>
             {notice}
-          </p>
+          </Feedback>
         ) : null}
 
         {/* The wrapper the fields' spacing comes from. A form that omitted it —

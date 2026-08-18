@@ -9,6 +9,7 @@ import { useSession } from '../../contexts/session.js';
 import { t } from '../../i18n/index.js';
 import { formatDate } from '../../lib/format-date.js';
 import { ApiError } from '../../lib/api.js';
+import { Feedback } from '../../components/ui/feedback.js';
 
 /** The entity types that reach the Trash. A closed list, so the filter offers
  *  real choices rather than whatever happens to be on the current page. */
@@ -238,9 +239,9 @@ export function TrashPage(): ReactNode {
   return (
     <AdminLayout title={t('admin.nav.trash')} lede={t('admin.trash.lede')}>
       {notice ? (
-        <p className="admin-notice" role="status" aria-live="polite">
+        <Feedback>
           {notice}
-        </p>
+        </Feedback>
       ) : null}
 
       <DataTable

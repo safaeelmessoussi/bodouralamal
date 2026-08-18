@@ -13,6 +13,7 @@ import { Badge } from '../../components/ui/badge.js';
 import { Button } from '../../components/ui/button.js';
 import { useSession } from '../../contexts/session.js';
 import { t } from '../../i18n/index.js';
+import { Feedback } from '../../components/ui/feedback.js';
 
 /**
  * `/superadmin/hijri-calendar` — **recording the Ministry of Habous's official
@@ -158,15 +159,15 @@ export function HijriCalendarPage(): ReactNode {
       </div>
 
       {notice ? (
-        <p className="admin-notice" role="status" aria-live="polite">
+        <Feedback>
           {notice}
-        </p>
+        </Feedback>
       ) : null}
 
       {drafts > 0 ? (
-        <p className="admin-notice admin-notice--warn">
+        <Feedback tone="warn">
           {t('admin.hijri.draftWarning')} ({drafts})
-        </p>
+        </Feedback>
       ) : null}
 
       {state === 'error' ? <ErrorState onRetry={() => void load()} /> : null}

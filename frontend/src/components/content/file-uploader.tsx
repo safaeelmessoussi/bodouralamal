@@ -5,6 +5,7 @@ import { t } from '../../i18n/index.js';
 import { ApiError } from '../../lib/api.js';
 import { Button } from '../ui/button.js';
 import { TextArea, TextField } from '../ui/field.js';
+import { Feedback } from '../ui/feedback.js';
 
 /**
  * The single-shot uploader (§4.9, §14.3, TD-9).
@@ -110,9 +111,9 @@ export function FileUploader({
   return (
     <div className="uploader">
       {disabledReason ? (
-        <p className="admin-notice" role="status">
+        <Feedback>
           {disabledReason}
-        </p>
+        </Feedback>
       ) : null}
 
       <div className="field">

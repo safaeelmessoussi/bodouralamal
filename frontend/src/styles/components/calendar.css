@@ -80,19 +80,58 @@
    Three buttons, centred beneath the title. `اليوم` is the primary variant
    because it is the action most often wanted and the only one not reversible by
    pressing its opposite. */
-.cal-nav {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-3);
+/* **The calendar's control system: one segmented group, used everywhere**
+   (2026-08-18).
+ *
+ * `قائمة | تقويم` and `السابق | اليوم | التالي` were five separate buttons at
+ * `min-width: 7.5rem`, and together they dominated the page they were meant to
+ * navigate. They are now two compact groups that read as controls rather than
+ * as calls to action — discoverable, obviously clickable, and quiet.
+ *
+ * The group is the bordered thing; the buttons inside it are borderless and
+ * share dividers, which is what makes them read as ONE control with parts. `
+ * border-inline-start` on every child but the first puts those dividers on the
+ * correct side in RTL with no second rule. */
+.cal-segmented {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: var(--color-surface);
 }
-/* Prominent, as a primary navigation control should be: wider than a form
-   button and with a comfortable target on a phone. */
-.cal-nav .btn {
-  min-width: 7.5rem;
-  justify-content: center;
-  padding-block: 0.75rem;
+.cal-segmented .btn {
+  min-width: 0;
+  border: 0;
+  /* The GROUP carries the corners; its children must not, or each part would
+     look like a button of its own — which is the reading being removed. */
+  border-radius: inherit;
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-secondary);
+}
+.cal-segmented .btn + .btn {
+  border-inline-start: 1px solid var(--color-border);
+}
+.cal-segmented .btn:hover {
+  background: var(--color-background);
+  color: var(--color-primary);
+}
+/* The selected VIEW is filled, because *which view am I in* must be answerable
+   at a glance and not by elimination. */
+.cal-segmented .btn.is-active {
+  background: var(--color-primary);
+  color: var(--color-text-inverse);
+}
+/* «اليوم» is the one that returns you to a known place, so it carries the
+   accent — as colour on the label only, staying inside the quiet group. */
+.cal-segmented .btn.is-emphasis {
+  color: var(--color-primary);
+  font-weight: 600;
+}
+/* The focus ring must not be clipped by the group's `overflow: hidden`. */
+.cal-segmented .btn:focus-visible {
+  outline-offset: -2px;
 }
 
 /* ── Filters ─────────────────────────────────────────────────────────────── */
@@ -537,15 +576,16 @@ tr:last-child .cal-cell {
     min-width: 1.8rem;
     height: 1.8rem;
   }
-  /* Full-width nav buttons stacked in a row of three: 360 px still fits them
-     side by side once the min-width is dropped, which keeps the three-way
-     relationship visible rather than turning it into a list. */
-  .cal-nav {
-    gap: var(--space-2);
+  /* On a phone the segmented groups span the width and share it equally: at
+     360px three parts still sit side by side once the padding tightens, which
+     keeps the relationship between them visible rather than turning it into a
+     list. */
+  .cal-segmented {
+    display: flex;
+    width: 100%;
   }
-  .cal-nav .btn {
+  .cal-segmented .btn {
     flex: 1 1 0;
-    min-width: 0;
     padding-inline: var(--space-2);
   }
   .cal-toolbar {

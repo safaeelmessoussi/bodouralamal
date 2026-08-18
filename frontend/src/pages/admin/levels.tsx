@@ -28,6 +28,7 @@ import { useSession } from '../../contexts/session.js';
 import { useActiveRole } from '../../contexts/active-role.js';
 import { t } from '../../i18n/index.js';
 import { ApiError } from '../../lib/api.js';
+import { Feedback } from '../../components/ui/feedback.js';
 
 /** §4.4b / Revision 27 — the values, rendered from the contract rather than
  *  hardcoded per screen. */
@@ -228,9 +229,9 @@ export function LevelsPage(): ReactNode {
       }
     >
       {notice ? (
-        <p className="admin-notice" role="status" aria-live="polite">
+        <Feedback>
           {notice}
-        </p>
+        </Feedback>
       ) : null}
 
       <DataTable

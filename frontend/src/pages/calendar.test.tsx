@@ -495,10 +495,24 @@ describe('month navigation', () => {
     expect(html.indexOf('اليوم')).toBeLessThan(html.indexOf('التالي'));
   });
 
-  it('gives today the primary variant, so it is the prominent control', () => {
-    expect(html).toContain('btn--primary');
-    // The other two are secondary — one emphasis, not three.
-    expect(html.split('btn--secondary').length - 1).toBe(2);
+  it('emphasises exactly one of the three, and «اليوم» is it', () => {
+    // **Restated 2026-08-18, not deleted.** The property is *one emphasis, not
+    // three* — it was pinned to `btn--primary` because that was how the emphasis
+    // happened to be spelled. The three buttons are now one compact segmented
+    // group, so the emphasis is a modifier on an otherwise uniform row; the
+    // property it was written for is unchanged and still asserted.
+    expect(html.split('is-emphasis').length - 1).toBe(1);
+    expect(html.indexOf('is-emphasis')).toBeGreaterThan(html.indexOf('السابق'));
+    expect(html.indexOf('is-emphasis')).toBeLessThan(html.indexOf('التالي'));
+    // And no button in the group is a call to action any more.
+    expect(html).not.toContain('btn--primary');
+  });
+
+  it('is one segmented control rather than three loose buttons', () => {
+    // The complaint this answers: five large scattered CTAs on a calendar page.
+    // The grouping is the fix, so the grouping is what is guarded.
+    expect(html).toContain('class="cal-segmented"');
+    expect(html.split('btn--ghost').length - 1).toBe(3);
   });
 
   it('carries accessible names that CONTAIN the visible label (WCAG 2.5.3)', () => {

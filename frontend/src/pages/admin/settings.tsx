@@ -8,6 +8,7 @@ import { NumberField, TextField } from '../../components/ui/field.js';
 import { useSession } from '../../contexts/session.js';
 import { t } from '../../i18n/index.js';
 import { ApiError } from '../../lib/api.js';
+import { Feedback } from '../../components/ui/feedback.js';
 
 /**
  * `/superadmin/settings` — Platform Settings, first iteration (§5.6, R42).
@@ -52,9 +53,9 @@ export function SettingsPage(): ReactNode {
   return (
     <AdminLayout title={t('admin.nav.settings')} lede={t('admin.settings.lede')}>
       {notice ? (
-        <p className="admin-notice" role="status" aria-live="polite">
+        <Feedback>
           {notice}
-        </p>
+        </Feedback>
       ) : null}
 
       {status === 'error' ? (

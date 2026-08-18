@@ -940,7 +940,15 @@ export async function updateEnrollmentPlacement(
   prisma: PrismaClient,
   actor: Actor,
   enrollmentId: string,
-  patch: { administrativeGroupId?: string | null; branchId?: string },
+  /**
+   * **Only the subdivision inside the enrolment** (2026-08-18).
+   *
+   * `levelId` and `branchId` are absent by design: an enrolment IS
+   * `beneficiary + Level + Branch`, so changing either is a different enrolment
+   * — end this one and create the other. Keeping them out of the input type is
+   * what makes that a compile-time fact rather than a validator's promise.
+   */
+  patch: { administrativeGroupId?: string | null },
 ): Promise<EnrollmentRow> {
   assertCanManage(actor);
 
@@ -950,15 +958,9 @@ export async function updateEnrollmentPlacement(
     // Authority over where she IS, before authority over where she is going.
     scope.assertCanActOnBranch(actor.roleScopes, MANAGING_ROLE, row.branchId, 'no such enrolment');
 
-    const branchId = patch.branchId ?? row.branchId;
-    if (branchId !== row.branchId) {
-      const branch = await tx.branch.findFirst({
-        where: { id: branchId, deletedAt: null },
-        select: { id: true },
-      });
-      if (!branch) throw new AppError('NOT_FOUND', 'no such branch');
-      scope.assertCanActOnBranch(actor.roleScopes, MANAGING_ROLE, branchId, 'no such branch');
-    }
+    // The enrolment's own branch, always — it is part of the enrolment's
+    // identity and this route cannot move it.
+    const branchId = row.branchId;
 
     const groupId =
       patch.administrativeGroupId === undefined ? row.administrativeGroupId : patch.administrativeGroupId;

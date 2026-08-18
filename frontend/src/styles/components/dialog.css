@@ -6,7 +6,28 @@
  * Built on the native `<dialog>`, so the backdrop, focus trap and top-layer
  * stacking come from the browser rather than from z-index arithmetic.
  */
+/*
+ * **One scrolling region per dialog, and the BODY owns it.**
+ *
+ * Measured 2026-08-18: the `<dialog>` itself was overflowing by exactly **2px**
+ * while `.dialog__body` overflowed by ~300 — two scrollbars side by side, the
+ * outer one useless and taller, which is what a reader was seeing.
+ *
+ * The 2px was the border. `.dialog__panel` inherited the dialog's computed
+ * `max-height`, which is a BORDER-box figure, while the dialog's content box is
+ * `1px + 1px` shorter — so the panel was always a hair too tall for its own
+ * parent. Hiding the scrollbar would have left the second scroll CONTAINER in
+ * place; making the shell a flex column that clips is what removes it.
+ *
+ * `min-height: 0` on the flex children is the part that is easy to miss: a flex
+ * item's default `min-height: auto` refuses to shrink below its content, so the
+ * body could never become shorter than its own scrollHeight and would push the
+ * overflow back out to the shell.
+ */
 .dialog {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
   width: min(100% - var(--space-8), 34rem);
   max-height: min(85vh, 44rem);
   padding: 0;
@@ -28,7 +49,10 @@
 .dialog__panel {
   display: flex;
   flex-direction: column;
-  max-height: inherit;
+  /* Fills the shell rather than inheriting a border-box height that does not
+     fit inside it. `min-height: 0` lets the body below actually shrink. */
+  flex: 1;
+  min-height: 0;
 }
 
 .dialog__head {
@@ -60,11 +84,17 @@
   color: var(--color-primary);
 }
 
-/* Scrolls internally, so the dialog can carry the full §4.4/§4.9 event record
-   as it grows without the page moving underneath it. */
+/* **The one intentional scroller.** The head above and any actions below stay
+   put; this is what moves. It carries the full §4.4/§4.9 event record as it
+   grows without the page moving underneath it. */
 .dialog__body {
+  flex: 1;
+  min-height: 0;
   padding: var(--space-5);
   overflow-y: auto;
+  /* Contain the scroll chain: reaching the end of a long form must not start
+     scrolling the page behind the dialog (the sidebar rule, applied here). */
+  overscroll-behavior: contain;
 }
 
 .details {

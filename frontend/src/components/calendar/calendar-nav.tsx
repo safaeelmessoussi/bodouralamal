@@ -37,14 +37,19 @@ export function CalendarNav({
   onNext: () => void;
 }): ReactNode {
   return (
-    <nav className="cal-nav" aria-label={t('calendar.navLabel')}>
-      <Button variant="secondary" onClick={onPrevious} aria-label={t('calendar.previousMonth')}>
+    /* **A compact segmented group, not three primary calls to action.** Month
+       stepping is a secondary act beside the calendar it steps, and three
+       7.5rem buttons dominated the page they were meant to navigate. «اليوم»
+       keeps a slight emphasis — it is the one that returns you to a known place
+       — while staying inside the group's quiet palette. */
+    <nav className="cal-segmented" aria-label={t('calendar.navLabel')}>
+      <Button variant="ghost" onClick={onPrevious} aria-label={t('calendar.previousMonth')}>
         {t('calendar.navPrevious')}
       </Button>
-      <Button variant="primary" onClick={onToday}>
+      <Button variant="ghost" className="is-emphasis" onClick={onToday}>
         {t('calendar.today')}
       </Button>
-      <Button variant="secondary" onClick={onNext} aria-label={t('calendar.nextMonth')}>
+      <Button variant="ghost" onClick={onNext} aria-label={t('calendar.nextMonth')}>
         {t('calendar.navNext')}
       </Button>
     </nav>

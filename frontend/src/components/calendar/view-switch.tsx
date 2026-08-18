@@ -35,11 +35,16 @@ export function ViewSwitch({
   onView: (next: CalendarView) => void;
 }): ReactNode {
   return (
-    <div className="cal-toolbar" role="tablist" aria-label={t('scheduling.viewLabel')}>
+    /* The SAME segmented shell the month stepping uses, so every calendar
+       surface reads as one control system rather than as five buttons. It sat on
+       `.cal-toolbar` — the FILTERS class — which is why it inherited their size
+       and spacing. */
+    <div className="cal-segmented" role="tablist" aria-label={t('scheduling.viewLabel')}>
       {(['list', 'calendar'] as const).map((v) => (
         <Button
           key={v}
-          variant={view === v ? 'primary' : 'ghost'}
+          variant="ghost"
+          className={view === v ? 'is-active' : undefined}
           role="tab"
           aria-selected={view === v}
           onClick={() => {

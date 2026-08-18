@@ -20,6 +20,7 @@ import { useSession } from '../../contexts/session.js';
 import { t } from '../../i18n/index.js';
 import { formatDate } from '../../lib/format-date.js';
 import { ApiError } from '../../lib/api.js';
+import { Feedback } from '../../components/ui/feedback.js';
 
 /**
  * `/admin/schedules/{id}/sessions` — the occurrences of one recurring class,
@@ -255,9 +256,9 @@ export function ScheduleSessionsPage({ scheduleId }: { scheduleId: string }): Re
       }
     >
       {notice ? (
-        <p className="admin-notice" role="status" aria-live="polite">
+        <Feedback>
           {notice}
-        </p>
+        </Feedback>
       ) : null}
 
       <DataTable
@@ -376,11 +377,11 @@ function ScopeDialog({
         </fieldset>
 
         {/* Stated before confirming, which is the clause's actual requirement. */}
-        <p className="admin-notice" role="status">
+        <Feedback>
           {t(`admin.sessions.willChange.${scope}`)
             .replace('{date}', session.date)
             .replace('{total}', String(total))}
-        </p>
+        </Feedback>
 
         {scope === 'this_session' ? (
           <DateField label={t('admin.sessions.colDate')} value={date} onChange={setDate} />

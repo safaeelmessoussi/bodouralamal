@@ -17,6 +17,7 @@ import { useActiveRole } from '../contexts/active-role.js';
 import { t } from '../i18n/index.js';
 import { formatDate } from '../lib/format-date.js';
 import { api } from '../lib/api.js';
+import { Feedback } from '../components/ui/feedback.js';
 
 /**
  * The content library management screen — `/admin/content` (§5.6) and
@@ -278,9 +279,9 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
       }
     >
       {notice ? (
-        <p className="admin-notice" role="status" aria-live="polite">
+        <Feedback>
           {notice}
-        </p>
+        </Feedback>
       ) : null}
 
       <DataTable

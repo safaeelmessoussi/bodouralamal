@@ -1,5 +1,6 @@
-import type { ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 
+import { keepSidebarPlace } from '../../lib/nav-scroll.js';
 import { ApplicationHeader } from '../header/application-header.js';
 import { Breadcrumb, type Crumb } from './breadcrumb.js';
 import { NoPermissionState } from '../states.js';
@@ -16,6 +17,11 @@ import { NoPermissionState } from '../states.js';
  * The sidebar is passed in rather than derived, because that is the one part
  * that genuinely differs: the back office groups its entries into §14.1's five
  * sections, and the teacher portal is a flat list.
+ *
+ * **Its scroll position survives a navigation** from here rather than from each
+ * portal: both have the same long menu and the same full-page loads, and a
+ * behaviour each portal had to opt into is a behaviour that would be missing
+ * from the next one (rule AE). See `lib/nav-scroll.ts`.
  */
 export function PortalShell({
   title,
@@ -37,10 +43,18 @@ export function PortalShell({
   permitted: boolean;
   children: ReactNode;
 }): ReactNode {
+  const frame = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    // The sidebar arrives as a node, so it is found in the DOM rather than held
+    // by a ref each portal would have to remember to attach.
+    const nav = frame.current?.querySelector<HTMLElement>('nav');
+    return nav ? keepSidebarPlace(nav) : undefined;
+  }, []);
+
   return (
     <>
       <ApplicationHeader />
-      <div className="admin">
+      <div className="admin" ref={frame}>
         {sidebar}
         <main id="main" className="admin__main">
           <div className="admin__head">

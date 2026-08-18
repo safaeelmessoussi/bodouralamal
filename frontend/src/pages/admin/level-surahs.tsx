@@ -26,6 +26,7 @@ import { useActiveRole } from '../../contexts/active-role.js';
 import { isDirty } from '../../lib/form-dirty.js';
 import { t } from '../../i18n/index.js';
 import { ApiError } from '../../lib/api.js';
+import { Feedback } from '../../components/ui/feedback.js';
 
 /**
  * `/admin/level-surahs` — **مقرر الحفظ** (§4.5, §7, BR-11; M4c).
@@ -197,9 +198,9 @@ export function LevelSurahsPage({ levelId }: { levelId: string | null }): ReactN
       actions={null}
     >
       {notice ? (
-        <p className="admin-notice" role="status" aria-live="polite">
+        <Feedback>
           {notice}
-        </p>
+        </Feedback>
       ) : null}
 
       <DataTable

@@ -26,6 +26,7 @@ import { useActiveRole } from '../../contexts/active-role.js';
 import { isDirty } from '../../lib/form-dirty.js';
 import { t } from '../../i18n/index.js';
 import { ApiError } from '../../lib/api.js';
+import { Feedback } from '../../components/ui/feedback.js';
 
 /**
  * `/admin/level-subjects` — **مواد المستوى** (§4.4b, TD-3 extension 2026-08-05;
@@ -210,9 +211,9 @@ export function LevelSubjectsPage({ levelId }: { levelId: string | null }): Reac
       actions={null}
     >
       {notice ? (
-        <p className="admin-notice" role="status" aria-live="polite">
+        <Feedback>
           {notice}
-        </p>
+        </Feedback>
       ) : null}
 
       <DataTable
