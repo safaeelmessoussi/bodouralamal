@@ -8,6 +8,7 @@ import {
   createTeachingGroup,
   deleteTeachingGroup,
   listCircles,
+  reorderCircles,
   listMembers,
   readSubjectSplit,
   removeMember,
@@ -34,6 +35,7 @@ import { FormDialog } from '../../components/ui/form-dialog.js';
 import { SearchInput, SelectField, TextField } from '../../components/ui/field.js';
 import { SearchableSelect } from '../../components/ui/searchable-select.js';
 import { useSession } from '../../contexts/session.js';
+import type { SortState } from '../../components/ui/data-table.js';
 import { useActiveRole } from '../../contexts/active-role.js';
 import { isDirty } from '../../lib/form-dirty.js';
 import { t } from '../../i18n/index.js';
@@ -117,6 +119,7 @@ export function TeachingStructurePage({
   const [total, setTotal] = useState(0);
   const [query, setQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
+  const [sort, setSort] = useState<SortState | null>(null);
   const [levelFilter, setLevelFilter] = useState('');
   const [subjectFilter, setSubjectFilter] = useState('');
 
@@ -151,19 +154,24 @@ export function TeachingStructurePage({
   const load = useCallback(async () => {
     setStatus('loading');
     try {
-      const result = await listCircles(accessToken, page, {
-        ...(query.trim() ? { q: query.trim() } : {}),
-        ...(categoryFilter ? { category_id: categoryFilter } : {}),
-        ...(levelFilter ? { level_id: levelFilter } : {}),
-        ...(subjectFilter ? { subject_id: subjectFilter } : {}),
-      });
+      const result = await listCircles(
+        accessToken,
+        page,
+        {
+          ...(query.trim() ? { q: query.trim() } : {}),
+          ...(categoryFilter ? { category_id: categoryFilter } : {}),
+          ...(levelFilter ? { level_id: levelFilter } : {}),
+          ...(subjectFilter ? { subject_id: subjectFilter } : {}),
+        },
+        sort,
+      );
       setRows(result.data);
       setTotal(result.meta.total);
       setStatus('ready');
     } catch {
       setStatus('error');
     }
-  }, [accessToken, page, query, categoryFilter, levelFilter, subjectFilter]);
+  }, [accessToken, page, query, categoryFilter, levelFilter, subjectFilter, sort]);
 
   useEffect(() => {
     void load();
@@ -266,15 +274,26 @@ export function TeachingStructurePage({
   const openLevel = levelId ? (levels.find((l) => l.id === levelId) ?? null) : null;
 
   const columns: Column<TeachingGroupRow>[] = [
-    { key: 'name', header: t('admin.subjectOrg.colCircle'), cell: (r) => r.name },
+    {
+      key: 'name',
+      header: t('admin.subjectOrg.colCircle'),
+      sortKey: 'name',
+      cell: (r) => r.name,
+    },
     {
       key: 'level',
       header: t('admin.subjectOrg.colLevel'),
+      sortKey: 'level',
       // The shared label, from the parts the server sent separately — the format
       // lives in one place and the server does not pre-join it.
       cell: (r) => levelLabel({ id: r.level_id, name: r.level_name, category_name: r.category_name }),
     },
-    { key: 'subject', header: t('admin.subjectOrg.colSubject'), cell: (r) => r.subject_name },
+    {
+      key: 'subject',
+      header: t('admin.subjectOrg.colSubject'),
+      sortKey: 'subject',
+      cell: (r) => r.subject_name,
+    },
     {
       key: 'members',
       header: t('admin.subjectOrg.colMembers'),
@@ -372,6 +391,31 @@ export function TeachingStructurePage({
             status={status}
             actions={actions}
             onRetry={() => void load()}
+            sort={sort}
+            onSort={(next) => {
+              setSort(next);
+              setPage(1);
+            }}
+            {...(canManageGroups
+              ? {
+                  /**
+                   * **R78.1 — circles order within their `(Level, Subject)`
+                   * pairing** (§2.2), so the sequence is meaningful only once
+                   * BOTH are chosen. `null` keeps the handle visible and
+                   * disabled with an explanation rather than hiding a
+                   * capability that exists.
+                   */
+                  onReorder:
+                    levelFilter === '' || subjectFilter === ''
+                      ? null
+                      : async (ids: string[]) =>
+                          reorderCircles(
+                            { levelId: levelFilter, subjectId: subjectFilter },
+                            ids,
+                            accessToken,
+                          ).then(load),
+                }
+              : {})}
             filtered={
               query.trim() !== '' ||
               categoryFilter !== '' ||

@@ -2076,6 +2076,14 @@ model SystemSetting {
 enum NotificationType {
   session_cancelled
   session_restored
+  /// R78.2 — a person was ADDED to a Session's staffing. Never written for a
+  /// re-save that changes nothing: the `(user, session, type)` unique index
+  /// makes that structural rather than a check.
+  session_assigned
+  /// R78.4 — an occurrence's date or time changed. The row points at the
+  /// Session, so the notice always renders the CURRENT date and time; a second
+  /// reschedule needs no second row, and the unique index gives that for free.
+  session_rescheduled
 
   @@map("notification_type")
 }

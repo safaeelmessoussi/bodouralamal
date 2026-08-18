@@ -1,4 +1,6 @@
 import type { Request, Response } from 'express';
+import { reorderWithinPairSchema } from '../validators/reorder.validators.js';
+import { sortParamsFrom } from '../lib/sorting.js';
 
 import type { PrismaClient } from '../generated/prisma/client.js';
 import { requireActor } from '../middleware/authenticate.js';
@@ -92,6 +94,7 @@ export function listAll(prisma: PrismaClient) {
       ...(filters.category_id !== undefined ? { categoryId: filters.category_id } : {}),
       ...(filters.q !== undefined ? { q: filters.q } : {}),
       ...pageParamsFrom(req.query),
+      ...sortParamsFrom(req.query),
     });
     res.json(pageOf(result, teachingGroupRowDto));
   };
@@ -108,6 +111,20 @@ export function listMembers(prisma: PrismaClient) {
   return async (req: Request, res: Response): Promise<void> => {
     const rows = await teachingGroups.listMembers(prisma, requireActor(req), idParam(req, 'id'));
     res.json({ data: rows.map(circleMemberDto) });
+  };
+}
+
+/** `PATCH /admin/teaching-groups/order` — one pairing's circles (R78.1). */
+export function reorderGroups(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const body = parse(reorderWithinPairSchema, req.body ?? {});
+    const ids = await teachingGroups.reorderTeachingGroups(
+      prisma,
+      requireActor(req),
+      { levelId: body.within.level_id, subjectId: body.within.subject_id },
+      body.ids,
+    );
+    res.json({ data: { ids } });
   };
 }
 

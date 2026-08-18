@@ -34,9 +34,22 @@ function code(source: string): string {
  */
 describe('the overview shows its data without being filtered first', () => {
   it('reads the circles unconditionally, with no required filter', () => {
-    // `listCircles(accessToken, page, {…})` — every parameter narrows and none is
-    // required, which is what lets the table render on arrival.
-    expect(code(PAGE)).toContain('listCircles(accessToken, page');
+    /**
+     * **Restated 2026-08-18, and the docstring above says why in advance.**
+     *
+     * This matched the exact call string `listCircles(accessToken, page`, so it
+     * broke the moment the call was reformatted onto several lines to take a
+     * sort argument — a change that touches the property not at all. The
+     * property is *the read happens and nothing is required first*, so that is
+     * what it now asserts: the call exists, and every argument after the page
+     * is optional or spread.
+     */
+    expect(code(PAGE)).toMatch(/listCircles\(\s*accessToken,\s*page\b/);
+    // Each filter reaches the read as a SPREAD — present when chosen, absent
+    // when not — which is the shape that cannot become a precondition.
+    for (const filter of ['category_id', 'level_id', 'subject_id']) {
+      expect(code(PAGE)).toContain(`? { ${filter}:`);
+    }
   });
 
   it('never makes a selector a precondition for the read', () => {

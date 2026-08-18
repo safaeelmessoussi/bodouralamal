@@ -365,6 +365,9 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
     '/admin/levels/:levelId/subjects/:subjectId/teaching-groups',
     teachingGroups.create(prisma),
   );
+  // Declared BEFORE `/:id`, like every other order route: Express matches in
+  // declaration order and the literal would otherwise arrive as a parameter.
+  guarded.patch('/admin/teaching-groups/order', teachingGroups.reorderGroups(prisma));
   guarded.patch('/admin/teaching-groups/:id', teachingGroups.update(prisma));
   guarded.delete('/admin/teaching-groups/:id', teachingGroups.remove(prisma));
   // The roster read completes a collection whose POST and DELETE were already

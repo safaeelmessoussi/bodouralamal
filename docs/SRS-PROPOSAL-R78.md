@@ -5,8 +5,11 @@
 **Three reversals the Owner has asked for, each contradicting a clause that gave
 its reasons.**
 
-**Status:** **DRAFT**, awaiting the Document Owner's decision. Nothing in it has
-been implemented, and `docs/SRS.md` is unchanged.
+**Status:** **APPLIED** to `docs/SRS.md` on 2026-08-18, on the Document Owner's
+explicit approval of all three decisions (*"I approve doing ALL currently open
+items … including applying R78"*), and with the narrowed reading of R77.3
+confirmed rather than a blanket reversal. This document is retained as the
+decision record.
 
 Raised because a 2026-08-18 instruction asks for three capabilities that the SRS
 does not merely omit — it **refuses them in terms**, each with a stated reason.
@@ -82,7 +85,7 @@ arrive through a revision. This is that revision.
 | **TD-2 rows** | **None** — both inherit existing authority. |
 | **Reversibility** | Additive throughout; the enum values can be retired without touching stored rows of the other types. |
 
-## 5 · What is being asked
+## 5 · What was approved
 
 1. Whether **R76.7's exclusion is superseded** — the reason has expired, but it
    is the Owner's clause and the Owner's call.

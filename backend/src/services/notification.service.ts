@@ -31,13 +31,51 @@ import { resolveAudience, type AudienceSpec } from '../policies/roster-resolutio
  * implementations that agree today are two that drift, and a notification list
  * disagreeing with the audit's count would make both unusable.
  *
- * **Students only.** Not staff, who take the decision; not parents, whose access
- * is §4.3's child context and is not a mailbox of their own in the MVP.
+ * ## Who is notified, as R78.3 narrows it
+ *
+ * R77.3 said *students only, not staff, who take the decision*. R78 keeps the
+ * reason and drops the over-reach: **the audience of an event is notified, and a
+ * person is never notified of their own act.** An administrator cancelling a
+ * class is telling the assigned مؤطرة something she did not decide; a مؤطرة
+ * cancelling her own is telling herself nothing.
+ *
+ * So the recipient set is *(enrolled students ∪ assigned staff) − the actor*.
+ * Parents remain outside it: §4.3's child context is not a mailbox of their own
+ * in the MVP.
  */
+
+/**
+ * The recipients of an event about one Session — **the audience predicate,
+ * written once** (R78.3).
+ *
+ * Both halves are resolved from live rows: the students through
+ * `resolveAudience`, which is the same predicate the `session.cancel` audit row
+ * counts, and the staff through the Session's own snapshot (R43.4) rather than
+ * the schedule's, so a مؤطرة who covered this occurrence is told about it and
+ * one merely removed from the schedule is not.
+ */
+async function recipientsFor(
+  tx: Prisma.TransactionClient,
+  sessionId: string,
+  spec: AudienceSpec,
+  actorUserId: string,
+): Promise<string[]> {
+  const [students, staff] = await Promise.all([
+    resolveAudience(tx as unknown as PrismaClient, spec),
+    tx.sessionStaff.findMany({
+      where: { sessionId, deletedAt: null },
+      select: { userId: true },
+    }),
+  ]);
+  const everyone = new Set([...students.map((s) => s.id), ...staff.map((s) => s.userId)]);
+  // **Never notified of your own act** — the whole of R78.3's narrowing.
+  everyone.delete(actorUserId);
+  return [...everyone];
+}
 
 export interface NotificationRow {
   id: string;
-  type: 'session_cancelled' | 'session_restored';
+  type: 'session_cancelled' | 'session_restored' | 'session_assigned' | 'session_rescheduled';
   sessionId: string;
   readAt: Date | null;
   createdAt: Date;
@@ -77,15 +115,68 @@ export async function notifyCancelled(
   tx: Prisma.TransactionClient,
   sessionId: string,
   spec: AudienceSpec,
+  actorUserId: string,
 ): Promise<number> {
-  const audience = await resolveAudience(tx as unknown as PrismaClient, spec);
-  if (audience.length === 0) return 0;
+  return writeFor(tx, sessionId, 'session_cancelled', await recipientsFor(tx, sessionId, spec, actorUserId));
+}
+
+/**
+ * `session_rescheduled` — an occurrence's date or time changed (R78.4).
+ *
+ * **One row, however many times it moves.** The notification points at the
+ * Session and the DTO renders that Session's *current* date and time, so a
+ * second reschedule needs no second row and the unique index gives that for
+ * nothing. A student always reads where the class is now, never a trail of
+ * where it used to be.
+ *
+ * It is deliberately **not** a cancellation plus a new occurrence: that would
+ * tell her the class is off and, separately, that a different one exists — two
+ * false statements in place of one true one (R78's rejected alternative).
+ */
+export async function notifyRescheduled(
+  tx: Prisma.TransactionClient,
+  sessionId: string,
+  spec: AudienceSpec,
+  actorUserId: string,
+): Promise<number> {
+  return writeFor(tx, sessionId, 'session_rescheduled', await recipientsFor(tx, sessionId, spec, actorUserId));
+}
+
+/**
+ * `session_assigned` — these people were ADDED to the staffing (R78.2).
+ *
+ * Only the newly added are told, which is what makes a re-save that changes
+ * nothing write nothing. The actor is excluded for the same reason as
+ * everywhere else: assigning yourself is not news to you.
+ */
+export async function notifyAssigned(
+  tx: Prisma.TransactionClient,
+  sessionId: string,
+  addedUserIds: readonly string[],
+  actorUserId: string,
+): Promise<number> {
+  return writeFor(
+    tx,
+    sessionId,
+    'session_assigned',
+    addedUserIds.filter((id) => id !== actorUserId),
+  );
+}
+
+/**
+ * The write itself. `skipDuplicates` against the `(user, session, type)` unique
+ * index is what makes every one of these idempotent: a retry after a dropped
+ * response writes the same rows rather than a second copy of the same news.
+ */
+async function writeFor(
+  tx: Prisma.TransactionClient,
+  sessionId: string,
+  type: 'session_cancelled' | 'session_rescheduled' | 'session_assigned',
+  userIds: readonly string[],
+): Promise<number> {
+  if (userIds.length === 0) return 0;
   const created = await tx.notification.createMany({
-    data: audience.map((student) => ({
-      userId: student.id,
-      sessionId,
-      type: 'session_cancelled' as const,
-    })),
+    data: userIds.map((userId) => ({ userId, sessionId, type })),
     skipDuplicates: true,
   });
   return created.count;

@@ -44,3 +44,20 @@ export const reorderWithinSchema = z
     ids: z.array(uuid).max(500),
   })
   .strict();
+
+/**
+ * A reorder within a **composite** parent — the circles that split one Subject
+ * at one Level (R78.1).
+ *
+ * `within` is an object here rather than a uuid because the parent genuinely is
+ * a pair: §4.4c splits a `(Level, Subject)` pairing into circles, and neither
+ * half alone names the collection. Sending only the Level would ask to order
+ * circles of every Subject that Level teaches — positions that mean nothing
+ * beside each other, which is the §2.2 hazard the `within` field exists for.
+ */
+export const reorderWithinPairSchema = z
+  .object({
+    within: z.object({ level_id: uuid, subject_id: uuid }).strict(),
+    ids: z.array(uuid).max(500),
+  })
+  .strict();

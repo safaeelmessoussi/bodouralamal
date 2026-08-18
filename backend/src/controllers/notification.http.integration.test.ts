@@ -67,6 +67,8 @@ let secondToken: string;
 let outsiderToken: string;
 let scheduleId: string;
 let sessionId: string;
+let teacherId: string;
+let teacherToken: string;
 
 async function makeUser(label: string): Promise<string> {
   return (
@@ -168,7 +170,13 @@ beforeAll(async () => {
     });
   }
 
+  // R78.3's second half needs staff on the session: an administrator's action
+  // reaches them, and their own action does not reach themselves.
+  teacherId = await makeUser('أستاذة');
+  teacherToken = bearer(teacherId, [{ role: 'teacher', branches: null }]);
+
   const created = await call('POST', '/admin/course-schedules', superAdmin, {
+    staff: [{ user_id: teacherId, position: 'teacher' }],
     title: `${TAG} حلقة`,
     subject_id: subjectId,
     teaching_mode: 'administrative_group',
@@ -271,8 +279,13 @@ describe('R77 — cancelling one occurrence notifies its enrolled students', () 
       orderBy: { createdAt: 'desc' },
     });
     const detail = row.detail as Record<string, unknown>;
+    // `audience_size` counts the STUDENTS the class is for — §4.4c's resolved
+    // audience, unchanged by R78.
     expect(detail['audience_size']).toBe(2);
-    expect(detail['notified']).toBe(2);
+    // `notified` counts who was actually told, which R78.3 widened to
+    // (students ∪ assigned staff) − the actor: the two students and the مؤطرة
+    // staffing the session, none of whom is the administrator who cancelled.
+    expect(detail['notified']).toBe(3);
   });
 
   it('is idempotent — a cancellation that is already in force writes no second notice', async () => {
@@ -283,7 +296,8 @@ describe('R77 — cancelling one occurrence notifies its enrolled students', () 
     const count = await prisma.notification.count({
       where: { sessionId, type: 'session_cancelled' },
     });
-    expect(count).toBe(2);
+    // Two students and the assigned مؤطرة (R78.3) — and no more on a retry.
+    expect(count).toBe(3);
   });
 
   it('refuses an anonymous read and never leaks another caller’s notice', async () => {
@@ -345,11 +359,174 @@ describe('R77.5 — restoring reconciles what was already delivered', () => {
       orderBy: { createdAt: 'desc' },
     });
     const detail = row.detail as Record<string, unknown>;
-    expect(detail['withdrawn']).toBe(1);
+    // The second student never read hers, and neither did the مؤطرة — both are
+    // withdrawn. Only the first student had read hers, so only hers is corrected.
+    expect(detail['withdrawn']).toBe(2);
     expect(detail['corrected']).toBe(1);
 
     // `scheduled → scheduled` is refused, and nothing multiplied.
     expect((await restore()).status).toBe(409);
     expect(await prisma.notification.count({ where: { sessionId } })).toBe(1);
+  });
+});
+
+/**
+ * **R78.3 — the audience is (students ∪ assigned staff) MINUS the actor.**
+ *
+ * R77.3 read *students only, not staff, who take the decision*. The reason was
+ * right and the rule over-reached: an administrator cancelling a class is
+ * telling the assigned مؤطرة something she did **not** decide. What R78 keeps is
+ * the part that was actually true — nobody is told about their own act.
+ */
+describe('R78.3 — assigned staff are told, unless they did it themselves', () => {
+  const reset = async (): Promise<void> => {
+    await prisma.notification.deleteMany({ where: { sessionId } });
+    const row = await prisma.session.findUniqueOrThrow({
+      where: { id: sessionId },
+      select: { status: true, version: true },
+    });
+    if (row.status === 'cancelled') {
+      await call('POST', `/sessions/${sessionId}/restore`, superAdmin, { version: row.version });
+      await prisma.notification.deleteMany({ where: { sessionId } });
+    }
+  };
+
+  const typesFor = async (token: string): Promise<string[]> => {
+    const res = await call('GET', '/notifications', token);
+    return (res.body.data as unknown as Record<string, unknown>[])
+      .filter((n) => n['session_id'] === sessionId)
+      .map((n) => String(n['type']));
+  };
+
+  it('an ADMIN cancelling reaches the students AND the assigned مؤطرة', async () => {
+    await reset();
+    expect((await cancel('الأستاذة مريضة')).status).toBe(200);
+    expect(await typesFor(enrolledToken)).toEqual(['session_cancelled']);
+    // She did not take this decision, so it is news to her.
+    expect(await typesFor(teacherToken)).toEqual(['session_cancelled']);
+    // And it still reaches nobody outside the audience.
+    expect(await typesFor(outsiderToken)).toEqual([]);
+  });
+
+  it('the مؤطرة cancelling her OWN class is not told about it', async () => {
+    await reset();
+    const version = await versionOf();
+    const res = await call('POST', `/sessions/${sessionId}/cancel`, teacherToken, {
+      reason: 'ظرف طارئ',
+      version,
+    });
+    expect(res.status).toBe(200);
+    // The students still learn of it — the event happened.
+    expect(await typesFor(enrolledToken)).toEqual(['session_cancelled']);
+    // She performed it. Telling her would be the platform reporting her own act
+    // back to her, which is exactly what R77.3 was reaching for.
+    expect(await typesFor(teacherToken)).toEqual([]);
+  });
+
+  it('is idempotent for staff too — a retry writes no second notice', async () => {
+    await reset();
+    await cancel('الأستاذة مريضة');
+    // `cancelled → cancelled` is refused, so the honest assertion is that the
+    // rows did not multiply.
+    expect((await cancel('مرة أخرى')).status).toBe(409);
+    expect(await typesFor(teacherToken)).toEqual(['session_cancelled']);
+  });
+});
+
+/**
+ * **R78.4 — a reschedule is one occurrence moving, not a cancellation and a
+ * creation.**
+ */
+describe('R78.4 — rescheduling tells the audience where the class now is', () => {
+  const moveTo = async (date: string, start: string, end: string) => {
+    // A cancelled occurrence left behind by an earlier block is restored first:
+    // rescheduling is about a class that is ON, and the scenario under test is
+    // a move rather than a revival.
+    const current = await prisma.session.findUniqueOrThrow({
+      where: { id: sessionId },
+      select: { status: true, version: true },
+    });
+    if (current.status === 'cancelled') {
+      await call('POST', `/sessions/${sessionId}/restore`, superAdmin, {
+        version: current.version,
+      });
+      await prisma.notification.deleteMany({ where: { sessionId } });
+    }
+    const version = await versionOf();
+    return call('PATCH', `/sessions/${sessionId}`, superAdmin, {
+      version,
+      date,
+      start_time: start,
+      end_time: end,
+    });
+  };
+
+  it('writes ONE session_rescheduled carrying the NEW date and time', async () => {
+    await prisma.notification.deleteMany({ where: { sessionId } });
+    const before = await prisma.session.findUniqueOrThrow({
+      where: { id: sessionId },
+      select: { date: true },
+    });
+
+    const moved = await moveTo('2098-03-09', '10:00', '12:00');
+    expect(moved.status).toBe(200);
+
+    const res = await call('GET', '/notifications', enrolledToken);
+    const mine = (res.body.data as unknown as Record<string, unknown>[]).filter(
+      (n) => n['session_id'] === sessionId,
+    );
+    expect(mine).toHaveLength(1);
+    expect(mine[0]!['type']).toBe('session_rescheduled');
+    // **The new time, not the old one.** A notice saying only *the time changed*
+    // is one nobody can act on.
+    expect(mine[0]!['session_date']).toBe('2098-03-09');
+    expect(mine[0]!['session_start_time']).toBe('10:00');
+    expect(before.date.toISOString().slice(0, 10)).not.toBe('2098-03-09');
+
+    // The SAME occurrence moved — no second row was created, and no
+    // cancellation was faked to stand in for the move.
+    expect(await prisma.session.count({ where: { scheduleId, deletedAt: null, date: before.date } })).toBe(0);
+    const still = await prisma.session.findUniqueOrThrow({
+      where: { id: sessionId },
+      select: { status: true },
+    });
+    expect(still.status).toBe('scheduled');
+  });
+
+  it('moving it AGAIN keeps one notice, showing where it is now', async () => {
+    expect((await moveTo('2098-03-16', '11:00', '13:00')).status).toBe(200);
+    const res = await call('GET', '/notifications', enrolledToken);
+    const mine = (res.body.data as unknown as Record<string, unknown>[]).filter(
+      (n) => n['session_id'] === sessionId,
+    );
+    // One row, because it points at the Session and the DTO renders the
+    // session's CURRENT time — a trail of old times helps nobody.
+    expect(mine.filter((n) => n['type'] === 'session_rescheduled')).toHaveLength(1);
+    expect(mine[0]!['session_date']).toBe('2098-03-16');
+    expect(mine[0]!['session_start_time']).toBe('11:00');
+  });
+
+  it('a change that is NOT a move writes nothing', async () => {
+    await prisma.notification.deleteMany({ where: { sessionId } });
+    const version = await versionOf();
+    // Same date and times, resubmitted. The row is still marked overridden —
+    // that is R43.4 — but nobody needs telling about it.
+    const res = await call('PATCH', `/sessions/${sessionId}`, superAdmin, {
+      version,
+      date: '2098-03-16',
+      start_time: '11:00',
+      end_time: '13:00',
+    });
+    expect(res.status).toBe(200);
+    expect(await prisma.notification.count({ where: { sessionId } })).toBe(0);
+  });
+
+  it('never reaches a student enrolled elsewhere', async () => {
+    const res = await call('GET', '/notifications', outsiderToken);
+    expect(
+      (res.body.data as unknown as Record<string, unknown>[]).filter(
+        (n) => n['session_id'] === sessionId,
+      ),
+    ).toHaveLength(0);
   });
 });

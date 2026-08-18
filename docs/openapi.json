@@ -3849,6 +3849,57 @@
         }
       }
     },
+    "/admin/teaching-groups/order": {
+      "patch": {
+        "summary": "Reorder one pairing's circles",
+        "description": "R78.1 — one `(Level, Subject)` pairing's circles, in the order given, on R76.4's contract unchanged. R76.7 had excluded `TeachingGroup` because no interface had ever set the column, so ordering circles was *not a decision anybody takes today*; that reason was evidential and R78 records its expiry. **The pairing is required and is not inferred from the ids**: a circle's position is meaningful only among the circles splitting the SAME Subject at the same Level (§2.2), so `within` is an OBJECT here — `{ level_id, subject_id }` — because neither half alone names the collection. Body is `{ within, ids }`: the sequence itself, never per-row numbers, so duplicate and gapped values are structurally impossible. Refused unless `ids` is the exact live set of that pairing (`DUPLICATE_ID`, `UNKNOWN_ID`, `INCOMPLETE_ORDER`). One transaction, idempotent, `1..n` contiguous. Authority is the resource's own write authority (R76.5) — Super Admin, per R43.3 — and TD-2 gains no row.",
+        "responses": {
+          "200": {
+            "description": "The resulting order, so a client re-renders from the server rather than from its own optimistic guess."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a malformed body, or a sequence that is not the exact live set; details.reason names which.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/admin/teaching-groups/{id}/members": {
       "get": {
         "summary": "Read a teaching group’s members",

@@ -1,4 +1,6 @@
 import type { Prisma, PrismaClient, TeachingGroup } from '../generated/prisma/client.js';
+import { resolveSort, type SortableFields, type SortParams } from '../lib/sorting.js';
+import { applyOrder } from '../lib/reorder.js';
 import { AppError } from '../lib/errors.js';
 import { page, pageWindow, type Page, type PageParams } from '../lib/pagination.js';
 import { assertSubjectTaughtAtLevel } from '../policies/curriculum.js';
@@ -165,6 +167,36 @@ export interface TeachingGroupRow {
   version: number;
 }
 
+/**
+ * What `/admin/teaching-groups` may be sorted by (R76.1) — **this endpoint's
+ * own allow-list**, not a shared one: a table shared across resources would
+ * quietly let every list accept every other list's fields.
+ */
+export const TEACHING_GROUP_SORT_FIELDS: SortableFields = {
+  name: (dir) => [{ name: dir }],
+  level: (dir) => [{ level: { name: dir } }],
+  subject: (dir) => [{ subject: { name: dir } }],
+};
+
+/**
+ * BR-19's order for circles: Category, then Level, then Subject, then the
+ * circle's own position.
+ *
+ * **The Category comes first because `Level.displayOrder` is scoped WITHIN its
+ * Category** (§2.2) — ordering by it across Categories interleaves them, and a
+ * table where اليافعات 1 sits between المرأة 1 and المرأة 2 is a table nobody
+ * can read.
+ */
+const TEACHING_GROUP_DEFAULT_ORDER = [
+        { level: { category: { displayOrder: 'asc' } } },
+        { level: { category: { name: 'asc' } } },
+        { level: { displayOrder: 'asc' } },
+        { level: { name: 'asc' } },
+        { subject: { name: 'asc' } },
+        { displayOrder: 'asc' },
+        { name: 'asc' },
+      ];
+
 export async function listAllTeachingGroups(
   prisma: PrismaClient,
   actor: Actor,
@@ -173,7 +205,8 @@ export async function listAllTeachingGroups(
     subjectId?: string;
     categoryId?: string;
     q?: string;
-  } & PageParams,
+  } & PageParams &
+    SortParams,
 ): Promise<Page<TeachingGroupRow>> {
   assertCanManageMembership(actor);
 
@@ -202,21 +235,9 @@ export async function listAllTeachingGroups(
   const [rows, total] = await Promise.all([
     prisma.teachingGroup.findMany({
       where,
-      // Category, then Level, then Subject, then the circle's own order: the
-      // reading order of the hierarchy the rows belong to, so a table sorts the
-      // way the menu does. **The Category comes first because
-      // `Level.displayOrder` is scoped WITHIN its Category** (§2.2) — ordering
-      // by it across Categories interleaves them, and a table where اليافعات 1
-      // sits between المرأة 1 and المرأة 2 is a table nobody can read.
-      orderBy: [
-        { level: { category: { displayOrder: 'asc' } } },
-        { level: { category: { name: 'asc' } } },
-        { level: { displayOrder: 'asc' } },
-        { level: { name: 'asc' } },
-        { subject: { name: 'asc' } },
-        { displayOrder: 'asc' },
-        { name: 'asc' },
-      ],
+      // Absent parameters preserve BR-19 exactly (R76.2); the default is stated
+      // beside the allow-list above, where its reasoning belongs.
+      orderBy: resolveSort(TEACHING_GROUP_SORT_FIELDS, filters, TEACHING_GROUP_DEFAULT_ORDER) as never,
       skip: window.skip,
       take: window.take,
       include: {
@@ -703,4 +724,48 @@ export async function listUnassignedStudents(
       branchId: r.branchId,
     })),
   };
+}
+
+/**
+ * `PATCH /admin/teaching-groups/order` — **one `(Level, Subject)` pairing's
+ * circles, in the order given** (R78.1, on R76.4's contract unchanged).
+ *
+ * R76.7 excluded `TeachingGroup` because no interface had ever set the column,
+ * so ordering circles was *"not a decision anybody takes today"*. That reason
+ * was evidential and has expired — R78 records the supersession.
+ *
+ * **The pairing is required, not inferred from the ids.** `display_order` on a
+ * circle is meaningful only among the circles that split the SAME Subject at the
+ * same Level: a position beside a circle of another Subject means nothing. It is
+ * the same §2.2 argument that makes `Level` scope to its Category and
+ * `AdministrativeGroup` to its Level — and, as there, the server must know which
+ * collection the sequence claims to be **before** it reads the live set to
+ * compare against.
+ *
+ * Authority is the resource's own write authority (R76.5) — whoever may create a
+ * circle may order them — and TD-2 gains no row.
+ */
+export async function reorderTeachingGroups(
+  prisma: PrismaClient,
+  actor: Actor,
+  within: { levelId: string; subjectId: string },
+  ids: readonly string[],
+): Promise<string[]> {
+  assertCanManageGroups(actor);
+
+  return applyOrder(
+    prisma,
+    {
+      liveIds: async (tx) =>
+        (
+          await tx.teachingGroup.findMany({
+            where: { deletedAt: null, levelId: within.levelId, subjectId: within.subjectId },
+            select: { id: true },
+          })
+        ).map((r) => r.id),
+      write: (tx, id, displayOrder) =>
+        tx.teachingGroup.update({ where: { id }, data: { displayOrder } }),
+    },
+    ids,
+  );
 }

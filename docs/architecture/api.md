@@ -210,9 +210,13 @@ compare against.
 | `PATCH /admin/subjects/order` | `{ ids }` |
 | `PATCH /admin/levels/order` | `{ within: categoryId, ids }` |
 | `PATCH /admin/administrative-groups/order` | `{ within: levelId, ids }` |
+| `PATCH /admin/teaching-groups/order` | `{ within: { level_id, subject_id }, ids }` |
 
-`TeachingGroup` carries the column and is deliberately **not** orderable: no interface has
-ever set it, so the gesture would invent a workflow rather than expose one.
+**`TeachingGroup` joined them in R78.1.** R76.7 had excluded it because *no interface had
+ever set the column*, so ordering circles was not a decision anybody took — an **evidential**
+reason, and the Owner asking for the gesture is the evidence it lacked. It is the only one
+whose `within` is an **object**: §4.4c splits a `(Level, Subject)` pairing into circles, and
+neither half alone names the collection.
 
 Authority is **inherited** from the resource's existing write authority — whoever may edit a
 Branch may reorder Branches — and TD-2 gains no row.

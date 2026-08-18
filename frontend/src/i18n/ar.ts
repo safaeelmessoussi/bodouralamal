@@ -256,6 +256,11 @@ export const ar = {
     unreadLabel: 'غير مقروءة',
     sessionCancelled: 'أُلغيت حصة {subject} ليوم {date} على الساعة {time}.',
     sessionRestored: 'عادت حصة {subject} ليوم {date} على الساعة {time} إلى الجدول.',
+    // R78.4 — الإشعار يحمل الموعد الجديد، لأن إشعاراً يقول «تغيّر الموعد» فقط
+    // لا يمكن لأحد أن يتصرّف بناءً عليه.
+    sessionRescheduled: 'تغيّر موعد حصة {subject}. الموعد الجديد: {date} على الساعة {time}.',
+    // R78.2 — تُرسَل لمن أُسنِدت إليه الحصة، ولا تُرسَل لمن قام بالإسناد بنفسه.
+    sessionAssigned: 'أُسنِدت إليك حصة {subject} ليوم {date} على الساعة {time}.',
     theClass: 'الحصة',
     reason: 'السبب: {reason}',
     markRead: 'تم الاطّلاع',

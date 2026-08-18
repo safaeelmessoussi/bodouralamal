@@ -31,6 +31,20 @@ import { ErrorState } from '../states.js';
  * while a read one is **corrected**. Auto-marking on render would make every
  * notice "read" and turn every restore into a correction nobody needed.
  */
+/**
+ * One key per event type, in one place.
+ *
+ * A chain of ternaries silently fell through to *cancelled* for anything it did
+ * not know, which is the worst possible default: a class that MOVED would have
+ * been announced as one that was called off.
+ */
+const HEADLINE_KEYS: Record<NotificationItem['type'], string> = {
+  session_cancelled: 'notifications.sessionCancelled',
+  session_restored: 'notifications.sessionRestored',
+  session_rescheduled: 'notifications.sessionRescheduled',
+  session_assigned: 'notifications.sessionAssigned',
+};
+
 export function NotificationList({ token }: { token: string | null }): ReactNode {
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [unread, setUnread] = useState(0);
@@ -92,11 +106,7 @@ export function NotificationList({ token }: { token: string | null }): ReactNode
             }
           >
             <p className="notifications__headline">
-              {t(
-                item.type === 'session_cancelled'
-                  ? 'notifications.sessionCancelled'
-                  : 'notifications.sessionRestored',
-              )
+              {t(HEADLINE_KEYS[item.type] ?? 'notifications.sessionCancelled')
                 .replace('{subject}', item.subject_name ?? t('notifications.theClass'))
                 .replace('{date}', item.session_date)
                 .replace('{time}', item.session_start_time)}
@@ -105,6 +115,9 @@ export function NotificationList({ token }: { token: string | null }): ReactNode
                 «لماذا» is what the association's manual channels already
                 managed, badly. Absent on a restoration, where the stored reason
                 describes the cancellation that no longer applies. */}
+            {/* The reason belongs to a cancellation. On a restoration or a
+                reschedule the stored reason describes something that no longer
+                applies, and on an assignment there is none. */}
             {item.type === 'session_cancelled' && item.reason ? (
               <p className="notifications__reason">
                 {t('notifications.reason').replace('{reason}', item.reason)}

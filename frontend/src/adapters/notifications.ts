@@ -9,7 +9,7 @@ import { api } from '../lib/api.js';
  */
 export interface NotificationItem {
   id: string;
-  type: 'session_cancelled' | 'session_restored';
+  type: 'session_cancelled' | 'session_restored' | 'session_assigned' | 'session_rescheduled';
   session_id: string;
   session_date: string;
   session_start_time: string;

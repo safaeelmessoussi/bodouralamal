@@ -1,4 +1,6 @@
 import { api } from '../lib/api.js';
+import { applySort } from './reorder.js';
+import type { SortState } from '../components/ui/data-table.js';
 import type { Page } from './administrative-groups.js';
 
 /**
@@ -164,12 +166,34 @@ export async function listCircles(
   token: string | null,
   page = 1,
   filters: CircleFilters = {},
+  sort: SortState | null = null,
 ): Promise<Page<TeachingGroupRow>> {
   const params = new URLSearchParams({ page: String(page), page_size: '25' });
   for (const [key, value] of Object.entries(filters)) {
     if (value) params.set(key, value);
   }
+  applySort(params, sort);
   return api<Page<TeachingGroupRow>>(`/admin/teaching-groups?${params.toString()}`, { token });
+}
+
+/**
+ * R78.1 — **one `(Level, Subject)` pairing's circles**, in the order given.
+ *
+ * The pairing is required for the §2.2 reason every parent-scoped reorder names
+ * one: a circle's position is meaningful only among the circles splitting the
+ * same Subject at the same Level.
+ */
+export async function reorderCircles(
+  within: { levelId: string; subjectId: string },
+  ids: readonly string[],
+  token: string | null,
+): Promise<string[]> {
+  const body = await api<{ data: { ids: string[] } }>('/admin/teaching-groups/order', {
+    method: 'PATCH',
+    token,
+    body: { within: { level_id: within.levelId, subject_id: within.subjectId }, ids },
+  });
+  return body.data.ids;
 }
 
 /**

@@ -353,6 +353,7 @@ authenticates; it does not authorise.
 | `GET` `POST` | `/admin/administrative-groups/{id}/roster` | Enrolment reads the Level **from the group** and **enqueues consent re-evaluation** per session. **No capacity check exists** |
 | `DELETE` | `/admin/administrative-groups/{id}/roster/{studentId}` | Soft-deletes the enrolment **only** — grades, submissions and Quran logs survive. Subject-split seats for that Level go with it |
 | `PATCH` | `/admin/administrative-groups/order` | `{ within: levelId, ids }` — one Level's groups, within the caller's branch scope |
+| `PATCH` | `/admin/teaching-groups/order` | R78.1 — `{ within: { level_id, subject_id }, ids }`. **`within` is an object**: a circle's position is meaningful only among the circles splitting the same Subject at the same Level (§2.2), so neither half alone names the collection. Supersedes R76.7's exclusion |
 | `PATCH` `DELETE` | `/admin/administrative-groups/{id}` | Only `name` and `display_order` are editable. Deletion is blocked by enrolments, by a schedule targeting the group, and by the **last group in a Level** — a Level created with one must never be emptied back to none |
 
 A group is exactly `id`, `name`, `level_id`, `branch_id`, `display_order`, `version`. The write

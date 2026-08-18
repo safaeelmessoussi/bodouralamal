@@ -61,6 +61,10 @@ async function clean(): Promise<void> {
   await prisma.educationalContent.deleteMany({ where: { levelId: { in: levelIds } } });
   await prisma.enrollment.deleteMany({ where: { levelId: { in: levelIds } } });
   await prisma.administrativeGroup.deleteMany({ where: { levelId: { in: levelIds } } });
+  await prisma.studentTeachingGroup.deleteMany({
+    where: { teachingGroup: { levelId: { in: levelIds } } },
+  });
+  await prisma.teachingGroup.deleteMany({ where: { levelId: { in: levelIds } } });
   await prisma.levelSubject.deleteMany({ where: { levelId: { in: levelIds } } });
   await prisma.level.deleteMany({ where: { id: { in: levelIds } } });
   await prisma.subject.deleteMany({ where: { name: { startsWith: TAG } } });
@@ -132,6 +136,24 @@ await prisma.levelSubject.create({ data: { levelId: level.id, subjectId: subject
 const group = await prisma.administrativeGroup.create({
   data: { name: `${TAG} المجموعة 1`, levelId: level.id, branchId: branch.id },
 });
+
+// R78.1 — three circles splitting the one (Level, Subject) pairing, so the
+// reorder harness has a parent-scoped collection to drag within.
+const circles: string[] = [];
+for (const [i, name] of ['ج الحلقة', 'أ الحلقة', 'ب الحلقة'].entries()) {
+  circles.push(
+    (
+      await prisma.teachingGroup.create({
+        data: {
+          name: `${TAG} ${name}`,
+          levelId: level.id,
+          subjectId: subject.id,
+          displayOrder: i + 1,
+        },
+      })
+    ).id,
+  );
+}
 
 const year =
   (await prisma.academicYear.findFirst({ orderBy: { label: 'desc' } })) ??
@@ -233,6 +255,7 @@ process.stdout.write(
       student,
       outsider,
       sessions: created,
+      circles,
       // The occurrence the recorder harness attaches to: the earliest one, so a
       // rerun addresses the same row rather than whichever came back first.
       firstSessionId: (

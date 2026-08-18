@@ -1,5 +1,9 @@
 import type { Prisma, PrismaClient, Session, SessionStatus } from '../generated/prisma/client.js';
-import { notifyCancelled, notifyRestored } from './notification.service.js';
+import {
+  notifyCancelled,
+  notifyRescheduled,
+  notifyRestored,
+} from './notification.service.js';
 import { AppError } from '../lib/errors.js';
 import { atMidnightUtc } from '../lib/recurrence.js';
 import * as scope from '../policies/branch-scope.js';
@@ -194,6 +198,30 @@ export async function overrideSession(
       };
     }
 
+    /**
+     * **R78.4 — a reschedule is a change of WHEN, not of anything else.**
+     *
+     * Moving a class to another room is not news a student must act on; moving
+     * it to another day is. So the notice is written only when the date or a
+     * time actually changed — `changed` already records exactly that, having
+     * been built from old-versus-new rather than from what was submitted.
+     */
+    const movedInTime = ['date', 'start_time', 'end_time'].some((k) => k in changed);
+    const notified = movedInTime
+      ? await notifyRescheduled(
+          tx,
+          sessionId,
+          {
+            teachingMode: session.schedule.teachingMode as never,
+            levelId: session.schedule.levelId,
+            administrativeGroupId: session.schedule.administrativeGroupId,
+            teachingGroupId: session.schedule.teachingGroupId,
+            branchId: session.schedule.branchId,
+          },
+          actor.userId,
+        )
+      : 0;
+
     await audit.write(tx, {
       actorUserId: actor.userId,
       activeRole: actor.activeRole,
@@ -202,7 +230,7 @@ export async function overrideSession(
       targetId: sessionId,
       // TD-8: the fields old→new, which is exactly the distinction that
       // protects this row from the next materialization.
-      detail: { changed },
+      detail: { changed, ...(movedInTime ? { notified } : {}) },
     });
     return updated;
   });
@@ -259,7 +287,10 @@ export async function cancelSession(
     // **In the same transaction** (R77.4). A committed cancellation with no
     // notifications is a class nobody was told about, and a retry cannot tell
     // that state apart from one already notified.
-    const notified = await notifyCancelled(tx, sessionId, spec);
+    // R78.3 — the audience is (students ∪ assigned staff) minus the actor: an
+    // administrator tells the مؤطرة something she did not decide, and a مؤطرة
+    // cancelling her own class tells herself nothing.
+    const notified = await notifyCancelled(tx, sessionId, spec, actor.userId);
     await audit.write(tx, {
       actorUserId: actor.userId,
       activeRole: actor.activeRole,

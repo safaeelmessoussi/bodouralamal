@@ -197,6 +197,7 @@ GET /admin/levels/{levelId}/subjects/{subjectId}/teaching-groups   # TD-3.12, §
 POST /admin/levels/{levelId}/subjects/{subjectId}/teaching-groups  # TD-3.12, §4.4c; Super Admin (R43.3)
 PATCH /admin/teaching-groups/{id}             # TD-3.12; TD-15; Super Admin (R43.3)
 DELETE /admin/teaching-groups/{id}            # TD-3.12; Super Admin (R43.3)
+PATCH /admin/teaching-groups/order            # R78.1; one (Level, Subject) pairing's circles; supersedes R76.7
 POST /admin/teaching-groups/{id}/members      # TD-3.12; at most one per (subject, level) — 409 (§4.4c)
 DELETE /admin/teaching-groups/{id}/members/{studentId}  # TD-3.12, §4.4c
 GET /admin/course-schedules                   # TD-3.12, §4.4 — the unit of delivery
