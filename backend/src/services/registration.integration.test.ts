@@ -1,19 +1,19 @@
-import { spawn } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { spawn } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
-import { loadConfig } from '../lib/config.js';
-import { issueOnboardingToken } from '../lib/onboarding-token.js';
-import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
-import { registrationSchema } from '../validators/registration.validators.js';
-import { CONSENT_TEXT_VERSION_KEY, register } from './registration.service.js';
+import { loadConfig } from "../lib/config.js";
+import { issueOnboardingToken } from "../lib/onboarding-token.js";
+import { createPrismaClient, TEST_CONNECTION_LIMIT } from "../lib/prisma.js";
+import { registrationSchema } from "../validators/registration.validators.js";
+import { CONSENT_TEXT_VERSION_KEY, register } from "./registration.service.js";
 import {
   captureConsentVersion,
   restoreConsentVersion,
   type SavedConsentVersion,
-} from '../test-support/consent-setting.js';
-import type { RegistrationInput } from '../validators/registration.validators.js';
+} from "../test-support/consent-setting.js";
+import type { RegistrationInput } from "../validators/registration.validators.js";
 
 /**
  * Unified registration (SRS §4.1, §4.1b step 5, TD-4.1) against the real
@@ -31,29 +31,49 @@ const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);
  */
 let savedConsentVersion: SavedConsentVersion | null = null;
 const KEY = config.ONBOARDING_TOKEN_KEY;
-const TAG = '[reg-test]';
+const TAG = "[reg-test]";
 /** Deliberately not a prefix-extension of `TAG` — `clear()` sweeps by prefix,
  *  and a placement caught by it would be deleted before its group. */
-const PLACEMENT_TAG = '[reg-test-place]';
-const TEXT_VERSION = 'reg-test-v1';
+const PLACEMENT_TAG = "[reg-test-place]";
+const TEXT_VERSION = "reg-test-v1";
 
 let counter = 0;
 function identity() {
   counter += 1;
-  return { email: `reg-${Date.now()}-${counter}@example.com`, providerSubjectId: `sub-${Date.now()}-${counter}` };
+  return {
+    email: `reg-${Date.now()}-${counter}@example.com`,
+    providerSubjectId: `sub-${Date.now()}-${counter}`,
+  };
 }
 
 /** The branch this suite's applicants choose (§4.1, Revision 39). */
-let branchId = '';
+let branchId = "";
 /** Revision 49 — the applicant's educational stage travels with every
  *  registration, so the fixture provides one. */
-let categoryId = '';
+let categoryId = "";
 
 /** Typed as the parent_child variant, so a test can reach `children`. */
-const parentChild = (): Extract<RegistrationInput, { kind: 'parent_child' }> => ({
-  kind: 'parent_child',
-  parent: { first_name_arabic: `${TAG}`, last_name_arabic: `والدة`, phone: '+212 600 000 001', sex: 'female' as const },
-  children: [{ first_name_arabic: `${TAG}`, last_name_arabic: `طفلة`, sex: 'female' as const, consent_media_release: true, requested_branch_id: branchId, requested_category_id: categoryId }],
+const parentChild = (): Extract<
+  RegistrationInput,
+  { kind: "parent_child" }
+> => ({
+  kind: "parent_child",
+  parent: {
+    first_name_arabic: `${TAG}`,
+    last_name_arabic: `والدة`,
+    phone: "+212 600 000 001",
+    sex: "female" as const,
+  },
+  children: [
+    {
+      first_name_arabic: `${TAG}`,
+      last_name_arabic: `طفلة`,
+      sex: "female" as const,
+      consent_media_release: true,
+      requested_branch_id: branchId,
+      requested_category_id: categoryId,
+    },
+  ],
   consents: { data_processing: true, media_release: true },
 });
 
@@ -69,17 +89,23 @@ const parentChild = (): Extract<RegistrationInput, { kind: 'parent_child' }> => 
 async function approveFirstChild(applicationId: string): Promise<string> {
   // R64.5 — an approved child must be placed (§4.1). Provisioned here rather
   // than in `beforeEach` because only the approving tests need it.
-  const { provisionPlacement } = await import('../test-support/placement.js');
+  const { provisionPlacement } = await import("../test-support/placement.js");
   const placement = await provisionPlacement(prisma, PLACEMENT_TAG);
-  const role = await prisma.role.findUnique({ where: { name: 'admin' } });
+  const role = await prisma.role.findUnique({ where: { name: "admin" } });
   const admin = await prisma.user.create({
-    data: { nameArabic: `${TAG} مسؤولة`, accountStatus: 'active' },
+    data: {
+      // R80 — every person carries a recorded sex; the column is NOT NULL.
+      sex: "female",
+      nameArabic: `${TAG} مسؤولة`,
+      accountStatus: "active",
+    },
   });
   await prisma.userBranchRole.create({
     data: { userId: admin.id, roleId: role!.id, branchId: null },
   });
-  const { decideChildApplication } = await import('./child-application.service.js');
-  const { actorFor } = await import('../test-support/actor.js');
+  const { decideChildApplication } =
+    await import("./child-application.service.js");
+  const { actorFor } = await import("../test-support/actor.js");
   const result = await decideChildApplication(
     prisma,
     await actorFor(prisma, admin.id),
@@ -111,7 +137,9 @@ async function clear(): Promise<void> {
     where: { OR: [{ targetId: { in: ids } }, { actorUserId: { in: ids } }] },
   });
   await prisma.consentRecord.deleteMany({
-    where: { OR: [{ studentId: { in: ids } }, { grantedByUserId: { in: ids } }] },
+    where: {
+      OR: [{ studentId: { in: ids } }, { grantedByUserId: { in: ids } }],
+    },
   });
   await prisma.familyLink.deleteMany({
     where: { OR: [{ parentId: { in: ids } }, { studentId: { in: ids } }] },
@@ -123,7 +151,7 @@ async function clear(): Promise<void> {
   await prisma.userIdentity.deleteMany({ where: { userId: { in: ids } } });
   await prisma.userBranchRole.deleteMany({ where: { userId: { in: ids } } });
   await prisma.user.deleteMany({ where: { id: { in: ids } } });
-  await prisma.consumedToken.deleteMany({ where: { purpose: 'onboarding' } });
+  await prisma.consumedToken.deleteMany({ where: { purpose: "onboarding" } });
   // After the users, never before: `intended_branch_id` is ON DELETE RESTRICT,
   // so a branch still referenced by a registration refuses to go — which is the
   // guarantee, working.
@@ -143,13 +171,18 @@ beforeEach(async () => {
     create: { key: CONSENT_TEXT_VERSION_KEY, value: TEXT_VERSION },
   });
   branchId = (await prisma.branch.create({ data: { name: `${TAG} مقر` } })).id;
-  categoryId = (await prisma.category.create({ data: { name: `${TAG} فئة` } })).id;
+  categoryId = (await prisma.category.create({ data: { name: `${TAG} فئة` } }))
+    .id;
 });
 
-const countTagged = () => prisma.user.count({ where: { nameArabic: { startsWith: TAG } } });
+const countTagged = () =>
+  prisma.user.count({ where: { nameArabic: { startsWith: TAG } } });
 
 /** Polls rather than sleeping a fixed time: the rollback is asynchronous. */
-async function waitFor(condition: () => Promise<boolean>, timeoutMs = 15_000): Promise<void> {
+async function waitFor(
+  condition: () => Promise<boolean>,
+  timeoutMs = 15_000,
+): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     if (await condition()) return;
@@ -161,25 +194,29 @@ afterAll(async () => {
   await clear();
   // R64.5 — the approving tests provision a placement, and its group holds an
   // enrolment under RESTRICT, so it goes after the people it enrolled.
-  const { clearPlacement } = await import('../test-support/placement.js');
+  const { clearPlacement } = await import("../test-support/placement.js");
   await clearPlacement(prisma, PLACEMENT_TAG);
   // Restore, never delete: deleting left the developer's database with no
   // consent text version, and registration then failed closed for everyone
   // who used the form after a test run (see test-support/consent-setting).
-  if (savedConsentVersion) await restoreConsentVersion(prisma, savedConsentVersion);
+  if (savedConsentVersion)
+    await restoreConsentVersion(prisma, savedConsentVersion);
   await prisma.$disconnect();
 });
 
-
-describe('§7 Revision 40 — الاسم الشخصي / الاسم العائلي', () => {
-  it('stores both parts AND composes name_arabic from them', async () => {
+describe("§7 Revision 40 — الاسم الشخصي / الاسم العائلي", () => {
+  it("stores both parts AND composes name_arabic from them", async () => {
     const { token } = issueOnboardingToken(identity(), KEY);
     const result = await register(
       prisma,
       token,
       {
-        kind: 'adult',
-        applicant: { first_name_arabic: `${TAG} خديجة`, last_name_arabic: 'بنعلي', sex: 'female' },
+        kind: "adult",
+        applicant: {
+          first_name_arabic: `${TAG} خديجة`,
+          last_name_arabic: "بنعلي",
+          sex: "female",
+        },
         branch_id: branchId,
         category_id: categoryId,
         consents: { data_processing: true },
@@ -187,24 +224,39 @@ describe('§7 Revision 40 — الاسم الشخصي / الاسم العائل�
       KEY,
     );
 
-    const user = await prisma.user.findUnique({ where: { id: result.applicantId } });
+    const user = await prisma.user.findUnique({
+      where: { id: result.applicantId },
+    });
     expect(user?.firstNameArabic).toBe(`${TAG} خديجة`);
-    expect(user?.lastNameArabic).toBe('بنعلي');
+    expect(user?.lastNameArabic).toBe("بنعلي");
     // Composed by the SERVER, personal name first, single space. A client doing
     // this would make it the authority on how a person's name reads (§1.1) —
     // and the wrong order is a mistake nobody reviewing a list would spot.
     expect(user?.nameArabic).toBe(`${TAG} خديجة بنعلي`);
   });
 
-  it('composes for the CHILD too, not only the applicant', async () => {
+  it("composes for the CHILD too, not only the applicant", async () => {
     const { token } = issueOnboardingToken(identity(), KEY);
     const result = await register(
       prisma,
       token,
       {
-        kind: 'parent_child',
-        parent: { first_name_arabic: `${TAG} أمينة`, last_name_arabic: 'بنعلي', sex: 'female' },
-        children: [{ first_name_arabic: `${TAG} سارة`, last_name_arabic: 'بنعلي', sex: 'female', consent_media_release: true, requested_branch_id: branchId, requested_category_id: categoryId }],
+        kind: "parent_child",
+        parent: {
+          first_name_arabic: `${TAG} أمينة`,
+          last_name_arabic: "بنعلي",
+          sex: "female",
+        },
+        children: [
+          {
+            first_name_arabic: `${TAG} سارة`,
+            last_name_arabic: "بنعلي",
+            sex: "female",
+            consent_media_release: true,
+            requested_branch_id: branchId,
+            requested_category_id: categoryId,
+          },
+        ],
         consents: { data_processing: true, media_release: false },
       },
       KEY,
@@ -216,28 +268,28 @@ describe('§7 Revision 40 — الاسم الشخصي / الاسم العائل�
     expect(child?.nameArabic).toBe(`${TAG} سارة بنعلي`);
   });
 
-  it('REFUSES a composed name_arabic from the client', () => {
+  it("REFUSES a composed name_arabic from the client", () => {
     // `.strict()`: the client must not be the authority on how the name reads,
     // so sending it is a refusal rather than a silently ignored field.
     const parsed = registrationSchema.safeParse({
-      kind: 'adult',
+      kind: "adult",
       applicant: {
-        first_name_arabic: 'خديجة',
-        last_name_arabic: 'بنعلي',
-        name_arabic: 'شيء آخر تماماً',
-        sex: 'female',
+        first_name_arabic: "خديجة",
+        last_name_arabic: "بنعلي",
+        name_arabic: "شيء آخر تماماً",
+        sex: "female",
       },
-      branch_id: '00000000-0000-4000-8000-000000000000',
+      branch_id: "00000000-0000-4000-8000-000000000000",
       category_id: categoryId,
       consents: { data_processing: true },
     });
     expect(parsed.success).toBe(false);
   });
 
-  it('REQUIRES both parts, and refuses a blank or over-long one (TD-9)', () => {
+  it("REQUIRES both parts, and refuses a blank or over-long one (TD-9)", () => {
     const base = {
-      kind: 'adult' as const,
-      branch_id: '00000000-0000-4000-8000-000000000000',
+      kind: "adult" as const,
+      branch_id: "00000000-0000-4000-8000-000000000000",
       category_id: categoryId,
       consents: { data_processing: true },
     };
@@ -245,14 +297,18 @@ describe('§7 Revision 40 — الاسم الشخصي / الاسم العائل�
     expect(
       registrationSchema.safeParse({
         ...base,
-        applicant: { first_name_arabic: 'خديجة', sex: 'female' },
+        applicant: { first_name_arabic: "خديجة", sex: "female" },
       }).success,
     ).toBe(false);
     // Whitespace only — trimmed to empty, which the DB CHECK also refuses.
     expect(
       registrationSchema.safeParse({
         ...base,
-        applicant: { first_name_arabic: '   ', last_name_arabic: 'بنعلي', sex: 'female' },
+        applicant: {
+          first_name_arabic: "   ",
+          last_name_arabic: "بنعلي",
+          sex: "female",
+        },
       }).success,
     ).toBe(false);
     // 61 characters: one past TD-9's per-part limit, which is what keeps the
@@ -260,23 +316,32 @@ describe('§7 Revision 40 — الاسم الشخصي / الاسم العائل�
     expect(
       registrationSchema.safeParse({
         ...base,
-        applicant: { first_name_arabic: 'أ'.repeat(61), last_name_arabic: 'بنعلي', sex: 'female' },
+        applicant: {
+          first_name_arabic: "أ".repeat(61),
+          last_name_arabic: "بنعلي",
+          sex: "female",
+        },
       }).success,
     ).toBe(false);
   });
 });
 
-describe('§4.1 Revision 39 — the applicant chooses a Branch, and only a Branch', () => {
-  it('still REJECTS every other placement field outright', () => {
+describe("§4.1 Revision 39 — the applicant chooses a Branch, and only a Branch", () => {
+  it("still REJECTS every other placement field outright", () => {
     // R39 narrowed R29's prohibition by exactly one field. Level, Room and Group
     // remain administrative decisions after approval, and `.strict()` refuses
     // them rather than ignoring them — a silently dropped `level_id` would let a
     // client believe a placement was recorded.
-    for (const field of ['room_id', 'level_id', 'group_id', 'category_id']) {
+    for (const field of ["room_id", "level_id", "group_id", "category_id"]) {
       const parsed = registrationSchema.safeParse({
-        kind: 'adult',
-        applicant: { first_name_arabic: 'خديجة', last_name_arabic: 'الاختبارية', sex: 'female', [field]: 'anything' },
-        branch_id: '00000000-0000-4000-8000-000000000000',
+        kind: "adult",
+        applicant: {
+          first_name_arabic: "خديجة",
+          last_name_arabic: "الاختبارية",
+          sex: "female",
+          [field]: "anything",
+        },
+        branch_id: "00000000-0000-4000-8000-000000000000",
         category_id: categoryId,
         consents: { data_processing: true },
       });
@@ -284,28 +349,38 @@ describe('§4.1 Revision 39 — the applicant chooses a Branch, and only a Branc
     }
   });
 
-  it('REQUIRES branch_id on the public self-service path', () => {
+  it("REQUIRES branch_id on the public self-service path", () => {
     // The applicant is present to choose, so a submission without a choice is
     // refused rather than defaulted. A default would silently put someone at a
     // branch nobody picked.
     const parsed = registrationSchema.safeParse({
-      kind: 'adult',
-      applicant: { first_name_arabic: 'خديجة', last_name_arabic: 'الاختبارية', sex: 'female' },
+      kind: "adult",
+      applicant: {
+        first_name_arabic: "خديجة",
+        last_name_arabic: "الاختبارية",
+        sex: "female",
+      },
       category_id: categoryId,
       consents: { data_processing: true },
     });
     expect(parsed.success).toBe(false);
   });
 
-  it('R67: REQUIRES a branch and a stage on EVERY child, not on the request', async () => {
+  it("R67: REQUIRES a branch and a stage on EVERY child, not on the request", async () => {
     // They moved off the request onto each child, and moving a mandatory
     // question does not make it answerable by silence — an approver must know,
     // for each child, what was asked.
     const base = parentChild();
-    for (const omit of ['requested_branch_id', 'requested_category_id'] as const) {
+    for (const omit of [
+      "requested_branch_id",
+      "requested_category_id",
+    ] as const) {
       const child = { ...base.children[0]! };
       delete (child as Record<string, unknown>)[omit];
-      const parsed = registrationSchema.safeParse({ ...base, children: [child] });
+      const parsed = registrationSchema.safeParse({
+        ...base,
+        children: [child],
+      });
       expect(parsed.success, omit).toBe(false);
     }
 
@@ -319,11 +394,15 @@ describe('§4.1 Revision 39 — the applicant chooses a Branch, and only a Branc
     expect(stale.success).toBe(false);
   });
 
-  it('R67: two children may ask for DIFFERENT branches and stages', async () => {
+  it("R67: two children may ask for DIFFERENT branches and stages", async () => {
     // The whole point of the revision, asserted on the rows rather than on the
     // form: a family is one request, and the children are not interchangeable.
-    const otherBranch = await prisma.branch.create({ data: { name: `${TAG} مقر ثانٍ` } });
-    const otherCategory = await prisma.category.create({ data: { name: `${TAG} فئة ثانية` } });
+    const otherBranch = await prisma.branch.create({
+      data: { name: `${TAG} مقر ثانٍ` },
+    });
+    const otherCategory = await prisma.category.create({
+      data: { name: `${TAG} فئة ثانية` },
+    });
     const { token } = issueOnboardingToken(identity(), KEY);
     const base = parentChild();
     const result = await register(
@@ -346,7 +425,7 @@ describe('§4.1 Revision 39 — the applicant chooses a Branch, and only a Branc
 
     const rows = await prisma.childApplication.findMany({
       where: { id: { in: result.childApplicationIds } },
-      orderBy: { createdAt: 'asc' },
+      orderBy: { createdAt: "asc" },
       select: { requestedBranchId: true, requestedCategoryId: true },
     });
     expect(rows).toHaveLength(2);
@@ -363,14 +442,18 @@ describe('§4.1 Revision 39 — the applicant chooses a Branch, and only a Branc
     expect(applicant.intendedCategoryId).toBe(categoryId);
   });
 
-  it('persists the chosen branch as a REQUEST, granting no placement', async () => {
+  it("persists the chosen branch as a REQUEST, granting no placement", async () => {
     const { token } = issueOnboardingToken(identity(), KEY);
     const result = await register(
       prisma,
       token,
       {
-        kind: 'adult',
-        applicant: { first_name_arabic: `${TAG}`, last_name_arabic: `مختارة`, sex: 'female' },
+        kind: "adult",
+        applicant: {
+          first_name_arabic: `${TAG}`,
+          last_name_arabic: `مختارة`,
+          sex: "female",
+        },
         branch_id: branchId,
         category_id: categoryId,
         consents: { data_processing: true },
@@ -378,24 +461,36 @@ describe('§4.1 Revision 39 — the applicant chooses a Branch, and only a Branc
       KEY,
     );
 
-    const applicant = await prisma.user.findUnique({ where: { id: result.applicantId } });
+    const applicant = await prisma.user.findUnique({
+      where: { id: result.applicantId },
+    });
     expect(applicant?.intendedBranchId).toBe(branchId);
 
     // The distinction R39 turns on: what was ASKED FOR is recorded; where the
     // person ENDS UP is still nothing, because placement follows approval. A
     // role assignment and an enrolment are both absent.
-    expect(await prisma.userBranchRole.count({ where: { userId: result.applicantId } })).toBe(0);
-    expect(await prisma.enrollment.count({ where: { studentId: result.applicantId } })).toBe(0);
+    expect(
+      await prisma.userBranchRole.count({
+        where: { userId: result.applicantId },
+      }),
+    ).toBe(0);
+    expect(
+      await prisma.enrollment.count({
+        where: { studentId: result.applicantId },
+      }),
+    ).toBe(0);
   });
 
-  it('records the branch on the APPLICANT only, never copied onto the child', async () => {
+  it("records the branch on the APPLICANT only, never copied onto the child", async () => {
     // One decision, one row. Copying it onto the child would be a second value
     // to keep in step, and the child's branch — once they have one — is their
     // Group's.
     const { token } = issueOnboardingToken(identity(), KEY);
     const result = await register(prisma, token, parentChild(), KEY);
 
-    const parent = await prisma.user.findUnique({ where: { id: result.applicantId } });
+    const parent = await prisma.user.findUnique({
+      where: { id: result.applicantId },
+    });
     expect(parent?.intendedBranchId).toBe(branchId);
     // R62 makes this stronger than it was: there is no child row to copy a
     // branch onto until approval, and approval does not copy one either.
@@ -404,25 +499,29 @@ describe('§4.1 Revision 39 — the applicant chooses a Branch, and only a Branc
     expect(child?.intendedBranchId).toBeNull();
   });
 
-  it('REFUSES a branch that does not exist', async () => {
+  it("REFUSES a branch that does not exist", async () => {
     const { token } = issueOnboardingToken(identity(), KEY);
     await expect(
       register(
         prisma,
         token,
         {
-          kind: 'adult',
-          applicant: { first_name_arabic: `${TAG}`, last_name_arabic: `وهمية`, sex: 'female' },
-          branch_id: '00000000-0000-4000-8000-000000000000',
+          kind: "adult",
+          applicant: {
+            first_name_arabic: `${TAG}`,
+            last_name_arabic: `وهمية`,
+            sex: "female",
+          },
+          branch_id: "00000000-0000-4000-8000-000000000000",
           category_id: categoryId,
           consents: { data_processing: true },
         },
         KEY,
       ),
-    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+    ).rejects.toMatchObject({ code: "VALIDATION_FAILED" });
   });
 
-  it('REFUSES a soft-deleted branch — a closed premises takes no registrations', async () => {
+  it("REFUSES a soft-deleted branch — a closed premises takes no registrations", async () => {
     // The foreign key alone would NOT catch this: a soft delete leaves the row
     // in place, so liveness has to be checked explicitly (R35 refuses to
     // advertise a closed branch for the same reason).
@@ -435,18 +534,22 @@ describe('§4.1 Revision 39 — the applicant chooses a Branch, and only a Branc
         prisma,
         token,
         {
-          kind: 'adult',
-          applicant: { first_name_arabic: `${TAG}`, last_name_arabic: `مرفوضة`, sex: 'female' },
+          kind: "adult",
+          applicant: {
+            first_name_arabic: `${TAG}`,
+            last_name_arabic: `مرفوضة`,
+            sex: "female",
+          },
           branch_id: closed.id,
           category_id: categoryId,
           consents: { data_processing: true },
         },
         KEY,
       ),
-    ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+    ).rejects.toMatchObject({ code: "VALIDATION_FAILED" });
   });
 
-  it('ACCEPTS a branch that has not opened yet', async () => {
+  it("ACCEPTS a branch that has not opened yet", async () => {
     // §4.4 keeps such a branch out of the CALENDAR; it must not keep it out of
     // registration, or an association could never enrol anyone for a premises
     // before opening day.
@@ -461,66 +564,96 @@ describe('§4.1 Revision 39 — the applicant chooses a Branch, and only a Branc
       prisma,
       token,
       {
-        kind: 'adult',
-        applicant: { first_name_arabic: `${TAG}`, last_name_arabic: `مبكرة`, sex: 'female' },
+        kind: "adult",
+        applicant: {
+          first_name_arabic: `${TAG}`,
+          last_name_arabic: `مبكرة`,
+          sex: "female",
+        },
         branch_id: future.id,
         category_id: categoryId,
         consents: { data_processing: true },
       },
       KEY,
     );
-    const applicant = await prisma.user.findUnique({ where: { id: result.applicantId } });
+    const applicant = await prisma.user.findUnique({
+      where: { id: result.applicantId },
+    });
     expect(applicant?.intendedBranchId).toBe(future.id);
   });
 });
 
-describe('§4.1b step 5 Revision 27 — registration captures sex before the User exists', () => {
-  it('persists sex for BOTH people created by a parent+child registration', async () => {
+describe("§4.1b step 5 Revision 27 — registration captures sex before the User exists", () => {
+  it("persists sex for BOTH people created by a parent+child registration", async () => {
     const { token } = issueOnboardingToken(identity(), KEY);
     const result = await register(
       prisma,
       token,
       {
-        kind: 'parent_child',
-        parent: { first_name_arabic: `${TAG}`, last_name_arabic: `والدة`, sex: 'female' },
-        children: [{ first_name_arabic: `${TAG}`, last_name_arabic: `ابن`, sex: 'male', consent_media_release: true, requested_branch_id: branchId, requested_category_id: categoryId }],
+        kind: "parent_child",
+        parent: {
+          first_name_arabic: `${TAG}`,
+          last_name_arabic: `والدة`,
+          sex: "female",
+        },
+        children: [
+          {
+            first_name_arabic: `${TAG}`,
+            last_name_arabic: `ابن`,
+            sex: "male",
+            consent_media_release: true,
+            requested_branch_id: branchId,
+            requested_category_id: categoryId,
+          },
+        ],
         consents: { data_processing: true, media_release: true },
       },
       KEY,
     );
 
-    const parent = await prisma.user.findUnique({ where: { id: result.applicantId } });
+    const parent = await prisma.user.findUnique({
+      where: { id: result.applicantId },
+    });
     // Written in the same transaction that created them — never patched on.
-    expect(parent?.sex).toBe('female');
+    expect(parent?.sex).toBe("female");
     // The child's sex travels on the application and is written when the child
     // is created, which is still one transaction — a later one.
     const childId = await approveFirstChild(result.childApplicationIds[0]!);
-    expect((await prisma.user.findUnique({ where: { id: childId } }))?.sex).toBe('male');
+    expect(
+      (await prisma.user.findUnique({ where: { id: childId } }))?.sex,
+    ).toBe("male");
   });
 
-  it('persists sex on the adult self-registration path', async () => {
+  it("persists sex on the adult self-registration path", async () => {
     const { token } = issueOnboardingToken(identity(), KEY);
     const result = await register(
       prisma,
       token,
       {
-        kind: 'adult',
-        applicant: { first_name_arabic: `${TAG}`, last_name_arabic: `راشدة`, sex: 'female' },
+        kind: "adult",
+        applicant: {
+          first_name_arabic: `${TAG}`,
+          last_name_arabic: `راشدة`,
+          sex: "female",
+        },
         branch_id: branchId,
         category_id: categoryId,
         consents: { data_processing: true },
       },
       KEY,
     );
-    expect((await prisma.user.findUnique({ where: { id: result.applicantId } }))?.sex).toBe('female');
+    expect(
+      (await prisma.user.findUnique({ where: { id: result.applicantId } }))
+        ?.sex,
+    ).toBe("female");
   });
 
-  it('the API boundary refuses a registration with no sex (§16.2: Zod validates there)', () => {
+  it("the API boundary refuses a registration with no sex (§16.2: Zod validates there)", () => {
     // `register()` deliberately trusts its input — §16.2 applies Zod schemas at
     // the API boundary, so that is where this rule lives and is asserted.
     const parsed = registrationSchema.safeParse({
-      kind: 'adult',
-      applicant: { first_name_arabic: 'خديجة', last_name_arabic: 'الاختبارية' },
+      kind: "adult",
+      applicant: { first_name_arabic: "خديجة", last_name_arabic: "الاختبارية" },
       branch_id: branchId,
       category_id: categoryId,
       consents: { data_processing: true },
@@ -528,10 +661,14 @@ describe('§4.1b step 5 Revision 27 — registration captures sex before the Use
     expect(parsed.success).toBe(false);
   });
 
-  it('the API boundary refuses an invalid sex value', () => {
+  it("the API boundary refuses an invalid sex value", () => {
     const parsed = registrationSchema.safeParse({
-      kind: 'adult',
-      applicant: { first_name_arabic: 'خديجة', last_name_arabic: 'الاختبارية', sex: 'other' },
+      kind: "adult",
+      applicant: {
+        first_name_arabic: "خديجة",
+        last_name_arabic: "الاختبارية",
+        sex: "other",
+      },
       branch_id: branchId,
       category_id: categoryId,
       consents: { data_processing: true },
@@ -539,12 +676,16 @@ describe('§4.1b step 5 Revision 27 — registration captures sex before the Use
     expect(parsed.success).toBe(false);
   });
 
-  it('the boundary accepts either permitted value', () => {
-    for (const sex of ['female', 'male']) {
+  it("the boundary accepts either permitted value", () => {
+    for (const sex of ["female", "male"]) {
       const parsed = registrationSchema.safeParse({
-        kind: 'adult',
-        applicant: { first_name_arabic: 'خديجة', last_name_arabic: 'الاختبارية', sex },
-        branch_id: '00000000-0000-4000-8000-000000000000',
+        kind: "adult",
+        applicant: {
+          first_name_arabic: "خديجة",
+          last_name_arabic: "الاختبارية",
+          sex,
+        },
+        branch_id: "00000000-0000-4000-8000-000000000000",
         category_id: categoryId,
         consents: { data_processing: true },
       });
@@ -553,8 +694,8 @@ describe('§4.1b step 5 Revision 27 — registration captures sex before the Use
   });
 });
 
-describe('§4.1b step 5 / TD-4.1 unified registration', () => {
-  it('creates parent + applications + consents + identity + consumed token atomically', async () => {
+describe("§4.1b step 5 / TD-4.1 unified registration", () => {
+  it("creates parent + applications + consents + identity + consumed token atomically", async () => {
     // **R62 narrowed what this transaction writes.** It no longer creates the
     // child, its link or its consents — those arrive at approval, one child at
     // a time, so a refused child leaves nothing behind. What stays atomic is
@@ -563,25 +704,33 @@ describe('§4.1b step 5 / TD-4.1 unified registration', () => {
     const { token, claims } = issueOnboardingToken(id, KEY);
     const result = await register(prisma, token, parentChild(), KEY);
 
-    expect(result.accountStatus).toBe('pending');
+    expect(result.accountStatus).toBe("pending");
     expect(result.childApplicationIds).toHaveLength(1);
 
-    const parent = await prisma.user.findUnique({ where: { id: result.applicantId } });
-    expect(parent?.accountStatus).toBe('pending');
+    const parent = await prisma.user.findUnique({
+      where: { id: result.applicantId },
+    });
+    expect(parent?.accountStatus).toBe("pending");
 
     // No child, no link — by design. This is the property that makes per-child
     // approval safe rather than merely convenient.
-    expect(await prisma.familyLink.count({ where: { parentId: result.applicantId } })).toBe(0);
+    expect(
+      await prisma.familyLink.count({
+        where: { parentId: result.applicantId },
+      }),
+    ).toBe(0);
 
     const application = await prisma.childApplication.findUnique({
       where: { id: result.childApplicationIds[0]! },
     });
-    expect(application?.status).toBe('pending');
+    expect(application?.status).toBe("pending");
     expect(application?.childUserId).toBeNull();
     // R62.3b — the version the parent SAW travels with the request.
     expect(application?.consentTextVersion).toBe(TEXT_VERSION);
 
-    const identityRow = await prisma.userIdentity.findFirst({ where: { userId: result.applicantId } });
+    const identityRow = await prisma.userIdentity.findFirst({
+      where: { userId: result.applicantId },
+    });
     expect(identityRow?.email).toBe(id.email);
     expect(identityRow?.providerSubjectId).toBe(id.providerSubjectId);
 
@@ -592,10 +741,12 @@ describe('§4.1b step 5 / TD-4.1 unified registration', () => {
     expect(consents).toHaveLength(1);
     expect(consents[0]?.consentTextVersion).toBe(TEXT_VERSION);
 
-    expect(await prisma.consumedToken.count({ where: { jti: claims.jti } })).toBe(1);
+    expect(
+      await prisma.consumedToken.count({ where: { jti: claims.jti } }),
+    ).toBe(1);
   });
 
-  it('a minor is login-less: no identity and no pre_provisioned_email (BR-5)', async () => {
+  it("a minor is login-less: no identity and no pre_provisioned_email (BR-5)", async () => {
     const { token } = issueOnboardingToken(identity(), KEY);
     const result = await register(prisma, token, parentChild(), KEY);
 
@@ -603,15 +754,27 @@ describe('§4.1b step 5 / TD-4.1 unified registration', () => {
     const childId = await approveFirstChild(result.childApplicationIds[0]!);
     const child = await prisma.user.findUnique({ where: { id: childId } });
     expect(child?.preProvisionedEmail).toBeNull();
-    expect(await prisma.userIdentity.count({ where: { userId: childId } })).toBe(0);
+    expect(
+      await prisma.userIdentity.count({ where: { userId: childId } }),
+    ).toBe(0);
   });
 
-  it('a declined media release is RECORDED, not omitted (BR-1, §4.1a)', async () => {
+  it("a declined media release is RECORDED, not omitted (BR-1, §4.1a)", async () => {
     const { token } = issueOnboardingToken(identity(), KEY);
     // R62.3b — the decision is PER CHILD now, so it lives on the child rather
     // than on the request beside `data_processing`.
     const base = parentChild();
-    const input = { ...base, children: [{ ...base.children[0]!, consent_media_release: false, requested_branch_id: branchId, requested_category_id: categoryId }] };
+    const input = {
+      ...base,
+      children: [
+        {
+          ...base.children[0]!,
+          consent_media_release: false,
+          requested_branch_id: branchId,
+          requested_category_id: categoryId,
+        },
+      ],
+    };
     const result = await register(prisma, token, input, KEY);
 
     // Captured on the application immediately…
@@ -623,7 +786,7 @@ describe('§4.1b step 5 / TD-4.1 unified registration', () => {
     // …and materialised as a real record when the child comes into existence.
     const childId = await approveFirstChild(result.childApplicationIds[0]!);
     const media = await prisma.consentRecord.findFirst({
-      where: { studentId: childId, consentType: 'media_release' },
+      where: { studentId: childId, consentType: "media_release" },
     });
     // Absence would ALSO mean "no consent" (BR-1), but a decision must leave a
     // record with an actor and timestamp so the history is auditable.
@@ -633,21 +796,27 @@ describe('§4.1b step 5 / TD-4.1 unified registration', () => {
     expect(media?.revokedByUserId).toBe(result.applicantId);
   });
 
-  it('REPLAY: the same token twice → 409 STATE_CONFLICT and nothing partial persists', async () => {
+  it("REPLAY: the same token twice → 409 STATE_CONFLICT and nothing partial persists", async () => {
     const id = identity();
     const { token } = issueOnboardingToken(id, KEY);
     await register(prisma, token, parentChild(), KEY);
 
-    const usersBefore = await prisma.user.count({ where: { nameArabic: { startsWith: TAG } } });
-    await expect(register(prisma, token, parentChild(), KEY)).rejects.toMatchObject({
-      code: 'STATE_CONFLICT',
+    const usersBefore = await prisma.user.count({
+      where: { nameArabic: { startsWith: TAG } },
+    });
+    await expect(
+      register(prisma, token, parentChild(), KEY),
+    ).rejects.toMatchObject({
+      code: "STATE_CONFLICT",
     });
     // §4.1b step 6: a failed submission persists nothing — the aborted attempt
     // must not have left a second parent behind.
-    expect(await prisma.user.count({ where: { nameArabic: { startsWith: TAG } } })).toBe(usersBefore);
+    expect(
+      await prisma.user.count({ where: { nameArabic: { startsWith: TAG } } }),
+    ).toBe(usersBefore);
   });
 
-  it('ATOMICITY: a failure at the LAST write rolls back everything, including the jti', async () => {
+  it("ATOMICITY: a failure at the LAST write rolls back everything, including the jti", async () => {
     // The §18 "kill it mid-transaction — nothing partial persists" check, done
     // deterministically. The failure is forced at the FINAL write by
     // pre-registering the same Google subject, so the transaction has already
@@ -655,37 +824,54 @@ describe('§4.1b step 5 / TD-4.1 unified registration', () => {
     // the identity insert collides.
     const id = identity();
     const squatter = await prisma.user.create({
-      data: { nameArabic: `${TAG} سابق`, accountStatus: 'active' },
+      data: {
+        // R80 — every person carries a recorded sex; the column is NOT NULL.
+        sex: "female",
+        nameArabic: `${TAG} سابق`,
+        accountStatus: "active",
+      },
     });
     await prisma.userIdentity.create({
       data: {
         userId: squatter.id,
-        provider: 'google',
+        provider: "google",
         providerSubjectId: id.providerSubjectId,
         email: id.email,
       },
     });
 
     const { token, claims } = issueOnboardingToken(id, KEY);
-    await expect(register(prisma, token, parentChild(), KEY)).rejects.toMatchObject({
-      code: 'DUPLICATE',
+    await expect(
+      register(prisma, token, parentChild(), KEY),
+    ).rejects.toMatchObject({
+      code: "DUPLICATE",
     });
 
     // Only the pre-existing squatter remains: no parent, no child.
-    expect(await prisma.user.count({ where: { nameArabic: { startsWith: TAG } } })).toBe(1);
+    expect(
+      await prisma.user.count({ where: { nameArabic: { startsWith: TAG } } }),
+    ).toBe(1);
     // Scoped to THIS test's users: the §15.2 dev fixtures also hold family links,
     // so a global count would measure them instead of the rollback.
     expect(
-      await prisma.familyLink.count({ where: { parent: { nameArabic: { startsWith: TAG } } } }),
+      await prisma.familyLink.count({
+        where: { parent: { nameArabic: { startsWith: TAG } } },
+      }),
     ).toBe(0);
-    expect(await prisma.consentRecord.count({ where: { consentTextVersion: TEXT_VERSION } })).toBe(0);
+    expect(
+      await prisma.consentRecord.count({
+        where: { consentTextVersion: TEXT_VERSION },
+      }),
+    ).toBe(0);
     // The decisive assertion: the rollback undid the replay guard too. A jti left
     // behind by a failed attempt would burn the user's one-and-only token and
     // strand them with no way to register.
-    expect(await prisma.consumedToken.count({ where: { jti: claims.jti } })).toBe(0);
+    expect(
+      await prisma.consumedToken.count({ where: { jti: claims.jti } }),
+    ).toBe(0);
   });
 
-  it('§18 KILL: SIGKILL mid-transaction persists nothing — not even the jti', async () => {
+  it("§18 KILL: SIGKILL mid-transaction persists nothing — not even the jti", async () => {
     // The §18 check taken literally: kill the PROCESS, not the transaction.
     //
     // This is a different failure from the one above. There, an error is raised
@@ -696,15 +882,25 @@ describe('§4.1b step 5 / TD-4.1 unified registration', () => {
     // were ever split across two transactions, or if any write escaped the
     // transaction, this is the test that would catch it.
     const id = identity();
-    const victim = fileURLToPath(new URL('../test-support/registration-victim.ts', import.meta.url));
+    const victim = fileURLToPath(
+      new URL("../test-support/registration-victim.ts", import.meta.url),
+    );
 
     const child = spawn(
-      'npx',
-      ['tsx', victim, TAG, id.email, id.providerSubjectId, branchId, categoryId],
+      "npx",
+      [
+        "tsx",
+        victim,
+        TAG,
+        id.email,
+        id.providerSubjectId,
+        branchId,
+        categoryId,
+      ],
       {
-        cwd: fileURLToPath(new URL('../..', import.meta.url)),
+        cwd: fileURLToPath(new URL("../..", import.meta.url)),
         env: process.env,
-        stdio: ['ignore', 'pipe', 'pipe'],
+        stdio: ["ignore", "pipe", "pipe"],
       },
     );
 
@@ -713,8 +909,8 @@ describe('§4.1b step 5 / TD-4.1 unified registration', () => {
     // early would make this test prove nothing.
     const parked = await new Promise<boolean>((resolve) => {
       const timer = setTimeout(() => resolve(false), 60_000);
-      child.stdout.on('data', (chunk: Buffer) => {
-        if (chunk.toString().includes('READY')) {
+      child.stdout.on("data", (chunk: Buffer) => {
+        if (chunk.toString().includes("READY")) {
           clearTimeout(timer);
           resolve(true);
         }
@@ -736,8 +932,10 @@ describe('§4.1b step 5 / TD-4.1 unified registration', () => {
     `;
     expect(Number(writing[0]!.count)).toBeGreaterThan(0);
 
-    const exited = new Promise<void>((resolve) => child.once('exit', () => resolve()));
-    child.kill('SIGKILL');
+    const exited = new Promise<void>((resolve) =>
+      child.once("exit", () => resolve()),
+    );
+    child.kill("SIGKILL");
     await exited;
 
     // Give PostgreSQL a moment to notice the dead connection and roll back.
@@ -745,29 +943,44 @@ describe('§4.1b step 5 / TD-4.1 unified registration', () => {
 
     expect(await countTagged()).toBe(0);
     expect(
-      await prisma.familyLink.count({ where: { parent: { nameArabic: { startsWith: TAG } } } }),
+      await prisma.familyLink.count({
+        where: { parent: { nameArabic: { startsWith: TAG } } },
+      }),
     ).toBe(0);
-    expect(await prisma.consentRecord.count({ where: { consentTextVersion: TEXT_VERSION } })).toBe(0);
     expect(
-      await prisma.userIdentity.count({ where: { providerSubjectId: id.providerSubjectId } }),
+      await prisma.consentRecord.count({
+        where: { consentTextVersion: TEXT_VERSION },
+      }),
+    ).toBe(0);
+    expect(
+      await prisma.userIdentity.count({
+        where: { providerSubjectId: id.providerSubjectId },
+      }),
     ).toBe(0);
     // And the applicant is not stranded: their single-use token survives the
     // crash unconsumed, so they can simply try again.
-    expect(await prisma.consumedToken.count({ where: { purpose: 'onboarding' } })).toBe(0);
+    expect(
+      await prisma.consumedToken.count({ where: { purpose: "onboarding" } }),
+    ).toBe(0);
   }, 90_000);
 
-  it('RETRY: after a rolled-back attempt the SAME token still works', async () => {
+  it("RETRY: after a rolled-back attempt the SAME token still works", async () => {
     // The token-consumption invariant, proven from the applicant's side rather
     // than by inspecting a row: a failed attempt must not burn their one
     // single-use credential (§4.1b issues exactly one token per callback).
     const id = identity();
     const blocker = await prisma.user.create({
-      data: { nameArabic: `${TAG} حاجز`, accountStatus: 'active' },
+      data: {
+        // R80 — every person carries a recorded sex; the column is NOT NULL.
+        sex: "female",
+        nameArabic: `${TAG} حاجز`,
+        accountStatus: "active",
+      },
     });
     const blockingIdentity = await prisma.userIdentity.create({
       data: {
         userId: blocker.id,
-        provider: 'google',
+        provider: "google",
         providerSubjectId: id.providerSubjectId,
         email: id.email,
       },
@@ -776,54 +989,68 @@ describe('§4.1b step 5 / TD-4.1 unified registration', () => {
     const { token, claims } = issueOnboardingToken(id, KEY);
 
     // Attempt 1 fails at the final write and rolls back.
-    await expect(register(prisma, token, parentChild(), KEY)).rejects.toMatchObject({
-      code: 'DUPLICATE',
+    await expect(
+      register(prisma, token, parentChild(), KEY),
+    ).rejects.toMatchObject({
+      code: "DUPLICATE",
     });
-    expect(await prisma.consumedToken.count({ where: { jti: claims.jti } })).toBe(0);
+    expect(
+      await prisma.consumedToken.count({ where: { jti: claims.jti } }),
+    ).toBe(0);
 
     // The transient cause is removed — as an admin merging a duplicate would do.
     await prisma.userIdentity.delete({ where: { id: blockingIdentity.id } });
 
     // Attempt 2 with the SAME token must now succeed.
     const result = await register(prisma, token, parentChild(), KEY);
-    expect(result.accountStatus).toBe('pending');
+    expect(result.accountStatus).toBe("pending");
     expect(result.childApplicationIds).toHaveLength(1);
     // And only now is the token spent.
-    expect(await prisma.consumedToken.count({ where: { jti: claims.jti } })).toBe(1);
+    expect(
+      await prisma.consumedToken.count({ where: { jti: claims.jti } }),
+    ).toBe(1);
 
     // A third attempt is a genuine replay.
-    await expect(register(prisma, token, parentChild(), KEY)).rejects.toMatchObject({
-      code: 'STATE_CONFLICT',
+    await expect(
+      register(prisma, token, parentChild(), KEY),
+    ).rejects.toMatchObject({
+      code: "STATE_CONFLICT",
     });
   });
 
-  it('refuses a missing data_processing consent with CONSENT_REQUIRED', async () => {
+  it("refuses a missing data_processing consent with CONSENT_REQUIRED", async () => {
     const { token } = issueOnboardingToken(identity(), KEY);
     const input = parentChild();
     input.consents.data_processing = false;
     await expect(register(prisma, token, input, KEY)).rejects.toMatchObject({
-      code: 'CONSENT_REQUIRED',
+      code: "CONSENT_REQUIRED",
     });
-    expect(await prisma.user.count({ where: { nameArabic: { startsWith: TAG } } })).toBe(0);
+    expect(
+      await prisma.user.count({ where: { nameArabic: { startsWith: TAG } } }),
+    ).toBe(0);
   });
 
-  it('refuses a minor registration with no media-release DECISION at all', async () => {
+  it("refuses a minor registration with no media-release DECISION at all", async () => {
     const { token } = issueOnboardingToken(identity(), KEY);
     const input = parentChild();
     delete (input.consents as { media_release?: boolean }).media_release;
     await expect(register(prisma, token, input, KEY)).rejects.toMatchObject({
-      code: 'CONSENT_REQUIRED',
+      code: "CONSENT_REQUIRED",
     });
   });
 
-  it('adult self-registration creates one user, one consent, no link', async () => {
+  it("adult self-registration creates one user, one consent, no link", async () => {
     const { token } = issueOnboardingToken(identity(), KEY);
     const result = await register(
       prisma,
       token,
       {
-        kind: 'adult',
-        applicant: { first_name_arabic: `${TAG}`, last_name_arabic: `خديجة`, sex: 'female' as const },
+        kind: "adult",
+        applicant: {
+          first_name_arabic: `${TAG}`,
+          last_name_arabic: `خديجة`,
+          sex: "female" as const,
+        },
         branch_id: branchId,
         category_id: categoryId,
         consents: { data_processing: true },
@@ -833,31 +1060,51 @@ describe('§4.1b step 5 / TD-4.1 unified registration', () => {
 
     // An adult registration names no children at all.
     expect(result.childApplicationIds).toHaveLength(0);
-    expect(await prisma.familyLink.count({ where: { parentId: result.applicantId } })).toBe(0);
-    const consents = await prisma.consentRecord.findMany({ where: { studentId: result.applicantId } });
+    expect(
+      await prisma.familyLink.count({
+        where: { parentId: result.applicantId },
+      }),
+    ).toBe(0);
+    const consents = await prisma.consentRecord.findMany({
+      where: { studentId: result.applicantId },
+    });
     expect(consents).toHaveLength(1);
-    expect(consents[0]!.consentType).toBe('data_processing');
+    expect(consents[0]!.consentType).toBe("data_processing");
   });
 
-  it('rejects an expired or forged token before touching the database', async () => {
-    const stale = issueOnboardingToken(identity(), KEY, new Date(Date.now() - 20 * 60 * 1000));
-    await expect(register(prisma, stale.token, parentChild(), KEY)).rejects.toMatchObject({
-      code: 'VALIDATION_FAILED',
+  it("rejects an expired or forged token before touching the database", async () => {
+    const stale = issueOnboardingToken(
+      identity(),
+      KEY,
+      new Date(Date.now() - 20 * 60 * 1000),
+    );
+    await expect(
+      register(prisma, stale.token, parentChild(), KEY),
+    ).rejects.toMatchObject({
+      code: "VALIDATION_FAILED",
     });
-    const forged = issueOnboardingToken(identity(), 'a-different-key');
-    await expect(register(prisma, forged.token, parentChild(), KEY)).rejects.toMatchObject({
-      code: 'VALIDATION_FAILED',
+    const forged = issueOnboardingToken(identity(), "a-different-key");
+    await expect(
+      register(prisma, forged.token, parentChild(), KEY),
+    ).rejects.toMatchObject({
+      code: "VALIDATION_FAILED",
     });
-    expect(await prisma.user.count({ where: { nameArabic: { startsWith: TAG } } })).toBe(0);
+    expect(
+      await prisma.user.count({ where: { nameArabic: { startsWith: TAG } } }),
+    ).toBe(0);
   });
 
-  it('fails closed when the consent text version is unset (§2.3 owner task)', async () => {
-    await prisma.systemSetting.deleteMany({ where: { key: CONSENT_TEXT_VERSION_KEY } });
+  it("fails closed when the consent text version is unset (§2.3 owner task)", async () => {
+    await prisma.systemSetting.deleteMany({
+      where: { key: CONSENT_TEXT_VERSION_KEY },
+    });
     const { token } = issueOnboardingToken(identity(), KEY);
     // §4.1a requires the exact text version on every record; without it we
     // cannot say what was agreed to, so we refuse rather than fabricate one.
-    await expect(register(prisma, token, parentChild(), KEY)).rejects.toMatchObject({
-      code: 'SERVICE_UNAVAILABLE',
+    await expect(
+      register(prisma, token, parentChild(), KEY),
+    ).rejects.toMatchObject({
+      code: "SERVICE_UNAVAILABLE",
       // **The half this test used to miss.** Asserting only that it fails let
       // the failure be indistinguishable from a transient outage, and the form
       // duly told the applicant to "try again later" — advice that could never
@@ -865,24 +1112,28 @@ describe('§4.1b step 5 / TD-4.1 unified registration', () => {
       // TD-3.8's `details` is what makes the cause actionable, so it is pinned
       // here rather than left to chance.
       details: {
-        reason: 'CONSENT_TEXT_VERSION_NOT_CONFIGURED',
+        reason: "CONSENT_TEXT_VERSION_NOT_CONFIGURED",
         setting: CONSENT_TEXT_VERSION_KEY,
       },
     });
-    expect(await prisma.user.count({ where: { nameArabic: { startsWith: TAG } } })).toBe(0);
+    expect(
+      await prisma.user.count({ where: { nameArabic: { startsWith: TAG } } }),
+    ).toBe(0);
   });
 
-  it('concurrent submissions of ONE token admit exactly one registration', async () => {
+  it("concurrent submissions of ONE token admit exactly one registration", async () => {
     const { token } = issueOnboardingToken(identity(), KEY);
     const results = await Promise.allSettled([
       register(prisma, token, parentChild(), KEY),
       register(prisma, token, parentChild(), KEY),
     ]);
-    const ok = results.filter((r) => r.status === 'fulfilled');
+    const ok = results.filter((r) => r.status === "fulfilled");
     expect(ok).toHaveLength(1);
     // Exactly one parent + one child, never two of either.
     // **One** person, not two: R62 creates the applicant here and the child at
     // approval, so a losing concurrent attempt cannot leave a stray child either.
-    expect(await prisma.user.count({ where: { nameArabic: { startsWith: TAG } } })).toBe(1);
+    expect(
+      await prisma.user.count({ where: { nameArabic: { startsWith: TAG } } }),
+    ).toBe(1);
   });
 });

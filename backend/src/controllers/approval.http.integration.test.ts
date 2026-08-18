@@ -1,17 +1,24 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { issueAccessToken } from '../lib/access-token.js';
-import { loadConfig } from '../lib/config.js';
-import { issueOnboardingToken } from '../lib/onboarding-token.js';
-import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
-import { httpCall } from '../test-support/http-client.js';
-import { clearPlacement, provisionPlacement, type Placement } from '../test-support/placement.js';
-import { CONSENT_TEXT_VERSION_KEY, register } from '../services/registration.service.js';
+import { issueAccessToken } from "../lib/access-token.js";
+import { loadConfig } from "../lib/config.js";
+import { issueOnboardingToken } from "../lib/onboarding-token.js";
+import { createPrismaClient, TEST_CONNECTION_LIMIT } from "../lib/prisma.js";
+import { httpCall } from "../test-support/http-client.js";
+import {
+  clearPlacement,
+  provisionPlacement,
+  type Placement,
+} from "../test-support/placement.js";
+import {
+  CONSENT_TEXT_VERSION_KEY,
+  register,
+} from "../services/registration.service.js";
 import {
   captureConsentVersion,
   restoreConsentVersion,
   type SavedConsentVersion,
-} from '../test-support/consent-setting.js';
+} from "../test-support/consent-setting.js";
 
 /**
  * Approval routes over real HTTP, through Nginx (TD-3.2, §5.6).
@@ -35,7 +42,7 @@ const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);
  */
 let savedConsentVersion: SavedConsentVersion | null = null;
 const BASE = `${config.PUBLIC_BASE_URL}/api/v1`;
-const TAG = '[http-appr-test]';
+const TAG = "[http-appr-test]";
 /**
  * **Deliberately not a prefix-extension of `TAG`.** `clear()` deletes by
  * `startsWith(TAG)`, so a placement tagged `${TAG}p` would be swept by the
@@ -43,27 +50,53 @@ const TAG = '[http-appr-test]';
  * `Restrict` FK would refuse. The separating `-` before the bracket is what
  * keeps the two namespaces disjoint.
  */
-const PLACEMENT_TAG = '[http-appr-test-place]';
+const PLACEMENT_TAG = "[http-appr-test-place]";
 
 interface Res {
   status: number;
-  body: { error?: { code?: string }; data?: unknown[]; meta?: { page_size?: number }; type?: string };
+  body: {
+    error?: { code?: string };
+    data?: unknown[];
+    meta?: { page_size?: number };
+    type?: string;
+  };
 }
 
-async function call(method: string, path: string, token?: string, body?: unknown): Promise<Res> {
-  return httpCall<Res['body']>(BASE, method, path, { token, ...(body !== undefined ? { body } : {}) });
+async function call(
+  method: string,
+  path: string,
+  token?: string,
+  body?: unknown,
+): Promise<Res> {
+  return httpCall<Res["body"]>(BASE, method, path, {
+    token,
+    ...(body !== undefined ? { body } : {}),
+  });
 }
 
-function bearer(userId: string, roles: string[], accountStatus = 'active'): string {
+function bearer(
+  userId: string,
+  roles: string[],
+  accountStatus = "active",
+): string {
   return issueAccessToken(
-    { userId, roleScopes: roles.map((role) => ({ role, branches: null })), accountStatus: accountStatus as never },
+    {
+      userId,
+      roleScopes: roles.map((role) => ({ role, branches: null })),
+      accountStatus: accountStatus as never,
+    },
     config.JWT_SIGNING_KEY,
   ).token;
 }
 
 async function makeStaff(role: string): Promise<string> {
   const user = await prisma.user.create({
-    data: { nameArabic: `${TAG} ${role}`, accountStatus: 'active' },
+    data: {
+      // R80 — every person carries a recorded sex; the column is NOT NULL.
+      sex: "female",
+      nameArabic: `${TAG} ${role}`,
+      accountStatus: "active",
+    },
   });
   const roleRow = await prisma.role.findUnique({ where: { name: role } });
   await prisma.userBranchRole.create({
@@ -81,20 +114,27 @@ async function submitBundle(
   counter += 1;
   const stamp = `${Date.now()}-${counter}`;
   const { token } = issueOnboardingToken(
-    { email: `httpappr-${stamp}@example.com`, providerSubjectId: `httpapprsub-${stamp}` },
+    {
+      email: `httpappr-${stamp}@example.com`,
+      providerSubjectId: `httpapprsub-${stamp}`,
+    },
     config.ONBOARDING_TOKEN_KEY,
   );
   const result = await register(
     prisma,
     token,
     {
-      kind: 'parent_child',
-      parent: { first_name_arabic: `${TAG}`, last_name_arabic: `والدة`, sex: 'female' as const },
+      kind: "parent_child",
+      parent: {
+        first_name_arabic: `${TAG}`,
+        last_name_arabic: `والدة`,
+        sex: "female" as const,
+      },
       children: [
         {
           first_name_arabic: `${TAG}`,
           last_name_arabic: `طفلة`,
-          sex: 'female' as const,
+          sex: "female" as const,
           consent_media_release: true,
           // R67 — the branch and stage belong to the child now. `intoBranchId`
           // is what the branch-filter test varies.
@@ -109,7 +149,10 @@ async function submitBundle(
     },
     config.ONBOARDING_TOKEN_KEY,
   );
-  return { parentId: result.applicantId, applicationId: result.childApplicationIds[0]! };
+  return {
+    parentId: result.applicantId,
+    applicationId: result.childApplicationIds[0]!,
+  };
 }
 
 async function clear(): Promise<void> {
@@ -146,7 +189,7 @@ async function clear(): Promise<void> {
     },
   });
   await prisma.user.deleteMany({ where: { id: { in: ids } } });
-  await prisma.consumedToken.deleteMany({ where: { purpose: 'onboarding' } });
+  await prisma.consumedToken.deleteMany({ where: { purpose: "onboarding" } });
   // After the users: `intended_branch_id` is ON DELETE RESTRICT.
   await prisma.branch.deleteMany({ where: { name: { startsWith: TAG } } });
   // **Last, not first.** `intended_branch_id` and `intended_category_id` are
@@ -160,8 +203,8 @@ let adminId: string;
 let teacherId: string;
 /** Two branches — a filter never given something to exclude has not been
  *  tested (§4.1/§14.2, Revision 39). */
-let branchId = '';
-let otherBranchId = '';
+let branchId = "";
+let otherBranchId = "";
 let admin: string;
 let teacher: string;
 /** §4.1 (R43) makes placement part of approval, so every approval here needs a
@@ -172,7 +215,9 @@ beforeAll(async () => {
   savedConsentVersion ??= await captureConsentVersion(prisma);
   // Fail loudly rather than skipping (§19.2): a silently skipped wiring test is
   // indistinguishable from a passing one.
-  const health = await fetch(`${config.PUBLIC_BASE_URL}/healthz`).catch(() => null);
+  const health = await fetch(`${config.PUBLIC_BASE_URL}/healthz`).catch(
+    () => null,
+  );
   if (!health || health.status !== 200) {
     throw new Error(
       `API not reachable at ${config.PUBLIC_BASE_URL}/healthz — run: docker compose up -d --build api`,
@@ -183,15 +228,18 @@ beforeAll(async () => {
   placement = await provisionPlacement(prisma, PLACEMENT_TAG);
   await prisma.systemSetting.upsert({
     where: { key: CONSENT_TEXT_VERSION_KEY },
-    update: { value: 'http-appr-v1' },
-    create: { key: CONSENT_TEXT_VERSION_KEY, value: 'http-appr-v1' },
+    update: { value: "http-appr-v1" },
+    create: { key: CONSENT_TEXT_VERSION_KEY, value: "http-appr-v1" },
   });
-  branchId = (await prisma.branch.create({ data: { name: `${TAG} مقر أ` } })).id;
-  otherBranchId = (await prisma.branch.create({ data: { name: `${TAG} مقر ب` } })).id;
-  adminId = await makeStaff('admin');
-  teacherId = await makeStaff('teacher');
-  admin = bearer(adminId, ['admin']);
-  teacher = bearer(teacherId, ['teacher']);
+  branchId = (await prisma.branch.create({ data: { name: `${TAG} مقر أ` } }))
+    .id;
+  otherBranchId = (
+    await prisma.branch.create({ data: { name: `${TAG} مقر ب` } })
+  ).id;
+  adminId = await makeStaff("admin");
+  teacherId = await makeStaff("teacher");
+  admin = bearer(adminId, ["admin"]);
+  teacher = bearer(teacherId, ["teacher"]);
 });
 
 afterAll(async () => {
@@ -199,75 +247,88 @@ afterAll(async () => {
   // Restore, never delete: deleting left the developer's database with no
   // consent text version, and registration then failed closed for everyone
   // who used the form after a test run (see test-support/consent-setting).
-  if (savedConsentVersion) await restoreConsentVersion(prisma, savedConsentVersion);
+  if (savedConsentVersion)
+    await restoreConsentVersion(prisma, savedConsentVersion);
   await prisma.$disconnect();
 });
 
-describe('GET /api/v1/admin/approvals', () => {
-  it('is mounted, guarded, and answers the TD-10 envelope to an admin', async () => {
+describe("GET /api/v1/admin/approvals", () => {
+  it("is mounted, guarded, and answers the TD-10 envelope to an admin", async () => {
     const { parentId } = await submitBundle();
-    const res = await call('GET', '/admin/approvals', admin);
+    const res = await call("GET", "/admin/approvals", admin);
 
     expect(res.status).toBe(200);
     expect(res.body.meta?.page_size).toBe(25);
     // Proves the route is really mounted at this path: a 401-from-nowhere would
     // look identical to an unmatched path under the guarded router.
-    expect((res.body.data as { id: string }[]).some((i) => i.id === parentId)).toBe(true);
+    expect(
+      (res.body.data as { id: string }[]).some((i) => i.id === parentId),
+    ).toBe(true);
   });
 
-  it('§16.2: an item is the contract DTO — snake_case, and exactly these keys', async () => {
+  it("§16.2: an item is the contract DTO — snake_case, and exactly these keys", async () => {
     // Asserting the EXACT key set, not just the presence of the ones we want,
     // is the point: the failure this guards against is a field arriving that
     // nobody chose. A `toContain`-style check passes happily through that.
     const { parentId } = await submitBundle();
-    const res = await call('GET', '/admin/approvals', admin);
-    const item = (res.body.data as Record<string, unknown>[]).find((i) => i.id === parentId)!;
+    const res = await call("GET", "/admin/approvals", admin);
+    const item = (res.body.data as Record<string, unknown>[]).find(
+      (i) => i.id === parentId,
+    )!;
 
-    expect(Object.keys(item).sort()).toEqual(
-      [
-        'applicants',
-        'branch',
-        'bundle',
-        'category',
-        // R62 — the per-child decidable blocks. `[]` on a registration item,
-        // which bundles its children as pending LINKS; populated only on a
-        // `child-application` item. It is argued onto this list rather than
-        // arriving on it: without it the queue could show a child-application
-        // request but give the approver nothing to act on, since R62.2 decides
-        // a child alone and the ids live in these blocks.
-        'children',
-        'id',
-        'requested_role',
-        'submitted_at',
-        'type',
-      ],
-    );
+    expect(Object.keys(item).sort()).toEqual([
+      "applicants",
+      "branch",
+      "bundle",
+      "category",
+      // R62 — the per-child decidable blocks. `[]` on a registration item,
+      // which bundles its children as pending LINKS; populated only on a
+      // `child-application` item. It is argued onto this list rather than
+      // arriving on it: without it the queue could show a child-application
+      // request but give the approver nothing to act on, since R62.2 decides
+      // a child alone and the ids live in these blocks.
+      "children",
+      "id",
+      "requested_role",
+      "submitted_at",
+      "type",
+    ]);
     // `requested_role` joined in Revision 49 and is deliberately argued onto
     // this list rather than arriving on it: without it the approver cannot tell
     // a teacher applicant from a family registration, which is the entire
     // reason the staff workflow needed anything at all. **A hint, never an
     // authority** — it is `null` here because this bundle asked for no role.
-    expect(item['requested_role']).toBeNull();
+    expect(item["requested_role"]).toBeNull();
     // `category` joined in Revision 49, and it is what made §4.1 step 1's
     // preselection implementable at all: nothing had recorded the applicant's
     // stage, so the clause could not be honoured. Two fields, like the branch.
-    expect(Object.keys(item['category'] as object).sort()).toEqual(['id', 'name']);
+    expect(Object.keys(item["category"] as object).sort()).toEqual([
+      "id",
+      "name",
+    ]);
     // R39: what the applicant ASKED FOR, projected to exactly two fields.
-    expect(Object.keys(item.branch as object).sort()).toEqual(['id', 'name']);
-    expect(Object.keys(item.bundle as object).sort()).toEqual(['child_count', 'link_count']);
+    expect(Object.keys(item.branch as object).sort()).toEqual(["id", "name"]);
+    expect(Object.keys(item.bundle as object).sort()).toEqual([
+      "child_count",
+      "link_count",
+    ]);
     const applicant = (item.applicants as Record<string, unknown>[])[0]!;
-    expect(Object.keys(applicant).sort()).toEqual(['id', 'name', 'role']);
+    expect(Object.keys(applicant).sort()).toEqual(["id", "name", "role"]);
     // `submitted_at` is an instant, correctly — a submission is a moment.
     expect(item.submitted_at).toMatch(/^\d{4}-\d{2}-\d{2}T/);
   });
 
-  it('§14.2 R39: branch_id NARROWS the queue rather than returning everything', async () => {
+  it("§14.2 R39: branch_id NARROWS the queue rather than returning everything", async () => {
     // The test a filter actually needs: something it must exclude. One item in
     // each branch, then assert each filter returns its own and not the other.
     const here = await submitBundle(branchId);
     const elsewhere = await submitBundle(otherBranchId);
 
-    const mine = await call('GET', `/admin/approvals?branch_id=${branchId}`, admin);
+    const mine = await call(
+      "GET",
+      `/admin/approvals?branch_id=${branchId}`,
+      admin,
+    );
     const ids = (mine.body.data as { id: string }[]).map((i) => i.id);
     expect(ids).toContain(here.parentId);
     expect(ids).not.toContain(elsewhere.parentId);
@@ -275,146 +336,214 @@ describe('GET /api/v1/admin/approvals', () => {
     // `meta.total` must describe the FILTERED set, or the client renders pages
     // that are empty.
     expect(mine.body.meta?.page_size).toBe(25);
-    const all = await call('GET', '/admin/approvals', admin);
+    const all = await call("GET", "/admin/approvals", admin);
     expect((all.body.data as { id: string }[]).map((i) => i.id)).toEqual(
       expect.arrayContaining([here.parentId, elsewhere.parentId]),
     );
   });
 
-  it('R39: a branch filter excludes family-link items WHOLESALE', async () => {
+  it("R39: a branch filter excludes family-link items WHOLESALE", async () => {
     // A link request carries no branch, so asking for "branch X" asks for
     // something it can never be. Excluding the type keeps `meta.total` honest.
-    const res = await call('GET', `/admin/approvals?branch_id=${branchId}`, admin);
-    const types = new Set((res.body.data as { type: string }[]).map((i) => i.type));
-    expect(types.has('family-link')).toBe(false);
+    const res = await call(
+      "GET",
+      `/admin/approvals?branch_id=${branchId}`,
+      admin,
+    );
+    const types = new Set(
+      (res.body.data as { type: string }[]).map((i) => i.type),
+    );
+    expect(types.has("family-link")).toBe(false);
   });
 
-  it('R39: an unknown branch_id is a 400, not a silent empty list', async () => {
+  it("R39: an unknown branch_id is a 400, not a silent empty list", async () => {
     // A malformed filter that returns nothing looks identical to a branch with
     // no applicants — the admin would conclude the queue is clear.
-    const res = await call('GET', '/admin/approvals?branch_id=not-a-uuid', admin);
+    const res = await call(
+      "GET",
+      "/admin/approvals?branch_id=not-a-uuid",
+      admin,
+    );
     expect(res.status).toBe(400);
-    expect(res.body.error?.code).toBe('VALIDATION_FAILED');
+    expect(res.body.error?.code).toBe("VALIDATION_FAILED");
   });
 
-  it('refuses an anonymous caller with the TD-3.8 envelope', async () => {
-    const res = await call('GET', '/admin/approvals');
+  it("refuses an anonymous caller with the TD-3.8 envelope", async () => {
+    const res = await call("GET", "/admin/approvals");
     expect(res.status).toBe(401);
-    expect(res.body.error?.code).toBe('AUTH_REQUIRED');
+    expect(res.body.error?.code).toBe("AUTH_REQUIRED");
   });
 
-  it('refuses a tampered token signature', async () => {
-    const res = await call('GET', '/admin/approvals', `${admin}x`);
+  it("refuses a tampered token signature", async () => {
+    const res = await call("GET", "/admin/approvals", `${admin}x`);
     expect(res.status).toBe(401);
   });
 
-  it('TD-2: a teacher holding a valid token gets 403, not a filtered list', async () => {
-    const res = await call('GET', '/admin/approvals', teacher);
+  it("TD-2: a teacher holding a valid token gets 403, not a filtered list", async () => {
+    const res = await call("GET", "/admin/approvals", teacher);
     expect(res.status).toBe(403);
-    expect(res.body.error?.code).toBe('FORBIDDEN');
+    expect(res.body.error?.code).toBe("FORBIDDEN");
   });
 
-  it('TD-12: a token claiming admin for a NON-admin user is refused', async () => {
+  it("TD-12: a token claiming admin for a NON-admin user is refused", async () => {
     // The claim is genuinely signed — only the database says otherwise. This is
     // the whole point of the freshness assertion: claims are not authority.
-    const res = await call('GET', '/admin/approvals', bearer(teacherId, ['admin', 'super_admin']));
+    const res = await call(
+      "GET",
+      "/admin/approvals",
+      bearer(teacherId, ["admin", "super_admin"]),
+    );
     expect(res.status).toBe(403);
   });
 });
 
-describe('POST /api/v1/admin/approvals/{id}/approve|reject', () => {
-  it('approves a bundle end to end and reports what changed', async () => {
+describe("POST /api/v1/admin/approvals/{id}/approve|reject", () => {
+  it("approves a bundle end to end and reports what changed", async () => {
     const { parentId, applicationId } = await submitBundle();
     // §4.1 (R43): the placement IS the approval. The child is the student; the
     // parent's access comes through the family link.
-    const res = await call('POST', `/admin/approvals/${parentId}/approve`, admin, {
-      // **R62 narrowed this.** The parent's approval no longer places a child;
-      // the placement moved onto the child's own decision.
-    });
-
-    expect(res.status).toBe(200);
-    expect(res.body.type).toBe('registration');
-    expect((await prisma.user.findUnique({ where: { id: parentId } }))?.accountStatus).toBe('active');
-    // Untouched, and still decidable through its own endpoint.
-    expect((await prisma.childApplication.findUnique({ where: { id: applicationId } }))?.status).toBe(
-      'pending',
+    const res = await call(
+      "POST",
+      `/admin/approvals/${parentId}/approve`,
+      admin,
+      {
+        // **R62 narrowed this.** The parent's approval no longer places a child;
+        // the placement moved onto the child's own decision.
+      },
     );
 
-    const second = await call('POST', `/admin/approvals/${parentId}/approve`, admin, {
-    });
+    expect(res.status).toBe(200);
+    expect(res.body.type).toBe("registration");
+    expect(
+      (await prisma.user.findUnique({ where: { id: parentId } }))
+        ?.accountStatus,
+    ).toBe("active");
+    // Untouched, and still decidable through its own endpoint.
+    expect(
+      (
+        await prisma.childApplication.findUnique({
+          where: { id: applicationId },
+        })
+      )?.status,
+    ).toBe("pending");
+
+    const second = await call(
+      "POST",
+      `/admin/approvals/${parentId}/approve`,
+      admin,
+      {},
+    );
     expect(second.status).toBe(409);
-    expect(second.body.error?.code).toBe('STATE_CONFLICT');
+    expect(second.body.error?.code).toBe("STATE_CONFLICT");
   });
 
-  it('rejects with a reason, and refuses to reject without one', async () => {
+  it("rejects with a reason, and refuses to reject without one", async () => {
     const { parentId } = await submitBundle();
 
-    const bare = await call('POST', `/admin/approvals/${parentId}/reject`, admin, {});
+    const bare = await call(
+      "POST",
+      `/admin/approvals/${parentId}/reject`,
+      admin,
+      {},
+    );
     expect(bare.status).toBe(400);
-    expect(bare.body.error?.code).toBe('VALIDATION_FAILED');
+    expect(bare.body.error?.code).toBe("VALIDATION_FAILED");
 
     // TD-9: 500 characters is the limit, so 501 must be refused at the edge.
-    const tooLong = await call('POST', `/admin/approvals/${parentId}/reject`, admin, {
-      reason: 'ط'.repeat(501),
-    });
+    const tooLong = await call(
+      "POST",
+      `/admin/approvals/${parentId}/reject`,
+      admin,
+      {
+        reason: "ط".repeat(501),
+      },
+    );
     expect(tooLong.status).toBe(400);
 
-    const ok = await call('POST', `/admin/approvals/${parentId}/reject`, admin, {
-      reason: 'الملف غير مكتمل',
-    });
+    const ok = await call(
+      "POST",
+      `/admin/approvals/${parentId}/reject`,
+      admin,
+      {
+        reason: "الملف غير مكتمل",
+      },
+    );
     expect(ok.status).toBe(200);
-    expect((await prisma.user.findUnique({ where: { id: parentId } }))?.accountStatus).toBe('rejected');
+    expect(
+      (await prisma.user.findUnique({ where: { id: parentId } }))
+        ?.accountStatus,
+    ).toBe("rejected");
   });
 
-  it('a malformed id is 400 and a well-formed unknown one is 404', async () => {
-    const malformed = await call('POST', '/admin/approvals/not-a-uuid/approve', admin, {});
+  it("a malformed id is 400 and a well-formed unknown one is 404", async () => {
+    const malformed = await call(
+      "POST",
+      "/admin/approvals/not-a-uuid/approve",
+      admin,
+      {},
+    );
     expect(malformed.status).toBe(400);
 
     // Shaped like a UUID but with an invalid version/variant nibble. Postgres
     // would accept it as a `uuid`; the edge rejects it as syntactically
     // impossible before any lookup, since every id this system issues is v4.
     const notRfcValid = await call(
-      'POST',
-      '/admin/approvals/11111111-2222-3333-4444-555555555555/approve',
+      "POST",
+      "/admin/approvals/11111111-2222-3333-4444-555555555555/approve",
       admin,
       {},
     );
     expect(notRfcValid.status).toBe(400);
 
     const unknown = await call(
-      'POST',
-      '/admin/approvals/11111111-2222-4333-8444-555555555555/approve',
+      "POST",
+      "/admin/approvals/11111111-2222-4333-8444-555555555555/approve",
       admin,
       {},
     );
     expect(unknown.status).toBe(404);
-    expect(unknown.body.error?.code).toBe('NOT_FOUND');
+    expect(unknown.body.error?.code).toBe("NOT_FOUND");
   });
 
-  it('a request with no body at all does not 500', async () => {
+  it("a request with no body at all does not 500", async () => {
     // The point is the ABSENCE of a crash, not the status. Since §4.1 (R43)
     // made the placement part of the approval, a bodyless approve is a
     // well-formed refusal — which is still exactly what this test exists to
     // prove: a missing body reaches the validator, not the error middleware.
     const { parentId } = await submitBundle();
-    const res = await call('POST', `/admin/approvals/${parentId}/approve`, admin);
+    const res = await call(
+      "POST",
+      `/admin/approvals/${parentId}/approve`,
+      admin,
+    );
     // R62 changed the STATUS, not the point: a parent registering children
     // enrols nobody at approval, so a bodyless approve is now well-formed.
     expect(res.status).toBe(200);
     expect(res.status).not.toBe(500);
   });
 
-  it('TD-12: suspending the admin revokes approval power without touching the token', async () => {
+  it("TD-12: suspending the admin revokes approval power without touching the token", async () => {
     const { parentId } = await submitBundle();
-    const solo = await makeStaff('admin');
-    const soloToken = bearer(solo, ['admin']);
+    const solo = await makeStaff("admin");
+    const soloToken = bearer(solo, ["admin"]);
 
-    expect((await call('GET', '/admin/approvals', soloToken)).status).toBe(200);
-    await prisma.user.update({ where: { id: solo }, data: { accountStatus: 'suspended' } });
+    expect((await call("GET", "/admin/approvals", soloToken)).status).toBe(200);
+    await prisma.user.update({
+      where: { id: solo },
+      data: { accountStatus: "suspended" },
+    });
 
-    expect((await call('GET', '/admin/approvals', soloToken)).status).toBe(403);
-    const denied = await call('POST', `/admin/approvals/${parentId}/approve`, soloToken, {});
+    expect((await call("GET", "/admin/approvals", soloToken)).status).toBe(403);
+    const denied = await call(
+      "POST",
+      `/admin/approvals/${parentId}/approve`,
+      soloToken,
+      {},
+    );
     expect(denied.status).toBe(403);
-    expect((await prisma.user.findUnique({ where: { id: parentId } }))?.accountStatus).toBe('pending');
+    expect(
+      (await prisma.user.findUnique({ where: { id: parentId } }))
+        ?.accountStatus,
+    ).toBe("pending");
   });
 });

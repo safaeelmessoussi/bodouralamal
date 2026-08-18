@@ -1,8 +1,8 @@
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it } from "vitest";
 
-import { loadConfig } from './config.js';
-import { createPrismaClient, TEST_CONNECTION_LIMIT } from './prisma.js';
-import { normalizePhone, normalizeSearchText } from './search-normalize.js';
+import { loadConfig } from "./config.js";
+import { createPrismaClient, TEST_CONNECTION_LIMIT } from "./prisma.js";
+import { normalizePhone, normalizeSearchText } from "./search-normalize.js";
 
 /**
  * TD-10 parity: the TypeScript normalizer must produce **byte-identical** output
@@ -29,65 +29,65 @@ afterAll(async () => {
 /** Realistic inputs plus the awkward edges the folding rules exist for. */
 const TEXT_CORPUS = [
   // Arabic names as staff would actually type them.
-  'سعاد',
-  'أم سعاد',
-  'آمنة',
-  'إبراهيم',
-  'فاطمة الزهراء',
-  'خديجة بنت خويلد',
+  "سعاد",
+  "أم سعاد",
+  "آمنة",
+  "إبراهيم",
+  "فاطمة الزهراء",
+  "خديجة بنت خويلد",
   // Alef variants that must all fold together.
-  'أحمد',
-  'احمد',
-  'إحمد',
-  'آحمد',
-  'ٱحمد',
+  "أحمد",
+  "احمد",
+  "إحمد",
+  "آحمد",
+  "ٱحمد",
   // Ta marbuta and alef maqsura.
-  'فاطمة',
-  'فاطمه',
-  'ليلى',
-  'ليلي',
+  "فاطمة",
+  "فاطمه",
+  "ليلى",
+  "ليلي",
   // Tashkeel and tatweel, which must vanish entirely.
-  'مُحَمَّد',
-  'محمد',
-  'مـــحـــمـــد',
-  'سُعَادٰ',
+  "مُحَمَّد",
+  "محمد",
+  "مـــحـــمـــد",
+  "سُعَادٰ",
   // French names with accents, mixed case.
-  'Aïcha',
-  'AÏCHA',
-  'Zoé',
-  'Frédéric',
-  'François',
-  'Noël',
-  'Bénédicte',
-  'Angèle',
-  'Jérôme',
-  'Anaïs',
+  "Aïcha",
+  "AÏCHA",
+  "Zoé",
+  "Frédéric",
+  "François",
+  "Noël",
+  "Bénédicte",
+  "Angèle",
+  "Jérôme",
+  "Anaïs",
   // Whitespace handling.
-  '  سعاد   بنت   علي  ',
-  'Marie   Claire',
-  '\tمحمد\n',
+  "  سعاد   بنت   علي  ",
+  "Marie   Claire",
+  "\tمحمد\n",
   // Mixed script and punctuation.
-  'أم Aïcha',
+  "أم Aïcha",
   "O'Brien",
-  'Ben-Ali',
+  "Ben-Ali",
   // Degenerate cases.
-  '',
-  ' ',
-  'a',
-  '123',
+  "",
+  " ",
+  "a",
+  "123",
 ];
 
 const PHONE_CORPUS = [
-  '+212 6 12 34 56 78',
-  '0612345678',
-  '+212612345678',
-  ' 06 12 34 56 78 ',
-  '+212-6-12-34-56-78',
-  '',
+  "+212 6 12 34 56 78",
+  "0612345678",
+  "+212612345678",
+  " 06 12 34 56 78 ",
+  "+212-6-12-34-56-78",
+  "",
 ];
 
-describe('TD-10 normalization parity between TypeScript and PostgreSQL', () => {
-  it('normalize_search_text agrees on every corpus entry', async () => {
+describe("TD-10 normalization parity between TypeScript and PostgreSQL", () => {
+  it("normalize_search_text agrees on every corpus entry", async () => {
     const rows = await prisma.$queryRaw<{ input: string; sql: string }[]>`
       SELECT t.input, normalize_search_text(t.input) AS sql
       FROM unnest(${TEXT_CORPUS}::text[]) AS t(input)
@@ -95,42 +95,54 @@ describe('TD-10 normalization parity between TypeScript and PostgreSQL', () => {
     expect(rows).toHaveLength(TEXT_CORPUS.length);
 
     const disagreements = rows
-      .map((row) => ({ input: row.input, sql: row.sql, ts: normalizeSearchText(row.input) }))
+      .map((row) => ({
+        input: row.input,
+        sql: row.sql,
+        ts: normalizeSearchText(row.input),
+      }))
       .filter((r) => r.sql !== r.ts);
 
     expect(disagreements).toEqual([]);
   });
 
-  it('normalize_phone agrees on every corpus entry', async () => {
+  it("normalize_phone agrees on every corpus entry", async () => {
     const rows = await prisma.$queryRaw<{ input: string; sql: string }[]>`
       SELECT t.input, normalize_phone(t.input) AS sql
       FROM unnest(${PHONE_CORPUS}::text[]) AS t(input)
     `;
 
     const disagreements = rows
-      .map((row) => ({ input: row.input, sql: row.sql, ts: normalizePhone(row.input) }))
+      .map((row) => ({
+        input: row.input,
+        sql: row.sql,
+        ts: normalizePhone(row.input),
+      }))
       .filter((r) => r.sql !== r.ts);
 
     expect(disagreements).toEqual([]);
   });
 
-  it('the folding actually collapses the variants staff will type', async () => {
+  it("the folding actually collapses the variants staff will type", async () => {
     // Not a parity check but a behaviour check: TD-10's whole point is that
     // `سعاد` finds `أم سعاد`, and that alef and ta-marbuta spellings unify.
-    expect(normalizeSearchText('أحمد')).toBe(normalizeSearchText('احمد'));
-    expect(normalizeSearchText('آحمد')).toBe(normalizeSearchText('ٱحمد'));
-    expect(normalizeSearchText('فاطمة')).toBe(normalizeSearchText('فاطمه'));
-    expect(normalizeSearchText('ليلى')).toBe(normalizeSearchText('ليلي'));
-    expect(normalizeSearchText('مُحَمَّد')).toBe(normalizeSearchText('محمد'));
-    expect(normalizeSearchText('مـــحـــمـــد')).toBe(normalizeSearchText('محمد'));
-    expect(normalizeSearchText('AÏCHA')).toBe(normalizeSearchText('aicha'));
-    expect(normalizeSearchText('Zoé')).toBe('zoe');
+    expect(normalizeSearchText("أحمد")).toBe(normalizeSearchText("احمد"));
+    expect(normalizeSearchText("آحمد")).toBe(normalizeSearchText("ٱحمد"));
+    expect(normalizeSearchText("فاطمة")).toBe(normalizeSearchText("فاطمه"));
+    expect(normalizeSearchText("ليلى")).toBe(normalizeSearchText("ليلي"));
+    expect(normalizeSearchText("مُحَمَّد")).toBe(normalizeSearchText("محمد"));
+    expect(normalizeSearchText("مـــحـــمـــد")).toBe(
+      normalizeSearchText("محمد"),
+    );
+    expect(normalizeSearchText("AÏCHA")).toBe(normalizeSearchText("aicha"));
+    expect(normalizeSearchText("Zoé")).toBe("zoe");
     // Substring, not prefix: the stored value contains the query.
-    expect(normalizeSearchText('أم سعاد')).toContain(normalizeSearchText('سعاد'));
+    expect(normalizeSearchText("أم سعاد")).toContain(
+      normalizeSearchText("سعاد"),
+    );
   });
 
-  it('phone normalization unifies the formats a person may enter', async () => {
-    expect(normalizePhone('+212 6 12 34 56 78')).toBe('212612345678');
-    expect(normalizePhone(' 06 12 34 56 78 ')).toBe('0612345678');
+  it("phone normalization unifies the formats a person may enter", async () => {
+    expect(normalizePhone("+212 6 12 34 56 78")).toBe("212612345678");
+    expect(normalizePhone(" 06 12 34 56 78 ")).toBe("0612345678");
   });
 });

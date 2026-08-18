@@ -1,13 +1,20 @@
-import { randomBytes } from 'node:crypto';
+import { randomBytes } from "node:crypto";
 
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import { loadConfig } from '../lib/config.js';
-import { BUCKETS, createStorageClients, type StorageClients } from '../lib/storage.js';
-import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
-import { issueUploadTicket } from '../lib/upload-token.js';
-import type { Actor } from '../policies/actor.js';
-import { createTeachingContext, staff } from '../test-support/educational-fixture.js';
+import { loadConfig } from "../lib/config.js";
+import {
+  BUCKETS,
+  createStorageClients,
+  type StorageClients,
+} from "../lib/storage.js";
+import { createPrismaClient, TEST_CONNECTION_LIMIT } from "../lib/prisma.js";
+import { issueUploadTicket } from "../lib/upload-token.js";
+import type { Actor } from "../policies/actor.js";
+import {
+  createTeachingContext,
+  staff,
+} from "../test-support/educational-fixture.js";
 import {
   abortUpload,
   completeUpload,
@@ -15,7 +22,7 @@ import {
   initiateUpload,
   mintDownloadUrl,
   UPLOAD_QUOTA,
-} from './content.service.js';
+} from "./content.service.js";
 
 /**
  * TD-3.5 end to end, against **real MinIO through the real Nginx proxy**.
@@ -32,39 +39,65 @@ import {
 const config = loadConfig();
 const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);
 const KEY = config.JWT_SIGNING_KEY;
-const TAG = '[content-test]';
+const TAG = "[content-test]";
 
 let clients: StorageClients;
-let adminId = '';
-let teacherId = '';
-let levelId = '';
-let subjectId = '';
-let branchId = '';
-let otherBranchId = '';
-let academicYearId = '';
+let adminId = "";
+let teacherId = "";
+let levelId = "";
+let subjectId = "";
+let branchId = "";
+let otherBranchId = "";
+let academicYearId = "";
 
-const actorOf = (userId: string, roles: { role: string; branches: string[] | null }[]): Actor =>
-  ({ userId, roles: roles.map((r) => r.role), roleScopes: roles } as unknown as Actor);
-const admin = (): Actor => actorOf(adminId, [{ role: 'admin', branches: null }]);
-const teacher = (): Actor => actorOf(teacherId, [{ role: 'teacher', branches: [branchId] }]);
+const actorOf = (
+  userId: string,
+  roles: { role: string; branches: string[] | null }[],
+): Actor =>
+  ({
+    userId,
+    roles: roles.map((r) => r.role),
+    roleScopes: roles,
+  }) as unknown as Actor;
+const admin = (): Actor =>
+  actorOf(adminId, [{ role: "admin", branches: null }]);
+const teacher = (): Actor =>
+  actorOf(teacherId, [{ role: "teacher", branches: [branchId] }]);
 
 async function failure(
   run: () => Promise<unknown>,
-): Promise<{ code?: string; status?: number; details?: Record<string, unknown> }> {
+): Promise<{
+  code?: string;
+  status?: number;
+  details?: Record<string, unknown>;
+}> {
   try {
     await run();
     return {};
   } catch (e) {
-    return e as { code?: string; status?: number; details?: Record<string, unknown> };
+    return e as {
+      code?: string;
+      status?: number;
+      details?: Record<string, unknown>;
+    };
   }
 }
 
 /** A real, valid PDF header — the sniffer reads the first 512 bytes and nothing else. */
-const pdfBytes = (): Buffer => Buffer.concat([Buffer.from('%PDF-1.7\n'), randomBytes(200)]);
+const pdfBytes = (): Buffer =>
+  Buffer.concat([Buffer.from("%PDF-1.7\n"), randomBytes(200)]);
 
 /** Uploads to the presigned URL exactly as a browser would. */
-async function putObject(url: string, body: Buffer, mime: string): Promise<number> {
-  const res = await fetch(url, { method: 'PUT', body, headers: { 'content-type': mime } });
+async function putObject(
+  url: string,
+  body: Buffer,
+  mime: string,
+): Promise<number> {
+  const res = await fetch(url, {
+    method: "PUT",
+    body,
+    headers: { "content-type": mime },
+  });
   return res.status;
 }
 
@@ -79,10 +112,16 @@ async function putObject(url: string, body: Buffer, mime: string): Promise<numbe
  */
 async function clear(): Promise<void> {
   const ids = (
-    await prisma.user.findMany({ where: { nameArabic: { startsWith: TAG } }, select: { id: true } })
+    await prisma.user.findMany({
+      where: { nameArabic: { startsWith: TAG } },
+      select: { id: true },
+    })
   ).map((u) => u.id);
   const levels = (
-    await prisma.level.findMany({ where: { name: { startsWith: TAG } }, select: { id: true } })
+    await prisma.level.findMany({
+      where: { name: { startsWith: TAG } },
+      select: { id: true },
+    })
   ).map((l) => l.id);
   const groups = (
     await prisma.administrativeGroup.findMany({
@@ -95,7 +134,12 @@ async function clear(): Promise<void> {
   // where this suite's schedules are found.
   const schedules = (
     await prisma.recurringCourseSchedule.findMany({
-      where: { OR: [{ administrativeGroupId: { in: groups } }, { levelId: { in: levels } }] },
+      where: {
+        OR: [
+          { administrativeGroupId: { in: groups } },
+          { levelId: { in: levels } },
+        ],
+      },
       select: { id: true },
     })
   ).map((s) => s.id);
@@ -104,21 +148,35 @@ async function clear(): Promise<void> {
     where: { title: { startsWith: TAG } },
     select: { id: true },
   });
-  await prisma.trash.deleteMany({ where: { targetId: { in: contents.map((c) => c.id) } } });
+  await prisma.trash.deleteMany({
+    where: { targetId: { in: contents.map((c) => c.id) } },
+  });
   await prisma.auditLog.deleteMany({ where: { actorUserId: { in: ids } } });
   await prisma.rateLimitCounter.deleteMany({ where: { userId: { in: ids } } });
-  await prisma.educationalContent.deleteMany({ where: { title: { startsWith: TAG } } });
+  await prisma.educationalContent.deleteMany({
+    where: { title: { startsWith: TAG } },
+  });
 
-  await prisma.sessionStaff.deleteMany({ where: { session: { scheduleId: { in: schedules } } } });
+  await prisma.sessionStaff.deleteMany({
+    where: { session: { scheduleId: { in: schedules } } },
+  });
   // R77 — `notification.session_id` is RESTRICT, like every other reference
   // to a Session: a cancellation notice whose session vanished is unreadable.
   // Fixtures therefore unwind notices before the occurrences they name.
-  await prisma.notification.deleteMany({ where: { session: { scheduleId: { in: schedules } } } });
+  await prisma.notification.deleteMany({
+    where: { session: { scheduleId: { in: schedules } } },
+  });
   await prisma.session.deleteMany({ where: { scheduleId: { in: schedules } } });
-  await prisma.courseScheduleStaff.deleteMany({ where: { scheduleId: { in: schedules } } });
-  await prisma.recurringCourseSchedule.deleteMany({ where: { id: { in: schedules } } });
+  await prisma.courseScheduleStaff.deleteMany({
+    where: { scheduleId: { in: schedules } },
+  });
+  await prisma.recurringCourseSchedule.deleteMany({
+    where: { id: { in: schedules } },
+  });
   await prisma.enrollment.deleteMany({ where: { levelId: { in: levels } } });
-  await prisma.administrativeGroup.deleteMany({ where: { levelId: { in: levels } } });
+  await prisma.administrativeGroup.deleteMany({
+    where: { levelId: { in: levels } },
+  });
   await prisma.levelSubject.deleteMany({ where: { levelId: { in: levels } } });
   await prisma.level.deleteMany({ where: { id: { in: levels } } });
   await prisma.subject.deleteMany({ where: { name: { startsWith: TAG } } });
@@ -130,26 +188,38 @@ async function clear(): Promise<void> {
 
 beforeAll(async () => {
   clients = createStorageClients(config);
-  const res = await fetch(`${config.STORAGE_BASE_URL}/${BUCKETS.public}/`, { redirect: 'manual' });
+  const res = await fetch(`${config.STORAGE_BASE_URL}/${BUCKETS.public}/`, {
+    redirect: "manual",
+  });
   if (res.status <= 0) {
-    throw new Error('storage proxy unreachable — docker compose up -d minio nginx');
+    throw new Error(
+      "storage proxy unreachable — docker compose up -d minio nginx",
+    );
   }
 });
 
 beforeEach(async () => {
   await clear();
 
-  const year = await prisma.academicYear.findFirst({ where: { isCurrent: true } });
+  const year = await prisma.academicYear.findFirst({
+    where: { isCurrent: true },
+  });
   academicYearId = year!.id;
 
   branchId = (await prisma.branch.create({ data: { name: `${TAG} فرع` } })).id;
-  otherBranchId = (await prisma.branch.create({ data: { name: `${TAG} فرع آخر` } })).id;
+  otherBranchId = (
+    await prisma.branch.create({ data: { name: `${TAG} فرع آخر` } })
+  ).id;
 
   adminId = (
-    await prisma.user.create({ data: { nameArabic: `${TAG} مديرة`, accountStatus: 'active' } })
+    await prisma.user.create({
+      data: { sex: 'female', nameArabic: `${TAG} مديرة`, accountStatus: "active" },
+    })
   ).id;
   teacherId = (
-    await prisma.user.create({ data: { nameArabic: `${TAG} مؤطرة`, accountStatus: 'active' } })
+    await prisma.user.create({
+      data: { sex: 'female', nameArabic: `${TAG} مؤطرة`, accountStatus: "active" },
+    })
   ).id;
 
   // §4.4c: a teacher's branch reach is the branches of the schedules they staff,
@@ -167,8 +237,12 @@ beforeEach(async () => {
   // an actor whose roles exist only in a token would be refused for the right
   // reason at the wrong time — and the suspended-teacher test below would pass
   // without ever exercising the suspension.
-  const adminRole = await prisma.role.findFirstOrThrow({ where: { name: 'admin' } });
-  const teacherRole = await prisma.role.findFirstOrThrow({ where: { name: 'teacher' } });
+  const adminRole = await prisma.role.findFirstOrThrow({
+    where: { name: "admin" },
+  });
+  const teacherRole = await prisma.role.findFirstOrThrow({
+    where: { name: "teacher" },
+  });
   await prisma.userBranchRole.createMany({
     data: [
       { userId: adminId, roleId: adminRole.id, branchId: null },
@@ -187,148 +261,167 @@ const meta = (over: Partial<Record<string, unknown>> = {}) => ({
   subjectId,
   academicYearId,
   branchId,
-  visibility: 'private',
+  visibility: "private",
   ...over,
 });
 
 /** initiate → PUT → complete, the whole path a browser takes. */
-async function uploadPdf(actor: Actor, title: string, over: Record<string, unknown> = {}) {
+async function uploadPdf(
+  actor: Actor,
+  title: string,
+  over: Record<string, unknown> = {},
+) {
   const bytes = pdfBytes();
   const initiated = await initiateUpload(prisma, clients, KEY, actor, {
-    filename: 'درس القرآن.pdf',
+    filename: "درس القرآن.pdf",
     size: bytes.length,
-    mime: 'application/pdf',
+    mime: "application/pdf",
     meta: meta(over) as never,
   });
-  expect(await putObject(initiated.putUrl, bytes, 'application/pdf')).toBe(200);
-  const created = await completeUpload(prisma, clients, KEY, actor, initiated.uploadId, {
-    title: `${TAG} ${title}`,
-    description: null,
-  });
+  expect(await putObject(initiated.putUrl, bytes, "application/pdf")).toBe(200);
+  const created = await completeUpload(
+    prisma,
+    clients,
+    KEY,
+    actor,
+    initiated.uploadId,
+    {
+      title: `${TAG} ${title}`,
+      description: null,
+    },
+  );
   return { ...created, initiated, bytes };
 }
 
-describe('the two-phase upload (TD-3.5)', () => {
-  it('round-trips a real file through the presigned PUT and creates the content row', async () => {
-    const { id, initiated, bytes } = await uploadPdf(admin(), 'ملف');
+describe("the two-phase upload (TD-3.5)", () => {
+  it("round-trips a real file through the presigned PUT and creates the content row", async () => {
+    const { id, initiated, bytes } = await uploadPdf(admin(), "ملف");
 
     // The URL handed to the browser is rooted at the public storage origin and
     // never at MinIO's internal endpoint (§3.1).
     expect(initiated.putUrl.startsWith(config.STORAGE_BASE_URL)).toBe(true);
 
-    const row = await prisma.educationalContent.findUniqueOrThrow({ where: { id } });
+    const row = await prisma.educationalContent.findUniqueOrThrow({
+      where: { id },
+    });
     expect(row.storageKey).toBe(initiated.key);
     expect(row.storageBucket).toBe(BUCKETS.private);
     expect(Number(row.sizeBytes)).toBe(bytes.length);
     // TD-9: the true filename is kept verbatim; the key carries a slug of it.
-    expect(row.originalFilename).toBe('درس القرآن.pdf');
-    expect(row.storageKey).toMatch(/^content\/[0-9a-f-]{36}\/[0-9a-f]{8}\/drs-alqran\.pdf$/);
+    expect(row.originalFilename).toBe("درس القرآن.pdf");
+    expect(row.storageKey).toMatch(
+      /^content\/[0-9a-f-]{36}\/[0-9a-f]{8}\/drs-alqran\.pdf$/,
+    );
   });
 
-  it('writes a content.upload audit row', async () => {
-    const { id } = await uploadPdf(admin(), 'مدقق');
+  it("writes a content.upload audit row", async () => {
+    const { id } = await uploadPdf(admin(), "مدقق");
     const entry = await prisma.auditLog.findFirst({
-      where: { actionType: 'content.upload', targetId: id },
+      where: { actionType: "content.upload", targetId: id },
     });
     expect(entry).not.toBeNull();
   });
 
-  it('refuses a MIME type TD-9 does not list, before anything is uploaded', async () => {
+  it("refuses a MIME type TD-9 does not list, before anything is uploaded", async () => {
     const e = await failure(() =>
       initiateUpload(prisma, clients, KEY, admin(), {
-        filename: 'clip.mp4',
+        filename: "clip.mp4",
         size: 1000,
-        mime: 'video/mp4',
+        mime: "video/mp4",
         meta: meta() as never,
       }),
     );
-    expect(e.code).toBe('VALIDATION_FAILED');
+    expect(e.code).toBe("VALIDATION_FAILED");
   });
 
-  it('refuses a declared size over the TD-9 cap without minting a URL', async () => {
+  it("refuses a declared size over the TD-9 cap without minting a URL", async () => {
     const e = await failure(() =>
       initiateUpload(prisma, clients, KEY, admin(), {
-        filename: 'huge.pdf',
+        filename: "huge.pdf",
         size: 51 * 1024 * 1024,
-        mime: 'application/pdf',
+        mime: "application/pdf",
         meta: meta() as never,
       }),
     );
-    expect(e.code).toBe('PAYLOAD_TOO_LARGE');
+    expect(e.code).toBe("PAYLOAD_TOO_LARGE");
   });
 
-  it('refuses a subject that is not taught at that level (R43)', async () => {
-    const stray = await prisma.subject.create({ data: { name: `${TAG} مادة غريبة` } });
+  it("refuses a subject that is not taught at that level (R43)", async () => {
+    const stray = await prisma.subject.create({
+      data: { name: `${TAG} مادة غريبة` },
+    });
     const e = await failure(() =>
       initiateUpload(prisma, clients, KEY, admin(), {
-        filename: 'a.pdf',
+        filename: "a.pdf",
         size: 10,
-        mime: 'application/pdf',
+        mime: "application/pdf",
         meta: meta({ subjectId: stray.id }) as never,
       }),
     );
-    expect(e.code).toBe('STATE_CONFLICT');
+    expect(e.code).toBe("STATE_CONFLICT");
     // One code across all three surfaces (`policies/curriculum.ts`): scheduling
     // and teaching-group splits raise the same one, and the older spelling wins
     // because clients render it.
-    expect(e.details?.['reason']).toBe('SUBJECT_NOT_IN_LEVEL');
+    expect(e.details?.["reason"]).toBe("SUBJECT_NOT_IN_LEVEL");
   });
 });
 
-describe('§4.9 upload authorization', () => {
-  it('refuses a Teacher the Global scope — the named §19.2 regression', async () => {
+describe("§4.9 upload authorization", () => {
+  it("refuses a Teacher the Global scope — the named §19.2 regression", async () => {
     const e = await failure(() =>
       initiateUpload(prisma, clients, KEY, teacher(), {
-        filename: 'a.pdf',
+        filename: "a.pdf",
         size: 10,
-        mime: 'application/pdf',
+        mime: "application/pdf",
         meta: meta({ branchId: null }) as never,
       }),
     );
-    expect(e.code).toBe('FORBIDDEN');
-    expect(e.details?.['reason']).toBe('GLOBAL_SCOPE_FORBIDDEN');
+    expect(e.code).toBe("FORBIDDEN");
+    expect(e.details?.["reason"]).toBe("GLOBAL_SCOPE_FORBIDDEN");
   });
 
-  it('refuses a Teacher a branch they do not teach at', async () => {
+  it("refuses a Teacher a branch they do not teach at", async () => {
     const e = await failure(() =>
       initiateUpload(prisma, clients, KEY, teacher(), {
-        filename: 'a.pdf',
+        filename: "a.pdf",
         size: 10,
-        mime: 'application/pdf',
+        mime: "application/pdf",
         meta: meta({ branchId: otherBranchId }) as never,
       }),
     );
-    expect(e.code).toBe('FORBIDDEN');
-    expect(e.details?.['reason']).toBe('BRANCH_OUT_OF_SCOPE');
+    expect(e.code).toBe("FORBIDDEN");
+    expect(e.details?.["reason"]).toBe("BRANCH_OUT_OF_SCOPE");
   });
 
-  it('admits a Teacher at a branch they DO teach at, resolved through the schedule', async () => {
+  it("admits a Teacher at a branch they DO teach at, resolved through the schedule", async () => {
     // The scope comes from `CourseScheduleStaff` (§4.4c), not from the role
     // assignment — the fixture's teacher has no admin scope of any kind.
-    const result = await uploadPdf(teacher(), 'ملف المؤطرة');
+    const result = await uploadPdf(teacher(), "ملف المؤطرة");
     expect(result.id).toBeTruthy();
   });
 
-  it('lets an Admin publish to the Global scope', async () => {
-    const { id } = await uploadPdf(admin(), 'عام', { branchId: null });
-    const row = await prisma.educationalContent.findUniqueOrThrow({ where: { id } });
+  it("lets an Admin publish to the Global scope", async () => {
+    const { id } = await uploadPdf(admin(), "عام", { branchId: null });
+    const row = await prisma.educationalContent.findUniqueOrThrow({
+      where: { id },
+    });
     expect(row.branchId).toBeNull();
   });
 });
 
-describe('completion verification (§4.9 Revision 8)', () => {
-  it('deletes the object and refuses with 409 when the magic bytes lie', async () => {
+describe("completion verification (§4.9 Revision 8)", () => {
+  it("deletes the object and refuses with 409 when the magic bytes lie", async () => {
     const png = Buffer.concat([
       Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
       randomBytes(100),
     ]);
     const initiated = await initiateUpload(prisma, clients, KEY, admin(), {
-      filename: 'liar.pdf',
+      filename: "liar.pdf",
       size: png.length,
-      mime: 'application/pdf',
+      mime: "application/pdf",
       meta: meta() as never,
     });
-    await putObject(initiated.putUrl, png, 'application/pdf');
+    await putObject(initiated.putUrl, png, "application/pdf");
 
     const e = await failure(() =>
       completeUpload(prisma, clients, KEY, admin(), initiated.uploadId, {
@@ -336,26 +429,32 @@ describe('completion verification (§4.9 Revision 8)', () => {
         description: null,
       }),
     );
-    expect(e.code).toBe('VALIDATION_FAILED');
+    expect(e.code).toBe("VALIDATION_FAILED");
     // §4.9 says 409 here, not 400: the request is well-formed, the object is not
     // what it claimed. TD-3.8 records it as the "409 variant on upload complete".
     expect(e.status).toBe(409);
 
-    expect(await prisma.educationalContent.count({ where: { title: `${TAG} كاذب` } })).toBe(0);
+    expect(
+      await prisma.educationalContent.count({
+        where: { title: `${TAG} كاذب` },
+      }),
+    ).toBe(0);
     // And the object is gone — a rejected upload must not linger in the bucket.
-    const orphan = await fetch(initiated.putUrl.replace('X-Amz', 'x-amz'), { method: 'HEAD' });
+    const orphan = await fetch(initiated.putUrl.replace("X-Amz", "x-amz"), {
+      method: "HEAD",
+    });
     expect(orphan.status).toBeGreaterThanOrEqual(400);
   });
 
-  it('refuses with 409 when the stored size disagrees with the declared size', async () => {
+  it("refuses with 409 when the stored size disagrees with the declared size", async () => {
     const bytes = pdfBytes();
     const initiated = await initiateUpload(prisma, clients, KEY, admin(), {
-      filename: 'short.pdf',
+      filename: "short.pdf",
       size: bytes.length + 500,
-      mime: 'application/pdf',
+      mime: "application/pdf",
       meta: meta() as never,
     });
-    await putObject(initiated.putUrl, bytes, 'application/pdf');
+    await putObject(initiated.putUrl, bytes, "application/pdf");
 
     const e = await failure(() =>
       completeUpload(prisma, clients, KEY, admin(), initiated.uploadId, {
@@ -363,15 +462,15 @@ describe('completion verification (§4.9 Revision 8)', () => {
         description: null,
       }),
     );
-    expect(e.code).toBe('VALIDATION_FAILED');
+    expect(e.code).toBe("VALIDATION_FAILED");
     expect(e.status).toBe(409);
   });
 
-  it('answers UPLOAD_INCOMPLETE when nothing was ever PUT', async () => {
+  it("answers UPLOAD_INCOMPLETE when nothing was ever PUT", async () => {
     const initiated = await initiateUpload(prisma, clients, KEY, admin(), {
-      filename: 'never.pdf',
+      filename: "never.pdf",
       size: 100,
-      mime: 'application/pdf',
+      mime: "application/pdf",
       meta: meta() as never,
     });
     const e = await failure(() =>
@@ -380,14 +479,14 @@ describe('completion verification (§4.9 Revision 8)', () => {
         description: null,
       }),
     );
-    expect(e.code).toBe('UPLOAD_INCOMPLETE');
+    expect(e.code).toBe("UPLOAD_INCOMPLETE");
   });
 
-  it('refuses a ticket belonging to another caller', async () => {
+  it("refuses a ticket belonging to another caller", async () => {
     const initiated = await initiateUpload(prisma, clients, KEY, admin(), {
-      filename: 'a.pdf',
+      filename: "a.pdf",
       size: 100,
-      mime: 'application/pdf',
+      mime: "application/pdf",
       meta: meta() as never,
     });
     const e = await failure(() =>
@@ -396,28 +495,28 @@ describe('completion verification (§4.9 Revision 8)', () => {
         description: null,
       }),
     );
-    expect(e.code).toBe('NOT_FOUND');
+    expect(e.code).toBe("NOT_FOUND");
   });
 
-  it('refuses a ticket whose scope was rewritten after it was issued', async () => {
+  it("refuses a ticket whose scope was rewritten after it was issued", async () => {
     // The forged ticket is what a client would have to produce to complete into
     // the Global scope after initiating inside a branch.
     const forged = issueUploadTicket(
       {
         sub: teacherId,
-        cid: '11111111-2222-3333-4444-555555555555',
+        cid: "11111111-2222-3333-4444-555555555555",
         bucket: BUCKETS.private,
-        key: 'content/x/abcd1234/a.pdf',
-        filename: 'a.pdf',
-        mime: 'application/pdf',
+        key: "content/x/abcd1234/a.pdf",
+        filename: "a.pdf",
+        mime: "application/pdf",
         size: 10,
         level_id: levelId,
         subject_id: subjectId,
         academic_year_id: academicYearId,
         branch_id: null,
-        visibility: 'private',
+        visibility: "private",
       },
-      'a-different-key',
+      "a-different-key",
     ).token;
     const e = await failure(() =>
       completeUpload(prisma, clients, KEY, teacher(), forged, {
@@ -425,21 +524,21 @@ describe('completion verification (§4.9 Revision 8)', () => {
         description: null,
       }),
     );
-    expect(e.code).toBe('NOT_FOUND');
-    expect(e.details?.['reason']).toBe('BAD_SIGNATURE');
+    expect(e.code).toBe("NOT_FOUND");
+    expect(e.details?.["reason"]).toBe("BAD_SIGNATURE");
   });
 });
 
-describe('abort', () => {
-  it('removes the object so an abandoned upload leaves nothing behind', async () => {
+describe("abort", () => {
+  it("removes the object so an abandoned upload leaves nothing behind", async () => {
     const bytes = pdfBytes();
     const initiated = await initiateUpload(prisma, clients, KEY, admin(), {
-      filename: 'gone.pdf',
+      filename: "gone.pdf",
       size: bytes.length,
-      mime: 'application/pdf',
+      mime: "application/pdf",
       meta: meta() as never,
     });
-    await putObject(initiated.putUrl, bytes, 'application/pdf');
+    await putObject(initiated.putUrl, bytes, "application/pdf");
     await abortUpload(clients, KEY, admin(), initiated.uploadId);
 
     const e = await failure(() =>
@@ -448,12 +547,12 @@ describe('abort', () => {
         description: null,
       }),
     );
-    expect(e.code).toBe('UPLOAD_INCOMPLETE');
+    expect(e.code).toBe("UPLOAD_INCOMPLETE");
   });
 });
 
-describe('the per-user upload quota (TD-4.12, Revision 14)', () => {
-  it('refuses the 31st initiation within the hour with RATE_LIMITED', async () => {
+describe("the per-user upload quota (TD-4.12, Revision 14)", () => {
+  it("refuses the 31st initiation within the hour with RATE_LIMITED", async () => {
     // Counted in PostgreSQL inside the initiating transaction — never in process
     // memory (dies with the container) and never through pg-boss (asynchronous).
     await prisma.rateLimitCounter.create({
@@ -466,17 +565,17 @@ describe('the per-user upload quota (TD-4.12, Revision 14)', () => {
     });
     const e = await failure(() =>
       initiateUpload(prisma, clients, KEY, admin(), {
-        filename: 'a.pdf',
+        filename: "a.pdf",
         size: 10,
-        mime: 'application/pdf',
+        mime: "application/pdf",
         meta: meta() as never,
       }),
     );
-    expect(e.code).toBe('RATE_LIMITED');
-    expect(e.details?.['limit']).toBe(30);
+    expect(e.code).toBe("RATE_LIMITED");
+    expect(e.details?.["limit"]).toBe(30);
   });
 
-  it('admits exactly one of two concurrent initiations at the boundary', async () => {
+  it("admits exactly one of two concurrent initiations at the boundary", async () => {
     // The check-then-write race TD-15.2's row lock exists to close: without the
     // lock both would read 29 and both would pass.
     await prisma.rateLimitCounter.create({
@@ -489,21 +588,27 @@ describe('the per-user upload quota (TD-4.12, Revision 14)', () => {
     });
     const attempt = () =>
       initiateUpload(prisma, clients, KEY, admin(), {
-        filename: 'a.pdf',
+        filename: "a.pdf",
         size: 10,
-        mime: 'application/pdf',
+        mime: "application/pdf",
         meta: meta() as never,
       });
     const results = await Promise.allSettled([attempt(), attempt()]);
-    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
-    expect(results.filter((r) => r.status === 'rejected')).toHaveLength(1);
+    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    expect(results.filter((r) => r.status === "rejected")).toHaveLength(1);
   });
 });
 
-describe('the presigned GET mint (TD-3.5, TD-12)', () => {
-  it('mints a short-lived URL that actually serves the bytes', async () => {
-    const { id, bytes } = await uploadPdf(admin(), 'قابل للتنزيل');
-    const minted = await mintDownloadUrl(prisma, clients, admin(), id, undefined);
+describe("the presigned GET mint (TD-3.5, TD-12)", () => {
+  it("mints a short-lived URL that actually serves the bytes", async () => {
+    const { id, bytes } = await uploadPdf(admin(), "قابل للتنزيل");
+    const minted = await mintDownloadUrl(
+      prisma,
+      clients,
+      admin(),
+      id,
+      undefined,
+    );
 
     expect(minted.expiresIn).toBe(600);
     expect(minted.url.startsWith(config.STORAGE_BASE_URL)).toBe(true);
@@ -512,21 +617,33 @@ describe('the presigned GET mint (TD-3.5, TD-12)', () => {
     expect(Buffer.from(await res.arrayBuffer()).length).toBe(bytes.length);
   });
 
-  it('refuses a suspended Teacher inside their unexpired token window (§19.2)', async () => {
-    const { id } = await uploadPdf(admin(), 'محمي');
-    await prisma.user.update({ where: { id: teacherId }, data: { accountStatus: 'suspended' } });
+  it("refuses a suspended Teacher inside their unexpired token window (§19.2)", async () => {
+    const { id } = await uploadPdf(admin(), "محمي");
+    await prisma.user.update({
+      where: { id: teacherId },
+      data: { accountStatus: "suspended" },
+    });
     // TD-12: "statelessness ends where safeguarding begins" — the token is still
     // valid, and that is exactly the case this check exists for.
-    const e = await failure(() => mintDownloadUrl(prisma, clients, teacher(), id, undefined));
-    expect(e.code).toBe('FORBIDDEN');
+    const e = await failure(() =>
+      mintDownloadUrl(prisma, clients, teacher(), id, undefined),
+    );
+    expect(e.code).toBe("FORBIDDEN");
   });
 
-  it('answers 404 rather than 403 for content out of the caller’s reach (§20 rule 17)', async () => {
-    const { id } = await uploadPdf(admin(), 'مخفي', { visibility: 'hidden' });
+  it("answers 404 rather than 403 for content out of the caller’s reach (§20 rule 17)", async () => {
+    const { id } = await uploadPdf(admin(), "مخفي", { visibility: "hidden" });
     const student = await prisma.user.create({
-      data: { nameArabic: `${TAG} طالبة`, accountStatus: 'active' },
+      data: {
+        // R80 — every person carries a recorded sex; the column is NOT NULL.
+        sex: "female",
+        nameArabic: `${TAG} طالبة`,
+        accountStatus: "active",
+      },
     });
-    const role = await prisma.role.findFirstOrThrow({ where: { name: 'student' } });
+    const role = await prisma.role.findFirstOrThrow({
+      where: { name: "student" },
+    });
     await prisma.userBranchRole.create({
       data: { userId: student.id, roleId: role.id, branchId },
     });
@@ -534,39 +651,49 @@ describe('the presigned GET mint (TD-3.5, TD-12)', () => {
       mintDownloadUrl(
         prisma,
         clients,
-        actorOf(student.id, [{ role: 'student', branches: [branchId] }]),
+        actorOf(student.id, [{ role: "student", branches: [branchId] }]),
         id,
         undefined,
       ),
     );
     // A 403 would confirm the file exists to someone with no business knowing.
-    expect(e.code).toBe('NOT_FOUND');
+    expect(e.code).toBe("NOT_FOUND");
   });
 });
 
-describe('replace and delete (R53)', () => {
-  it('replacement mints a NEW key and never overwrites the old object (TD-9)', async () => {
-    const first = await uploadPdf(admin(), 'نسخة أولى');
-    const before = await prisma.educationalContent.findUniqueOrThrow({ where: { id: first.id } });
+describe("replace and delete (R53)", () => {
+  it("replacement mints a NEW key and never overwrites the old object (TD-9)", async () => {
+    const first = await uploadPdf(admin(), "نسخة أولى");
+    const before = await prisma.educationalContent.findUniqueOrThrow({
+      where: { id: first.id },
+    });
 
-    const second = await uploadPdf(admin(), 'نسخة ثانية', { replacesContentId: first.id });
+    const second = await uploadPdf(admin(), "نسخة ثانية", {
+      replacesContentId: first.id,
+    });
     expect(second.id).toBe(first.id);
 
-    const after = await prisma.educationalContent.findUniqueOrThrow({ where: { id: first.id } });
+    const after = await prisma.educationalContent.findUniqueOrThrow({
+      where: { id: first.id },
+    });
     expect(after.storageKey).not.toBe(before.storageKey);
     expect(after.version).toBe(before.version + 1);
     // One row, not two — the record keeps its identity and every link to it.
-    expect(await prisma.educationalContent.count({ where: { id: first.id } })).toBe(1);
+    expect(
+      await prisma.educationalContent.count({ where: { id: first.id } }),
+    ).toBe(1);
   });
 
-  it('deletion soft-deletes, snapshots to the Trash, and leaves the file recoverable', async () => {
-    const { id } = await uploadPdf(admin(), 'للحذف');
+  it("deletion soft-deletes, snapshots to the Trash, and leaves the file recoverable", async () => {
+    const { id } = await uploadPdf(admin(), "للحذف");
     await deleteContent(prisma, clients, admin(), id);
 
-    const row = await prisma.educationalContent.findUniqueOrThrow({ where: { id } });
+    const row = await prisma.educationalContent.findUniqueOrThrow({
+      where: { id },
+    });
     expect(row.deletedAt).not.toBeNull();
     const tomb = await prisma.trash.findFirst({
-      where: { targetEntity: 'EducationalContent', targetId: id },
+      where: { targetEntity: "EducationalContent", targetId: id },
     });
     // BR-15: the object waits out the 90-day window in quarantine rather than
     // being destroyed — the retention rule is the whole point of a soft delete.
@@ -574,11 +701,13 @@ describe('replace and delete (R53)', () => {
     expect(tomb!.purgeAfter.getTime()).toBeGreaterThan(Date.now());
   });
 
-  it('refuses a Teacher deleting content outside their branch scope, as a 404', async () => {
-    const { id } = await uploadPdf(admin(), 'عام للحذف', { branchId: null });
-    const e = await failure(() => deleteContent(prisma, clients, teacher(), id));
+  it("refuses a Teacher deleting content outside their branch scope, as a 404", async () => {
+    const { id } = await uploadPdf(admin(), "عام للحذف", { branchId: null });
+    const e = await failure(() =>
+      deleteContent(prisma, clients, teacher(), id),
+    );
     // Global content is readable by a teacher and not writable — and the refusal
     // is a 404 for the same reason every other out-of-scope answer is.
-    expect(['NOT_FOUND', 'FORBIDDEN']).toContain(e.code);
+    expect(["NOT_FOUND", "FORBIDDEN"]).toContain(e.code);
   });
 });

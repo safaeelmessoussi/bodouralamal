@@ -41,7 +41,8 @@ const APPROVER_ROLES = ['admin', 'super_admin'] as const;
 export interface ChildApplicationInput {
   firstNameArabic: string;
   lastNameArabic: string;
-  sex?: 'female' | 'male';
+  /** R80.1 — required at creation, like every other path into the system. */
+  sex: 'female' | 'male';
   schoolingStage?:
     | 'pre_primary'
     | 'primary'
@@ -107,7 +108,7 @@ export async function submitChildApplications(
         parentId,
         firstNameArabic: firstName,
         lastNameArabic: lastName,
-        ...(child.sex ? { sex: child.sex } : {}),
+        sex: child.sex,
         ...(child.schoolingStage ? { schoolingStage: child.schoolingStage } : {}),
         ...(child.requestedBranchId ? { requestedBranchId: child.requestedBranchId } : {}),
         ...(child.requestedCategoryId
@@ -258,12 +259,29 @@ export async function decideChildApplication(
       const referenceCode = await allocateReferenceCode(
         async (code) => (await tx.user.count({ where: { referenceCode: code } })) > 0,
       );
+      /**
+       * **R80 — an application with no recorded sex cannot be approved.**
+       *
+       * The column is nullable for rows written before R80 made it required.
+       * Creating the child with a guessed value would be exactly the inference
+       * the revision forbids, and a NULL is no longer storable. So the approval
+       * refuses and says what to do: the family is asked, and the answer is
+       * recorded — by a person, not by this code.
+       */
+      if (application.sex === null) {
+        throw new AppError('VALIDATION_FAILED', 'this application records no sex (R80)', {
+          reason: 'SEX_REQUIRED',
+          application_id: application.id,
+        });
+      }
+
       const child = await tx.user.create({
         data: {
           nameArabic: composeArabicName(application.firstNameArabic, application.lastNameArabic),
           firstNameArabic: application.firstNameArabic,
           lastNameArabic: application.lastNameArabic,
-          ...(application.sex ? { sex: application.sex } : {}),
+          // R80.1 — the application carried one, so the child it creates does.
+          sex: application.sex,
           ...(application.schoolingStage ? { schoolingStage: application.schoolingStage } : {}),
           // Approved here, so the child is usable immediately (TD-4.2).
           accountStatus: 'active',

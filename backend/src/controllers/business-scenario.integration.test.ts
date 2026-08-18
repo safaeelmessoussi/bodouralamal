@@ -1,9 +1,9 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { issueAccessToken } from '../lib/access-token.js';
-import { loadConfig } from '../lib/config.js';
-import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
-import { httpCall } from '../test-support/http-client.js';
+import { issueAccessToken } from "../lib/access-token.js";
+import { loadConfig } from "../lib/config.js";
+import { createPrismaClient, TEST_CONNECTION_LIMIT } from "../lib/prisma.js";
+import { httpCall } from "../test-support/http-client.js";
 
 /**
  * **The association's own scenario, end to end** (Document Owner, 2026-08-18).
@@ -32,13 +32,13 @@ import { httpCall } from '../test-support/http-client.js';
 const config = loadConfig();
 const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);
 const BASE = `${config.PUBLIC_BASE_URL}/api/v1`;
-const TAG = '[scenario]';
-const YEAR_LABEL = '2096-2097';
+const TAG = "[scenario]";
+const YEAR_LABEL = "2096-2097";
 
 /** The Monday the Owner named, and the fortnight around it. */
-const CANCELLED_DATE = '2026-08-24';
-const FROM = '2026-08-01';
-const TO = '2026-09-30';
+const CANCELLED_DATE = "2026-08-24";
+const FROM = "2026-08-01";
+const TO = "2026-09-30";
 
 interface Row {
   id: string;
@@ -63,8 +63,13 @@ interface Res {
   };
 }
 
-const call = (method: string, path: string, token?: string, body?: unknown): Promise<Res> =>
-  httpCall<Res['body']>(BASE, method, path, {
+const call = (
+  method: string,
+  path: string,
+  token?: string,
+  body?: unknown,
+): Promise<Res> =>
+  httpCall<Res["body"]>(BASE, method, path, {
     token,
     ...(body !== undefined ? { body } : {}),
   });
@@ -80,15 +85,19 @@ const call = (method: string, path: string, token?: string, body?: unknown): Pro
  */
 const createdId = (res: Res): string => {
   const body = res.body as Record<string, unknown>;
-  const payload = (body['data'] ?? body) as Record<string, unknown>;
-  const id = payload['id'];
-  if (typeof id !== 'string') throw new Error(`no id in ${JSON.stringify(body).slice(0, 200)}`);
+  const payload = (body["data"] ?? body) as Record<string, unknown>;
+  const id = payload["id"];
+  if (typeof id !== "string")
+    throw new Error(`no id in ${JSON.stringify(body).slice(0, 200)}`);
   return id;
 };
 
-const bearer = (userId: string, scopes: { role: string; branches: string[] | null }[]): string =>
+const bearer = (
+  userId: string,
+  scopes: { role: string; branches: string[] | null }[],
+): string =>
   issueAccessToken(
-    { userId, roleScopes: scopes as never, accountStatus: 'active' as never },
+    { userId, roleScopes: scopes as never, accountStatus: "active" as never },
     config.JWT_SIGNING_KEY,
   ).token;
 
@@ -113,12 +122,17 @@ let scheduleId: string;
  * enrolment treat a NULL `sex` as **not eligible** — a restriction nothing could
  * enforce would be a restriction in name only.
  */
-const person = async (label: string, sex: 'female' | 'male' | null = 'female'): Promise<string> =>
+const person = async (
+  label: string,
+  sex: "female" | "male" | null = "female",
+): Promise<string> =>
   (
     await prisma.user.create({
       data: {
+        // R80 — every person carries a recorded sex; the column is NOT NULL.
+        sex: "female",
         nameArabic: `${TAG} ${label}`,
-        accountStatus: 'active',
+        accountStatus: "active",
         ...(sex === null ? {} : { sex }),
       },
     })
@@ -130,15 +144,23 @@ async function clear(): Promise<void> {
     select: { id: true },
   });
   const ids = schedules.map((s) => s.id);
-  await prisma.notification.deleteMany({ where: { session: { scheduleId: { in: ids } } } });
-  await prisma.sessionStaff.deleteMany({ where: { session: { scheduleId: { in: ids } } } });
+  await prisma.notification.deleteMany({
+    where: { session: { scheduleId: { in: ids } } },
+  });
+  await prisma.sessionStaff.deleteMany({
+    where: { session: { scheduleId: { in: ids } } },
+  });
   await prisma.session.deleteMany({ where: { scheduleId: { in: ids } } });
-  await prisma.courseScheduleStaff.deleteMany({ where: { scheduleId: { in: ids } } });
+  await prisma.courseScheduleStaff.deleteMany({
+    where: { scheduleId: { in: ids } },
+  });
   if (ids.length > 0) {
     await prisma.auditLog.deleteMany({ where: { targetId: { in: ids } } });
     await prisma.trash.deleteMany({ where: { targetId: { in: ids } } });
   }
-  await prisma.recurringCourseSchedule.deleteMany({ where: { id: { in: ids } } });
+  await prisma.recurringCourseSchedule.deleteMany({
+    where: { id: { in: ids } },
+  });
 
   const levels = await prisma.level.findMany({
     where: { name: { startsWith: TAG } },
@@ -146,12 +168,18 @@ async function clear(): Promise<void> {
   });
   const levelIds = levels.map((l) => l.id);
   await prisma.enrollment.deleteMany({ where: { levelId: { in: levelIds } } });
-  await prisma.administrativeGroup.deleteMany({ where: { levelId: { in: levelIds } } });
-  await prisma.levelSubject.deleteMany({ where: { levelId: { in: levelIds } } });
+  await prisma.administrativeGroup.deleteMany({
+    where: { levelId: { in: levelIds } },
+  });
+  await prisma.levelSubject.deleteMany({
+    where: { levelId: { in: levelIds } },
+  });
   await prisma.level.deleteMany({ where: { id: { in: levelIds } } });
   await prisma.subject.deleteMany({ where: { name: { startsWith: TAG } } });
   await prisma.category.deleteMany({ where: { name: { startsWith: TAG } } });
-  await prisma.room.deleteMany({ where: { branch: { name: { startsWith: TAG } } } });
+  await prisma.room.deleteMany({
+    where: { branch: { name: { startsWith: TAG } } },
+  });
   await prisma.branch.deleteMany({ where: { name: { startsWith: TAG } } });
   await prisma.academicYear.deleteMany({ where: { label: YEAR_LABEL } });
 
@@ -161,8 +189,12 @@ async function clear(): Promise<void> {
   });
   const userIds = users.map((u) => u.id);
   if (userIds.length > 0) {
-    await prisma.notification.deleteMany({ where: { userId: { in: userIds } } });
-    await prisma.auditLog.deleteMany({ where: { actorUserId: { in: userIds } } });
+    await prisma.notification.deleteMany({
+      where: { userId: { in: userIds } },
+    });
+    await prisma.auditLog.deleteMany({
+      where: { actorUserId: { in: userIds } },
+    });
     await prisma.auditLog.deleteMany({ where: { targetId: { in: userIds } } });
     await prisma.trash.deleteMany({ where: { deletedById: { in: userIds } } });
     await prisma.user.deleteMany({ where: { id: { in: userIds } } });
@@ -170,12 +202,18 @@ async function clear(): Promise<void> {
 }
 
 beforeAll(async () => {
-  const health = await fetch(`${config.PUBLIC_BASE_URL}/healthz`).catch(() => null);
-  if (!health || health.status !== 200) throw new Error('API not reachable');
+  const health = await fetch(`${config.PUBLIC_BASE_URL}/healthz`).catch(
+    () => null,
+  );
+  if (!health || health.status !== 200) throw new Error("API not reachable");
   await clear();
 
-  superAdmin = bearer(await person('مديرة', null), [{ role: 'super_admin', branches: null }]);
-  academicYearId = (await prisma.academicYear.create({ data: { label: YEAR_LABEL } })).id;
+  superAdmin = bearer(await person("مديرة", null), [
+    { role: "super_admin", branches: null },
+  ]);
+  academicYearId = (
+    await prisma.academicYear.create({ data: { label: YEAR_LABEL } })
+  ).id;
 });
 
 afterAll(async () => {
@@ -185,30 +223,32 @@ afterAll(async () => {
 
 /** Every occurrence of this scenario's class, in date order. */
 async function occurrences(token?: string): Promise<Row[]> {
-  const res = await call('GET', `/calendar?from=${FROM}&to=${TO}`, token);
+  const res = await call("GET", `/calendar?from=${FROM}&to=${TO}`, token);
   expect(res.status).toBe(200);
   return (res.body.data ?? [])
     .filter((r) => r.title?.startsWith(TAG))
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 
-describe('the scenario, step by step — each step through the API a screen uses', () => {
-  it('1 · the structure: فئة المرأة → مستوى وميض الأمل, teaching مادة التفسير', async () => {
-    const category = await call('POST', '/admin/categories', superAdmin, {
+describe("the scenario, step by step — each step through the API a screen uses", () => {
+  it("1 · the structure: فئة المرأة → مستوى وميض الأمل, teaching مادة التفسير", async () => {
+    const category = await call("POST", "/admin/categories", superAdmin, {
       name: `${TAG} المرأة`,
     });
     expect(category.status).toBe(201);
     categoryId = createdId(category);
 
-    const level = await call('POST', '/admin/levels', superAdmin, {
+    const level = await call("POST", "/admin/levels", superAdmin, {
       name: `${TAG} وميض الأمل`,
       category_id: categoryId,
-      gender_restriction: 'girls_only',
+      gender_restriction: "girls_only",
     });
     expect(level.status).toBe(201);
     levelId = createdId(level);
 
-    const subject = await call('POST', '/admin/subjects', superAdmin, { name: `${TAG} تفسير` });
+    const subject = await call("POST", "/admin/subjects", superAdmin, {
+      name: `${TAG} تفسير`,
+    });
     expect(subject.status).toBe(201);
     subjectId = createdId(subject);
 
@@ -217,110 +257,132 @@ describe('the scenario, step by step — each step through the API a screen uses
     // Idempotent in effect, and it answers `204` — there is no new resource to
     // return, only a pairing that now holds.
     expect(
-      (await call('PUT', `/admin/levels/${levelId}/subjects/${subjectId}`, superAdmin)).status,
+      (
+        await call(
+          "PUT",
+          `/admin/levels/${levelId}/subjects/${subjectId}`,
+          superAdmin,
+        )
+      ).status,
     ).toBe(204);
   });
 
-  it('2 · the premises: فرع تاركة with القاعة 5', async () => {
-    const branch = await call('POST', '/admin/branches', superAdmin, { name: `${TAG} تاركة` });
+  it("2 · the premises: فرع تاركة with القاعة 5", async () => {
+    const branch = await call("POST", "/admin/branches", superAdmin, {
+      name: `${TAG} تاركة`,
+    });
     expect(branch.status).toBe(201);
     branchId = createdId(branch);
 
-    const room = await call('POST', `/admin/branches/${branchId}/rooms`, superAdmin, {
-      name: `${TAG} القاعة 5`,
-    });
+    const room = await call(
+      "POST",
+      `/admin/branches/${branchId}/rooms`,
+      superAdmin,
+      {
+        name: `${TAG} القاعة 5`,
+      },
+    );
     expect(room.status).toBe(201);
     roomId = createdId(room);
   });
 
-  it('3 · the group, and صفاء and أمينة enrolled in it', async () => {
-    const group = await call('POST', '/admin/administrative-groups', superAdmin, {
-      name: `${TAG} المجموعة 1`,
-      level_id: levelId,
-      branch_id: branchId,
-    });
+  it("3 · the group, and صفاء and أمينة enrolled in it", async () => {
+    const group = await call(
+      "POST",
+      "/admin/administrative-groups",
+      superAdmin,
+      {
+        name: `${TAG} المجموعة 1`,
+        level_id: levelId,
+        branch_id: branchId,
+      },
+    );
     expect(group.status).toBe(201);
     groupId = createdId(group);
 
-    for (const name of ['مستفيدة أولى', 'مستفيدة ثانية']) {
+    for (const name of ["مستفيدة أولى", "مستفيدة ثانية"]) {
       const studentId = await person(name);
       const enrolled = await call(
-        'POST',
+        "POST",
         `/admin/administrative-groups/${groupId}/roster`,
         superAdmin,
         { student_id: studentId },
       );
       expect(enrolled.status, name).toBe(201);
-      const token = bearer(studentId, [{ role: 'student', branches: null }]);
-      if (name === 'مستفيدة أولى') safaToken = token;
+      const token = bearer(studentId, [{ role: "student", branches: null }]);
+      if (name === "مستفيدة أولى") safaToken = token;
       else aminaToken = token;
     }
     // Enrolled in nothing — the control for the notification assertions.
-    outsiderToken = bearer(await person('زائرة'), [{ role: 'student', branches: null }]);
+    outsiderToken = bearer(await person("زائرة"), [
+      { role: "student", branches: null },
+    ]);
   });
 
-  it('4 · the schedule: every Monday, 15:00–17:00, in that room, with its staff', async () => {
+  it("4 · the schedule: every Monday, 15:00–17:00, in that room, with its staff", async () => {
     // §4.4c — a Teacher's whole reach is derived from the schedules she staffs,
     // so صفاء and أمينة are STAFF here and not enrolled people.
-    const safaId = await person('صفاء', null);
-    const aminaId = await person('أمينة', null);
-    teacherToken = bearer(safaId, [{ role: 'teacher', branches: null }]);
-    assistantToken = bearer(aminaId, [{ role: 'teacher', branches: null }]);
+    const safaId = await person("صفاء", null);
+    const aminaId = await person("أمينة", null);
+    teacherToken = bearer(safaId, [{ role: "teacher", branches: null }]);
+    assistantToken = bearer(aminaId, [{ role: "teacher", branches: null }]);
 
-    const created = await call('POST', '/admin/course-schedules', superAdmin, {
+    const created = await call("POST", "/admin/course-schedules", superAdmin, {
       staff: [
-        { user_id: safaId, position: 'teacher' },
-        { user_id: aminaId, position: 'assistant' },
+        { user_id: safaId, position: "teacher" },
+        { user_id: aminaId, position: "assistant" },
       ],
       title: `${TAG} حلقة التفسير`,
       subject_id: subjectId,
-      teaching_mode: 'administrative_group',
+      teaching_mode: "administrative_group",
       target_id: groupId,
       branch_id: branchId,
       room_id: roomId,
-      start_time: '15:00',
-      end_time: '17:00',
-      recurrence: 'weekly',
-      weekdays: ['monday'],
+      start_time: "15:00",
+      end_time: "17:00",
+      recurrence: "weekly",
+      weekdays: ["monday"],
       academic_year_id: academicYearId,
     });
     expect(created.status).toBe(201);
     scheduleId = created.body.schedule!.id;
   });
 
-  it('5 · the occurrences are MATERIALIZED rows, every one a Monday', async () => {
+  it("5 · the occurrences are MATERIALIZED rows, every one a Monday", async () => {
     // TD-4.6c — a Session is a real row, not a rule evaluated at read time. That
     // is what lets one occurrence be cancelled without touching the series.
     const rows = await prisma.session.findMany({
       where: { scheduleId, deletedAt: null },
       select: { date: true },
-      orderBy: { date: 'asc' },
+      orderBy: { date: "asc" },
     });
     expect(rows.length).toBeGreaterThan(3);
     for (const row of rows) {
       // 1 = Monday.
       expect(row.date.getUTCDay(), row.date.toISOString().slice(0, 10)).toBe(1);
     }
-    expect(rows.some((r) => r.date.toISOString().slice(0, 10) === CANCELLED_DATE)).toBe(true);
+    expect(
+      rows.some((r) => r.date.toISOString().slice(0, 10) === CANCELLED_DATE),
+    ).toBe(true);
   });
 
-  it('6 · صفاء’s calendar carries the class, with its room, branch and audience', async () => {
+  it("6 · صفاء’s calendar carries the class, with its room, branch and audience", async () => {
     const rows = await occurrences(safaToken);
     expect(rows.length).toBeGreaterThan(3);
     const monday = rows.find((r) => r.date === CANCELLED_DATE)!;
     // Wall-clock, never an instant (TD-11): 15:00 stays 15:00 across the Ramadan
     // DST shift, which is the whole reason for the type.
-    expect(monday.start_time).toBe('15:00');
-    expect(monday.end_time).toBe('17:00');
-    expect(monday.subject_name).toContain('تفسير');
-    expect(monday.room_name).toContain('القاعة 5');
-    expect(monday.branch_name).toContain('تاركة');
+    expect(monday.start_time).toBe("15:00");
+    expect(monday.end_time).toBe("17:00");
+    expect(monday.subject_name).toContain("تفسير");
+    expect(monday.room_name).toContain("القاعة 5");
+    expect(monday.branch_name).toContain("تاركة");
     // R43 — who the class is FOR, carried beside the class rather than buried in
     // its description.
-    expect(monday.audience_label).toContain('المجموعة 1');
+    expect(monday.audience_label).toContain("المجموعة 1");
   });
 
-  it('7 · أمينة sees the same class — and so does everyone, which is the design', async () => {
+  it("7 · أمينة sees the same class — and so does everyone, which is the design", async () => {
     expect((await occurrences(aminaToken)).length).toBeGreaterThan(3);
 
     /**
@@ -343,7 +405,7 @@ describe('the scenario, step by step — each step through the API a screen uses
     expect((await occurrences(outsiderToken)).length).toBeGreaterThan(3);
   });
 
-  it('8 · the staff see it too, and every occurrence carries its own context', async () => {
+  it("8 · the staff see it too, and every occurrence carries its own context", async () => {
     /**
      * **The occurrences reach the staffing side from the SAME rows.**
      *
@@ -357,41 +419,48 @@ describe('the scenario, step by step — each step through the API a screen uses
      * beside it so an event dialog opens with no further request.
      */
     for (const [who, token] of [
-      ['صفاء (main teacher)', teacherToken],
-      ['أمينة (assistant)', assistantToken],
+      ["صفاء (main teacher)", teacherToken],
+      ["أمينة (assistant)", assistantToken],
     ] as const) {
       const rows = await occurrences(token);
       expect(rows.length, who).toBeGreaterThan(3);
       const monday = rows.find((r) => r.date === CANCELLED_DATE)!;
       expect(monday, who).toBeDefined();
-      expect(monday.start_time, who).toBe('15:00');
-      expect(monday.end_time, who).toBe('17:00');
-      expect(monday.room_name, who).toContain('القاعة 5');
-      expect(monday.branch_name, who).toContain('تاركة');
-      expect(monday.subject_name, who).toContain('تفسير');
+      expect(monday.start_time, who).toBe("15:00");
+      expect(monday.end_time, who).toBe("17:00");
+      expect(monday.room_name, who).toContain("القاعة 5");
+      expect(monday.branch_name, who).toContain("تاركة");
+      expect(monday.subject_name, who).toContain("تفسير");
       // Both are named, and R36.1 resolves the display name server-side — a
       // client that fell back to a full name would leak one nobody published.
-      const named = (monday.instructors ?? []).map((i) => i.display_name).join(' | ');
-      expect(named, who).toContain('صفاء');
-      expect(named, who).toContain('أمينة');
+      const named = (monday.instructors ?? [])
+        .map((i) => i.display_name)
+        .join(" | ");
+      expect(named, who).toContain("صفاء");
+      expect(named, who).toContain("أمينة");
     }
   });
 });
 
-describe('cancelling ONE Monday leaves the series alone', () => {
+describe("cancelling ONE Monday leaves the series alone", () => {
   let cancelledId: string;
 
-  it('cancels 2026-08-24 for «الأستاذة مريضة», and nothing else changes', async () => {
+  it("cancels 2026-08-24 for «الأستاذة مريضة», and nothing else changes", async () => {
     const target = await prisma.session.findFirstOrThrow({
       where: { scheduleId, date: new Date(`${CANCELLED_DATE}T00:00:00.000Z`) },
       select: { id: true, version: true },
     });
     cancelledId = target.id;
 
-    const res = await call('POST', `/sessions/${target.id}/cancel`, superAdmin, {
-      reason: 'الأستاذة مريضة',
-      version: target.version,
-    });
+    const res = await call(
+      "POST",
+      `/sessions/${target.id}/cancel`,
+      superAdmin,
+      {
+        reason: "الأستاذة مريضة",
+        version: target.version,
+      },
+    );
     expect(res.status).toBe(200);
 
     // The recurring schedule is untouched — cancelling one occurrence is not
@@ -402,55 +471,61 @@ describe('cancelling ONE Monday leaves the series alone', () => {
     });
     expect(schedule.deletedAt).toBeNull();
     const stillScheduled = await prisma.session.count({
-      where: { scheduleId, status: 'scheduled', deletedAt: null },
+      where: { scheduleId, status: "scheduled", deletedAt: null },
     });
     expect(stillScheduled).toBeGreaterThan(2);
   });
 
-  it('still SHOWS the cancelled Monday, marked — the calendar says a class is off', async () => {
+  it("still SHOWS the cancelled Monday, marked — the calendar says a class is off", async () => {
     // Hiding it would answer *is there a class* while the reader is asking
     // *what happened to my class*.
-    const monday = (await occurrences(safaToken)).find((r) => r.date === CANCELLED_DATE);
+    const monday = (await occurrences(safaToken)).find(
+      (r) => r.date === CANCELLED_DATE,
+    );
     expect(monday).toBeDefined();
-    expect(monday!.status).toBe('cancelled');
+    expect(monday!.status).toBe("cancelled");
   });
 
-  it('tells صفاء and أمينة, and nobody else', async () => {
+  it("tells صفاء and أمينة, and nobody else", async () => {
     for (const token of [safaToken, aminaToken]) {
-      const res = await call('GET', '/notifications', token);
-      const mine = (res.body.data as unknown as Record<string, unknown>[]).filter(
-        (n) => n['session_id'] === cancelledId,
-      );
+      const res = await call("GET", "/notifications", token);
+      const mine = (
+        res.body.data as unknown as Record<string, unknown>[]
+      ).filter((n) => n["session_id"] === cancelledId);
       expect(mine).toHaveLength(1);
-      expect(mine[0]!['reason']).toBe('الأستاذة مريضة');
+      expect(mine[0]!["reason"]).toBe("الأستاذة مريضة");
     }
-    const outsider = await call('GET', '/notifications', outsiderToken);
-    expect((outsider.body.data as unknown as Record<string, unknown>[])).toHaveLength(0);
+    const outsider = await call("GET", "/notifications", outsiderToken);
+    expect(
+      outsider.body.data as unknown as Record<string, unknown>[],
+    ).toHaveLength(0);
   });
 
-  it('restores it, and the calendar and the notices both come back into line', async () => {
+  it("restores it, and the calendar and the notices both come back into line", async () => {
     const before = await prisma.session.findUniqueOrThrow({
       where: { id: cancelledId },
       select: { version: true },
     });
     expect(
       (
-        await call('POST', `/sessions/${cancelledId}/restore`, superAdmin, {
+        await call("POST", `/sessions/${cancelledId}/restore`, superAdmin, {
           version: before.version,
         })
       ).status,
     ).toBe(200);
 
-    const monday = (await occurrences(safaToken)).find((r) => r.date === CANCELLED_DATE)!;
-    expect(monday.status).toBe('scheduled');
+    const monday = (await occurrences(safaToken)).find(
+      (r) => r.date === CANCELLED_DATE,
+    )!;
+    expect(monday.status).toBe("scheduled");
 
     // Neither student had read hers, so both notices are withdrawn: an unread
     // notice of something no longer true is worth nothing (R77.5).
     for (const token of [safaToken, aminaToken]) {
-      const res = await call('GET', '/notifications', token);
+      const res = await call("GET", "/notifications", token);
       expect(
         (res.body.data as unknown as Record<string, unknown>[]).filter(
-          (n) => n['session_id'] === cancelledId,
+          (n) => n["session_id"] === cancelledId,
         ),
       ).toHaveLength(0);
     }

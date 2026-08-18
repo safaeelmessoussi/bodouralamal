@@ -39,6 +39,9 @@ const USER_ADMIN_ROLES = ['admin', 'super_admin'] as const;
 export type AssignableRole = 'admin' | 'teacher' | 'student' | 'parent';
 
 export interface PreProvisionInput {
+  /** R80.1 — captured at creation; there is no path that produces a person
+   *  without one, and no way to acquire one later except explicit completion. */
+  sex: 'female' | 'male';
   nameArabic: string;
   email: string;
   /** Optional: TD-2 grants creating users and assigning roles to the same actors. */
@@ -125,6 +128,8 @@ export async function preProvision(
       user = await tx.user.create({
         data: {
           nameArabic,
+          // R80.1 — captured at creation, like every other path.
+          sex: input.sex,
           preProvisionedEmail: email,
           accountStatus: input.preApproved ? 'active' : 'pending',
         },
@@ -410,6 +415,15 @@ export interface UserProfileInput {
   nameFrench?: string | null;
   nickname?: string | null;
   phone?: string | null;
+  /**
+   * **R80.3 — COMPLETION, never correction.**
+   *
+   * Accepted only while the stored value is absent. Supplying one for a person
+   * who already has a recorded sex is refused: changing it is a different
+   * decision with consequences for placements already made, and R80.4 declines
+   * to introduce one silently under the name of completion.
+   */
+  sex?: 'female' | 'male';
 }
 
 /**
@@ -425,7 +439,13 @@ async function loadManageable(
   db: Pick<PrismaClient, 'user'>,
   actor: { roleScopes: Parameters<typeof branchesForRole>[0] },
   id: string,
-): Promise<{ id: string; nameArabic: string; accountStatus: string; version: number }> {
+): Promise<{
+  id: string;
+  nameArabic: string;
+  accountStatus: string;
+  version: number;
+  sex: 'female' | 'male' | null;
+}> {
   const managed = branchesForRole(actor.roleScopes, 'admin');
   const user = await db.user.findFirst({
     where: {
@@ -435,7 +455,9 @@ async function loadManageable(
         ? { branchRoles: { some: { deletedAt: null, branchId: { in: managed } } } }
         : {}),
     },
-    select: { id: true, nameArabic: true, accountStatus: true, version: true },
+    // `sex` travels with the row so the R80.3 completion guard can see whether
+    // one is already recorded — a fact only the stored row knows.
+    select: { id: true, nameArabic: true, accountStatus: true, version: true, sex: true },
   });
   if (!user) throw new AppError('NOT_FOUND', 'no such user');
   return user;
@@ -451,7 +473,22 @@ export async function updateUser(
   const actor = await assertFreshActive(prisma, caller.userId, USER_ADMIN_ROLES, caller.activeRole);
 
   await prisma.$transaction(async (tx) => {
-    await loadManageable(tx, actor, id);
+    const target = await loadManageable(tx, actor, id);
+
+    /**
+     * **R80.3 — this path COMPLETES a missing sex; it does not correct one.**
+     *
+     * The check belongs here rather than in the validator because it is a fact
+     * about the STORED row. R80.4 declines to introduce a correction path
+     * silently under the name of completion: changing a recorded sex has
+     * consequences for placements already made, and is its own decision.
+     */
+    if (input.sex !== undefined && target.sex !== null && target.sex !== input.sex) {
+      throw new AppError('VALIDATION_FAILED', 'sex is already recorded for this person', {
+        reason: 'SEX_ALREADY_RECORDED',
+      });
+    }
+
     // TD-15.1: a conditional UPDATE on `version`. `updateMany` is what makes the
     // condition part of the write rather than a check preceding it.
     const written = await tx.user.updateMany({
@@ -461,6 +498,7 @@ export async function updateUser(
         ...(input.nameFrench !== undefined ? { nameFrench: input.nameFrench } : {}),
         ...(input.nickname !== undefined ? { nickname: input.nickname } : {}),
         ...(input.phone !== undefined ? { phone: input.phone } : {}),
+        ...(input.sex !== undefined ? { sex: input.sex } : {}),
         version: { increment: 1 },
       },
     });

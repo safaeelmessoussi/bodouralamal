@@ -1,9 +1,9 @@
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
-import { loadConfig } from '../lib/config.js';
-import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
-import type { Actor } from '../policies/actor.js';
-import type { RoleScope } from '../policies/branch-scope.js';
+import { loadConfig } from "../lib/config.js";
+import { createPrismaClient, TEST_CONNECTION_LIMIT } from "../lib/prisma.js";
+import type { Actor } from "../policies/actor.js";
+import type { RoleScope } from "../policies/branch-scope.js";
 import {
   correctLog,
   deleteLog,
@@ -11,12 +11,12 @@ import {
   logProgress,
   readOwnCoverage,
   readStudentCoverage,
-} from './quran.service.js';
+} from "./quran.service.js";
 import {
   assignSurahToLevel,
   listLevelSurahs,
   unassignSurahFromLevel,
-} from './reference-data.service.js';
+} from "./reference-data.service.js";
 
 /**
  * **Quran memorization tracking (§4.5, BR-13; M4a, SRS Revision 73).**
@@ -32,7 +32,7 @@ import {
  */
 const config = loadConfig();
 const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);
-const TAG = '[quran-test]';
+const TAG = "[quran-test]";
 
 let adminId: string;
 let branchA: string;
@@ -50,10 +50,14 @@ const actorOf = (userId: string, scopes: RoleScope[]): Actor => ({
   roles: scopes.map((s) => s.role),
   roleScopes: scopes,
 });
-const superAdmin = (): Actor => actorOf(adminId, [{ role: 'super_admin', branches: null }]);
-const teacher = (id: string): Actor => actorOf(id, [{ role: 'teacher', branches: null }]);
+const superAdmin = (): Actor =>
+  actorOf(adminId, [{ role: "super_admin", branches: null }]);
+const teacher = (id: string): Actor =>
+  actorOf(id, [{ role: "teacher", branches: null }]);
 
-async function failure(run: () => Promise<unknown>): Promise<{ code?: string }> {
+async function failure(
+  run: () => Promise<unknown>,
+): Promise<{ code?: string }> {
   try {
     await run();
     return {};
@@ -65,25 +69,36 @@ async function failure(run: () => Promise<unknown>): Promise<{ code?: string }> 
 async function person(label: string): Promise<string> {
   return (
     await prisma.user.create({
-      data: { nameArabic: `${TAG} ${label}`, accountStatus: 'active' },
+      data: {
+        // R80 — every person carries a recorded sex; the column is NOT NULL.
+        sex: "female",
+        nameArabic: `${TAG} ${label}`,
+        accountStatus: "active",
+      },
     })
   ).id;
 }
 
 /** A schedule staffed by `who`, delivering `subjectId` to `groupA`. */
-async function staffedSchedule(subjectId: string, who: string, position: 'teacher' | 'assistant') {
-  const year = await prisma.academicYear.findFirstOrThrow({ where: { isCurrent: true } });
+async function staffedSchedule(
+  subjectId: string,
+  who: string,
+  position: "teacher" | "assistant",
+) {
+  const year = await prisma.academicYear.findFirstOrThrow({
+    where: { isCurrent: true },
+  });
   const schedule = await prisma.recurringCourseSchedule.create({
     data: {
       title: `${TAG} حصة`,
       subjectId,
-      teachingMode: 'administrative_group',
+      teachingMode: "administrative_group",
       administrativeGroupId: groupA,
       branchId: branchA,
-      startTime: new Date('1970-01-01T09:00:00Z'),
-      endTime: new Date('1970-01-01T10:00:00Z'),
-      recurrence: 'weekly',
-      weekdays: ['monday'],
+      startTime: new Date("1970-01-01T09:00:00Z"),
+      endTime: new Date("1970-01-01T10:00:00Z"),
+      recurrence: "weekly",
+      weekdays: ["monday"],
       academicYearId: year.id,
     },
   });
@@ -103,7 +118,9 @@ async function clear(): Promise<void> {
     await prisma.quranProgressLog.deleteMany({
       where: { OR: [{ studentId: { in: ids } }, { loggedById: { in: ids } }] },
     });
-    await prisma.studentSurahProgress.deleteMany({ where: { studentId: { in: ids } } });
+    await prisma.studentSurahProgress.deleteMany({
+      where: { studentId: { in: ids } },
+    });
     await prisma.enrollment.deleteMany({ where: { studentId: { in: ids } } });
   }
   const schedules = await prisma.recurringCourseSchedule.findMany({
@@ -112,8 +129,12 @@ async function clear(): Promise<void> {
   });
   const sids = schedules.map((s) => s.id);
   if (sids.length > 0) {
-    await prisma.courseScheduleStaff.deleteMany({ where: { scheduleId: { in: sids } } });
-    await prisma.recurringCourseSchedule.deleteMany({ where: { id: { in: sids } } });
+    await prisma.courseScheduleStaff.deleteMany({
+      where: { scheduleId: { in: sids } },
+    });
+    await prisma.recurringCourseSchedule.deleteMany({
+      where: { id: { in: sids } },
+    });
   }
   if (ids.length > 0) {
     await prisma.auditLog.deleteMany({ where: { actorUserId: { in: ids } } });
@@ -127,9 +148,15 @@ async function clear(): Promise<void> {
   await prisma.administrativeGroup.deleteMany({
     where: { levelId: { in: levels.map((l) => l.id) } },
   });
-  await prisma.levelSubject.deleteMany({ where: { levelId: { in: levels.map((l) => l.id) } } });
-  await prisma.levelSurah.deleteMany({ where: { levelId: { in: levels.map((l) => l.id) } } });
-  await prisma.level.deleteMany({ where: { id: { in: levels.map((l) => l.id) } } });
+  await prisma.levelSubject.deleteMany({
+    where: { levelId: { in: levels.map((l) => l.id) } },
+  });
+  await prisma.levelSurah.deleteMany({
+    where: { levelId: { in: levels.map((l) => l.id) } },
+  });
+  await prisma.level.deleteMany({
+    where: { id: { in: levels.map((l) => l.id) } },
+  });
   await prisma.subject.deleteMany({ where: { name: { startsWith: TAG } } });
   await prisma.category.deleteMany({ where: { name: { startsWith: TAG } } });
   await prisma.branch.deleteMany({ where: { name: { startsWith: TAG } } });
@@ -137,16 +164,23 @@ async function clear(): Promise<void> {
 
 beforeEach(async () => {
   await clear();
-  adminId = await person('مسؤولة');
+  adminId = await person("مسؤولة");
   const cat = await prisma.category.create({ data: { name: `${TAG} فئة` } });
   levelId = (
     await prisma.level.create({
-      data: { name: `${TAG} مستوى`, categoryId: cat.id, genderRestriction: 'any' },
+      data: {
+        name: `${TAG} مستوى`,
+        categoryId: cat.id,
+        genderRestriction: "any",
+      },
     })
   ).id;
   branchA = (
     await prisma.branch.create({
-      data: { name: `${TAG} فرع`, operationalStartDate: new Date('2020-01-01') },
+      data: {
+        name: `${TAG} فرع`,
+        operationalStartDate: new Date("2020-01-01"),
+      },
     })
   ).id;
   groupA = (
@@ -157,21 +191,29 @@ beforeEach(async () => {
 
   // R73.4 — the marker, not the name. At most one live Subject may carry it.
   quranSubject = (
-    await prisma.subject.create({ data: { name: `${TAG} قرآن`, tracksQuranProgress: true } })
+    await prisma.subject.create({
+      data: { name: `${TAG} قرآن`, tracksQuranProgress: true },
+    })
   ).id;
-  fiqhSubject = (await prisma.subject.create({ data: { name: `${TAG} فقه` } })).id;
+  fiqhSubject = (await prisma.subject.create({ data: { name: `${TAG} فقه` } }))
+    .id;
 
-  student = await person('مستفيدة');
+  student = await person("مستفيدة");
   await prisma.enrollment.create({
-    data: { studentId: student, levelId, administrativeGroupId: groupA, branchId: branchA },
+    data: {
+      studentId: student,
+      levelId,
+      administrativeGroupId: groupA,
+      branchId: branchA,
+    },
   });
 
-  quranTeacher = await person('مؤطرة القرآن');
-  fiqhTeacher = await person('مؤطرة الفقه');
-  assistant = await person('مؤطرة مساعدة');
-  await staffedSchedule(quranSubject, quranTeacher, 'teacher');
-  await staffedSchedule(fiqhSubject, fiqhTeacher, 'teacher');
-  await staffedSchedule(quranSubject, assistant, 'assistant');
+  quranTeacher = await person("مؤطرة القرآن");
+  fiqhTeacher = await person("مؤطرة الفقه");
+  assistant = await person("مؤطرة مساعدة");
+  await staffedSchedule(quranSubject, quranTeacher, "teacher");
+  await staffedSchedule(fiqhSubject, fiqhTeacher, "teacher");
+  await staffedSchedule(quranSubject, assistant, "assistant");
 });
 
 afterAll(async () => {
@@ -184,58 +226,68 @@ const range = (start: number, end: number) => ({
   surahId: 1,
   startAyah: start,
   endAyah: end,
-  category: 'new_memorization' as const,
+  category: "new_memorization" as const,
 });
 
-describe('R73.3 — Quran scope is the Quran teaching, not any teaching', () => {
-  it('the مؤطرة who teaches this student’s QURAN may log', async () => {
-    const coverage = await logProgress(prisma, teacher(quranTeacher), range(1, 4));
+describe("R73.3 — Quran scope is the Quran teaching, not any teaching", () => {
+  it("the مؤطرة who teaches this student’s QURAN may log", async () => {
+    const coverage = await logProgress(
+      prisma,
+      teacher(quranTeacher),
+      range(1, 4),
+    );
     expect(coverage.merged_ayah_count).toBe(4);
     // Al-Fatiha has 7 ayahs — the denominator is the Surah's own (§4.5).
     expect(coverage.coverage_percent).toBe(57.14);
   });
 
-  it('the مؤطرة who teaches the same student only FIQH may not', async () => {
+  it("the مؤطرة who teaches the same student only FIQH may not", async () => {
     // **The case the Owner rejected**, and the one §4.4c's subject-blind
     // "own students" would have admitted: she teaches this مستفيدة, just not
     // her Quran.
-    const denied = await failure(() => logProgress(prisma, teacher(fiqhTeacher), range(1, 4)));
+    const denied = await failure(() =>
+      logProgress(prisma, teacher(fiqhTeacher), range(1, 4)),
+    );
     // §20 rule 17 — out of scope is 404, never 403.
-    expect(denied.code).toBe('NOT_FOUND');
+    expect(denied.code).toBe("NOT_FOUND");
   });
 
-  it('an ASSISTANT on the Quran schedule may log — position is not consulted', async () => {
+  it("an ASSISTANT on the Quran schedule may log — position is not consulted", async () => {
     // R43 gave co-teachers and assistants one table and one rule; R73 does not
     // introduce a second, and the Owner's decision 6 requires exactly this.
     const coverage = await logProgress(prisma, teacher(assistant), range(1, 3));
     expect(coverage.merged_ayah_count).toBe(3);
   });
 
-  it('a مؤطرة who staffs nothing reaches nobody', async () => {
-    const stranger = await person('غريبة');
-    const denied = await failure(() => logProgress(prisma, teacher(stranger), range(1, 2)));
-    expect(denied.code).toBe('NOT_FOUND');
+  it("a مؤطرة who staffs nothing reaches nobody", async () => {
+    const stranger = await person("غريبة");
+    const denied = await failure(() =>
+      logProgress(prisma, teacher(stranger), range(1, 2)),
+    );
+    expect(denied.code).toBe("NOT_FOUND");
   });
 
-  it('with NO Subject marked, no مؤطرة has Quran scope — it fails closed', async () => {
+  it("with NO Subject marked, no مؤطرة has Quran scope — it fails closed", async () => {
     // Failing open would reinstate exactly the behaviour R73.3 was written to
     // stop, so an unconfigured association grants nobody rather than everybody.
     await prisma.subject.update({
       where: { id: quranSubject },
       data: { tracksQuranProgress: false },
     });
-    const denied = await failure(() => logProgress(prisma, teacher(quranTeacher), range(1, 2)));
-    expect(denied.code).toBe('NOT_FOUND');
+    const denied = await failure(() =>
+      logProgress(prisma, teacher(quranTeacher), range(1, 2)),
+    );
+    expect(denied.code).toBe("NOT_FOUND");
   });
 
-  it('a Super Admin is unaffected by the Subject rule', async () => {
+  it("a Super Admin is unaffected by the Subject rule", async () => {
     const coverage = await logProgress(prisma, superAdmin(), range(1, 7));
     expect(coverage.coverage_percent).toBe(100);
   });
 });
 
-describe('BR-13 — coverage is a union, recomputed synchronously', () => {
-  it('does not inflate when ranges overlap, and updates in the same request', async () => {
+describe("BR-13 — coverage is a union, recomputed synchronously", () => {
+  it("does not inflate when ranges overlap, and updates in the same request", async () => {
     await logProgress(prisma, teacher(quranTeacher), range(1, 5));
     const after = await logProgress(prisma, teacher(quranTeacher), range(3, 7));
     // [1–5] ∪ [3–7] = [1–7] = 7 ayahs, not 10.
@@ -250,18 +302,28 @@ describe('BR-13 — coverage is a union, recomputed synchronously', () => {
     expect(cached.mergedAyahCount).toBe(7);
   });
 
-  it('recomputes downwards when a log is corrected', async () => {
-    const coverage = await logProgress(prisma, teacher(quranTeacher), range(1, 7));
+  it("recomputes downwards when a log is corrected", async () => {
+    const coverage = await logProgress(
+      prisma,
+      teacher(quranTeacher),
+      range(1, 7),
+    );
     expect(coverage.merged_ayah_count).toBe(7);
 
-    const log = await prisma.quranProgressLog.findFirstOrThrow({ where: { studentId: student } });
-    const after = await correctLog(prisma, teacher(quranTeacher), log.id, { endAyah: 3 });
+    const log = await prisma.quranProgressLog.findFirstOrThrow({
+      where: { studentId: student },
+    });
+    const after = await correctLog(prisma, teacher(quranTeacher), log.id, {
+      endAyah: 3,
+    });
     expect(after.merged_ayah_count).toBe(3);
   });
 
-  it('recomputes to zero when the only log is deleted, and leaves a Trash entry', async () => {
+  it("recomputes to zero when the only log is deleted, and leaves a Trash entry", async () => {
     await logProgress(prisma, teacher(quranTeacher), range(1, 7));
-    const log = await prisma.quranProgressLog.findFirstOrThrow({ where: { studentId: student } });
+    const log = await prisma.quranProgressLog.findFirstOrThrow({
+      where: { studentId: student },
+    });
 
     const after = await deleteLog(prisma, teacher(quranTeacher), log.id);
     expect(after.merged_ayah_count).toBe(0);
@@ -269,7 +331,9 @@ describe('BR-13 — coverage is a union, recomputed synchronously', () => {
 
     // R59 — a deletion a person deliberately performed gets its own entry.
     expect(
-      await prisma.trash.count({ where: { targetEntity: 'QuranProgressLog', targetId: log.id } }),
+      await prisma.trash.count({
+        where: { targetEntity: "QuranProgressLog", targetId: log.id },
+      }),
     ).toBe(1);
     // The stamp is cleared with the last log; a leftover would make an empty
     // coverage look freshly computed.
@@ -279,18 +343,18 @@ describe('BR-13 — coverage is a union, recomputed synchronously', () => {
     expect(cached.lastLogId).toBeNull();
   });
 
-  it('refuses an ayah past the end of the surah', async () => {
+  it("refuses an ayah past the end of the surah", async () => {
     // Al-Fatiha has 7. The database trigger enforces it too (TD-6); the service
     // turns it into a coded refusal rather than a driver error.
     const denied = await failure(() =>
       logProgress(prisma, teacher(quranTeacher), { ...range(1, 8) }),
     );
-    expect(denied.code).toBe('VALIDATION_FAILED');
+    expect(denied.code).toBe("VALIDATION_FAILED");
   });
 });
 
-describe('R10 — the cache is self-healing, which is why TD-15 needs no lock', () => {
-  it('repairs a cache row that lost its write, on read', async () => {
+describe("R10 — the cache is self-healing, which is why TD-15 needs no lock", () => {
+  it("repairs a cache row that lost its write, on read", async () => {
     await logProgress(prisma, teacher(quranTeacher), range(1, 7));
 
     // Simulate the crash window between the log's commit and the cache upsert:
@@ -300,7 +364,11 @@ describe('R10 — the cache is self-healing, which is why TD-15 needs no lock', 
       data: { mergedAyahCount: 1, coveragePercent: 14.29, lastLogId: null },
     });
 
-    const read = await readStudentCoverage(prisma, teacher(quranTeacher), student);
+    const read = await readStudentCoverage(
+      prisma,
+      teacher(quranTeacher),
+      student,
+    );
     // The reader never sees the stale value — §4.5's guard recomputes first.
     expect(read.surahs[0]?.merged_ayah_count).toBe(7);
 
@@ -312,15 +380,15 @@ describe('R10 — the cache is self-healing, which is why TD-15 needs no lock', 
     expect(repaired.lastLogId).not.toBeNull();
   });
 
-  it('reads a student with no logs as no surahs, not an error', async () => {
+  it("reads a student with no logs as no surahs, not an error", async () => {
     const read = await readStudentCoverage(prisma, superAdmin(), student);
     expect(read.surahs).toEqual([]);
     expect(read.logs).toEqual([]);
   });
 });
 
-describe('M4b — the student reads her own, and only her own', () => {
-  it('reads her own coverage with no scope question asked', async () => {
+describe("M4b — the student reads her own, and only her own", () => {
+  it("reads her own coverage with no scope question asked", async () => {
     // The subject was established by `childContext` before this call — the
     // service takes a verified id and never resolves one, exactly as
     // `getStudentIdentity` does.
@@ -331,40 +399,53 @@ describe('M4b — the student reads her own, and only her own', () => {
     expect(own.logs).toHaveLength(1);
   });
 
-  it('shows an empty state rather than an error before anything is logged', async () => {
+  it("shows an empty state rather than an error before anything is logged", async () => {
     const own = await readOwnCoverage(prisma, student);
     expect(own.surahs).toEqual([]);
     expect(own.logs).toEqual([]);
   });
 
-  it('cannot reach another student — the STAFF path still refuses her', async () => {
+  it("cannot reach another student — the STAFF path still refuses her", async () => {
     // A student holds no staff role, so the id-carrying route is closed to her
     // whatever id she supplies. The id-less route is the only one she has, and
     // it takes its subject from the middleware rather than from her request.
-    const other = await person('مستفيدة أخرى');
-    const asStudent = actorOf(student, [{ role: 'student', branches: null }]);
-    const denied = await failure(() => readStudentCoverage(prisma, asStudent, other));
-    expect(denied.code).toBe('NOT_FOUND');
+    const other = await person("مستفيدة أخرى");
+    const asStudent = actorOf(student, [{ role: "student", branches: null }]);
+    const denied = await failure(() =>
+      readStudentCoverage(prisma, asStudent, other),
+    );
+    expect(denied.code).toBe("NOT_FOUND");
   });
 
-  it('cannot reach another student through the staff path even for herself', async () => {
+  it("cannot reach another student through the staff path even for herself", async () => {
     // Belt and braces: the student role grants nothing on the staff read, so
     // even naming her own id there is refused. Her access is the `/me` route.
-    const asStudent = actorOf(student, [{ role: 'student', branches: null }]);
-    const denied = await failure(() => readStudentCoverage(prisma, asStudent, student));
-    expect(denied.code).toBe('NOT_FOUND');
+    const asStudent = actorOf(student, [{ role: "student", branches: null }]);
+    const denied = await failure(() =>
+      readStudentCoverage(prisma, asStudent, student),
+    );
+    expect(denied.code).toBe("NOT_FOUND");
   });
 
-  it('leaves the مؤطرة and Admin paths exactly as they were', async () => {
+  it("leaves the مؤطرة and Admin paths exactly as they were", async () => {
     await logProgress(prisma, teacher(quranTeacher), range(1, 4));
     // The Quran مؤطرة still reads through the staff path…
-    expect((await readStudentCoverage(prisma, teacher(quranTeacher), student)).surahs).toHaveLength(1);
+    expect(
+      (await readStudentCoverage(prisma, teacher(quranTeacher), student))
+        .surahs,
+    ).toHaveLength(1);
     // …the Fiqh-only مؤطرة still does not…
-    expect((await failure(() => readStudentCoverage(prisma, teacher(fiqhTeacher), student))).code).toBe(
-      'NOT_FOUND',
-    );
+    expect(
+      (
+        await failure(() =>
+          readStudentCoverage(prisma, teacher(fiqhTeacher), student),
+        )
+      ).code,
+    ).toBe("NOT_FOUND");
     // …and a Super Admin is unaffected.
-    expect((await readStudentCoverage(prisma, superAdmin(), student)).surahs).toHaveLength(1);
+    expect(
+      (await readStudentCoverage(prisma, superAdmin(), student)).surahs,
+    ).toHaveLength(1);
   });
 });
 
@@ -376,44 +457,63 @@ describe('M4b — the student reads her own, and only her own', () => {
  * Completion is read from the **existing** engine — configured Surahs × the
  * coverage §4.5 already derives — and no second percentage is computed.
  */
-describe('M4c — LevelSurah is Super Admin curriculum', () => {
-  it('a Super Admin adds and removes a Surah', async () => {
+describe("M4c — LevelSurah is Super Admin curriculum", () => {
+  it("a Super Admin adds and removes a Surah", async () => {
     await assignSurahToLevel(prisma, superAdmin(), levelId, 1);
-    expect((await listLevelSurahs(prisma, superAdmin(), levelId)).map((s) => s.surah_id)).toEqual([1]);
+    expect(
+      (await listLevelSurahs(prisma, superAdmin(), levelId)).map(
+        (s) => s.surah_id,
+      ),
+    ).toEqual([1]);
 
     await unassignSurahFromLevel(prisma, superAdmin(), levelId, 1);
     expect(await listLevelSurahs(prisma, superAdmin(), levelId)).toEqual([]);
   });
 
-  it('revives a previously removed Surah rather than failing on the unique pair', async () => {
+  it("revives a previously removed Surah rather than failing on the unique pair", async () => {
     await assignSurahToLevel(prisma, superAdmin(), levelId, 2);
     await unassignSurahFromLevel(prisma, superAdmin(), levelId, 2);
     await assignSurahToLevel(prisma, superAdmin(), levelId, 2);
-    expect((await listLevelSurahs(prisma, superAdmin(), levelId)).map((s) => s.surah_id)).toEqual([2]);
+    expect(
+      (await listLevelSurahs(prisma, superAdmin(), levelId)).map(
+        (s) => s.surah_id,
+      ),
+    ).toEqual([2]);
   });
 
-  it('refuses a مؤطرة and an Admin — curriculum is Super Admin (R26)', async () => {
-    expect((await failure(() => assignSurahToLevel(prisma, teacher(quranTeacher), levelId, 1))).code).toBe(
-      'FORBIDDEN',
-    );
-    const asAdmin = actorOf(adminId, [{ role: 'admin', branches: null }]);
-    expect((await failure(() => assignSurahToLevel(prisma, asAdmin, levelId, 1))).code).toBe('FORBIDDEN');
+  it("refuses a مؤطرة and an Admin — curriculum is Super Admin (R26)", async () => {
+    expect(
+      (
+        await failure(() =>
+          assignSurahToLevel(prisma, teacher(quranTeacher), levelId, 1),
+        )
+      ).code,
+    ).toBe("FORBIDDEN");
+    const asAdmin = actorOf(adminId, [{ role: "admin", branches: null }]);
+    expect(
+      (await failure(() => assignSurahToLevel(prisma, asAdmin, levelId, 1)))
+        .code,
+    ).toBe("FORBIDDEN");
     // …but an Admin may READ it: operational work depends on the syllabus.
     expect(await listLevelSurahs(prisma, asAdmin, levelId)).toEqual([]);
   });
 
-  it('removing a Surah leaves the logged progress untouched', async () => {
+  it("removing a Surah leaves the logged progress untouched", async () => {
     // §4.5 records against (student, surah) and BR-13 derives from the logs, so
     // the syllabus decides what BR-11 REQUIRES, never what she has recited.
     await assignSurahToLevel(prisma, superAdmin(), levelId, 1);
     await logProgress(prisma, teacher(quranTeacher), range(1, 7));
     await unassignSurahFromLevel(prisma, superAdmin(), levelId, 1);
-    expect(await prisma.quranProgressLog.count({ where: { studentId: student, deletedAt: null } })).toBe(1);
+    expect(
+      await prisma.quranProgressLog.count({
+        where: { studentId: student, deletedAt: null },
+      }),
+    ).toBe(1);
   });
 });
 
-describe('M4c — BR-11 level completion', () => {
-  it('is NOT COMPUTABLE when the Level configures no Surahs', async () => {
+describe("M4c — BR-11 level completion", () => {
+  it("is NOT COMPUTABLE when the Level configures no Surahs", async () => {
     // Vacuous 100% would let an unconfigured Level mark everybody finished, so
     // the third state is the honest answer rather than a convenient one.
     const rows = await levelCompletion(prisma, superAdmin(), levelId);
@@ -422,7 +522,7 @@ describe('M4c — BR-11 level completion', () => {
     expect(mine.configured_surahs).toBe(0);
   });
 
-  it('is FALSE at 0% coverage of a configured syllabus', async () => {
+  it("is FALSE at 0% coverage of a configured syllabus", async () => {
     await assignSurahToLevel(prisma, superAdmin(), levelId, 1);
     const mine = (await levelCompletion(prisma, superAdmin(), levelId)).find(
       (r) => r.student_id === student,
@@ -431,7 +531,7 @@ describe('M4c — BR-11 level completion', () => {
     expect(mine.completed_surahs).toBe(0);
   });
 
-  it('is FALSE at partial coverage', async () => {
+  it("is FALSE at partial coverage", async () => {
     await assignSurahToLevel(prisma, superAdmin(), levelId, 1);
     // Al-Fatiha has 7 ayahs; four of them is 57.14%.
     await logProgress(prisma, teacher(quranTeacher), range(1, 4));
@@ -442,7 +542,7 @@ describe('M4c — BR-11 level completion', () => {
     expect(mine.surahs[0]?.coverage_percent).toBe(57.14);
   });
 
-  it('is TRUE at 100% of every configured Surah, with no final exam configured', async () => {
+  it("is TRUE at 100% of every configured Surah, with no final exam configured", async () => {
     await assignSurahToLevel(prisma, superAdmin(), levelId, 1);
     await logProgress(prisma, teacher(quranTeacher), range(1, 7));
     const mine = (await levelCompletion(prisma, superAdmin(), levelId)).find(
@@ -455,7 +555,7 @@ describe('M4c — BR-11 level completion', () => {
     expect(mine.final_exam_configured).toBe(false);
   });
 
-  it('needs EVERY configured Surah, not just one', async () => {
+  it("needs EVERY configured Surah, not just one", async () => {
     await assignSurahToLevel(prisma, superAdmin(), levelId, 1);
     await assignSurahToLevel(prisma, superAdmin(), levelId, 114);
     await logProgress(prisma, teacher(quranTeacher), range(1, 7));
@@ -467,9 +567,13 @@ describe('M4c — BR-11 level completion', () => {
     expect(mine.complete).toBe(false);
   });
 
-  it('refuses a مؤطرة — completion is an Admin read', async () => {
-    expect((await failure(() => levelCompletion(prisma, teacher(quranTeacher), levelId))).code).toBe(
-      'FORBIDDEN',
-    );
+  it("refuses a مؤطرة — completion is an Admin read", async () => {
+    expect(
+      (
+        await failure(() =>
+          levelCompletion(prisma, teacher(quranTeacher), levelId),
+        )
+      ).code,
+    ).toBe("FORBIDDEN");
   });
 });

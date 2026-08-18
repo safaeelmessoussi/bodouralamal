@@ -351,7 +351,11 @@ model User {
   phone             String? @db.VarChar(20)
   /// Captured at registration (§4.1b step 5, Revision 27) — never patched on
   /// afterwards, because the registration exists before the User does.
-  sex               Sex?    @map("sex")
+  /// R80 — recorded at every creation, completed explicitly where missing, and
+  /// required by the schema since `20260818220000_r80_sex_not_null`. A NULL has
+  /// always meant *not eligible* for a restricted Level rather than
+  /// *unknown-but-fine* (R27), which is why it could not stay optional.
+  sex               Sex     @map("sex")
 
   /// **Is this person one of the institute's مستفيدات?** (Revision 79)
   ///

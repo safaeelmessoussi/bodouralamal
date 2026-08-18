@@ -1,8 +1,8 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import { loadConfig } from '../lib/config.js';
-import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
-import { issueNewSession } from '../services/refresh-token.service.js';
+import { loadConfig } from "../lib/config.js";
+import { createPrismaClient, TEST_CONNECTION_LIMIT } from "../lib/prisma.js";
+import { issueNewSession } from "../services/refresh-token.service.js";
 
 /**
  * `POST /auth/refresh` — the CSRF posture of TD-12's **sole cookie-authenticated
@@ -22,7 +22,7 @@ import { issueNewSession } from '../services/refresh-token.service.js';
 const config = loadConfig();
 const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);
 const URL_ = `${config.PUBLIC_BASE_URL}/api/v1/auth/refresh`;
-const TAG = '[refresh-csrf-test]';
+const TAG = "[refresh-csrf-test]";
 
 let cookie: string;
 let userId: string;
@@ -32,8 +32,14 @@ interface Envelope {
   access_token?: string;
 }
 
-async function post(headers: Record<string, string>): Promise<{ status: number; body: Envelope }> {
-  const res = await fetch(URL_, { method: 'POST', headers, redirect: 'manual' });
+async function post(
+  headers: Record<string, string>,
+): Promise<{ status: number; body: Envelope }> {
+  const res = await fetch(URL_, {
+    method: "POST",
+    headers,
+    redirect: "manual",
+  });
   const body = (await res.json().catch(() => ({}))) as Envelope;
   return { status: res.status, body };
 }
@@ -50,14 +56,21 @@ async function clear(): Promise<void> {
 }
 
 beforeAll(async () => {
-  const health = await fetch(`${config.PUBLIC_BASE_URL}/healthz`).catch(() => null);
-  if (!health || health.status !== 200) throw new Error('API not reachable');
+  const health = await fetch(`${config.PUBLIC_BASE_URL}/healthz`).catch(
+    () => null,
+  );
+  if (!health || health.status !== 200) throw new Error("API not reachable");
 });
 
 beforeEach(async () => {
   await clear();
   const user = await prisma.user.create({
-    data: { nameArabic: `${TAG} مستخدمة`, accountStatus: 'active' },
+    data: {
+      // R80 — every person carries a recorded sex; the column is NOT NULL.
+      sex: "female",
+      nameArabic: `${TAG} مستخدمة`,
+      accountStatus: "active",
+    },
   });
   userId = user.id;
   const issued = await issueNewSession(prisma, userId);
@@ -69,83 +82,98 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 
-const XHR = 'XMLHttpRequest';
+const XHR = "XMLHttpRequest";
 
-describe('the CSRF posture (TD-12)', () => {
-  it('accepts a well-formed request and returns a fresh access token', async () => {
+describe("the CSRF posture (TD-12)", () => {
+  it("accepts a well-formed request and returns a fresh access token", async () => {
     // The control: everything below must fail for its own reason, not because
     // the happy path was broken.
     const res = await post({
       cookie,
-      'x-requested-with': XHR,
+      "x-requested-with": XHR,
       origin: config.PUBLIC_BASE_URL,
     });
 
     expect(res.status).toBe(200);
-    expect(typeof res.body.access_token).toBe('string');
+    expect(typeof res.body.access_token).toBe("string");
   });
 
-  it('refuses a request with NO custom header — the cross-site form case', async () => {
+  it("refuses a request with NO custom header — the cross-site form case", async () => {
     // A cross-site <form> can carry cookies but cannot set this header.
     const res = await post({ cookie, origin: config.PUBLIC_BASE_URL });
 
     expect(res.status).toBe(401);
-    expect(res.body.error?.code).toBe('AUTH_REQUIRED');
+    expect(res.body.error?.code).toBe("AUTH_REQUIRED");
     expect(res.body.access_token).toBeUndefined();
   });
 
-  it('refuses a header with the wrong value, not merely a missing one', async () => {
-    const res = await post({ cookie, 'x-requested-with': 'fetch', origin: config.PUBLIC_BASE_URL });
+  it("refuses a header with the wrong value, not merely a missing one", async () => {
+    const res = await post({
+      cookie,
+      "x-requested-with": "fetch",
+      origin: config.PUBLIC_BASE_URL,
+    });
     expect(res.status).toBe(401);
   });
 
-  it('refuses a foreign Origin even with the custom header present', async () => {
+  it("refuses a foreign Origin even with the custom header present", async () => {
     const res = await post({
       cookie,
-      'x-requested-with': XHR,
-      origin: 'https://evil.example.com',
+      "x-requested-with": XHR,
+      origin: "https://evil.example.com",
     });
 
     expect(res.status).toBe(401);
     expect(res.body.access_token).toBeUndefined();
   });
 
-  it('allows an ABSENT Origin, which same-origin XHR may omit', async () => {
+  it("allows an ABSENT Origin, which same-origin XHR may omit", async () => {
     // Deliberate: requiring it would break legitimate same-origin callers, and
     // the custom header already carries the cross-site protection.
-    const res = await post({ cookie, 'x-requested-with': XHR });
+    const res = await post({ cookie, "x-requested-with": XHR });
     expect(res.status).toBe(200);
   });
 
-  it('refuses when the cookie is absent, and does not mint anything', async () => {
-    const res = await post({ 'x-requested-with': XHR, origin: config.PUBLIC_BASE_URL });
+  it("refuses when the cookie is absent, and does not mint anything", async () => {
+    const res = await post({
+      "x-requested-with": XHR,
+      origin: config.PUBLIC_BASE_URL,
+    });
 
     expect(res.status).toBe(401);
     expect(res.body.access_token).toBeUndefined();
   });
 
-  it('refuses a forged cookie value indistinguishably from a missing one', async () => {
+  it("refuses a forged cookie value indistinguishably from a missing one", async () => {
     // TD-12/Revision 16: telling a stolen cookie *why* it failed would confirm
     // it was once real.
     const forged = await post({
-      cookie: 'bodour_refresh=not-a-real-token',
-      'x-requested-with': XHR,
+      cookie: "bodour_refresh=not-a-real-token",
+      "x-requested-with": XHR,
       origin: config.PUBLIC_BASE_URL,
     });
-    const absent = await post({ 'x-requested-with': XHR, origin: config.PUBLIC_BASE_URL });
+    const absent = await post({
+      "x-requested-with": XHR,
+      origin: config.PUBLIC_BASE_URL,
+    });
 
     expect(forged.status).toBe(absent.status);
     expect(forged.body.error?.code).toBe(absent.body.error?.code);
   });
 
-  it('the CSRF check runs BEFORE the cookie is even looked at', async () => {
+  it("the CSRF check runs BEFORE the cookie is even looked at", async () => {
     // Order matters: a cross-site probe must not be able to learn whether a
     // cookie was valid by comparing responses.
-    const noHeaderValidCookie = await post({ cookie, origin: config.PUBLIC_BASE_URL });
+    const noHeaderValidCookie = await post({
+      cookie,
+      origin: config.PUBLIC_BASE_URL,
+    });
     const noHeaderNoCookie = await post({ origin: config.PUBLIC_BASE_URL });
 
     expect(noHeaderValidCookie.status).toBe(noHeaderNoCookie.status);
-    expect(noHeaderValidCookie.body.error?.code).toBe(noHeaderNoCookie.body.error?.code);
+    expect(noHeaderValidCookie.body.error?.code).toBe(
+      noHeaderNoCookie.body.error?.code,
+    );
 
     // And a refused CSRF probe must not consume or revoke the real token.
     // Asserted against the row rather than by refreshing again: the auth

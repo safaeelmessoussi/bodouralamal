@@ -1,6 +1,24 @@
 import type { PrismaClient } from '../../src/generated/prisma/client.js';
 
 /**
+ * The bootstrap account's sex, from the environment, or a loud refusal naming it.
+ *
+ * It fails rather than defaulting because a default here would be exactly the
+ * inference R80 forbids — and because the person this account belongs to is
+ * standing next to whoever runs the seed.
+ */
+function requireSuperAdminSex(): 'female' | 'male' {
+  const raw = (process.env['SUPER_ADMIN_SEX'] ?? '').trim().toLowerCase();
+  if (raw === 'female' || raw === 'male') return raw;
+  throw new Error(
+    'SUPER_ADMIN_SEX must be set to `female` or `male` before this seed can create the ' +
+      'Super Administrator account (SRS Revision 80). It is seed-only, like SUPER_ADMIN_EMAIL: ' +
+      'the running API never reads it. Nothing is defaulted, because a default would be the ' +
+      'inference R80 exists to forbid.',
+  );
+}
+
+/**
  * §15.1 Super Admin — BOOTSTRAP ONLY (Revision 22).
  *
  * `SUPER_ADMIN_EMAIL` is a bootstrap configuration value, not an operational
@@ -124,6 +142,16 @@ export async function bootstrapSuperAdmin(prisma: PrismaClient, email: string | 
          * beneficiary status and administrative roles are independent (R79.2).
          */
         isBeneficiary: false,
+        /**
+         * **R80.2 — supplied, never defaulted.**
+         *
+         * `SUPER_ADMIN_SEX` sits beside `SUPER_ADMIN_EMAIL` on the same terms
+         * (TD-13, R23): a **seed-only** value the running API never reads,
+         * demanded only on the branch that actually CREATES an account.
+         * Granting Super Admin to an existing person asks for nothing, because
+         * that person registered and already has one.
+         */
+        sex: requireSuperAdminSex(),
       },
       select: { id: true },
     });

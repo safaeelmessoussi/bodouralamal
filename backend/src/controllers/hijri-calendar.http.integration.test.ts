@@ -1,9 +1,9 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import { issueAccessToken } from '../lib/access-token.js';
-import { loadConfig } from '../lib/config.js';
-import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
-import { httpCall } from '../test-support/http-client.js';
+import { issueAccessToken } from "../lib/access-token.js";
+import { loadConfig } from "../lib/config.js";
+import { createPrismaClient, TEST_CONNECTION_LIMIT } from "../lib/prisma.js";
+import { httpCall } from "../test-support/http-client.js";
 
 /**
  * Recording the Ministry's official Hijri announcements over real HTTP — SRS
@@ -16,7 +16,7 @@ import { httpCall } from '../test-support/http-client.js';
 const config = loadConfig();
 const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);
 const BASE = `${config.PUBLIC_BASE_URL}/api/v1`;
-const TAG = '[hijri-http-test]';
+const TAG = "[hijri-http-test]";
 
 /** Inside TD-9's range, but no real date resolves against it. */
 const YEAR = 1591;
@@ -41,11 +41,18 @@ interface Body {
 }
 
 const call = (method: string, path: string, token?: string, body?: unknown) =>
-  httpCall<Body>(BASE, method, path, { token, ...(body !== undefined ? { body } : {}) });
+  httpCall<Body>(BASE, method, path, {
+    token,
+    ...(body !== undefined ? { body } : {}),
+  });
 
 const bearer = (userId: string, roles: string[]): string =>
   issueAccessToken(
-    { userId, roleScopes: roles.map((role) => ({ role, branches: null })), accountStatus: 'active' as never },
+    {
+      userId,
+      roleScopes: roles.map((role) => ({ role, branches: null })),
+      accountStatus: "active" as never,
+    },
     config.JWT_SIGNING_KEY,
   ).token;
 
@@ -54,10 +61,17 @@ let adminToken: string;
 
 async function withRole(label: string, role: string): Promise<string> {
   const u = await prisma.user.create({
-    data: { nameArabic: `${TAG} ${label}`, accountStatus: 'active' },
+    data: {
+      // R80 — every person carries a recorded sex; the column is NOT NULL.
+      sex: "female",
+      nameArabic: `${TAG} ${label}`,
+      accountStatus: "active",
+    },
   });
   const r = await prisma.role.findUnique({ where: { name: role } });
-  await prisma.userBranchRole.create({ data: { userId: u.id, roleId: r!.id, branchId: null } });
+  await prisma.userBranchRole.create({
+    data: { userId: u.id, roleId: r!.id, branchId: null },
+  });
   return u.id;
 }
 
@@ -68,8 +82,12 @@ async function clear(): Promise<void> {
   });
   // R59.5 — a withdrawn month leaves a tombstone, and `deleted_by` is RESTRICT:
   // the snapshot goes before the person who wrote it (TD-5).
-  await prisma.trash.deleteMany({ where: { targetId: { in: months.map((m) => m.id) } } });
-  await prisma.hijriMonthStart.deleteMany({ where: { hijriYear: { in: [YEAR - 1, YEAR, YEAR + 1] } } });
+  await prisma.trash.deleteMany({
+    where: { targetId: { in: months.map((m) => m.id) } },
+  });
+  await prisma.hijriMonthStart.deleteMany({
+    where: { hijriYear: { in: [YEAR - 1, YEAR, YEAR + 1] } },
+  });
   const users = await prisma.user.findMany({
     where: { nameArabic: { startsWith: TAG } },
     select: { id: true },
@@ -82,14 +100,18 @@ async function clear(): Promise<void> {
 }
 
 beforeAll(async () => {
-  const health = await fetch(`${config.PUBLIC_BASE_URL}/healthz`).catch(() => null);
-  if (!health || health.status !== 200) throw new Error('API not reachable');
+  const health = await fetch(`${config.PUBLIC_BASE_URL}/healthz`).catch(
+    () => null,
+  );
+  if (!health || health.status !== 200) throw new Error("API not reachable");
 });
 
 beforeEach(async () => {
   await clear();
-  superToken = bearer(await withRole('مشرف عام', 'super_admin'), ['super_admin']);
-  adminToken = bearer(await withRole('مسؤولة', 'admin'), ['admin']);
+  superToken = bearer(await withRole("مشرف عام", "super_admin"), [
+    "super_admin",
+  ]);
+  adminToken = bearer(await withRole("مسؤولة", "admin"), ["admin"]);
 });
 
 afterAll(async () => {
@@ -98,30 +120,34 @@ afterAll(async () => {
 });
 
 const recordMonth = (month: number, date: string, version?: number) =>
-  call('PUT', `/admin/hijri-calendar/${YEAR}/${month}`, superToken, {
+  call("PUT", `/admin/hijri-calendar/${YEAR}/${month}`, superToken, {
     gregorian_start_date: date,
     ...(version !== undefined ? { version } : {}),
   });
 
-describe('GET /admin/hijri-calendar', () => {
-  it('returns all twelve months of the requested year', async () => {
-    await recordMonth(1, '2026-06-17');
-    const res = await call('GET', `/admin/hijri-calendar?year=${YEAR}`, superToken);
+describe("GET /admin/hijri-calendar", () => {
+  it("returns all twelve months of the requested year", async () => {
+    await recordMonth(1, "2026-06-17");
+    const res = await call(
+      "GET",
+      `/admin/hijri-calendar?year=${YEAR}`,
+      superToken,
+    );
 
     expect(res.status).toBe(200);
     expect(res.body.year).toBe(YEAR);
     expect(res.body.data).toHaveLength(12);
     expect(res.body.data![0]).toMatchObject({
       hijri_month: 1,
-      month_name_ar: 'محرم',
-      gregorian_start_date: '2026-06-17',
-      status: 'draft',
+      month_name_ar: "محرم",
+      gregorian_start_date: "2026-06-17",
+      status: "draft",
     });
     // A month not yet announced is a blank to fill, not a missing row.
     expect(res.body.data![1]!.gregorian_start_date).toBeNull();
   });
 
-  it('pins the EXACT wire shape of the envelope and of a month row', async () => {
+  it("pins the EXACT wire shape of the envelope and of a month row", async () => {
     // `toMatchObject` above checks a subset, which is right for values and
     // wrong for the contract: it cannot see a field that is missing, and the
     // client's declared type had invented three names — `hijri_year`/`months`/
@@ -131,127 +157,162 @@ describe('GET /admin/hijri-calendar', () => {
     // and the admin screen rendered blank white.
     //
     // The exact key set is the assertion that would have caught it.
-    await recordMonth(1, '2026-06-17');
-    const res = await call('GET', `/admin/hijri-calendar?year=${YEAR}`, superToken);
+    await recordMonth(1, "2026-06-17");
+    const res = await call(
+      "GET",
+      `/admin/hijri-calendar?year=${YEAR}`,
+      superToken,
+    );
 
-    expect(Object.keys(res.body).sort()).toEqual(['coverage', 'data', 'year']);
+    expect(Object.keys(res.body).sort()).toEqual(["coverage", "data", "year"]);
     // The coverage report (2026-08-05): the safeguard against a manually
     // maintained calendar running out in silence. Automation is impossible by
     // the nature of the source — Morocco declares months on actual moon
     // sighting — so the honest alternative is to make the gap loud.
     expect(Object.keys(res.body.coverage as object).sort()).toEqual([
-      'days_remaining',
-      'next_unrecorded',
-      'published_through',
-      'warning',
+      "days_remaining",
+      "next_unrecorded",
+      "published_through",
+      "warning",
     ]);
     expect(Object.keys(res.body.data![0]!).sort()).toEqual([
-      'gregorian_start_date',
-      'hijri_month',
-      'month_name_ar',
-      'source',
-      'status',
-      'version',
+      "gregorian_start_date",
+      "hijri_month",
+      "month_name_ar",
+      "source",
+      "status",
+      "version",
     ]);
   });
 
-  it('TD-2: an Admin is refused, and an anonymous caller gets the TD-3.8 envelope', async () => {
-    expect((await call('GET', `/admin/hijri-calendar?year=${YEAR}`, adminToken)).status).toBe(403);
+  it("TD-2: an Admin is refused, and an anonymous caller gets the TD-3.8 envelope", async () => {
+    expect(
+      (await call("GET", `/admin/hijri-calendar?year=${YEAR}`, adminToken))
+        .status,
+    ).toBe(403);
 
-    const anon = await call('GET', `/admin/hijri-calendar?year=${YEAR}`);
+    const anon = await call("GET", `/admin/hijri-calendar?year=${YEAR}`);
     expect(anon.status).toBe(401);
-    expect(anon.body.error?.code).toBe('AUTH_REQUIRED');
+    expect(anon.body.error?.code).toBe("AUTH_REQUIRED");
   });
 
-  it('requires a year inside the TD-9 range', async () => {
-    expect((await call('GET', '/admin/hijri-calendar', superToken)).status).toBe(400);
+  it("requires a year inside the TD-9 range", async () => {
+    expect(
+      (await call("GET", "/admin/hijri-calendar", superToken)).status,
+    ).toBe(400);
     // The likeliest data-entry slip: a Gregorian year typed into the Hijri field.
-    expect((await call('GET', '/admin/hijri-calendar?year=2026', superToken)).status).toBe(400);
+    expect(
+      (await call("GET", "/admin/hijri-calendar?year=2026", superToken)).status,
+    ).toBe(400);
   });
 });
 
-describe('PUT /admin/hijri-calendar/{year}/{month}', () => {
-  it('records a month start and returns it as YYYY-MM-DD', async () => {
-    const res = await recordMonth(1, '2026-06-17');
+describe("PUT /admin/hijri-calendar/{year}/{month}", () => {
+  it("records a month start and returns it as YYYY-MM-DD", async () => {
+    const res = await recordMonth(1, "2026-06-17");
 
     expect(res.status).toBe(200);
     // TD-11: a local calendar date at the boundary, never an ISO instant.
-    expect(res.body.gregorian_start_date).toBe('2026-06-17');
-    expect(res.body.status).toBe('draft');
+    expect(res.body.gregorian_start_date).toBe("2026-06-17");
+    expect(res.body.status).toBe("draft");
   });
 
-  it('TD-15: correcting requires the version, and a stale one is 409', async () => {
-    const first = await recordMonth(1, '2026-06-17');
+  it("TD-15: correcting requires the version, and a stale one is 409", async () => {
+    const first = await recordMonth(1, "2026-06-17");
     const stale = first.body.version!;
 
     // No version at all on an existing month is a 400, not a silent overwrite.
-    expect((await recordMonth(1, '2026-06-18')).status).toBe(400);
+    expect((await recordMonth(1, "2026-06-18")).status).toBe(400);
 
-    expect((await recordMonth(1, '2026-06-18', stale)).status).toBe(200);
-    const conflict = await recordMonth(1, '2026-06-19', stale);
+    expect((await recordMonth(1, "2026-06-18", stale)).status).toBe(200);
+    const conflict = await recordMonth(1, "2026-06-19", stale);
     expect(conflict.status).toBe(409);
-    expect(conflict.body.error?.code).toBe('VERSION_CONFLICT');
+    expect(conflict.body.error?.code).toBe("VERSION_CONFLICT");
   });
 
-  it('an out-of-order month is 400 with structured details', async () => {
-    await recordMonth(1, '2026-06-17');
-    const res = await recordMonth(2, '2026-06-01');
+  it("an out-of-order month is 400 with structured details", async () => {
+    await recordMonth(1, "2026-06-17");
+    const res = await recordMonth(2, "2026-06-01");
 
     expect(res.status).toBe(400);
-    expect(res.body.error?.code).toBe('VALIDATION_FAILED');
-    expect(res.body.error?.details?.['reason']).toBe('MONTH_ORDER');
-    expect(res.body.error?.details?.['conflicting_month']).toBe(1);
+    expect(res.body.error?.code).toBe("VALIDATION_FAILED");
+    expect(res.body.error?.details?.["reason"]).toBe("MONTH_ORDER");
+    expect(res.body.error?.details?.["conflicting_month"]).toBe(1);
   });
 
-  it('rejects a malformed date and an out-of-range month at the boundary', async () => {
-    expect((await recordMonth(1, '17/06/2026')).status).toBe(400);
-    expect((await recordMonth(13, '2026-06-17')).status).toBe(400);
-    expect((await recordMonth(0, '2026-06-17')).status).toBe(400);
+  it("rejects a malformed date and an out-of-range month at the boundary", async () => {
+    expect((await recordMonth(1, "17/06/2026")).status).toBe(400);
+    expect((await recordMonth(13, "2026-06-17")).status).toBe(400);
+    expect((await recordMonth(0, "2026-06-17")).status).toBe(400);
   });
 
-  it('TD-2: an Admin cannot record a month', async () => {
-    const res = await call('PUT', `/admin/hijri-calendar/${YEAR}/1`, adminToken, {
-      gregorian_start_date: '2026-06-17',
-    });
+  it("TD-2: an Admin cannot record a month", async () => {
+    const res = await call(
+      "PUT",
+      `/admin/hijri-calendar/${YEAR}/1`,
+      adminToken,
+      {
+        gregorian_start_date: "2026-06-17",
+      },
+    );
     expect(res.status).toBe(403);
   });
 });
 
-describe('POST /admin/hijri-calendar/{year}/publish', () => {
-  it('publishes the year’s drafts and reports the count', async () => {
-    await recordMonth(1, '2026-06-17');
-    await recordMonth(2, '2026-07-16');
+describe("POST /admin/hijri-calendar/{year}/publish", () => {
+  it("publishes the year’s drafts and reports the count", async () => {
+    await recordMonth(1, "2026-06-17");
+    await recordMonth(2, "2026-07-16");
 
-    const res = await call('POST', `/admin/hijri-calendar/${YEAR}/publish`, superToken);
+    const res = await call(
+      "POST",
+      `/admin/hijri-calendar/${YEAR}/publish`,
+      superToken,
+    );
     expect(res.status).toBe(200);
     expect(res.body.published).toBe(2);
 
-    const listed = await call('GET', `/admin/hijri-calendar?year=${YEAR}`, superToken);
-    expect(listed.body.data![0]!.status).toBe('published');
+    const listed = await call(
+      "GET",
+      `/admin/hijri-calendar?year=${YEAR}`,
+      superToken,
+    );
+    expect(listed.body.data![0]!.status).toBe("published");
   });
 
-  it('publishing with nothing to publish is 409, not a silent success', async () => {
-    await recordMonth(1, '2026-06-17');
-    await call('POST', `/admin/hijri-calendar/${YEAR}/publish`, superToken);
+  it("publishing with nothing to publish is 409, not a silent success", async () => {
+    await recordMonth(1, "2026-06-17");
+    await call("POST", `/admin/hijri-calendar/${YEAR}/publish`, superToken);
 
-    const again = await call('POST', `/admin/hijri-calendar/${YEAR}/publish`, superToken);
+    const again = await call(
+      "POST",
+      `/admin/hijri-calendar/${YEAR}/publish`,
+      superToken,
+    );
     expect(again.status).toBe(409);
-    expect(again.body.error?.details?.['reason']).toBe('NOTHING_TO_PUBLISH');
+    expect(again.body.error?.details?.["reason"]).toBe("NOTHING_TO_PUBLISH");
   });
 });
 
-describe('GET /admin/hijri-calendar/{year}/history', () => {
-  it('returns the audit trail carrying both the old and new date', async () => {
-    const first = await recordMonth(1, '2026-06-17');
-    await recordMonth(1, '2026-06-18', first.body.version!);
+describe("GET /admin/hijri-calendar/{year}/history", () => {
+  it("returns the audit trail carrying both the old and new date", async () => {
+    const first = await recordMonth(1, "2026-06-17");
+    await recordMonth(1, "2026-06-18", first.body.version!);
 
-    const res = await call('GET', `/admin/hijri-calendar/${YEAR}/history`, superToken);
+    const res = await call(
+      "GET",
+      `/admin/hijri-calendar/${YEAR}/history`,
+      superToken,
+    );
     expect(res.status).toBe(200);
 
-    const latest = res.body.data![0] as unknown as { action_type: string; detail: Record<string, unknown> };
-    expect(latest.action_type).toBe('hijri.month_start.record');
-    expect(latest.detail['previous_start_date']).toBe('2026-06-17');
-    expect(latest.detail['new_start_date']).toBe('2026-06-18');
+    const latest = res.body.data![0] as unknown as {
+      action_type: string;
+      detail: Record<string, unknown>;
+    };
+    expect(latest.action_type).toBe("hijri.month_start.record");
+    expect(latest.detail["previous_start_date"]).toBe("2026-06-17");
+    expect(latest.detail["new_start_date"]).toBe("2026-06-18");
   });
 });
 
@@ -263,17 +324,18 @@ describe('GET /admin/hijri-calendar/{year}/history', () => {
  * rather than trusting a status code: the failure this guards against is a `204`
  * that changed nothing, which this project has shipped twice.
  */
-describe('DELETE /admin/hijri-calendar/{year}/{month}', () => {
+describe("DELETE /admin/hijri-calendar/{year}/{month}", () => {
   const monthsOf = async (): Promise<Row[]> =>
-    (await call('GET', `/admin/hijri-calendar?year=${YEAR}`, superToken)).body.data!;
+    (await call("GET", `/admin/hijri-calendar?year=${YEAR}`, superToken)).body
+      .data!;
 
-  it('withdraws the last recorded month, and the month reads as unrecorded after', async () => {
-    await recordMonth(1, '2026-06-17');
+  it("withdraws the last recorded month, and the month reads as unrecorded after", async () => {
+    await recordMonth(1, "2026-06-17");
     const before = (await monthsOf())[0]!;
-    expect(before.gregorian_start_date).toBe('2026-06-17');
+    expect(before.gregorian_start_date).toBe("2026-06-17");
 
     const res = await call(
-      'DELETE',
+      "DELETE",
       `/admin/hijri-calendar/${YEAR}/1?version=${before.version}`,
       superToken,
     );
@@ -285,65 +347,87 @@ describe('DELETE /admin/hijri-calendar/{year}/{month}', () => {
     expect(after.status).toBeNull();
   });
 
-  it('leaves a Trash entry a Super Admin can find, labelled in Arabic', async () => {
-    await recordMonth(1, '2026-06-17');
+  it("leaves a Trash entry a Super Admin can find, labelled in Arabic", async () => {
+    await recordMonth(1, "2026-06-17");
     const version = (await monthsOf())[0]!.version;
-    await call('DELETE', `/admin/hijri-calendar/${YEAR}/1?version=${version}`, superToken);
-
-    const trash = await call('GET', '/admin/trash?entity=HijriMonthStart&page_size=100', superToken);
-    const entry = (trash.body as unknown as { data: Record<string, unknown>[] }).data.find(
-      (r) => String(r['label']).includes(String(YEAR)),
+    await call(
+      "DELETE",
+      `/admin/hijri-calendar/${YEAR}/1?version=${version}`,
+      superToken,
     );
-    expect(entry, 'the withdrawal is invisible in the Trash').toBeDefined();
+
+    const trash = await call(
+      "GET",
+      "/admin/trash?entity=HijriMonthStart&page_size=100",
+      superToken,
+    );
+    const entry = (
+      trash.body as unknown as { data: Record<string, unknown>[] }
+    ).data.find((r) => String(r["label"]).includes(String(YEAR)));
+    expect(entry, "the withdrawal is invisible in the Trash").toBeDefined();
     // A month has no name column — the label is composed, or the row is a UUID.
-    expect(String(entry!['label'])).toContain('محرم');
+    expect(String(entry!["label"])).toContain("محرم");
     // R59.5 — nothing cascades, so both actions are offered.
-    expect(entry!['restorable']).toBe(true);
-    expect(entry!['purgeable']).toBe(true);
+    expect(entry!["restorable"]).toBe(true);
+    expect(entry!["purgeable"]).toBe(true);
   });
 
-  it('REFUSES to punch a hole in the run, and names the month that blocks it', async () => {
-    await recordMonth(1, '2026-06-17');
-    await recordMonth(2, '2026-07-16');
+  it("REFUSES to punch a hole in the run, and names the month that blocks it", async () => {
+    await recordMonth(1, "2026-06-17");
+    await recordMonth(2, "2026-07-16");
     const first = (await monthsOf())[0]!;
 
     const res = await call(
-      'DELETE',
+      "DELETE",
       `/admin/hijri-calendar/${YEAR}/1?version=${first.version}`,
       superToken,
     );
 
     expect(res.status).toBe(409);
-    expect(res.body.error?.details?.['reason']).toBe('LATER_MONTH_RECORDED');
-    expect(res.body.error?.details?.['later_hijri_month']).toBe(2);
+    expect(res.body.error?.details?.["reason"]).toBe("LATER_MONTH_RECORDED");
+    expect(res.body.error?.details?.["later_hijri_month"]).toBe(2);
     // And it really did not happen.
-    expect((await monthsOf())[0]!.gregorian_start_date).toBe('2026-06-17');
+    expect((await monthsOf())[0]!.gregorian_start_date).toBe("2026-06-17");
   });
 
-  it('requires the TD-15 version, and refuses a stale one', async () => {
-    await recordMonth(1, '2026-06-17');
+  it("requires the TD-15 version, and refuses a stale one", async () => {
+    await recordMonth(1, "2026-06-17");
     const version = (await monthsOf())[0]!.version!;
 
-    expect((await call('DELETE', `/admin/hijri-calendar/${YEAR}/1`, superToken)).status).toBe(400);
+    expect(
+      (await call("DELETE", `/admin/hijri-calendar/${YEAR}/1`, superToken))
+        .status,
+    ).toBe(400);
     const stale = await call(
-      'DELETE',
+      "DELETE",
       `/admin/hijri-calendar/${YEAR}/1?version=${version + 1}`,
       superToken,
     );
     expect(stale.status).toBe(409);
-    expect((await monthsOf())[0]!.gregorian_start_date).toBe('2026-06-17');
+    expect((await monthsOf())[0]!.gregorian_start_date).toBe("2026-06-17");
   });
 
-  it('refuses an Admin and an anonymous caller', async () => {
-    await recordMonth(1, '2026-06-17');
+  it("refuses an Admin and an anonymous caller", async () => {
+    await recordMonth(1, "2026-06-17");
     const version = (await monthsOf())[0]!.version;
 
     expect(
-      (await call('DELETE', `/admin/hijri-calendar/${YEAR}/1?version=${version}`, adminToken)).status,
+      (
+        await call(
+          "DELETE",
+          `/admin/hijri-calendar/${YEAR}/1?version=${version}`,
+          adminToken,
+        )
+      ).status,
     ).toBe(403);
     expect(
-      (await call('DELETE', `/admin/hijri-calendar/${YEAR}/1?version=${version}`)).status,
+      (
+        await call(
+          "DELETE",
+          `/admin/hijri-calendar/${YEAR}/1?version=${version}`,
+        )
+      ).status,
     ).toBe(401);
-    expect((await monthsOf())[0]!.gregorian_start_date).toBe('2026-06-17');
+    expect((await monthsOf())[0]!.gregorian_start_date).toBe("2026-06-17");
   });
 });

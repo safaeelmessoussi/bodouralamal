@@ -1,9 +1,9 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import { issueAccessToken } from '../lib/access-token.js';
-import { loadConfig } from '../lib/config.js';
-import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
-import { httpCall } from '../test-support/http-client.js';
+import { issueAccessToken } from "../lib/access-token.js";
+import { loadConfig } from "../lib/config.js";
+import { createPrismaClient, TEST_CONNECTION_LIMIT } from "../lib/prisma.js";
+import { httpCall } from "../test-support/http-client.js";
 
 /**
  * `POST /uploads/initiate` **over real HTTP, through the real router** (TD-3.5).
@@ -36,7 +36,7 @@ import { httpCall } from '../test-support/http-client.js';
 const config = loadConfig();
 const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);
 const BASE = `${config.PUBLIC_BASE_URL}/api/v1`;
-const TAG = '[upload-http-test]';
+const TAG = "[upload-http-test]";
 
 interface Res {
   status: number;
@@ -48,30 +48,41 @@ interface Res {
   };
 }
 
-function bearer(userId: string, scopes: { role: string; branches: string[] | null }[]): string {
+function bearer(
+  userId: string,
+  scopes: { role: string; branches: string[] | null }[],
+): string {
   return issueAccessToken(
-    { userId, roleScopes: scopes as never, accountStatus: 'active' as never },
+    { userId, roleScopes: scopes as never, accountStatus: "active" as never },
     config.JWT_SIGNING_KEY,
   ).token;
 }
 
-let adminId = '';
-let token = '';
-let branchId = '';
-let levelId = '';
-let taughtSubjectId = '';
-let untaughtSubjectId = '';
-let academicYearId = '';
+let adminId = "";
+let token = "";
+let branchId = "";
+let levelId = "";
+let taughtSubjectId = "";
+let untaughtSubjectId = "";
+let academicYearId = "";
 
 async function clear(): Promise<void> {
   const ids = (
-    await prisma.user.findMany({ where: { nameArabic: { startsWith: TAG } }, select: { id: true } })
+    await prisma.user.findMany({
+      where: { nameArabic: { startsWith: TAG } },
+      select: { id: true },
+    })
   ).map((u) => u.id);
   const levels = (
-    await prisma.level.findMany({ where: { name: { startsWith: TAG } }, select: { id: true } })
+    await prisma.level.findMany({
+      where: { name: { startsWith: TAG } },
+      select: { id: true },
+    })
   ).map((l) => l.id);
 
-  await prisma.educationalContent.deleteMany({ where: { title: { startsWith: TAG } } });
+  await prisma.educationalContent.deleteMany({
+    where: { title: { startsWith: TAG } },
+  });
   await prisma.rateLimitCounter.deleteMany({ where: { userId: { in: ids } } });
   await prisma.auditLog.deleteMany({ where: { actorUserId: { in: ids } } });
   await prisma.levelSubject.deleteMany({ where: { levelId: { in: levels } } });
@@ -86,8 +97,11 @@ async function clear(): Promise<void> {
 /** `as: null` is *anonymous*. It cannot be `undefined`: a default parameter is
  *  applied for an explicit `undefined` too, so "no token" would silently become
  *  "the admin token" — which is how a 401 test passes by getting a 201. */
-async function initiate(body: unknown, as: string | null = token): Promise<Res> {
-  return httpCall<Res['body']>(BASE, 'POST', '/uploads/initiate', {
+async function initiate(
+  body: unknown,
+  as: string | null = token,
+): Promise<Res> {
+  return httpCall<Res["body"]>(BASE, "POST", "/uploads/initiate", {
     ...(as === null ? {} : { token: as }),
     body,
   });
@@ -96,9 +110,9 @@ async function initiate(body: unknown, as: string | null = token): Promise<Res> 
 /** The payload the upload screen actually sends. */
 function payload(over: Record<string, unknown> = {}): unknown {
   return {
-    filename: 'درس.pdf',
+    filename: "درس.pdf",
     size: 2048,
-    mime: 'application/pdf',
+    mime: "application/pdf",
     content_meta: {
       level_id: levelId,
       subject_id: taughtSubjectId,
@@ -110,29 +124,43 @@ function payload(over: Record<string, unknown> = {}): unknown {
 }
 
 beforeAll(async () => {
-  academicYearId = (await prisma.academicYear.findFirstOrThrow({ where: { isCurrent: true } })).id;
+  academicYearId = (
+    await prisma.academicYear.findFirstOrThrow({ where: { isCurrent: true } })
+  ).id;
 });
 
 beforeEach(async () => {
   await clear();
 
   branchId = (await prisma.branch.create({ data: { name: `${TAG} فرع` } })).id;
-  const categoryId = (await prisma.category.create({ data: { name: `${TAG} فئة` } })).id;
+  const categoryId = (
+    await prisma.category.create({ data: { name: `${TAG} فئة` } })
+  ).id;
   levelId = (
     await prisma.level.create({
-      data: { name: `${TAG} مستوى`, categoryId, genderRestriction: 'any' },
+      data: { name: `${TAG} مستوى`, categoryId, genderRestriction: "any" },
     })
   ).id;
-  taughtSubjectId = (await prisma.subject.create({ data: { name: `${TAG} مادة مسندة` } })).id;
-  untaughtSubjectId = (await prisma.subject.create({ data: { name: `${TAG} مادة غريبة` } })).id;
-  await prisma.levelSubject.create({ data: { levelId, subjectId: taughtSubjectId } });
+  taughtSubjectId = (
+    await prisma.subject.create({ data: { name: `${TAG} مادة مسندة` } })
+  ).id;
+  untaughtSubjectId = (
+    await prisma.subject.create({ data: { name: `${TAG} مادة غريبة` } })
+  ).id;
+  await prisma.levelSubject.create({
+    data: { levelId, subjectId: taughtSubjectId },
+  });
 
   adminId = (
-    await prisma.user.create({ data: { nameArabic: `${TAG} مديرة`, accountStatus: 'active' } })
+    await prisma.user.create({
+      data: { sex: 'female', nameArabic: `${TAG} مديرة`, accountStatus: "active" },
+    })
   ).id;
-  const role = await prisma.role.findFirstOrThrow({ where: { name: 'admin' } });
-  await prisma.userBranchRole.create({ data: { userId: adminId, roleId: role.id, branchId: null } });
-  token = bearer(adminId, [{ role: 'admin', branches: null }]);
+  const role = await prisma.role.findFirstOrThrow({ where: { name: "admin" } });
+  await prisma.userBranchRole.create({
+    data: { userId: adminId, roleId: role.id, branchId: null },
+  });
+  token = bearer(adminId, [{ role: "admin", branches: null }]);
 });
 
 afterAll(async () => {
@@ -140,8 +168,8 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 
-describe('the route is mounted (the defect this file was written for)', () => {
-  it('answers a valid upload with a ticket, not the unmounted-route 404', async () => {
+describe("the route is mounted (the defect this file was written for)", () => {
+  it("answers a valid upload with a ticket, not the unmounted-route 404", async () => {
     const res = await initiate(payload());
 
     expect(res.status).toBe(201);
@@ -152,82 +180,92 @@ describe('the route is mounted (the defect this file was written for)', () => {
     expect(res.body.key).toMatch(/^content\/[0-9a-f-]{36}\/[0-9a-f]{8}\//);
   });
 
-  it('never answers NOT_FOUND with empty details — that shape means UNMOUNTED', async () => {
+  it("never answers NOT_FOUND with empty details — that shape means UNMOUNTED", async () => {
     // The exact signature of the reported bug. Every refusal this endpoint
     // raises names a reason; a bare NOT_FOUND can only have come from the
     // `notFound` middleware, which means the route is not on the router.
     for (const body of [
       payload(),
       payload({ subject_id: untaughtSubjectId }),
-      payload({ level_id: '11111111-2222-3333-4444-555555555555' }),
+      payload({ level_id: "11111111-2222-3333-4444-555555555555" }),
     ]) {
       const res = await initiate(body);
       const isBareNotFound =
-        res.body.error?.code === 'NOT_FOUND' &&
+        res.body.error?.code === "NOT_FOUND" &&
         Object.keys(res.body.error.details ?? {}).length === 0;
       expect(isBareNotFound, JSON.stringify(res.body)).toBe(false);
     }
   });
 
-  it('still mounts /complete and /abort, which share the failure mode', async () => {
+  it("still mounts /complete and /abort, which share the failure mode", async () => {
     // A ticket the server refuses, but refuses with a REASON — proving the
     // handler ran rather than the router giving up.
-    const complete = await httpCall<Res['body']>(BASE, 'POST', '/uploads/not-a-ticket/complete', {
-      token,
-      body: { title: 'x' },
-    });
-    expect(complete.body.error?.details?.['reason']).toBe('MALFORMED');
+    const complete = await httpCall<Res["body"]>(
+      BASE,
+      "POST",
+      "/uploads/not-a-ticket/complete",
+      {
+        token,
+        body: { title: "x" },
+      },
+    );
+    expect(complete.body.error?.details?.["reason"]).toBe("MALFORMED");
 
-    const abort = await httpCall<Res['body']>(BASE, 'POST', '/uploads/not-a-ticket/abort', {
-      token,
-    });
-    expect(abort.body.error?.details?.['reason']).toBe('MALFORMED');
+    const abort = await httpCall<Res["body"]>(
+      BASE,
+      "POST",
+      "/uploads/not-a-ticket/abort",
+      {
+        token,
+      },
+    );
+    expect(abort.body.error?.details?.["reason"]).toBe("MALFORMED");
   });
 });
 
-describe('the Level/Subject pairing the screen must respect (R43)', () => {
-  it('accepts a Subject the Level teaches', async () => {
+describe("the Level/Subject pairing the screen must respect (R43)", () => {
+  it("accepts a Subject the Level teaches", async () => {
     expect((await initiate(payload())).status).toBe(201);
   });
 
-  it('refuses a Subject the Level does not teach, and says which rule', async () => {
+  it("refuses a Subject the Level does not teach, and says which rule", async () => {
     // The second half of the reported failure: with no `LevelSubject` rows, a
     // picker offering every Subject in the platform can only ever produce this.
     const res = await initiate(payload({ subject_id: untaughtSubjectId }));
     expect(res.status).toBe(409);
-    expect(res.body.error?.details?.['reason']).toBe('SUBJECT_NOT_IN_LEVEL');
+    expect(res.body.error?.details?.["reason"]).toBe("SUBJECT_NOT_IN_LEVEL");
   });
 
-  it('refuses every Subject once the Level teaches none — the observed database state', async () => {
+  it("refuses every Subject once the Level teaches none — the observed database state", async () => {
     await prisma.levelSubject.deleteMany({ where: { levelId } });
     for (const subject of [taughtSubjectId, untaughtSubjectId]) {
       const res = await initiate(payload({ subject_id: subject }));
-      expect(res.body.error?.details?.['reason']).toBe('SUBJECT_NOT_IN_LEVEL');
+      expect(res.body.error?.details?.["reason"]).toBe("SUBJECT_NOT_IN_LEVEL");
     }
   });
 });
 
-describe('the payload contract (TD-3.5)', () => {
-  it('rejects an unknown key rather than ignoring it', async () => {
+describe("the payload contract (TD-3.5)", () => {
+  it("rejects an unknown key rather than ignoring it", async () => {
     // `.strict()` at the boundary: a client sending `content_id` instead of the
     // documented key must be told, not silently given a different upload.
-    const res = await initiate({ ...(payload() as object), session_id: 'x' });
+    const res = await initiate({ ...(payload() as object), session_id: "x" });
     expect(res.status).toBe(400);
-    expect(res.body.error?.code).toBe('VALIDATION_FAILED');
+    expect(res.body.error?.code).toBe("VALIDATION_FAILED");
   });
 
-  it('requires branch_id to be PRESENT, so Global is never a silent default', async () => {
+  it("requires branch_id to be PRESENT, so Global is never a silent default", async () => {
     const body = payload() as { content_meta: Record<string, unknown> };
-    delete body.content_meta['branch_id'];
+    delete body.content_meta["branch_id"];
     const res = await initiate(body);
     expect(res.status).toBe(400);
   });
 
-  it('refuses a MIME type absent from the TD-9 whitelist, including video', async () => {
+  it("refuses a MIME type absent from the TD-9 whitelist, including video", async () => {
     const res = await initiate({
-      filename: 'clip.mp4',
+      filename: "clip.mp4",
       size: 2048,
-      mime: 'video/mp4',
+      mime: "video/mp4",
       content_meta: {
         level_id: levelId,
         subject_id: taughtSubjectId,
@@ -236,10 +274,10 @@ describe('the payload contract (TD-3.5)', () => {
       },
     });
     expect(res.status).toBe(400);
-    expect(res.body.error?.code).toBe('VALIDATION_FAILED');
+    expect(res.body.error?.code).toBe("VALIDATION_FAILED");
   });
 
-  it('answers 401 without a token — the guarded router, not the service', async () => {
+  it("answers 401 without a token — the guarded router, not the service", async () => {
     const res = await initiate(payload(), null);
     expect(res.status).toBe(401);
   });

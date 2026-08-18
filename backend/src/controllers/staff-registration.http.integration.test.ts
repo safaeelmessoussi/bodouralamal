@@ -1,16 +1,20 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { issueAccessToken } from '../lib/access-token.js';
-import { loadConfig } from '../lib/config.js';
-import { issueOnboardingToken } from '../lib/onboarding-token.js';
-import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
-import { httpCall } from '../test-support/http-client.js';
-import { clearPlacement, provisionPlacement, type Placement } from '../test-support/placement.js';
+import { issueAccessToken } from "../lib/access-token.js";
+import { loadConfig } from "../lib/config.js";
+import { issueOnboardingToken } from "../lib/onboarding-token.js";
+import { createPrismaClient, TEST_CONNECTION_LIMIT } from "../lib/prisma.js";
+import { httpCall } from "../test-support/http-client.js";
+import {
+  clearPlacement,
+  provisionPlacement,
+  type Placement,
+} from "../test-support/placement.js";
 import {
   captureConsentVersion,
   restoreConsentVersion,
   type SavedConsentVersion,
-} from '../test-support/consent-setting.js';
+} from "../test-support/consent-setting.js";
 
 /**
  * The staff registration workflow, end to end (Revision 49, proposed).
@@ -29,7 +33,7 @@ import {
 const config = loadConfig();
 const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);
 const BASE = `${config.PUBLIC_BASE_URL}/api/v1`;
-const TAG = '[http-staffreg-test]';
+const TAG = "[http-staffreg-test]";
 /**
  * **Deliberately not a prefix-extension of `TAG`.** `clear()` deletes by
  * `startsWith(TAG)`, so a placement tagged `${TAG}p` would be swept by the
@@ -37,7 +41,7 @@ const TAG = '[http-staffreg-test]';
  * `Restrict` FK would refuse. The separating `-` before the bracket is what
  * keeps the two namespaces disjoint.
  */
-const PLACEMENT_TAG = '[http-staffreg-test-place]';
+const PLACEMENT_TAG = "[http-staffreg-test-place]";
 
 let savedConsentVersion: SavedConsentVersion | null = null;
 
@@ -50,8 +54,13 @@ interface Res {
   };
 }
 
-const call = (method: string, path: string, token?: string, body?: unknown): Promise<Res> =>
-  httpCall<Res['body']>(BASE, method, path, {
+const call = (
+  method: string,
+  path: string,
+  token?: string,
+  body?: unknown,
+): Promise<Res> =>
+  httpCall<Res["body"]>(BASE, method, path, {
     ...(token !== undefined ? { token } : {}),
     ...(body !== undefined ? { body } : {}),
   });
@@ -61,7 +70,7 @@ const bearer = (userId: string, roles: string[]): string =>
     {
       userId,
       roleScopes: roles.map((role) => ({ role, branches: null })) as never,
-      accountStatus: 'active' as never,
+      accountStatus: "active" as never,
     },
     config.JWT_SIGNING_KEY,
   ).token;
@@ -74,9 +83,16 @@ let placement: Placement;
 
 async function makeStaff(role: string, branch: string | null): Promise<string> {
   const user = await prisma.user.create({
-    data: { nameArabic: `${TAG} ${role}`, accountStatus: 'active' },
+    data: {
+      // R80 — every person carries a recorded sex; the column is NOT NULL.
+      sex: "female",
+      nameArabic: `${TAG} ${role}`,
+      accountStatus: "active",
+    },
   });
-  const roleRow = await prisma.role.findUniqueOrThrow({ where: { name: role } });
+  const roleRow = await prisma.role.findUniqueOrThrow({
+    where: { name: role },
+  });
   await prisma.userBranchRole.create({
     data: { userId: user.id, roleId: roleRow.id, branchId: branch },
   });
@@ -87,37 +103,39 @@ let counter = 0;
 
 /** Submits the adult self-registration form over real HTTP, exactly as the
  *  public form does — with the onboarding token as the only identity. */
-async function apply(requestedRole?: 'teacher'): Promise<string> {
+async function apply(requestedRole?: "teacher"): Promise<string> {
   counter += 1;
   const stamp = `${Date.now()}-${counter}`;
   const { token } = issueOnboardingToken(
-    { email: `staffreg-${stamp}@example.com`, providerSubjectId: `staffregsub-${stamp}` },
+    {
+      email: `staffreg-${stamp}@example.com`,
+      providerSubjectId: `staffregsub-${stamp}`,
+    },
     config.ONBOARDING_TOKEN_KEY,
   );
-  const res = await httpCall<{ applicant_id?: string; error?: { code?: string } }>(
-    BASE,
-    'POST',
-    '/registrations',
-    {
-      headers: { 'X-Onboarding-Token': token },
-      body: {
-        kind: 'adult',
-        applicant: {
-          first_name_arabic: `${TAG}`,
-          last_name_arabic: `أستاذة${counter}`,
-          sex: 'female',
-        },
-        branch_id: branchId,
-        // R49: a student states a stage; a staff request must NOT — a teacher
-        // is admitted to no Level, and the schema refuses the pair together.
-        ...(requestedRole
-          ? { requested_role: requestedRole }
-          : { category_id: placement.categoryId }),
-        consents: { data_processing: true },
+  const res = await httpCall<{
+    applicant_id?: string;
+    error?: { code?: string };
+  }>(BASE, "POST", "/registrations", {
+    headers: { "X-Onboarding-Token": token },
+    body: {
+      kind: "adult",
+      applicant: {
+        first_name_arabic: `${TAG}`,
+        last_name_arabic: `أستاذة${counter}`,
+        sex: "female",
       },
+      branch_id: branchId,
+      // R49: a student states a stage; a staff request must NOT — a teacher
+      // is admitted to no Level, and the schema refuses the pair together.
+      ...(requestedRole
+        ? { requested_role: requestedRole }
+        : { category_id: placement.categoryId }),
+      consents: { data_processing: true },
     },
-  );
-  if (res.status !== 201) throw new Error(`registration failed: ${JSON.stringify(res.body)}`);
+  });
+  if (res.status !== 201)
+    throw new Error(`registration failed: ${JSON.stringify(res.body)}`);
   return res.body.applicant_id!;
 }
 
@@ -131,14 +149,16 @@ async function clear(): Promise<void> {
     await prisma.auditLog.deleteMany({
       where: { OR: [{ actorUserId: { in: ids } }, { targetId: { in: ids } }] },
     });
-    await prisma.consentRecord.deleteMany({ where: { studentId: { in: ids } } });
+    await prisma.consentRecord.deleteMany({
+      where: { studentId: { in: ids } },
+    });
     await prisma.userBranchRole.deleteMany({ where: { userId: { in: ids } } });
     // §4.1 (R43): approving now CREATES enrolments, and `enrollment.student_id`
-  // is ON DELETE RESTRICT — so they go before the people they belong to. This
-  // line did not exist before approval placed anybody, which is why adding the
-  // placement turned an unrelated dozen tests red.
-  await prisma.enrollment.deleteMany({ where: { studentId: { in: ids } } });
-  await prisma.userIdentity.deleteMany({ where: { userId: { in: ids } } });
+    // is ON DELETE RESTRICT — so they go before the people they belong to. This
+    // line did not exist before approval placed anybody, which is why adding the
+    // placement turned an unrelated dozen tests red.
+    await prisma.enrollment.deleteMany({ where: { studentId: { in: ids } } });
+    await prisma.userIdentity.deleteMany({ where: { userId: { in: ids } } });
     await prisma.refreshToken.deleteMany({ where: { userId: { in: ids } } });
     await prisma.user.deleteMany({ where: { id: { in: ids } } });
   }
@@ -151,76 +171,103 @@ async function clear(): Promise<void> {
 }
 
 beforeAll(async () => {
-  const health = await fetch(`${config.PUBLIC_BASE_URL}/healthz`).catch(() => null);
-  if (!health || health.status !== 200) throw new Error('API not reachable');
+  const health = await fetch(`${config.PUBLIC_BASE_URL}/healthz`).catch(
+    () => null,
+  );
+  if (!health || health.status !== 200) throw new Error("API not reachable");
   savedConsentVersion = await captureConsentVersion(prisma);
   await clear();
 
   branchId = (await prisma.branch.create({ data: { name: `${TAG} فرع` } })).id;
   placement = await provisionPlacement(prisma, PLACEMENT_TAG);
-  superAdmin = bearer(await makeStaff('super_admin', null), ['super_admin']);
-  branchAdmin = bearer(await makeStaff('admin', branchId), ['admin']);
+  superAdmin = bearer(await makeStaff("super_admin", null), ["super_admin"]);
+  branchAdmin = bearer(await makeStaff("admin", branchId), ["admin"]);
 });
 
 afterAll(async () => {
   await clear();
-  if (savedConsentVersion) await restoreConsentVersion(prisma, savedConsentVersion);
+  if (savedConsentVersion)
+    await restoreConsentVersion(prisma, savedConsentVersion);
   await prisma.$disconnect();
 });
 
-describe('a teacher asks for a teacher account', () => {
-  it('records the request and grants absolutely nothing', async () => {
-    const id = await apply('teacher');
+describe("a teacher asks for a teacher account", () => {
+  it("records the request and grants absolutely nothing", async () => {
+    const id = await apply("teacher");
     const row = await prisma.user.findUniqueOrThrow({ where: { id } });
 
-    expect(row.requestedRole).toBe('teacher');
+    expect(row.requestedRole).toBe("teacher");
     // The whole point: a self-declared role is a HINT. Authority lives in
     // `user_branch_role`, and a value that granted access by form submission
     // would be privilege escalation.
-    expect(row.accountStatus).toBe('pending');
-    expect(await prisma.userBranchRole.count({ where: { userId: id, deletedAt: null } })).toBe(0);
+    expect(row.accountStatus).toBe("pending");
+    expect(
+      await prisma.userBranchRole.count({
+        where: { userId: id, deletedAt: null },
+      }),
+    ).toBe(0);
   });
 
-  it('appears in the queue, distinguishable from a family registration', async () => {
+  it("appears in the queue, distinguishable from a family registration", async () => {
     // Before this field the approver could not tell a teacher applicant from a
     // student applicant — the queue showed names and a branch, and nothing else.
-    const teacher = await apply('teacher');
+    const teacher = await apply("teacher");
     const ordinary = await apply();
 
-    const res = await call('GET', '/admin/approvals?type=registration&page_size=100', superAdmin);
+    const res = await call(
+      "GET",
+      "/admin/approvals?type=registration&page_size=100",
+      superAdmin,
+    );
     expect(res.status).toBe(200);
     const rows = res.body.data!;
-    expect(rows.find((r) => r['id'] === teacher)?.['requested_role']).toBe('teacher');
-    expect(rows.find((r) => r['id'] === ordinary)?.['requested_role']).toBeNull();
+    expect(rows.find((r) => r["id"] === teacher)?.["requested_role"]).toBe(
+      "teacher",
+    );
+    expect(
+      rows.find((r) => r["id"] === ordinary)?.["requested_role"],
+    ).toBeNull();
   });
 
-  it('refuses an administrator role being self-nominated', async () => {
+  it("refuses an administrator role being self-nominated", async () => {
     // Administrator accounts arrive through staff pre-provisioning (§4.1b step
     // 4b) — an authenticated path with a named actor. A public form is not that,
     // and the schema refuses the value rather than dropping it.
     counter += 1;
     const stamp = `${Date.now()}-${counter}`;
     const { token } = issueOnboardingToken(
-      { email: `staffregx-${stamp}@example.com`, providerSubjectId: `staffregxsub-${stamp}` },
+      {
+        email: `staffregx-${stamp}@example.com`,
+        providerSubjectId: `staffregxsub-${stamp}`,
+      },
       config.ONBOARDING_TOKEN_KEY,
     );
-    for (const role of ['admin', 'super_admin', 'student']) {
-      const res = await httpCall<{ error?: { code?: string } }>(BASE, 'POST', '/registrations', {
-        headers: { 'X-Onboarding-Token': token },
-        body: {
-          kind: 'adult',
-          applicant: { first_name_arabic: `${TAG}`, last_name_arabic: 'رفض', sex: 'female' },
-          branch_id: branchId,
-          requested_role: role,
-          consents: { data_processing: true },
+    for (const role of ["admin", "super_admin", "student"]) {
+      const res = await httpCall<{ error?: { code?: string } }>(
+        BASE,
+        "POST",
+        "/registrations",
+        {
+          headers: { "X-Onboarding-Token": token },
+          body: {
+            kind: "adult",
+            applicant: {
+              first_name_arabic: `${TAG}`,
+              last_name_arabic: "رفض",
+              sex: "female",
+            },
+            branch_id: branchId,
+            requested_role: role,
+            consents: { data_processing: true },
+          },
         },
-      });
+      );
       expect(res.status).toBe(400);
-      expect(res.body.error?.code).toBe('VALIDATION_FAILED');
+      expect(res.body.error?.code).toBe("VALIDATION_FAILED");
     }
   });
 
-  it('does not collect a branch SCOPE — only the branch the applicant asked for', async () => {
+  it("does not collect a branch SCOPE — only the branch the applicant asked for", async () => {
     // R39's `branch_id` is a request, not a placement. A role's branch scope is
     // an authorization boundary (TD-2), and collecting it here would let an
     // applicant propose the extent of their own permissions. `.strict()` turns
@@ -228,163 +275,250 @@ describe('a teacher asks for a teacher account', () => {
     counter += 1;
     const stamp = `${Date.now()}-${counter}`;
     const { token } = issueOnboardingToken(
-      { email: `staffregs-${stamp}@example.com`, providerSubjectId: `staffregssub-${stamp}` },
+      {
+        email: `staffregs-${stamp}@example.com`,
+        providerSubjectId: `staffregssub-${stamp}`,
+      },
       config.ONBOARDING_TOKEN_KEY,
     );
-    const res = await httpCall<{ error?: { code?: string } }>(BASE, 'POST', '/registrations', {
-      headers: { 'X-Onboarding-Token': token },
-      body: {
-        kind: 'adult',
-        applicant: { first_name_arabic: `${TAG}`, last_name_arabic: 'نطاق', sex: 'female' },
-        branch_id: branchId,
-        requested_role: 'teacher',
-        role_branch_id: branchId,
-        consents: { data_processing: true },
+    const res = await httpCall<{ error?: { code?: string } }>(
+      BASE,
+      "POST",
+      "/registrations",
+      {
+        headers: { "X-Onboarding-Token": token },
+        body: {
+          kind: "adult",
+          applicant: {
+            first_name_arabic: `${TAG}`,
+            last_name_arabic: "نطاق",
+            sex: "female",
+          },
+          branch_id: branchId,
+          requested_role: "teacher",
+          role_branch_id: branchId,
+          consents: { data_processing: true },
+        },
       },
-    });
+    );
     expect(res.status).toBe(400);
   });
 });
 
-describe('approval grants the role and its scope in one transaction', () => {
-  it('activates and assigns together, so the account is never active with no role', async () => {
-    const id = await apply('teacher');
+describe("approval grants the role and its scope in one transaction", () => {
+  it("activates and assigns together, so the account is never active with no role", async () => {
+    const id = await apply("teacher");
 
-    const res = await call('POST', `/admin/approvals/${id}/approve`, superAdmin, {
-      assignments: [{ role: 'teacher', branch_id: branchId }],
-    });
+    const res = await call(
+      "POST",
+      `/admin/approvals/${id}/approve`,
+      superAdmin,
+      {
+        assignments: [{ role: "teacher", branch_id: branchId }],
+      },
+    );
     expect(res.status).toBe(200);
 
     const row = await prisma.user.findUniqueOrThrow({
       where: { id },
-      include: { branchRoles: { where: { deletedAt: null }, include: { role: true } } },
+      include: {
+        branchRoles: { where: { deletedAt: null }, include: { role: true } },
+      },
     });
-    expect(row.accountStatus).toBe('active');
+    expect(row.accountStatus).toBe("active");
     expect(row.branchRoles).toHaveLength(1);
-    expect(row.branchRoles[0]!.role.name).toBe('teacher');
+    expect(row.branchRoles[0]!.role.name).toBe("teacher");
     expect(row.branchRoles[0]!.branchId).toBe(branchId);
   });
 
-  it('records what was asked and what was granted — the gap is the decision', async () => {
-    const id = await apply('teacher');
-    await call('POST', `/admin/approvals/${id}/approve`, superAdmin, {
+  it("records what was asked and what was granted — the gap is the decision", async () => {
+    const id = await apply("teacher");
+    await call("POST", `/admin/approvals/${id}/approve`, superAdmin, {
       // Approved as a teacher at ONE branch, having asked for nothing in
       // particular about scope. The audit row is where that is visible.
-      assignments: [{ role: 'teacher', branch_id: branchId }],
+      assignments: [{ role: "teacher", branch_id: branchId }],
     });
     const entry = await prisma.auditLog.findFirstOrThrow({
-      where: { targetEntity: 'User', targetId: id, actionType: 'user.approve' },
+      where: { targetEntity: "User", targetId: id, actionType: "user.approve" },
     });
     const detail = entry.detail as Record<string, unknown>;
-    expect(detail['requested_role']).toBe('teacher');
-    expect(detail['granted']).toEqual([{ role: 'teacher', branch_id: branchId }]);
+    expect(detail["requested_role"]).toBe("teacher");
+    expect(detail["granted"]).toEqual([
+      { role: "teacher", branch_id: branchId },
+    ]);
   });
 
-  it('approves an ordinary applicant with a placement and no role', async () => {
+  it("approves an ordinary applicant with a placement and no role", async () => {
     // A student receives access through ENROLMENT, not through a role
     // assignment — so an empty assignment set is a normal outcome, while an
     // empty placement is not (§4.1, R43).
     const id = await apply();
-    const res = await call('POST', `/admin/approvals/${id}/approve`, superAdmin, {
-      enrollments: [{ user_id: id, administrative_group_id: placement.groupId }],
-    });
+    const res = await call(
+      "POST",
+      `/admin/approvals/${id}/approve`,
+      superAdmin,
+      {
+        enrollments: [
+          { user_id: id, administrative_group_id: placement.groupId },
+        ],
+      },
+    );
     expect(res.status).toBe(200);
-    expect((await prisma.user.findUniqueOrThrow({ where: { id } })).accountStatus).toBe('active');
-    expect(await prisma.userBranchRole.count({ where: { userId: id, deletedAt: null } })).toBe(0);
-    expect(await prisma.enrollment.count({ where: { studentId: id, deletedAt: null } })).toBe(1);
+    expect(
+      (await prisma.user.findUniqueOrThrow({ where: { id } })).accountStatus,
+    ).toBe("active");
+    expect(
+      await prisma.userBranchRole.count({
+        where: { userId: id, deletedAt: null },
+      }),
+    ).toBe(0);
+    expect(
+      await prisma.enrollment.count({
+        where: { studentId: id, deletedAt: null },
+      }),
+    ).toBe(1);
   });
 
-  it('refuses to approve a student with NO placement (§4.1, R43)', async () => {
+  it("refuses to approve a student with NO placement (§4.1, R43)", async () => {
     // "An approved account with no enrollment is a person the platform admitted
     // and then lost." The refusal names WHO is missing, because on a family
     // bundle that is the only way to know which of them.
     const id = await apply();
-    const res = await call('POST', `/admin/approvals/${id}/approve`, superAdmin, {});
+    const res = await call(
+      "POST",
+      `/admin/approvals/${id}/approve`,
+      superAdmin,
+      {},
+    );
     expect(res.status).toBe(400);
-    expect(res.body.error?.details?.['reason']).toBe('ENROLLMENT_REQUIRED');
-    expect(res.body.error?.details?.['missing_user_ids']).toEqual([id]);
-    expect((await prisma.user.findUniqueOrThrow({ where: { id } })).accountStatus).toBe('pending');
+    expect(res.body.error?.details?.["reason"]).toBe("ENROLLMENT_REQUIRED");
+    expect(res.body.error?.details?.["missing_user_ids"]).toEqual([id]);
+    expect(
+      (await prisma.user.findUniqueOrThrow({ where: { id } })).accountStatus,
+    ).toBe("pending");
   });
 
-  it('enrols NOBODY for a staff request — a teacher is not admitted to a Level', async () => {
-    const id = await apply('teacher');
-    const res = await call('POST', `/admin/approvals/${id}/approve`, superAdmin, {
-      assignments: [{ role: 'teacher', branch_id: branchId }],
-    });
+  it("enrols NOBODY for a staff request — a teacher is not admitted to a Level", async () => {
+    const id = await apply("teacher");
+    const res = await call(
+      "POST",
+      `/admin/approvals/${id}/approve`,
+      superAdmin,
+      {
+        assignments: [{ role: "teacher", branch_id: branchId }],
+      },
+    );
     expect(res.status).toBe(200);
     expect(await prisma.enrollment.count({ where: { studentId: id } })).toBe(0);
   });
 
-  it('refuses a placement for somebody outside the bundle', async () => {
+  it("refuses a placement for somebody outside the bundle", async () => {
     // Otherwise approval would be an unscoped enrolment endpoint: naming any
     // student's id would place them.
-    const mine = await apply('teacher');
-    const stranger = await apply('teacher');
-    const res = await call('POST', `/admin/approvals/${mine}/approve`, superAdmin, {
-      enrollments: [{ user_id: stranger, administrative_group_id: placement.groupId }],
-    });
+    const mine = await apply("teacher");
+    const stranger = await apply("teacher");
+    const res = await call(
+      "POST",
+      `/admin/approvals/${mine}/approve`,
+      superAdmin,
+      {
+        enrollments: [
+          { user_id: stranger, administrative_group_id: placement.groupId },
+        ],
+      },
+    );
     expect(res.status).toBe(400);
-    expect(res.body.error?.details?.['reason']).toBe('NOT_IN_BUNDLE');
+    expect(res.body.error?.details?.["reason"]).toBe("NOT_IN_BUNDLE");
     expect(
-      (await prisma.user.findUniqueOrThrow({ where: { id: stranger } })).accountStatus,
-    ).toBe('pending');
+      (await prisma.user.findUniqueOrThrow({ where: { id: stranger } }))
+        .accountStatus,
+    ).toBe("pending");
   });
 
-  it('grants NOTHING on rejection, whatever the caller sends', async () => {
+  it("grants NOTHING on rejection, whatever the caller sends", async () => {
     // The single worst outcome this endpoint could produce. The service
     // discards assignments on the reject path rather than relying on a client
     // not to send them.
-    const id = await apply('teacher');
-    const res = await call('POST', `/admin/approvals/${id}/reject`, superAdmin, {
-      reason: 'اختبار',
-      assignments: [{ role: 'teacher', branch_id: branchId }],
-    });
+    const id = await apply("teacher");
+    const res = await call(
+      "POST",
+      `/admin/approvals/${id}/reject`,
+      superAdmin,
+      {
+        reason: "اختبار",
+        assignments: [{ role: "teacher", branch_id: branchId }],
+      },
+    );
     expect(res.status).toBe(200);
     const row = await prisma.user.findUniqueOrThrow({ where: { id } });
-    expect(row.accountStatus).toBe('rejected');
-    expect(await prisma.userBranchRole.count({ where: { userId: id, deletedAt: null } })).toBe(0);
+    expect(row.accountStatus).toBe("rejected");
+    expect(
+      await prisma.userBranchRole.count({
+        where: { userId: id, deletedAt: null },
+      }),
+    ).toBe(0);
   });
 
-  it('refuses an Admin granting an administrator role through approval', async () => {
+  it("refuses an Admin granting an administrator role through approval", async () => {
     // Approval must not become a second, weaker way to hand out authority than
     // `PUT /admin/users/{id}/roles`. The guard is the SAME function, which is
     // why there is one rule rather than two that drift.
-    const id = await apply('teacher');
-    const res = await call('POST', `/admin/approvals/${id}/approve`, branchAdmin, {
-      assignments: [{ role: 'admin', branch_id: branchId }],
-    });
+    const id = await apply("teacher");
+    const res = await call(
+      "POST",
+      `/admin/approvals/${id}/approve`,
+      branchAdmin,
+      {
+        assignments: [{ role: "admin", branch_id: branchId }],
+      },
+    );
     expect(res.status).toBe(403);
 
     // And the refusal took the ACTIVATION with it: the transaction is atomic,
     // so a rejected privilege grant cannot leave an approved account behind.
     expect(
       (await prisma.user.findUniqueOrThrow({ where: { id } })).accountStatus,
-    ).toBe('pending');
+    ).toBe("pending");
   });
 
-  it('lets an Admin approve and grant a teacher role', async () => {
+  it("lets an Admin approve and grant a teacher role", async () => {
     // The privilege guard is about ADMINISTRATOR roles; ordinary approval work
     // stays with the Admins who do it (TD-2).
-    const id = await apply('teacher');
-    const res = await call('POST', `/admin/approvals/${id}/approve`, branchAdmin, {
-      assignments: [{ role: 'teacher', branch_id: branchId }],
-    });
+    const id = await apply("teacher");
+    const res = await call(
+      "POST",
+      `/admin/approvals/${id}/approve`,
+      branchAdmin,
+      {
+        assignments: [{ role: "teacher", branch_id: branchId }],
+      },
+    );
     expect(res.status).toBe(200);
     expect(
       await prisma.userBranchRole.count({
-        where: { userId: id, deletedAt: null, role: { name: 'teacher' } },
+        where: { userId: id, deletedAt: null, role: { name: "teacher" } },
       }),
     ).toBe(1);
   });
 
-  it('refuses an unknown branch, and approves nothing in the attempt', async () => {
-    const id = await apply('teacher');
-    const res = await call('POST', `/admin/approvals/${id}/approve`, superAdmin, {
-      assignments: [{ role: 'teacher', branch_id: '00000000-0000-4000-8000-000000000000' }],
-    });
+  it("refuses an unknown branch, and approves nothing in the attempt", async () => {
+    const id = await apply("teacher");
+    const res = await call(
+      "POST",
+      `/admin/approvals/${id}/approve`,
+      superAdmin,
+      {
+        assignments: [
+          {
+            role: "teacher",
+            branch_id: "00000000-0000-4000-8000-000000000000",
+          },
+        ],
+      },
+    );
     expect(res.status).toBe(404);
     expect(
       (await prisma.user.findUniqueOrThrow({ where: { id } })).accountStatus,
-    ).toBe('pending');
+    ).toBe("pending");
   });
 });

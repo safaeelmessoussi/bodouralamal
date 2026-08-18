@@ -43,7 +43,10 @@ const submitSchema = z
           .object({
             first_name_arabic: z.string().trim().min(1).max(60),
             last_name_arabic: z.string().trim().min(1).max(60),
-            sex: z.enum(['female', 'male']).optional(),
+            // R80.1 — required, like every other creation path. A child
+            // admitted without one could never be placed in a restricted Level,
+            // and nothing inside the application could repair it.
+            sex: z.enum(['female', 'male']),
             schooling_stage: SCHOOLING_STAGE.optional(),
             /**
              * R67 — **required, on this path too.** They were optional while
@@ -142,7 +145,7 @@ export function submit(prisma: PrismaClient) {
         children: body.children.map((c) => ({
           firstNameArabic: c.first_name_arabic,
           lastNameArabic: c.last_name_arabic,
-          ...(c.sex ? { sex: c.sex } : {}),
+          sex: c.sex,
           ...(c.schooling_stage ? { schoolingStage: c.schooling_stage } : {}),
           requestedCategoryId: c.requested_category_id,
           requestedBranchId: c.requested_branch_id,

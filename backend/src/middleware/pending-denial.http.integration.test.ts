@@ -1,12 +1,12 @@
-import { readFileSync } from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import { readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import { issueAccessToken } from '../lib/access-token.js';
-import { loadConfig } from '../lib/config.js';
-import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
-import { httpCall } from '../test-support/http-client.js';
+import { issueAccessToken } from "../lib/access-token.js";
+import { loadConfig } from "../lib/config.js";
+import { createPrismaClient, TEST_CONNECTION_LIMIT } from "../lib/prisma.js";
+import { httpCall } from "../test-support/http-client.js";
 
 /**
  * §19.2 named regression — **Pending-session data-access denial across all
@@ -30,7 +30,7 @@ import { httpCall } from '../test-support/http-client.js';
 const config = loadConfig();
 const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);
 const BASE = `${config.PUBLIC_BASE_URL}/api/v1`;
-const TAG = '[pending-denial-test]';
+const TAG = "[pending-denial-test]";
 
 interface Body {
   error?: { code?: string };
@@ -38,9 +38,16 @@ interface Body {
 }
 
 const call = (method: string, path: string, token?: string, body?: unknown) =>
-  httpCall<Body>(BASE, method, path, { token, ...(body !== undefined ? { body } : {}) });
+  httpCall<Body>(BASE, method, path, {
+    token,
+    ...(body !== undefined ? { body } : {}),
+  });
 
-const bearer = (userId: string, roles: string[], accountStatus: string): string =>
+const bearer = (
+  userId: string,
+  roles: string[],
+  accountStatus: string,
+): string =>
   issueAccessToken(
     {
       userId,
@@ -57,7 +64,12 @@ let activeToken: string;
 
 async function person(label: string, status: string): Promise<string> {
   const u = await prisma.user.create({
-    data: { nameArabic: `${TAG} ${label}`, accountStatus: status as never },
+    data: {
+      // R80 — every person carries a recorded sex; the column is NOT NULL.
+      sex: "female",
+      nameArabic: `${TAG} ${label}`,
+      accountStatus: status as never,
+    },
   });
   return u.id;
 }
@@ -74,18 +86,36 @@ async function clear(): Promise<void> {
 }
 
 beforeAll(async () => {
-  const health = await fetch(`${config.PUBLIC_BASE_URL}/healthz`).catch(() => null);
-  if (!health || health.status !== 200) throw new Error('API not reachable');
+  const health = await fetch(`${config.PUBLIC_BASE_URL}/healthz`).catch(
+    () => null,
+  );
+  if (!health || health.status !== 200) throw new Error("API not reachable");
 });
 
 beforeEach(async () => {
   await clear();
   // A Pending account that also carries roles: the denial must rest on status,
   // never on the caller happening to lack a role.
-  pendingToken = bearer(await person('قيد الموافقة', 'pending'), ['super_admin'], 'pending');
-  suspendedToken = bearer(await person('موقوفة', 'suspended'), ['super_admin'], 'suspended');
-  rejectedToken = bearer(await person('مرفوضة', 'rejected'), ['super_admin'], 'rejected');
-  activeToken = bearer(await person('نشطة', 'active'), ['super_admin'], 'active');
+  pendingToken = bearer(
+    await person("قيد الموافقة", "pending"),
+    ["super_admin"],
+    "pending",
+  );
+  suspendedToken = bearer(
+    await person("موقوفة", "suspended"),
+    ["super_admin"],
+    "suspended",
+  );
+  rejectedToken = bearer(
+    await person("مرفوضة", "rejected"),
+    ["super_admin"],
+    "rejected",
+  );
+  activeToken = bearer(
+    await person("نشطة", "active"),
+    ["super_admin"],
+    "active",
+  );
 });
 
 afterAll(async () => {
@@ -105,7 +135,7 @@ afterAll(async () => {
  * **before** anything is looked up, so the answer must never depend on whether
  * the target exists.
  */
-const NOWHERE = '00000000-0000-4000-8000-000000000000';
+const NOWHERE = "00000000-0000-4000-8000-000000000000";
 
 /**
  * The documented exceptions, each with its clause. Listing them here — rather
@@ -115,23 +145,23 @@ const NOWHERE = '00000000-0000-4000-8000-000000000000';
  */
 const EXEMPT = new Set([
   // §4.4 / §4.1b / TD-3.9: public by design.
-  '/calendar',
-  '/registrations',
-  '/healthz',
+  "/calendar",
+  "/registrations",
+  "/healthz",
   // Revision 35: the §5.1 landing-page branch directory, anonymous.
-  '/branches',
+  "/branches",
   // Revision 36 (TD-3.10): the calendar screen's reference data, anonymous.
-  '/calendar/bootstrap',
+  "/calendar/bootstrap",
   // TD-3.4 (Revision 43): the §5.2 Session page is PUBLIC at the caller's tier,
   // exactly like the calendar grid it is opened from. A Pending account sees a
   // public session's existence and details, and never its private recordings —
   // which is the tier doing the work, not the guard.
-  '/calendar/sessions/{id}',
+  "/calendar/sessions/{id}",
   // TD-3.13 (Revision 43): the Educational Library is PUBLIC (§5.2). A Pending
   // account sees the public tier exactly as an anonymous visitor does, for the
   // same reason the calendar does — the account exists and grants nothing
   // (TD-1), which is not the same as being refused.
-  '/library',
+  "/library",
   // §4.9 (Revision 43): `SessionContent` read backwards — which class sessions
   // reference this item. **Public at the caller's tier**, `optionalAuthenticate`
   // like the two reads above it, and for the same reason: it adds no
@@ -142,21 +172,21 @@ const EXEMPT = new Set([
   // which was stale for a week (`ed7212b`..`4842def`). Regenerating the contract
   // is what made the route discoverable — the guard widening on its own is the
   // behaviour that was wanted, and this is the first route it caught.
-  '/library/{id}/sessions',
+  "/library/{id}/sessions",
   // §4.1b: the login flow itself, which a Pending user must be able to complete.
-  '/auth/google',
-  '/auth/google/callback',
+  "/auth/google",
+  "/auth/google/callback",
   // TD-12: cookie-authenticated, not bearer-guarded.
-  '/auth/refresh',
+  "/auth/refresh",
   // TD-1: *"a Pending session reaches no endpoint but `GET /me` and logout"*.
-  '/auth/logout',
-  '/me',
+  "/auth/logout",
+  "/me",
 ]);
 
 function concretePath(template: string): string {
   return template
-    .replace('{year}', '1448')
-    .replace('{month}', '1')
+    .replace("{year}", "1448")
+    .replace("{month}", "1")
     .replace(/\{[^}]+\}/g, NOWHERE);
 }
 
@@ -165,14 +195,16 @@ interface Contract {
 }
 
 function guardedRoutes(): [string, string][] {
-  const file = fileURLToPath(new URL('../../../docs/openapi.json', import.meta.url));
-  const spec = JSON.parse(readFileSync(file, 'utf8')) as Contract;
+  const file = fileURLToPath(
+    new URL("../../../docs/openapi.json", import.meta.url),
+  );
+  const spec = JSON.parse(readFileSync(file, "utf8")) as Contract;
   const out: [string, string][] = [];
 
   for (const [template, ops] of Object.entries(spec.paths)) {
     if (EXEMPT.has(template)) continue;
     for (const method of Object.keys(ops)) {
-      if (!['get', 'post', 'put', 'patch', 'delete'].includes(method)) continue;
+      if (!["get", "post", "put", "patch", "delete"].includes(method)) continue;
       out.push([method.toUpperCase(), concretePath(template)]);
     }
   }
@@ -181,71 +213,88 @@ function guardedRoutes(): [string, string][] {
 
 const GUARDED = guardedRoutes();
 
-describe('§19.2 — a Pending session reaches no guarded endpoint', () => {
-  it('derives its route list from the contract, and that list is not empty', () => {
+describe("§19.2 — a Pending session reaches no guarded endpoint", () => {
+  it("derives its route list from the contract, and that list is not empty", () => {
     // Without this, an empty or broken derivation would make every `it.each`
     // below vacuously pass by simply not running.
     expect(GUARDED.length).toBeGreaterThan(20);
-    expect(GUARDED.some(([, p]) => p.startsWith('/admin/'))).toBe(true);
+    expect(GUARDED.some(([, p]) => p.startsWith("/admin/"))).toBe(true);
   });
 
-  it.each(GUARDED)('%s %s is refused', async (method, path) => {
-    const res = await call(method, path, pendingToken, method === 'GET' ? undefined : {});
+  it.each(GUARDED)("%s %s is refused", async (method, path) => {
+    const res = await call(
+      method,
+      path,
+      pendingToken,
+      method === "GET" ? undefined : {},
+    );
 
     expect(res.status).toBe(403);
-    expect(res.body.error?.code).toBe('FORBIDDEN');
+    expect(res.body.error?.code).toBe("FORBIDDEN");
     // Nothing was read: no data travels alongside the refusal.
     expect(res.body.data).toBeUndefined();
   });
 });
 
-describe('§18 — suspended and rejected are refused identically', () => {
+describe("§18 — suspended and rejected are refused identically", () => {
   it.each([
-    ['suspended', () => suspendedToken],
-    ['rejected', () => rejectedToken],
-  ])('a %s session reaches no guarded endpoint either', async (_label, token) => {
-    for (const [method, path] of GUARDED.slice(0, 8)) {
-      const res = await call(method, path, token(), method === 'GET' ? undefined : {});
-      expect(res.status).toBe(403);
-    }
-  });
+    ["suspended", () => suspendedToken],
+    ["rejected", () => rejectedToken],
+  ])(
+    "a %s session reaches no guarded endpoint either",
+    async (_label, token) => {
+      for (const [method, path] of GUARDED.slice(0, 8)) {
+        const res = await call(
+          method,
+          path,
+          token(),
+          method === "GET" ? undefined : {},
+        );
+        expect(res.status).toBe(403);
+      }
+    },
+  );
 
-  it('the same token with account_status active is NOT refused', async () => {
+  it("the same token with account_status active is NOT refused", async () => {
     // The decisive control: without it, every assertion above could be passing
     // for some unrelated reason — a wrong path, a missing role, a typo.
-    const res = await call('GET', '/admin/branches', activeToken);
+    const res = await call("GET", "/admin/branches", activeToken);
     expect(res.status).toBe(200);
   });
 });
 
-describe('TD-1 — the two exceptions a Pending session DOES reach', () => {
-  it('GET /me is reachable, because status must be discoverable', async () => {
+describe("TD-1 — the two exceptions a Pending session DOES reach", () => {
+  it("GET /me is reachable, because status must be discoverable", async () => {
     // Refusing this would strand a Pending user: the client learns it is
     // pending from here, and would otherwise have nothing to route on.
-    const res = await call('GET', '/me', pendingToken);
+    const res = await call("GET", "/me", pendingToken);
     expect(res.status).toBe(200);
   });
 
-  it('logout is reachable, because a pending user must be able to leave', async () => {
-    const res = await call('POST', '/auth/logout', pendingToken);
+  it("logout is reachable, because a pending user must be able to leave", async () => {
+    const res = await call("POST", "/auth/logout", pendingToken);
     expect(res.status).toBe(204);
   });
 });
 
-describe('TD-3.4 — the Session page is public at the caller’s tier', () => {
-  it('serves a Pending account, which then sees the public tier only', async () => {
+describe("TD-3.4 — the Session page is public at the caller’s tier", () => {
+  it("serves a Pending account, which then sees the public tier only", async () => {
     // A 404 here would be the SESSION not existing, not the account being
     // refused — the point is that it is not a 401/403.
-    const res = await call('GET', '/calendar/sessions/00000000-0000-4000-8000-000000000000', pendingToken);
+    const res = await call(
+      "GET",
+      "/calendar/sessions/00000000-0000-4000-8000-000000000000",
+      pendingToken,
+    );
     expect(res.status).toBe(404);
-    expect(res.body.error?.code).toBe('NOT_FOUND');
+    expect(res.body.error?.code).toBe("NOT_FOUND");
   });
 });
 
-describe('TD-3.13 — the public library is an exception for the same reason', () => {
-  it('serves a Pending account the public tier, exactly as anonymous', async () => {
-    const asPending = await call('GET', '/library', pendingToken);
-    const asAnonymous = await call('GET', '/library');
+describe("TD-3.13 — the public library is an exception for the same reason", () => {
+  it("serves a Pending account the public tier, exactly as anonymous", async () => {
+    const asPending = await call("GET", "/library", pendingToken);
+    const asAnonymous = await call("GET", "/library");
     expect(asPending.status).toBe(200);
     expect(asAnonymous.status).toBe(200);
     // Signing in reorders and never unlocks (TD-3.13); a Pending account is not
@@ -254,11 +303,11 @@ describe('TD-3.13 — the public library is an exception for the same reason', (
   });
 });
 
-describe('§4.4 — the public calendar is the one documented exception', () => {
-  it('serves a Pending account the public tier, exactly as anonymous', async () => {
-    const range = 'from=2026-06-01&to=2026-06-30';
-    const asPending = await call('GET', `/calendar?${range}`, pendingToken);
-    const asAnonymous = await call('GET', `/calendar?${range}`);
+describe("§4.4 — the public calendar is the one documented exception", () => {
+  it("serves a Pending account the public tier, exactly as anonymous", async () => {
+    const range = "from=2026-06-01&to=2026-06-30";
+    const asPending = await call("GET", `/calendar?${range}`, pendingToken);
+    const asAnonymous = await call("GET", `/calendar?${range}`);
 
     expect(asPending.status).toBe(200);
     expect(asAnonymous.status).toBe(200);

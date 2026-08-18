@@ -1,5 +1,5 @@
-import { readdirSync, readFileSync } from 'node:fs';
-import { describe, expect, it } from 'vitest';
+import { readdirSync, readFileSync } from "node:fs";
+import { describe, expect, it } from "vitest";
 
 /**
  * **Guard: a group-less enrolment is a valid enrolment (R66).**
@@ -40,15 +40,16 @@ const GROUP_SPECIFIC_BY_DESIGN: Record<string, string> = {
   // The audit's P2, left deliberately: it degrades the calendar's *prefill*
   // only — no wrong data, nothing hidden that authorization would allow — and
   // the Owner scoped it out of this slice.
-  'calendar.service.ts:676': 'prefill only; recorded as P2, deliberately out of scope',
+  "calendar.service.ts:676":
+    "prefill only; recorded as P2, deliberately out of scope",
 };
 
 function blockAt(source: string, from: number): string {
   let depth = 0;
   let i = from;
   while (i < source.length) {
-    if ('({['.includes(source[i]!)) depth += 1;
-    else if (')}]'.includes(source[i]!)) {
+    if ("({[".includes(source[i]!)) depth += 1;
+    else if (")}]".includes(source[i]!)) {
       depth -= 1;
       if (depth === 0) break;
     }
@@ -57,26 +58,34 @@ function blockAt(source: string, from: number): string {
   return source.slice(from, i);
 }
 
-describe('R66 — enrolment resolution must accept a group-less enrolment', () => {
-  it('no enrolment query requires a live Administrative Group', () => {
-    const dir = new URL('.', import.meta.url).pathname;
+describe("R66 — enrolment resolution must accept a group-less enrolment", () => {
+  it("no enrolment query requires a live Administrative Group", () => {
+    const dir = new URL(".", import.meta.url).pathname;
     const offenders: string[] = [];
 
-    for (const file of readdirSync(dir).filter((f) => f.endsWith('.ts') && !f.includes('.test.'))) {
-      const source = readFileSync(`${dir}${file}`, 'utf8');
+    for (const file of readdirSync(dir).filter(
+      (f) => f.endsWith(".ts") && !f.includes(".test."),
+    )) {
+      const source = readFileSync(`${dir}${file}`, "utf8");
 
-      for (const match of source.matchAll(/\b(?:tx|prisma)\.enrollment\.(findMany|findFirst|count)\(/g)) {
+      for (const match of source.matchAll(
+        /\b(?:tx|prisma)\.enrollment\.(findMany|findFirst|count)\(/g,
+      )) {
         const block = blockAt(source, match.index! + match[0]!.length - 1);
-        if (!block.includes('administrativeGroup')) continue;
+        if (!block.includes("administrativeGroup")) continue;
 
         // The null arm: the correct predicate.
-        if (block.includes('administrativeGroupId: null')) continue;
+        if (block.includes("administrativeGroupId: null")) continue;
         // Group-specific by intent — `administrativeGroupId: <id>` or the
         // object shorthand `{ administrativeGroupId, … }`.
-        if (/administrativeGroupId\s*[,:}]/.test(block.replace(/administrativeGroupId:\s*null/g, '')))
+        if (
+          /administrativeGroupId\s*[,:}]/.test(
+            block.replace(/administrativeGroupId:\s*null/g, ""),
+          )
+        )
           continue;
 
-        const line = source.slice(0, match.index).split('\n').length;
+        const line = source.slice(0, match.index).split("\n").length;
         const key = `${file}:${line}`;
         if (GROUP_SPECIFIC_BY_DESIGN[key]) continue;
         offenders.push(key);
@@ -86,11 +95,11 @@ describe('R66 — enrolment resolution must accept a group-less enrolment', () =
     expect(offenders).toEqual([]);
   });
 
-  it('names its own blind spot, so nobody trusts it further than it reaches', () => {
+  it("names its own blind spot, so nobody trusts it further than it reaches", () => {
     // The P0 consent defect lived in a NESTED `level.enrollments.some`, which
     // this scanner cannot see. The integration tests beside it cover that path,
     // and this assertion exists so the limitation is read rather than assumed.
-    const self = readFileSync(new URL(import.meta.url).pathname, 'utf8');
-    expect(self).toContain('deliberately does NOT cover');
+    const self = readFileSync(new URL(import.meta.url).pathname, "utf8");
+    expect(self).toContain("deliberately does NOT cover");
   });
 });

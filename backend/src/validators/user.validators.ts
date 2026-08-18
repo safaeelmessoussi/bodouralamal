@@ -34,6 +34,15 @@ const phone = z
  */
 export const updateUserSchema = z
   .object({
+    /**
+     * **R80.3 — COMPLETION of a missing sex, never correction.**
+     *
+     * The service refuses it when one is already recorded
+     * (`SEX_ALREADY_RECORDED`): changing a recorded sex has consequences for
+     * placements already made and is its own decision, which R80.4 declines to
+     * introduce silently under the name of completion.
+     */
+    sex: z.enum(['female', 'male']).optional(),
     version,
     name_arabic: nameArabic.optional(),
     name_french: nameFrench.optional(),

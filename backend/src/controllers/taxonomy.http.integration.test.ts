@@ -1,9 +1,9 @@
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-import { issueAccessToken } from '../lib/access-token.js';
-import { loadConfig } from '../lib/config.js';
-import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
-import { httpCall } from '../test-support/http-client.js';
+import { issueAccessToken } from "../lib/access-token.js";
+import { loadConfig } from "../lib/config.js";
+import { createPrismaClient, TEST_CONNECTION_LIMIT } from "../lib/prisma.js";
+import { httpCall } from "../test-support/http-client.js";
 
 /** R66 — an enrolment carries its own branch, taken from the group so the
  *  composite FK `(administrative_group_id, branch_id)` holds. */
@@ -27,7 +27,7 @@ async function branchOf(groupId: string): Promise<string> {
 const config = loadConfig();
 const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);
 const BASE = `${config.PUBLIC_BASE_URL}/api/v1`;
-const TAG = '[http-taxonomy-test]';
+const TAG = "[http-taxonomy-test]";
 
 interface Res {
   status: number;
@@ -43,14 +43,17 @@ const call = (
   token?: string,
   body?: unknown,
 ): Promise<Res> =>
-  httpCall<Res['body']>(BASE, method, path, {
+  httpCall<Res["body"]>(BASE, method, path, {
     ...(token !== undefined ? { token } : {}),
     ...(body !== undefined ? { body } : {}),
   });
 
-const bearer = (userId: string, scopes: { role: string; branches: string[] | null }[]): string =>
+const bearer = (
+  userId: string,
+  scopes: { role: string; branches: string[] | null }[],
+): string =>
   issueAccessToken(
-    { userId, roleScopes: scopes as never, accountStatus: 'active' as never },
+    { userId, roleScopes: scopes as never, accountStatus: "active" as never },
     config.JWT_SIGNING_KEY,
   ).token;
 
@@ -62,7 +65,12 @@ let categoryId: string;
 
 async function makeUser(label: string): Promise<string> {
   const u = await prisma.user.create({
-    data: { nameArabic: `${TAG} ${label}`, accountStatus: 'active' },
+    data: {
+      // R80 — every person carries a recorded sex; the column is NOT NULL.
+      sex: "female",
+      nameArabic: `${TAG} ${label}`,
+      accountStatus: "active",
+    },
   });
   return u.id;
 }
@@ -73,14 +81,22 @@ async function clear(): Promise<void> {
     select: { id: true },
   });
   const levelIds = levels.map((l) => l.id);
-  await prisma.teachingGroup.deleteMany({ where: { levelId: { in: levelIds } } });
-  await prisma.levelSubject.deleteMany({ where: { levelId: { in: levelIds } } });
+  await prisma.teachingGroup.deleteMany({
+    where: { levelId: { in: levelIds } },
+  });
+  await prisma.levelSubject.deleteMany({
+    where: { levelId: { in: levelIds } },
+  });
   await prisma.enrollment.deleteMany({ where: { levelId: { in: levelIds } } });
-  await prisma.administrativeGroup.deleteMany({ where: { levelId: { in: levelIds } } });
+  await prisma.administrativeGroup.deleteMany({
+    where: { levelId: { in: levelIds } },
+  });
   await prisma.level.deleteMany({ where: { id: { in: levelIds } } });
   await prisma.category.deleteMany({ where: { name: { startsWith: TAG } } });
   await prisma.subject.deleteMany({ where: { name: { startsWith: TAG } } });
-  await prisma.room.deleteMany({ where: { branch: { name: { startsWith: TAG } } } });
+  await prisma.room.deleteMany({
+    where: { branch: { name: { startsWith: TAG } } },
+  });
   await prisma.branch.deleteMany({ where: { name: { startsWith: TAG } } });
   const users = await prisma.user.findMany({
     where: { nameArabic: { startsWith: TAG } },
@@ -95,14 +111,20 @@ async function clear(): Promise<void> {
 }
 
 beforeAll(async () => {
-  const health = await fetch(`${config.PUBLIC_BASE_URL}/healthz`).catch(() => null);
-  if (!health || health.status !== 200) throw new Error('API not reachable');
+  const health = await fetch(`${config.PUBLIC_BASE_URL}/healthz`).catch(
+    () => null,
+  );
+  if (!health || health.status !== 200) throw new Error("API not reachable");
   await clear();
 
   branchId = (await prisma.branch.create({ data: { name: `${TAG} فرع` } })).id;
-  superAdmin = bearer(await makeUser('مدير عام'), [{ role: 'super_admin', branches: null }]);
-  admin = bearer(await makeUser('مسؤولة'), [{ role: 'admin', branches: null }]);
-  teacher = bearer(await makeUser('أستاذة'), [{ role: 'teacher', branches: null }]);
+  superAdmin = bearer(await makeUser("مدير عام"), [
+    { role: "super_admin", branches: null },
+  ]);
+  admin = bearer(await makeUser("مسؤولة"), [{ role: "admin", branches: null }]);
+  teacher = bearer(await makeUser("أستاذة"), [
+    { role: "teacher", branches: null },
+  ]);
 });
 
 afterAll(async () => {
@@ -110,142 +132,180 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 
-describe('Categories (§5.6 الفئات والمواد)', () => {
-  it('creates one, and reports that it holds no Levels yet', async () => {
-    const res = await call('POST', '/admin/categories', superAdmin, {
+describe("Categories (§5.6 الفئات والمواد)", () => {
+  it("creates one, and reports that it holds no Levels yet", async () => {
+    const res = await call("POST", "/admin/categories", superAdmin, {
       name: `${TAG} فئة`,
       display_order: 1,
     });
     expect(res.status).toBe(201);
-    categoryId = String((res.body.data as unknown as Record<string, unknown>)['id']);
+    categoryId = String(
+      (res.body.data as unknown as Record<string, unknown>)["id"],
+    );
     // `level_count` is what tells the screen whether deleting is possible at
     // all, without a request per row.
-    expect((res.body.data as unknown as Record<string, unknown>)['level_count']).toBe(0);
+    expect(
+      (res.body.data as unknown as Record<string, unknown>)["level_count"],
+    ).toBe(0);
   });
 
-  it('lists with the version an editor must send back (TD-15)', async () => {
-    const res = await call('GET', '/admin/categories', superAdmin);
+  it("lists with the version an editor must send back (TD-15)", async () => {
+    const res = await call("GET", "/admin/categories", superAdmin);
     expect(res.status).toBe(200);
     const row = (res.body.data as unknown as Record<string, unknown>[]).find(
-      (r) => r['id'] === categoryId,
+      (r) => r["id"] === categoryId,
     )!;
     expect(Object.keys(row).sort()).toEqual([
-      'display_order',
-      'id',
-      'level_count',
-      'name',
-      'version',
+      "display_order",
+      "id",
+      "level_count",
+      "name",
+      "version",
     ]);
   });
 
-  it('refuses a stale version with 409 VERSION_CONFLICT rather than overwriting', async () => {
-    const res = await call('PATCH', `/admin/categories/${categoryId}`, superAdmin, {
-      version: 99,
-      name: `${TAG} فئة معدلة`,
-    });
+  it("refuses a stale version with 409 VERSION_CONFLICT rather than overwriting", async () => {
+    const res = await call(
+      "PATCH",
+      `/admin/categories/${categoryId}`,
+      superAdmin,
+      {
+        version: 99,
+        name: `${TAG} فئة معدلة`,
+      },
+    );
     expect(res.status).toBe(409);
-    expect(res.body.error?.code).toBe('VERSION_CONFLICT');
+    expect(res.body.error?.code).toBe("VERSION_CONFLICT");
   });
 
-  it('is Super Admin to write and Admin to read (TD-2 R26)', async () => {
-    expect((await call('GET', '/admin/categories', admin)).status).toBe(200);
-    const res = await call('POST', '/admin/categories', admin, { name: `${TAG} مرفوضة` });
+  it("is Super Admin to write and Admin to read (TD-2 R26)", async () => {
+    expect((await call("GET", "/admin/categories", admin)).status).toBe(200);
+    const res = await call("POST", "/admin/categories", admin, {
+      name: `${TAG} مرفوضة`,
+    });
     expect(res.status).toBe(403);
-    expect(res.body.error?.code).toBe('FORBIDDEN');
+    expect(res.body.error?.code).toBe("FORBIDDEN");
   });
 
-  it('refuses a Teacher entirely (Revision 30)', async () => {
-    expect((await call('GET', '/admin/categories', teacher)).status).toBe(403);
+  it("refuses a Teacher entirely (Revision 30)", async () => {
+    expect((await call("GET", "/admin/categories", teacher)).status).toBe(403);
   });
 });
 
-describe('Subjects (§5.6 الفئات والمواد)', () => {
-  let subjectId = '';
+describe("Subjects (§5.6 الفئات والمواد)", () => {
+  let subjectId = "";
 
-  it('creates, renames and lists through the ONE subject endpoint', async () => {
-    const created = await call('POST', '/admin/subjects', superAdmin, { name: `${TAG} مادة` });
+  it("creates, renames and lists through the ONE subject endpoint", async () => {
+    const created = await call("POST", "/admin/subjects", superAdmin, {
+      name: `${TAG} مادة`,
+    });
     expect(created.status).toBe(201);
     const row = created.body.data as unknown as Record<string, unknown>;
-    subjectId = String(row['id']);
+    subjectId = String(row["id"]);
 
     // The selector and the editor read the same list — that is why `version`
     // is published on it.
-    const renamed = await call('PATCH', `/admin/subjects/${subjectId}`, superAdmin, {
-      version: row['version'],
-      name: `${TAG} مادة معدلة`,
-    });
+    const renamed = await call(
+      "PATCH",
+      `/admin/subjects/${subjectId}`,
+      superAdmin,
+      {
+        version: row["version"],
+        name: `${TAG} مادة معدلة`,
+      },
+    );
     expect(renamed.status).toBe(200);
 
-    const list = await call('GET', '/admin/subjects', superAdmin);
-    const listed = (list.body.data as unknown as Record<string, unknown>[]).find(
-      (r) => r['id'] === subjectId,
-    )!;
-    expect(listed['name']).toBe(`${TAG} مادة معدلة`);
+    const list = await call("GET", "/admin/subjects", superAdmin);
+    const listed = (
+      list.body.data as unknown as Record<string, unknown>[]
+    ).find((r) => r["id"] === subjectId)!;
+    expect(listed["name"]).toBe(`${TAG} مادة معدلة`);
   });
 
-  it('refuses deletion while a Level still teaches it', async () => {
+  it("refuses deletion while a Level still teaches it", async () => {
     const level = await prisma.level.create({
-      data: { name: `${TAG} مستوى للمادة`, categoryId, genderRestriction: 'any' },
+      data: {
+        name: `${TAG} مستوى للمادة`,
+        categoryId,
+        genderRestriction: "any",
+      },
     });
-    await prisma.levelSubject.create({ data: { levelId: level.id, subjectId } });
+    await prisma.levelSubject.create({
+      data: { levelId: level.id, subjectId },
+    });
 
-    const res = await call('DELETE', `/admin/subjects/${subjectId}`, superAdmin);
+    const res = await call(
+      "DELETE",
+      `/admin/subjects/${subjectId}`,
+      superAdmin,
+    );
     expect(res.status).toBe(409);
-    expect(res.body.error?.code).toBe('STATE_CONFLICT');
+    expect(res.body.error?.code).toBe("STATE_CONFLICT");
     // Named, so the screen can say WHICH relationship blocks it rather than
     // "cannot delete".
-    expect(res.body.error?.details?.['blocked_by']).toHaveProperty('levels');
+    expect(res.body.error?.details?.["blocked_by"]).toHaveProperty("levels");
 
     await prisma.levelSubject.deleteMany({ where: { levelId: level.id } });
     await prisma.level.delete({ where: { id: level.id } });
   });
 
-  it('deletes once nothing teaches it, and leaves a Trash snapshot (TD-5)', async () => {
-    const res = await call('DELETE', `/admin/subjects/${subjectId}`, superAdmin);
+  it("deletes once nothing teaches it, and leaves a Trash snapshot (TD-5)", async () => {
+    const res = await call(
+      "DELETE",
+      `/admin/subjects/${subjectId}`,
+      superAdmin,
+    );
     expect(res.status).toBe(204);
     const row = await prisma.subject.findUnique({ where: { id: subjectId } });
     expect(row?.deletedAt).not.toBeNull();
     expect(
-      await prisma.trash.count({ where: { targetEntity: 'Subject', targetId: subjectId } }),
+      await prisma.trash.count({
+        where: { targetEntity: "Subject", targetId: subjectId },
+      }),
     ).toBe(1);
   });
 
-  it('drops out of the selector once deleted', async () => {
-    const list = await call('GET', '/admin/subjects', superAdmin);
+  it("drops out of the selector once deleted", async () => {
+    const list = await call("GET", "/admin/subjects", superAdmin);
     expect(
-      (list.body.data as unknown as Record<string, unknown>[]).map((r) => r['id']),
+      (list.body.data as unknown as Record<string, unknown>[]).map(
+        (r) => r["id"],
+      ),
     ).not.toContain(subjectId);
   });
 });
 
-describe('Levels (§5.6 مستويات, TD-4.6b)', () => {
-  let levelId = '';
+describe("Levels (§5.6 مستويات, TD-4.6b)", () => {
+  let levelId = "";
 
-  it('R66: creates ONLY the Level — no group, and no branch to ask for', async () => {
+  it("R66: creates ONLY the Level — no group, and no branch to ask for", async () => {
     // TD-4.6b created a first group in the same transaction, which is why this
     // endpoint used to demand a branch. R66 retires it: a Level belongs to a
     // Category and to no Branch, and a Level nobody has subdivided needs no
     // group — students are enrolled in it directly.
-    const res = await call('POST', '/admin/levels', superAdmin, {
+    const res = await call("POST", "/admin/levels", superAdmin, {
       name: `${TAG} مستوى`,
       category_id: categoryId,
-      gender_restriction: 'girls_only',
+      gender_restriction: "girls_only",
     });
     expect(res.status).toBe(201);
     const row = res.body.data as unknown as Record<string, unknown>;
-    levelId = String(row['id']);
+    levelId = String(row["id"]);
 
     // No group, and none reported: creating a Level creates a Level.
-    expect(row).not.toHaveProperty('first_group');
+    expect(row).not.toHaveProperty("first_group");
     expect(
-      await prisma.administrativeGroup.count({ where: { levelId, deletedAt: null } }),
+      await prisma.administrativeGroup.count({
+        where: { levelId, deletedAt: null },
+      }),
     ).toBe(0);
   });
 
-  it('R66: REFUSES a branch on level creation rather than ignoring it', async () => {
+  it("R66: REFUSES a branch on level creation rather than ignoring it", async () => {
     // Refused, not stripped: a client that still sends one would otherwise get
     // `201` and believe a group had been created somewhere.
-    const res = await call('POST', '/admin/levels', superAdmin, {
+    const res = await call("POST", "/admin/levels", superAdmin, {
       name: `${TAG} مستوى بفرع`,
       category_id: categoryId,
       branch_id: branchId,
@@ -253,38 +313,52 @@ describe('Levels (§5.6 مستويات, TD-4.6b)', () => {
     expect(res.status).toBe(400);
   });
 
-  it('R66: still stores no branch on the Level — and no longer takes one', async () => {
+  it("R66: still stores no branch on the Level — and no longer takes one", async () => {
     // A Level is Category-scoped and branch-independent. It never had a branch
     // column; R66 removes the last reason it was ever ASKED for one.
-    const res = await call('GET', '/admin/levels', superAdmin);
+    const res = await call("GET", "/admin/levels", superAdmin);
     const row = (res.body.data as unknown as Record<string, unknown>[]).find(
-      (r) => r['id'] === levelId,
+      (r) => r["id"] === levelId,
     )!;
-    expect(row).not.toHaveProperty('branch_id');
-    expect(row['category_name']).toBe(`${TAG} فئة`);
+    expect(row).not.toHaveProperty("branch_id");
+    expect(row["category_name"]).toBe(`${TAG} فئة`);
     // Zero, and that is a legitimate Level — not a broken one.
-    expect(row['group_count']).toBe(0);
-    expect(row['gender_restriction']).toBe('girls_only');
+    expect(row["group_count"]).toBe(0);
+    expect(row["gender_restriction"]).toBe("girls_only");
   });
 
-  it('filters by category, and rejects a malformed filter rather than ignoring it', async () => {
-    const ok = await call('GET', `/admin/levels?category_id=${categoryId}`, superAdmin);
+  it("filters by category, and rejects a malformed filter rather than ignoring it", async () => {
+    const ok = await call(
+      "GET",
+      `/admin/levels?category_id=${categoryId}`,
+      superAdmin,
+    );
     expect(ok.status).toBe(200);
-    expect((ok.body.data as unknown as Record<string, unknown>[]).length).toBeGreaterThan(0);
+    expect(
+      (ok.body.data as unknown as Record<string, unknown>[]).length,
+    ).toBeGreaterThan(0);
 
     // Silently returning every Level for a bad filter would answer a question
     // nobody asked.
-    const bad = await call('GET', '/admin/levels?category_id=not-a-uuid', superAdmin);
+    const bad = await call(
+      "GET",
+      "/admin/levels?category_id=not-a-uuid",
+      superAdmin,
+    );
     expect(bad.status).toBe(400);
   });
 
-  it('will not move a Level between Categories', async () => {
+  it("will not move a Level between Categories", async () => {
     // Absent from the schema on purpose: a move would re-file every enrolled
     // student into a different educational stage, and §2.2 scopes display_order
     // within the Category, so the ordering would stop meaning anything.
-    const row = await prisma.level.findUniqueOrThrow({ where: { id: levelId } });
-    const other = await prisma.category.create({ data: { name: `${TAG} فئة أخرى` } });
-    const res = await call('PATCH', `/admin/levels/${levelId}`, superAdmin, {
+    const row = await prisma.level.findUniqueOrThrow({
+      where: { id: levelId },
+    });
+    const other = await prisma.category.create({
+      data: { name: `${TAG} فئة أخرى` },
+    });
+    const res = await call("PATCH", `/admin/levels/${levelId}`, superAdmin, {
       version: row.version,
       category_id: other.id,
     });
@@ -292,49 +366,65 @@ describe('Levels (§5.6 مستويات, TD-4.6b)', () => {
     // client believing it moved the Level finds out immediately.
     expect(res.status).toBe(400);
     expect(
-      (await prisma.level.findUniqueOrThrow({ where: { id: levelId } })).categoryId,
+      (await prisma.level.findUniqueOrThrow({ where: { id: levelId } }))
+        .categoryId,
     ).toBe(categoryId);
   });
 
-  it('refuses deletion while a student is enrolled', async () => {
+  it("refuses deletion while a student is enrolled", async () => {
     // R66 — the Level has no group unless this test makes one, and this test is
     // about the enrolment guard, so it makes one.
     const group = await prisma.administrativeGroup.create({
       data: { name: `${TAG} مجموعة`, levelId, branchId, displayOrder: 0 },
     });
-    const student = await makeUser('طالبة');
+    const student = await makeUser("طالبة");
     await prisma.enrollment.create({
-      data: { studentId: student, administrativeGroupId: group.id, levelId, branchId: await branchOf(group.id) },
+      data: {
+        studentId: student,
+        administrativeGroupId: group.id,
+        levelId,
+        branchId: await branchOf(group.id),
+      },
     });
 
-    const res = await call('DELETE', `/admin/levels/${levelId}`, superAdmin);
+    const res = await call("DELETE", `/admin/levels/${levelId}`, superAdmin);
     expect(res.status).toBe(409);
-    expect(res.body.error?.code).toBe('STATE_CONFLICT');
-    expect(res.body.error?.details?.['blocked_by']).toHaveProperty('enrollments');
+    expect(res.body.error?.code).toBe("STATE_CONFLICT");
+    expect(res.body.error?.details?.["blocked_by"]).toHaveProperty(
+      "enrollments",
+    );
 
     await prisma.enrollment.deleteMany({ where: { levelId } });
   });
 
-  it('deletes an empty Level, cascading whatever groups it has', async () => {
+  it("deletes an empty Level, cascading whatever groups it has", async () => {
     // A group count is NOT a blocker, and R66 does not change that: the guards
     // above have already established nothing is enrolled, and an empty
     // subdivision is not a reason to refuse deleting what it subdivides.
-    const res = await call('DELETE', `/admin/levels/${levelId}`, superAdmin);
+    const res = await call("DELETE", `/admin/levels/${levelId}`, superAdmin);
     expect(res.status).toBe(204);
     expect(
-      await prisma.administrativeGroup.count({ where: { levelId, deletedAt: null } }),
+      await prisma.administrativeGroup.count({
+        where: { levelId, deletedAt: null },
+      }),
     ).toBe(0);
 
     const audited = await prisma.auditLog.findFirst({
-      where: { targetEntity: 'Level', targetId: levelId, actionType: 'level.delete' },
+      where: {
+        targetEntity: "Level",
+        targetId: levelId,
+        actionType: "level.delete",
+      },
     });
     // The groups disappeared as a CONSEQUENCE of this decision; TD-8's record
     // has to say which.
-    expect((audited?.detail as Record<string, unknown>)['cascaded_group_ids']).toHaveLength(1);
+    expect(
+      (audited?.detail as Record<string, unknown>)["cascaded_group_ids"],
+    ).toHaveLength(1);
   });
 
-  it('is Super Admin to write (TD-2 R26)', async () => {
-    const res = await call('POST', '/admin/levels', admin, {
+  it("is Super Admin to write (TD-2 R26)", async () => {
+    const res = await call("POST", "/admin/levels", admin, {
       name: `${TAG} مستوى مرفوض`,
       category_id: categoryId,
     });
@@ -342,22 +432,32 @@ describe('Levels (§5.6 مستويات, TD-4.6b)', () => {
   });
 });
 
-describe('Category deletion (TD-5)', () => {
-  it('refuses while Levels reference it, and never cascades a live curriculum', async () => {
+describe("Category deletion (TD-5)", () => {
+  it("refuses while Levels reference it, and never cascades a live curriculum", async () => {
     const level = await prisma.level.create({
-      data: { name: `${TAG} مستوى حي`, categoryId, genderRestriction: 'any' },
+      data: { name: `${TAG} مستوى حي`, categoryId, genderRestriction: "any" },
     });
-    const res = await call('DELETE', `/admin/categories/${categoryId}`, superAdmin);
+    const res = await call(
+      "DELETE",
+      `/admin/categories/${categoryId}`,
+      superAdmin,
+    );
     expect(res.status).toBe(409);
-    expect(res.body.error?.details?.['blocked_by']).toHaveProperty('levels');
+    expect(res.body.error?.details?.["blocked_by"]).toHaveProperty("levels");
     // A Level carries enrolments, groups and schedules — cascading here would
     // delete a live curriculum from a control that says "delete category".
-    expect((await prisma.level.findUniqueOrThrow({ where: { id: level.id } })).deletedAt).toBeNull();
+    expect(
+      (await prisma.level.findUniqueOrThrow({ where: { id: level.id } }))
+        .deletedAt,
+    ).toBeNull();
     await prisma.level.delete({ where: { id: level.id } });
   });
 
-  it('deletes once empty', async () => {
-    expect((await call('DELETE', `/admin/categories/${categoryId}`, superAdmin)).status).toBe(204);
+  it("deletes once empty", async () => {
+    expect(
+      (await call("DELETE", `/admin/categories/${categoryId}`, superAdmin))
+        .status,
+    ).toBe(204);
   });
 });
 
@@ -382,29 +482,35 @@ describe('Category deletion (TD-5)', () => {
  *   pair: every other Level stays available, because one beneficiary may hold
  *   many enrolments, one per Level.
  */
-describe('GET /admin/levels?eligible_for_student= (R27 + BR-21)', () => {
+describe("GET /admin/levels?eligible_for_student= (R27 + BR-21)", () => {
   let girlsOnly: string;
   let boysOnly: string;
   let open: string;
   let girl: string;
   let boy: string;
-  let unknownSex: string;
 
-  const person = async (label: string, sex: 'female' | 'male' | null): Promise<string> => {
+  const person = async (
+    label: string,
+    sex: "female" | "male",
+  ): Promise<string> => {
     const u = await prisma.user.create({
       data: {
+        // R80 — every person carries a recorded sex; the column is NOT NULL.
+        sex: "female",
         nameArabic: `${TAG} ${label}`,
-        accountStatus: 'active',
-        ...(sex === null ? {} : { sex }),
+        accountStatus: "active",
+        sex,
       },
     });
     return u.id;
   };
 
   const levelIds = async (query: string): Promise<string[]> => {
-    const res = await call('GET', `/admin/levels?${query}`, superAdmin);
+    const res = await call("GET", `/admin/levels?${query}`, superAdmin);
     expect(res.status).toBe(200);
-    return (res.body.data as unknown as Record<string, unknown>[]).map((l) => String(l['id']));
+    return (res.body.data as unknown as Record<string, unknown>[]).map((l) =>
+      String(l["id"]),
+    );
   };
 
   beforeAll(async () => {
@@ -418,39 +524,37 @@ describe('GET /admin/levels?eligible_for_student= (R27 + BR-21)', () => {
           },
         })
       ).id;
-    girlsOnly = await make('للفتيات', 'girls_only');
-    boysOnly = await make('للفتيان', 'boys_only');
-    open = await make('مفتوح', 'any');
-    girl = await person('فتاة', 'female');
-    boy = await person('فتى', 'male');
-    unknownSex = await person('بلا جنس مسجّل', null);
+    girlsOnly = await make("للفتيات", "girls_only");
+    boysOnly = await make("للفتيان", "boys_only");
+    open = await make("مفتوح", "any");
+    girl = await person("فتاة", "female");
+    boy = await person("فتى", "male");
   });
 
-  it('offers a female beneficiary the girls-only and the open Levels', async () => {
+  it("offers a female beneficiary the girls-only and the open Levels", async () => {
     const offered = await levelIds(`eligible_for_student=${girl}`);
     expect(offered).toContain(girlsOnly);
     expect(offered).toContain(open);
     expect(offered).not.toContain(boysOnly);
   });
 
-  it('offers a male beneficiary the boys-only and the open Levels', async () => {
+  it("offers a male beneficiary the boys-only and the open Levels", async () => {
     const offered = await levelIds(`eligible_for_student=${boy}`);
     expect(offered).toContain(boysOnly);
     expect(offered).toContain(open);
     expect(offered).not.toContain(girlsOnly);
   });
 
-  it('withholds every restricted Level when the sex is unrecorded', async () => {
-    // A NULL cannot PROVE eligibility, and the placement would be refused —
-    // offering it would be offering a request that cannot succeed. The open
-    // Level is still offered, because nothing about it is in question.
-    const offered = await levelIds(`eligible_for_student=${unknownSex}`);
-    expect(offered).toContain(open);
-    expect(offered).not.toContain(girlsOnly);
+  it("has no unrecorded sex left to withhold Levels for (R80)", async () => {
+    // Restated, not deleted: R80 made the third case impossible. The rule is
+    // still asserted by the two tests above — a female is offered girls-only,
+    // a male is not.
+    const offered = await levelIds(`eligible_for_student=${girl}`);
+    expect(offered).toContain(girlsOnly);
     expect(offered).not.toContain(boysOnly);
   });
 
-  it('excludes ONLY the Level she already holds, never the others (BR-21)', async () => {
+  it("excludes ONLY the Level she already holds, never the others (BR-21)", async () => {
     await prisma.enrollment.create({
       data: { studentId: girl, levelId: open, branchId },
     });
@@ -461,21 +565,30 @@ describe('GET /admin/levels?eligible_for_student= (R27 + BR-21)', () => {
     expect(offered).toContain(girlsOnly);
   });
 
-  it('narrows nothing when the parameter is absent', async () => {
-    const offered = await levelIds('');
+  it("narrows nothing when the parameter is absent", async () => {
+    const offered = await levelIds("");
     for (const id of [girlsOnly, boysOnly, open]) expect(offered).toContain(id);
   });
 
-  it('narrows to nothing for an unknown beneficiary, never back to everything', async () => {
-    expect(await levelIds('eligible_for_student=00000000-0000-4000-8000-000000000000')).toEqual([]);
+  it("narrows to nothing for an unknown beneficiary, never back to everything", async () => {
+    expect(
+      await levelIds(
+        "eligible_for_student=00000000-0000-4000-8000-000000000000",
+      ),
+    ).toEqual([]);
   });
 
-  it('refuses a malformed id rather than ignoring it', async () => {
-    expect((await call('GET', '/admin/levels?eligible_for_student=nope', superAdmin)).status).toBe(400);
+  it("refuses a malformed id rather than ignoring it", async () => {
+    expect(
+      (await call("GET", "/admin/levels?eligible_for_student=nope", superAdmin))
+        .status,
+    ).toBe(400);
   });
 
-  it('composes with the Category filter rather than replacing it', async () => {
-    const offered = await levelIds(`eligible_for_student=${boy}&category_id=${categoryId}`);
+  it("composes with the Category filter rather than replacing it", async () => {
+    const offered = await levelIds(
+      `eligible_for_student=${boy}&category_id=${categoryId}`,
+    );
     expect(offered).toContain(boysOnly);
     expect(offered).not.toContain(girlsOnly);
   });

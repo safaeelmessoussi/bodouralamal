@@ -30,6 +30,15 @@ const createSchema = z.object({
   // TD-9 length limits, matching the registration validators.
   name_arabic: z.string().trim().min(1).max(200),
   email: z.email().max(320),
+  /**
+   * **R80.1 — required, like every other creation path.**
+   *
+   * A person pre-provisioned by staff used to acquire no sex and had no way
+   * ever to acquire one: the column was write-once at registration. That is
+   * what made `NOT NULL` unreachable, and what made a `girls_only` placement
+   * refuse a person nobody could fix.
+   */
+  sex: z.enum(['female', 'male']),
   role: z.enum(['admin', 'teacher', 'student', 'parent']).optional(),
   branch_id: z.uuid().optional(),
   pre_approved: z.boolean().optional(),
@@ -49,13 +58,17 @@ export function create(prisma: PrismaClient) {
   return async (req: Request, res: Response): Promise<void> => {
     const parsed = createSchema.safeParse(req.body ?? {});
     if (!parsed.success) {
-      throw new AppError('VALIDATION_FAILED', 'name_arabic and a valid email are required');
+      throw new AppError(
+        'VALIDATION_FAILED',
+        'name_arabic, a valid email and sex are required (R80.1)',
+      );
     }
-    const { name_arabic, email, role, branch_id, pre_approved } = parsed.data;
+    const { name_arabic, email, sex, role, branch_id, pre_approved } = parsed.data;
 
     const user = await preProvision(prisma, requireActor(req), {
       nameArabic: name_arabic,
       email,
+      sex,
       ...(role ? { role } : {}),
       ...(branch_id ? { branchId: branch_id } : {}),
       ...(pre_approved !== undefined ? { preApproved: pre_approved } : {}),
@@ -127,6 +140,7 @@ export function update(prisma: PrismaClient) {
         ...(body.name_french !== undefined ? { nameFrench: body.name_french } : {}),
         ...(body.nickname !== undefined ? { nickname: body.nickname } : {}),
         ...(body.phone !== undefined ? { phone: body.phone } : {}),
+        ...(body.sex !== undefined ? { sex: body.sex } : {}),
       },
     );
     res.json({ data: userDto(user) });

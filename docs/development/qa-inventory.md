@@ -120,6 +120,12 @@ came back marked. The seed now states what that account **is** rather than
 leaving it to a column default, and the dev rows were corrected. **Evidence-based
 backfill is only as clean as the database's history.**
 
+**A third lesson, from R80:** `sex` was required at registration and **writable
+nowhere else**, so every person staff created was permanently incomplete and no
+migration could fix it. *A field required on one road in, and unreachable on the
+others, is not a required field — it is a trap.* Check every creation path when a
+column becomes mandatory, and check that a missing value can still be repaired.
+
 **The lesson this phase already produced:** `[تجريبي]` had `sex = NULL` because
 the seed predated R27, so the demo data could not satisfy a rule the platform
 correctly enforced. A fixture that cannot pass is worse than no fixture — it

@@ -1,9 +1,9 @@
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
-import { loadConfig } from '../lib/config.js';
-import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
-import type { Actor } from '../policies/actor.js';
-import { listTrash, purgeEntry, restoreEntry } from './trash.service.js';
+import { loadConfig } from "../lib/config.js";
+import { createPrismaClient, TEST_CONNECTION_LIMIT } from "../lib/prisma.js";
+import type { Actor } from "../policies/actor.js";
+import { listTrash, purgeEntry, restoreEntry } from "./trash.service.js";
 
 /**
  * The Trash (§7, TD-5, BR-15, Revision 52).
@@ -16,16 +16,19 @@ import { listTrash, purgeEntry, restoreEntry } from './trash.service.js';
  */
 const config = loadConfig();
 const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);
-const TAG = '[trash-test]';
+const TAG = "[trash-test]";
 
 const actorOf = (roles: { role: string; branches: string[] | null }[]): Actor =>
-  ({ userId: actorUserId, roleScopes: roles } as unknown as Actor);
-const superAdmin = (): Actor => actorOf([{ role: 'super_admin', branches: null }]);
-const admin = (): Actor => actorOf([{ role: 'admin', branches: null }]);
+  ({ userId: actorUserId, roleScopes: roles }) as unknown as Actor;
+const superAdmin = (): Actor =>
+  actorOf([{ role: "super_admin", branches: null }]);
+const admin = (): Actor => actorOf([{ role: "admin", branches: null }]);
 
-let actorUserId = '';
+let actorUserId = "";
 
-async function failure(run: () => Promise<unknown>): Promise<{ code?: string; details?: Record<string, unknown> }> {
+async function failure(
+  run: () => Promise<unknown>,
+): Promise<{ code?: string; details?: Record<string, unknown> }> {
   try {
     await run();
     return {};
@@ -35,7 +38,11 @@ async function failure(run: () => Promise<unknown>): Promise<{ code?: string; de
 }
 
 /** Soft-deletes a row the way the services do: tombstone + Trash snapshot. */
-async function bin(entity: string, targetId: string, snapshot: object): Promise<string> {
+async function bin(
+  entity: string,
+  targetId: string,
+  snapshot: object,
+): Promise<string> {
   const row = await prisma.trash.create({
     data: {
       targetEntity: entity,
@@ -54,7 +61,9 @@ async function clear(): Promise<void> {
     select: { id: true },
   });
   const ids = users.map((u) => u.id);
-  await prisma.trash.deleteMany({ where: { OR: [{ deletedById: { in: ids } }] } });
+  await prisma.trash.deleteMany({
+    where: { OR: [{ deletedById: { in: ids } }] },
+  });
   await prisma.auditLog.deleteMany({ where: { actorUserId: { in: ids } } });
   await prisma.userBranchRole.deleteMany({ where: { userId: { in: ids } } });
   await prisma.room.deleteMany({ where: { name: { startsWith: TAG } } });
@@ -66,14 +75,16 @@ async function clear(): Promise<void> {
 beforeEach(async () => {
   await clear();
   actorUserId = (
-    await prisma.user.create({ data: { nameArabic: `${TAG} مديرة`, accountStatus: 'active' } })
+    await prisma.user.create({
+      data: { sex: 'female', nameArabic: `${TAG} مديرة`, accountStatus: "active" },
+    })
   ).id;
   // **A LIVE role assignment, not just a claim in a synthetic actor.** Restore
   // and permanent delete are TD-12 high-risk: they re-read the caller's roles
   // from the database and ignore what the token said, so an actor that exists
   // only in memory is correctly refused. That is the guard working, and this
   // fixture has to satisfy it the way a real Super Admin does.
-  const role = await prisma.role.findUnique({ where: { name: 'super_admin' } });
+  const role = await prisma.role.findUnique({ where: { name: "super_admin" } });
   await prisma.userBranchRole.create({
     data: { userId: actorUserId, roleId: role!.id, branchId: null },
   });
@@ -84,88 +95,101 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 
-describe('who may open the Trash (TD-2)', () => {
-  it('refuses an Admin — the list spans every branch', async () => {
+describe("who may open the Trash (TD-2)", () => {
+  it("refuses an Admin — the list spans every branch", async () => {
     // No other surface lets a branch-scoped Admin see another branch's records,
     // and a list of every deletion in the platform is the last place to start.
     const e = await failure(() => listTrash(prisma, admin(), {}));
-    expect(e.code).toBe('FORBIDDEN');
+    expect(e.code).toBe("FORBIDDEN");
   });
 });
 
-describe('what the list says about each row', () => {
-  it('reads a label from the snapshot rather than joining a row that may be gone', async () => {
+describe("what the list says about each row", () => {
+  it("reads a label from the snapshot rather than joining a row that may be gone", async () => {
     const subject = await prisma.subject.create({
       data: { name: `${TAG} القرآن`, deletedAt: new Date() },
     });
-    await bin('Subject', subject.id, { id: subject.id, name: `${TAG} القرآن` });
+    await bin("Subject", subject.id, { id: subject.id, name: `${TAG} القرآن` });
 
-    const page = await listTrash(prisma, superAdmin(), { entity: 'Subject' });
+    const page = await listTrash(prisma, superAdmin(), { entity: "Subject" });
     const row = page.data.find((r) => r.targetId === subject.id)!;
     expect(row.label).toBe(`${TAG} القرآن`);
     expect(row.deletedByName).toBe(`${TAG} مديرة`);
     expect(row.purgeAfter).toBeInstanceOf(Date);
   });
 
-  it('marks a guarded entity RESTORABLE and a cascading one not, with a reason', async () => {
+  it("marks a guarded entity RESTORABLE and a cascading one not, with a reason", async () => {
     // This is the whole design: the capability is a server decision, per entity
     // type, because a client cannot know which deletions cascade.
     const subject = await prisma.subject.create({
       data: { name: `${TAG} مادة`, deletedAt: new Date() },
     });
-    await bin('Subject', subject.id, { name: `${TAG} مادة` });
-    await bin('User', actorUserId, { nameArabic: `${TAG} شخص` });
+    await bin("Subject", subject.id, { name: `${TAG} مادة` });
+    await bin("User", actorUserId, { nameArabic: `${TAG} شخص` });
 
     const page = await listTrash(prisma, superAdmin(), {});
-    const subjectRow = page.data.find((r) => r.targetEntity === 'Subject')!;
-    const userRow = page.data.find((r) => r.targetEntity === 'User')!;
+    const subjectRow = page.data.find((r) => r.targetEntity === "Subject")!;
+    const userRow = page.data.find((r) => r.targetEntity === "User")!;
 
     expect(subjectRow.restorable).toBe(true);
     expect(subjectRow.restoreBlockedReason).toBeNull();
     expect(userRow.restorable).toBe(false);
     // §7's hazard, named: the cascade removes six relationship types.
-    expect(userRow.restoreBlockedReason).toBe('CASCADE_RELATIONSHIPS');
+    expect(userRow.restoreBlockedReason).toBe("CASCADE_RELATIONSHIPS");
   });
 
-  it('filters by entity type', async () => {
+  it("filters by entity type", async () => {
     const subject = await prisma.subject.create({
       data: { name: `${TAG} مادة`, deletedAt: new Date() },
     });
-    await bin('Subject', subject.id, { name: `${TAG} مادة` });
-    await bin('User', actorUserId, { nameArabic: `${TAG} شخص` });
+    await bin("Subject", subject.id, { name: `${TAG} مادة` });
+    await bin("User", actorUserId, { nameArabic: `${TAG} شخص` });
 
-    const page = await listTrash(prisma, superAdmin(), { entity: 'User' });
-    expect(page.data.every((r) => r.targetEntity === 'User')).toBe(true);
+    const page = await listTrash(prisma, superAdmin(), { entity: "User" });
+    expect(page.data.every((r) => r.targetEntity === "User")).toBe(true);
   });
 });
 
-describe('restore is offered only where it is COMPLETE (§7)', () => {
-  it('restores a guarded entity and removes its tombstone', async () => {
+describe("restore is offered only where it is COMPLETE (§7)", () => {
+  it("restores a guarded entity and removes its tombstone", async () => {
     const subject = await prisma.subject.create({
-      data: { name: `${TAG} مادة`, deletedAt: new Date(), deletedById: actorUserId },
+      data: {
+        name: `${TAG} مادة`,
+        deletedAt: new Date(),
+        deletedById: actorUserId,
+      },
     });
-    const entryId = await bin('Subject', subject.id, { name: `${TAG} مادة` });
+    const entryId = await bin("Subject", subject.id, { name: `${TAG} مادة` });
 
     await restoreEntry(prisma, superAdmin(), entryId);
 
-    expect((await prisma.subject.findUniqueOrThrow({ where: { id: subject.id } })).deletedAt).toBeNull();
+    expect(
+      (await prisma.subject.findUniqueOrThrow({ where: { id: subject.id } }))
+        .deletedAt,
+    ).toBeNull();
     // The record is no longer deleted, so leaving it listed would make the Trash
     // disagree with the platform. The audit row keeps the event answerable.
-    expect(await prisma.trash.findUnique({ where: { id: entryId } })).toBeNull();
     expect(
-      await prisma.auditLog.count({ where: { actionType: 'trash.restore', targetId: subject.id } }),
+      await prisma.trash.findUnique({ where: { id: entryId } }),
+    ).toBeNull();
+    expect(
+      await prisma.auditLog.count({
+        where: { actionType: "trash.restore", targetId: subject.id },
+      }),
     ).toBe(1);
   });
 
-  it('REFUSES a cascading entity loudly rather than half-restoring it', async () => {
+  it("REFUSES a cascading entity loudly rather than half-restoring it", async () => {
     // Answering 200 here would be exactly the silent breakage §7 warns about.
-    const entryId = await bin('User', actorUserId, { nameArabic: `${TAG} شخص` });
+    const entryId = await bin("User", actorUserId, {
+      nameArabic: `${TAG} شخص`,
+    });
     const e = await failure(() => restoreEntry(prisma, superAdmin(), entryId));
-    expect(e.code).toBe('STATE_CONFLICT');
-    expect(e.details?.['reason']).toBe('CASCADE_RELATIONSHIPS');
+    expect(e.code).toBe("STATE_CONFLICT");
+    expect(e.details?.["reason"]).toBe("CASCADE_RELATIONSHIPS");
   });
 
-  it('will not restore a child into a deleted parent', async () => {
+  it("will not restore a child into a deleted parent", async () => {
     // Technically alive, practically unreachable: a room in a branch nobody can
     // open through any screen.
     const branch = await prisma.branch.create({
@@ -174,28 +198,37 @@ describe('restore is offered only where it is COMPLETE (§7)', () => {
     const room = await prisma.room.create({
       data: { name: `${TAG} قاعة`, branchId: branch.id, deletedAt: new Date() },
     });
-    const entryId = await bin('Room', room.id, { name: `${TAG} قاعة` });
+    const entryId = await bin("Room", room.id, { name: `${TAG} قاعة` });
 
     const e = await failure(() => restoreEntry(prisma, superAdmin(), entryId));
-    expect(e.code).toBe('STATE_CONFLICT');
-    expect(e.details?.['reason']).toBe('PARENT_DELETED');
-    expect((await prisma.room.findUniqueOrThrow({ where: { id: room.id } })).deletedAt).not.toBeNull();
+    expect(e.code).toBe("STATE_CONFLICT");
+    expect(e.details?.["reason"]).toBe("PARENT_DELETED");
+    expect(
+      (await prisma.room.findUniqueOrThrow({ where: { id: room.id } }))
+        .deletedAt,
+    ).not.toBeNull();
   });
 
-  it('reports ALREADY_PURGED when BR-15 removed the row itself', async () => {
+  it("reports ALREADY_PURGED when BR-15 removed the row itself", async () => {
     // The snapshot alone cannot safely recreate it: every foreign key it names
     // may have gone too.
-    const entryId = await bin('Subject', '00000000-0000-4000-8000-000000000000', { name: 'x' });
+    const entryId = await bin(
+      "Subject",
+      "00000000-0000-4000-8000-000000000000",
+      { name: "x" },
+    );
     const e = await failure(() => restoreEntry(prisma, superAdmin(), entryId));
-    expect(e.details?.['reason']).toBe('ALREADY_PURGED');
+    expect(e.details?.["reason"]).toBe("ALREADY_PURGED");
   });
 
-  it('refuses an Admin', async () => {
+  it("refuses an Admin", async () => {
     const subject = await prisma.subject.create({
       data: { name: `${TAG} مادة`, deletedAt: new Date() },
     });
-    const entryId = await bin('Subject', subject.id, { name: `${TAG} مادة` });
-    expect((await failure(() => restoreEntry(prisma, admin(), entryId))).code).toBe('FORBIDDEN');
+    const entryId = await bin("Subject", subject.id, { name: `${TAG} مادة` });
+    expect(
+      (await failure(() => restoreEntry(prisma, admin(), entryId))).code,
+    ).toBe("FORBIDDEN");
   });
 });
 
@@ -206,16 +239,18 @@ describe('restore is offered only where it is COMPLETE (§7)', () => {
  * away": nothing below trusts a status code, because the whole point of a purge
  * is that the record is gone — so every assertion reads the database afterwards.
  */
-describe('permanent deletion is Super Admin only and irreversible (R59.1)', () => {
-  it('REFUSES an Admin, a Teacher and a Student — server-side, not by a hidden button', async () => {
-    const branch = await prisma.branch.create({ data: { name: `${TAG} فرع`, deletedAt: new Date() } });
-    const entry = await bin('Branch', branch.id, branch);
+describe("permanent deletion is Super Admin only and irreversible (R59.1)", () => {
+  it("REFUSES an Admin, a Teacher and a Student — server-side, not by a hidden button", async () => {
+    const branch = await prisma.branch.create({
+      data: { name: `${TAG} فرع`, deletedAt: new Date() },
+    });
+    const entry = await bin("Branch", branch.id, branch);
 
-    for (const role of ['admin', 'teacher', 'student', 'parent']) {
+    for (const role of ["admin", "teacher", "student", "parent"]) {
       const err = await failure(() =>
         purgeEntry(prisma, actorOf([{ role, branches: null }]), entry),
       );
-      expect(err.code, `${role} must not be able to purge`).toBe('FORBIDDEN');
+      expect(err.code, `${role} must not be able to purge`).toBe("FORBIDDEN");
     }
 
     // The refusal is real: the row and its tombstone are both still there.
@@ -223,9 +258,11 @@ describe('permanent deletion is Super Admin only and irreversible (R59.1)', () =
     expect(await prisma.trash.count({ where: { id: entry } })).toBe(1);
   });
 
-  it('destroys the record AND its tombstone, and writes an audit row that outlives both', async () => {
-    const branch = await prisma.branch.create({ data: { name: `${TAG} فرع`, deletedAt: new Date() } });
-    const entry = await bin('Branch', branch.id, branch);
+  it("destroys the record AND its tombstone, and writes an audit row that outlives both", async () => {
+    const branch = await prisma.branch.create({
+      data: { name: `${TAG} فرع`, deletedAt: new Date() },
+    });
+    const entry = await bin("Branch", branch.id, branch);
 
     const result = await purgeEntry(prisma, superAdmin(), entry);
     expect(result.alreadyPurged).toBe(false);
@@ -236,53 +273,61 @@ describe('permanent deletion is Super Admin only and irreversible (R59.1)', () =
     // `trash.permanent_delete` is deliberately absent from the audit-purge
     // allowlist, so the record of an irreversible act is retained indefinitely.
     const log = await prisma.auditLog.findFirst({
-      where: { actionType: 'trash.permanent_delete', targetId: branch.id },
+      where: { actionType: "trash.permanent_delete", targetId: branch.id },
     });
     expect(log).not.toBeNull();
-    expect((log?.detail as Record<string, unknown>)['label']).toContain('فرع');
+    expect((log?.detail as Record<string, unknown>)["label"]).toContain("فرع");
   });
 
-  it('refuses while a live row still references it, and names the constraint', async () => {
-    const branch = await prisma.branch.create({ data: { name: `${TAG} فرع`, deletedAt: new Date() } });
+  it("refuses while a live row still references it, and names the constraint", async () => {
+    const branch = await prisma.branch.create({
+      data: { name: `${TAG} فرع`, deletedAt: new Date() },
+    });
     // A room at that branch, NOT deleted: the branch's tombstone does not
     // describe it, so destroying the branch would orphan a live record.
-    await prisma.room.create({ data: { name: `${TAG} قاعة`, branchId: branch.id } });
-    const entry = await bin('Branch', branch.id, branch);
+    await prisma.room.create({
+      data: { name: `${TAG} قاعة`, branchId: branch.id },
+    });
+    const entry = await bin("Branch", branch.id, branch);
 
     const err = await failure(() => purgeEntry(prisma, superAdmin(), entry));
-    expect(err.code).toBe('STATE_CONFLICT');
-    expect(err.details?.['reason']).toBe('DEPENDENTS_EXIST');
+    expect(err.code).toBe("STATE_CONFLICT");
+    expect(err.details?.["reason"]).toBe("DEPENDENTS_EXIST");
     // Named, so an administrator learns WHICH relationship is in the way. A
     // `RESTRICT` violation arrives as P2039/23001, not P2003 — matching only
     // P2003 let the raw Prisma error escape as a 500 for this exact case.
-    expect(err.details?.['constraint']).toBe('room_branch_id_fkey');
+    expect(err.details?.["constraint"]).toBe("room_branch_id_fkey");
 
     // Nothing partial: the branch survives intact rather than half-destroyed.
     expect(await prisma.branch.count({ where: { id: branch.id } })).toBe(1);
     expect(await prisma.trash.count({ where: { id: entry } })).toBe(1);
   });
 
-  it('refuses a type with no destruction plan, with the reason', async () => {
-    const entry = await bin('User', actorUserId, { nameArabic: `${TAG} شخص` });
+  it("refuses a type with no destruction plan, with the reason", async () => {
+    const entry = await bin("User", actorUserId, { nameArabic: `${TAG} شخص` });
     const err = await failure(() => purgeEntry(prisma, superAdmin(), entry));
-    expect(err.code).toBe('STATE_CONFLICT');
+    expect(err.code).toBe("STATE_CONFLICT");
     // Destroying a person takes the audit trail that says what they did.
-    expect(err.details?.['reason']).toBe('ACCOUNTABILITY_RECORD');
+    expect(err.details?.["reason"]).toBe("ACCOUNTABILITY_RECORD");
   });
 
-  it('will not destroy a record somebody restored since — the tombstone is stale', async () => {
+  it("will not destroy a record somebody restored since — the tombstone is stale", async () => {
     // Live row, stale entry: the record is in active use and no deletion stands
     // behind the tombstone.
-    const branch = await prisma.branch.create({ data: { name: `${TAG} فرع حي` } });
-    const entry = await bin('Branch', branch.id, branch);
+    const branch = await prisma.branch.create({
+      data: { name: `${TAG} فرع حي` },
+    });
+    const entry = await bin("Branch", branch.id, branch);
     const err = await failure(() => purgeEntry(prisma, superAdmin(), entry));
 
-    expect(err.details?.['reason']).toBe('NOT_DELETED');
+    expect(err.details?.["reason"]).toBe("NOT_DELETED");
     expect(await prisma.branch.count({ where: { id: branch.id } })).toBe(1);
   });
 
-  it('removes a tombstone whose record BR-15 already took, and says which happened', async () => {
-    const entry = await bin('Branch', '00000000-0000-4000-8000-0000000000ff', { name: 'gone' });
+  it("removes a tombstone whose record BR-15 already took, and says which happened", async () => {
+    const entry = await bin("Branch", "00000000-0000-4000-8000-0000000000ff", {
+      name: "gone",
+    });
 
     const result = await purgeEntry(prisma, superAdmin(), entry);
 
@@ -292,20 +337,22 @@ describe('permanent deletion is Super Admin only and irreversible (R59.1)', () =
   });
 });
 
-describe('restore reinstates the children it declares (R59.3)', () => {
-  it('publishes purgeability per row, decided by the server', async () => {
-    const branch = await prisma.branch.create({ data: { name: `${TAG} فرع`, deletedAt: new Date() } });
-    await bin('Branch', branch.id, branch);
-    await bin('User', actorUserId, { nameArabic: `${TAG} شخص` });
+describe("restore reinstates the children it declares (R59.3)", () => {
+  it("publishes purgeability per row, decided by the server", async () => {
+    const branch = await prisma.branch.create({
+      data: { name: `${TAG} فرع`, deletedAt: new Date() },
+    });
+    await bin("Branch", branch.id, branch);
+    await bin("User", actorUserId, { nameArabic: `${TAG} شخص` });
 
     const rows = await listTrash(prisma, superAdmin(), { pageSize: 100 });
-    const branchRow = rows.data.find((r) => r.targetEntity === 'Branch');
-    const userRow = rows.data.find((r) => r.targetEntity === 'User');
+    const branchRow = rows.data.find((r) => r.targetEntity === "Branch");
+    const userRow = rows.data.find((r) => r.targetEntity === "User");
 
     expect(branchRow?.purgeable).toBe(true);
     expect(branchRow?.purgeBlockedReason).toBeNull();
     // A client cannot know this, which is why the server says it.
     expect(userRow?.purgeable).toBe(false);
-    expect(userRow?.purgeBlockedReason).toBe('ACCOUNTABILITY_RECORD');
+    expect(userRow?.purgeBlockedReason).toBe("ACCOUNTABILITY_RECORD");
   });
 });

@@ -1,17 +1,21 @@
-import { afterAll, beforeEach, describe, expect, it } from 'vitest';
-import { actorFor } from '../test-support/actor.js';
+import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { actorFor } from "../test-support/actor.js";
 
-import { loadConfig } from '../lib/config.js';
-import { issueOnboardingToken } from '../lib/onboarding-token.js';
-import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
-import { decide, listApprovals } from './approval.service.js';
-import { CONSENT_TEXT_VERSION_KEY, register } from './registration.service.js';
-import { clearPlacement, provisionPlacement, type Placement } from '../test-support/placement.js';
+import { loadConfig } from "../lib/config.js";
+import { issueOnboardingToken } from "../lib/onboarding-token.js";
+import { createPrismaClient, TEST_CONNECTION_LIMIT } from "../lib/prisma.js";
+import { decide, listApprovals } from "./approval.service.js";
+import { CONSENT_TEXT_VERSION_KEY, register } from "./registration.service.js";
+import {
+  clearPlacement,
+  provisionPlacement,
+  type Placement,
+} from "../test-support/placement.js";
 import {
   captureConsentVersion,
   restoreConsentVersion,
   type SavedConsentVersion,
-} from '../test-support/consent-setting.js';
+} from "../test-support/consent-setting.js";
 
 /**
  * Approval queue (SRS §5.6, TD-4.2, TD-12, TD-15.3) against the real database.
@@ -29,7 +33,7 @@ const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);
  */
 let savedConsentVersion: SavedConsentVersion | null = null;
 const KEY = config.ONBOARDING_TOKEN_KEY;
-const TAG = '[appr-test]';
+const TAG = "[appr-test]";
 /**
  * **Deliberately not a prefix-extension of `TAG`.** `clear()` deletes by
  * `startsWith(TAG)`, so a placement tagged `${TAG}p` would be swept by the
@@ -37,7 +41,7 @@ const TAG = '[appr-test]';
  * `Restrict` FK would refuse. The separating `-` before the bracket is what
  * keeps the two namespaces disjoint.
  */
-const PLACEMENT_TAG = '[appr-test-place]';
+const PLACEMENT_TAG = "[appr-test-place]";
 
 let counter = 0;
 function identity() {
@@ -49,9 +53,14 @@ function identity() {
 }
 
 /** An Admin whose role row actually exists — TD-12 checks live rows, not claims. */
-async function makeAdmin(role = 'admin'): Promise<string> {
+async function makeAdmin(role = "admin"): Promise<string> {
   const user = await prisma.user.create({
-    data: { nameArabic: `${TAG} مشرف`, accountStatus: 'active' },
+    data: {
+      // R80 — every person carries a recorded sex; the column is NOT NULL.
+      sex: "female",
+      nameArabic: `${TAG} مشرف`,
+      accountStatus: "active",
+    },
   });
   const roleRow = await prisma.role.findUnique({ where: { name: role } });
   await prisma.userBranchRole.create({
@@ -79,13 +88,17 @@ async function submitBundle(
     prisma,
     token,
     {
-      kind: 'parent_child',
-      parent: { first_name_arabic: `${TAG}`, last_name_arabic: `والدة`, sex: 'female' as const },
+      kind: "parent_child",
+      parent: {
+        first_name_arabic: `${TAG}`,
+        last_name_arabic: `والدة`,
+        sex: "female" as const,
+      },
       children: [
         {
           first_name_arabic: `${TAG}`,
           last_name_arabic: `طفلة`,
-          sex: 'female' as const,
+          sex: "female" as const,
           consent_media_release: true,
           // R67 — the branch and stage are the CHILD's now. `intoBranchId` is
           // what the branch-filter test varies, so it lands here rather than on
@@ -100,7 +113,10 @@ async function submitBundle(
     },
     KEY,
   );
-  return { parentId: result.applicantId, applicationId: result.childApplicationIds[0]! };
+  return {
+    parentId: result.applicantId,
+    applicationId: result.childApplicationIds[0]!,
+  };
 }
 
 async function clear(): Promise<void> {
@@ -109,9 +125,13 @@ async function clear(): Promise<void> {
     select: { id: true },
   });
   const ids = users.map((u) => u.id);
-  await prisma.auditLog.deleteMany({ where: { OR: [{ targetId: { in: ids } }, { actorUserId: { in: ids } }] } });
+  await prisma.auditLog.deleteMany({
+    where: { OR: [{ targetId: { in: ids } }, { actorUserId: { in: ids } }] },
+  });
   await prisma.consentRecord.deleteMany({ where: { studentId: { in: ids } } });
-  await prisma.familyLink.deleteMany({ where: { OR: [{ parentId: { in: ids } }, { studentId: { in: ids } }] } });
+  await prisma.familyLink.deleteMany({
+    where: { OR: [{ parentId: { in: ids } }, { studentId: { in: ids } }] },
+  });
   // §4.1 (R43): approving now CREATES enrolments, and `enrollment.student_id`
   // is ON DELETE RESTRICT — so they go before the people they belong to. This
   // line did not exist before approval placed anybody, which is why adding the
@@ -133,7 +153,7 @@ async function clear(): Promise<void> {
     },
   });
   await prisma.user.deleteMany({ where: { id: { in: ids } } });
-  await prisma.consumedToken.deleteMany({ where: { purpose: 'onboarding' } });
+  await prisma.consumedToken.deleteMany({ where: { purpose: "onboarding" } });
   // After the users: `intended_branch_id` is ON DELETE RESTRICT, so a branch
   // still referenced refuses to go.
   await prisma.branch.deleteMany({ where: { name: { startsWith: TAG } } });
@@ -146,8 +166,8 @@ async function clear(): Promise<void> {
 
 /** Two branches, because a filter that is never given something to exclude has
  *  not been tested (§4.1, Revision 39). */
-let branchId = '';
-let otherBranchId = '';
+let branchId = "";
+let otherBranchId = "";
 /**
  * §4.1 (Revision 43) makes placement part of approval, so every approval of a
  * student now needs a Level and a group behind it. Provisioned once per test
@@ -170,11 +190,14 @@ beforeEach(async () => {
   await clear();
   await prisma.systemSetting.upsert({
     where: { key: CONSENT_TEXT_VERSION_KEY },
-    update: { value: 'appr-test-v1' },
-    create: { key: CONSENT_TEXT_VERSION_KEY, value: 'appr-test-v1' },
+    update: { value: "appr-test-v1" },
+    create: { key: CONSENT_TEXT_VERSION_KEY, value: "appr-test-v1" },
   });
-  branchId = (await prisma.branch.create({ data: { name: `${TAG} مقر أ` } })).id;
-  otherBranchId = (await prisma.branch.create({ data: { name: `${TAG} مقر ب` } })).id;
+  branchId = (await prisma.branch.create({ data: { name: `${TAG} مقر أ` } }))
+    .id;
+  otherBranchId = (
+    await prisma.branch.create({ data: { name: `${TAG} مقر ب` } })
+  ).id;
   placement = await provisionPlacement(prisma, PLACEMENT_TAG);
 });
 
@@ -183,12 +206,13 @@ afterAll(async () => {
   // Restore, never delete: deleting left the developer's database with no
   // consent text version, and registration then failed closed for everyone
   // who used the form after a test run (see test-support/consent-setting).
-  if (savedConsentVersion) await restoreConsentVersion(prisma, savedConsentVersion);
+  if (savedConsentVersion)
+    await restoreConsentVersion(prisma, savedConsentVersion);
   await prisma.$disconnect();
 });
 
-describe('R66.5 — an approver places into a Level with no group', () => {
-  it('approves with level_id + branch_id and enrols directly', async () => {
+describe("R66.5 — an approver places into a Level with no group", () => {
+  it("approves with level_id + branch_id and enrols directly", async () => {
     // The capability the revision exists for. Before it, an approver facing a
     // Level nobody had subdivided could not admit anybody at all: the placement
     // demanded a group, and there was none to name.
@@ -196,12 +220,16 @@ describe('R66.5 — an approver places into a Level with no group', () => {
     // assertion fails before the explicit delete below — a leaked Level holds
     // its Category under RESTRICT and takes the whole suite's teardown with it.
     const bare = await prisma.level.create({
-      data: { name: `${PLACEMENT_TAG} مستوى بلا مجموعة`, categoryId: placement.categoryId },
+      data: {
+        name: `${PLACEMENT_TAG} مستوى بلا مجموعة`,
+        categoryId: placement.categoryId,
+      },
     });
     const { parentId, applicationId } = await submitBundle();
-    const admin = await makeAdmin('super_admin');
+    const admin = await makeAdmin("super_admin");
 
-    const { decideChildApplication } = await import('./child-application.service.js');
+    const { decideChildApplication } =
+      await import("./child-application.service.js");
     const result = await decideChildApplication(
       prisma,
       await actorFor(prisma, admin),
@@ -222,22 +250,23 @@ describe('R66.5 — an approver places into a Level with no group', () => {
     await prisma.level.delete({ where: { id: bare.id } });
     expect(parentId).toBeTruthy();
   });
-
 });
 
-describe('§5.6 / TD-4.2 approval queue', () => {
-  it('lists a parent+child registration as ONE item, with the child as a decidable block', async () => {
+describe("§5.6 / TD-4.2 approval queue", () => {
+  it("lists a parent+child registration as ONE item, with the child as a decidable block", async () => {
     const admin = await makeAdmin();
     const { parentId, applicationId } = await submitBundle();
 
-    const page = await listApprovals(prisma, await actorFor(prisma, admin), { type: 'registration' });
+    const page = await listApprovals(prisma, await actorFor(prisma, admin), {
+      type: "registration",
+    });
     const item = page.data.find((i) => i.id === parentId);
 
     expect(item).toBeDefined();
     // **One family, one entry** — the intent this test has always had. What
     // changed is where the child appears: R62 creates no child `User` until
     // approval, so `applicants` names only the person who exists…
-    expect(item!.applicants.map((a) => a.role)).toEqual(['applicant']);
+    expect(item!.applicants.map((a) => a.role)).toEqual(["applicant"]);
     // …and the child is a decidable block carrying its own application id,
     // because R62.2 decides a child alone.
     expect(item!.children.map((c) => c.applicationId)).toEqual([applicationId]);
@@ -245,15 +274,21 @@ describe('§5.6 / TD-4.2 approval queue', () => {
 
     // And it is not ALSO listed as a standalone child-application item, which
     // would invite an approver to decide the same family from two places.
-    const standalone = await listApprovals(prisma, await actorFor(prisma, admin), {
-      type: 'child-application',
-    });
-    expect(standalone.data.some((i) => i.children.some((c) => c.applicationId === applicationId))).toBe(
-      false,
+    const standalone = await listApprovals(
+      prisma,
+      await actorFor(prisma, admin),
+      {
+        type: "child-application",
+      },
     );
+    expect(
+      standalone.data.some((i) =>
+        i.children.some((c) => c.applicationId === applicationId),
+      ),
+    ).toBe(false);
   });
 
-  it('TD-4.2 as narrowed by R62: the parent is decided ALONE', async () => {
+  it("TD-4.2 as narrowed by R62: the parent is decided ALONE", async () => {
     // **This test asserted the superseded rule.** TD-4.2 used to make approval
     // atomic across the applicant and every pending child; R62 narrows it to
     // the applicant and ONE child, decided through its own endpoint — so the
@@ -261,40 +296,56 @@ describe('§5.6 / TD-4.2 approval queue', () => {
     const admin = await makeAdmin();
     const { parentId, applicationId } = await submitBundle();
 
-    const result = await decide(prisma, await actorFor(prisma, admin), parentId, { approve: true });
-    expect(result.type).toBe('registration');
+    const result = await decide(
+      prisma,
+      await actorFor(prisma, admin),
+      parentId,
+      { approve: true },
+    );
+    expect(result.type).toBe("registration");
 
-    expect((await prisma.user.findUnique({ where: { id: parentId } }))?.accountStatus).toBe('active');
+    expect(
+      (await prisma.user.findUnique({ where: { id: parentId } }))
+        ?.accountStatus,
+    ).toBe("active");
     // No child, no link — the application is still waiting for its own decision.
-    const application = await prisma.childApplication.findUnique({ where: { id: applicationId } });
-    expect(application?.status).toBe('pending');
+    const application = await prisma.childApplication.findUnique({
+      where: { id: applicationId },
+    });
+    expect(application?.status).toBe("pending");
     expect(await prisma.familyLink.count({ where: { parentId } })).toBe(0);
 
     // …and deciding the child then creates both, without touching the parent.
-    const { decideChildApplication } = await import('./child-application.service.js');
+    const { decideChildApplication } =
+      await import("./child-application.service.js");
     const childResult = await decideChildApplication(
       prisma,
       await actorFor(prisma, admin),
       applicationId,
       // R64.5 — approving a child places it, exactly as approving a
       // registration always has (§4.1).
-      { approve: true, placement: { administrativeGroupId: placement.groupId } },
+      {
+        approve: true,
+        placement: { administrativeGroupId: placement.groupId },
+      },
     );
     const link = await prisma.familyLink.findFirst({
       where: { parentId, studentId: childResult.childUserId! },
     });
-    expect(link?.status).toBe('approved');
+    expect(link?.status).toBe("approved");
     expect(link?.decidedById).toBe(admin);
 
     const row = await prisma.auditLog.findFirst({
-      where: { targetId: parentId, actionType: 'user.approve' },
+      where: { targetId: parentId, actionType: "user.approve" },
     });
     expect(row).not.toBeNull();
     // Zero: R62 moved child activation out of this decision entirely.
-    expect((row!.detail as Record<string, unknown>)['children_activated']).toBe(0);
+    expect((row!.detail as Record<string, unknown>)["children_activated"]).toBe(
+      0,
+    );
   });
 
-  it('rejecting the parent leaves each child its OWN decision (R62)', async () => {
+  it("rejecting the parent leaves each child its OWN decision (R62)", async () => {
     // The superseded rule rejected the family together. R62 makes the parent's
     // application explicitly separate — *"never inferred from the children's
     // outcomes"* — which cuts both ways: a refused parent does not refuse the
@@ -302,44 +353,69 @@ describe('§5.6 / TD-4.2 approval queue', () => {
     const admin = await makeAdmin();
     const { parentId, applicationId } = await submitBundle();
 
-    await decide(prisma, await actorFor(prisma, admin), parentId, { approve: false, reason: 'بيانات غير مكتملة' });
+    await decide(prisma, await actorFor(prisma, admin), parentId, {
+      approve: false,
+      reason: "بيانات غير مكتملة",
+    });
 
-    expect((await prisma.user.findUnique({ where: { id: parentId } }))?.accountStatus).toBe('rejected');
+    expect(
+      (await prisma.user.findUnique({ where: { id: parentId } }))
+        ?.accountStatus,
+    ).toBe("rejected");
     // Still pending, and still decidable — nothing was inferred.
-    expect((await prisma.childApplication.findUnique({ where: { id: applicationId } }))?.status).toBe(
-      'pending',
-    );
+    expect(
+      (
+        await prisma.childApplication.findUnique({
+          where: { id: applicationId },
+        })
+      )?.status,
+    ).toBe("pending");
     // And no link exists to be half-decided, because none is created until a
     // child is approved.
     expect(await prisma.familyLink.count({ where: { parentId } })).toBe(0);
   });
 
-  it('rejection without a reason is refused (§5.6, §14.2)', async () => {
+  it("rejection without a reason is refused (§5.6, §14.2)", async () => {
     const admin = await makeAdmin();
     const { parentId } = await submitBundle();
-    await expect(decide(prisma, await actorFor(prisma, admin), parentId, { approve: false })).rejects.toMatchObject({
-      code: 'VALIDATION_FAILED',
+    await expect(
+      decide(prisma, await actorFor(prisma, admin), parentId, {
+        approve: false,
+      }),
+    ).rejects.toMatchObject({
+      code: "VALIDATION_FAILED",
     });
     // Nothing decided.
-    expect((await prisma.user.findUnique({ where: { id: parentId } }))?.accountStatus).toBe('pending');
+    expect(
+      (await prisma.user.findUnique({ where: { id: parentId } }))
+        ?.accountStatus,
+    ).toBe("pending");
   });
 
-  it('TD-15.3: double-approval — first wins, second gets STATE_CONFLICT', async () => {
+  it("TD-15.3: double-approval — first wins, second gets STATE_CONFLICT", async () => {
     const admin = await makeAdmin();
     const { parentId } = await submitBundle();
 
-    await decide(prisma, await actorFor(prisma, admin), parentId, { approve: true });
+    await decide(prisma, await actorFor(prisma, admin), parentId, {
+      approve: true,
+    });
     await expect(
-      decide(prisma, await actorFor(prisma, admin), parentId, { approve: true }),
-    ).rejects.toMatchObject({ code: 'STATE_CONFLICT' });
+      decide(prisma, await actorFor(prisma, admin), parentId, {
+        approve: true,
+      }),
+    ).rejects.toMatchObject({ code: "STATE_CONFLICT" });
   });
 
-  it('§14.2 R39: branch_id narrows the queue, and meta.total follows the filter', async () => {
+  it("§14.2 R39: branch_id narrows the queue, and meta.total follows the filter", async () => {
     const admin = await makeAdmin();
     const here = await submitBundle(branchId);
     const elsewhere = await submitBundle(otherBranchId);
 
-    const filtered = await listApprovals(prisma, await actorFor(prisma, admin), { branchId });
+    const filtered = await listApprovals(
+      prisma,
+      await actorFor(prisma, admin),
+      { branchId },
+    );
     const ids = filtered.data.map((i) => i.id);
     expect(ids).toContain(here.parentId);
     expect(ids).not.toContain(elsewhere.parentId);
@@ -351,36 +427,54 @@ describe('§5.6 / TD-4.2 approval queue', () => {
     expect(item.branch?.id).toBe(branchId);
   });
 
-  it('R39: the requested branch never decides the placement', async () => {
+  it("R39: the requested branch never decides the placement", async () => {
     const admin = await makeAdmin();
     const { parentId, applicationId } = await submitBundle(branchId);
     // The approver places the child at the fixture's branch, which is NOT the
     // one the family asked for — that is the whole distinction R39 draws
     // between a request and a placement, and it survives R62 moving placement
     // onto the child's own decision.
-    await decide(prisma, await actorFor(prisma, admin), parentId, { approve: true });
-    const { decideChildApplication } = await import('./child-application.service.js');
+    await decide(prisma, await actorFor(prisma, admin), parentId, {
+      approve: true,
+    });
+    const { decideChildApplication } =
+      await import("./child-application.service.js");
     const child = await decideChildApplication(
       prisma,
       await actorFor(prisma, admin),
       applicationId,
-      { approve: true, placement: { administrativeGroupId: placement.groupId } },
+      {
+        approve: true,
+        placement: { administrativeGroupId: placement.groupId },
+      },
     );
 
-    expect((await prisma.user.findUnique({ where: { id: parentId } }))?.accountStatus).toBe('active');
-    expect(await prisma.userBranchRole.count({ where: { userId: parentId, role: { name: { not: 'parent' } } } })).toBe(0);
+    expect(
+      (await prisma.user.findUnique({ where: { id: parentId } }))
+        ?.accountStatus,
+    ).toBe("active");
+    expect(
+      await prisma.userBranchRole.count({
+        where: { userId: parentId, role: { name: { not: "parent" } } },
+      }),
+    ).toBe(0);
     // The PARENT is not a student and is never enrolled; the child is.
-    expect(await prisma.enrollment.count({ where: { studentId: parentId } })).toBe(0);
+    expect(
+      await prisma.enrollment.count({ where: { studentId: parentId } }),
+    ).toBe(0);
     const enrolment = await prisma.enrollment.findFirstOrThrow({
       where: { studentId: child.childUserId! },
     });
     expect(enrolment.administrativeGroupId).toBe(placement.groupId);
     expect(enrolment.levelId).toBe(placement.levelId);
     // The request itself survives approval — it is the record of what was asked.
-    expect((await prisma.user.findUnique({ where: { id: parentId } }))?.intendedBranchId).toBe(branchId);
+    expect(
+      (await prisma.user.findUnique({ where: { id: parentId } }))
+        ?.intendedBranchId,
+    ).toBe(branchId);
   });
 
-  it('TD-15.3: two admins approving concurrently activate exactly once', async () => {
+  it("TD-15.3: two admins approving concurrently activate exactly once", async () => {
     const a1 = await makeAdmin();
     const a2 = await makeAdmin();
     const { parentId } = await submitBundle();
@@ -389,28 +483,43 @@ describe('§5.6 / TD-4.2 approval queue', () => {
       decide(prisma, await actorFor(prisma, a1), parentId, { approve: true }),
       decide(prisma, await actorFor(prisma, a2), parentId, { approve: true }),
     ]);
-    expect(results.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
+    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
     // A benign outcome, never a 500 (TD-15.3).
-    expect((await prisma.user.findUnique({ where: { id: parentId } }))?.accountStatus).toBe('active');
     expect(
-      await prisma.auditLog.count({ where: { targetId: parentId, actionType: 'user.approve' } }),
+      (await prisma.user.findUnique({ where: { id: parentId } }))
+        ?.accountStatus,
+    ).toBe("active");
+    expect(
+      await prisma.auditLog.count({
+        where: { targetId: parentId, actionType: "user.approve" },
+      }),
     ).toBe(1);
   });
 
-  it('TD-12 freshness: an admin suspended mid-session loses approval power at once', async () => {
+  it("TD-12 freshness: an admin suspended mid-session loses approval power at once", async () => {
     const admin = await makeAdmin();
     const { parentId } = await submitBundle();
 
     // The token is still perfectly valid; only the database row changed.
-    await prisma.user.update({ where: { id: admin }, data: { accountStatus: 'suspended' } });
-
-    await expect(decide(prisma, await actorFor(prisma, admin), parentId, { approve: true })).rejects.toMatchObject({
-      code: 'FORBIDDEN',
+    await prisma.user.update({
+      where: { id: admin },
+      data: { accountStatus: "suspended" },
     });
-    expect((await prisma.user.findUnique({ where: { id: parentId } }))?.accountStatus).toBe('pending');
+
+    await expect(
+      decide(prisma, await actorFor(prisma, admin), parentId, {
+        approve: true,
+      }),
+    ).rejects.toMatchObject({
+      code: "FORBIDDEN",
+    });
+    expect(
+      (await prisma.user.findUnique({ where: { id: parentId } }))
+        ?.accountStatus,
+    ).toBe("pending");
   });
 
-  it('TD-12 freshness: a REVOKED role assignment loses approval power at once', async () => {
+  it("TD-12 freshness: a REVOKED role assignment loses approval power at once", async () => {
     const admin = await makeAdmin();
     const { parentId } = await submitBundle();
 
@@ -418,34 +527,51 @@ describe('§5.6 / TD-4.2 approval queue', () => {
     // assignment to still exist, not merely to have existed at token issue.
     await prisma.userBranchRole.deleteMany({ where: { userId: admin } });
 
-    await expect(decide(prisma, await actorFor(prisma, admin), parentId, { approve: true })).rejects.toMatchObject({
-      code: 'FORBIDDEN',
+    await expect(
+      decide(prisma, await actorFor(prisma, admin), parentId, {
+        approve: true,
+      }),
+    ).rejects.toMatchObject({
+      code: "FORBIDDEN",
     });
   });
 
-  it('TD-2: a non-admin cannot approve, and cannot even list', async () => {
-    const teacher = await makeAdmin('teacher');
+  it("TD-2: a non-admin cannot approve, and cannot even list", async () => {
+    const teacher = await makeAdmin("teacher");
     const { parentId } = await submitBundle();
 
-    await expect(listApprovals(prisma, await actorFor(prisma, teacher), {})).rejects.toMatchObject({ code: 'FORBIDDEN' });
-    await expect(decide(prisma, await actorFor(prisma, teacher), parentId, { approve: true })).rejects.toMatchObject({
-      code: 'FORBIDDEN',
+    await expect(
+      listApprovals(prisma, await actorFor(prisma, teacher), {}),
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await expect(
+      decide(prisma, await actorFor(prisma, teacher), parentId, {
+        approve: true,
+      }),
+    ).rejects.toMatchObject({
+      code: "FORBIDDEN",
     });
   });
 
-  it('an unknown id is NOT_FOUND, not a 500 or a silent success', async () => {
+  it("an unknown id is NOT_FOUND, not a 500 or a silent success", async () => {
     const admin = await makeAdmin();
     await expect(
-      decide(prisma, await actorFor(prisma, admin), '11111111-2222-4333-8444-555555555555', { approve: true }),
-    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+      decide(
+        prisma,
+        await actorFor(prisma, admin),
+        "11111111-2222-4333-8444-555555555555",
+        { approve: true },
+      ),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
   });
 
-  it('TD-10: pagination envelope with default 25 and max 100', async () => {
+  it("TD-10: pagination envelope with default 25 and max 100", async () => {
     const admin = await makeAdmin();
     await submitBundle();
-    const page = await listApprovals(prisma, await actorFor(prisma, admin), { pageSize: 500 });
+    const page = await listApprovals(prisma, await actorFor(prisma, admin), {
+      pageSize: 500,
+    });
     expect(page.meta.page_size).toBe(100);
     expect(page.meta.page).toBe(1);
-    expect(typeof page.meta.total).toBe('number');
+    expect(typeof page.meta.total).toBe("number");
   });
 });
