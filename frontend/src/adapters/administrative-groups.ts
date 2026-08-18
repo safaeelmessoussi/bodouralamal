@@ -1,4 +1,6 @@
 import { api } from '../lib/api.js';
+import { applySort, reorderResource } from './reorder.js';
+import type { SortState } from '../components/ui/data-table.js';
 
 /**
  * Administrative Groups and their rosters (§4.4c, §5.6, TD-3.12, Revision 43).
@@ -49,14 +51,29 @@ export async function listAdministrativeGroups(
   token: string | null,
   page = 1,
   filters: GroupFilters = {},
+  sort: SortState | null = null,
 ): Promise<Page<AdministrativeGroup>> {
   const params = new URLSearchParams({ page: String(page), page_size: '25' });
   for (const [key, value] of Object.entries(filters)) {
     if (value) params.set(key, value);
   }
+  applySort(params, sort);
   return api<Page<AdministrativeGroup>>(`/admin/administrative-groups?${params.toString()}`, {
     token,
   });
+}
+
+/**
+ * R76.4 — **one Level's** groups, in the order given, within the caller's branch
+ * scope. The Level is required for the same reason a Category is on Levels: §2.2
+ * scopes `display_order` to the parent.
+ */
+export async function reorderAdministrativeGroups(
+  levelId: string,
+  ids: readonly string[],
+  token: string | null,
+): Promise<string[]> {
+  return reorderResource('administrative-groups', ids, token, levelId);
 }
 
 export interface GroupInput {

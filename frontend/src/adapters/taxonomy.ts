@@ -1,4 +1,6 @@
 import { api } from '../lib/api.js';
+import { reorderResource, sortQuery } from './reorder.js';
+import type { SortState } from '../components/ui/data-table.js';
 import type { SubjectRef } from './reference-data.js';
 
 /**
@@ -32,9 +34,20 @@ export interface TaxonomyInput {
   display_order?: number | null;
 }
 
-export async function listCategories(token: string | null): Promise<Category[]> {
-  const body = await api<{ data: Category[] }>('/admin/categories', { token });
+export async function listCategories(
+  token: string | null,
+  sort: SortState | null = null,
+): Promise<Category[]> {
+  const body = await api<{ data: Category[] }>(`/admin/categories${sortQuery(sort)}`, { token });
   return body.data;
+}
+
+/** R76.4 — the categories, in the order given. */
+export async function reorderCategories(
+  ids: readonly string[],
+  token: string | null,
+): Promise<string[]> {
+  return reorderResource('categories', ids, token);
 }
 
 export async function createCategory(
@@ -150,10 +163,26 @@ export interface UpdateLevelInput {
 export async function listLevels(
   token: string | null,
   categoryId?: string,
+  sort: SortState | null = null,
 ): Promise<Level[]> {
-  const query = categoryId ? `?category_id=${encodeURIComponent(categoryId)}` : '';
+  const query = sortQuery(sort, categoryId ? { category_id: categoryId } : {});
   const body = await api<{ data: Level[] }>(`/admin/levels${query}`, { token });
   return body.data;
+}
+
+/**
+ * R76.4 — **one Category's** Levels, in the order given.
+ *
+ * The Category is required, not inferred: §2.2 scopes `Level.display_order` to
+ * its parent, so a sequence that did not name one would be a sequence about no
+ * particular collection.
+ */
+export async function reorderLevels(
+  categoryId: string,
+  ids: readonly string[],
+  token: string | null,
+): Promise<string[]> {
+  return reorderResource('levels', ids, token, categoryId);
 }
 
 /** Answers with the Level **and** the المجموعة 1 created with it, so the screen

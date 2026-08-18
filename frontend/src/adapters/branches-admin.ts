@@ -1,4 +1,5 @@
 import { api } from '../lib/api.js';
+import { applySort, reorderResource } from './reorder.js';
 
 /**
  * Branch and Room administration (§5.6, §14.2, Revision 26).
@@ -70,11 +71,7 @@ export async function listBranches(
   page = 1,
   sort: { by: string; dir: 'asc' | 'desc' } | null = null,
 ): Promise<Page<Branch>> {
-  const params = new URLSearchParams({ page: String(page), page_size: '25' });
-  if (sort) {
-    params.set('sort_by', sort.by);
-    params.set('sort_dir', sort.dir);
-  }
+  const params = applySort(new URLSearchParams({ page: String(page), page_size: '25' }), sort);
   return api<Page<Branch>>(`/admin/branches?${params.toString()}`, { token });
 }
 
@@ -90,12 +87,7 @@ export async function reorderBranches(
   ids: readonly string[],
   token: string | null,
 ): Promise<string[]> {
-  const body = await api<{ data: { ids: string[] } }>('/admin/branches/order', {
-    method: 'PATCH',
-    token,
-    body: { ids },
-  });
-  return body.data.ids;
+  return reorderResource('branches', ids, token);
 }
 
 export async function createBranch(input: BranchInput, token: string | null): Promise<Branch> {

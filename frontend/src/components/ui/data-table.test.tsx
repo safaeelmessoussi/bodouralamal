@@ -377,3 +377,106 @@ describe('sortable column headers (R76.8)', () => {
     ]);
   });
 });
+
+describe('manual ordering — the drag gesture and its states (R76.8)', () => {
+  const cols: Column<Row>[] = [
+    { key: 'name', header: 'الاسم', sortKey: 'name', cell: (r) => r.name },
+  ];
+  const render = (props: {
+    sort?: SortState | null;
+    onReorder?: ((ids: string[]) => Promise<unknown>) | null;
+    total?: number;
+  }): string =>
+    renderToStaticMarkup(
+      <DataTable
+        caption="ج"
+        columns={cols}
+        rows={rows}
+        rowKey={(r) => r.id}
+        status="ready"
+        sort={props.sort ?? null}
+        onSort={() => undefined}
+        {...(props.onReorder !== undefined ? { onReorder: props.onReorder } : {})}
+        {...(props.total !== undefined
+          ? { pagination: { page: 1, pageSize: 25, total: props.total, onPage: () => undefined } }
+          : {})}
+      />,
+    );
+
+  it('adds no grip column at all to a table that does not order manually', () => {
+    // The capability is opt-in; a column of dead handles on every list would
+    // teach that ordering exists where it does not.
+    const html = render({});
+    expect(html).not.toContain('admin-table__grip');
+    expect(html).not.toContain('datatable__reorder');
+  });
+
+  it('offers a draggable row with a keyboard-reachable handle in canonical order', () => {
+    const html = render({ onReorder: async () => undefined });
+    expect(html).toContain('draggable="true"');
+    // A button, not a bare icon: native drag-and-drop is mouse-only, and a
+    // persisted business decision must not be pointer-exclusive.
+    expect(html).toContain('admin-table__grip-btn');
+    expect(html).not.toContain('admin-table__grip-btn" disabled=""');
+    expect(html).toContain(t('common.reorder.hint'));
+  });
+
+  it('disables the handle under a column sort, and SAYS why', () => {
+    // R76.8 — the visible sequence is not the business one, so a drop would
+    // persist a position the reader never intended.
+    const html = render({ onReorder: async () => undefined, sort: { by: 'name', dir: 'asc' } });
+    expect(html).not.toContain('draggable="true"');
+    expect(html).toContain('admin-table__grip-btn" disabled=""');
+    expect(html).toContain(t('common.reorder.blockedBySort'));
+    // The column survives, so clearing the sort does not shift every row.
+    expect(html).toContain('admin-table__grip');
+  });
+
+  it('disables it when the page is not the whole collection, and SAYS why', () => {
+    // The contract takes the exact live set, so a page-sized sequence would be
+    // refused by the server; the gesture is withheld rather than failing.
+    const html = render({ onReorder: async () => undefined, total: 40 });
+    expect(html).not.toContain('draggable="true"');
+    expect(html).toContain('admin-table__grip-btn" disabled=""');
+    expect(html).toContain(t('common.reorder.blockedByPaging'));
+  });
+
+  it('allows it when the pagination happens to hold everything', () => {
+    const html = render({ onReorder: async () => undefined, total: rows.length });
+    expect(html).toContain('draggable="true"');
+    expect(html).toContain(t('common.reorder.hint'));
+  });
+
+  it('keeps the handle and explains when no parent is selected (§2.2)', () => {
+    // `null` is the third state: this table orders manually, but the rows on
+    // screen span several sequences, so a position means nothing in any of them.
+    const html = render({ onReorder: null });
+    expect(html).toContain('admin-table__grip-btn" disabled=""');
+    expect(html).not.toContain('draggable="true"');
+    expect(html).toContain(t('common.reorder.blockedByScope'));
+  });
+
+  it('names the handle for a screen reader rather than shipping a bare glyph', () => {
+    expect(render({ onReorder: async () => undefined })).toContain(
+      `aria-label="${t('common.reorder.handle')}"`,
+    );
+  });
+
+  it('widens the loading skeleton by the grip column, so nothing reflows', () => {
+    const withGrip = renderToStaticMarkup(
+      <DataTable
+        caption="ج"
+        columns={cols}
+        rows={[]}
+        rowKey={(r: Row) => r.id}
+        status="loading"
+        onReorder={async () => undefined}
+      />,
+    );
+    const without = renderToStaticMarkup(
+      <DataTable caption="ج" columns={cols} rows={[]} rowKey={(r: Row) => r.id} status="loading" />,
+    );
+    const cells = (html: string): number => (html.match(/class="skeleton"/g) ?? []).length;
+    expect(cells(withGrip)).toBe(cells(without) + 5);
+  });
+});

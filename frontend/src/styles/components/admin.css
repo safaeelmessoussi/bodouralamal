@@ -562,3 +562,53 @@
 .admin-table th[aria-sort='descending'] .datatable__sort-arrow {
   color: var(--color-primary);
 }
+
+/* **Manual ordering** (R76.8, 2026-08-18).
+ *
+ * The grip is a real button — native drag-and-drop is mouse-only, and a
+ * persisted business decision must not be reachable by pointer alone. It keeps
+ * the platform's `:focus-visible` ring, which is what makes the keyboard path
+ * visible rather than merely present.
+ *
+ * `touch-action: none` on the row is what lets a pointer drag begin on a touch
+ * screen instead of scrolling the page. */
+.admin-table__grip-head,
+.admin-table__grip {
+  width: 1px;
+  padding-inline: var(--space-2);
+}
+.admin-table__grip-btn {
+  display: block;
+  padding: var(--space-1) var(--space-2);
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-md);
+  line-height: 1;
+  cursor: grab;
+}
+.admin-table__grip-btn:hover:not(:disabled) {
+  color: var(--color-primary);
+  background: var(--color-surface-subtle);
+}
+.admin-table__grip-btn:active:not(:disabled) {
+  cursor: grabbing;
+}
+/* Disabled rather than hidden: the column keeps its width, so clearing a sort
+   does not shift every row sideways — and the reader can see that the capability
+   exists and is currently unavailable, which is what the status line explains. */
+.admin-table__grip-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.admin-table tbody tr[draggable='true'] {
+  touch-action: none;
+}
+.admin-table tbody tr.is-dragging {
+  opacity: 0.5;
+}
+.datatable__reorder {
+  margin-block-start: var(--space-2);
+  font-size: var(--font-size-sm);
+}

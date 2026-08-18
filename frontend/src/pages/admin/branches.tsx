@@ -7,6 +7,7 @@ import {
   deleteRoom,
   listBranches,
   listRooms,
+  reorderBranches,
   updateBranch,
   updateRoom,
   type Branch,
@@ -26,7 +27,6 @@ import {
 import { Dialog } from '../../components/ui/dialog.js';
 import {
   DateField,
-  NumberField,
   SearchInput,
   TextArea,
   TextField,
@@ -295,6 +295,16 @@ export function BranchesPage(): ReactNode {
             placeholder={t('admin.branches.searchPlaceholder')}
           />
         }
+        {...(canWrite
+          ? {
+              /* The search box filters CLIENT-side, so `visible` can be a
+                 subset of the live set the reorder contract requires. Nothing
+                 here has to say so: the table compares what it is showing
+                 against `total` and blocks the gesture itself — which is the
+                 whole reason that rule lives there and not in each page. */
+              onReorder: async (ids: string[]) => reorderBranches(ids, accessToken).then(load),
+            }
+          : {})}
         pagination={{ page, pageSize: 25, total, onPage: setPage }}
       />
 
@@ -549,7 +559,6 @@ function BranchFormDialog({
     openingHours: branch?.opening_hours_ar ?? '',
     mapsUrl: branch?.google_maps_url ?? '',
     start: branch?.operational_start_date ?? '',
-    order: branch?.display_order !== null && branch?.display_order !== undefined ? String(branch.display_order) : '',
   });
   const [touched, setTouched] = useState(false);
 
@@ -585,7 +594,6 @@ function BranchFormDialog({
       ...(trimmed(form.openingHours) ? { opening_hours_ar: trimmed(form.openingHours)! } : {}),
       google_maps_url: trimmed(form.mapsUrl) ?? null,
       operational_start_date: trimmed(form.start) ?? null,
-      display_order: form.order.trim() === '' ? null : Number(form.order),
     });
   }
 
@@ -633,21 +641,18 @@ function BranchFormDialog({
           error={touched ? errors.mapsUrl : null}
           hint={t('admin.branches.mapsUrlHint')}
         />
-        <div className="form__row">
-          <DateField
-            label={t('admin.branches.colStart')}
-            value={form.start}
-            onChange={set('start')}
-            hint={t('admin.branches.startHint')}
-          />
-          <NumberField
-            label={t('admin.branches.colOrder')}
-            value={form.order}
-            onChange={set('order')}
-            min={0}
-            hint={t('admin.branches.orderHint')}
-          />
-        </div>
+        {/* **No «الترتيب» field** (R76.8). The column left the table in the
+            previous slice and the field follows it here: the two together were
+            a number *and* a sequence claiming to state the same fact, and the
+            drag is the one a reader can act on. Omitting it on save preserves
+            the stored position; a new branch arrives with NULL, which sorts
+            last, and is dragged from the end. */}
+        <DateField
+          label={t('admin.branches.colStart')}
+          value={form.start}
+          onChange={set('start')}
+          hint={t('admin.branches.startHint')}
+        />
 
         <div className="form__actions">
           <Button variant="secondary" onClick={onCancel}>

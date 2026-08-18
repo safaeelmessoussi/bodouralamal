@@ -1,4 +1,6 @@
 import { api } from '../lib/api.js';
+import { reorderResource, sortQuery } from './reorder.js';
+import type { SortState } from '../components/ui/data-table.js';
 
 /**
  * Reference-data selectors (TD-3 extension, 2026-08-05).
@@ -49,9 +51,20 @@ export interface AcademicYearRef {
   is_current: boolean;
 }
 
-export async function listSubjects(token: string | null): Promise<SubjectRef[]> {
-  const body = await api<{ data: SubjectRef[] }>('/admin/subjects', { token });
+export async function listSubjects(
+  token: string | null,
+  sort: SortState | null = null,
+): Promise<SubjectRef[]> {
+  const body = await api<{ data: SubjectRef[] }>(`/admin/subjects${sortQuery(sort)}`, { token });
   return body.data;
+}
+
+/** R76.4 — the subjects, in the order given. */
+export async function reorderSubjects(
+  ids: readonly string[],
+  token: string | null,
+): Promise<string[]> {
+  return reorderResource('subjects', ids, token);
 }
 
 export async function listAcademicYears(token: string | null): Promise<AcademicYearRef[]> {

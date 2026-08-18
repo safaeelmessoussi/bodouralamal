@@ -109,6 +109,50 @@ Rename a field in the adapter and the **typecheck** fails here. That is the chec
 cannot perform. `pages/admin/hijri-calendar.test.tsx` is the worked example — written after a
 type mismatch rendered a whole admin screen blank white with nothing red anywhere.
 
+## Driving a real browser, on real authenticated screens
+
+Vitest here renders with `renderToStaticMarkup`: **no jsdom, no layout engine, no
+events, no fetches.** Whole classes of fact are therefore invisible to it — where
+a button actually lands, whether a header click issues a request, whether a
+dragged row moves. The project has no Playwright and §3.1a forbids adding a
+dependency casually, so both browser scripts drive the **installed Chrome** over
+the DevTools Protocol using Node's built-in `WebSocket`: no install, no lockfile
+change.
+
+| Script | Answers |
+|---|---|
+| `scripts/dev/browser/measure-page-header.sh` | Does the primary action stay put as the description grows, at nine widths |
+| `scripts/dev/browser/verify-reorder.sh` | R76 on the five real admin screens: is «الترتيب» gone, is the header a focusable button, does pressing it send `sort_by` to the server, does a dropped row move **and survive a reload**, is the handle disabled and explained when it cannot be used |
+
+### Getting past the login wall without bypassing it
+
+Every `/admin/*` screen needs a session, and the only issuer is Google OAuth
+(§4.1b) — which a headless browser on a developer machine cannot complete. That
+is not a reason to skip browser verification; it is a reason to provision a
+session properly.
+
+`scripts/dev/issue-dev-session.sh` mints one by calling **`issueNewSession`, the
+production code path the OAuth callback itself calls**, and prints the raw token
+to be set as the ordinary `bodour_refresh` cookie — confined to its own route
+(TD-12), exactly as the server sets it. **Nothing about authorisation is
+bypassed**: the user is an ordinary `super_admin` row, and every request it makes
+is checked by the same TD-2 rules as any other. What is replaced is the identity
+*provider*, and only in a development database — the script refuses to run
+against a non-loopback `DATABASE_URL` or with `NODE_ENV=production`.
+
+### What browser verification found that no test could
+
+The R76 drag worked from the keyboard and did nothing on a synthetic drag
+sequence. The cause was real and would have bitten a real user on a fast
+pointer: `dragstart` and the first `dragover` can arrive **in the same task**, so
+a handler reading only React state sees `null` and never begins. The dragged row
+and the arrangement in progress now live in refs; state drives the styling, the
+refs drive the logic.
+
+The lesson generalises: *a behaviour that depends on a re-render happening between
+two events is a behaviour that works only when the machine is slow enough.*
+Neither a unit test nor a code reading would have asked.
+
 ## Four environment traps the integration suite sets
 
 **Running the full suite repeatedly hits the real Nginx rate limits.** The stack

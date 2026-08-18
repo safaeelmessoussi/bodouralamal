@@ -186,6 +186,7 @@ same component rather than merely resembling one.
 
 **Everything is configuration**: columns, actions, labels, empty copy. Adding an
 entity means passing different configuration, never editing the component.
+Sorting and manual reordering are configuration too — see [AF](#af--ordering-a-list-sort-is-a-question-drag-is-a-decision).
 
 **The one legitimate exception is a table whose cells hold live form controls**
 bound to per-row draft state — the grade sheet, the Quran log editor, the Hijri
@@ -197,6 +198,52 @@ to add a fourth exception.
 
 A **calendar month grid** is a `<table>` and is not a list: weekdays across, weeks
 down, a cell addressed by both. Different concept, permanent exception.
+
+## AF · Ordering a list: sort is a question, drag is a decision
+
+Two different acts, and the platform keeps them apart because confusing them is
+what makes a saved order untrustworthy.
+
+**A column sort is a temporary view.** The header is a real `<button>`; first
+press ascending, second descending, third ascending again — never back to
+"unsorted", which a reader cannot tell apart from ascending and which makes the
+third click look broken. `aria-sort` sits on the `<th>`, because the direction is
+a property of the column. Only a column declaring `sortKey` becomes a button; the
+actions column never does. **The server sorts** (`?sort_by=&sort_dir=`): a client
+sorting one page of a paginated collection would order that page and misreport it
+as the collection's order.
+
+**A drag is a persisted business decision.** «الترتيب» is no longer a number
+anybody types — the column and the form field are both gone from every screen —
+because a number *and* a sequence stating the same fact disagree the first time
+either is used. The row carries a grip; the grip is a `<button>` and ↑/↓ move the
+row, since native drag-and-drop is mouse-only and a persisted decision must not
+be pointer-exclusive. The client never computes `display_order`: it sends the
+**sequence**, and the server assigns the positions.
+
+**Drag is offered only in canonical order, and the table decides that itself.**
+Three states block it, and `DataTable` derives all three from what it already
+holds rather than taking a prop each page must remember to pass:
+
+| Block | Why |
+|---|---|
+| `sorted` | Under a column sort the visible sequence is not the business one, so a drop would persist a position the reader never intended |
+| `paged` | The contract takes the **exact live set**; a page-sized — or search-filtered — sequence is refused by the server, so the gesture would be a request that cannot win |
+| `scope` | `Level` and `AdministrativeGroup` order **within a parent** (§2.2), so until one is selected the rows on screen span several sequences |
+
+A blocked handle is **disabled and explained**, never hidden and never inert: the
+status line under the table names the way out — clear the sort, show everything
+on one page, pick a Category. This is the rule that would rot fastest as a
+per-page flag, and `paged` is the case a page would forget: the server refuses,
+and the reader sees a drag that silently does nothing.
+
+The optimistic order is held until **the rows that come back agree with it** —
+releasing it when the request resolves would flash the old order for the length
+of the refetch, which reads as the drop having failed. A refusal drops it at once.
+
+> [`SRS R76`] · `components/ui/reorderable.ts` (the rules, as pure functions,
+> because this project's component tests have no layout engine) ·
+> [API contracts](../architecture/api.md#manual-ordering-takes-the-sequence-not-per-row-numbers)
 
 ## I · Empty states
 

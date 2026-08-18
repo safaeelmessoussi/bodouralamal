@@ -233,6 +233,21 @@ export const ar = {
     previous: 'السابق',
     next: 'التالي',
     pageOf: 'صفحة {page} من {pages}',
+    // R76.8 — «الترتيب» is no longer a number a user types; it is the sequence
+    // of the rows. Every message below names the way OUT of the state, not only
+    // the obstacle: a reader who cannot drag needs to know what to change.
+    reorder: {
+      column: 'تغيير الترتيب',
+      handle: 'اسحبي لتغيير الترتيب، أو استعملي السهمين لأعلى وأسفل',
+      hint: 'يمكنك تغيير ترتيب الصفوف بسحبها، أو بالسهمين لأعلى وأسفل بعد تحديد مقبض الصف.',
+      saving: 'جارٍ حفظ الترتيب…',
+      failed: 'تعذّر حفظ الترتيب. لم يتغيّر الترتيب المحفوظ.',
+      blockedBySort: 'الترتيب اليدوي متاح في الترتيب الافتراضي فقط. أزيلي الفرز حسب العمود للعودة إليه.',
+      blockedByPaging: 'الترتيب اليدوي يحتاج إلى ظهور جميع العناصر في صفحة واحدة.',
+      // §2.2 — الترتيب محفوظ داخل الفئة أو داخل المستوى، لا عبر القائمة كلها.
+      // الصياغة عامة لأنها تخدم الحالتين، والمُصفّي المقصود ظاهر أعلى الجدول.
+      blockedByScope: 'الترتيب محفوظ داخل كل مجموعة على حدة. اختاري عنصرًا واحدًا من عوامل التصفية أعلاه لترتيب ما بداخله.',
+    },
   },
   calendar: {
     title: 'الجدول الزمني',
@@ -719,8 +734,6 @@ export const ar = {
       // it is what refuses deletion — and the remedy needs to know which Levels.
       colSubjectLevels: 'المستويات التي تُدرَّس فيها',
       noLevels: 'غير مسندة إلى أي مستوى',
-      colOrder: 'الترتيب',
-      orderHint: 'اتركيه فارغًا للترتيب الأبجدي.',
       categoryNameHint: 'مرحلة تعليمية عامة (طفل، يافع، بالغ) — دون أي إشارة إلى الجنس.',
       createCategory: 'إضافة فئة',
       editCategory: 'تعديل الفئة',
@@ -983,9 +996,7 @@ export const ar = {
       colCategory: 'الفئة',
       colGender: 'الفئة المستهدفة',
       colStudents: 'المستفيدات المسجلات',
-      colOrder: 'الترتيب',
       allCategories: 'كل الفئات',
-      orderHint: 'الترتيب داخل الفئة. اتركيه فارغًا للترتيب الأبجدي.',
       gender: {
         any: 'الجميع',
         girls_only: 'الإناث فقط',
@@ -1184,7 +1195,6 @@ export const ar = {
       colName: 'الاسم',
       colLevel: 'المستوى',
       colBranch: 'الفرع',
-      colOrder: 'الترتيب',
       // States the consequence: these are re-creations, not edits.
       fixedAfterCreate: 'المستوى والفرع يُحدَّدان عند الإنشاء ولا يُعدَّلان — النقل إعادة إنشاء.',
       roster: 'المستفيدات',
@@ -1362,7 +1372,6 @@ export const ar = {
       colName: 'اسم المقر',
       colAddress: 'العنوان',
       colStart: 'تاريخ بدء العمل',
-      colOrder: 'ترتيب العرض',
       phone: 'الهاتف',
       email: 'البريد الإلكتروني',
       openingHours: 'أوقات العمل',
@@ -1376,7 +1385,6 @@ export const ar = {
       urlHttps: 'يجب أن يبدأ الرابط بـ https://',
       addressShort: 'العنوان قصير جداً (5 أحرف على الأقل).',
       startHint: 'قبل هذا التاريخ لا تظهر أنشطة المقر في الجدول.',
-      orderHint: 'رقم اختياري يحدّد ترتيب الظهور. الأصغر أولاً.',
       deleteTitle: 'حذف المقر',
       deleteBody: 'سيتم حذف «{name}». يمكن استرجاعه خلال 90 يوماً.',
       // TD-5: deletion is prohibited while rooms or groups reference the branch.

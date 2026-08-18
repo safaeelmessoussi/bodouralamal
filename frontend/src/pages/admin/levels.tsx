@@ -5,6 +5,7 @@ import {
   deleteLevel,
   listCategories,
   listLevels,
+  reorderLevels,
   updateLevel,
   type Category,
   type CreateLevelInput,
@@ -14,9 +15,15 @@ import {
 import { AdminLayout } from '../../components/admin/admin-layout.js';
 import { Button } from '../../components/ui/button.js';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
-import { DataTable, type Column, type RowAction, type TableStatus } from '../../components/ui/data-table.js';
+import {
+  DataTable,
+  type Column,
+  type RowAction,
+  type SortState,
+  type TableStatus,
+} from '../../components/ui/data-table.js';
 import { Dialog } from '../../components/ui/dialog.js';
-import { NumberField, SelectField, TextField } from '../../components/ui/field.js';
+import { SelectField, TextField } from '../../components/ui/field.js';
 import { useSession } from '../../contexts/session.js';
 import { useActiveRole } from '../../contexts/active-role.js';
 import { t } from '../../i18n/index.js';
@@ -61,16 +68,17 @@ export function LevelsPage(): ReactNode {
   const [deleting, setDeleting] = useState<Level | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [sort, setSort] = useState<SortState | null>(null);
 
   const load = useCallback(async () => {
     setStatus('loading');
     try {
-      setRows(await listLevels(accessToken, categoryFilter || undefined));
+      setRows(await listLevels(accessToken, categoryFilter || undefined, sort));
       setStatus('ready');
     } catch {
       setStatus('error');
     }
-  }, [accessToken, categoryFilter]);
+  }, [accessToken, categoryFilter, sort]);
 
   useEffect(() => {
     void load();
@@ -88,10 +96,11 @@ export function LevelsPage(): ReactNode {
   }, [accessToken]);
 
   const columns: Column<Level>[] = [
-    { key: 'name', header: t('admin.levels.colName'), cell: (r) => r.name },
+    { key: 'name', header: t('admin.levels.colName'), sortKey: 'name', cell: (r) => r.name },
     {
       key: 'category',
       header: t('admin.levels.colCategory'),
+      sortKey: 'category',
       cell: (r) => r.category_name,
     },
     {
@@ -100,16 +109,10 @@ export function LevelsPage(): ReactNode {
       // Announced as a word, never as a colour or an icon alone (§14.4).
       cell: (r) => t(`admin.levels.gender.${r.gender_restriction}`),
     },
-    {
-      // The fourth field `LevelFormDialog` collects, and the second gap the
-      // R64 table sweep found: §2.2 orders Levels by it, so a screen that
-      // hides it cannot answer *why is this Level listed here*.
-      key: 'order',
-      header: t('admin.levels.colOrder'),
-      numeric: true,
-      secondary: true,
-      cell: (r) => (r.display_order ?? '—') as ReactNode,
-    },
+    /* **«الترتيب» is gone** (R76.8). It answered *why is this Level listed
+       here*, and the answer is now the sequence itself — visible without a
+       column, and changed by dragging rather than by typing a number into a
+       form that then had to be saved. */
     /**
      * **«المجموعات» and «المواد» are gone from this table** (Owner decision,
      * 2026-08-17).
@@ -169,7 +172,6 @@ export function LevelsPage(): ReactNode {
           {
             name: input.name,
             gender_restriction: input.gender_restriction,
-            display_order: input.display_order ?? null,
           },
           accessToken,
         );
@@ -241,6 +243,20 @@ export function LevelsPage(): ReactNode {
         onRetry={() => void load()}
         filtered={categoryFilter !== ''}
         onClearFilters={() => setCategoryFilter('')}
+        sort={sort}
+        onSort={setSort}
+        {...(canWrite
+          ? {
+              /* §2.2 scopes `Level.display_order` to its Category, so the
+                 sequence is only meaningful once one Category is selected.
+                 `null` keeps the handle visible and disabled with an
+                 explanation, rather than hiding a capability that exists. */
+              onReorder:
+                categoryFilter === ''
+                  ? null
+                  : async (ids: string[]) => reorderLevels(categoryFilter, ids, accessToken).then(load),
+            }
+          : {})}
         toolbar={
           // Narrowed SERVER-side: the endpoint takes `category_id`, so the
           // client never filters a list the server owns.
@@ -311,10 +327,6 @@ function LevelFormDialog({
     name: level?.name ?? '',
     categoryId: level?.category_id ?? categories[0]?.id ?? '',
     gender: (level?.gender_restriction ?? 'any') as GenderRestriction,
-    order:
-      level?.display_order !== null && level?.display_order !== undefined
-        ? String(level.display_order)
-        : '',
   });
   const [touched, setTouched] = useState(false);
 
@@ -365,13 +377,11 @@ function LevelFormDialog({
             belongs to a Category and to no Branch; a branch is chosen when the
             Level is actually subdivided, on the group. */}
 
-        <NumberField
-          label={t('admin.levels.colOrder')}
-          value={form.order}
-          onChange={(v) => setForm((f) => ({ ...f, order: v }))}
-          min={0}
-          hint={t('admin.levels.orderHint')}
-        />
+        {/* **No «الترتيب» field** (R76.8): the order is the sequence of the
+            rows, set by dragging one. A number here would be a second way to
+            state the same fact, and the two would disagree the first time
+            either was used. Omitting it on save preserves the stored position;
+            a new Level arrives with NULL, which sorts last. */}
 
         <div className="form__actions">
           <Button variant="secondary" onClick={onCancel}>
@@ -387,7 +397,6 @@ function LevelFormDialog({
                 name: form.name.trim(),
                 category_id: form.categoryId,
                 gender_restriction: form.gender,
-                display_order: form.order.trim() === '' ? null : Number(form.order),
               });
             }}
           >

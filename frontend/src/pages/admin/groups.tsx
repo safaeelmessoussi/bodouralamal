@@ -5,6 +5,7 @@ import {
   deleteAdministrativeGroup,
   enrolStudent,
   listAdministrativeGroups,
+  reorderAdministrativeGroups,
   listRoster,
   unenrolStudent,
   updateAdministrativeGroup,
@@ -25,11 +26,12 @@ import {
   DataTable,
   type Column,
   type RowAction,
+  type SortState,
   type TableStatus,
 } from '../../components/ui/data-table.js';
 import { Dialog } from '../../components/ui/dialog.js';
 import { FormDialog } from '../../components/ui/form-dialog.js';
-import { NumberField, SelectField, TextField } from '../../components/ui/field.js';
+import { SelectField, TextField } from '../../components/ui/field.js';
 import { SearchableSelect } from '../../components/ui/searchable-select.js';
 import { useSession } from '../../contexts/session.js';
 import { useActiveRole } from '../../contexts/active-role.js';
@@ -96,21 +98,27 @@ export function GroupsPage(): ReactNode {
   const [rosterOf, setRosterOf] = useState<AdministrativeGroup | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [sort, setSort] = useState<SortState | null>(null);
 
   const load = useCallback(async () => {
     setStatus('loading');
     try {
-      const result = await listAdministrativeGroups(accessToken, page, {
-        ...(levelFilter ? { level_id: levelFilter } : {}),
-        ...(branchFilter ? { branch_id: branchFilter } : {}),
-      });
+      const result = await listAdministrativeGroups(
+        accessToken,
+        page,
+        {
+          ...(levelFilter ? { level_id: levelFilter } : {}),
+          ...(branchFilter ? { branch_id: branchFilter } : {}),
+        },
+        sort,
+      );
       setRows(result.data);
       setTotal(result.meta.total);
       setStatus('ready');
     } catch {
       setStatus('error');
     }
-  }, [accessToken, page, levelFilter, branchFilter]);
+  }, [accessToken, page, levelFilter, branchFilter, sort]);
 
   useEffect(() => {
     void load();
@@ -145,7 +153,7 @@ export function GroupsPage(): ReactNode {
   const labelledLevels = withCategoryNames(levels, categories);
 
   const columns: Column<AdministrativeGroup>[] = [
-    { key: 'name', header: t('admin.groups.colName'), cell: (r) => r.name },
+    { key: 'name', header: t('admin.groups.colName'), sortKey: 'name', cell: (r) => r.name },
     {
       key: 'level',
       header: t('admin.groups.colLevel'),
@@ -161,13 +169,8 @@ export function GroupsPage(): ReactNode {
       secondary: true,
       cell: (r) => nameOf(branches, r.branch_id),
     },
-    {
-      key: 'order',
-      header: t('admin.groups.colOrder'),
-      numeric: true,
-      secondary: true,
-      cell: (r) => (r.display_order ?? '—') as ReactNode,
-    },
+    /* **No «الترتيب» column** (R76.8) — the order is the sequence of the rows,
+       changed by dragging one within a Level. */
   ];
 
   const actions: RowAction<AdministrativeGroup>[] = [
@@ -197,7 +200,6 @@ export function GroupsPage(): ReactNode {
     name: string;
     level_id: string;
     branch_id: string;
-    display_order: number | null;
   }): Promise<void> {
     setBusy(true);
     setNotice(null);
@@ -206,7 +208,9 @@ export function GroupsPage(): ReactNode {
         await updateAdministrativeGroup(
           editing.id,
           editing.version,
-          { name: input.name, display_order: input.display_order },
+          // R76.8 — `display_order` is not sent: an edit must not overwrite a
+          // position the administrator set by dragging.
+          { name: input.name },
           accessToken,
         );
       } else {
@@ -285,6 +289,25 @@ export function GroupsPage(): ReactNode {
         status={status}
         actions={actions}
         onRetry={() => void load()}
+        sort={sort}
+        onSort={(next) => {
+          setSort(next);
+          setPage(1);
+        }}
+        {...(canWrite
+          ? {
+              /* §2.2 scopes `AdministrativeGroup.display_order` to its Level, so
+                 a sequence is only meaningful once one Level is selected. A
+                 branch filter is orthogonal and does not enable or block it —
+                 the server scopes the live set to the caller's branches either
+                 way. */
+              onReorder:
+                levelFilter === ''
+                  ? null
+                  : async (ids: string[]) =>
+                      reorderAdministrativeGroups(levelFilter, ids, accessToken).then(load),
+            }
+          : {})}
         filtered={levelFilter !== '' || branchFilter !== ''}
         onClearFilters={() => {
           scope.setMany({ levelId: '', branchId: '' });
@@ -358,41 +381,27 @@ function GroupDialog({
     name: string;
     level_id: string;
     branch_id: string;
-    display_order: number | null;
   }) => void;
   onCancel: () => void;
 }): ReactNode {
   const [name, setName] = useState('');
   const [levelId, setLevelId] = useState('');
   const [branchId, setBranchId] = useState('');
-  // Held as a string like every other NumberField on the platform: '' and 0
-  // are different answers, and a numeric state collapses them.
-  const [order, setOrder] = useState('');
-
   useEffect(() => {
     setName(group?.name ?? '');
     setLevelId(group?.level_id ?? '');
     setBranchId(group?.branch_id ?? '');
-    setOrder(
-      group?.display_order !== null && group?.display_order !== undefined
-        ? String(group.display_order)
-        : '',
-    );
   }, [group, open]);
 
   const complete = name.trim() !== '' && levelId !== '' && branchId !== '';
 
-  /** The four fields the reset effect above writes — the same expressions. */
+  /** The three fields the reset effect above writes — the same expressions. */
   const dirty = isDirty(
-    { name, levelId, branchId, order },
+    { name, levelId, branchId },
     {
       name: group?.name ?? '',
       levelId: group?.level_id ?? '',
       branchId: group?.branch_id ?? '',
-      order:
-        group?.display_order !== null && group?.display_order !== undefined
-          ? String(group.display_order)
-          : '',
     },
   );
 
@@ -421,7 +430,6 @@ function GroupDialog({
           name,
           level_id: levelId,
           branch_id: branchId,
-          display_order: order.trim() === '' ? null : Number(order),
         })
       }
     >
@@ -444,7 +452,8 @@ function GroupDialog({
 
       {group ? <p className="muted">{t('admin.groups.fixedAfterCreate')}</p> : null}
 
-      <NumberField label={t('admin.groups.colOrder')} value={order} onChange={setOrder} />
+      {/* **No «الترتيب» field** (R76.8) — the order is the sequence of the rows
+          within the Level, set by dragging. */}
     </FormDialog>
   );
 }

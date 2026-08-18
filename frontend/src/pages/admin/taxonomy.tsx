@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 
-import { listSubjects, type SubjectRef } from '../../adapters/reference-data.js';
+import { listSubjects, reorderSubjects, type SubjectRef } from '../../adapters/reference-data.js';
 import {
   createCategory,
   createSubject,
   deleteCategory,
   deleteSubject,
   listCategories,
+  reorderCategories,
   updateCategory,
   updateSubject,
   type Category,
@@ -16,9 +17,15 @@ import { AdminLayout } from '../../components/admin/admin-layout.js';
 import { levelLabel } from '../../components/scope/level-select.js';
 import { Button } from '../../components/ui/button.js';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
-import { DataTable, type Column, type RowAction, type TableStatus } from '../../components/ui/data-table.js';
+import {
+  DataTable,
+  type Column,
+  type RowAction,
+  type SortState,
+  type TableStatus,
+} from '../../components/ui/data-table.js';
 import { Dialog } from '../../components/ui/dialog.js';
-import { NumberField, TextField } from '../../components/ui/field.js';
+import { TextField } from '../../components/ui/field.js';
 import { useSession } from '../../contexts/session.js';
 import { useActiveRole } from '../../contexts/active-role.js';
 import { t } from '../../i18n/index.js';
@@ -67,7 +74,9 @@ interface KindSpec {
   blockedKey: string;
   /** Revision 27's warning, on Categories only. */
   formHintKey?: string;
-  list: (token: string | null) => Promise<Row[]>;
+  list: (token: string | null, sort: SortState | null) => Promise<Row[]>;
+  /** R76.4 — the sequence, submitted to this kind's own `/order` route. */
+  reorder: (ids: readonly string[], token: string | null) => Promise<unknown>;
   create: (input: TaxonomyInput, token: string | null) => Promise<unknown>;
   update: (
     id: string,
@@ -89,7 +98,8 @@ const KINDS: Record<TaxonomyKind, KindSpec> = {
     deleteBodyKey: 'admin.taxonomy.deleteCategoryBody',
     blockedKey: 'admin.taxonomy.categoryBlocked',
     formHintKey: 'admin.taxonomy.categoryNameHint',
-    list: (token) => listCategories(token),
+    list: listCategories,
+    reorder: reorderCategories,
     create: createCategory,
     update: updateCategory,
     remove: deleteCategory,
@@ -115,7 +125,8 @@ const KINDS: Record<TaxonomyKind, KindSpec> = {
     // `GET /admin/subjects` is the same endpoint every selector reads. It
     // publishes `version` precisely so this screen could reuse it rather than
     // add a second read over the same table.
-    list: (token) => listSubjects(token),
+    list: listSubjects,
+    reorder: reorderSubjects,
     create: createSubject,
     update: updateSubject,
     remove: deleteSubject,
@@ -184,16 +195,19 @@ export function TaxonomyPage({ kind }: { kind: TaxonomyKind }): ReactNode {
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<Row | 'new' | null>(null);
   const [deleting, setDeleting] = useState<Row | null>(null);
+  // `null` is BR-19's order, which is also the canonical order manual
+  // reordering writes into (R76.8).
+  const [sort, setSort] = useState<SortState | null>(null);
 
   const load = useCallback(async () => {
     setStatus('loading');
     try {
-      setRows(await spec.list(accessToken));
+      setRows(await spec.list(accessToken, sort));
       setStatus('ready');
     } catch {
       setStatus('error');
     }
-  }, [accessToken, spec]);
+  }, [accessToken, spec, sort]);
 
   useEffect(() => {
     void load();
@@ -241,16 +255,13 @@ export function TaxonomyPage({ kind }: { kind: TaxonomyKind }): ReactNode {
     }
   }
 
+  /* **No «الترتيب» column** (R76.8). The stored order is now expressed by the
+     sequence of the rows and changed by dragging one; a number beside it would
+     be a second way to say the same thing, and the two would disagree the first
+     time either was used. The field itself is untouched in the database. */
   const columns: Column<Row>[] = [
-    { key: 'name', header: t('admin.taxonomy.colName'), cell: (r) => r.name },
+    { key: 'name', header: t('admin.taxonomy.colName'), sortKey: 'name', cell: (r) => r.name },
     ...spec.extraColumns.map((c) => ({ ...c, header: t(c.header) })),
-    {
-      key: 'order',
-      header: t('admin.taxonomy.colOrder'),
-      numeric: true,
-      secondary: true,
-      cell: (r) => (r.display_order ?? '—') as ReactNode,
-    },
   ];
 
   const actions: RowAction<Row>[] = canWrite
@@ -286,6 +297,11 @@ export function TaxonomyPage({ kind }: { kind: TaxonomyKind }): ReactNode {
         status={status}
         actions={actions}
         onRetry={() => void load()}
+        sort={sort}
+        onSort={setSort}
+        {...(canWrite
+          ? { onReorder: async (ids: string[]) => spec.reorder(ids, accessToken).then(load) }
+          : {})}
       />
 
       {editing ? (
@@ -336,11 +352,6 @@ function TaxonomyFormDialog({
   onCancel: () => void;
 }): ReactNode {
   const [name, setName] = useState(initial?.name ?? '');
-  const [order, setOrder] = useState(
-    initial?.display_order !== null && initial?.display_order !== undefined
-      ? String(initial.display_order)
-      : '',
-  );
   const [touched, setTouched] = useState(false);
   const error = name.trim() === '' ? t('common.required') : null;
 
@@ -355,13 +366,6 @@ function TaxonomyFormDialog({
           error={touched ? error : null}
           {...(hint !== undefined ? { hint } : {})}
         />
-        <NumberField
-          label={t('admin.taxonomy.colOrder')}
-          value={order}
-          onChange={setOrder}
-          min={0}
-          hint={t('admin.taxonomy.orderHint')}
-        />
         <div className="form__actions">
           <Button variant="secondary" onClick={onCancel}>
             {t('common.cancel')}
@@ -372,10 +376,14 @@ function TaxonomyFormDialog({
             onClick={() => {
               setTouched(true);
               if (error) return;
-              onSave({
-                name: name.trim(),
-                display_order: order.trim() === '' ? null : Number(order),
-              });
+              /* **`display_order` is not sent** (R76.8). The form no longer
+                 offers it, so sending anything would be inventing a value: an
+                 edit would overwrite a position the administrator set by
+                 dragging, and a create would claim a place in a sequence nobody
+                 chose. Omitted, an edit preserves the stored position and a new
+                 row arrives with NULL — which sorts last, so it appears at the
+                 end and is dragged from there. */
+              onSave({ name: name.trim() });
             }}
           >
             {t('common.save')}
