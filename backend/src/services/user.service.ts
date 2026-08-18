@@ -200,6 +200,8 @@ export interface UserListFilters {
   role?: string;
   branchId?: string;
   status?: string;
+  /** R27 — only people a restricted Level can actually take. See the filter. */
+  eligibleForLevel?: string;
   page?: number;
   pageSize?: number;
 }
@@ -252,6 +254,38 @@ export async function listUsers(
   const { skip, take, page, pageSize } = pageWindow({ page: filters.page, pageSize: filters.pageSize });
 
   const where: Record<string, unknown> = { deletedAt: null };
+
+  /**
+   * **`eligibleForLevel` — the candidates a restricted Level can actually take.**
+   *
+   * R27 makes a Level's `gender_restriction` enforceable only against the
+   * person-side `sex`, and enrolment refuses a mismatch **and a NULL**. Before
+   * this filter existed the enrolment form offered every active account and the
+   * server refused a good half of them — the reader's only way to learn which
+   * were eligible was to try one and read a `GENDER_RESTRICTION`.
+   *
+   * **The server narrows, never the client** (§4.4, ux-architecture rule O).
+   * `sex` is not on the user contract and is deliberately not added: the
+   * cancellation-style reasoning applies here too — staff placing a beneficiary
+   * need the *eligible set*, not everybody's sex. So this parameter hands back a
+   * list, and the fact behind it never leaves the service.
+   *
+   * An unrestricted Level (`any`) narrows nothing, which is why the filter is
+   * built from the Level rather than from a sex the caller names.
+   */
+  if (filters.eligibleForLevel !== undefined) {
+    const level = await prisma.level.findFirst({
+      where: { id: filters.eligibleForLevel, deletedAt: null },
+      select: { genderRestriction: true },
+    });
+    // An unknown Level narrows to nothing rather than to everything: a filter
+    // that silently stops filtering is worse than one returning an empty list.
+    if (level === null) {
+      where['id'] = { in: [] };
+    } else if (level.genderRestriction !== 'any') {
+      where['sex'] = level.genderRestriction === 'girls_only' ? 'female' : 'male';
+    }
+  }
 
   // §4.2 Revision 25: visibility follows the caller's OWN admin scope. Resolved
   // per role — the branches reachable through some other role the caller holds

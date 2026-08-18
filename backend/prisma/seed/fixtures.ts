@@ -237,14 +237,43 @@ async function main(): Promise<void> {
   );
 
   // --- People: a teacher, two parents, an adult student, and login-less minors
-  async function upsertPerson(nameArabic: string, opts: { preProvisionedEmail?: string } = {}) {
+  /**
+   * **Every fixture person carries a `sex`, and that is not cosmetic.**
+   *
+   * R27 added the person-side half of `Level.gender_restriction`, and enrolment
+   * treats a **NULL sex as NOT eligible** for a restricted Level. This seed
+   * predated R27 and was never backfilled, so every fixture beneficiary was
+   * silently unenrollable in any `girls_only` Level — the platform refusing
+   * correctly against data that could never satisfy it, which is the worst kind
+   * of fixture: it looks like a product defect.
+   *
+   * `female` is the default because every person this seed creates is a woman or
+   * a girl (أمينة، خديجة، سعاد، ياسمين، والدة…). It is a parameter rather than a
+   * constant so a `boys_only` case can be added without touching the helper.
+   */
+  async function upsertPerson(
+    nameArabic: string,
+    opts: { preProvisionedEmail?: string; sex?: 'female' | 'male' } = {},
+  ) {
     const name = `${FIXTURE_TAG} ${nameArabic}`;
     const existing = await prisma.user.findFirst({ where: { nameArabic: name, deletedAt: null } });
-    if (existing) return existing;
+    // **Backfilled, not skipped.** A fixture created before R27 exists with a
+    // NULL sex, and returning it unchanged would leave the defect in place on
+    // every database that has already been seeded once.
+    if (existing) {
+      if (existing.sex === null) {
+        return prisma.user.update({
+          where: { id: existing.id },
+          data: { sex: opts.sex ?? 'female' },
+        });
+      }
+      return existing;
+    }
     return prisma.user.create({
       data: {
         nameArabic: name,
         accountStatus: 'active',
+        sex: opts.sex ?? 'female',
         // Staff/adults are pre-provisioned against a fixture address; minors get
         // NOTHING here — they are login-less by rule (BR-5, §4.3).
         ...(opts.preProvisionedEmail

@@ -7,7 +7,7 @@
  * sortable; and — the one only a real browser can settle — that paging through a
  * sorted collection neither drops a row nor shows one twice.
  *
- * The last is why R76.3 appends an `id` tiebreaker: with a non-unique sort key,
+ * The last is why R76.3 appends an id tiebreaker: with a non-unique sort key,
  * offset pagination can put a row on two pages or on neither.
  */
 import { connect, results } from './cdp.mjs';

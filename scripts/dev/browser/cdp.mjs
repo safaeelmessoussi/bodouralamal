@@ -1,6 +1,15 @@
 /**
  * **A minimal Chrome DevTools Protocol client**, shared by the browser scripts.
  *
+ * ## One rule these scripts keep breaking, so it is written here
+ *
+ * **NEVER put a backtick in a comment.** Page code is passed to
+ * `Runtime.evaluate` as a template literal, and a backtick anywhere inside it —
+ * including inside a `//` comment — terminates the literal and yields
+ * *"SyntaxError: missing ) after argument list"* from Node, pointing at the
+ * template's opening line rather than at the comment. It cost four debugging
+ * rounds across four harnesses before being written down.
+ *
  * Extracted when the second one was written: `measure-page-header.mjs` and
  * `verify-reorder.mjs` had each grown their own copy of the same twenty lines,
  * and a third would have made three. There is no dependency here — Node's

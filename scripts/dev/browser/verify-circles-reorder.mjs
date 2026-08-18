@@ -1,11 +1,11 @@
 /**
  * **R78.1 — dragging حلقات المواد, on the real page.**
  *
- * R76.7 had excluded `TeachingGroup` from manual ordering because no interface
+ * R76.7 had excluded TeachingGroup from manual ordering because no interface
  * had ever set the column. R78 records that the reason expired. This drives the
- * actual `الحلقات` screen — not the shared component in isolation — because the
+ * actual الحلقات screen — not the shared component in isolation — because the
  * question is whether the *page* wires the parent scope, the authority and the
- * sequence correctly, and none of that lives in `DataTable`.
+ * sequence correctly, and none of that lives in DataTable.
  *
  * Circles are identified by their **id from the seeder**, never by title.
  */

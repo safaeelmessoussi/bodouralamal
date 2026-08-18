@@ -2,7 +2,7 @@
  * **R77 in a real browser, on the real student screens.**
  *
  * The scenario is the association's own — تفسير · وميض الأمل · كل اثنين
- * 15:00–17:00 · تاركة · القاعة 5 — seeded by `scripts/dev/seed-dev-scenario.sh`
+ * 15:00–17:00 · تاركة · القاعة 5 — seeded by scripts/dev/seed-dev-scenario.sh
  * into the development database, and read back through the actual application.
  *
  * ## What only this layer can prove
@@ -16,10 +16,10 @@
  *
  * ## Identity
  *
- * Three real sessions, each minted through `issueNewSession` — the production
- * path the OAuth callback calls — and presented as the ordinary `bodour_refresh`
+ * Three real sessions, each minted through issueNewSession — the production
+ * path the OAuth callback calls — and presented as the ordinary bodour_refresh
  * cookie on its own route. **No authorisation is bypassed:** the student session
- * is an ordinary student with no role beyond `student`, and every request it
+ * is an ordinary student with no role beyond student, and every request it
  * makes is checked exactly as any other. Switching identity is done by replacing
  * the cookie, which is what a different person on a different device is.
  */
@@ -44,7 +44,7 @@ let current = null;
  * on every refresh — the presented token is revoked and a successor issued —
  * with reuse detection behind it. Re-setting the token this script was handed
  * therefore works exactly once per identity; the second switch back presents a
- * revoked token and is correctly refused with `401`. That is the platform
+ * revoked token and is correctly refused with 401. That is the platform
  * behaving properly, and a harness that ignored it would report a defect the
  * application does not have.
  *
@@ -105,7 +105,7 @@ const readInbox = () =>
  * The student's own upcoming sessions, as rendered on the dashboard.
  *
  * **It waits for the list rather than reading immediately.** The identity block
- * is a `.card` and renders as soon as `GET /students/me` resolves, while the
+ * is a .card and renders as soon as GET /students/me resolves, while the
  * timetable is a second request behind it — reading straight after navigation
  * measured an empty section that filled in 300ms later. A probe that races the
  * page it measures reports a defect the application does not have.
@@ -148,18 +148,18 @@ const asAdminApi = (method, path, body) =>
   })()`);
 
 /**
- * The current TD-15 `version` of one occurrence, **through the read the admin
+ * The current TD-15 version of one occurrence, **through the read the admin
  * screen itself uses**.
  *
- * The harness first asked `GET /calendar/sessions/{id}`, and got `undefined`.
+ * The harness first asked GET /calendar/sessions/{id}, and got undefined.
  * That is the endpoint being right, not wrong: the Session page is **public at
  * the caller's tier** (§4.9/R43), and a concurrency token is a write-path
  * concern that has no business travelling on an anonymous read. Sending
- * `version: 0` after that made the application answer `409 STATE_CONFLICT` —
+ * version: 0 after that made the application answer 409 STATE_CONFLICT —
  * optimistic locking doing exactly its job.
  *
- * `GET /admin/course-schedules/{id}/sessions` is the authoritative source and
- * the one `schedule-sessions.tsx` reads before offering «إلغاء» or «استعادة».
+ * GET /admin/course-schedules/{id}/sessions is the authoritative source and
+ * the one schedule-sessions.tsx reads before offering «إلغاء» or «استعادة».
  * Using it keeps the harness on the real production flow rather than inventing
  * a shortcut around the mechanism it is supposed to be exercising.
  */
@@ -198,8 +198,8 @@ await goto('/admin/branches');
  * **A FUTURE Monday, deliberately.**
  *
  * The harness first took the earliest scheduled occurrence, which was a Monday
- * already past — and `restoreSession` refuses that with
- * `STATE_CONFLICT / SESSION_IN_PAST`, because reinstating a class that has
+ * already past — and restoreSession refuses that with
+ * STATE_CONFLICT / SESSION_IN_PAST, because reinstating a class that has
  * already not happened would put a session on the calendar claiming it did.
  * That is the application being right; the harness was aiming at the one
  * occurrence the scenario cannot be run against.
@@ -245,8 +245,8 @@ check(
 );
 check('9b · no placeholder survived into the rendered copy', !after.items[0]?.headline.includes('{'), after.items[0]?.headline);
 
-// Wrapped in an async IIFE: `Runtime.evaluate` parses the expression as a
-// script, where a top-level `await` is a syntax error rather than a wait.
+// Wrapped in an async IIFE: Runtime.evaluate parses the expression as a
+// script, where a top-level await is a syntax error rather than a wait.
 const cancelledOnCalendar = await evaluate(`(async () => {
   const body = await (await fetch('/api/v1/calendar?from=${S.from}&to=${S.to}')).json();
   return body.data.filter((o) => o.id === ${JSON.stringify(occurrence.id)}).map((o) => o.status);

@@ -162,7 +162,7 @@ check('13 · the cancellation is accepted', cancelled.status === 200, String(can
  * The first version of this check matched the rendered date and found a
  * DIFFERENT session that another probe run had left on 2026-08-24 — correctly
  * not cancelled — and reported the rendering rule broken. Identity comes from
- * the API for `upcoming.id`; the title it returns is then what locates the row.
+ * the API for upcoming.id; the title it returns is then what locates the row.
  */
 await anonymous();
 const publicRow = JSON.parse(

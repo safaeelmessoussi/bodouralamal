@@ -3,7 +3,7 @@
  *
  * ## Why this is not a unit test
  *
- * Vitest here renders with `renderToStaticMarkup`: no layout engine, no events,
+ * Vitest here renders with renderToStaticMarkup: no layout engine, no events,
  * no fetches. Everything this script asks is something that markup cannot
  * answer — *does the column appear on the live screen*, *does the sort request
  * actually leave the browser*, *does the row move when dropped*, *does the
@@ -11,9 +11,9 @@
  *
  * ## Authentication
  *
- * The session is a **real** one, minted through the production `issueNewSession`
- * path by `scripts/dev/issue-dev-session.sh` and presented as the ordinary
- * `bodour_refresh` cookie. Nothing about authorisation is bypassed: every request
+ * The session is a **real** one, minted through the production issueNewSession
+ * path by scripts/dev/issue-dev-session.sh and presented as the ordinary
+ * bodour_refresh cookie. Nothing about authorisation is bypassed: every request
  * below is checked by the same TD-2 rules as any other, and a screen this user
  * may not write simply renders read-only.
  */
@@ -164,7 +164,7 @@ for (const screen of SCREENS) {
 }
 
 /**
- * The drop itself, on `الفئات` — unpaginated, so the visible rows are the whole
+ * The drop itself, on الفئات — unpaginated, so the visible rows are the whole
  * live set and the gesture is available with no filter to choose first.
  */
 {
@@ -179,7 +179,7 @@ for (const screen of SCREENS) {
 
   if (canDrag && before.length > 1) {
     // A real HTML5 drag sequence: dragstart on the first row, dragover the last,
-    // drop. `DataTransfer` is constructed because CDP cannot synthesise one.
+    // drop. DataTransfer is constructed because CDP cannot synthesise one.
     const after = await evaluate(`(async () => {
       const rows = [...document.querySelectorAll('.admin-table tbody tr')];
       const dt = new DataTransfer();

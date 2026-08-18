@@ -1,16 +1,16 @@
 /**
- * **R75 in a real browser, with a real `MediaRecorder`.**
+ * **R75 in a real browser, with a real MediaRecorder.**
  *
- * Chrome is started with `--use-fake-device-for-media-capture`, which supplies a
- * synthetic microphone to `getUserMedia`. **The API is not faked** — this is
- * Chrome's own `MediaRecorder`, encoding a real stream into a real container,
+ * Chrome is started with --use-fake-device-for-media-capture, which supplies a
+ * synthetic microphone to getUserMedia. **The API is not faked** — this is
+ * Chrome's own MediaRecorder, encoding a real stream into a real container,
  * and what it produces is uploaded through the ordinary
- * `initiate → PUT → complete` pipeline into MinIO. Stubbing `MediaRecorder`
+ * initiate → PUT → complete pipeline into MinIO. Stubbing MediaRecorder
  * would prove nothing about the one thing this exists to check.
  *
- * `--use-fake-ui-for-media-stream` auto-answers the permission prompt, the one
+ * --use-fake-ui-for-media-stream auto-answers the permission prompt, the one
  * part a headless browser cannot click; the permission is still REQUESTED
- * through `getUserMedia` exactly as it is in a person's browser.
+ * through getUserMedia exactly as it is in a person's browser.
  */
 import { connect, results } from './cdp.mjs';
 
@@ -64,7 +64,7 @@ const api = (method, path) =>
  * The element also carries a visually-hidden state word ("0:02 جارٍ التسجيل"),
  * which is deliberate — the state is what a screen reader is told, since a clock
  * announced every second is unusable. So the probe matches the CLOCK rather than
- * parsing the whole node, which read `NaN` and failed three checks that were in
+ * parsing the whole node, which read NaN and failed three checks that were in
  * fact passing.
  */
 const secs = (t) => {

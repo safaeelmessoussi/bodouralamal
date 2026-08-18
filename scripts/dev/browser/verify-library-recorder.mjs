@@ -4,12 +4,12 @@
  * §1 asks for one recorder reachable from both الجدولة and مكتبة المحتوى, not
  * two implementations. The proof that it is one is behavioural: the same
  * control, in a screen that has **no session at all**, producing an ordinary
- * `EducationalContent` — which is the case R43 already provides the linking half
+ * EducationalContent — which is the case R43 already provides the linking half
  * for.
  *
  * §3 asks for an indicator that belongs to its own column. That is a geometric
  * claim about rendered boxes, so it is measured here rather than asserted from
- * CSS — the lesson `measure-page-header` exists for.
+ * CSS — the lesson measure-page-header exists for.
  */
 import { connect, results } from './cdp.mjs';
 

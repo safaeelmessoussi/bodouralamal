@@ -346,17 +346,42 @@ function EnrolDialog({
   // structural fact distinguishing a مستفيدة from any other account: minors
   // hold no role at all (§4.3), `intended_category_id` is unset on every live
   // row, and a مؤطرة may legitimately be enrolled — one of the association's
-  // accounts holds both `teacher` and `student` today. Filtering by role would
-  // hide exactly the students who most need enrolling.
+  // accounts holds both `teacher` and `student` today. Filtering by ROLE would
+  // hide exactly the students who most need enrolling, and that stays true.
+  //
+  // **What DOES narrow the list is the chosen Level's gender restriction**
+  // (R27, 2026-08-18). It used to offer every active account while the server
+  // refused a good half of them, so the only way to learn who was eligible was
+  // to pick somebody and read a `GENDER_RESTRICTION` — the platform's
+  // dependent-selector rule (§14.4/R55) applied to every other pair on this
+  // form but not to this one.
+  //
+  // **The server narrows it**, not this component: `sex` is not on the user
+  // contract and is deliberately not added, so the eligible SET travels and the
+  // fact behind it never does (§4.4, ux-architecture rule O).
   useEffect(() => {
     void (async () => {
       try {
-        setMatches((await searchUsers(token, {})).data);
+        setMatches(
+          (await searchUsers(token, levelId ? { eligible_for_level: levelId } : {})).data,
+        );
       } catch {
         setMatches([]);
       }
     })();
-  }, [token]);
+  }, [token, levelId]);
+
+  /**
+   * **A candidate chosen before the Level may not survive it.**
+   *
+   * Reconciled here for the same reason `useScopeOptions` reconciles its own
+   * children: a stale id left in the field is what reaches the server as a pair
+   * it must refuse. Clearing it is the honest outcome — the person is genuinely
+   * not eligible for the Level now chosen.
+   */
+  useEffect(() => {
+    if (studentId !== '' && !matches.some((m) => m.id === studentId)) setStudentId('');
+  }, [matches, studentId]);
 
   // §14.4/R55 — every selector is dependent: the Groups offered are those of the
   // chosen Level at the chosen branch, so the form cannot express a pair the
@@ -511,16 +536,23 @@ function EnrolDialog({
           every live row, and a مؤطرة may legitimately be enrolled — one of the
           association's accounts holds both `teacher` and `student` today.
           Filtering by role would hide exactly the students who need enrolling. */}
+      {/* **The Level comes FIRST because it is the parent** (§14.4/R55). It
+          decides which beneficiaries are eligible at all, and a form that asked
+          for the person first was asking a question whose valid answers it did
+          not yet know. */}
+      <LevelSelect levels={levels} value={levelId} onChange={setLevelId} />
+
       <SearchableSelect
         label={t('admin.enrollments.student')}
         options={matches.map((m) => ({ value: m.id, label: m.name_arabic }))}
         value={studentId}
         onChange={setStudentId}
-        hint={t('admin.enrollments.searchHint')}
+        // Says WHY the list is what it is, rather than leaving a reader to
+        // wonder where somebody went (§14.4).
+        hint={levelId ? t('admin.enrollments.eligibleHint') : t('admin.enrollments.searchHint')}
+        emptyLabel={t('admin.enrollments.noneEligible')}
         required
       />
-
-      <LevelSelect levels={levels} value={levelId} onChange={setLevelId} />
 
       <SelectField
         label={t('admin.enrollments.branch')}
