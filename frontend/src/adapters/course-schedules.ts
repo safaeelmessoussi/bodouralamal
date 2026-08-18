@@ -41,6 +41,13 @@ export interface CourseSchedule {
   /** One mode, one target (§4.4c) — never three nullable target columns. */
   teaching_mode: string;
   target_id: string;
+  /**
+   * **Which Level the class is for**, resolved server-side whatever the mode
+   * names — for `entire_level` it equals `target_id`, and for the other two it
+   * comes through the target, whose own row is the only thing that knows it
+   * (§2.2). `null` on a write response, which is a narrower projection.
+   */
+  level_id: string | null;
   branch_id: string;
   room_id: string | null;
   /** TD-11 **wall-clock** `HH:MM`, never an instant — a class starts at 15:00

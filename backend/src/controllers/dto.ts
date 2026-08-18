@@ -485,6 +485,27 @@ export interface CourseScheduleDto {
    */
   teaching_mode: string;
   target_id: string;
+  /**
+   * **Which Level this class is for**, whatever the mode names.
+   *
+   * `target_id` answers *who is it for*; this answers *which Level*, and for
+   * `entire_level` the two coincide. For the other two modes the Level is a
+   * fact about the target — an Administrative Group and a Teaching Group each
+   * belong to one — and the server already knows it, so a client that had to
+   * re-derive it would be re-deriving something it cannot see: `§2.2` scopes
+   * the Group to its Level and no field on this response carried that link.
+   *
+   * The edit form is what made the gap concrete. A class taught to a Group has
+   * `level_id IS NULL` on its own row (`course_schedule_mode_target_check`
+   * allows exactly one target per mode), so a form seeding itself from this
+   * response had no Level to seed — and the Group list, which §4.4c narrows by
+   * Level **and** Branch together, then came back empty and dropped the very
+   * Group the class already had.
+   *
+   * `null` on a **write** response, for the same reason the labels above are:
+   * a narrower projection, and a caller that just submitted knows the Level.
+   */
+  level_id: string | null;
   branch_id: string;
   room_id: string | null;
   /** TD-11 wall-clock, `HH:MM`. */
@@ -559,8 +580,10 @@ export function courseScheduleDto(row: {
   branch?: { name: string } | null;
   room?: { name: string } | null;
   level?: { name: string } | null;
-  administrativeGroup?: { name: string } | null;
-  teachingGroup?: { name: string } | null;
+  // `levelId` travels beside the name because §2.2 scopes each of these to one
+  // Level, and that link is what `level_id` publishes.
+  administrativeGroup?: { name: string; levelId: string } | null;
+  teachingGroup?: { name: string; levelId: string } | null;
 }): CourseScheduleDto {
   return {
     id: row.id,
@@ -570,6 +593,9 @@ export function courseScheduleDto(row: {
     subject_name: row.subject?.name ?? null,
     teaching_mode: row.teachingMode,
     target_id: targetOf(row),
+    // Resolved rather than read from one column: only `entire_level` carries a
+    // `level_id` of its own, and the other two reach theirs through the target.
+    level_id: row.levelId ?? row.administrativeGroup?.levelId ?? row.teachingGroup?.levelId ?? null,
     // Whichever of the three the mode names (§4.4c) — the timetable reads *who
     // this class is for*, and the caller should not have to resolve that from
     // three nullable ids.

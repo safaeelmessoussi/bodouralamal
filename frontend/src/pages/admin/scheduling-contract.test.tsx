@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { t } from '../../i18n/index.js';
 
 import type { CourseSchedule } from '../../adapters/course-schedules.js';
+import { fromSchedule } from '../../adapters/scheduling.js';
 import { recurrenceLabel, timeLabel } from '../../components/scheduling/labels.js';
 
 /**
@@ -28,6 +29,10 @@ const WIRE: CourseSchedule = {
   // R55.1 — resolved labels, so a timetable can be read without ids.
   subject_name: 'تفسير',
   target_name: 'المجموعة 1',
+  // Which Level the class is for, resolved server-side. For a Group-taught
+  // class the row's own column is NULL, so this is the ONLY way a client learns
+  // it — and the edit form could not seed its Level selector without it.
+  level_id: '00000000-0000-4000-8000-000000000009',
   branch_name: 'مقر أمرشيش',
   room_name: null,
   teaching_mode: 'administrative_group',
@@ -59,6 +64,9 @@ describe('the adapter type matches the wire contract', () => {
       'effective_until',
       'end_time',
       'id',
+      // Which Level the class is for, resolved server-side (§2.2). Mirrors the
+      // server key set exactly, which is what this test exists to keep true.
+      'level_id',
       'month_of_year',
       'recurrence',
       'room_id',
@@ -77,9 +85,18 @@ describe('the adapter type matches the wire contract', () => {
   });
 
   it('exposes one mode and one target, never three nullable columns (§4.4c)', () => {
-    for (const column of ['level_id', 'administrative_group_id', 'teaching_group_id']) {
+    // **Restated, not relaxed** — the same restatement the server guard took.
+    // The property is *no raw TARGET column is exposed*: either group column
+    // would be a rival answer to *who is this for*, and a response carrying one
+    // beside `target_id` would have no correct reading.
+    for (const column of ['administrative_group_id', 'teaching_group_id']) {
       expect(WIRE).not.toHaveProperty(column);
     }
+    // `level_id` is a RESOLVED field answering *which Level*, not a target. It
+    // cannot contradict `target_id`: in `entire_level` the two agree by
+    // definition, and in the other modes the target is not a Level at all.
+    expect(WIRE.level_id).not.toBe(WIRE.target_id);
+    expect(WIRE.teaching_mode).toBe('administrative_group');
   });
 });
 
@@ -127,5 +144,54 @@ describe('the recurrence cell', () => {
     for (const day of ['monday', 'tuesday', 'saturday']) {
       expect(recurrenceLabel({ ...WIRE, weekdays: [day] })).toBe(t(`scheduling.weekday.${day}`));
     }
+  });
+});
+
+/**
+ * **The edit form's seed, which had no test and two defects** (2026-08-18).
+ *
+ * Reported as: open a class, change only «نهاية التكرار», press «حفظ» — and get
+ * *«اختاري الحلقة المعنية»* beside a الحلقة selector reading *«لا حلقات لهذا
+ * المستوى في هذا الفرع»*. Both symptoms came from the item the form seeds from,
+ * so that is where the guard belongs.
+ */
+describe('a class row carries what an edit form must seed from', () => {
+  const item = fromSchedule(WIRE);
+
+  it('carries the row\u2019s OWN teaching mode, never a default', () => {
+    // It was hard-coded to `administrative_group` for every class. The mode
+    // select is disabled while editing, so an `entire_level` class opened on a
+    // mode it does not have, with no way to correct it — and `teaching_mode` is
+    // SENT on save, so an unrelated edit would have rewritten its audience.
+    expect(item.ids.teachingMode).toBe('administrative_group');
+  });
+
+  it('carries the Level even though the class is taught to a GROUP', () => {
+    // The row's own `level_id` is NULL in this mode (§4.4c allows one target),
+    // so this can only be the server's resolved answer. Without it the form
+    // seeded no Level, the Group list — narrowed by Level AND Branch together —
+    // came back empty, and the seeded Group was dropped as invalid.
+    expect(item.ids.levelId).toBe(WIRE.level_id);
+    expect(item.ids.levelId).not.toBeNull();
+  });
+
+  it('reads the target as a GROUP, because that is what the mode names', () => {
+    expect(item.ids.groupId).toBe(WIRE.target_id);
+    // And the Level is not the target: reading one from the other is the guess
+    // §4.4c warns about, and it is why these are two fields.
+    expect(item.ids.levelId).not.toBe(item.ids.groupId);
+  });
+
+  it('reads an entire-level class the other way round', () => {
+    const entireLevel = fromSchedule({
+      ...WIRE,
+      teaching_mode: 'entire_level',
+      target_id: WIRE.level_id!,
+    });
+    expect(entireLevel.ids.teachingMode).toBe('entire_level');
+    expect(entireLevel.ids.levelId).toBe(WIRE.level_id);
+    // No group is chosen, and inventing one from `target_id` would name a Level
+    // as a Group — which is exactly how the audience got rewritten.
+    expect(entireLevel.ids.groupId).toBeNull();
   });
 });

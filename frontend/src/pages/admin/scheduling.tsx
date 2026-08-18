@@ -512,7 +512,21 @@ export function SchedulingDialog({
     endDate: item?.repeatUntil ?? '',
   });
 
-  const [mode, setMode] = useState<string>('administrative_group');
+  /**
+   * **The mode is the ROW's, not a default** (2026-08-18).
+   *
+   * It was `useState('administrative_group')` for every class, edit included,
+   * and the mode select is `disabled` while editing — so an `entire_level`
+   * class opened showing the wrong mode with no way to correct it. Two
+   * consequences, and the second is the serious one:
+   *
+   * * `targetId` read `groupId` for a class whose target is a Level, so Save
+   *   refused with *«اختاري الحلقة المعنية»* against a field the form does not
+   *   let you fill;
+   * * `teachingMode: mode` is **sent on save**, so saving an unrelated edit —
+   *   a new end date, say — would have rewritten that class's audience.
+   */
+  const [mode, setMode] = useState<string>(item?.ids.teachingMode ?? 'administrative_group');
   const [roomId, setRoomId] = useState(item?.ids.roomId ?? '');
   const [rooms, setRooms] = useState<{ id: string; name: string; capacity: number | null }[]>([]);
   // `RoomDto` publishes no `capacity` — BR-23 makes it informational and it is
@@ -578,7 +592,9 @@ export function SchedulingDialog({
       startDate: item?.startDate ?? '',
       endDate: item?.repeatUntil ?? '',
     },
-    mode: 'administrative_group',
+    // Pristine mirrors the state above expression for expression, or `dirty`
+    // would report every edited class as changed before it was touched.
+    mode: item?.ids.teachingMode ?? 'administrative_group',
     roomId: item?.ids.roomId ?? '',
     teacherId: item?.ids.staff.find((x) => x.position === 'teacher')?.user_id ?? '',
     assistantIds: (item?.ids.staff ?? [])

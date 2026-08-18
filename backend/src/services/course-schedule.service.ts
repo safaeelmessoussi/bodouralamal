@@ -1088,8 +1088,10 @@ export async function listCourseSchedules(
         branch: { select: { name: true } },
         room: { select: { name: true } },
         level: { select: { name: true } },
-        administrativeGroup: { select: { name: true } },
-        teachingGroup: { select: { name: true } },
+        // `levelId` beside the name: §2.2 scopes both to one Level, and
+        // `level_id` on the DTO is what a client seeds a Level selector from.
+        administrativeGroup: { select: { name: true, levelId: true } },
+        teachingGroup: { select: { name: true, levelId: true } },
       },
     }),
     prisma.recurringCourseSchedule.count({ where }),

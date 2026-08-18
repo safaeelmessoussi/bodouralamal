@@ -105,11 +105,27 @@ export interface SchedulingItem {
 export interface SchedulingIds {
   branchId: string | null;
   roomId: string | null;
+  /**
+   * **The Level the item is for**, not merely the Level where it is the target.
+   *
+   * A class taught to an Administrative Group has no `level_id` of its own —
+   * the CHECK behind §4.4c allows exactly one target per mode — so this is the
+   * server's resolved answer. A form that seeded only `groupId` had no Level,
+   * and the Group list, narrowed by Level **and** Branch together (§4.4c), then
+   * came back empty and dropped the Group the class already had.
+   */
   levelId: string | null;
   subjectId: string | null;
   academicYearId: string | null;
   /** The narrower audience where one was chosen; `null` is the whole Level. */
   groupId: string | null;
+  /**
+   * **The item's own teaching mode**, so an edit form opens on the mode the row
+   * actually has. Without it the form defaulted to `administrative_group` for
+   * every class — which read the wrong target on validation and, worse, would
+   * have SENT that mode back and rewritten an `entire_level` class's audience.
+   */
+  teachingMode: string | null;
   staff: { user_id: string; position: string }[];
 }
 
@@ -137,12 +153,18 @@ const EMPTY_IDS: SchedulingIds = {
   roomId: null,
   levelId: null,
   groupId: null,
+  teachingMode: null,
   subjectId: null,
   academicYearId: null,
   staff: [],
 };
 
-function fromSchedule(row: CourseSchedule): SchedulingItem {
+/**
+ * Exported so the mapping can be tested directly, by the same rule
+ * `assertExactSet` is: the interesting part is the *decisions* — which id is the
+ * Level, which is the target, what the mode is — and each was wrong once.
+ */
+export function fromSchedule(row: CourseSchedule): SchedulingItem {
   return {
     type: 'class',
     id: row.id,
@@ -165,10 +187,13 @@ function fromSchedule(row: CourseSchedule): SchedulingItem {
     ids: {
       branchId: row.branch_id,
       roomId: row.room_id,
-      // §4.4c — ONE target of the kind the mode names, so exactly one of these
-      // is set and reading the other from `target_id` would be a guess.
-      levelId: row.teaching_mode === 'entire_level' ? row.target_id : null,
+      // The Level comes from the server's resolved field, never from
+      // `target_id`: in every mode but `entire_level` the target is not a Level.
+      levelId: row.level_id,
+      // §4.4c — ONE target of the kind the mode names, so reading the group
+      // from `target_id` is right only when the mode says it is a group.
       groupId: row.teaching_mode === 'administrative_group' ? row.target_id : null,
+      teachingMode: row.teaching_mode,
       subjectId: row.subject_id,
       academicYearId: row.academic_year_id,
       staff: row.staff.map((x) => ({ user_id: x.user_id, position: x.position })),
@@ -238,6 +263,9 @@ function fromExam(row: Exam): SchedulingItem {
       roomId: row.room_id,
       levelId: row.level_id,
       groupId: row.administrative_group_id,
+      // An exam is not a course schedule: §4.4c's teaching mode is a property
+      // of a recurring class, and an exam carries both ids directly.
+      teachingMode: null,
       subjectId: row.subject_id,
       academicYearId: row.academic_year_id,
       staff: row.staff.map((x) => ({ user_id: x.user_id, position: x.position })),

@@ -38,6 +38,10 @@ const SCHEDULE_KEYS = [
   'effective_until',
   'end_time',
   'id',
+  // Which Level the class is for, whatever the mode names. For a Group-taught
+  // class the row's own `level_id` is NULL, so this is resolved through the
+  // target — the fact the edit form had no way to reach.
+  'level_id',
   'month_of_year',
   'recurrence',
   'room_id',
@@ -285,10 +289,33 @@ describe('the response is an explicit contract DTO (§16.2)', () => {
     const schedule = res.body.schedule as Record<string, unknown>;
     expect(schedule['teaching_mode']).toBe('administrative_group');
     expect(schedule['target_id']).toBe(groupA);
-    // A response holding two of these would have no correct reading.
-    for (const column of ['level_id', 'administrative_group_id', 'teaching_group_id']) {
+    // **The property, restated rather than dropped.** It was *none of the three
+    // target columns is exposed*, and `level_id` used to be in that list. It is
+    // now a field — but a RESOLVED one answering *which Level*, not a second
+    // target answering *who for*. The hazard the guard exists for is unchanged
+    // and still asserted: the two group columns would each be a rival target,
+    // and a response carrying one beside `target_id` would have no correct
+    // reading.
+    for (const column of ['administrative_group_id', 'teaching_group_id']) {
       expect(schedule).not.toHaveProperty(column);
     }
+    // A write is built from a narrower projection, so the resolved Level is
+    // null here — exactly as `target_name` and `subject_name` are, and for the
+    // same reason: the caller just submitted it.
+    expect(schedule['level_id']).toBeNull();
+  });
+
+  it('publishes the Level a GROUP-taught class is for, on the read (§2.2)', async () => {
+    // The row's own `level_id` is NULL in this mode — the CHECK allows exactly
+    // one target — so this can only come from the Group, which is the point.
+    // Without it the edit form had no Level to seed, the Group list (narrowed
+    // by Level AND Branch, §4.4c) came back empty, and the class lost the very
+    // Group it already had.
+    const res = await call('GET', '/admin/course-schedules?page_size=100', superAdmin);
+    const row = res.body.data!.find((r) => r['target_id'] === groupA);
+    expect(row).toBeDefined();
+    expect(row!['teaching_mode']).toBe('administrative_group');
+    expect(row!['level_id']).toBe(levelId);
   });
 
   it('renders times as TD-11 wall-clock, never as an instant', async () => {
