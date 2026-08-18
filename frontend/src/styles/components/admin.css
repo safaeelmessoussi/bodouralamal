@@ -612,3 +612,45 @@
   margin-block-start: var(--space-2);
   font-size: var(--font-size-sm);
 }
+
+/* **Notifications** (§4.8 as narrowed by R77, 2026-08-18).
+ *
+ * A section on the student's own dashboard, not §10.1's bell-and-dropdown: one
+ * event exists, and chrome implying a stream of them would promise a postponed
+ * feature.
+ *
+ * The unread marker is a **border on the inline start**, so it reads correctly
+ * in RTL without a second rule — and it is a shape, not only a colour, because
+ * §14.4 forbids state carried by colour alone. */
+.notifications__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.notifications__item {
+  padding-inline-start: var(--space-3);
+  border-inline-start: 3px solid var(--color-border);
+}
+.notifications__item.is-unread {
+  border-inline-start-color: var(--color-primary);
+}
+.notifications__headline {
+  margin: 0;
+  font-weight: 600;
+}
+.notifications__reason {
+  margin: var(--space-1) 0 var(--space-2);
+  color: var(--color-text-secondary);
+}
+.notifications__count {
+  display: inline-block;
+  margin-inline-start: var(--space-2);
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-lg);
+  background: var(--color-primary);
+  color: var(--color-text-inverse);
+  font-size: var(--font-size-sm);
+}

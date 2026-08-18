@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { fetchOccurrences, type Occurrence } from '../../adapters/calendar.js';
 import { fetchStudentIdentity, type StudentIdentity } from '../../adapters/students.js';
 import { ApplicationHeader } from '../../components/header/application-header.js';
+import { NotificationList } from '../../components/notifications/notification-list.js';
 import { SiteFooter } from '../../components/site-footer.js';
 import { ButtonLink } from '../../components/ui/button.js';
 import { EmptyState, ErrorState, LoadingState } from '../../components/states.js';
@@ -142,6 +143,11 @@ export function StudentDashboard(): ReactNode {
           ) : identity ? (
             <>
               <IdentityBlock identity={identity} />
+              {/* **Above the sessions, deliberately** (R77.8): a cancellation is
+                  news about the list below it, and a reader who saw the timetable
+                  first would have already drawn the wrong conclusion from it.
+                  Renders nothing at all when there is nothing to say. */}
+              <NotificationList token={accessToken} />
               <UpcomingSessions sessions={sessions} />
             </>
           ) : null}

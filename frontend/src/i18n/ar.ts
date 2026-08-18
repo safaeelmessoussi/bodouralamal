@@ -249,6 +249,17 @@ export const ar = {
       blockedByScope: 'الترتيب محفوظ داخل كل مجموعة على حدة. اختاري عنصرًا واحدًا من عوامل التصفية أعلاه لترتيب ما بداخله.',
     },
   },
+  // §4.8 as narrowed by R77 — ONE event, so the wording names the class rather
+  // than promising a stream of notice types this MVP does not have.
+  notifications: {
+    title: 'مستجدّات',
+    unreadLabel: 'غير مقروءة',
+    sessionCancelled: 'أُلغيت حصة {subject} ليوم {date} على الساعة {time}.',
+    sessionRestored: 'عادت حصة {subject} ليوم {date} على الساعة {time} إلى الجدول.',
+    theClass: 'الحصة',
+    reason: 'السبب: {reason}',
+    markRead: 'تم الاطّلاع',
+  },
   calendar: {
     title: 'الجدول الزمني',
     lede: 'مواعيد الحلقات الأسبوعية والأنشطة والمناسبات في مقرات الجمعية.',

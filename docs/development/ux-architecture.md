@@ -245,6 +245,35 @@ of the refetch, which reads as the drop having failed. A refusal drops it at onc
 > because this project's component tests have no layout engine) ·
 > [API contracts](../architecture/api.md#manual-ordering-takes-the-sequence-not-per-row-numbers)
 
+## AG · A notification is a delivered fact, and the screen must not pretend otherwise
+
+One event exists in the MVP — a class session was cancelled (§4.8 as narrowed by
+Revision 77) — so the surface is a **section on the student's own dashboard**,
+not §10.1's bell-and-dropdown. Chrome implying a stream of notice types would
+promise a postponed feature; whatever §10.1 later specifies **replaces** this
+rather than extending it.
+
+**Nothing is marked read by being rendered.** R77.5 turns on the distinction: an
+unread notice is *withdrawn* when a class is reinstated, a read one is
+*corrected*. Auto-marking on scroll would make every notice read and turn every
+restore into a correction nobody needed. The reader presses «تم الاطّلاع».
+
+**A read notice stays on screen.** It is still true — the class is still
+cancelled — and hiding it would make the section answer *what is new* while
+looking like it answers *what has happened*. This is not an inbox that empties.
+
+**With nothing to say it renders nothing**, rather than an empty panel on every
+student's most-used screen.
+
+**It sits above the timetable**, because a cancellation is news *about* the list
+below it and a reader who saw the sessions first has already drawn the wrong
+conclusion.
+
+The unread marker is an inline-start border — **a shape, not only a colour**
+(§14.4) — which reads correctly in RTL with no second rule.
+
+> [`SRS R77`] · [API contracts](../reference/api-endpoints.md#notifications)
+
 ## I · Empty states
 
 Use the shared states. **Never hand-code an empty state or its button** — the
