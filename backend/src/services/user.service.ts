@@ -200,6 +200,14 @@ export interface UserListFilters {
   role?: string;
   branchId?: string;
   status?: string;
+  /**
+   * R79.7 — **only the institute's مستفيدات**, whatever their roles.
+   *
+   * Independent of enrolment: a beneficiary between placements, or one never yet
+   * enrolled, is still a beneficiary. Independent of role in both directions: a
+   * مؤطرة who studies is included, a guardian who does not is not.
+   */
+  beneficiariesOnly?: boolean;
   page?: number;
   pageSize?: number;
 }
@@ -252,6 +260,9 @@ export async function listUsers(
   const { skip, take, page, pageSize } = pageWindow({ page: filters.page, pageSize: filters.pageSize });
 
   const where: Record<string, unknown> = { deletedAt: null };
+
+  // R79.7 — the durable fact, never a role or an enrolment lookup.
+  if (filters.beneficiariesOnly === true) where['isBeneficiary'] = true;
 
   // §4.2 Revision 25: visibility follows the caller's OWN admin scope. Resolved
   // per role — the branches reachable through some other role the caller holds

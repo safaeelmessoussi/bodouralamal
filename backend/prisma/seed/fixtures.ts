@@ -253,7 +253,19 @@ async function main(): Promise<void> {
    */
   async function upsertPerson(
     nameArabic: string,
-    opts: { preProvisionedEmail?: string; sex?: 'female' | 'male' } = {},
+    opts: {
+      preProvisionedEmail?: string;
+      sex?: 'female' | 'male';
+      /**
+       * **R79 — the durable beneficiary fact, declared per fixture.**
+       *
+       * Explicit rather than inferred, because the whole point of the revision
+       * is that it cannot be derived from a role, an enrolment or a name. The
+       * QA set below deliberately spans all six shapes so the independence is
+       * demonstrable rather than asserted.
+       */
+      beneficiary?: boolean;
+    } = {},
   ) {
     const name = `${FIXTURE_TAG} ${nameArabic}`;
     const existing = await prisma.user.findFirst({ where: { nameArabic: name, deletedAt: null } });
@@ -261,11 +273,16 @@ async function main(): Promise<void> {
     // NULL sex, and returning it unchanged would leave the defect in place on
     // every database that has already been seeded once.
     if (existing) {
-      if (existing.sex === null) {
-        return prisma.user.update({
-          where: { id: existing.id },
-          data: { sex: opts.sex ?? 'female' },
-        });
+      const repair: { sex?: 'female' | 'male'; isBeneficiary?: boolean } = {};
+      if (existing.sex === null) repair.sex = opts.sex ?? 'female';
+      // Re-asserted on every run: the fixture definition is the authority for
+      // what these people ARE, and a database seeded before R79 carries `false`
+      // from the column default rather than from a decision.
+      if (opts.beneficiary !== undefined && existing.isBeneficiary !== opts.beneficiary) {
+        repair.isBeneficiary = opts.beneficiary;
+      }
+      if (Object.keys(repair).length > 0) {
+        return prisma.user.update({ where: { id: existing.id }, data: repair });
       }
       return existing;
     }
@@ -274,6 +291,7 @@ async function main(): Promise<void> {
         nameArabic: name,
         accountStatus: 'active',
         sex: opts.sex ?? 'female',
+        isBeneficiary: opts.beneficiary ?? false,
         // Staff/adults are pre-provisioned against a fixture address; minors get
         // NOTHING here — they are login-less by rule (BR-5, §4.3).
         ...(opts.preProvisionedEmail
@@ -285,21 +303,48 @@ async function main(): Promise<void> {
     });
   }
 
+  /**
+   * **The six shapes R79 has to keep apart**, seeded deliberately so the
+   * independence of beneficiary status from roles is demonstrable rather than
+   * argued: staff-only, beneficiary-only, both, a minor with no role at all,
+   * a guardian who does not study, and an admin.
+   */
   const teacher = await upsertPerson('أمينة المؤطرة', {
+    beneficiary: false,
     preProvisionedEmail: 'teacher.amina',
   });
+  // **Guardian only** — she registers her daughters and studies nothing herself.
   const parentConsenting = await upsertPerson('والدة سعاد', {
+    beneficiary: false,
     preProvisionedEmail: 'parent.souad',
   });
   const parentRevoked = await upsertPerson('والدة ياسمين', {
+    beneficiary: false,
     preProvisionedEmail: 'parent.yasmine',
   });
+  // **Beneficiary only** — an adult مستفيدة with the ordinary student role.
   const adultStudent = await upsertPerson('خديجة الطالبة', {
+    beneficiary: true,
     preProvisionedEmail: 'student.khadija',
   });
-  // Minor students: login-less — no identity, no pre_provisioned_email (BR-5).
-  const minorConsenting = await upsertPerson('سعاد الصغيرة');
-  const minorNoConsent = await upsertPerson('ياسمين الصغيرة');
+  // **Minor beneficiaries with NO ROLE ROW AT ALL** (§4.3, BR-5) — the shape
+  // that makes role-based identification impossible, and the reason R79 exists.
+  const minorConsenting = await upsertPerson('سعاد الصغيرة', { beneficiary: true });
+  const minorNoConsent = await upsertPerson('ياسمين الصغيرة', { beneficiary: true });
+
+  /**
+   * **مؤطرة who also studies** — staff AND beneficiary at once.
+   *
+   * The case that defeats every shortcut: she must appear in the enrolment
+   * selector *because she is a beneficiary*, while `أمينة المؤطرة` beside her
+   * must not, and no role distinguishes them.
+   */
+  const teachingBeneficiary = await upsertPerson('نادية المؤطرة الدارسة', {
+    beneficiary: true,
+    preProvisionedEmail: 'teacher.nadia',
+  });
+  /** **Beneficiary with ZERO enrolments** — accepted, not yet placed (R79.4). */
+  const unplacedBeneficiary = await upsertPerson('سلمى بلا تسجيل', { beneficiary: true });
 
   // Revision 43: teacher scope resolves through `CourseScheduleStaff` (§4.4c) —
   // a teacher reaches students through the courses they staff, not through a
@@ -327,7 +372,26 @@ async function main(): Promise<void> {
       data: { userId: teacher.id, roleId: teacherRole.id, branchId: branches[0]!.id },
     });
   }
-  console.log('  people: teacher, 2 parents, 1 adult student, 2 login-less minors');
+  // The مؤطرة who also studies carries the SAME teacher role as أمينة. Nothing
+  // in her roles says she is a beneficiary — only `isBeneficiary` does, which is
+  // exactly what R79 is for.
+  const dualScope = await prisma.userBranchRole.findFirst({
+    where: { userId: teachingBeneficiary.id, roleId: teacherRole.id, deletedAt: null },
+  });
+  if (!dualScope) {
+    await prisma.userBranchRole.create({
+      data: {
+        userId: teachingBeneficiary.id,
+        roleId: teacherRole.id,
+        branchId: branches[0]!.id,
+      },
+    });
+  }
+  console.log(
+    '  people: 2 مؤطرات (one of them also a beneficiary), 2 guardians, ' +
+      '1 adult beneficiary, 2 login-less minor beneficiaries, 1 unplaced beneficiary',
+  );
+  void unplacedBeneficiary;
 
   // --- Family links in BOTH states: approved and pending (§15.2)
   for (const [parent, child, status] of [

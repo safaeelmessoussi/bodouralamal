@@ -30,7 +30,7 @@ rather than summarised.
 |---|---|---|---|---|---|---|
 | 1 | Authentication | `/login`, OAuth callback, refresh, logout | ✓ | ✓ `auth`, `auth-refresh`, `refresh-token` | — | TD-12 rotation covered at API level; no browser flow |
 | 2 | Users | `/admin/users` | ✓ | ✓ `user-management` (27) | ✓ sorting | Eligibility filter added 2026-08-18 |
-| 3 | Beneficiaries / enrolment | `/admin/enrollments` | ✓ | ✓ `educational-organisation`, `group-less-enrollment` | ✓ 11/11 gender narrowing | R27 traced end to end |
+| 3 | Beneficiaries / enrolment | `/admin/enrollments` | ✓ | ✓ `educational-organisation`, `group-less-enrollment`, `user-management` (R79) | ✓ **17/17** — six person-shapes, WHO→WHERE narrowing, forged request | R27 + R79 traced end to end |
 | 4 | Levels | `/admin/levels` | ✓ | ✓ `taxonomy` | ✓ reorder + sort | |
 | 5 | Subjects | `/admin/subjects` | ✓ | ✓ `taxonomy`, `reference-data` | ✓ reorder + sort | |
 | 6 | Categories | `/admin/categories` | ✓ | ✓ `taxonomy` | ✓ reorder + sort | |
@@ -74,10 +74,16 @@ rather than summarised.
 | `verify-circles-reorder.sh` | R78.1 حلقات المواد | 9/9 |
 | `verify-sorting.sh` | Sort contract, four tables | 39/39 |
 | `verify-public-calendar.sh` | قائمة / تقويم, anonymous | 18/18 |
-| `verify-enrolment-gender.sh` | R27 narrowing | 11/11 |
+| `verify-enrolment-gender.sh` | R79 beneficiary identity (six shapes) + R27/BR-21 Level narrowing | 17/17 |
 | `measure-page-header.sh` | Header layout, nine widths | 9/9 |
 
-**175 browser checks across ten harnesses.**
+**181 browser checks across ten harnesses.**
+
+**The beneficiary-identification gap is closed** (R79, 2026-08-18): `is_beneficiary`
+is a durable fact on `User`, independent of every role and of every enrolment. The
+fixture set deliberately spans the six shapes — beneficiary-only, staff-only,
+staff **and** beneficiary, a minor with no role at all, guardian-only, admin-only —
+so the independence is demonstrable rather than argued.
 
 ## The gaps, ranked
 
@@ -106,6 +112,13 @@ same kind of thing:
 | `[dev-scenario]` | The **browser-harness scenario** — `backend/scripts/seed-dev-scenario.ts`. Seeded per run, `--clean` removes exactly its own rows, and every harness traps `EXIT` to clean up | Ephemeral by design |
 | `[dev-session]` | One **development session user** minted by `issue-dev-session.sh` | Keep; harmless |
 | `[cprobe]`, `[scenario]`, `[http-*]` | **Stale probe and suite residue** from interrupted runs | Safe to remove; no code refers to them |
+
+**A second lesson, from R79's backfill:** the migration raised `is_beneficiary`
+from enrolment evidence, which is correct — but in a development database that
+evidence includes rows earlier probe runs created, so the bootstrap Super Admin
+came back marked. The seed now states what that account **is** rather than
+leaving it to a column default, and the dev rows were corrected. **Evidence-based
+backfill is only as clean as the database's history.**
 
 **The lesson this phase already produced:** `[تجريبي]` had `sex = NULL` because
 the seed predated R27, so the demo data could not satisfy a rule the platform

@@ -53,12 +53,14 @@ async function makeUser(
   label: string,
   status = 'active',
   sex: 'female' | 'male' | null = null,
+  beneficiary = false,
 ): Promise<string> {
   const u = await prisma.user.create({
     data: {
       nameArabic: `${TAG} ${label}`,
       accountStatus: status as never,
       ...(sex === null ? {} : { sex }),
+      isBeneficiary: beneficiary,
     },
   });
   return u.id;
@@ -81,13 +83,18 @@ async function clear(): Promise<void> {
     await prisma.auditLog.deleteMany({
       where: { OR: [{ actorUserId: { in: ids } }, { targetId: { in: ids } }] },
     });
+    // Enrolments are RESTRICT against `user` (TD-5) — a placement is part of
+    // the record of what happened, so it never vanishes beneath a person. The
+    // R79 suite creates one, so the teardown unwinds it first.
+    await prisma.enrollment.deleteMany({ where: { studentId: { in: ids } } });
     await prisma.refreshToken.deleteMany({ where: { userId: { in: ids } } });
     await prisma.userBranchRole.deleteMany({ where: { userId: { in: ids } } });
     await prisma.userIdentity.deleteMany({ where: { userId: { in: ids } } });
     await prisma.user.deleteMany({ where: { id: { in: ids } } });
   }
+  await prisma.enrollment.deleteMany({ where: { level: { name: { startsWith: TAG } } } });
   await prisma.branch.deleteMany({ where: { name: { startsWith: TAG } } });
-  // The eligibility suite below creates a Level and its Category; Levels are
+  // The R79 suite creates a Level and its Category; Levels are
   // RESTRICT-referenced by their Category, so they unwind in that order.
   await prisma.level.deleteMany({ where: { name: { startsWith: TAG } } });
   await prisma.category.deleteMany({ where: { name: { startsWith: TAG } } });
@@ -494,5 +501,128 @@ describe('who may manage users at all', () => {
     const res = await call('PATCH', `/admin/users/${superAdminId}`, undefined, { version: 0 });
     expect(res.status).toBe(401);
     expect(res.body.error?.code).toBe('AUTH_REQUIRED');
+  });
+});
+
+/**
+ * **R79 — beneficiary status is a durable fact, independent of every role.**
+ *
+ * ## What these prove that nothing else could
+ *
+ * Before R79 the enrolment selector offered every active account, because the
+ * platform had no way to answer *is this person a beneficiary*. Each substitute
+ * fails on one of the rows below, and that is why they are all here:
+ *
+ * * the **student role** fails on the minor, who holds none at all (§4.3), and
+ *   on the مؤطرة who studies;
+ * * an existing **enrolment** fails on the accepted-but-unplaced beneficiary,
+ *   and would make enrolment the precondition for being enrollable;
+ * * a **staff role** fails as an exclusion, because staff may be beneficiaries.
+ */
+describe('R79 — who the enrolment selector offers', () => {
+  let beneficiaryNoRole: string;
+  let staffOnly: string;
+  let adminOnly: string;
+  let guardianOnly: string;
+  let staffAndBeneficiary: string;
+  let unplacedBeneficiary: string;
+  let levelId: string;
+  let branchId: string;
+
+  const offered = async (): Promise<string[]> => {
+    const res = await call('GET', '/admin/users?page_size=100&beneficiaries_only=true', superAdmin);
+    expect(res.status).toBe(200);
+    return (res.body.data as unknown as Record<string, unknown>[]).map((u) => String(u['id']));
+  };
+
+  beforeAll(async () => {
+    beneficiaryNoRole = await makeUser('قاصر مستفيدة', 'active', 'female', true);
+    staffOnly = await makeUser('مؤطرة فقط', 'active', 'female', false);
+    adminOnly = await makeUser('مسؤولة فقط', 'active', 'female', false);
+    guardianOnly = await makeUser('ولية أمر فقط', 'active', 'female', false);
+    staffAndBeneficiary = await makeUser('مؤطرة ودارسة', 'active', 'female', true);
+    unplacedBeneficiary = await makeUser('مستفيدة بلا تسجيل', 'active', 'female', true);
+    await grant(staffOnly, 'teacher', null);
+    await grant(adminOnly, 'admin', null);
+    // The decisive pair: the SAME role, opposite beneficiary status.
+    await grant(staffAndBeneficiary, 'teacher', null);
+
+    // Test J needs a placement to end. Created here rather than assumed from
+    // another suite's fixtures: a test that borrows somebody else's rows fails
+    // for reasons that have nothing to do with what it asserts.
+    const category = await prisma.category.create({ data: { name: `${TAG} فئة R79` } });
+    levelId = (
+      await prisma.level.create({
+        data: { name: `${TAG} مستوى R79`, categoryId: category.id, genderRestriction: 'any' },
+      })
+    ).id;
+    branchId = (await prisma.branch.create({ data: { name: `${TAG} فرع R79` } })).id;
+  });
+
+  it('A · a beneficiary with NO ROLE appears', async () => {
+    expect(await offered()).toContain(beneficiaryNoRole);
+  });
+
+  it('B/C/D · staff-only, admin-only and guardian-only do NOT appear', async () => {
+    const list = await offered();
+    expect(list).not.toContain(staffOnly);
+    expect(list).not.toContain(adminOnly);
+    expect(list).not.toContain(guardianOnly);
+  });
+
+  it('E · staff WHO ARE ALSO beneficiaries DO appear', async () => {
+    // She holds the same `teacher` role as the excluded one. No role
+    // distinguishes them — only the durable fact does, which is the whole point.
+    expect(await offered()).toContain(staffAndBeneficiary);
+  });
+
+  it('F · a beneficiary with ZERO enrolments appears', async () => {
+    // The case that makes enrolment unusable as the definition: she has been
+    // accepted and not yet placed.
+    expect(
+      await prisma.enrollment.count({ where: { studentId: unplacedBeneficiary } }),
+    ).toBe(0);
+    expect(await offered()).toContain(unplacedBeneficiary);
+  });
+
+  it('J · ending every enrolment does NOT erase the fact', async () => {
+    const enrolment = await prisma.enrollment.create({
+      data: { studentId: beneficiaryNoRole, levelId, branchId },
+    });
+    await prisma.enrollment.update({
+      where: { id: enrolment.id },
+      data: { deletedAt: new Date() },
+    });
+    // R79.4 — durable. A beneficiary between placements is still a beneficiary.
+    expect(await offered()).toContain(beneficiaryNoRole);
+  });
+
+  it('L · a StudentSocialProfile is NOT required for beneficiary identity', async () => {
+    // §4.10's case file is created by staff later, and most beneficiaries never
+    // have one. Requiring it would have hidden nearly everybody.
+    const withProfile = await prisma.studentSocialProfile.count({
+      where: { studentId: { in: [beneficiaryNoRole, unplacedBeneficiary] } },
+    });
+    expect(withProfile).toBe(0);
+    const list = await offered();
+    expect(list).toContain(beneficiaryNoRole);
+    expect(list).toContain(unplacedBeneficiary);
+  });
+
+  it('offers everybody when the parameter is absent, so it narrows nothing by default', async () => {
+    const res = await call('GET', `/admin/users?page_size=100&q=${encodeURIComponent(TAG)}`, superAdmin);
+    const all = (res.body.data as unknown as Record<string, unknown>[]).map((u) => String(u['id']));
+    expect(all).toContain(staffOnly);
+    expect(all).toContain(beneficiaryNoRole);
+  });
+
+  it('never publishes the flag on the contract', async () => {
+    // R79.8 — it is a fact about a person's relationship with the institute, and
+    // the screens that need it read it server-side.
+    const res = await call('GET', `/admin/users?q=${encodeURIComponent(TAG)}`, superAdmin);
+    for (const row of res.body.data as unknown as Record<string, unknown>[]) {
+      expect(row).not.toHaveProperty('is_beneficiary');
+      expect(row).not.toHaveProperty('sex');
+    }
   });
 });

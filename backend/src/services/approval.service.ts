@@ -593,6 +593,30 @@ export async function decide(
         }
       }
 
+      /**
+       * **R79.3 — the durable beneficiary fact, set HERE.**
+       *
+       * The people this bundle admits as students are exactly the ones
+       * `enrollments` places, and reusing that set rather than re-deriving it is
+       * the whole point: a second derivation would drift from the first, and the
+       * drift would be invisible until somebody could not be enrolled again.
+       *
+       * It is written in the SAME transaction that clears `requestedRole` and
+       * `intendedCategoryId` further down — those are REQUEST fields consumed by
+       * this decision, and cannot carry the fact afterwards. That is the failure
+       * R79 exists to prevent.
+       *
+       * A staff approval places nobody and therefore sets nothing; a parent who
+       * registered children is not made a beneficiary by their admission.
+       */
+      const admitted = [...new Set(enrollments.map((e) => e.userId))];
+      if (decision.approve && admitted.length > 0) {
+        await tx.user.updateMany({
+          where: { id: { in: admitted } },
+          data: { isBeneficiary: true },
+        });
+      }
+
       for (const e of enrollments) {
         // One resolver for both shapes and both approval paths — the branching
         // lives in `enrolAtPlacement`, not in each caller (R66.5).
@@ -612,6 +636,9 @@ export async function decide(
           // them is the approver's decision, and it is the thing an auditor
           // would come here to see.
           requested_role: applicant.requestedRole,
+          // R79 — who this decision accepted as a مستفيدة, recorded beside what
+          // was requested and what was granted.
+          admitted_as_beneficiary: admitted.length,
           granted: assignments.map((a) => ({ role: a.role, branch_id: a.branchId })),
           // §4.1's placement, recorded on the approval itself as well as on each
           // `enrollment.create` row: this is the act that admitted them, and it

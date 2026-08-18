@@ -57,6 +57,11 @@ export interface UserQuery {
   role?: string;
   branch_id?: string;
   status?: string;
+  /**
+   * R79.7 — **only the institute's مستفيدات**, whatever their roles and whatever
+   * their enrolments. The durable fact, resolved server-side.
+   */
+  beneficiaries_only?: 'true';
 }
 
 export async function searchUsers(

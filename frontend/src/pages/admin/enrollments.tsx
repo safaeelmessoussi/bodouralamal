@@ -356,17 +356,24 @@ function EnrolDialog({
   // accounts holds both `teacher` and `student` today. Filtering by ROLE would
   // hide exactly the students who most need enrolling, and that stays true.
   //
-  // **The beneficiary is the FIRST and INDEPENDENT selector**, and narrowing it
-  // by a chosen Level was tried on 2026-08-18 and reversed the same day. The
-  // question this form asks is *who am I enrolling*, and a woman already
-  // enrolled in one Level is still a beneficiary: making her disappear because
-  // she is not in the Level currently selected answers a question nobody asked.
-  //
-  // **The dependency runs the other way** — beneficiary → Levels, below.
+  /**
+   * **The beneficiary is the FIRST and INDEPENDENT selector.**
+   *
+   * The question this form asks is *who am I enrolling*, and a woman already
+   * enrolled in one Level is still a beneficiary — narrowing this list by a
+   * chosen Level was tried and reversed the same day. **The dependency runs the
+   * other way**, beneficiary → Levels, below.
+   *
+   * **It offers مستفيدات, not every active account** (R79.7). That was
+   * impossible until R79: no role identifies a beneficiary — a minor holds none
+   * at all (§4.3) and a مؤطرة may study — and an enrolment cannot, because it
+   * would make enrolment the precondition for being enrollable. The durable fact
+   * answers it, and the SERVER answers it: this list is what it is handed.
+   */
   useEffect(() => {
     void (async () => {
       try {
-        setMatches((await searchUsers(token, {})).data);
+        setMatches((await searchUsers(token, { beneficiaries_only: 'true' })).data);
       } catch {
         setMatches([]);
       }

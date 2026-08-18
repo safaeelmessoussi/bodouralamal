@@ -112,6 +112,18 @@ export async function bootstrapSuperAdmin(prisma: PrismaClient, email: string | 
         // Pre-approved by definition: the Super Admin must not land in the
         // approval queue that only a Super Admin could clear.
         accountStatus: 'active',
+        /**
+         * **Not a beneficiary** (R79). This account is created by the platform
+         * to administer it, never accepted by the institute as a مستفيدة —
+         * which is a decision only an approval makes. Stated rather than left
+         * to the column default, because the seed is the authority for what
+         * this account IS, and a `false` that is merely a default is
+         * indistinguishable from one nobody chose.
+         *
+         * She may of course become one later, through the ordinary approval —
+         * beneficiary status and administrative roles are independent (R79.2).
+         */
+        isBeneficiary: false,
       },
       select: { id: true },
     });

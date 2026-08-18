@@ -88,6 +88,44 @@ const form = await evaluate(`(async () => {
 })()`);
 check('1 · the beneficiary is asked FIRST', form.studentBeforeLevel === true, JSON.stringify(form.fields));
 
+/**
+ * **R79 — the six shapes, told apart in the browser.**
+ *
+ * The fixture set is deliberately built so no role and no enrolment could
+ * produce this answer: أمينة المؤطرة and نادية المؤطرة الدارسة hold the SAME
+ * teacher role and differ only in the durable fact; سلمى has no enrolment at
+ * all; the minors hold no role at all.
+ */
+const shapes = {
+  minorBeneficiary: 'سعاد الصغيرة',
+  adultBeneficiary: 'خديجة الطالبة',
+  unplacedBeneficiary: 'سلمى بلا تسجيل',
+  staffAndBeneficiary: 'نادية المؤطرة الدارسة',
+  staffOnly: 'أمينة المؤطرة',
+  guardianOnly: 'والدة سعاد',
+};
+const listed = (name) => (form.candidates ?? []).some((c) => c.includes(name));
+
+check('R79-a · a minor beneficiary with NO ROLE appears', listed(shapes.minorBeneficiary));
+check('R79-b · an adult beneficiary appears', listed(shapes.adultBeneficiary));
+check(
+  'R79-c · a beneficiary with ZERO enrolments appears',
+  listed(shapes.unplacedBeneficiary),
+  'enrolment is backfill evidence, never the runtime definition',
+);
+check(
+  'R79-d · staff WHO ALSO STUDY appear',
+  listed(shapes.staffAndBeneficiary),
+  'same teacher role as the excluded one — only the durable fact separates them',
+);
+check('R79-e · staff-only does NOT appear', !listed(shapes.staffOnly));
+check('R79-f · guardian-only does NOT appear', !listed(shapes.guardianOnly));
+check(
+  'R79-g · no admin or tooling account appears',
+  !(form.candidates ?? []).some((c) => c.includes('المشرف') || c.includes('dev-session')),
+  JSON.stringify((form.candidates ?? []).slice(0, 8)),
+);
+
 const enrolled = JSON.parse((await api('/admin/enrollments')).body || '{}');
 const alreadyEnrolled = (enrolled.data ?? [])[0];
 check(
