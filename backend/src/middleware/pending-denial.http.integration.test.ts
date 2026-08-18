@@ -132,6 +132,17 @@ const EXEMPT = new Set([
   // same reason the calendar does — the account exists and grants nothing
   // (TD-1), which is not the same as being refused.
   '/library',
+  // §4.9 (Revision 43): `SessionContent` read backwards — which class sessions
+  // reference this item. **Public at the caller's tier**, `optionalAuthenticate`
+  // like the two reads above it, and for the same reason: it adds no
+  // relationship and exposes nothing the library list and the Session page do
+  // not already expose at that tier.
+  //
+  // It appears here only now because this list is DERIVED FROM `openapi.json`,
+  // which was stale for a week (`ed7212b`..`4842def`). Regenerating the contract
+  // is what made the route discoverable — the guard widening on its own is the
+  // behaviour that was wanted, and this is the first route it caught.
+  '/library/{id}/sessions',
   // §4.1b: the login flow itself, which a Pending user must be able to complete.
   '/auth/google',
   '/auth/google/callback',
