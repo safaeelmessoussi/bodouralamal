@@ -43,6 +43,7 @@ const TO = '2026-09-30';
 interface Row {
   id: string;
   title: string;
+  instructors?: { display_name: string }[];
   date: string;
   start_time: string;
   end_time: string;
@@ -95,6 +96,8 @@ let superAdmin: string;
 let safaToken: string;
 let aminaToken: string;
 let outsiderToken: string;
+let teacherToken: string;
+let assistantToken: string;
 let branchId: string;
 let roomId: string;
 let categoryId: string;
@@ -239,7 +242,7 @@ describe('the scenario, step by step — each step through the API a screen uses
     expect(group.status).toBe(201);
     groupId = createdId(group);
 
-    for (const name of ['صفاء', 'أمينة']) {
+    for (const name of ['مستفيدة أولى', 'مستفيدة ثانية']) {
       const studentId = await person(name);
       const enrolled = await call(
         'POST',
@@ -249,15 +252,26 @@ describe('the scenario, step by step — each step through the API a screen uses
       );
       expect(enrolled.status, name).toBe(201);
       const token = bearer(studentId, [{ role: 'student', branches: null }]);
-      if (name === 'صفاء') safaToken = token;
+      if (name === 'مستفيدة أولى') safaToken = token;
       else aminaToken = token;
     }
     // Enrolled in nothing — the control for the notification assertions.
     outsiderToken = bearer(await person('زائرة'), [{ role: 'student', branches: null }]);
   });
 
-  it('4 · the schedule: every Monday, 15:00–17:00, in that room', async () => {
+  it('4 · the schedule: every Monday, 15:00–17:00, in that room, with its staff', async () => {
+    // §4.4c — a Teacher's whole reach is derived from the schedules she staffs,
+    // so صفاء and أمينة are STAFF here and not enrolled people.
+    const safaId = await person('صفاء', null);
+    const aminaId = await person('أمينة', null);
+    teacherToken = bearer(safaId, [{ role: 'teacher', branches: null }]);
+    assistantToken = bearer(aminaId, [{ role: 'teacher', branches: null }]);
+
     const created = await call('POST', '/admin/course-schedules', superAdmin, {
+      staff: [
+        { user_id: safaId, position: 'teacher' },
+        { user_id: aminaId, position: 'assistant' },
+      ],
       title: `${TAG} حلقة التفسير`,
       subject_id: subjectId,
       teaching_mode: 'administrative_group',
@@ -327,6 +341,40 @@ describe('the scenario, step by step — each step through the API a screen uses
      */
     expect((await occurrences()).length).toBeGreaterThan(3);
     expect((await occurrences(outsiderToken)).length).toBeGreaterThan(3);
+  });
+
+  it('8 · the staff see it too, and every occurrence carries its own context', async () => {
+    /**
+     * **The occurrences reach the staffing side from the SAME rows.**
+     *
+     * There is no teacher-specific event and no student-specific one: one
+     * materialized `Session` set serves every calendar, and a second projection
+     * for staff would be the parallel model §20 rule 22 forbids. What differs
+     * between readers is the §4.4 tier, never the source.
+     *
+     * The context assertions are the other half: an occurrence a مؤطرة opens
+     * has to say *where* and *with whom*, and R36.1 carries the resolved names
+     * beside it so an event dialog opens with no further request.
+     */
+    for (const [who, token] of [
+      ['صفاء (main teacher)', teacherToken],
+      ['أمينة (assistant)', assistantToken],
+    ] as const) {
+      const rows = await occurrences(token);
+      expect(rows.length, who).toBeGreaterThan(3);
+      const monday = rows.find((r) => r.date === CANCELLED_DATE)!;
+      expect(monday, who).toBeDefined();
+      expect(monday.start_time, who).toBe('15:00');
+      expect(monday.end_time, who).toBe('17:00');
+      expect(monday.room_name, who).toContain('القاعة 5');
+      expect(monday.branch_name, who).toContain('تاركة');
+      expect(monday.subject_name, who).toContain('تفسير');
+      // Both are named, and R36.1 resolves the display name server-side — a
+      // client that fell back to a full name would leak one nobody published.
+      const named = (monday.instructors ?? []).map((i) => i.display_name).join(' | ');
+      expect(named, who).toContain('صفاء');
+      expect(named, who).toContain('أمينة');
+    }
   });
 });
 

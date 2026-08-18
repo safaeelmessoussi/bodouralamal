@@ -129,6 +129,8 @@ result is reported in the slice that ran them.
 |---|---|
 | `scripts/dev/browser/measure-page-header.sh` | Does the primary action stay put as the description grows, at nine widths |
 | `scripts/dev/browser/verify-reorder.sh` | R76 on the five real admin screens: is «الترتيب» gone, is the header a focusable button, does pressing it send `sort_by` to the server, does a dropped row move **and survive a reload**, is the handle disabled and explained when it cannot be used |
+| `scripts/dev/browser/verify-recorder.sh` | R75 with a **real `MediaRecorder`**: start · elapsed advancing · pause freezing the reading · resume · stop · editable name · save · discard · a second recording numbered « 2» — then the bytes in **MinIO** through a presigned URL, the row in the library, and the link as a *recording* on the Session page. Chrome runs with `--use-fake-device-for-media-capture`, which supplies a synthetic microphone; **the API is not stubbed**. **Last run: 22/22.** |
+| `scripts/dev/browser/verify-schedule-edit.sh` | «تعديل العنصر»: the dialog opens with the row's own mode, a seeded المستوى and its own الحلقة; changing only «نهاية التكرار» saves; and `teaching_mode`/`target_id` are untouched afterwards. **Last run: 12/12.** |
 | `scripts/dev/browser/verify-notifications.sh` | R77 on the real student dashboard: does a student see her own occurrences, does a cancellation reach her **with its reason**, is the notice unread and singular, does «تم الاطّلاع» clear it, does restoring **withdraw** an unread notice and **correct** a read one — driven as three real sessions (student · administrator · unrelated student) against the scenario the seeder builds. **Last run: 18/18.** |
 
 ### Getting past the login wall without bypassing it
@@ -208,6 +210,25 @@ again:
   now comes from `GET /admin/course-schedules/{id}/sessions` — the same read the
   admin screen uses before offering «إلغاء» or «استعادة». **The schedule is the
   identity; a name never was.**
+
+The R75 run found **three real defects and no harness fault at all**, which is
+the strongest argument for this kind of verification the project has:
+
+* **Every recording was refused by the server.** TD-9's whitelist compared the
+  whole declared MIME string, so `audio/webm;codecs=opus` — exactly what
+  `MediaRecorder` produces — read as a foreign type. A media type is its essence
+  plus parameters; that string *is* `audio/webm`.
+* **The recording vanished the moment it was saved.** The dialog read the
+  Session page anonymously, and that endpoint is public *at the caller's tier* —
+  so it returned the public tier while a fresh recording is private. The
+  numbering rule then computed its suffix from an empty set and produced **two
+  recordings with the same name**, the exact overwrite R75.6 exists to prevent.
+* **Uploads declared a Group as their Level**, because the sessions page read
+  `levelId` from `target_id`.
+
+None of the three is visible from source, and each needed the *next* step to
+expose it — the whitelist refusal only appears once a real container reaches the
+server, and the tier bug only once a private row exists to be hidden.
 
 A third correction was in the harness's own bookkeeping rather than its aim:
 TD-4.13 **rotates the refresh token on every use**, with reuse detection behind
