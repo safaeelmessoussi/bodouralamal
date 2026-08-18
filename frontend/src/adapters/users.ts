@@ -57,8 +57,6 @@ export interface UserQuery {
   role?: string;
   branch_id?: string;
   status?: string;
-  /** R27 — hands back only the people the named Level can actually take. */
-  eligible_for_level?: string;
 }
 
 export async function searchUsers(

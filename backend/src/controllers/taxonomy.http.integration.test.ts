@@ -360,3 +360,123 @@ describe('Category deletion (TD-5)', () => {
     expect((await call('DELETE', `/admin/categories/${categoryId}`, superAdmin)).status).toBe(204);
   });
 });
+
+/**
+ * **`?eligible_for_student=` — WHERE may SHE be enrolled** (R27 + BR-21).
+ *
+ * ## The direction, and why it was reversed
+ *
+ * A first attempt narrowed the BENEFICIARY list by a chosen Level. It was wrong
+ * in the domain rather than in the code: a woman already enrolled in one Level
+ * is still a beneficiary, and making her disappear from the picker because she
+ * is not in the Level currently selected answers a question nobody asked. The
+ * form's question is *who am I enrolling*; everything else answers *where*.
+ *
+ * So the dependency runs **beneficiary → Levels**, and the two rules that narrow
+ * are the server's own:
+ *
+ * * **R27** — a restriction she cannot satisfy removes that Level from the offer.
+ *   A NULL `sex` cannot PROVE eligibility, so restricted Levels are withheld;
+ *   the backend would refuse the placement anyway.
+ * * **BR-21** — the one Level she already holds is excluded. Only that exact
+ *   pair: every other Level stays available, because one beneficiary may hold
+ *   many enrolments, one per Level.
+ */
+describe('GET /admin/levels?eligible_for_student= (R27 + BR-21)', () => {
+  let girlsOnly: string;
+  let boysOnly: string;
+  let open: string;
+  let girl: string;
+  let boy: string;
+  let unknownSex: string;
+
+  const person = async (label: string, sex: 'female' | 'male' | null): Promise<string> => {
+    const u = await prisma.user.create({
+      data: {
+        nameArabic: `${TAG} ${label}`,
+        accountStatus: 'active',
+        ...(sex === null ? {} : { sex }),
+      },
+    });
+    return u.id;
+  };
+
+  const levelIds = async (query: string): Promise<string[]> => {
+    const res = await call('GET', `/admin/levels?${query}`, superAdmin);
+    expect(res.status).toBe(200);
+    return (res.body.data as unknown as Record<string, unknown>[]).map((l) => String(l['id']));
+  };
+
+  beforeAll(async () => {
+    const make = async (name: string, restriction: string): Promise<string> =>
+      (
+        await prisma.level.create({
+          data: {
+            name: `${TAG} ${name}`,
+            categoryId,
+            genderRestriction: restriction as never,
+          },
+        })
+      ).id;
+    girlsOnly = await make('للفتيات', 'girls_only');
+    boysOnly = await make('للفتيان', 'boys_only');
+    open = await make('مفتوح', 'any');
+    girl = await person('فتاة', 'female');
+    boy = await person('فتى', 'male');
+    unknownSex = await person('بلا جنس مسجّل', null);
+  });
+
+  it('offers a female beneficiary the girls-only and the open Levels', async () => {
+    const offered = await levelIds(`eligible_for_student=${girl}`);
+    expect(offered).toContain(girlsOnly);
+    expect(offered).toContain(open);
+    expect(offered).not.toContain(boysOnly);
+  });
+
+  it('offers a male beneficiary the boys-only and the open Levels', async () => {
+    const offered = await levelIds(`eligible_for_student=${boy}`);
+    expect(offered).toContain(boysOnly);
+    expect(offered).toContain(open);
+    expect(offered).not.toContain(girlsOnly);
+  });
+
+  it('withholds every restricted Level when the sex is unrecorded', async () => {
+    // A NULL cannot PROVE eligibility, and the placement would be refused —
+    // offering it would be offering a request that cannot succeed. The open
+    // Level is still offered, because nothing about it is in question.
+    const offered = await levelIds(`eligible_for_student=${unknownSex}`);
+    expect(offered).toContain(open);
+    expect(offered).not.toContain(girlsOnly);
+    expect(offered).not.toContain(boysOnly);
+  });
+
+  it('excludes ONLY the Level she already holds, never the others (BR-21)', async () => {
+    await prisma.enrollment.create({
+      data: { studentId: girl, levelId: open, branchId },
+    });
+    const offered = await levelIds(`eligible_for_student=${girl}`);
+    expect(offered).not.toContain(open);
+    // The whole point of the correction: enrolment in one Level must not remove
+    // her from anything else she is eligible for.
+    expect(offered).toContain(girlsOnly);
+  });
+
+  it('narrows nothing when the parameter is absent', async () => {
+    const offered = await levelIds('');
+    for (const id of [girlsOnly, boysOnly, open]) expect(offered).toContain(id);
+  });
+
+  it('narrows to nothing for an unknown beneficiary, never back to everything', async () => {
+    expect(await levelIds('eligible_for_student=00000000-0000-4000-8000-000000000000')).toEqual([]);
+  });
+
+  it('refuses a malformed id rather than ignoring it', async () => {
+    expect((await call('GET', '/admin/levels?eligible_for_student=nope', superAdmin)).status).toBe(400);
+  });
+
+  it('composes with the Category filter rather than replacing it', async () => {
+    const offered = await levelIds(`eligible_for_student=${boy}&category_id=${categoryId}`);
+    expect(offered).toContain(boysOnly);
+    expect(offered).not.toContain(girlsOnly);
+  });
+});

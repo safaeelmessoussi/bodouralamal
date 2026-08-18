@@ -344,6 +344,42 @@ cost the class.
 > reason [AF](#af--ordering-a-list-sort-is-a-question-drag-is-a-decision) does:
 > the component tests have no `MediaRecorder` and no layout engine.
 
+## AI · A selector dependency follows the business question, not the field order
+
+The platform's dynamic-dropdown rule says a choice updates what the other
+selectors offer. It does **not** say which way the arrow points, and assuming
+*later filters earlier* — or the reverse — gets it wrong half the time.
+
+**The domain decides the direction.** For enrolment the question is:
+
+    WHO am I enrolling?  →  WHERE may she be enrolled?  →  HOW is that subdivided?
+
+so the arrows are:
+
+| Selector | Depends on | Why |
+|---|---|---|
+| **المستفيدة** | *nothing* | The form's subject. She is a beneficiary whatever else is chosen |
+| **المستوى** | the beneficiary | R27 asks whether **she** may enter a restricted Level; BR-21 excludes only the one she already holds |
+| **الفرع** | the Level | Where that Level actually meets |
+| **مجموعة المستوى** | Level **and** Branch | §4.4c — a group is a roster at a premises. Optional: direct Level enrolment is valid |
+| **حلقات المواد** | Level **and** Subject | And **independent of the Administrative Group** — a student may sit in مجموعة 1 and in two circles that share none of its members |
+
+**This was got wrong once, in the obvious direction.** Filtering the beneficiary
+list by a chosen Level looked like the dependent-selector rule being applied, and
+it was the rule being applied backwards: a woman already enrolled in one Level is
+still a beneficiary, and removing her from the picker because she is not in the
+Level currently selected answers a question nobody asked. The fix was to reverse
+the arrow, not to remove the dependency.
+
+**The test to apply before wiring any pair:** say the two fields aloud as a
+question. *"Which Levels may صفاء enter?"* has an answer. *"Which people does
+وميض الأمل permit?"* is a different question, and it is not the one the form is
+asking.
+
+**Both directions still narrow server-side** (§4.4, rule O): the client sends the
+parent and receives the permitted set, so a rule can never drift between the two
+— and, in this case, `sex` never leaves the service at all.
+
 ## I · Empty states
 
 Use the shared states. **Never hand-code an empty state or its button** — the

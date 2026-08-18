@@ -75,8 +75,6 @@ const listSchema = z.object({
   role: z.enum(['super_admin', 'admin', 'teacher', 'student', 'parent']).optional(),
   branch_id: z.uuid().optional(),
   status: z.enum(['pending', 'active', 'rejected', 'suspended']).optional(),
-  // R27 — narrows to the people the named Level can actually take.
-  eligible_for_level: z.uuid().optional(),
   page: z.coerce.number().int().min(1).optional(),
   page_size: z.coerce.number().int().min(1).max(100).optional(),
 });
@@ -85,14 +83,13 @@ export function list(prisma: PrismaClient) {
   return async (req: Request, res: Response): Promise<void> => {
     const parsed = listSchema.safeParse(req.query);
     if (!parsed.success) throw new AppError('VALIDATION_FAILED', 'bad query parameters');
-    const { q, role, branch_id, status, page, page_size, eligible_for_level } = parsed.data;
+    const { q, role, branch_id, status, page, page_size } = parsed.data;
 
     const result = await listUsers(prisma, requireActor(req), {
       ...(q ? { q } : {}),
       ...(role ? { role } : {}),
       ...(branch_id ? { branchId: branch_id } : {}),
       ...(status ? { status } : {}),
-      ...(eligible_for_level ? { eligibleForLevel: eligible_for_level } : {}),
       ...(page ? { page } : {}),
       ...(page_size ? { pageSize: page_size } : {}),
       ...sortParamsFrom(req.query),

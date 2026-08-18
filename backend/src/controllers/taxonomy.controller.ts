@@ -151,10 +151,19 @@ export function levels(prisma: PrismaClient) {
     // the filter is the whole request when a screen drills into one Category.
     const raw = req.query['category_id'];
     const categoryId = typeof raw === 'string' && raw !== '' ? parse<string>(uuid, raw) : undefined;
+    // R27 + BR-21 — the Levels this beneficiary may actually enter. Malformed
+    // is a 400 for the same reason `category_id` is: "that is not an id" and
+    // "she is eligible for nothing" are different answers.
+    const forStudent = req.query['eligible_for_student'];
+    const eligibleForStudent =
+      typeof forStudent === 'string' && forStudent !== '' ? parse<string>(uuid, forStudent) : undefined;
     const rows = await listLevels(
       prisma,
       requireActor(req),
-      categoryId !== undefined ? { categoryId } : {},
+      {
+        ...(categoryId !== undefined ? { categoryId } : {}),
+        ...(eligibleForStudent !== undefined ? { eligibleForStudent } : {}),
+      },
       sortParamsFrom(req.query),
     );
     res.json({ data: rows.map(levelDto) });

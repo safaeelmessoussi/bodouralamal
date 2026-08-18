@@ -168,7 +168,6 @@ never on the wire** — it is the whole row, including columns no screen is enti
 
 | | Path | Audience | Notes |
 |---|---|---|---|
-| `GET` `POST` | `/admin/users` | `?eligible_for_level=` narrows to the people a restricted Level can take (R27) — **no `sex` is published**; the eligible set travels and the fact behind it does not |
 | `GET` `POST` | `/admin/users` | 🔒 | List with search (carries `version`, so the edit form needs no second read); create pre-provisions against a Google address |
 | `PATCH` | `/admin/users/{id}` | 🔒 | The person's own fields. **`account_status`, `pre_provisioned_email` and `public_display_name` are refused, not dropped** |
 | `POST` | `/admin/users/{id}/suspend` | 🔒 | TD-1 `Active → Suspended`; **revokes every live session in the same transaction** (TD-4.15). Reason mandatory |
@@ -287,7 +286,7 @@ are (the Revision 21 pattern). SRS wording is drafted in
 | `PATCH` `DELETE` | `/admin/categories/{id}` | 👤 |
 | `POST` | `/admin/subjects` | 👤 (the `GET` is the selector below) |
 | `PATCH` `DELETE` | `/admin/subjects/{id}` | 👤 |
-| `GET` `POST` | `/admin/levels` | 👤 write · 🔒 read |
+| `GET` `POST` | `/admin/levels` | 👤 write · 🔒 read. `?eligible_for_student=` narrows to the Levels **that beneficiary** may enter — R27's sex restriction and BR-21's uniqueness, both resolved server-side. **No `sex` is published**: the eligible set travels and the fact behind it does not |
 | `PATCH` `DELETE` | `/admin/levels/{id}` | 👤 |
 | `PATCH` | `/admin/categories/order` | 👤 — `{ ids }` |
 | `PATCH` | `/admin/subjects/order` | 👤 — `{ ids }` |

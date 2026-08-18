@@ -326,6 +326,13 @@ function EnrolDialog({
   const [matches, setMatches] = useState<UserSummary[]>([]);
   const [studentId, setStudentId] = useState('');
   const [levelId, setLevelId] = useState<string | null>(null);
+  /**
+   * **The Levels THIS beneficiary may enter**, resolved server-side once she is
+   * chosen (R27 + BR-21). Before that the dialog offers the full list it was
+   * handed, so the field is never empty for want of an answer to a question the
+   * reader has not been asked yet.
+   */
+  const [eligibleLevels, setEligibleLevels] = useState<Level[] | null>(null);
   const [branchId, setBranchId] = useState('');
   const [groupId, setGroupId] = useState('');
   const [groups, setGroups] = useState<AdministrativeGroup[]>([]);
@@ -349,39 +356,56 @@ function EnrolDialog({
   // accounts holds both `teacher` and `student` today. Filtering by ROLE would
   // hide exactly the students who most need enrolling, and that stays true.
   //
-  // **What DOES narrow the list is the chosen Level's gender restriction**
-  // (R27, 2026-08-18). It used to offer every active account while the server
-  // refused a good half of them, so the only way to learn who was eligible was
-  // to pick somebody and read a `GENDER_RESTRICTION` — the platform's
-  // dependent-selector rule (§14.4/R55) applied to every other pair on this
-  // form but not to this one.
+  // **The beneficiary is the FIRST and INDEPENDENT selector**, and narrowing it
+  // by a chosen Level was tried on 2026-08-18 and reversed the same day. The
+  // question this form asks is *who am I enrolling*, and a woman already
+  // enrolled in one Level is still a beneficiary: making her disappear because
+  // she is not in the Level currently selected answers a question nobody asked.
   //
-  // **The server narrows it**, not this component: `sex` is not on the user
-  // contract and is deliberately not added, so the eligible SET travels and the
-  // fact behind it never does (§4.4, ux-architecture rule O).
+  // **The dependency runs the other way** — beneficiary → Levels, below.
   useEffect(() => {
     void (async () => {
       try {
-        setMatches(
-          (await searchUsers(token, levelId ? { eligible_for_level: levelId } : {})).data,
-        );
+        setMatches((await searchUsers(token, {})).data);
       } catch {
         setMatches([]);
       }
     })();
-  }, [token, levelId]);
+  }, [token]);
 
   /**
-   * **A candidate chosen before the Level may not survive it.**
-   *
-   * Reconciled here for the same reason `useScopeOptions` reconciles its own
-   * children: a stale id left in the field is what reaches the server as a pair
-   * it must refuse. Clearing it is the honest outcome — the person is genuinely
-   * not eligible for the Level now chosen.
+   * **WHO → WHERE.** Choosing the beneficiary narrows the Levels, because that
+   * is the direction the domain runs: R27 asks whether *she* may enter a
+   * restricted Level, and BR-21 excludes only the one Level she already holds.
+   * Every other Level stays on offer — one beneficiary, many enrolments, one
+   * per Level.
    */
   useEffect(() => {
-    if (studentId !== '' && !matches.some((m) => m.id === studentId)) setStudentId('');
-  }, [matches, studentId]);
+    if (studentId === '') {
+      setEligibleLevels(null);
+      return;
+    }
+    void (async () => {
+      try {
+        setEligibleLevels(await listLevels(token, undefined, null, studentId));
+      } catch {
+        // The server is still the authority; leaving the full list rather than
+        // an empty one keeps the form usable and lets the refusal speak.
+        setEligibleLevels(null);
+      }
+    })();
+  }, [token, studentId]);
+
+  const offeredLevels = eligibleLevels ?? levels;
+
+  /**
+   * A Level chosen before the beneficiary may not survive her — she may already
+   * be enrolled in it, or it may be restricted. Reconciled rather than left to
+   * reach the server as a pair it must refuse.
+   */
+  useEffect(() => {
+    if (levelId !== null && !offeredLevels.some((l) => l.id === levelId)) setLevelId(null);
+  }, [offeredLevels, levelId]);
 
   // §14.4/R55 — every selector is dependent: the Groups offered are those of the
   // chosen Level at the chosen branch, so the form cannot express a pair the
@@ -536,23 +560,29 @@ function EnrolDialog({
           every live row, and a مؤطرة may legitimately be enrolled — one of the
           association's accounts holds both `teacher` and `student` today.
           Filtering by role would hide exactly the students who need enrolling. */}
-      {/* **The Level comes FIRST because it is the parent** (§14.4/R55). It
-          decides which beneficiaries are eligible at all, and a form that asked
-          for the person first was asking a question whose valid answers it did
-          not yet know. */}
-      <LevelSelect levels={levels} value={levelId} onChange={setLevelId} />
-
+      {/* **The beneficiary is asked FIRST, and is independent.** The form's
+          question is *who am I enrolling*, and every other field answers *where
+          and how*. Narrowing this list by a chosen Level was tried and reversed:
+          a woman already enrolled elsewhere is still a beneficiary. */}
       <SearchableSelect
         label={t('admin.enrollments.student')}
         options={matches.map((m) => ({ value: m.id, label: m.name_arabic }))}
         value={studentId}
         onChange={setStudentId}
-        // Says WHY the list is what it is, rather than leaving a reader to
-        // wonder where somebody went (§14.4).
-        hint={levelId ? t('admin.enrollments.eligibleHint') : t('admin.enrollments.searchHint')}
-        emptyLabel={t('admin.enrollments.noneEligible')}
+        hint={t('admin.enrollments.searchHint')}
         required
       />
+
+      {/* Narrowed by HER: restricted Levels she cannot enter, and the one she is
+          already enrolled in, are not offered (R27, BR-21). */}
+      <LevelSelect levels={offeredLevels} value={levelId} onChange={setLevelId} />
+      {studentId !== '' && eligibleLevels !== null ? (
+        <p className="field__hint">
+          {eligibleLevels.length === 0
+            ? t('admin.enrollments.noLevelsForStudent')
+            : t('admin.enrollments.levelsForStudent')}
+        </p>
+      ) : null}
 
       <SelectField
         label={t('admin.enrollments.branch')}

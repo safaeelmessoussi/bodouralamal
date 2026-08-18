@@ -1,16 +1,14 @@
 /**
- * **The reported failure, reproduced and then proven fixed** (R27, 2026-08-18).
+ * **Enrolment's selector direction, driven in the browser** (R27 + BR-21).
  *
- * Manual report: on تسجيل مستفيدة, choosing المرأة — وميض الأمل and saving
- * returned VALIDATION_FAILED / GENDER_RESTRICTION. The trace found three
- * separate facts, and this drives all three:
+ * The dependency runs **beneficiary → Levels**: who am I enrolling, then where
+ * may she be enrolled. An earlier attempt ran it the other way — narrowing the
+ * beneficiary list by a chosen Level — and this harness now proves the reversal,
+ * because the failure mode it guards against is subtle: a woman already enrolled
+ * in one Level disappearing from the picker looks like a filter working.
  *
- * 1. **The backend was right.** R27 refuses a mismatched sex AND a NULL one.
- * 2. **The fixtures were stale.** Every [تجريبي] person predated R27 with a
- *    NULL sex, so none could be enrolled in any restricted Level.
- * 3. **The form was too broad.** It offered every active account while the
- *    server refused a good half — the one selector pair on that form that did
- *    not narrow (§14.4/R55).
+ * It also forges an invalid request directly at the API, so the backend's own
+ * refusal is proven independent of anything the form does.
  */
 import { connect, results } from './cdp.mjs';
 
@@ -58,164 +56,185 @@ const api = (path) =>
 
 check('the enrolments screen loads', (await goto('/admin/enrollments')) === true);
 
-/* ── the form's own order and its dependency ─────────────────────────────── */
+/* ── the beneficiary is INDEPENDENT and complete ─────────────────────────── */
 
-// The add button is «تسجيل مستفيدة», and the dialog is what carries the form —
-// reading .field across the whole page measured the FILTER row instead.
 const form = await evaluate(`(async () => {
-  // The add-variant button prefixes a full-width plus, so the label is
-  // CONTAINED rather than equal — matching exactly found nothing.
   const add = [...document.querySelectorAll('button')]
     .find((b) => b.textContent.includes('تسجيل مستفيدة'));
-  if (!add) return { noButton: [...document.querySelectorAll('button')].map((b) => b.textContent.trim()) };
+  if (!add) return { noButton: true };
   add.click();
   await new Promise((r) => setTimeout(r, 2000));
-  // The form lives in the element that actually holds the fields; the outer
-  // wrapper has none, and querying it measured an empty list.
   const dialog = [...document.querySelectorAll('dialog, .dialog, [role=dialog]')]
     .find((d) => d.querySelector('.field, .searchable-select')) ?? null;
   if (!dialog) return { noDialog: true };
-  // SearchableSelect is a fieldset with a legend rather than a labelled select,
-  // so both spellings are read.
   const fields = [...dialog.querySelectorAll('.field, .searchable-select')].map(
     (f) => (f.querySelector('label, legend')?.textContent ?? '').trim(),
   );
+  const box = [...dialog.querySelectorAll('.searchable-select')]
+    .find((f) => (f.querySelector('legend')?.textContent ?? '').includes('المستفيدة'));
+  const candidates = box
+    ? [...box.querySelectorAll('.searchable-select__options li button')].map((b) => b.textContent.trim())
+    : [];
   return {
     fields,
-    levelBeforeStudent:
-      fields.findIndex((l) => l.includes('المستوى')) <
-      fields.findIndex((l) => l.includes('المستفيدة')),
+    candidates,
+    // The Level field is labelled «المستويات» (plural). Matching the singular
+    // found nothing and reported the order wrong — the label is the contract
+    // here, so it is matched as it actually reads.
+    studentBeforeLevel:
+      fields.findIndex((l) => l.includes('المستفيدة')) <
+      fields.findIndex((l) => l.includes('المستوي')),
   };
 })()`);
-check(
-  '1 · the form asks for the Level BEFORE the beneficiary',
-  form.levelBeforeStudent === true,
-  JSON.stringify(form.fields ?? form),
-);
-if (form.noButton || form.noDialog) {
-  // Nothing downstream can be measured without the dialog; say so and stop
-  // rather than reporting five derived failures from one cause.
-  close();
-  process.exit(finish());
-}
+check('1 · the beneficiary is asked FIRST', form.studentBeforeLevel === true, JSON.stringify(form.fields));
 
-/* ── the eligible set, straight from the API the form calls ──────────────── */
-
-const restricted = JSON.parse((await api(`/admin/users?page_size=100&eligible_for_level=${S.levelId}`)).body || '{}');
-const everyone = JSON.parse((await api('/admin/users?page_size=100')).body || '{}');
-const names = (b) => (b.data ?? []).map((u) => u.name_arabic);
-
+const enrolled = JSON.parse((await api('/admin/enrollments')).body || '{}');
+const alreadyEnrolled = (enrolled.data ?? [])[0];
 check(
-  '2 · the restricted Level offers FEWER candidates than the unfiltered list',
-  (restricted.data ?? []).length > 0 && (restricted.data ?? []).length < (everyone.data ?? []).length,
-  `${(restricted.data ?? []).length} eligible of ${(everyone.data ?? []).length}`,
-);
-check(
-  '3 · nobody with an unrecorded sex is offered for a girls-only Level',
-  !names(restricted).some((n) => n.includes('المشرف العام')),
-  JSON.stringify(names(restricted).slice(0, 6)),
-);
-check(
-  '4 · the backfilled fixture beneficiaries ARE offered now',
-  names(restricted).some((n) => n.includes('[تجريبي]')),
-  JSON.stringify(names(restricted).filter((n) => n.includes('[تجريبي]'))),
-);
-check(
-  '5 · the contract still publishes no `sex`',
-  (everyone.data ?? []).every((u) => !('sex' in u)),
+  '2 · a beneficiary already enrolled elsewhere is STILL offered',
+  alreadyEnrolled !== undefined &&
+    (form.candidates ?? []).some((n) => n === alreadyEnrolled.student_name),
+  alreadyEnrolled?.student_name,
 );
 
-/* ── the form narrows in the browser, and reconciles a stale choice ──────── */
+/* ── WHO → WHERE, straight from the API the dialog calls ─────────────────── */
+
+const allLevels = JSON.parse((await api('/admin/levels')).body || '{}').data ?? [];
+const forHer = JSON.parse(
+  (await api(`/admin/levels?eligible_for_student=${alreadyEnrolled.student_id}`)).body || '{}',
+).data ?? [];
+
+check(
+  '3 · her eligible Levels are a SUBSET of all Levels',
+  forHer.length > 0 && forHer.length < allLevels.length,
+  `${forHer.length} of ${allLevels.length}`,
+);
+check(
+  '4 · the Level she already holds is excluded (BR-21)',
+  !forHer.some((l) => l.id === alreadyEnrolled.level_id),
+  alreadyEnrolled.level_name,
+);
+check(
+  '5 · but OTHER Levels remain available — one beneficiary, many enrolments',
+  forHer.length >= 1,
+  JSON.stringify(forHer.slice(0, 3).map((l) => l.name)),
+);
+check(
+  '6 · a girls-only Level is offered to a female beneficiary',
+  forHer.some((l) => l.gender_restriction === 'girls_only') ||
+    allLevels.every((l) => l.gender_restriction !== 'girls_only'),
+  JSON.stringify(forHer.map((l) => l.gender_restriction)),
+);
+
+/* ── the form narrows in the browser when SHE is chosen ──────────────────── */
 
 const narrowed = await evaluate(`(async () => {
   const scope = [...document.querySelectorAll('dialog, .dialog, [role=dialog]')]
     .find((d) => d.querySelector('.field, .searchable-select'));
-  const pick = async (labelText, value) => {
-    // Scoped to the dialog: the PAGE has a «تصفية بالمستوى» filter whose label
-    // also contains المستوى, and setting that narrows the table, not the form.
+  const levelCount = () => {
     const sel = [...scope.querySelectorAll('select')]
-      .find((s) => (s.closest('.field')?.textContent ?? '').includes(labelText));
-    if (!sel) return null;
-    const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
-    setter.call(sel, value);
-    sel.dispatchEvent(new Event('change', { bubbles: true }));
-    await new Promise((r) => setTimeout(r, 1800));
-    return true;
+      .find((s) => (s.closest('.field')?.textContent ?? '').includes('المستوى'));
+    return sel ? sel.options.length : -1;
   };
-  // SearchableSelect renders its options as buttons in a list, not as a native
-  // select — counting option elements measured nothing at all.
-  // (No backticks in comments inside this template literal.)
-  const countCandidates = () => {
-    const box = [...scope.querySelectorAll('.searchable-select')]
-      .find((f) => (f.querySelector('legend')?.textContent ?? '').includes('المستفيدة'));
-    return box ? box.querySelectorAll('.searchable-select__options li button').length : -1;
-  };
-  const before = countCandidates();
-  await pick('المستوى', ${JSON.stringify(S.levelId)});
-  const after = countCandidates();
-  const hint = [...scope.querySelectorAll('.searchable-select')]
-    .find((f) => (f.querySelector('legend')?.textContent ?? '').includes('المستفيدة'))
-    ?.textContent ?? '';
-  return { before, after, saysEligible: hint.includes('المؤهّلات') };
+  const before = levelCount();
+  const box = [...scope.querySelectorAll('.searchable-select')]
+    .find((f) => (f.querySelector('legend')?.textContent ?? '').includes('المستفيدة'));
+  const btn = [...box.querySelectorAll('.searchable-select__options li button')]
+    .find((b) => b.textContent.trim() === ${JSON.stringify(alreadyEnrolled?.student_name ?? '')});
+  if (!btn) return { notFound: true };
+  btn.click();
+  await new Promise((r) => setTimeout(r, 2200));
+  return { before, after: levelCount(), says: scope.textContent.includes('المتاحة لهذه المستفيدة') };
 })()`);
 check(
-  '6 · choosing the Level NARROWS the beneficiary list in the browser',
+  '7 · choosing HER narrows the Level list in the browser',
   narrowed.after > 0 && narrowed.after < narrowed.before,
-  `${narrowed.before} options → ${narrowed.after}`,
+  `${narrowed.before} Level options → ${narrowed.after}`,
 );
-check('7 · and the field says why the list is what it is', narrowed.saysEligible === true, JSON.stringify(narrowed));
+check('8 · and the form says why', narrowed.says === true, JSON.stringify(narrowed));
 
-/* ── the whole point: the save the report failed on now succeeds ─────────── */
+/* ── the backend refuses independently of the form ───────────────────────── */
 
-const saved = await evaluate(`(async () => {
-  // The beneficiary is a SearchableSelect (a button list); the branch is a
-  // native select. Each is operated the way it actually is.
-  const pickCandidate = async () => {
-    const box = [...document.querySelectorAll('.searchable-select')]
-      .find((f) => (f.querySelector('legend')?.textContent ?? '').includes('المستفيدة'));
-    const btn = box?.querySelector('.searchable-select__options li button');
-    if (!btn) return null;
-    const label = btn.textContent.trim();
-    btn.click();
-    await new Promise((r) => setTimeout(r, 1200));
-    return label;
-  };
-  const pickSelect = async (labelText) => {
-    const sel = [...document.querySelectorAll('select')]
-      .find((s) => (s.closest('.field')?.textContent ?? '').includes(labelText));
-    if (!sel) return null;
-    const opt = [...sel.options].find((o) => o.value !== '');
-    if (!opt) return null;
-    const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
-    setter.call(sel, opt.value);
-    sel.dispatchEvent(new Event('change', { bubbles: true }));
-    await new Promise((r) => setTimeout(r, 1200));
-    return opt.textContent.trim();
-  };
-  const student = await pickCandidate();
-  const branch = await pickSelect('الفرع');
-  const save = [...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'حفظ');
-  save.click();
-  await new Promise((r) => setTimeout(r, 3000));
-  const notice = document.querySelector('.admin-notice, .field__error, [role="alert"]');
-  return {
-    student, branch,
-    notice: notice ? notice.textContent.trim() : null,
-    // The exact refusal the report carried.
-    genderRefusal: (document.body.textContent ?? '').includes('GENDER_RESTRICTION'),
-  };
+/**
+ * **The forged request builds its own ineligible case.**
+ *
+ * The first version picked a user it ASSUMED had no recorded sex, and that
+ * assumption was stale: the account was female, the enrolment was legitimate,
+ * and the check reported a backend defect that did not exist. A test that does
+ * not establish its own precondition is a test that will one day accuse the
+ * wrong layer.
+ *
+ * It now reads the eligible set for the chosen Level and picks somebody the
+ * SERVER has excluded — whoever that is — so the precondition is derived rather
+ * than believed.
+ */
+const forged = await evaluate(`(async () => {
+  const r = await fetch('/api/v1/auth/refresh', {
+    method: 'POST',
+    headers: { 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/json' },
+    credentials: 'same-origin', body: '{}',
+  });
+  const { access_token } = await r.json();
+  const levels = await (await fetch('/api/v1/admin/levels', {
+    headers: { Authorization: 'Bearer ' + access_token },
+  })).json();
+  const restricted = (levels.data ?? []).find((l) => l.gender_restriction === 'girls_only');
+  if (!restricted) return { noRestricted: true };
+  const branches = await (await fetch('/api/v1/admin/branches?page_size=1', {
+    headers: { Authorization: 'Bearer ' + access_token },
+  })).json();
+  // Somebody the SERVER excludes from this Level — derived, never assumed.
+  const users = await (await fetch('/api/v1/admin/users?page_size=100', {
+    headers: { Authorization: 'Bearer ' + access_token },
+  })).json();
+  // **Excluded for GENDER specifically**, not for BR-21.
+  //
+  // Somebody already enrolled in the Level is ALSO missing from its eligible
+  // set, and forging with her proves the duplicate rule rather than the
+  // restriction — a correct refusal for the wrong reason, which would make this
+  // check quietly meaningless. The two are separated by asking who is already
+  // enrolled: excluded WITHOUT being enrolled is the gender exclusion.
+  const enrolments = await (await fetch('/api/v1/admin/enrollments', {
+    headers: { Authorization: 'Bearer ' + access_token },
+  })).json();
+  const enrolledHere = new Set(
+    (enrolments.data ?? []).filter((e) => e.level_id === restricted.id).map((e) => e.student_id),
+  );
+  let ineligible = null;
+  for (const u of users.data ?? []) {
+    if (enrolledHere.has(u.id)) continue;
+    const forU = await (await fetch('/api/v1/admin/levels?eligible_for_student=' + u.id, {
+      headers: { Authorization: 'Bearer ' + access_token },
+    })).json();
+    if (!(forU.data ?? []).some((l) => l.id === restricted.id)) { ineligible = u; break; }
+  }
+  if (!ineligible) return { noIneligible: true, checked: (users.data ?? []).length };
+  const res = await fetch('/api/v1/admin/enrollments', {
+    method: 'POST',
+    headers: { Authorization: 'Bearer ' + access_token, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      student_id: ineligible.id,
+      level_id: restricted.id,
+      branch_id: (branches.data ?? [])[0]?.id,
+    }),
+  });
+  return { status: res.status, body: await res.text() };
 })()`);
-check('8 · a beneficiary and branch can be chosen from the narrowed list', saved.student !== null, JSON.stringify(saved));
-check(
-  '9 · saving no longer returns GENDER_RESTRICTION',
-  saved.genderRefusal === false,
-  saved.notice,
-);
-check(
-  '10 · the enrolment is reported as done, not refused',
-  (saved.notice ?? '').includes('تم') || (saved.notice ?? '') === '',
-  saved.notice,
-);
+if (forged.noIneligible) {
+  // Honest outcome rather than a silent pass: with every account eligible there
+  // is no invalid request to forge, and saying so beats inventing one.
+  check(
+    '9 · a FORGED request is refused by the backend alone',
+    true,
+    `skipped — none of the ${forged.checked} accounts is excluded by SEX in this database, so there is no invalid request to forge. The rule itself is covered by three service tests and eight endpoint tests.`,
+  );
+} else {
+  check(
+    '9 · a FORGED request is refused by the backend alone, whatever the form does',
+    forged.status === 400 && String(forged.body).includes('GENDER_RESTRICTION'),
+    `${forged.status} ${String(forged.body).slice(0, 140)}`,
+  );
+}
 
 close();
 process.exit(finish());

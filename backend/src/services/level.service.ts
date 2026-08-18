@@ -1,4 +1,4 @@
-import type { Level, PrismaClient } from '../generated/prisma/client.js';
+import type { Level, Prisma, PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
 import { applyOrder } from '../lib/reorder.js';
 import { resolveSort, type SortableFields, type SortParams } from '../lib/sorting.js';
@@ -126,16 +126,78 @@ const LEVEL_DEFAULT_ORDER = [
   { name: 'asc' },
 ];
 
+/**
+ * **Which Levels a given beneficiary may be enrolled into** (`?eligible_for_student=`).
+ *
+ * The dependency runs **beneficiary → Levels**, not the other way round, and the
+ * direction is the business question rather than the field order:
+ *
+ *     WHO am I enrolling?  →  WHERE may she be enrolled?
+ *
+ * Filtering *beneficiaries* by a chosen Level was the opposite and was wrong: a
+ * woman already enrolled in one Level is still a beneficiary, and making her
+ * vanish from the picker because she is not in the Level currently selected
+ * answers a question nobody asked.
+ *
+ * Two rules narrow the list, and both are the SERVER's own:
+ *
+ * * **R27's sex restriction.** A `girls_only` Level is offered only to a
+ *   `female` beneficiary. A **NULL sex cannot prove eligibility**, so restricted
+ *   Levels are withheld — the backend would refuse the placement anyway, and
+ *   offering it would be offering a request that cannot succeed.
+ * * **BR-21's uniqueness.** A Level she already holds a live `Enrollment` in is
+ *   excluded, because that exact pair is the one thing the model refuses. Every
+ *   OTHER Level stays available: one beneficiary, many enrolments, one per Level.
+ *
+ * `sex` never leaves the service — the eligible SET travels and the fact behind
+ * it does not (§4.10, BR-16), the same reasoning that keeps the student's own sex
+ * out of the `GENDER_RESTRICTION` error.
+ */
+async function eligibilityFor(
+  prisma: PrismaClient,
+  studentId: string,
+): Promise<Prisma.LevelWhereInput> {
+  const student = await prisma.user.findFirst({
+    where: { id: studentId, deletedAt: null },
+    select: { sex: true, levelEnrollments: { where: { deletedAt: null }, select: { levelId: true } } },
+  });
+  // An unknown beneficiary narrows to nothing rather than to everything: a
+  // filter that silently stops filtering is worse than one returning empty.
+  if (student === null) return { id: { in: [] } };
+
+  const held = student.levelEnrollments.map((e) => e.levelId);
+  return {
+    // BR-21 — the exact duplicate, and only that.
+    ...(held.length > 0 ? { id: { notIn: held } } : {}),
+    // R27 — a restriction she cannot satisfy, including because her sex is
+    // unrecorded, removes that Level from the offer and nothing else.
+    ...(student.sex === 'female'
+      ? { genderRestriction: { in: ['any', 'girls_only'] } }
+      : student.sex === 'male'
+        ? { genderRestriction: { in: ['any', 'boys_only'] } }
+        : { genderRestriction: 'any' }),
+  };
+}
+
 export async function listLevels(
   prisma: PrismaClient,
   actor: Actor,
-  filters: { categoryId?: string } = {},
+  filters: { categoryId?: string; eligibleForStudent?: string } = {},
   sort: SortParams = {},
 ): Promise<LevelSummary[]> {
   assertCanReadReferenceData(actor);
 
+  const eligibility =
+    filters.eligibleForStudent === undefined
+      ? {}
+      : await eligibilityFor(prisma, filters.eligibleForStudent);
+
   const rows = await prisma.level.findMany({
-    where: { deletedAt: null, ...(filters.categoryId ? { categoryId: filters.categoryId } : {}) },
+    where: {
+      deletedAt: null,
+      ...(filters.categoryId ? { categoryId: filters.categoryId } : {}),
+      ...eligibility,
+    },
     orderBy: resolveSort(LEVEL_SORT_FIELDS, sort, LEVEL_DEFAULT_ORDER) as never,
     select: {
       id: true,

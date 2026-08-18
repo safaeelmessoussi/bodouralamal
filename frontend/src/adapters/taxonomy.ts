@@ -164,8 +164,18 @@ export async function listLevels(
   token: string | null,
   categoryId?: string,
   sort: SortState | null = null,
+  /**
+   * **The Levels this beneficiary may enter** — R27's sex restriction and
+   * BR-21's uniqueness, both resolved server-side. The dependency runs
+   * beneficiary → Levels, because the business question is *where may SHE be
+   * enrolled*, not *whom does this Level permit*.
+   */
+  eligibleForStudent?: string,
 ): Promise<Level[]> {
-  const query = sortQuery(sort, categoryId ? { category_id: categoryId } : {});
+  const query = sortQuery(sort, {
+    ...(categoryId ? { category_id: categoryId } : {}),
+    ...(eligibleForStudent ? { eligible_for_student: eligibleForStudent } : {}),
+  });
   const body = await api<{ data: Level[] }>(`/admin/levels${query}`, { token });
   return body.data;
 }
