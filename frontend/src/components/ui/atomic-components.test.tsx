@@ -65,6 +65,43 @@ function stripComments(text: string): string {
   return text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 }
 
+describe('one calendar header', () => {
+  /**
+   * **The atoms were shared; the ARRANGEMENT was not** — and that is where the
+   * two calendar surfaces had already diverged (2026-08-18). The public page put
+   * the title above a controls row; the back office put it beside the stepping
+   * inside `.cal-toolbar` — the FILTERS container — with its view switch
+   * somewhere else on the page entirely. Nothing was duplicated, so no
+   * duplication guard would have caught it.
+   *
+   * So what is pinned here is composition: the three atoms are assembled in ONE
+   * place, and a page reaches them through `CalendarHeader`. The geometry that
+   * arrangement produces — switch right, title centred, stepping left — is
+   * measured in `verify-calendar-header.mjs`, because centred is a fact about
+   * boxes and not about source.
+   */
+  const ALLOWED = new Set(['components/calendar/calendar-header.tsx']);
+
+  it('only the shared header composes the calendar control atoms', () => {
+    const offenders = FILES.filter((f) => {
+      if (ALLOWED.has(f.path)) return false;
+      const text = stripComments(f.text);
+      return /<(CalendarTitle|CalendarNav|ViewSwitch)[\s/>]/.test(text);
+    }).map((f) => f.path);
+    expect(offenders).toEqual([]);
+  });
+
+  it('the header keeps the three-region structure the layout depends on', () => {
+    // The CSS grid is `1fr auto 1fr` over these three children; losing one turns
+    // the centre column into whatever is left over, which is the defect.
+    const source = RAW['/src/components/calendar/calendar-header.tsx'] ?? '';
+    expect(source).not.toBe('');
+    for (const region of ['cal-header__start', 'cal-header__centre', 'cal-header__end']) {
+      expect(source).toContain(region);
+    }
+  });
+});
+
 describe('one action message', () => {
   /**
    * **The same rule as the button, on the concept that had drifted furthest**

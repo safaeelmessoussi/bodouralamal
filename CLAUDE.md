@@ -192,6 +192,16 @@ You are working on the بذور الأمل Platform.
   boolean first, and was promptly applied to one screen and forgotten on the next.
   **A behaviour that each caller must opt into is a behaviour that will be
   missing somewhere**; prefer a fact the caller already states.
+- **An author `display` on a native element can defeat the UA rule that hides it
+  (AG).** `dialog:not([open]) { display: none }` is the *only* thing keeping a
+  closed `<dialog>` off the page, and author styles outrank the UA sheet at every
+  specificity — one unconditional `display: flex` put a permanent dialog under
+  the table on most of the platform. Scope such rules to `[open]`, and **sweep
+  the pages that did NOT break too**: they are the control that tells a fix from
+  a coincidence.
+- **UI text is not prose (AK).** `p { max-width: var(--measure) }` reaches every
+  paragraph in the application, so short helper text under a table wraps early.
+  Six components had already patched it locally before the rule was written once.
 - **A layout property must be measured in a browser, not asserted from CSS.** The
   header guard asserted `align-items: start` — present, correct, and irrelevant,
   because `flex-wrap` put the action on its own line. Run

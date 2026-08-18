@@ -276,13 +276,14 @@
 .admin-panel__hint {
   font-size: var(--font-size-xs);
   color: var(--color-text-muted);
-  max-width: 52ch;
+  /* The 52ch that used to be here was a second, narrower measure invented for
+     this one hint — the arbitrary limit the table-note rule exists to remove.
+     Width comes from the panel now; see `tokens/layout.css`. */
 }
 
 /* A status line, not a toast: these messages report the result of an action the
    reader just took on this page, and should stay until the next one. */
 .admin-notice {
-  max-width: none;
   padding: var(--space-3) var(--space-4);
   margin-block-end: var(--space-4);
   border-inline-start: 3px solid var(--color-primary-emphasis);

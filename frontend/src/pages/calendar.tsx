@@ -9,10 +9,9 @@ import {
   type Occurrence,
 } from '../adapters/calendar.js';
 import { CalendarGrid } from '../components/calendar/calendar-grid.js';
-import { CalendarNav } from '../components/calendar/calendar-nav.js';
+import { CalendarHeader } from '../components/calendar/calendar-header.js';
 import { OccurrenceList } from '../components/calendar/occurrence-list.js';
-import { ViewSwitch, viewFromUrl, type CalendarView } from '../components/calendar/view-switch.js';
-import { CalendarTitle } from '../components/calendar/calendar-title.js';
+import { viewFromUrl, type CalendarView } from '../components/calendar/view-switch.js';
 import { CalendarToolbar } from '../components/calendar/calendar-toolbar.js';
 import { DayEventsDialog } from '../components/calendar/day-events-dialog.js';
 import { EventDetailsDialog } from '../components/calendar/event-details-dialog.js';
@@ -217,39 +216,35 @@ export function CalendarPage(): ReactNode {
               <h1 id="calendar-title" className="cal-page__eyebrow">
                 {t('calendar.title')}
               </h1>
-              <CalendarTitle
-                gregorianMonths={bootstrap?.gregorian_months ?? []}
-                hijriMonths={bootstrap?.hijri.months ?? []}
-                month={month}
-              />
-              {/* **The switch leads, the month stepping follows** — and the
-                  stepping is compact and secondary, because the calendar is what
-                  the reader came for. `CalendarNav` renders `ghost` buttons for
-                  exactly that reason, and it is hidden in the قائمة view where
-                  stepping a month would move a list that is not month-shaped. */}
-              <div className="cal-head__controls">
-                <ViewSwitch view={view} onView={setView} />
-                {view === 'calendar' ? (
-                  <CalendarNav
-                    onPrevious={() => goToMonth(addMonths(month, -1))}
-                    onToday={() => goToMonth(today)}
-                    onNext={() => goToMonth(addMonths(month, 1))}
-                  />
-                ) : null}
-              </div>
             </div>
 
-            <CalendarToolbar
-              branches={branches}
-              branchId={branchId}
-              onBranchChange={setBranchId}
-              categories={bootstrap?.categories ?? []}
-              categoryId={categoryId}
-              onCategoryChange={changeCategory}
-              levels={bootstrap?.levels ?? []}
-              levelId={levelId}
-              levelsBusy={bootstrapBusy}
-              onLevelChange={setLevelId}
+            {/* **The one calendar header** — switch right, dual title centred,
+                stepping left, filters on their own row. The arrangement lives in
+                the component so the back office cannot drift from it, which is
+                exactly what had happened. */}
+            <CalendarHeader
+              view={view}
+              onView={setView}
+              gregorianMonths={bootstrap?.gregorian_months ?? []}
+              hijriMonths={bootstrap?.hijri.months ?? []}
+              month={month}
+              onPrevious={() => goToMonth(addMonths(month, -1))}
+              onToday={() => goToMonth(today)}
+              onNext={() => goToMonth(addMonths(month, 1))}
+              filters={
+                <CalendarToolbar
+                  branches={branches}
+                  branchId={branchId}
+                  onBranchChange={setBranchId}
+                  categories={bootstrap?.categories ?? []}
+                  categoryId={categoryId}
+                  onCategoryChange={changeCategory}
+                  levels={bootstrap?.levels ?? []}
+                  levelId={levelId}
+                  levelsBusy={bootstrapBusy}
+                  onLevelChange={setLevelId}
+                />
+              }
             />
 
             {/* Announced politely so a keyboard user hears the month reload

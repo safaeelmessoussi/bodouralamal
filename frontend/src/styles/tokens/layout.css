@@ -50,9 +50,48 @@ h3 {
   letter-spacing: -0.01em;
 }
 
+/* **A reading measure for prose — and the reason the exception below exists.**
+ *
+ * 64ch is right for a paragraph somebody reads. It is wrong for the short
+ * explanation under a table, which belongs to the table's width: the reorder
+ * hint on المستويات wrapped its last word onto a line of its own with half the
+ * row still empty beside it.
+ *
+ * The cap is on the ELEMENT, so it reaches every `<p>` in the application
+ * whether or not that paragraph is prose — and the evidence that this bites
+ * repeatedly is that **six components had already patched it locally** with
+ * `max-width: none` (the dual title, the day dialog's date, the action message,
+ * the confirm body, the preview description, the mobile trigger). Each was a
+ * correct local fix for a defect that was never local.
+ */
 p {
   margin: 0;
   max-width: var(--measure);
+}
+
+/**
+ * **UI text is not prose, and does not take the prose measure.**
+ *
+ * Text bound to a control, a table or a state uses the width of the thing it
+ * belongs to. Listing the families here — rather than adding a class each
+ * component must remember — is deliberate: a behaviour every caller has to opt
+ * into is a behaviour that will be missing from the next component somebody
+ * writes (rule AE). A new component gets this by using the shared classes it was
+ * going to use anyway.
+ *
+ * This is NOT a licence to un-cap long copy: a paragraph a person reads keeps
+ * `--measure`, and `--measure-lede` remains the page description's wider one.
+ */
+.table-note,
+.datatable__reorder,
+.state p,
+.admin-notice,
+.admin-panel__hint,
+.field__hint,
+.cal-title,
+.confirm__body,
+.preview__description {
+  max-width: none;
 }
 
 a {

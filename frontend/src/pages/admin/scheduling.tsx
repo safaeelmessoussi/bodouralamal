@@ -19,9 +19,7 @@ import {
 import { searchUsers, type UserSummary } from '../../adapters/users.js';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
 import { CalendarGrid } from '../../components/calendar/calendar-grid.js';
-import { ViewSwitch } from '../../components/calendar/view-switch.js';
-import { CalendarNav } from '../../components/calendar/calendar-nav.js';
-import { CalendarTitle } from '../../components/calendar/calendar-title.js';
+import { CalendarHeader } from '../../components/calendar/calendar-header.js';
 import { DayEventsDialog } from '../../components/calendar/day-events-dialog.js';
 import {
   ActivitySection,
@@ -277,11 +275,12 @@ export function SchedulingPage(): ReactNode {
         </Feedback>
       ) : null}
 
-      {/* **The shared switch.** This was inline markup here, and the public
-          calendar needed the same control — copying it would have made two that
-          drift. It is one component now, and the query-parameter behaviour lives
-          with it (§20 rule 16). */}
-      <ViewSwitch view={view} onView={setView} />
+      {/* **The shared header, in its no-month form.** The list is a table of
+          recurring schedules rather than a month, so the centre and the stepping
+          are absent — see `CalendarHeader`. The calendar view renders the same
+          component WITH its month, so there is exactly one header on screen
+          either way, and only one place that decides where a control sits. */}
+      {view === 'list' ? <CalendarHeader view={view} onView={setView} /> : null}
 
       {view === 'list' ? (
         <>
@@ -322,7 +321,7 @@ export function SchedulingPage(): ReactNode {
           {truncated ? <p className="muted">{t('scheduling.truncated')}</p> : null}
         </>
       ) : (
-        <CalendarView />
+        <CalendarView view={view} onView={setView} />
       )}
 
       {editing ? (
@@ -360,7 +359,13 @@ export function SchedulingPage(): ReactNode {
  * Reused rather than rebuilt: a second month grid would be a second answer to
  * *what does a month look like*, and the two would drift.
  */
-function CalendarView(): ReactNode {
+function CalendarView({
+  view,
+  onView,
+}: {
+  view: View;
+  onView: (view: View) => void;
+}): ReactNode {
   const today = useMemo(() => new Date(), []);
   const [month, setMonth] = useState(() => startOfMonth(today));
   const [occurrences, setOccurrences] = useState<Occurrence[]>([]);
@@ -402,22 +407,19 @@ function CalendarView(): ReactNode {
 
   return (
     <div aria-live="polite">
-      {/* **The same header and the same navigation the public calendar uses.**
-          The dual title is where the Gregorian month is named beside its Hijri
-          month (R31, R36) — rebuilding it here with plain buttons, as this view
-          first did, left the back office without the Hijri side entirely. */}
-      <div className="cal-toolbar">
-        <CalendarTitle
-          gregorianMonths={bootstrap?.gregorian_months ?? []}
-          hijriMonths={bootstrap?.hijri.months ?? []}
-          month={month}
-        />
-        <CalendarNav
-          onPrevious={() => setMonth((m) => new Date(Date.UTC(m.getUTCFullYear(), m.getUTCMonth() - 1, 1)))}
-          onToday={() => setMonth(startOfMonth(today))}
-          onNext={() => setMonth((m) => new Date(Date.UTC(m.getUTCFullYear(), m.getUTCMonth() + 1, 1)))}
-        />
-      </div>
+      {/* **The same header component the public calendar uses**, rather than the
+          same three atoms arranged differently — which is what this view had, in
+          the FILTERS container, with its view switch elsewhere on the page. */}
+      <CalendarHeader
+        view={view}
+        onView={onView}
+        gregorianMonths={bootstrap?.gregorian_months ?? []}
+        hijriMonths={bootstrap?.hijri.months ?? []}
+        month={month}
+        onPrevious={() => setMonth((m) => new Date(Date.UTC(m.getUTCFullYear(), m.getUTCMonth() - 1, 1)))}
+        onToday={() => setMonth(startOfMonth(today))}
+        onNext={() => setMonth((m) => new Date(Date.UTC(m.getUTCFullYear(), m.getUTCMonth() + 1, 1)))}
+      />
 
       <CalendarGrid
         month={month}

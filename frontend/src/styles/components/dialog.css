@@ -24,10 +24,37 @@
  * body could never become shorter than its own scrollHeight and would push the
  * overflow back out to the shell.
  */
-.dialog {
+/*
+ * **`display` on this selector must stay scoped to `[open]`** — the regression of
+ * 2026-08-18, and the reason the rule below exists.
+ *
+ * A native `<dialog>` is hidden by ONE line in the user-agent stylesheet:
+ * `dialog:not([open]) { display: none }`. Author styles beat the UA stylesheet
+ * at every specificity, so an unconditional `display: flex` on `.dialog` does
+ * not merely add a layout — it **defeats the only thing hiding closed dialogs**.
+ * Every management screen keeps its add/edit dialog mounted (a native dialog has
+ * to be in the DOM to be openable), so all of them rendered permanently, in
+ * normal flow, underneath the table. The calendar's day dialog is `--wide`,
+ * which is why a `dialog dialog--wide` block appeared at the top of the public
+ * calendar. Pages that mount their dialog conditionally were untouched, which is
+ * exactly the pattern the affected/unaffected lists followed.
+ *
+ * So the hiding is now **explicit** rather than borrowed from the UA, and every
+ * `display` on this component is scoped to `[open]`. Stating it in the author
+ * sheet is what makes the invariant reviewable: the next person to add a
+ * `display` here sees the rule it would have to beat.
+ */
+.dialog:not([open]) {
+  display: none;
+}
+
+.dialog[open] {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+}
+
+.dialog {
   width: min(100% - var(--space-8), 34rem);
   max-height: min(85vh, 44rem);
   padding: 0;

@@ -138,7 +138,6 @@
   gap: var(--space-4);
 }
 .confirm__body {
-  max-width: none;
 }
 
 /* ── The generic table ───────────────────────────────────────────────────── */

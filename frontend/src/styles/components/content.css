@@ -272,7 +272,6 @@
   gap: var(--space-4);
 }
 .preview__description {
-  max-width: none;
   color: var(--color-text-secondary);
 }
 /* A fixed aspect ratio so the dialog does not jump between the skeleton, the

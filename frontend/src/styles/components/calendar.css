@@ -54,7 +54,6 @@
   align-items: center;
   justify-content: center;
   gap: var(--space-4);
-  max-width: none;
   /* The headline of the page — it is what a visitor came to read. */
   font-size: var(--font-size-lg);
   font-weight: 700;
@@ -80,6 +79,72 @@
    Three buttons, centred beneath the title. `اليوم` is the primary variant
    because it is the action most often wanted and the only one not reversible by
    pressing its opposite. */
+/* ── The calendar header ──────────────────────────────────────────────────────
+ *
+ * One row, three regions, and **the middle one is centred on the header rather
+ * than on what is left over**: `1fr auto 1fr` gives both side columns the same
+ * width whatever they contain, so the title sits on the centre line even though
+ * «السابق اليوم التالي» is three controls against the switch's two — and still
+ * does when the stepping disappears in the list view.
+ *
+ * A flex row was the obvious alternative and is the one that fails: with
+ * `space-between` the title lands wherever the unequal sides leave it, which
+ * reads as centred on exactly the screens where both groups happen to match.
+ *
+ * Source order is the RTL visual order — first column reads on the right — so no
+ * `direction` or `order` rule is needed anywhere in this block.
+ */
+.cal-header {
+  display: grid;
+  gap: var(--space-4);
+  margin-block-end: var(--space-5);
+}
+.cal-header__bar {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: var(--space-4);
+}
+.cal-header__start {
+  justify-self: start;
+}
+.cal-header__centre {
+  justify-self: center;
+  text-align: center;
+}
+.cal-header__end {
+  justify-self: end;
+}
+/* The filters are their own row: *where am I looking* and *what am I looking at*
+   are two questions, and they were competing for one line. */
+.cal-header__filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  align-items: end;
+}
+
+/* On a phone the three regions cannot share a line and stay usable, so the title
+   leads — it is the answer to *where am I* — and the two control groups share
+   the row below it. The regions keep their identity; only the arrangement
+   changes, which is what lets one component serve both. */
+@media (width < 48rem) {
+  .cal-header__bar {
+    grid-template-columns: 1fr 1fr;
+    row-gap: var(--space-3);
+  }
+  .cal-header__centre {
+    grid-column: 1 / -1;
+    grid-row: 1;
+  }
+  .cal-header__start {
+    grid-row: 2;
+  }
+  .cal-header__end {
+    grid-row: 2;
+  }
+}
+
 /* **The calendar's control system: one segmented group, used everywhere**
    (2026-08-18).
  *

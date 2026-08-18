@@ -954,6 +954,31 @@ Canonical: [`dialog.css`](../../frontend/src/styles/components/dialog.css).
 Bounded option lists inside a form (`select__options`) are **deliberate** nested
 scrollers and are not this defect — the rule is about the dialog's own shell.
 
+### And a closed dialog must consume no layout
+
+**The regression this rule caused, one day later, is part of the rule.**
+
+A native `<dialog>` is hidden by exactly one line in the user-agent stylesheet:
+`dialog:not([open]) { display: none }`. Author styles beat the UA stylesheet at
+every specificity, so the `display: flex` above — added to fix the scrolling —
+did not merely add a layout, it **removed the only thing hiding closed dialogs**.
+Every management screen keeps its add/edit dialog mounted, because a native
+dialog must be in the DOM to be openable, so all of them rendered permanently in
+normal flow underneath the table. The calendar's day dialog is `--wide`, which is
+why a `dialog dialog--wide` block appeared at the top of the public calendar.
+
+The pages that survived were the ones that mount their dialog **conditionally** —
+which is why the Owner's affected/unaffected lists split exactly along that line,
+and why both sets belong in the regression sweep: the second is the control that
+tells a real fix from a coincidence.
+
+So: **every `display` on `.dialog` is scoped to `[open]`**, and the hiding is
+stated explicitly in the author sheet rather than borrowed from the UA — the next
+person to add a `display` here sees the rule they would have to beat.
+Guarded twice, deliberately: `check-dialog-hidden-when-closed.sh` refuses the
+construct in CI where no browser runs, and `verify-dialog-states.mjs` measures
+the rendered geometry, which is the property.
+
 **Measured, never asserted from CSS.** The defect that produced this rule was the
 `<dialog>` overflowing by **2px** while its body overflowed by ~300; no
 stylesheet reading finds that. `verify-ux-slice.mjs` filters the elements that
@@ -1015,6 +1040,74 @@ answer it: the widest control measures **73px** where the minimum used to be
 120px, each group occupies one row at 1440px and at 390px, and the ring stays
 inside the clipping group.
 
+### AJ · One calendar header, and the title is centred on it
+
+The atoms were shared and the **arrangement** was not — which is where the two
+calendar surfaces had already diverged, with nothing duplicated for a duplication
+guard to catch. The public page put the title above a controls row; the back
+office put it beside the stepping inside `.cal-toolbar`, the *filters* container,
+with its view switch elsewhere on the page.
+
+    ┌──────────────────────────────────────────────────────────┐
+    │ [قائمة | تقويم]     صفر 1448 │ أغسطس 2026     [السابق | اليوم | التالي] │
+    ├──────────────────────────────────────────────────────────┤
+    │ filters (optional)                                        │
+    ├──────────────────────────────────────────────────────────┤
+    │ calendar / list                                           │
+    └──────────────────────────────────────────────────────────┘
+
+Canonical: [`calendar-header.tsx`](../../frontend/src/components/calendar/calendar-header.tsx).
+Source order **is** the RTL visual order, so no `direction` or `order` rule
+appears anywhere in the block.
+
+**The title is centred on the header, not in the space left over.** The row is a
+`1fr auto 1fr` grid: both side columns take the same width whatever they contain,
+so the middle sits on the header's centre line. A flex row with
+`space-between` — the obvious alternative — centres the title only when the two
+control groups happen to measure the same, and they never do: three controls
+against two, and the stepping disappears entirely in the list view. Measured at
+1440px, the drift is **0px** on both surfaces with side groups of 135px and
+207px; asserting `text-align: center` would have proved nothing, because a
+centred line inside an off-centre box is still off centre.
+
+**Shape follows the data, not a flag.** A surface with no month passes none, and
+the centre and the stepping are omitted together — the back office's list is a
+table of recurring schedules, and naming a month above it would assert a scope it
+does not have. A `showTitle` boolean would have been the opt-in that goes missing
+on the next surface ([AE](#ae--a-dependency-between-selectors-belongs-to-forms-not-to-filters)).
+
+**No date arithmetic moved.** The month names still come from the backend's
+bootstrap through `CalendarTitle` (§20 rule 14; R31, R36); the header decides
+position and nothing else.
+
+## AK · UI text is not prose, and does not take the prose measure
+
+`p { max-width: var(--measure) }` — 64ch — is right for a paragraph somebody
+reads and wrong for the short explanation under a table. It is declared on the
+**element**, so it reaches every `<p>` in the application: the reorder hint on
+المستويات wrapped its last word onto a line of its own with half the row empty
+beside it.
+
+The evidence that this bites repeatedly is that **six components had already
+patched it locally** with `max-width: none` — the dual title, the day dialog's
+date, the action message, the confirm body, the preview description, the mobile
+trigger — and a seventh had invented a *narrower* measure of its own (`52ch` on
+the panel hint). Each was a correct local fix for a defect that was never local.
+
+The exception now lives once, beside the rule it excepts, in
+[`tokens/layout.css`](../../frontend/src/styles/tokens/layout.css), and lists the
+families of UI text rather than adding a class each component must remember —
+because a behaviour every caller opts into is one that will be missing from the
+next component somebody writes.
+
+**This is not a licence to un-cap long copy.** Prose keeps `--measure`; the page
+description keeps the wider `--measure-lede`. The distinction is *does somebody
+read this as text*, not *is it short*.
+
+Measured, and **proved against the defect in the same page**: uncapped the note
+is one line of 648px in a 1105px table; with the prose cap restored on the same
+element it becomes two lines at 620px.
+
 ## The guards
 
 Rules that are not checked drift back. These are behavioural or registry-level,
@@ -1023,7 +1116,7 @@ system's internals, break on every restyle, and catch nothing.
 
 | Guard | What it pins |
 |---|---|
-| [`ui/atomic-components.test.tsx`](../../frontend/src/components/ui/atomic-components.test.tsx) | one Button (both class vocabularies, and no second system in CSS) · the `＋` convention, in code and in the catalogue · one table, with reasoned exceptions · one Level label · no engineering reference in a user-facing string · no data gate in the copy · no pass/fail on the sheet · no account creation on `المستخدمون`, **in code and in the catalogue** · **the dirty-state wiring, and that no form omits `dirty`** · **AH — one action message, and that it still announces politely** |
+| [`ui/atomic-components.test.tsx`](../../frontend/src/components/ui/atomic-components.test.tsx) | one Button (both class vocabularies, and no second system in CSS) · the `＋` convention, in code and in the catalogue · one table, with reasoned exceptions · one Level label · no engineering reference in a user-facing string · no data gate in the copy · no pass/fail on the sheet · no account creation on `المستخدمون`, **in code and in the catalogue** · **the dirty-state wiring, and that no form omits `dirty`** · **AH — one action message, and that it still announces politely** · **AJ — only the shared header composes the calendar atoms** |
 | [`i18n/resolves.test.ts`](../../frontend/src/i18n/resolves.test.ts) | **every literal `t()` key resolves** — and that `t()` still returns the key on a miss, which is the behaviour the guard exists to police |
 | [`lib/admin-modules.test.ts`](../../frontend/src/lib/admin-modules.test.ts) | §14.1's sitemap · R61's section rule · **the الإدارة curriculum order** · every label resolves |
 | [`lib/teacher-modules.test.ts`](../../frontend/src/lib/teacher-modules.test.ts) | the teaching nodes, their sections, and **no `/admin/*` path in her menu** |
@@ -1034,6 +1127,10 @@ system's internals, break on every restyle, and catch nothing.
 | [`pages/calendar.test.tsx`](../../frontend/src/pages/calendar.test.tsx) | **AI** — one segmented group, one emphasis, no call to action among the month controls |
 | [`enrollment.http.integration.test.ts`](../../backend/src/controllers/enrollment.http.integration.test.ts) | **AF/L** — a forged `level_id` or `branch_id` is refused *and changes nothing*; the group may still be set and cleared; ending one enrolment leaves the other and the beneficiary |
 | [`scripts/dev/browser/verify-ux-slice.mjs`](../../scripts/dev/browser/verify-ux-slice.mjs) | **AG/AI/W** as **rendered boxes** — scroll ownership at two viewports, control geometry on two calendars, sidebar `scrollTop` across a real navigation |
+| [`scripts/ci/check-dialog-hidden-when-closed.sh`](../../scripts/ci/check-dialog-hidden-when-closed.sh) | **AG** — no unconditional `display` on `.dialog`, and the explicit closed rule survives |
+| [`scripts/dev/browser/verify-dialog-states.mjs`](../../scripts/dev/browser/verify-dialog-states.mjs) | **AG** — closed/open/close/reopen on 15 pages from BOTH the affected and unaffected sets, plus page-flow impact and scroll ownership |
+| [`scripts/dev/browser/verify-calendar-header.mjs`](../../scripts/dev/browser/verify-calendar-header.mjs) | **AJ/AK** — region geometry at 1440px and 390px on both calendars, title drift from the header centre, and the table note against its table's width |
+| [`components/calendar/calendar-header.test.tsx`](../../frontend/src/components/calendar/calendar-header.test.tsx) | **AJ** — the three regions, and the shape following the data rather than a flag |
 | `grade.http.integration.test.ts` | a student reads published grades and **not drafts**, one student never reads another's, the projection carries no verdict |
 | `teaching-group.http.integration.test.ts` | the flat read grants nothing, every filter narrows, TD-10 pagination, Admin-only |
 

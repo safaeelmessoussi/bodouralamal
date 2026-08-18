@@ -313,10 +313,17 @@ check(
 await width(390, 780);
 await new Promise((r) => setTimeout(r, 600));
 const phone = await controls();
+/* **Restated 2026-08-18, not deleted.** This asserted that each group spans the
+   width on a phone, which was true while the groups were the page's own blocks.
+   They now sit in the shared header's two-column mobile row, side by side — the
+   arrangement the Owner asked for — so spanning is no longer the property. What
+   the check existed for is that a phone user can still HIT them and that the
+   group never wraps into a stack of loose buttons; that is what it asserts now,
+   with the tap target measured rather than assumed. */
 check(
-  '5h . on a phone the group spans the width and still does not wrap',
-  phone.every((g) => g.rows === 1 && g.w > 300),
-  JSON.stringify(phone.map((g) => ({ w: g.w, rows: g.rows }))),
+  '5h . on a phone each group stays one row with usable tap targets',
+  phone.every((g) => g.rows === 1 && g.kids.every((k) => k.h >= 40 && k.w >= 40)),
+  JSON.stringify(phone.map((g) => ({ w: g.w, rows: g.rows, kids: g.kids }))),
 );
 await width(1440);
 
