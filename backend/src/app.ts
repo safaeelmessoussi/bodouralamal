@@ -296,6 +296,9 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
   guarded.delete('/admin/family-links/:id', familyLinks.revoke(prisma));
   guarded.get('/admin/branches', branch.listBranches(prisma));
   guarded.post('/admin/branches', branch.createBranch(prisma));
+  // R76 — manual ordering as a contract. Declared BEFORE `/:id` so the literal
+  // `order` segment cannot be captured as a branch id.
+  guarded.patch('/admin/branches/order', branch.reorderBranches(prisma));
   guarded.patch('/admin/branches/:id', branch.updateBranch(prisma));
   guarded.delete('/admin/branches/:id', branch.deleteBranch(prisma));
   guarded.get('/admin/branches/:id/rooms', branch.listRooms(prisma));

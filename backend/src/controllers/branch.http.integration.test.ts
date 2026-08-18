@@ -240,3 +240,146 @@ describe('the routes are mounted and guarded (TD-2 Revision 26)', () => {
     expect(res.body.error?.code).toBe('VERSION_CONFLICT');
   });
 });
+
+/**
+ * **R76 — sorting and manual ordering, over real HTTP.**
+ *
+ * The two contracts are tested together here because they are two halves of one
+ * question: *what order is this collection in, and who decided it*.
+ */
+describe('R76 — list sorting is a contract, not a column name', () => {
+  it('preserves BR-19’s order when nothing is asked (R76.2)', async () => {
+    // This revision adds a capability and moves no default.
+    const res = await call('GET', '/admin/branches?page_size=100', superAdmin);
+    expect(res.status).toBe(200);
+    const ours = res.body.data!.filter((b) => String(b['name']).startsWith(TAG));
+    expect(ours.length).toBeGreaterThan(1);
+  });
+
+  it('sorts ascending and descending by an allowed field', async () => {
+    const asc = await call('GET', '/admin/branches?sort_by=name&sort_dir=asc&page_size=100', superAdmin);
+    const desc = await call('GET', '/admin/branches?sort_by=name&sort_dir=desc&page_size=100', superAdmin);
+    expect(asc.status).toBe(200);
+    expect(desc.status).toBe(200);
+    const names = (r: Res): string[] =>
+      r.body.data!.filter((b) => String(b['name']).startsWith(TAG)).map((b) => String(b['name']));
+    expect(names(desc)).toEqual([...names(asc)].reverse());
+  });
+
+  it('refuses an unknown field — a typo must not look like a working sort', async () => {
+    const res = await call('GET', '/admin/branches?sort_by=nope', superAdmin);
+    expect(res.status).toBe(400);
+    expect(res.body.error?.code).toBe('VALIDATION_FAILED');
+  });
+
+  it('refuses a database column name, which is not a contract field', async () => {
+    // The security property over the wire: `sort_by` names a field the endpoint
+    // promises, and there is no path from the query string to a column.
+    for (const injected of ['display_order', 'displayOrder', 'deleted_at']) {
+      const res = await call('GET', `/admin/branches?sort_by=${injected}`, superAdmin);
+      expect(res.status, injected).toBe(400);
+    }
+  });
+
+  it('refuses a direction that is neither asc nor desc, and one with no field', async () => {
+    expect((await call('GET', '/admin/branches?sort_by=name&sort_dir=up', superAdmin)).status).toBe(400);
+    expect((await call('GET', '/admin/branches?sort_dir=desc', superAdmin)).status).toBe(400);
+  });
+
+  it('keeps pagination deterministic across pages while sorted', async () => {
+    // R76.3 — the appended `id` tiebreaker. Without it a row sharing a sort value
+    // can appear on two pages or on neither.
+    const first = await call('GET', '/admin/branches?sort_by=name&page=1&page_size=2', superAdmin);
+    const second = await call('GET', '/admin/branches?sort_by=name&page=2&page_size=2', superAdmin);
+    const ids = (r: Res): string[] => r.body.data!.map((b) => String(b['id']));
+    expect(ids(first).some((id) => ids(second).includes(id))).toBe(false);
+  });
+});
+
+describe('R76 — reordering takes the sequence, not per-row numbers', () => {
+  const ids = async (): Promise<string[]> => {
+    const res = await call('GET', '/admin/branches?page_size=100', superAdmin);
+    return res.body.data!.map((b) => String(b['id']));
+  };
+
+  it('assigns contiguous 1..n from the sequence, and persists it', async () => {
+    const before = await ids();
+    const reversed = [...before].reverse();
+
+    const res = await call('PATCH', '/admin/branches/order', superAdmin, { ids: reversed });
+    expect(res.status).toBe(200);
+    // Returns the resulting order, so a client re-renders from the server rather
+    // than from its own optimistic guess.
+    expect((res.body.data as unknown as { ids: string[] }).ids).toEqual(reversed);
+
+    // R76.6 — contiguous and unique, never duplicated or gapped, because the
+    // positions came from a list rather than from the caller's arithmetic.
+    const rows = await prisma.branch.findMany({
+      where: { id: { in: reversed }, deletedAt: null },
+      select: { id: true, displayOrder: true },
+      orderBy: { displayOrder: 'asc' },
+    });
+    expect(rows.map((r) => r.displayOrder)).toEqual(rows.map((_, i) => i + 1));
+    expect(rows.map((r) => r.id)).toEqual(reversed);
+
+    // And a fresh read returns it — the order survives the request.
+    expect(await ids()).toEqual(reversed);
+  });
+
+  it('is idempotent — the same sequence twice is safe after a dropped response', async () => {
+    const order = await ids();
+    expect((await call('PATCH', '/admin/branches/order', superAdmin, { ids: order })).status).toBe(200);
+    expect((await call('PATCH', '/admin/branches/order', superAdmin, { ids: order })).status).toBe(200);
+    expect(await ids()).toEqual(order);
+  });
+
+  it('refuses a duplicate, a foreign id and a partial sequence — each by name', async () => {
+    const order = await ids();
+
+    const dup = await call('PATCH', '/admin/branches/order', superAdmin, {
+      ids: [order[0]!, order[0]!, ...order.slice(1)],
+    });
+    expect(dup.status).toBe(400);
+    expect(dup.body.error?.details?.['reason']).toBe('DUPLICATE_ID');
+
+    const foreign = await call('PATCH', '/admin/branches/order', superAdmin, {
+      ids: [...order.slice(1), '00000000-0000-4000-8000-000000000000'],
+    });
+    expect(foreign.status).toBe(400);
+    expect(foreign.body.error?.details?.['reason']).toBe('UNKNOWN_ID');
+
+    // A partial sequence cannot say where the omitted rows belong.
+    const partial = await call('PATCH', '/admin/branches/order', superAdmin, {
+      ids: order.slice(0, 1),
+    });
+    expect(partial.status).toBe(400);
+    expect(partial.body.error?.details?.['reason']).toBe('INCOMPLETE_ORDER');
+
+    // None of the refusals wrote anything.
+    expect(await ids()).toEqual(order);
+  });
+
+  it('refuses a malformed body, and a body carrying anything else', async () => {
+    expect((await call('PATCH', '/admin/branches/order', superAdmin, { ids: ['nope'] })).status).toBe(400);
+    // `.strict()` — a `version` here would propose a concurrency model this
+    // contract deliberately does not use.
+    const order = await ids();
+    expect(
+      (await call('PATCH', '/admin/branches/order', superAdmin, { ids: order, version: 1 })).status,
+    ).toBe(400);
+  });
+
+  it('inherits the resource’s write authority, and adds no TD-2 row', async () => {
+    // R76.5 — whoever may edit a Branch may reorder Branches; an Admin may not
+    // write reference data, and is refused here exactly as they are on `PATCH`.
+    const order = await ids();
+    expect((await call('PATCH', '/admin/branches/order', adminToken, { ids: order })).status).toBe(403);
+    expect((await call('PATCH', '/admin/branches/order', undefined, { ids: order })).status).toBe(401);
+  });
+
+  it('does not capture `order` as a branch id', async () => {
+    // The route is declared before `/:id`; this is what proves it.
+    const res = await call('PATCH', '/admin/branches/order', superAdmin, { ids: await ids() });
+    expect(res.status).not.toBe(404);
+  });
+});

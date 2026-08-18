@@ -1,5 +1,7 @@
 import type { Request, Response } from 'express';
 import { pageParamsFrom } from '../lib/pagination.js';
+import { sortParamsFrom } from '../lib/sorting.js';
+import { reorderSchema } from '../validators/reorder.validators.js';
 
 import type { PrismaClient } from '../generated/prisma/client.js';
 import { requireActor } from '../middleware/authenticate.js';
@@ -32,8 +34,28 @@ const id = (req: Request, key: string): string => idParam(req, key);
 
 export function listBranches(prisma: PrismaClient) {
   return async (req: Request, res: Response): Promise<void> => {
-    const result = await branches.listBranches(prisma, requireActor(req), pageParamsFrom(req.query));
+    const result = await branches.listBranches(prisma, requireActor(req), {
+      ...pageParamsFrom(req.query),
+      // R76 — refused here if it names a field the endpoint does not offer, so a
+      // query string never reaches a query builder.
+      ...sortParamsFrom(req.query),
+    });
     res.json(pageOf(result, branchDto));
+  };
+}
+
+/**
+ * `PATCH /admin/branches/order` — the branches, in the order given (R76.4).
+ *
+ * The body is the **sequence**; the server assigns positions from it. Returns the
+ * resulting order so a client re-renders from the server's answer rather than its
+ * own optimistic guess.
+ */
+export function reorderBranches(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const body = parse(reorderSchema, req.body ?? {});
+    const ids = await branches.reorderBranches(prisma, requireActor(req), body.ids);
+    res.json({ data: { ids } });
   };
 }
 

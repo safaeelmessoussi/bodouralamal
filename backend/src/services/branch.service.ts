@@ -4,6 +4,8 @@ import { teacherBranchIds } from '../policies/roster-resolution.js';
 import type { Actor } from '../policies/actor.js';
 import { AppError } from '../lib/errors.js';
 import { page, pageWindow, type Page, type PageParams } from '../lib/pagination.js';
+import { applyOrder } from '../lib/reorder.js';
+import { resolveSort, type SortableFields, type SortParams } from '../lib/sorting.js';
 import * as audit from '../repositories/audit.repository.js';
 import * as trash from '../repositories/trash.repository.js';
 import { assertNoBlockingReferences, updateWithVersion } from '../repositories/optimistic-lock.js';
@@ -112,10 +114,31 @@ function assertMaySetDisplayOrder(actor: Actor, data: { displayOrder?: number | 
  * correct Arabic order automatically because the column is natively collated
  * `ar-x-icu` (TD-6a). Never add a per-query COLLATE; fix the column instead.
  */
+/**
+ * **What `/admin/branches` may be sorted by** (R76.1).
+ *
+ * An allow-list of **contract names**, not columns: `sort_by=name` is a promise
+ * this endpoint makes, and anything outside this object is refused before it can
+ * reach a query. Adding a sortable column is adding an entry here, deliberately.
+ */
+export const BRANCH_SORT_FIELDS: SortableFields = {
+  name: (dir) => [{ name: dir }],
+  // The operational date, which is the other thing an administrator scans a
+  // branch list for. Nulls last either way: a branch with no recorded start is
+  // not "earliest".
+  operational_start_date: (dir) => [{ operationalStartDate: { sort: dir, nulls: 'last' } }],
+};
+
+/** BR-19's order — what an unparameterised list still receives (R76.2). */
+const BRANCH_DEFAULT_ORDER = [
+  { displayOrder: { sort: 'asc', nulls: 'last' } },
+  { name: 'asc' },
+];
+
 export async function listBranches(
   prisma: PrismaClient,
   actor: Actor,
-  params: PageParams = {},
+  params: PageParams & SortParams = {},
 ): Promise<Page<Branch>> {
   assertCanReadReferenceData(actor);
   // **Other branches' names are not shown** (Owner instruction, 2026-08-11).
@@ -130,9 +153,10 @@ export async function listBranches(
   const [rows, total] = await Promise.all([
     prisma.branch.findMany({
       where,
-      // TD-10: `display_order ASC NULLS LAST`, then `name` (correct Arabic order
-      // via the native collation), then `id` as the stable tiebreaker.
-      orderBy: [{ displayOrder: { sort: 'asc', nulls: 'last' } }, { name: 'asc' }, { id: 'asc' }],
+      // R76: the caller's sort if they asked for one, else BR-19's order — and
+      // `id` appended either way, because offset pagination with a non-unique
+      // sort puts a row on two pages or on neither.
+      orderBy: resolveSort(BRANCH_SORT_FIELDS, params, BRANCH_DEFAULT_ORDER) as never,
       skip: window.skip,
       take: window.take,
     }),
@@ -211,6 +235,59 @@ export async function createBranch(
 
     return branch;
   });
+}
+
+/**
+ * `PATCH /admin/branches/order` — **the branches, in the order given** (R76.4).
+ *
+ * ## Why it takes the sequence
+ *
+ * `{ ids: [...] }`, and `display_order` is assigned from each id's **position**.
+ * A per-row payload would make duplicate and gapped values something to validate
+ * against; a sequence makes them impossible.
+ *
+ * ## Why it must be the whole set
+ *
+ * A partial sequence cannot say where the omitted branches belong. Refused —
+ * naming which ids are duplicated, foreign or missing — rather than guessed.
+ *
+ * ## Authority
+ *
+ * `assertCanWriteReferenceData`, the **same check every other branch write
+ * performs** (R76.5 — reorder inherits the resource's write authority, and TD-2
+ * gains no row). **The scope is the caller's own visible set**, so a branch-scoped
+ * caller cannot reorder branches they may not see: `liveIds` reads through the
+ * same `visibleBranchIds` the list does, and the exact-set rule then refuses a
+ * sequence that names anything outside it.
+ */
+export async function reorderBranches(
+  prisma: PrismaClient,
+  actor: Actor,
+  ids: readonly string[],
+): Promise<string[]> {
+  assertCanWriteReferenceData(actor);
+  const visible = await visibleBranchIds(prisma, actor);
+
+  return applyOrder(
+    prisma,
+    {
+      liveIds: async (tx) => {
+        const rows = await tx.branch.findMany({
+          where: { deletedAt: null, ...(visible === null ? {} : { id: { in: visible } }) },
+          select: { id: true },
+        });
+        return rows.map((r) => r.id);
+      },
+      // No `version` bump and no Trash entry: R59's own test is that a
+      // *deletion* a person performed gets a snapshot, and TD-15's `version`
+      // answers "did this row change under me". A reorder is a statement about
+      // the collection, and treating it as N row edits would fill the audit with
+      // rows nobody edited.
+      write: (tx, id, displayOrder) =>
+        tx.branch.update({ where: { id }, data: { displayOrder } }),
+    },
+    ids,
+  );
 }
 
 export async function updateBranch(
