@@ -15,6 +15,7 @@ import { Button } from '../../components/ui/button.js';
 import { DataTable, type Column, type RowAction, type TableStatus } from '../../components/ui/data-table.js';
 import { Dialog } from '../../components/ui/dialog.js';
 import { DateField, TextField } from '../../components/ui/field.js';
+import { useActiveRole } from '../../contexts/active-role.js';
 import { useSession } from '../../contexts/session.js';
 import { t } from '../../i18n/index.js';
 import { formatDate } from '../../lib/format-date.js';
@@ -51,6 +52,17 @@ import { ApiError } from '../../lib/api.js';
  */
 export function ScheduleSessionsPage({ scheduleId }: { scheduleId: string }): ReactNode {
   const { accessToken } = useSession();
+  const { activeRoles } = useActiveRole();
+  /**
+   * **Who may attach materials to a class, may record for it** (R75.3): the
+   * recorder inherits the session's own link authority and TD-2 gains no row.
+   * The server is the authority either way — this only keeps a control off the
+   * screen of somebody it would refuse, which §14.2 asks for and which is not
+   * the enforcement.
+   */
+  const canWrite = activeRoles.some(
+    (r) => r === 'teacher' || r === 'admin' || r === 'super_admin',
+  );
 
   const [rows, setRows] = useState<ScheduleSession[]>([]);
   const [status, setStatus] = useState<TableStatus>('loading');
@@ -68,6 +80,9 @@ export function ScheduleSessionsPage({ scheduleId }: { scheduleId: string }): Re
     academicYearId: string;
     branchId: string | null;
   } | null>(null);
+  /** R75.6 — the class's own name and note, which a recording is named from.
+   *  They belong to the schedule, not to the occurrence. */
+  const [klass, setKlass] = useState<{ title: string; description: string | null } | null>(null);
 
   const load = useCallback(async () => {
     setStatus('loading');
@@ -92,11 +107,21 @@ export function ScheduleSessionsPage({ scheduleId }: { scheduleId: string }): Re
       const mine = page.data.find((row) => row.id === scheduleId);
       if (mine) {
         setScope({
-          levelId: mine.target_id,
+          /**
+           * **`level_id`, never `target_id`** (2026-08-18).
+           *
+           * This read `target_id`, which is the *Group* for an
+           * `administrative_group` class — so every upload and every recording
+           * made from a group-taught class's session was declaring a Group id
+           * as its `level_id`. §4.9 requires the Level, and the contract now
+           * resolves it whatever the mode names.
+           */
+          levelId: mine.level_id ?? '',
           subjectId: mine.subject_id,
           academicYearId: mine.academic_year_id,
           branchId: mine.branch_id,
         });
+        setKlass({ title: mine.title, description: mine.description });
       }
     })();
   }, [scheduleId, accessToken]);
@@ -274,7 +299,12 @@ export function ScheduleSessionsPage({ scheduleId }: { scheduleId: string }): Re
           // R75.6 — the default recording name is derived from the session it
           // belongs to: the class and the day it was held. A recording called
           // "تسجيل 4" tells a reader nothing a year later.
-          sessionName={sessionLabel(rows.find((r) => r.id === materialsFor))}
+          session={{
+            title: klass?.title ?? '',
+            description: klass?.description ?? null,
+            date: rows.find((r) => r.id === materialsFor)?.date ?? '',
+          }}
+          canRecord={canWrite}
           scope={scope}
           token={accessToken}
           onClose={() => setMaterialsFor(null)}
@@ -282,18 +312,6 @@ export function ScheduleSessionsPage({ scheduleId }: { scheduleId: string }): Re
       ) : null}
     </AdminLayout>
   );
-}
-
-/**
- * The name a recording of this occurrence gets by default (R75.6).
- *
- * The subject and the date, which is what a reader needs a year later — a file
- * called *تسجيل 4* answers nothing. It is a **default and never an invariant**:
- * nothing reads it back, and the ordinary content-edit flow changes it.
- */
-function sessionLabel(session: { subject_name?: string | null; date: string } | undefined): string {
-  if (session === undefined) return '';
-  return [session.subject_name, session.date].filter(Boolean).join(' — ');
 }
 
 /**

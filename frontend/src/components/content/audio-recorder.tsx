@@ -4,11 +4,14 @@ import { uploadFile, type UploadMeta } from '../../adapters/uploads.js';
 import { t } from '../../i18n/index.js';
 import {
   defaultRecordingName,
+  elapsedSeconds,
   extensionFor,
   formatElapsed,
   pickContainer,
+  recordingBaseName,
   RECORDER_OPTIONS,
   shouldGuardUnload,
+  type RecordedSpan,
 } from '../../lib/recorder.js';
 import { Button } from '../ui/button.js';
 import { TextField } from '../ui/field.js';
@@ -54,8 +57,9 @@ import { TextField } from '../ui/field.js';
 export interface AudioRecorderProps {
   meta: UploadMeta;
   token: string | null;
-  /** The session's own name and date, which R75.6 derives the default from. */
-  baseName: string;
+  /** R75.6's three sources for the default name: the class's own title and
+   *  note, and the date of the occurrence being recorded. */
+  session: { title: string; description: string | null; date: string };
   /** The titles already linked to this session — the suffix is chosen from
    *  these, so two concurrent saves cannot land on the same name (R75.6). */
   existingTitles: readonly string[];
@@ -68,13 +72,20 @@ type RecorderState = 'idle' | 'recording' | 'paused' | 'saving';
 export function AudioRecorder({
   meta,
   token,
-  baseName,
+  session,
   existingTitles,
   onSaved,
   onCancel,
 }: AudioRecorderProps): ReactNode {
   const [state, setState] = useState<RecorderState>('idle');
-  const [elapsed, setElapsed] = useState(0);
+  /**
+   * **The spans actually recorded**, not a tick count. `setInterval` is
+   * throttled in a background tab — the very case R75.7 warns about — so a
+   * counter understates a long recording by whatever the browser skipped.
+   */
+  const [spans, setSpans] = useState<RecordedSpan[]>([]);
+  const [now, setNow] = useState(() => Date.now());
+  const elapsed = elapsedSeconds(spans, now);
   const [error, setError] = useState<string | null>(null);
   const [percent, setPercent] = useState(0);
   const [title, setTitle] = useState('');
@@ -102,11 +113,11 @@ export function AudioRecorder({
 
   useEffect(() => () => releaseMicrophone(), [releaseMicrophone]);
 
-  // The clock. `paused` stops it, which is the honest reading of a stopwatch —
-  // and is also why it cannot be the file's duration (R75.5).
+  // The clock only asks *what time is it* — the reading itself is computed from
+  // the spans, so a skipped tick costs nothing but a late repaint.
   useEffect(() => {
     if (state !== 'recording') return undefined;
-    const id = window.setInterval(() => setElapsed((n) => n + 1), 1000);
+    const id = window.setInterval(() => setNow(Date.now()), 500);
     return () => window.clearInterval(id);
   }, [state]);
 
@@ -153,7 +164,8 @@ export function AudioRecorder({
       };
       recorderRef.current = recorder;
       recorder.start();
-      setElapsed(0);
+      setSpans([{ start: Date.now(), end: null }]);
+      setNow(Date.now());
       setState('recording');
     } catch {
       // Permission refused, or no microphone. Both are the person's to fix, and
@@ -163,9 +175,17 @@ export function AudioRecorder({
     }
   }
 
+  /** Closes the open span, whichever transition asked for it. */
+  function closeSpan(): void {
+    setSpans((current) =>
+      current.map((span) => (span.end === null ? { ...span, end: Date.now() } : span)),
+    );
+  }
+
   function stop(): void {
     recorderRef.current?.stop();
     recorderRef.current = null;
+    closeSpan();
     setState('idle');
   }
 
@@ -173,7 +193,10 @@ export function AudioRecorder({
     if (blob === null) return;
     setState('saving');
     setError(null);
-    const name = title.trim() === '' ? defaultRecordingName(baseName, existingTitles) : title.trim();
+    const name =
+      title.trim() === ''
+        ? defaultRecordingName(recordingBaseName(session), existingTitles)
+        : title.trim();
     // The extension follows the MIME the browser agreed to: the server checks
     // the declared type AND the magic bytes (TD-9), so a mismatched name is
     // rejected at `complete`, after the whole upload has been spent.
@@ -251,6 +274,7 @@ export function AudioRecorder({
               variant="secondary"
               onClick={() => {
                 recorderRef.current?.pause();
+                closeSpan();
                 setState('paused');
               }}
             >
@@ -267,6 +291,9 @@ export function AudioRecorder({
               variant="secondary"
               onClick={() => {
                 recorderRef.current?.resume();
+                // A NEW span: the gap between them is the pause, and excluding
+                // it is what makes the reading honest.
+                setSpans((current) => [...current, { start: Date.now(), end: null }]);
                 setState('recording');
               }}
             >
@@ -285,7 +312,7 @@ export function AudioRecorder({
             label={t('recorder.name')}
             value={title}
             onChange={setTitle}
-            placeholder={defaultRecordingName(baseName, existingTitles)}
+            placeholder={defaultRecordingName(recordingBaseName(session), existingTitles)}
             hint={t('recorder.nameHint')}
           />
           {state === 'saving' ? (
@@ -299,7 +326,7 @@ export function AudioRecorder({
               disabled={state === 'saving'}
               onClick={() => {
                 setBlob(null);
-                setElapsed(0);
+                setSpans([]);
               }}
             >
               {t('recorder.discard')}

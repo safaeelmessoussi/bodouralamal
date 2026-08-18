@@ -55,6 +55,34 @@ export function extensionFor(mimeType: string): string {
 }
 
 /**
+ * **The base name a recording is derived from** (R75.6).
+ *
+ * The specification names three sources — *its title, its description and its
+ * date* — and all three earn their place: the title says which class, the date
+ * says which occurrence, and the description is where a teacher writes what
+ * made this session different. A file called *تسجيل 4* answers none of those a
+ * year later.
+ *
+ * Absent parts are **omitted rather than left as empty separators**, and the
+ * description is reduced to its first line and bounded: it is free multiline
+ * text (§7), and a paragraph would produce a name no list can render.
+ */
+export function recordingBaseName(session: {
+  title: string;
+  description: string | null;
+  date: string;
+}): string {
+  const firstLine = (session.description ?? '').split('\n')[0]?.trim() ?? '';
+  const note = firstLine.length > DESCRIPTION_LIMIT
+    ? `${firstLine.slice(0, DESCRIPTION_LIMIT).trimEnd()}…`
+    : firstLine;
+  return [session.title.trim(), note, session.date].filter((part) => part !== '').join(' — ');
+}
+
+/** Long enough to identify a session, short enough to read in a list. */
+const DESCRIPTION_LIMIT = 40;
+
+/**
  * **The default name for a recording** (R75.6).
  *
  * The first carries no number; the second and subsequent are suffixed ` 2`,
@@ -77,6 +105,29 @@ export function defaultRecordingName(base: string, existingTitles: readonly stri
     if (!taken.has(candidate)) return candidate;
   }
   return `${trimmed} ${Date.now()}`;
+}
+
+/**
+ * **How long has been recorded, from timestamps rather than from ticks.**
+ *
+ * A counter incremented once a second drifts — `setInterval` is throttled in a
+ * background tab, which is precisely the situation R75.7 warns about — so a
+ * reading taken that way understates a long recording by however much the
+ * browser skipped. This sums the actual wall-clock spans instead: the closed
+ * segments, plus the open one when recording is in progress.
+ *
+ * It remains **UI only** (R75.5). Some containers write a duration that ignores
+ * paused time, so this is not the file's duration and nothing persists it;
+ * `EducationalContent` has no such column and gains none.
+ */
+export interface RecordedSpan {
+  start: number;
+  end: number | null;
+}
+
+export function elapsedSeconds(spans: readonly RecordedSpan[], now: number): number {
+  const total = spans.reduce((sum, span) => sum + ((span.end ?? now) - span.start), 0);
+  return Math.max(0, total) / 1000;
 }
 
 /**

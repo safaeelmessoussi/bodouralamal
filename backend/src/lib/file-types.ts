@@ -50,16 +50,35 @@ export const SIZE_CAPS = {
   document: 50 * MB,
 } as const;
 
+/**
+ * **The media type without its parameters** — `audio/webm;codecs=opus` is
+ * `audio/webm` with a parameter, not a different type (RFC 9110 §8.3).
+ *
+ * The whitelist compared the whole declared string, which is comparing the
+ * wrong thing: it refused **every recording the in-app recorder produces**,
+ * because `MediaRecorder` names its codec in the type it hands back and the blob
+ * carries that name verbatim. It would equally have refused a stray space or a
+ * `charset` a proxy appended.
+ *
+ * This **widens nothing** (§20 rule 16). No type joins TD-9's list; a
+ * parameterised spelling of a type already on it is simply read correctly, and
+ * the magic-byte check that turns a declaration into a fact is untouched.
+ */
+export function mimeEssence(mime: string): string {
+  return (mime.split(';')[0] ?? '').trim().toLowerCase();
+}
+
 export function isAcceptedMime(mime: string): mime is AcceptedMime {
+  const essence = mimeEssence(mime);
   return (
-    (AUDIO_MIME_TYPES as readonly string[]).includes(mime) ||
-    (DOCUMENT_MIME_TYPES as readonly string[]).includes(mime)
+    (AUDIO_MIME_TYPES as readonly string[]).includes(essence) ||
+    (DOCUMENT_MIME_TYPES as readonly string[]).includes(essence)
   );
 }
 
 /** The TD-9 cap that governs this type. */
 export function sizeCapFor(mime: AcceptedMime): number {
-  return (AUDIO_MIME_TYPES as readonly string[]).includes(mime)
+  return (AUDIO_MIME_TYPES as readonly string[]).includes(mimeEssence(mime))
     ? SIZE_CAPS.audio
     : SIZE_CAPS.document;
 }
@@ -134,7 +153,11 @@ const SIGNATURES: Record<AcceptedMime, Sniffer> = {
  * this is the only thing that turns it into a fact.
  */
 export function magicBytesMatch(mime: AcceptedMime, head: Buffer): boolean {
-  return SIGNATURES[mime](head);
+  // Keyed by essence for the same reason the whitelist is: the signature belongs
+  // to the container, and `audio/webm;codecs=opus` is the same container as
+  // `audio/webm`. Without this the lookup returns `undefined` and throws.
+  const check = SIGNATURES[mimeEssence(mime) as AcceptedMime];
+  return check !== undefined && check(head);
 }
 
 /* ── Storage keys (TD-9) ─────────────────────────────────────────────────── */

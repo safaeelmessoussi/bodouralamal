@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
+import { useSession } from '../contexts/session.js';
 
 import { fetchSessionPage, type SessionContentRef, type SessionPage } from '../adapters/calendar.js';
 import { ApplicationHeader } from '../components/header/application-header.js';
@@ -33,6 +34,7 @@ import { ApiError } from '../lib/api.js';
  * implies someone forgot to write any.
  */
 export function SessionPage(): ReactNode {
+  const { accessToken } = useSession();
   const id = window.location.pathname.split('/').pop() ?? '';
   const [page, setPage] = useState<SessionPage | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'missing' | 'error'>('loading');
@@ -40,7 +42,9 @@ export function SessionPage(): ReactNode {
   useEffect(() => {
     void (async () => {
       try {
-        setPage(await fetchSessionPage(id));
+        // The reader's own tier: a student sees a private recording of a class
+        // she is enrolled in, an anonymous visitor sees the public tier (§4.9).
+        setPage(await fetchSessionPage(id, accessToken));
         setState('ready');
       } catch (error) {
         // A 404 is a different fact from a failure, and §14.4 gives them
@@ -49,7 +53,7 @@ export function SessionPage(): ReactNode {
         setState(error instanceof ApiError && error.status === 404 ? 'missing' : 'error');
       }
     })();
-  }, [id]);
+  }, [id, accessToken]);
 
   return (
     <>

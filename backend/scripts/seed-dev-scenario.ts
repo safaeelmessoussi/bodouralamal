@@ -233,6 +233,15 @@ process.stdout.write(
       student,
       outsider,
       sessions: created,
+      // The occurrence the recorder harness attaches to: the earliest one, so a
+      // rerun addresses the same row rather than whichever came back first.
+      firstSessionId: (
+        await prisma.session.findFirstOrThrow({
+          where: { scheduleId: schedule.id, deletedAt: null },
+          orderBy: { date: 'asc' },
+          select: { id: true },
+        })
+      ).id,
     },
     null,
     0,

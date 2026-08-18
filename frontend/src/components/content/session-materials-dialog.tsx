@@ -31,9 +31,20 @@ import { FileUploader } from './file-uploader.js';
  */
 export interface SessionMaterialsProps {
   sessionId: string | null;
-  /** R75.6 derives a recording's default name from the session: its title and
-   *  its date, which the calling screen already holds. */
-  sessionName?: string;
+  /** R75.6's three sources for a recording's default name — the class's own
+   *  title and note, and the date of this occurrence. The calling screen holds
+   *  them; the session row itself carries none of them (it references a
+   *  schedule). */
+  session?: { title: string; description: string | null; date: string };
+  /**
+   * **Whether to offer the recorder at all** (R75.3).
+   *
+   * It inherits the session's own link authority — whoever may attach materials
+   * may record — and TD-2 gains no row. The server refuses either way; this
+   * keeps a control off the screen of somebody it would refuse (§14.2), which
+   * is a UX rule and never the enforcement.
+   */
+  canRecord?: boolean;
   /** The session's teaching scope, so an upload lands where the class is. */
   scope: { levelId: string; subjectId: string; academicYearId: string; branchId: string | null };
   token: string | null;
@@ -47,7 +58,8 @@ interface LibraryOption {
 
 export function SessionMaterialsDialog({
   sessionId,
-  sessionName = '',
+  session = { title: '', description: null, date: '' },
+  canRecord = false,
   scope,
   token,
   onClose,
@@ -63,7 +75,11 @@ export function SessionMaterialsDialog({
 
   const load = useCallback(async () => {
     if (!sessionId) return;
-    const page = await fetchSessionPage(sessionId);
+    // **With the token.** The Session page is public at the CALLER'S TIER, so
+    // an anonymous read returns the public tier only — and a recording just made
+    // is normally private. Without this the list a teacher was looking at could
+    // never show the recording she had just saved.
+    const page = await fetchSessionPage(sessionId, token);
     setLinked(page.linked_content);
     setRecordings(page.recordings);
     // The candidates are the library items in this session's own Level and
@@ -199,7 +215,7 @@ export function SessionMaterialsDialog({
           The recorder renders its own *not supported* state, so no condition
           lives here — a check in this file would be a second opinion about the
           browser, and the two would disagree the first time either changed. */}
-      {recording ? (
+      {!canRecord ? null : recording ? (
         <AudioRecorder
           meta={{
             level_id: scope.levelId,
@@ -208,7 +224,7 @@ export function SessionMaterialsDialog({
             branch_id: scope.branchId,
           }}
           token={token}
-          baseName={sessionName}
+          session={session}
           // R75.6 — the suffix is chosen from what is ALREADY LINKED, so two
           // people saving at once cannot land on the same name.
           existingTitles={[...linked, ...recordings].map((c) => c.title)}
@@ -224,6 +240,10 @@ export function SessionMaterialsDialog({
           onCancel={() => setRecording(false)}
         />
       ) : (
+        /* **«تسجيل صوتي», not «بدء التسجيل»** — this OPENS the recorder; the
+           recorder's own control starts it. Naming both the same put two
+           buttons with identical labels beside each other, which is ambiguous
+           to a reader and was ambiguous to the browser harness driving it. */
         <Button variant="secondary" onClick={() => setRecording(true)} disabled={busy || uploading}>
           {t('recorder.title')}
         </Button>

@@ -3,9 +3,11 @@ import { describe, expect, it } from 'vitest';
 import {
   CONTAINERS,
   defaultRecordingName,
+  elapsedSeconds,
   extensionFor,
   formatElapsed,
   pickContainer,
+  recordingBaseName,
   RECORDER_OPTIONS,
   shouldGuardUnload,
 } from './recorder.js';
@@ -140,5 +142,65 @@ describe('R75 — the copy keeps the phone-upload path visible', () => {
     ]) {
       expect(t(key), key).not.toEqual(key);
     }
+  });
+});
+
+describe('R75.6 — the base name is derived from all three sources', () => {
+  const session = {
+    title: 'حلقة التفسير',
+    description: 'مراجعة سورة البقرة',
+    date: '2026-08-24',
+  };
+
+  it('joins title, description and date, in that order', () => {
+    // The specification names three sources and each earns its place: which
+    // class, what made this occurrence different, and which occurrence.
+    expect(recordingBaseName(session)).toBe('حلقة التفسير — مراجعة سورة البقرة — 2026-08-24');
+  });
+
+  it('omits an absent description rather than leaving an empty separator', () => {
+    expect(recordingBaseName({ ...session, description: null })).toBe('حلقة التفسير — 2026-08-24');
+    expect(recordingBaseName({ ...session, description: '   ' })).toBe('حلقة التفسير — 2026-08-24');
+  });
+
+  it('takes only the first line, because a description is free multiline text (§7)', () => {
+    const multi = { ...session, description: 'السطر الأول\nالسطر الثاني' };
+    expect(recordingBaseName(multi)).toContain('السطر الأول');
+    expect(recordingBaseName(multi)).not.toContain('السطر الثاني');
+  });
+
+  it('bounds a long description, so the name stays readable in a list', () => {
+    const long = { ...session, description: 'ا'.repeat(200) };
+    const name = recordingBaseName(long);
+    expect(name).toContain('…');
+    expect(name.length).toBeLessThan(90);
+  });
+
+  it('feeds the suffix rule, so the second recording of a session is numbered', () => {
+    const base = recordingBaseName(session);
+    expect(defaultRecordingName(base, [])).toBe(base);
+    expect(defaultRecordingName(base, [base])).toBe(`${base} 2`);
+  });
+});
+
+describe('R75.5 — elapsed time is measured, not counted', () => {
+  it('sums the closed spans and the open one', () => {
+    // Recorded 0–10s, paused, resumed at 20s and still running at 25s.
+    expect(elapsedSeconds([{ start: 0, end: 10_000 }, { start: 20_000, end: null }], 25_000)).toBe(15);
+  });
+
+  it('excludes paused time entirely', () => {
+    // The whole point of spans: a ten-minute pause adds nothing.
+    expect(elapsedSeconds([{ start: 0, end: 5_000 }], 605_000)).toBe(5);
+  });
+
+  it('does not drift when the tab is throttled', () => {
+    // A per-second counter loses every tick the browser skips — exactly the
+    // background-tab case R75.7 warns about. A timestamp span cannot.
+    expect(elapsedSeconds([{ start: 0, end: null }], 3_600_000)).toBe(3600);
+  });
+
+  it('is zero before anything is recorded', () => {
+    expect(elapsedSeconds([], 1_000)).toBe(0);
   });
 });

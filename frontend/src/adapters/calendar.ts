@@ -260,6 +260,19 @@ export interface SessionPage {
  * details and **never its private recordings** (§5.2) — the server decides that,
  * not this call.
  */
-export async function fetchSessionPage(id: string): Promise<SessionPage> {
-  return api<SessionPage>(`/calendar/sessions/${id}`);
+/**
+ * The Session page (TD-3.4) — **public at the caller's TIER**, which is exactly
+ * why the token is not optional in practice.
+ *
+ * Read anonymously, it returns the public tier and nothing else. A recording a
+ * مؤطرة has just made is normally **private** (§4.9's consent gate and the
+ * per-Category default), so a caller that omitted its token saw the session page
+ * without the very content it had just attached — the materials dialog did, and
+ * a teacher's recording appeared to vanish the moment it was saved.
+ *
+ * Passing the token widens nothing: the server still resolves the tier from the
+ * caller's own roles, and an anonymous read still sees only the public tier.
+ */
+export async function fetchSessionPage(id: string, token?: string | null): Promise<SessionPage> {
+  return api<SessionPage>(`/calendar/sessions/${id}`, { token: token ?? null });
 }
