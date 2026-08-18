@@ -16,7 +16,8 @@ function code(source: string): string {
  * component. This project has paid for the alternative repeatedly — R69 spent a
  * whole revision removing entry points that unrelated screens had grown — and a
  * second grading implementation would diverge exactly where it matters: the
- * empty-versus-zero distinction, the /20 conversion, and BR-8's publish state.
+ * empty-versus-zero distinction, the exam's own maximum, and BR-8's publish
+ * state.
  */
 describe('both entry points render the shared sheet', () => {
   it('the admin page delegates rather than reimplementing', () => {
@@ -43,15 +44,16 @@ describe('both entry points render the shared sheet', () => {
  * neither is visible in a rendered snapshot.
  */
 describe('the sheet keeps empty distinguishable from zero', () => {
-  it('holds the mark as a string, so `` is a state `0` cannot represent', () => {
-    expect(code(SHEET)).toContain('mark: string');
+  it('holds the score as a string, so `` is a state `0` cannot represent', () => {
+    // Restated for R81's vocabulary; the property is the one it always was.
+    expect(code(SHEET)).toContain('score: string');
   });
 
   it('sends null — not 0 — for an unmarked student', () => {
     // BR-7 decides what becomes of an unmarked student at save time. Coercing
     // the blank field to 0 here would record a mark nobody entered and make the
     // absent-zero rule unobservable.
-    expect(code(SHEET)).toContain("draft.mark.trim() === '' ? null");
+    expect(code(SHEET)).toContain("draft.score.trim() === '' ? null");
   });
 
   /**
@@ -74,25 +76,44 @@ describe('the sheet keeps empty distinguishable from zero', () => {
     expect(code(SHEET)).not.toContain('admin.grades.failed');
   });
 
-  it('still surfaces a manual override, because provenance is not a verdict', () => {
-    // BR-12: a human decided this row, which a reader of the sheet needs to
-    // know. That is a fact about the RECORD, not a label on the student.
-    expect(code(SHEET)).toContain('manual_pass_fail_override');
-    expect(code(SHEET)).toContain('admin.grades.overridden');
+  /**
+   * **Restated a second time, and in the opposite direction — deliberately.**
+   *
+   * It asserted that the sheet still surfaces BR-12's manual override, on the
+   * reasoning that provenance is not a verdict. R81 retired the override
+   * itself: with no passing threshold there is nothing to override, and the
+   * columns went with the concept. So the guard now pins the *absence* of the
+   * whole apparatus, which is what the Owner decided.
+   *
+   * Kept rather than deleted because the risk it guards is unchanged: a future
+   * screen reintroducing a verdict, by any name.
+   */
+  it('carries no pass/fail apparatus at all — no override, no threshold', () => {
+    expect(code(SHEET)).not.toContain('manual_pass_fail_override');
+    expect(code(SHEET)).not.toContain('admin.grades.overridden');
+    expect(code(SHEET)).not.toContain('passing');
   });
 });
 
-describe('the scale conversion belongs to the server', () => {
-  it('reads `display_scale` from the sheet rather than hardcoding /20', () => {
-    // R14 fixed the association's scale at /20 and put it in `SystemSetting`;
-    // a literal 20 here would be a second source of truth for it.
-    expect(code(SHEET)).toContain('sheet.display_scale');
+describe('the maximum comes from the exam, and nothing is converted', () => {
+  /**
+   * **Restated, not deleted.** This asserted that the sheet reads
+   * `display_scale` from the server rather than hardcoding /20 — the property
+   * being *the client owns no scale of its own*. R81 moved the maximum onto the
+   * exam, so the same property is now that the sheet reads `max_grade` from the
+   * sheet it was given. A literal 20 here would be the same defect it always
+   * was.
+   */
+  it('reads the exam’s own maximum rather than hardcoding one', () => {
+    expect(code(SHEET)).toContain('sheet.max_grade');
+    expect(code(SHEET)).not.toContain('display_scale');
   });
 
-  it('never computes basis points for the wire', () => {
-    // R8: the round-half-up happens exactly once, at final persistence, on the
-    // server. A client-side conversion would be a second rounding rule
-    // deciding whether a student passed.
+  it('performs no arithmetic on a score at all', () => {
+    // R81 removed the conversion rather than moving it: what is typed is what
+    // is stored. `Math.round` or a division here would be a rounding rule the
+    // client had invented, which is how a mark stops reading back as itself.
     expect(code(SHEET)).not.toContain('Math.round');
+    expect(code(SHEET)).not.toContain('10_000');
   });
 });

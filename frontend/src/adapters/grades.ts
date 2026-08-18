@@ -1,27 +1,22 @@
 import { api } from '../lib/api.js';
 
 /**
- * Grade entry (§4.6, BR-7, BR-8, BR-12; SRS Revision 70).
+ * Grade entry (§4.6, BR-7, BR-8; SRS Revision 81).
  *
- * **Marks cross the wire on the association's /20 scale; storage is basis
- * points.** The conversion belongs to the server — Revision 8 requires the
- * round-half-up exactly once, at final persistence, and a client that converted
- * would be a second rounding site deciding whether somebody passed. The sheet
- * carries `display_scale` so the interface can render bp back to a mark without
- * knowing the rule.
+ * **A score is itself, out of its own exam's maximum.** No conversion crosses
+ * this boundary in either direction: the number typed is the number sent, stored
+ * and read back. The sheet carries the exam's `max_grade` because that is what
+ * «النقطة (من 20)» is built from, and there is no platform-wide scale to ask.
  */
 
 export interface GradeSheetRow {
   student_id: string;
   student_name: string;
-  /** `null` is **unmarked** — never `0`, which is a mark somebody entered. */
-  value_bp: number | null;
+  /** `null` is **unmarked** — never `0`, which is a score somebody entered. */
+  score: number | null;
   absent: boolean;
   status: 'draft' | 'published';
-  manual_pass_fail_override: boolean | null;
-  override_reason: string | null;
   version: number | null;
-  passed: boolean | null;
 }
 
 export interface GradeSheet {
@@ -40,8 +35,8 @@ export interface GradeSheet {
     /** Derived by the server from `created_at > date` — no column exists. */
     recorded_late: boolean;
   };
-  display_scale: number;
-  passing_grade_bp: number;
+  /** What every score on this sheet is out of (R81). */
+  max_grade: number;
   has_published: boolean;
   rows: GradeSheetRow[];
 }
@@ -49,7 +44,7 @@ export interface GradeSheet {
 export interface GradeEntryInput {
   student_id: string;
   /** `null` leaves the student unmarked; BR-7 makes them absent-zero on save. */
-  mark: number | null;
+  score: number | null;
   absent: boolean;
   version?: number;
 }
@@ -83,20 +78,6 @@ export async function publishGrades(
   return body.data;
 }
 
-/** BR-12 — `value: null` clears the override and restores the computed result. */
-export async function overridePassFail(
-  examId: string,
-  studentId: string,
-  input: { value: boolean | null; reason?: string; version: number },
-  token: string | null,
-): Promise<void> {
-  await api<void>(`/exams/${examId}/grades/${studentId}/override`, {
-    method: 'POST',
-    token,
-    body: input,
-  });
-}
-
 /**
  * `GET /students/me/grades` — **a مستفيدة's own published grades** (§5.3).
  *
@@ -110,9 +91,9 @@ export async function overridePassFail(
  *
  * ## What the row deliberately does not carry
  *
- * **No pass/fail.** The staff sheet keeps it — BR-8's publication states and
- * BR-12's override are untouched in the model — but this screen reports what she
- * scored, not a verdict about her (Owner decision, 2026-08-17).
+ * **No pass/fail — anywhere.** R81 retired the passing threshold, the computed
+ * verdict and BR-12's manual override together: a grade is a grade, and nothing
+ * in the platform labels a person from one.
  *
  * **No draft.** Not hidden here: absent from the server's query.
  */
@@ -122,18 +103,20 @@ export interface PublishedGrade {
   date: string;
   level_name: string;
   subject_name: string | null;
-  /** Already on the display scale — the server converted from basis points. */
-  mark: number;
+  /** The score she was given. */
+  score: number;
+  /** What it was out of — **per row**, because each exam sets its own (R81). */
+  max_grade: number;
   absent: boolean;
 }
 
 export async function fetchMyGrades(
   token: string | null,
   activeChildId: string | null,
-): Promise<{ rows: PublishedGrade[]; displayScale: number }> {
-  const body = await api<{ data: PublishedGrade[]; meta: { display_scale: number } }>(
-    '/students/me/grades',
-    { token, activeChildId },
-  );
-  return { rows: body.data, displayScale: body.meta.display_scale };
+): Promise<PublishedGrade[]> {
+  const body = await api<{ data: PublishedGrade[] }>('/students/me/grades', {
+    token,
+    activeChildId,
+  });
+  return body.data;
 }

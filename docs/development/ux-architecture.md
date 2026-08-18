@@ -904,10 +904,18 @@ product**, exactly as `legal.consent_text_version` was before R42.
 exists somewhere unreachable.** The recurring shape in **P** has a settings twin:
 a value the specification already places, with no surface to change it.
 
-**And check whether the SRS has already refused the shape being asked for.** A
-*per-exam* maximum mark is not this: R58 rejected it in terms — *"a second answer
-to what `grading.display_scale` already owns"* — so the question *"is this exam
-out of 10 or 20"* is platform-wide by decision, not by omission.
+**And check whether the SRS has already refused the shape being asked for** —
+*and then check whether that refusal still stands.* This paragraph used to end
+here, citing R58's rejection of a *per-exam* maximum mark — *"a second answer to
+what `grading.display_scale` already owns"* — as proof that *"is this exam out of
+10 or 20"* was platform-wide **by decision, not by omission**. That was true when
+it was written and is **false now**: R81 retired the global scale, and with it the
+only thing the per-exam maximum could have been a second answer to.
+
+The lesson survives the example, and is worth more than it was. A recorded
+refusal is a **reason**, not a verdict: read what it depended on, because a
+decision resting on something the Owner has since removed is not a decision any
+more. Cite the clause, check its premise, and say which you found.
 
 
 ---

@@ -97,6 +97,8 @@ export interface ExamStaffInput {
 
 export interface PhysicalExamInput {
   title: string;
+  /** R81 — required at creation: an exam with no maximum cannot be marked. */
+  maxGrade: number;
   description?: string | null;
   date: Date;
   startTime: Date;
@@ -201,6 +203,7 @@ export async function createPhysicalExam(
       data: {
         mode: 'physical',
         title: input.title,
+        maxGrade: input.maxGrade,
         description: input.description ?? null,
         date: input.date,
         startTime: input.startTime,
@@ -297,6 +300,27 @@ export async function updatePhysicalExam(
   }
 
   await prisma.$transaction(async (tx) => {
+    /**
+     * **Lowering the maximum below a mark already recorded is refused, not
+     * clamped** (R81).
+     *
+     * A grade of 18 on an exam whose maximum becomes 10 is not *18 capped to
+     * 10* — nobody knows what it is, and silently rewriting a child's mark to
+     * make a form succeed is the one outcome that must not happen. The edit
+     * fails, naming how many rows disagree, and the person decides.
+     */
+    if (input.maxGrade !== undefined) {
+      const above = await tx.grade.count({
+        where: { examId: id, score: { gt: input.maxGrade } },
+      });
+      if (above > 0) {
+        throw new AppError('VALIDATION_FAILED', 'grades already recorded exceed that maximum', {
+          reason: 'GRADES_EXCEED_MAX_GRADE',
+          grades_above_maximum: above,
+        });
+      }
+    }
+
     // **Every editable field is listed here or it is silently dropped.** R57
     // found exactly that shape: a validator accepting a key while the update
     // omitted it answers `200 OK`, bumps the version, and changes nothing.
@@ -304,6 +328,11 @@ export async function updatePhysicalExam(
       where: { id },
       data: {
         ...(input.title === undefined ? {} : { title: input.title }),
+        // **Editable, and deliberately so.** A maximum typed wrongly at
+        // creation would otherwise strand every score on that exam; the service
+        // then re-checks the grades already recorded against the new maximum
+        // rather than leaving one above it (see `assertGradesFitMaxGrade`).
+        ...(input.maxGrade === undefined ? {} : { maxGrade: input.maxGrade }),
         ...(input.description === undefined ? {} : { description: input.description }),
         ...(input.date === undefined ? {} : { date: input.date }),
         ...(input.startTime === undefined ? {} : { startTime: input.startTime }),

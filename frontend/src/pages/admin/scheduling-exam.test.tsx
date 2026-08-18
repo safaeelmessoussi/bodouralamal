@@ -25,6 +25,8 @@ const WIRE: Exam = {
   id: '00000000-0000-4000-8000-0000000000e1',
   mode: 'physical',
   title: 'امتحان الفصل الأول',
+  // R81 — the exam's own maximum; there is no platform scale to inherit one.
+  max_grade: 20,
   description: 'تفتح القاعة قبل ربع ساعة',
   date: '2026-09-14',
   start_time: '09:00',

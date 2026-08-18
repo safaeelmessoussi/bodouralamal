@@ -483,7 +483,6 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
   guarded.get('/exams/:id/grades', grades.sheet(prisma));
   guarded.put('/exams/:id/grades', grades.save(prisma));
   guarded.post('/exams/:id/grades/publish', grades.publish(prisma));
-  guarded.post('/exams/:id/grades/:studentId/override', grades.override(prisma));
 
   // §5.3 — **the student's own published grades.** TD-3.3 already names *grades*
   // among the student-context reads resolved per §4.3, and `/students/me/quran`

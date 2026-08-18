@@ -530,6 +530,9 @@ export function SchedulingDialog({
   );
   // An exam already saved is physical: `online` cannot be stored (§4.6, R58).
   const [examMode, setExamMode] = useState<'physical' | 'online'>('physical');
+  /** R81 — the exam's own maximum grade. A string while it is being typed; the
+   *  form has no default to offer, because there is no platform scale left. */
+  const [examMaxGrade, setExamMaxGrade] = useState('');
   const [supervisorId, setSupervisorId] = useState(
     item?.ids.staff.find((x) => x.position === 'supervisor')?.user_id ?? '',
   );
@@ -761,6 +764,9 @@ export function SchedulingDialog({
           // `null` is the whole Level sitting together (R58), not a gap.
           examGroupId: scope.value.groupId || null,
           examStaff: examStaffOf(supervisorId, assistantIds),
+          // R81 — required by the server on create; sent as a number so the
+          // contract carries a grade maximum, not a form string.
+          examMaxGrade: examMaxGrade.trim() === '' ? null : Number(examMaxGrade),
           // R71 — sent only when this caller may set it; the server refuses
           // otherwise, and sending it anyway would turn an ordinary save into
           // a refusal for a مؤطرة editing her own event.
@@ -876,6 +882,8 @@ export function SchedulingDialog({
             onSupervisor={setSupervisorId}
             assistantIds={assistantIds}
             onAssistants={setAssistantIds}
+            maxGrade={examMaxGrade}
+            onMaxGrade={setExamMaxGrade}
           />
         ) : (
           <ActivitySection

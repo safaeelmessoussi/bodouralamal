@@ -392,6 +392,9 @@ export interface SchedulingInput {
   /** `null` is the whole Level, never "no target". */
   examGroupId?: string | null;
   examStaff?: { user_id: string; position: 'supervisor' | 'assistant' }[];
+  /** R81 — the exam's own maximum grade. `null` only while the form is empty;
+   *  the server requires it on create and refuses the request without it. */
+  examMaxGrade?: number | null;
 
   /** Class only (§4.4c). */
   subjectId?: string;
@@ -490,6 +493,9 @@ export async function saveSchedulingItem(
           ...(input.roomId ? { room_id: input.roomId } : {}),
           administrative_group_id: input.examGroupId ?? null,
           ...(input.examStaff ? { staff: input.examStaff } : {}),
+          // Editable after creation, unlike the identity fields: the server
+          // refuses a maximum below a mark already recorded (R81).
+          ...(input.examMaxGrade == null ? {} : { max_grade: input.examMaxGrade }),
         },
         token,
       );
@@ -512,6 +518,7 @@ export async function saveSchedulingItem(
         room_id: input.roomId!,
         administrative_group_id: input.examGroupId ?? null,
         ...(input.examStaff ? { staff: input.examStaff } : {}),
+        max_grade: input.examMaxGrade!,
       },
       token,
     );

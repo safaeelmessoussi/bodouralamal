@@ -182,8 +182,12 @@ export function DateField(props: BaseProps): ReactNode {
 export function NumberField({
   min,
   max,
+  /** The increment the value moves in — and, with it, the precision the browser
+   *  will accept. R81's grades store two decimals, so a finer step would be
+   *  rounded on the way in and read back as a different number. */
+  step,
   ...props
-}: BaseProps & { min?: number; max?: number }): ReactNode {
+}: BaseProps & { min?: number; max?: number; step?: number | string }): ReactNode {
   return (
     <FieldShell {...props}>
       {({ id, describedBy }) => (
@@ -194,6 +198,7 @@ export function NumberField({
           value={props.value}
           min={min}
           max={max}
+          {...(step === undefined ? {} : { step })}
           required={props.required ?? false}
           disabled={props.disabled ?? false}
           aria-invalid={props.error ? true : undefined}

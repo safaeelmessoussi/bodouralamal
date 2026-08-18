@@ -555,6 +555,9 @@ async function main(): Promise<void> {
       data: {
         title: examTitle,
         levelId: levels[0]!.id,
+        // R81 — every exam states what its marks are out of; there is no
+        // platform-wide scale left to inherit one from.
+        maxGrade: 20,
         date: daysAgo(7),
         accessPolicy: ExamAccessPolicy.save_and_resume,
         // Every question carries an immutable auto-generated UUID; submissions

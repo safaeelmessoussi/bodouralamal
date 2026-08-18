@@ -3,7 +3,6 @@ import { AppError } from '../lib/errors.js';
 import type { Actor } from '../policies/actor.js';
 import { assertFreshActive } from '../policies/freshness.policy.js';
 import * as audit from '../repositories/audit.repository.js';
-import { DISPLAY_SCALE_KEY, PASSING_GRADE_BP_KEY } from '../policies/grading.js';
 import { CONSENT_TEXT_VERSION_KEY } from './registration.service.js';
 
 /**
@@ -91,70 +90,17 @@ export const WRITABLE_SETTINGS: WritableSetting[] = [
     },
   },
 
-  /**
-   * **The grading scale, exposed rather than invented** (2026-08-17).
-   *
-   * §7 describes `SystemSetting` as *"application-level, **runtime-editable**"*
-   * and names *"the grading scale and passing-grade defaults"* among its
-   * contents; R14 fixes the association's values at `/20` and `5000` bp and
-   * places them **in `SystemSetting` only**, explicitly so that neither `Level`
-   * nor `Category` carries a column for them. The rows have been seeded since
-   * §15.1 and were reachable by **nothing in the product** — the same shape of
-   * gap as `legal.consent_text_version`, which is why this list exists at all.
-   *
-   * **A per-exam maximum mark is NOT this, and R58 already refused it**: *"a
-   * second answer to what `grading.display_scale` already owns"*, deliberately
-   * not added to `Exam`. So *"is this exam out of 10 or 20"* is a platform
-   * question, and this is where it is answered.
-   *
-   * **Changing the scale re-reads every stored grade, and does not rewrite one.**
-   * Grades are basis points of the exam total (§4.6) — that is exactly why R8
-   * stores them that way — so 7500 bp reads as 15/20 or 7.5/10 with no migration
-   * and no data loss. The hint says so, because a Super Admin changing this is
-   * changing how past marks are *displayed*.
-   *
-   * **`grading.passing_grade_bp` is basis points and is NOT rescaled with it.**
-   * It is 50% of the exam total either way; a scale change does not move the pass
-   * mark, and coupling them here would be inventing a rule R14 does not state.
-   *
-   * §7 also specifies **per-level overrides** as `SystemSetting` rows keyed per
-   * level. Those are not built — `readGradingScale` reads the two global keys —
-   * and that gap is recorded rather than half-implemented here.
-   */
-  {
-    key: DISPLAY_SCALE_KEY,
-    labelKey: 'admin.settings.displayScaleLabel',
-    hintKey: 'admin.settings.displayScaleHint',
-    kind: 'integer',
-    validate: (value) => integerSetting(value, 'display scale', 1, 100),
-  },
-  {
-    key: PASSING_GRADE_BP_KEY,
-    labelKey: 'admin.settings.passingGradeLabel',
-    hintKey: 'admin.settings.passingGradeHint',
-    kind: 'integer',
-    // 0–10,000 is the whole basis-point range (§20 rule 3 — integers only).
-    validate: (value) => integerSetting(value, 'passing grade', 0, 10_000),
-  },
 ];
 
 /**
- * An integer setting, refused rather than coerced.
+ * **`integerSetting` lived here and went with R81** (2026-08-19).
  *
- * Accepts a number or a numeric string, because a form sends the latter — but
- * **refuses a fraction**: §20 rule 3 requires scoring to stay integer-only end to
- * end, and a scale of `20.5` or a pass mark of `5000.5` would put a rounding
- * decision somewhere nobody chose.
+ * It validated the two grading rows — the only integer settings there were — and
+ * the Owner retired both. `kind: 'integer'` **stays** in the contract below: it
+ * is a published field the settings screen renders on, and narrowing a contract
+ * to remove an unused branch buys nothing while costing a client change. The
+ * next integer setting brings its own validator back.
  */
-function integerSetting(value: unknown, what: string, min: number, max: number): number {
-  const n = typeof value === 'number' ? value : Number(String(value).trim());
-  if (!Number.isInteger(n) || n < min || n > max) {
-    throw new AppError('VALIDATION_FAILED', `${what} must be an integer between ${min} and ${max}`, {
-      issues: [{ path: 'value', message: `expected an integer between ${min} and ${max}` }],
-    });
-  }
-  return n;
-}
 
 export interface SettingRow {
   key: string;

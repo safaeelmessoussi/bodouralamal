@@ -41,6 +41,7 @@ export function create(prisma: PrismaClient) {
 
     const result = await createPhysicalExam(prisma, requireActor(req), {
       title: b.title,
+      maxGrade: b.max_grade,
       ...(b.description !== undefined ? { description: b.description } : {}),
       date: b.date,
       startTime: b.start_time,
@@ -70,6 +71,10 @@ export function update(prisma: PrismaClient) {
       ...(b.start_time !== undefined ? { startTime: b.start_time } : {}),
       ...(b.end_time !== undefined ? { endTime: b.end_time } : {}),
       ...(b.room_id !== undefined ? { roomId: b.room_id } : {}),
+      // **R57's shape, caught here by its own test.** A validator that accepts a
+      // key the update never maps answers 204, bumps the version and changes
+      // nothing — which is what this line was missing for one commit.
+      ...(b.max_grade !== undefined ? { maxGrade: b.max_grade } : {}),
       ...(b.administrative_group_id !== undefined
         ? { administrativeGroupId: b.administrative_group_id }
         : {}),

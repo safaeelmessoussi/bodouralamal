@@ -2,7 +2,14 @@
 
 # Exams / Assessments — current-state audit and proposed model
 
-**Status: proposal awaiting Document Owner review. Nothing implemented.**
+**Status: implemented, and its grading half SUPERSEDED by SRS Revision 81
+(2026-08-19).** The exam model and grade entry shipped with R58 and R70. Every
+statement below about `grading.display_scale`, `grading.passing_grade_bp`,
+basis-point storage and pass/fail describes **the model as it was**: the maximum
+grade is now a required column on `Exam`, scores are stored as `NUMERIC(6,2)` on
+that scale, and the MVP derives no pass/fail at all. The document is kept as the
+record of the analysis that led there — see §4.6 and Revision 81 in the SRS for
+what is in force.
 
 Requested before M4 (Quran Progress): audit the platform for an assessment
 capability, then propose the smallest coherent model for in-school exams with

@@ -1754,6 +1754,14 @@ model Exam {
 
   accessPolicy ExamAccessPolicy @default(save_and_resume) @map("access_policy")
 
+  /// R81 — **the maximum grade belongs to the exam**, and nothing else defines
+  /// one. R58 refused this field as *"a second answer to what
+  /// `grading.display_scale` already owns"*; the Owner retired that global
+  /// scale, so the second answer became the only one. NUMERIC, not basis
+  /// points: with a per-exam maximum there is nothing to normalise against, and
+  /// exact decimal has no rounding site at all.
+  maxGrade Decimal @map("max_grade") @db.Decimal(6, 2)
+
   questions Json @db.JsonB
 
   isPublished Boolean   @default(false) @map("is_published")
@@ -1817,20 +1825,16 @@ model Grade {
   administrativeGroupId String?              @map("administrative_group_id") @db.Uuid
   administrativeGroup   AdministrativeGroup? @relation(fields: [administrativeGroupId], references: [id], onDelete: Restrict)
 
-  /// Integer basis points of the exam total, 0–10,000 (CHECK in SQL).
-  valueBp Int         @map("value_bp")
-  status  GradeStatus @default(draft)
+  /// R81 — **the score itself**, on the exam's own scale: 15 of an exam whose
+  /// `max_grade` is 20. Bounded by that maximum in the service, because a CHECK
+  /// cannot reach another table.
+  score  Decimal     @db.Decimal(6, 2)
+  status GradeStatus @default(draft)
 
   /// BR-7: an enrolled student with no submission gets 0 flagged absent, and
   /// the row is initialized at the teacher's FIRST draft save so draft
   /// averages are never inflated by omission (§4.6).
   absent Boolean @default(false)
-
-  /// BR-12: a manual override always wins over computed results.
-  manualPassFailOverride Boolean?  @map("manual_pass_fail_override")
-  overrideById           String?   @map("override_by") @db.Uuid
-  overrideAt             DateTime? @map("override_at") @db.Timestamptz(6)
-  overrideReason         String?   @map("override_reason") @db.VarChar(500)
 
   /// TD-15: concurrent co-teacher scoring vs admin override must not clobber.
   version Int @default(0)

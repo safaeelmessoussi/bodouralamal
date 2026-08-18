@@ -6542,10 +6542,10 @@
     "/exams/{id}/grades": {
       "get": {
         "summary": "The grade sheet for one exam",
-        "description": "§4.6, TD-3.6 (R70) — every student in the exam's audience with their current mark, absence flag and TD-15 version. The **grading scale travels with the rows** because it is SystemSetting data (R14) and not a constant a client may assume: §4.6 refused a per-exam scale in terms (R58). Staff only, scoped to the exam's own teaching (§4.4c).",
+        "description": "§4.6, TD-3.6 (R70, R81) — every student in the exam's audience with their current score, absence flag and TD-15 version. **max_grade travels with the sheet** because it is the exam's own (R81): the platform-wide grading.display_scale is retired, so «النقطة (من 20)» is built from the exam in hand rather than from a setting. Staff only, scoped to the exam's own teaching (§4.4c).",
         "responses": {
           "200": {
-            "description": "The sheet: the audience, their marks and the scale."
+            "description": "The sheet: the audience, their scores and the exam’s maximum."
           },
           "401": {
             "description": "Error envelope (TD-3.8).",
@@ -6591,13 +6591,13 @@
       },
       "put": {
         "summary": "Save the grade sheet as a draft",
-        "description": "§4.6, TD-3.6 (R70). **The /20 ↔ basis-point conversion happens here and nowhere else on the write path**: Revision 8 requires the round-half-up exactly once, at final persistence, so the service deals only in the integers §20 rule 3 mandates and no client owns a rounding rule that decides whether somebody passed. **mark: null stays null all the way in** — it means *unmarked*, and turning it into 0 would erase the distinction BR-7 depends on. Per-row TD-15 version, so a stale row is refused rather than overwriting a colleague's entry. Saving a draft publishes nothing.",
+        "description": "§4.6, TD-3.6 (R70, R81). **A score is stored as itself**, on the exam's own scale: no conversion happens in either direction, so what was entered is what is read back. **The bound is this exam's max_grade and the SERVER applies it** — a forged request never opens the form, so a score above the maximum is refused here with SCORE_OUT_OF_RANGE naming the maximum. **score: null stays null all the way in** — it means *unmarked*, and turning it into 0 would erase the distinction BR-7 depends on. Per-row TD-15 version, so a stale row is refused rather than overwriting a colleague's entry. Saving a draft publishes nothing.",
         "responses": {
           "200": {
             "description": "What was written, per row."
           },
           "400": {
-            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a mark outside the scale, or both a mark and an absence.",
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a score above this exam’s maximum, more than two decimals, or both a score and an absence.",
             "content": {
               "application/json": {
                 "schema": {
@@ -6720,84 +6720,13 @@
         }
       }
     },
-    "/exams/{id}/grades/{studentId}/override": {
-      "post": {
-        "summary": "Override one student’s pass/fail verdict",
-        "description": "§4.6, BR-12, TD-3.6 (R70). The verdict is normally derived from the mark and the threshold; this records a **human decision to differ**, with its reason, and the reason is what makes it auditable rather than arbitrary. TD-15 version on the row it overrides. It changes the verdict and **never the mark** — rewriting the mark to force a verdict would destroy the evidence the override exists to sit beside.",
-        "responses": {
-          "204": {
-            "description": "Recorded; no body."
-          },
-          "400": {
-            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a missing reason or an unknown verdict.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "Error envelope (TD-3.8).",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Error envelope (TD-3.8).",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Error envelope (TD-3.8). NOT_FOUND for an exam or student outside the caller’s scope.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Error envelope (TD-3.8). VERSION_CONFLICT when the row changed under the caller.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/students/me/grades": {
       "get": {
         "summary": "The acting student’s published grades",
-        "description": "§5.3 (R63.3) — **published only**; a draft sheet is a teacher's working document and is not a grade a family has been given. me resolves exactly as GET /students/me and GET /students/me/quran do: the JWT sub, or an approved FamilyLink child named by X-Active-Child-ID (§4.3). **requireActor is deliberately not called** — the endpoint takes no actor-scoped decision because the request carries no identifier for a caller to have chosen, and that absence is the TD-12 property. The scale travels with the rows for the same reason it does on the sheet: it is SystemSetting data (R14). Unlisted in TD-3's seed, shipping under TD-3.3's clause.",
+        "description": "§5.3 (R63.3) — **published only**; a draft sheet is a teacher's working document and is not a grade a family has been given. me resolves exactly as GET /students/me and GET /students/me/quran do: the JWT sub, or an approved FamilyLink child named by X-Active-Child-ID (§4.3). **requireActor is deliberately not called** — the endpoint takes no actor-scoped decision because the request carries no identifier for a caller to have chosen, and that absence is the TD-12 property. **Each row carries its own max_grade** (R81): exams no longer share a scale, so 15 / 20 and 8 / 10 sit beside each other in one list. **No verdict of any kind** — the passing threshold, the computed pass/fail and BR-12's manual override are all retired, so a grade is a grade. Unlisted in TD-3's seed, shipping under TD-3.3's clause.",
         "responses": {
           "200": {
-            "description": "The acting student’s published grades, with the scale."
+            "description": "The acting student’s published grades, each with its exam’s maximum."
           },
           "400": {
             "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a parent with no child named.",

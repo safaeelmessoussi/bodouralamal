@@ -33,10 +33,26 @@ const staff = z
   .array(z.object({ user_id: uuid, position: z.enum(['supervisor', 'assistant']) }).strict())
   .max(20);
 
+/**
+ * R81 — the exam's maximum grade: **required, positive, two decimals**.
+ *
+ * Two places is where the column stores, so a third would be rounded silently
+ * by PostgreSQL and read back as something other than what was typed. Refusing
+ * it here is what keeps *what you entered is what you see* true.
+ */
+const maxGrade = z
+  .number()
+  .positive()
+  .max(9999.99)
+  .refine((v) => Number.isInteger(Math.round(v * 100)) && Math.abs(v * 100 - Math.round(v * 100)) < 1e-9, {
+    message: 'at most two decimal places',
+  });
+
 export const createExamSchema = z
   .object({
     mode: z.enum(['physical', 'online']).default('physical'),
     title: z.string().trim().min(1).max(120),
+    max_grade: maxGrade,
     description: z.string().trim().max(2000).nullable().optional(),
     date: calendarDate,
     start_time: wallClock,
@@ -68,6 +84,7 @@ export const updateExamSchema = z
   .object({
     version,
     title: z.string().trim().min(1).max(120).optional(),
+    max_grade: maxGrade.optional(),
     description: z.string().trim().max(2000).nullable().optional(),
     date: calendarDate.optional(),
     start_time: wallClock.optional(),

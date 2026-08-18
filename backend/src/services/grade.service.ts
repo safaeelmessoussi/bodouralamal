@@ -1,8 +1,9 @@
-import type { Prisma, PrismaClient } from '../generated/prisma/client.js';
+import { Prisma } from '../generated/prisma/client.js';
+import type { PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
 import type { Actor } from '../policies/actor.js';
 import * as scope from '../policies/branch-scope.js';
-import { passes, readGradingScale, type GradingScale } from '../policies/grading.js';
+import { isValidScore, toNumber } from '../policies/grading.js';
 import { assertExamInTeacherScope, audienceWhere } from '../policies/roster-resolution.js';
 import * as audit from '../repositories/audit.repository.js';
 
@@ -25,8 +26,8 @@ import * as audit from '../repositories/audit.repository.js';
  * | State | Row | Meaning |
  * |---|---|---|
  * | **empty** | no `Grade` row | nobody has marked this student yet |
- * | **absent** | `value_bp = 0`, `absent = true` | sat nothing — BR-7 |
- * | **an actual zero** | `value_bp = 0`, `absent = false` | marked, and scored nothing |
+ * | **absent** | `score = 0`, `absent = true` | sat nothing — BR-7 |
+ * | **an actual zero** | `score = 0`, `absent = false` | marked, and scored nothing |
  *
  * A nullable score column would have collapsed the first two, which is exactly
  * what BR-7 exists to prevent: *"draft averages are never inflated by omission"*
@@ -60,16 +61,15 @@ import * as audit from '../repositories/audit.repository.js';
 export interface GradeSheetRow {
   student_id: string;
   student_name: string;
-  /** `null` — **no row yet**. Distinct from `0`, which is a mark somebody entered. */
-  value_bp: number | null;
+  /**
+   * The score on the exam's own scale — `null` is **no row yet**, which is a
+   * different fact from `0`, the mark somebody entered (R81).
+   */
+  score: number | null;
   absent: boolean;
   status: 'draft' | 'published';
-  /** BR-12 — set means a human decided pass/fail regardless of the mark. */
-  manual_pass_fail_override: boolean | null;
-  override_reason: string | null;
   /** `null` until a row exists; TD-15 requires it on every subsequent write. */
   version: number | null;
-  passed: boolean | null;
 }
 
 export interface GradeSheet {
@@ -88,8 +88,12 @@ export interface GradeSheet {
     /** Derived, never stored (R70.5): recorded after the sitting it describes. */
     recorded_late: boolean;
   };
-  display_scale: number;
-  passing_grade_bp: number;
+  /**
+   * R81 — **the exam's maximum**, which is what every score here is out of. It
+   * travels with the sheet because the sheet is what renders «النقطة (من 20)»,
+   * and there is no global scale left to ask.
+   */
+  max_grade: number;
   /** Whether any row is published — what makes the action *re*-publish (BR-8). */
   has_published: boolean;
   rows: GradeSheetRow[];
@@ -119,6 +123,7 @@ interface ExamForGrading {
   subject: { name: string } | null;
   branch: { name: string } | null;
   administrativeGroup: { name: string } | null;
+  maxGrade: Prisma.Decimal;
 }
 
 const EXAM_SELECT = {
@@ -126,6 +131,9 @@ const EXAM_SELECT = {
   title: true,
   date: true,
   createdAt: true,
+  // R81 — every score on this sheet is out of this, and the bound is checked
+  // against it on every write.
+  maxGrade: true,
   levelId: true,
   subjectId: true,
   branchId: true,
@@ -221,39 +229,29 @@ function audienceOf(exam: ExamForGrading): Prisma.UserWhereInput {
 function toRow(
   student: { id: string; nameArabic: string },
   grade: {
-    valueBp: number;
+    score: Prisma.Decimal;
     absent: boolean;
     status: string;
-    manualPassFailOverride: boolean | null;
-    overrideReason: string | null;
     version: number;
   } | null,
-  scale: GradingScale,
 ): GradeSheetRow {
   if (!grade) {
     return {
       student_id: student.id,
       student_name: student.nameArabic,
-      value_bp: null,
+      score: null,
       absent: false,
       status: 'draft',
-      manual_pass_fail_override: null,
-      override_reason: null,
       version: null,
-      passed: null,
     };
   }
   return {
     student_id: student.id,
     student_name: student.nameArabic,
-    value_bp: grade.valueBp,
+    score: toNumber(grade.score),
     absent: grade.absent,
     status: grade.status === 'published' ? 'published' : 'draft',
-    manual_pass_fail_override: grade.manualPassFailOverride,
-    override_reason: grade.overrideReason,
     version: grade.version,
-    // BR-12 — a manual override always wins over the computed result.
-    passed: grade.manualPassFailOverride ?? passes(grade.valueBp, scale.passingGradeBp),
   };
 }
 
@@ -264,7 +262,6 @@ export async function readGradeSheet(
   examId: string,
 ): Promise<GradeSheet> {
   const exam = await loadForGrading(prisma, actor, examId);
-  const scale = await readGradingScale(prisma);
 
   const [students, grades] = await Promise.all([
     prisma.user.findMany({
@@ -297,10 +294,9 @@ export async function readGradeSheet(
       // recorded after the day it took place.
       recorded_late: exam.createdAt.toISOString().slice(0, 10) > exam.date.toISOString().slice(0, 10),
     },
-    display_scale: scale.displayScale,
-    passing_grade_bp: scale.passingGradeBp,
+    max_grade: toNumber(exam.maxGrade),
     has_published: grades.some((g) => g.status === 'published'),
-    rows: students.map((s) => toRow(s, byStudent.get(s.id) ?? null, scale)),
+    rows: students.map((s) => toRow(s, byStudent.get(s.id) ?? null)),
   };
 }
 
@@ -318,12 +314,10 @@ export async function readGradeSheet(
  *
  * ## No pass/fail
  *
- * The row carries the mark and nothing that labels the person. `Grade.status`,
- * `passed` and BR-12's override are **untouched in the model and on the staff
- * sheet** — they are how the association decides retakes and progression — but a
- * student's own screen reports what she scored, not a verdict about her. This is
- * the Owner's decision of 2026-08-17, and it removes no business logic
- * whatsoever.
+ * The row carries the mark and nothing that labels the person — and since R81
+ * there is nothing anywhere to label her with: the passing threshold, the
+ * computed verdict and BR-12's manual override are all retired. A grade is a
+ * grade. `15 / 20`, never `15 / 20 — ناجحة`.
  *
  * ## The subject is resolved, never named by the caller
  *
@@ -346,17 +340,17 @@ export interface PublishedGradeRow {
   date: string;
   level_name: string;
   subject_name: string | null;
-  /** On the association's display scale, never basis points (R8/R14). */
-  mark: number;
+  /** The score she was given, on that exam's own scale (R81). */
+  score: number;
+  /** What it is out of — carried per row, because each exam sets its own. */
+  max_grade: number;
   absent: boolean;
 }
 
 export async function readPublishedGrades(
   prisma: PrismaClient,
   studentId: string,
-): Promise<{ rows: PublishedGradeRow[]; displayScale: number }> {
-  const scale = await readGradingScale(prisma);
-
+): Promise<{ rows: PublishedGradeRow[] }> {
   const grades = await prisma.grade.findMany({
     where: {
       studentId,
@@ -370,13 +364,14 @@ export async function readPublishedGrades(
     // back, not to read a chronicle from the beginning.
     orderBy: [{ exam: { date: 'desc' } }],
     select: {
-      valueBp: true,
+      score: true,
       absent: true,
       exam: {
         select: {
           id: true,
           title: true,
           date: true,
+          maxGrade: true,
           level: { select: { name: true } },
           subject: { select: { name: true } },
         },
@@ -385,16 +380,16 @@ export async function readPublishedGrades(
   });
 
   return {
-    displayScale: scale.displayScale,
     rows: grades.map((g) => ({
       exam_id: g.exam.id,
       exam_title: g.exam.title,
       date: g.exam.date.toISOString().slice(0, 10),
       level_name: g.exam.level.name,
       subject_name: g.exam.subject?.name ?? null,
-      // The one conversion, and it is the same arithmetic the staff sheet's
-      // display uses (R8 keeps the rounding on the WRITE path; this is a read).
-      mark: (g.valueBp * scale.displayScale) / 10_000,
+      // **No conversion at all**, which is the point of R81: the number stored
+      // is the number given, and the number beside it is the exam's own.
+      score: toNumber(g.score),
+      max_grade: toNumber(g.exam.maxGrade),
       absent: g.absent,
     })),
   };
@@ -403,7 +398,7 @@ export async function readPublishedGrades(
 export interface GradeEntry {
   studentId: string;
   /** `null` **leaves the student unmarked**; BR-7 then makes them absent-zero. */
-  valueBp: number | null;
+  score: number | null;
   absent: boolean;
   /** TD-15 — required once a row exists, refused as stale if it has moved on. */
   version?: number | undefined;
@@ -458,8 +453,24 @@ export async function saveGradeDraft(
     for (const entry of entries) {
       // An absent student holds a real 0 (BR-7) — never a null, which is what
       // "nobody has marked this" means and would collapse the two states.
-      const valueBp = entry.absent ? 0 : (entry.valueBp ?? 0);
+      const score = entry.absent ? 0 : (entry.score ?? 0);
       const current = byStudent.get(entry.studentId);
+
+      /**
+       * **The bound is the exam's own maximum, and the server is what applies
+       * it** (R81). The form refuses an out-of-range mark first as a courtesy;
+       * this refuses it regardless, because a forged request never opens the
+       * form. `Decimal` throughout, so 20.00 on a /20 exam is accepted and
+       * 20.01 is not — a boundary decided exactly rather than by a float that
+       * is a hair over.
+       */
+      if (!isValidScore(new Prisma.Decimal(score), exam.maxGrade)) {
+        throw new AppError('VALIDATION_FAILED', 'score is outside this exam’s range', {
+          reason: 'SCORE_OUT_OF_RANGE',
+          student_id: entry.studentId,
+          max_grade: toNumber(exam.maxGrade),
+        });
+      }
 
       if (!current) {
         await tx.grade.create({
@@ -467,7 +478,7 @@ export async function saveGradeDraft(
             examId,
             studentId: entry.studentId,
             administrativeGroupId: exam.administrativeGroupId,
-            valueBp,
+            score,
             absent: entry.absent,
             status: 'draft',
           },
@@ -481,7 +492,7 @@ export async function saveGradeDraft(
         await tx.grade.update({
           where: { id: current.id },
           data: {
-            valueBp,
+            score,
             absent: entry.absent,
             // BR-8 — amending a published grade returns it to draft; the new
             // value is invisible until somebody re-publishes deliberately.
@@ -505,7 +516,7 @@ export async function saveGradeDraft(
           examId,
           studentId: student.id,
           administrativeGroupId: exam.administrativeGroupId,
-          valueBp: 0,
+          score: 0,
           absent: true,
           status: 'draft',
         },
@@ -576,54 +587,5 @@ export async function publishGrades(
     });
 
     return { published: draft.length, republished };
-  });
-}
-
-/**
- * `POST /exams/{id}/grades/{studentId}/override` — BR-12.
- *
- * **A manual override always wins and is never clobbered by recalculation.** It
- * is stored beside the mark rather than replacing it, so the sheet keeps saying
- * what the student scored *and* what a human decided about it — collapsing them
- * would destroy the reason the override exists.
- *
- * `grade.passfail_override` is one of the four action types Revision 19 names as
- * **indefinitely retained**; `audit.purge` must never touch it.
- */
-export async function overridePassFail(
-  prisma: PrismaClient,
-  actor: Actor,
-  examId: string,
-  studentId: string,
-  input: { value: boolean | null; reason: string; version: number },
-): Promise<void> {
-  await loadForGrading(prisma, actor, examId);
-
-  await prisma.$transaction(async (tx) => {
-    const grade = await tx.grade.findFirst({ where: { examId, studentId } });
-    if (!grade) throw new AppError('NOT_FOUND', 'no grade to override');
-    if (grade.version !== input.version) {
-      throw new AppError('VERSION_CONFLICT', 'this grade was changed by someone else');
-    }
-
-    await tx.grade.update({
-      where: { id: grade.id },
-      data: {
-        manualPassFailOverride: input.value,
-        overrideById: input.value === null ? null : actor.userId,
-        overrideAt: input.value === null ? null : new Date(),
-        overrideReason: input.value === null ? null : input.reason,
-        version: { increment: 1 },
-      },
-    });
-
-    await audit.write(tx, {
-      actorUserId: actor.userId,
-      activeRole: actor.activeRole,
-      actionType: 'grade.passfail_override',
-      targetEntity: 'Grade',
-      targetId: grade.id,
-      detail: { exam_id: examId, student_id: studentId, value: input.value, reason: input.reason },
-    });
   });
 }

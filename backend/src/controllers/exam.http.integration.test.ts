@@ -43,6 +43,9 @@ const EXAM_KEYS = [
   "id",
   "level_id",
   "level_name",
+  // R81 — what marks on this exam are out of. Listed deliberately: this set is
+  // asserted exactly, so a field cannot join the contract by accident.
+  "max_grade",
   "mode",
   "room_id",
   "room_name",
@@ -278,6 +281,8 @@ function body(over: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     mode: "physical",
     title: `${TAG} امتحان`,
+    // R81 — required: an exam states what its marks are out of.
+    max_grade: 20,
     date: `2099-03-${String(dayIndex).padStart(2, "0")}`,
     start_time: "09:00",
     end_time: "11:00",

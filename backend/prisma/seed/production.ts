@@ -196,8 +196,6 @@ async function seedSystemSettings(categoryIds: Map<string, string>): Promise<voi
     // Hijri overlay offset, constrained to −2…+2 by a CHECK (TD-6).
     // Association grading scale: 10/20 default pass mark, held in basis points
     // so comparisons stay integer-only (§4.6, Revision 14).
-    { key: 'grading.display_scale', value: 20 },
-    { key: 'grading.passing_grade_bp', value: 5000 },
   ];
 
   // Per-Category default content visibility (§4.9, §15.1).

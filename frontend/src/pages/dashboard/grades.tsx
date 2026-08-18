@@ -65,7 +65,6 @@ export function StudentGradesPage(): ReactNode {
   const { activeChild, activeChildId } = useActiveChild();
 
   const [rows, setRows] = useState<PublishedGrade[]>([]);
-  const [scale, setScale] = useState(20);
   const [status, setStatus] = useState<TableStatus>('loading');
   const [requestId, setRequestId] = useState<string | undefined>(undefined);
 
@@ -77,9 +76,7 @@ export function StudentGradesPage(): ReactNode {
     setStatus('loading');
     setRequestId(undefined);
     try {
-      const result = await fetchMyGrades(accessToken, childHeader);
-      setRows(result.rows);
-      setScale(result.displayScale);
+      setRows(await fetchMyGrades(accessToken, childHeader));
       setStatus('ready');
     } catch (error) {
       setRequestId(
@@ -112,8 +109,10 @@ export function StudentGradesPage(): ReactNode {
       cell: (r) => r.subject_name ?? r.level_name,
     },
     {
-      key: 'mark',
-      header: t('student.grades.mark').replace('{scale}', String(scale)),
+      key: 'score',
+      // **No scale in the header** (R81): each row is out of its own exam's
+      // maximum, so the pair travels in the cell where it is true.
+      header: t('student.grades.score'),
       numeric: true,
       cell: (r) =>
         r.absent ? (
@@ -122,7 +121,7 @@ export function StudentGradesPage(): ReactNode {
           // the honest cell.
           <Badge tone="neutral">{t('student.grades.absent')}</Badge>
         ) : (
-          `${r.mark} / ${scale}`
+          `${r.score} / ${r.max_grade}`
         ),
     },
   ];
@@ -133,7 +132,7 @@ export function StudentGradesPage(): ReactNode {
       <main id="main" className="section">
         <Container>
           <h1>{t('student.grades.title')}</h1>
-          <p className="lede">{t('student.grades.lede').replace('{scale}', String(scale))}</p>
+          <p className="lede">{t('student.grades.lede')}</p>
 
           {/* R62.10 — persistent, and the first thing under the heading. A
               parent looking at the wrong child's marks must find that out by

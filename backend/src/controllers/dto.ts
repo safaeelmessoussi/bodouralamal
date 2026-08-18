@@ -25,6 +25,8 @@
  * being one.
  */
 
+import type { Prisma } from '../generated/prisma/client.js';
+import { toNumber } from '../policies/grading.js';
 import type { Page } from '../lib/pagination.js';
 
 /**
@@ -1584,6 +1586,13 @@ export interface ExamDto {
   /** `null` is **the whole Level** (R58), never "no target". */
   administrative_group_id: string | null;
   administrative_group_name: string | null;
+  /**
+   * R81 — **the exam's own maximum grade**, the number every score on it is out
+   * of. There is no platform-wide scale to fall back to, so this travels with
+   * the exam rather than being looked up: a client rendering `15 / 20` must not
+   * have to ask a second endpoint what the 20 is.
+   */
+  max_grade: number;
   staff: { user_id: string; position: string }[];
   version: number;
 }
@@ -1607,6 +1616,7 @@ export function examDto(row: {
   room?: { name: string } | null;
   administrativeGroupId: string | null;
   administrativeGroup?: { name: string } | null;
+  maxGrade: Prisma.Decimal;
   staff: { userId: string; position: string }[];
   version: number;
 }): ExamDto {
@@ -1629,6 +1639,7 @@ export function examDto(row: {
     room_name: row.room?.name ?? null,
     administrative_group_id: row.administrativeGroupId,
     administrative_group_name: row.administrativeGroup?.name ?? null,
+    max_grade: toNumber(row.maxGrade),
     staff: row.staff.map((s) => ({ user_id: s.userId, position: String(s.position) })),
     version: row.version,
   };

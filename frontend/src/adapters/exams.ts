@@ -46,6 +46,8 @@ export interface Exam {
   /** `null` is **the whole Level** (R58), never "no target". */
   administrative_group_id: string | null;
   administrative_group_name: string | null;
+  /** R81 — what marks on this exam are out of. Per exam; no global scale. */
+  max_grade: number;
   staff: ExamStaffRef[];
   version: number;
 }
@@ -65,6 +67,8 @@ export interface ExamInput {
   branch_id: string;
   room_id: string;
   administrative_group_id?: string | null;
+  /** R81 — required on create: an exam with no maximum cannot be marked. */
+  max_grade: number;
   staff?: ExamStaffRef[];
 }
 

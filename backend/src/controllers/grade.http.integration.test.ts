@@ -11,9 +11,9 @@ import { httpCall } from "../test-support/http-client.js";
  *
  * Two things are asserted here that no unit test can see:
  *
- * * **the /20 ↔ basis-point conversion crosses the wire**, so a mark of 15 has
- *   to come back as `7500` — Revision 8 puts the single rounding at final
- *   persistence, and this is the only layer where both ends are real;
+ * * **a score crosses the wire unchanged** (R81): 15 goes in and 15 comes back,
+ *   because there is no conversion left to get wrong — and the bound it is
+ *   checked against is the exam's own maximum, applied by the server;
  * * **§4.4c scope is enforced by the server**, not by a hidden button. Every
  *   capability is asserted from both sides: a Teacher inside their scope, and
  *   the same Teacher one branch, one level or one group outside it.
@@ -264,6 +264,7 @@ beforeAll(async () => {
   }
 
   const created = await call("POST", "/exams", superToken, {
+      max_grade: 20,
     title: `${TAG} امتحان`,
     date: "2098-03-01",
     start_time: "09:00",
@@ -289,6 +290,7 @@ describe("Teacher exam scope (§4.4c, TD-2 as split by R70.4)", () => {
     // §4.5: "teachers create exams manually". The service refused this outright
     // until R70.4 — three normative statements against one implementation.
     const res = await call("POST", "/exams", teacherToken, {
+      max_grade: 20,
       title: `${TAG} امتحان المؤطرة`,
       date: "2098-04-01",
       start_time: "09:00",
@@ -305,6 +307,7 @@ describe("Teacher exam scope (§4.4c, TD-2 as split by R70.4)", () => {
 
   it("refuses a level the Teacher does not teach", async () => {
     const res = await call("POST", "/exams", teacherToken, {
+      max_grade: 20,
       title: `${TAG} امتحان خارج النطاق`,
       date: "2098-04-02",
       start_time: "09:00",
@@ -321,6 +324,7 @@ describe("Teacher exam scope (§4.4c, TD-2 as split by R70.4)", () => {
 
   it("refuses a branch the Teacher does not staff", async () => {
     const res = await call("POST", "/exams", teacherToken, {
+      max_grade: 20,
       title: `${TAG} امتحان فرع آخر`,
       date: "2098-04-03",
       start_time: "09:00",
@@ -340,6 +344,7 @@ describe("Teacher exam scope (§4.4c, TD-2 as split by R70.4)", () => {
     // and authority over everyone is held rather than inferred from authority
     // over some. A teacher of one group must not set the whole Level's paper.
     const res = await call("POST", "/exams", teacherToken, {
+      max_grade: 20,
       title: `${TAG} امتحان المستوى كامل`,
       date: "2098-04-04",
       start_time: "09:00",
@@ -369,19 +374,21 @@ describe("the grade sheet (§4.6, R70.1)", () => {
     const sheet = res.body.data as {
       rows: {
         student_id: string;
-        value_bp: number | null;
+        score: number | null;
         version: number | null;
       }[];
-      display_scale: number;
-      passing_grade_bp: number;
+      max_grade: number;
       has_published: boolean;
     };
     expect(sheet.rows).toHaveLength(2);
     // The distinction the whole model rests on: **no row yet**, not a zero.
-    expect(sheet.rows.every((r) => r.value_bp === null)).toBe(true);
+    expect(sheet.rows.every((r) => r.score === null)).toBe(true);
     expect(sheet.rows.every((r) => r.version === null)).toBe(true);
-    expect(sheet.display_scale).toBe(20);
-    expect(sheet.passing_grade_bp).toBe(5000);
+    // R81 — the exam's own maximum, and nothing that could stand in for a
+    // platform scale or a passing threshold.
+    expect(sheet.max_grade).toBe(20);
+    expect(sheet).not.toHaveProperty("display_scale");
+    expect(sheet).not.toHaveProperty("passing_grade_bp");
     expect(sheet.has_published).toBe(false);
   });
 
@@ -396,10 +403,10 @@ describe("the grade sheet (§4.6, R70.1)", () => {
   });
 });
 
-describe("entry, BR-7 and the /20 ↔ bp conversion", () => {
-  it("converts a mark once, and initialises absentees at the first draft save", async () => {
+describe("entry, BR-7 and the exam’s own maximum", () => {
+  it("stores the score as given, and initialises absentees at the first draft save", async () => {
     const save = await call("PUT", `/exams/${examId}/grades`, teacherToken, {
-      entries: [{ student_id: studentOne, mark: 15, absent: false }],
+      entries: [{ student_id: studentOne, score: 15, absent: false }],
     });
     expect(save.status).toBe(200);
     // BR-7 (R10 timing): the student nobody marked gets a draft 0/absent row at
@@ -413,14 +420,12 @@ describe("entry, BR-7 and the /20 ↔ bp conversion", () => {
     const two = rows.find((r) => r["student_id"] === studentTwo)!;
 
     // 15/20 → 7500 bp. Round-half-up applied exactly once, on the server (R8).
-    expect(one["value_bp"]).toBe(7500);
+    expect(one["score"]).toBe(15);
     expect(one["absent"]).toBe(false);
-    expect(one["passed"]).toBe(true);
-
-    expect(two["value_bp"]).toBe(0);
+    
+    expect(two["score"]).toBe(0);
     expect(two["absent"]).toBe(true);
-    expect(two["passed"]).toBe(false);
-  });
+      });
 
   it("an actual zero stays distinguishable from an absence", async () => {
     const sheet = await call("GET", `/exams/${examId}/grades`, teacherToken);
@@ -432,7 +437,7 @@ describe("entry, BR-7 and the /20 ↔ bp conversion", () => {
       entries: [
         {
           student_id: studentTwo,
-          mark: 0,
+          score: 0,
           absent: false,
           version: two["version"] as number,
         },
@@ -445,14 +450,14 @@ describe("entry, BR-7 and the /20 ↔ bp conversion", () => {
       after.body.data as { rows: Record<string, unknown>[] }
     ).rows.find((r) => r["student_id"] === studentTwo)!;
     // Same number, different fact: marked and scored nothing, vs sat nothing.
-    expect(row["value_bp"]).toBe(0);
+    expect(row["score"]).toBe(0);
     expect(row["absent"]).toBe(false);
   });
 
   it("refuses a student who is not sitting this exam", async () => {
     const stranger = await makeUser("غريبة");
     const res = await call("PUT", `/exams/${examId}/grades`, superToken, {
-      entries: [{ student_id: stranger, mark: 10, absent: false }],
+      entries: [{ student_id: stranger, score: 10, absent: false }],
     });
     expect(res.status).toBe(400);
     expect(res.body.error?.details?.["reason"]).toBe("NOT_IN_AUDIENCE");
@@ -471,14 +476,14 @@ describe("entry, BR-7 and the /20 ↔ bp conversion", () => {
 
     const first = await call("PUT", `/exams/${examId}/grades`, teacherToken, {
       entries: [
-        { student_id: studentOne, mark: 12, absent: false, version: stale },
+        { student_id: studentOne, score: 12, absent: false, version: stale },
       ],
     });
     expect(first.status).toBe(200);
 
     const second = await call("PUT", `/exams/${examId}/grades`, teacherToken, {
       entries: [
-        { student_id: studentOne, mark: 19, absent: false, version: stale },
+        { student_id: studentOne, score: 19, absent: false, version: stale },
       ],
     });
     expect(second.status).toBe(409);
@@ -487,7 +492,7 @@ describe("entry, BR-7 and the /20 ↔ bp conversion", () => {
 
   it("a Teacher outside their scope cannot enter grades", async () => {
     const res = await call("PUT", `/exams/${examId}/grades`, outsiderToken, {
-      entries: [{ student_id: studentOne, mark: 20, absent: false }],
+      entries: [{ student_id: studentOne, score: 20, absent: false }],
     });
     expect(res.status).toBe(403);
   });
@@ -518,7 +523,7 @@ describe("publish, amend, re-publish (BR-8)", () => {
       entries: [
         {
           student_id: studentOne,
-          mark: 18,
+          score: 18,
           absent: false,
           version: one["version"] as number,
         },
@@ -533,7 +538,7 @@ describe("publish, amend, re-publish (BR-8)", () => {
     };
     const after = body.rows.find((r) => r["student_id"] === studentOne)!;
     expect(after["status"]).toBe("draft");
-    expect(after["value_bp"]).toBe(9000);
+    expect(after["score"]).toBe(18);
 
     const again = await call(
       "POST",
@@ -556,47 +561,6 @@ describe("publish, amend, re-publish (BR-8)", () => {
   });
 });
 
-describe("manual pass/fail override (BR-12)", () => {
-  it("wins over the computed result and requires a reason", async () => {
-    const sheet = await call("GET", `/exams/${examId}/grades`, superToken);
-    const two = (
-      sheet.body.data as { rows: Record<string, unknown>[] }
-    ).rows.find((r) => r["student_id"] === studentTwo)!;
-    expect(two["passed"]).toBe(false); // 0 bp, below the 5000 threshold
-
-    const noReason = await call(
-      "POST",
-      `/exams/${examId}/grades/${studentTwo}/override`,
-      superToken,
-      { value: true, version: two["version"] as number },
-    );
-    expect(noReason.status).toBe(400);
-
-    const ok = await call(
-      "POST",
-      `/exams/${examId}/grades/${studentTwo}/override`,
-      superToken,
-      {
-        value: true,
-        reason: "قرار المجلس التعليمي",
-        version: two["version"] as number,
-      },
-    );
-    expect(ok.status).toBe(204);
-
-    const after = await call("GET", `/exams/${examId}/grades`, superToken);
-    const row = (
-      after.body.data as { rows: Record<string, unknown>[] }
-    ).rows.find((r) => r["student_id"] === studentTwo)!;
-    // The mark is untouched — the sheet still says what they scored AND what a
-    // human decided about it. Collapsing them would destroy the reason BR-12
-    // exists.
-    expect(row["value_bp"]).toBe(0);
-    expect(row["passed"]).toBe(true);
-    expect(row["manual_pass_fail_override"]).toBe(true);
-  });
-});
-
 describe("an exam that predates Revision 58", () => {
   it("is refused with a coded reason rather than a 500", async () => {
     // **Found against the live database, not by a fixture.** Every fixture here
@@ -607,6 +571,7 @@ describe("an exam that predates Revision 58", () => {
       data: {
         title: `${TAG} امتحان قديم`,
         mode: "physical",
+        maxGrade: 20,
         levelId,
         date: new Date("2024-05-05T00:00:00Z"),
         questions: [],
@@ -622,6 +587,7 @@ describe("an exam that predates Revision 58", () => {
 describe("retroactively recorded exams (R70.5)", () => {
   it("accepts a past date and derives «سُجّل لاحقًا» without storing it", async () => {
     const created = await call("POST", "/exams", superToken, {
+      max_grade: 20,
       title: `${TAG} امتحان سابق`,
       date: "2020-01-15",
       start_time: "09:00",
@@ -658,6 +624,7 @@ describe("retroactively recorded exams (R70.5)", () => {
   it("an exam recorded on its own date is not flagged", async () => {
     const today = new Date().toISOString().slice(0, 10);
     const created = await call("POST", "/exams", superToken, {
+      max_grade: 20,
       title: `${TAG} امتحان اليوم`,
       date: today,
       start_time: "09:00",
@@ -702,6 +669,7 @@ describe("the student’s own published grades (§5.3)", () => {
 
   beforeAll(async () => {
     const created = await call("POST", "/exams", superToken, {
+      max_grade: 20,
       title: `${TAG} امتحان المستفيدة`,
       date: "2098-04-01",
       start_time: "09:00",
@@ -720,8 +688,8 @@ describe("the student’s own published grades (§5.3)", () => {
     // row can take (BR-7).
     const saved = await call("PUT", `/exams/${ownExam}/grades`, superToken, {
       entries: [
-        { student_id: studentOne, mark: 15, absent: false },
-        { student_id: studentTwo, mark: null, absent: true },
+        { student_id: studentOne, score: 15, absent: false },
+        { student_id: studentTwo, score: null, absent: true },
       ],
     });
     expect(saved.status).toBe(200);
@@ -763,20 +731,19 @@ describe("the student’s own published grades (§5.3)", () => {
     const rows = res.body.data as unknown as Record<string, unknown>[];
     const row = rows.find((r) => r["exam_id"] === ownExam);
     expect(row).toBeDefined();
-    // R8/R14 — the mark crosses the wire on the display scale, converted once by
-    // the server from the 7500 basis points it stores. Basis points never appear.
-    expect(row!["mark"]).toBe(15);
+    // R81 — the score as given, beside the maximum it is out of. No conversion
+    // happened in either direction, and no `meta` scale accompanies it.
+    expect(row!["score"]).toBe(15);
+    expect(row!["max_grade"]).toBe(20);
     expect(row!["absent"]).toBe(false);
-    expect((res.body.meta as Record<string, unknown>)["display_scale"]).toBe(
-      20,
-    );
+    expect(res.body.meta).toBeUndefined();
   });
 
   it("carries no pass/fail verdict — a mark is a fact, «راسبة» is a verdict", async () => {
-    // The Owner's decision of 2026-08-17. `Grade.passed` and BR-12's override are
-    // untouched in the model and still shown on the STAFF sheet; the projection
-    // is what changed, and it is asserted as an exact key set so a field added by
-    // reflex to a screen a child looks at is caught here.
+    // The Owner's decision of 2026-08-17, completed by R81: the verdict is gone
+    // from the model too, so there is nothing left anywhere to leak here. The
+    // key set is asserted exactly, so a field added by reflex to a screen a
+    // child looks at is caught.
     const res = await call(
       "GET",
       "/students/me/grades",
@@ -792,7 +759,8 @@ describe("the student’s own published grades (§5.3)", () => {
         "exam_title",
         "level_name",
         "subject_name",
-        "mark",
+        "score",
+        "max_grade",
       ].sort(),
     );
     expect(row).not.toHaveProperty("passed");
@@ -852,7 +820,7 @@ describe("the student’s own published grades (§5.3)", () => {
     // And each reads her OWN outcome: a mark for the one who sat it, an absence
     // for the one who did not.
     expect(rowFor(one)["absent"]).toBe(false);
-    expect(rowFor(one)["mark"]).toBe(15);
+    expect(rowFor(one)["score"]).toBe(15);
     expect(rowFor(two)["absent"]).toBe(true);
   });
 

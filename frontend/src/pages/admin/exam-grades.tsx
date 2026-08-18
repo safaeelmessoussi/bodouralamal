@@ -64,8 +64,9 @@ export function ExamGradesPage({ examId }: { examId: string | null }): ReactNode
   const [status, setStatus] = useState<TableStatus>('loading');
   const [query, setQuery] = useState('');
   const [levelFilter, setLevelFilter] = useState<string | null>(null);
-  /** R14's canonical value until the sheet reports the configured one. */
-  const [displayScale, setDisplayScale] = useState(20);
+  /** **This exam's** maximum, reported by the sheet once one is open (R81).
+   *  `null` until then: there is no platform default to stand in for it. */
+  const [maxGrade, setMaxGrade] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     setStatus('loading');
@@ -158,10 +159,14 @@ export function ExamGradesPage({ examId }: { examId: string | null }): ReactNode
   return (
     <AdminLayout
       title={t('admin.nav.examGrades')}
-      // The scale is `SystemSetting` data (R14), so the lede cannot be a static
-      // string: `{scale}` is resolved from the sheet once one has been read, and
-      // falls back to the association's own /20 before then.
-      lede={t('admin.grades.lede').replace('{scale}', String(displayScale))}
+      // **The list has no scale to name** (R81): each exam carries its own, so
+      // the lede states the maximum only while a sheet is open and describes the
+      // page plainly otherwise.
+      lede={
+        maxGrade === null
+          ? t('admin.grades.ledeList')
+          : t('admin.grades.lede').replace('{scale}', String(maxGrade))
+      }
       actions={
         current ? (
           <Button variant="secondary" onClick={() => (window.location.href = '/admin/exam-grades')}>
@@ -178,7 +183,7 @@ export function ExamGradesPage({ examId }: { examId: string | null }): ReactNode
       }
     >
       {current ? (
-        <GradeSheetView examId={current.id} onScale={setDisplayScale} />
+        <GradeSheetView examId={current.id} onMaxGrade={setMaxGrade} />
       ) : examId !== null && status === 'ready' ? (
         // A deep link to an exam outside the caller's scope, or a stale
         // bookmark. Named rather than silently falling back to the list, which

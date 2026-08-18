@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 
 import { ScopeSelectors } from '../scope/scope-selectors.js';
-import { SelectField } from '../ui/field.js';
+import { NumberField, SelectField } from '../ui/field.js';
 import { StaffPicker } from './staff-picker.js';
 import { t } from '../../i18n/index.js';
 import type { ScopeOptions } from '../../hooks/use-scope-options.js';
@@ -51,6 +51,10 @@ export interface ExamSectionProps {
   onSupervisor: (v: string) => void;
   assistantIds: string[];
   onAssistants: (ids: string[]) => void;
+  /** R81 — this exam's maximum grade, as typed. A string because the field is
+   *  a text input: an empty one is *not yet answered*, which `0` is not. */
+  maxGrade: string;
+  onMaxGrade: (v: string) => void;
 }
 
 /** The staff array the API takes — one supervisor, any number of assistants. */
@@ -74,6 +78,8 @@ export function ExamSection({
   onSupervisor,
   assistantIds,
   onAssistants,
+  maxGrade,
+  onMaxGrade,
 }: ExamSectionProps): ReactNode {
   return (
     <>
@@ -105,6 +111,24 @@ export function ExamSection({
             fields={['branchId', 'levelId', 'subjectId', 'academicYearId']}
             mode="form"
             locked={locked ? ['branchId', 'levelId', 'subjectId', 'academicYearId'] : []}
+          />
+
+          {/* **R81 — every exam states what its marks are out of.** Required,
+              because a sitting whose maximum is unknown cannot be marked at
+              all; editable afterwards, because a typo here would otherwise
+              strand every score on the exam — and the server refuses a maximum
+              below a mark already recorded rather than clamping anybody's
+              result. Not locked with the identity fields: the maximum does not
+              change *what is examined, for whom, or where*. */}
+          <NumberField
+            label={t('scheduling.exam.maxGrade')}
+            hint={t('scheduling.exam.maxGradeHint')}
+            required
+            min={0.01}
+            max={9999.99}
+            step="0.01"
+            value={maxGrade}
+            onChange={onMaxGrade}
           />
 
           {/* **Optional, and its emptiness means something**: no group is the

@@ -38,33 +38,33 @@ import { Feedback } from '../ui/feedback.js';
  *
  * ## Marks are on the association's scale
  *
- * The field takes /20 because that is what the association uses (R14). Basis
- * points never appear in the interface, and the conversion happens once, on the
- * server (R8) — a client-side conversion would be a second rounding rule
- * deciding whether a student passed.
+ * The field takes **the exam's own maximum** (R81): «النقطة (من 20)» on one
+ * exam and «النقطة (من 10)» on the next, from `sheet.max_grade`. There is no
+ * conversion in either direction and no platform-wide scale to consult — the
+ * number typed is the number stored.
  */
 
 interface Draft {
   /** `''` is **unmarked**. Deliberately a string; see the module docstring. */
-  mark: string;
+  score: string;
   absent: boolean;
 }
 
-function draftFrom(row: GradeSheetRow, displayScale: number): Draft {
+function draftFrom(row: GradeSheetRow): Draft {
   return {
-    mark: row.value_bp === null ? '' : String((row.value_bp * displayScale) / 10_000),
+    score: row.score === null ? '' : String(row.score),
     absent: row.absent,
   };
 }
 
 export function GradeSheetView({
   examId,
-  onScale,
+  onMaxGrade,
 }: {
   examId: string;
-  /** Reports the CONFIGURED scale (R14 — a `SystemSetting`, not a constant) so a
-   *  surrounding frame can name it without reading the sheet a second time. */
-  onScale?: (displayScale: number) => void;
+  /** Reports **this exam's** maximum (R81) so a surrounding frame can name it
+   *  without fetching the sheet a second time. */
+  onMaxGrade?: (maxGrade: number) => void;
 }): ReactNode {
   const { accessToken } = useSession();
 
@@ -79,19 +79,15 @@ export function GradeSheetView({
     try {
       const next = await fetchGradeSheet(examId, accessToken);
       setSheet(next);
-      onScale?.(next.display_scale);
-      setDrafts(
-        Object.fromEntries(
-          next.rows.map((r) => [r.student_id, draftFrom(r, next.display_scale)]),
-        ),
-      );
+      onMaxGrade?.(next.max_grade);
+      setDrafts(Object.fromEntries(next.rows.map((r) => [r.student_id, draftFrom(r)])));
       setState('ready');
     } catch (error) {
       // The server's refusal is rendered as a refusal — §4.4c is enforced there
       // and this screen reports it rather than pre-empting it.
       setState(error instanceof ApiError && error.status === 403 ? 'forbidden' : 'error');
     }
-  }, [examId, accessToken, onScale]);
+  }, [examId, accessToken, onMaxGrade]);
 
   useEffect(() => {
     void load();
@@ -105,12 +101,12 @@ export function GradeSheetView({
       const result = await saveGrades(
         examId,
         sheet.rows.map((row) => {
-          const draft = drafts[row.student_id] ?? { mark: '', absent: false };
+          const draft = drafts[row.student_id] ?? { score: '', absent: false };
           return {
             student_id: row.student_id,
             // `''` stays null all the way to the server: unmarked is not zero,
             // and BR-7 is what decides what becomes of it.
-            mark: draft.absent || draft.mark.trim() === '' ? null : Number(draft.mark),
+            score: draft.absent || draft.score.trim() === '' ? null : Number(draft.score),
             absent: draft.absent,
             ...(row.version === null ? {} : { version: row.version }),
           };
@@ -165,7 +161,7 @@ export function GradeSheetView({
     );
   }
 
-  const scale = sheet.display_scale;
+  const maxGrade = sheet.max_grade;
 
   return (
     <>
@@ -220,7 +216,7 @@ export function GradeSheetView({
             <thead>
               <tr>
                 <th scope="col">{t('admin.grades.student')}</th>
-                <th scope="col">{t('admin.grades.mark').replace('{scale}', String(scale))}</th>
+                <th scope="col">{t('admin.grades.mark').replace('{scale}', String(maxGrade))}</th>
                 <th scope="col">{t('admin.grades.absent')}</th>
                 {/* **No النتيجة column** (Owner decision, 2026-08-17). See the
                     note on the status cell below for what changed and what
@@ -230,7 +226,7 @@ export function GradeSheetView({
             </thead>
             <tbody>
               {sheet.rows.map((row) => {
-                const draft = drafts[row.student_id] ?? { mark: '', absent: false };
+                const draft = drafts[row.student_id] ?? { score: '', absent: false };
                 return (
                   <tr key={row.student_id}>
                     <td>{row.student_name}</td>
@@ -239,17 +235,20 @@ export function GradeSheetView({
                         className="field__input"
                         type="number"
                         min={0}
-                        max={scale}
-                        step="0.25"
+                        max={maxGrade}
+                        // Two decimals is what the column stores, so it is what
+                        // the field offers — a finer step would be rounded on
+                        // the way in and read back as a different number.
+                        step="0.01"
                         inputMode="decimal"
                         // An absent student holds no mark to type (BR-7).
                         disabled={draft.absent || busy}
-                        value={draft.mark}
-                        aria-label={`${t('admin.grades.mark').replace('{scale}', String(scale))} — ${row.student_name}`}
+                        value={draft.score}
+                        aria-label={`${t('admin.grades.mark').replace('{scale}', String(maxGrade))} — ${row.student_name}`}
                         onChange={(event) =>
                           setDrafts((d) => ({
                             ...d,
-                            [row.student_id]: { ...draft, mark: event.target.value },
+                            [row.student_id]: { ...draft, score: event.target.value },
                           }))
                         }
                       />
@@ -264,35 +263,21 @@ export function GradeSheetView({
                           setDrafts((d) => ({
                             ...d,
                             [row.student_id]: {
-                              mark: event.target.checked ? '' : draft.mark,
+                              score: event.target.checked ? '' : draft.score,
                               absent: event.target.checked,
                             },
                           }))
                         }
                       />
                     </td>
-                    {/* **The pass/fail badge is gone, and the business logic is
-                        not** (Owner decision, 2026-08-17).
-
-                        `Grade.passed`, `manual_pass_fail_override`, BR-12's
-                        *"a manual override always wins"* and the
-                        `POST …/override` endpoint are all untouched: they are
-                        how the association decides retakes, progression and
-                        re-enrolment, and removing them would be removing a
-                        rule rather than a label.
-
-                        What is removed is **labelling a مستفيدة «راسبة» on a
-                        grade sheet**. A mark is a fact; «راسبة» is a verdict
-                        about a person, and the platform states the fact.
-
-                        `row.passed` therefore stays in the contract, unread by
-                        this component. That is deliberate: the day a screen
-                        needs the verdict — a progression report, say — it
-                        reads it from the server rather than recomputing it
-                        from the mark, which would be a second grading rule
-                        (R8/R12). **The override is still surfaced**, because
-                        it is provenance rather than a verdict: it says a human
-                        decided this row, which a reader of the sheet needs. */}
+                    {/* **No verdict, and now nothing to compute one from**
+                        (R81). The badge was removed first, on the Owner's
+                        decision that a mark is a fact and «راسبة» is a verdict
+                        about a person; the threshold, the computed `passed` and
+                        BR-12's manual override have now been retired with it.
+                        The MVP publishes a score out of a maximum and derives
+                        nothing else — so there is no rule left here to
+                        accidentally reimplement from the mark. */}
                     <td>
                       <Badge tone={row.status === 'published' ? 'ok' : 'neutral'}>
                         {t(
@@ -301,12 +286,6 @@ export function GradeSheetView({
                             : 'admin.grades.statusDraft',
                         )}
                       </Badge>
-                      {row.manual_pass_fail_override !== null ? (
-                        <>
-                          {' '}
-                          <Badge tone="neutral">{t('admin.grades.overridden')}</Badge>
-                        </>
-                      ) : null}
                     </td>
                   </tr>
                 );

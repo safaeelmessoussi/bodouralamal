@@ -21,7 +21,9 @@ const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);
 /** Every action type TD-8 retains INDEFINITELY. None may ever be purged. */
 const RETAINED_FOREVER = [
   "consent_gate.override",
-  "grade.passfail_override",
+  // R81 retired `grade.passfail_override` with the pass/fail concept itself.
+  // Rows already written keep their indefinite retention — the purge allowlist
+  // is enumerated (R19) and gains nothing, which is what protects them.
   "settings.change",
   "trash.manual_restore",
   "consent.grant",
