@@ -231,10 +231,43 @@ POST /exams/{id}/publish                      # TD-3.6, BR-8
 POST /exams/{id}/submissions                  # TD-3.6, TD-1
 PATCH /submissions/{id}                       # TD-3.6, §4.6
 POST /submissions/{id}/submit                 # TD-3.6, TD-1
-POST /grades/{id}/publish                     # TD-3.6, TD-4.5
-POST /grades/{id}/republish                   # TD-3.6, TD-4.5
-POST /grades/{id}/pass-fail-override          # TD-3.6, BR-12
-POST /students/{id}/quran-logs                # TD-3.6, §4.5
+# ── FOUR ENTRIES THE IMPLEMENTATION ADDRESSES DIFFERENTLY ────────────────────
+#
+# These stay PENDING and are NOT edited to match the code, because the registry
+# is the projection of the SRS and editing it to fit an implementation is the
+# drift it exists to prevent. Audited 2026-08-18; the finding is recorded here
+# so it is decidable rather than merely unresolved.
+#
+# THE EVIDENCE, which is the same for the first three:
+#   **No contract anywhere exposes a `Grade` id.** The sheet is keyed by
+#   `student_id` (`GET/PUT /exams/{id}/grades`), `openapi.json` has no path
+#   under `/grades`, and no DTO emits one. So `/grades/{id}/…` is addressed by
+#   an identifier no client ever receives — these shapes are not merely
+#   different from what shipped, they are UNREACHABLE as written.
+#
+# What shipped instead, and why it is coherent:
+#   * `POST /exams/{id}/grades/publish` publishes the SHEET. R70 says a sheet is
+#     "saved as a sheet"; publishing one student alone is not an act §4.6 or any
+#     screen asks for. This differs in GRANULARITY, not only in addressing.
+#   * `POST /exams/{id}/grades/{studentId}/override` is the same operation as
+#     `pass-fail-override`, re-addressed by the natural key the client holds.
+#   * There is NO republish route: R70.4 absorbed it into the same verb, and
+#     TD-8 still distinguishes the two by whether anything had been published —
+#     a fact the rows carry. `grade.republish` remains an audit action type.
+#   * `POST /quran-logs` carries `student_id` in the body. TD-3.6's own line
+#     already places PATCH and DELETE at the flat `/quran-logs/{id}`, so the
+#     nested POST is the odd one out within the SRS line itself.
+#
+# RECOMMENDATION (Document Owner's call — §3.1 makes this an SRS revision, and
+# the SRS is not editable from here): adopt the four implemented shapes and
+# retire `republish`. Nothing is blocked meanwhile — they report as PENDING,
+# which is not a failure. **They DO fail the M8 release gate**, where
+# TD3_REQUIRE_COMPLETE=1 makes a missing endpoint fatal (§18), so this needs a
+# decision before that gate and not before anything earlier.
+POST /grades/{id}/publish                     # TD-3.6, TD-4.5; implemented as POST /exams/{id}/grades/publish (see above)
+POST /grades/{id}/republish                   # TD-3.6, TD-4.5; absorbed into the publish verb by R70.4 (see above)
+POST /grades/{id}/pass-fail-override          # TD-3.6, BR-12; implemented as POST /exams/{id}/grades/{studentId}/override
+POST /students/{id}/quran-logs                # TD-3.6, §4.5; implemented as POST /quran-logs with student_id in the body
 PATCH /quran-logs/{id}                        # TD-3.6, §4.5
 DELETE /quran-logs/{id}                       # TD-3.6, §4.5
 
