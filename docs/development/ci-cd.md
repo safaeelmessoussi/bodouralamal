@@ -28,6 +28,8 @@ Each exists because something went wrong, or would plausibly go wrong silently. 
 | `check-design-tokens.sh` | A raw colour, a reach past the semantic token layer, or a stylesheet nobody imports |
 | `check-display-identity.sh` | Raw name fields reaching the frontend · an inline display-name fallback · a controller exposing both inputs outside the one admissible staff screen |
 | `check-openapi-td3.sh` | An endpoint that contradicts the specification, is implemented undocumented, or is documented but absent from the router |
+| `check-openapi-current.sh` | `docs/openapi.json` describing an API that is no longer the one served — a served endpoint with no generator mapping, a mapping the router does not serve, or a document that reconciles but was never regenerated |
+| `check-shared-layout.sh` | The shared page header redefined per page, a second button system in CSS, or the header losing its two-column grid |
 | `check-doc-links.sh` | A broken relative link or missing anchor in the documentation (SRS §16.4, listed in §19.2) |
 | `check-migration-order.sh` | A migration referencing a column that a **later-named** migration adds — fine on every existing database, fatal on an empty one, so it would surface exactly once: at the first production deploy (TD-6a) |
 | `check-contract-dto.sh` | A controller handing a service result straight to `res.json` · a spread inside `dto.ts` that turns an allow-list back into "everything" (SRS §16.2, Revision 38) |
@@ -40,24 +42,55 @@ for g in scripts/ci/check-*.sh; do bash "$g" || echo "FAILED: $g"; done
 
 ## The contract job
 
-Three steps, and the **order** is what makes it work:
+Four steps, and the **order** is what makes it work:
 
 ```yaml
-1. npm run openapi:generate          # regenerate FROM THE IMPLEMENTATION
-2. git diff --exit-code docs/openapi.json   # fail if the committed copy differs
-3. bash scripts/ci/check-openapi-td3.sh     # conformance against the specification
+1. npm run openapi:generate                   # regenerate FROM THE IMPLEMENTATION
+2. git diff --exit-code docs/openapi.json     # fail if the committed copy differs
+3. bash scripts/ci/check-openapi-current.sh   # the same question, runnable locally
+4. bash scripts/ci/check-openapi-td3.sh       # conformance against the specification
 ```
 
-**Step 1 is not redundant.** Without regenerating, step 3 would be validating a file a human
+**Step 1 is not redundant.** Without regenerating, step 4 would be validating a file a human
 could hand-edit — exactly what the specification forbids. Regenerating first is what makes
 `openapi.json` a generated artifact *in fact*, not merely by intention.
 
 Generation walks the **live Express router**, so it fails on any operation documented but not
 served, or served but not documented.
 
-> **Rule 3 exists because it was needed.** A route was once added to both the registry and
+> **Rule 4 exists because it was needed.** A route was once added to both the registry and
 > the contract while never being mounted — every gate passed while the endpoint returned
 > `404`.
+
+### Why step 3 was added, and what it is NOT a duplicate of
+
+`docs/openapi.json` **went stale for a week** — from `ed7212b` (2026-08-11) to `4842def`
+(2026-08-18) — while **24 served endpoints** had no generator mapping: enrolments, the whole
+Quran surface, grade entry, the teaching-group reads, `PUT /events/{id}/staff`. Every local
+guard was green throughout.
+
+Three things had to be true at once, and each is worth stating because each is a general trap:
+
+1. **Step 4 cannot see it.** It compares the **committed** document against the TD-3 registry
+   — *does this file describe endpoints the SRS documents* — and a stale file can satisfy that
+   forever. *Does this file describe the API we serve* is a different question, and nothing
+   was asking it outside CI.
+2. **The generator's failure looked like a build error.** Step 1 does fail on this, but under
+   a step named *"Regenerate docs/openapi.json"* — which reads as tooling breaking, not as a
+   contract gap, and reads that way to whoever glances at the job.
+3. **Nothing local ran the generator.** It is not part of `npm test`, not part of any hook,
+   and not in `scripts/ci/`. The one sweep a developer actually runs —
+   `for g in scripts/ci/check-*.sh` — could not reach it.
+
+Step 3 fixes the third, which is the one that matters: **the guard now lives where the sweep
+looks.** It fails on all three staleness modes, including the one neither other step catches —
+a document that reconciles against the router but was never regenerated after a description,
+a response code or a path changed.
+
+> **The general lesson, worth more than the fix:** *a guard that checks the committed artifact
+> is not a guard that the artifact is current.* Ask which of the two questions each gate is
+> really asking, because a gate answering the wrong one stays green while the thing it exists
+> to protect rots.
 
 **Documented-but-unimplemented endpoints report `PENDING`** and do not fail the build. A gate
 that is red from M1 to M6 is a gate nobody reads. The final release checklist flips `PENDING`

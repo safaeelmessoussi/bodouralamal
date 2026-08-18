@@ -2626,7 +2626,7 @@
     "/admin/branches": {
       "get": {
         "summary": "List branches",
-        "description": "**Read access is retained for Admins** (branch-scoped) because operational work depends on it — a Group references a Branch, a Level and a Room (TD-2 Revision 26). Ordered by display_order ASC NULLS LAST then name (ar-x-icu collated, §2.2/TD-10). Super Admins see all. **Paginated (TD-10):** `?page=` (default 1) and `?page_size=` (default 25, **max 100** — a larger request is capped, not refused). Responds `{ data, meta: { page, page_size, total } }`; `total` is the unpaginated count, so a client can compute page count. Ordering carries an `id` tiebreaker, which is what keeps paging stable across requests. **Explicit contract DTO (§16.2, Revision 38):** every branch response — here, `POST` and `PATCH` alike — returns exactly `id`, `name`, `operational_start_date`, `display_order`, `address`, `phone`, `email`, `opening_hours_ar`, `google_maps_url` and `version`, in `snake_case`, built by an allow-list projection. `operational_start_date` is a **TD-11 calendar date (`YYYY-MM-DD`)**, never an instant — an instant invites a timezone conversion in a client. `created_at`, `updated_at`, `deleted_at` and `deleted_by` are **not** exposed: they are operational metadata no screen consumes. Until Revision 38 this endpoint returned the Prisma row itself, which is how a `camelCase` shape and four internal columns came to sit inside a `snake_case` envelope; a column added to `Branch` now joins the model and not this response.",
+        "description": "**Read access is retained for Admins** (branch-scoped) because operational work depends on it — a Group references a Branch, a Level and a Room (TD-2 Revision 26). Ordered by display_order ASC NULLS LAST then name (ar-x-icu collated, §2.2/TD-10). Super Admins see all. **Paginated (TD-10):** `?page=` (default 1) and `?page_size=` (default 25, **max 100** — a larger request is capped, not refused). Responds `{ data, meta: { page, page_size, total } }`; `total` is the unpaginated count, so a client can compute page count. Ordering carries an `id` tiebreaker, which is what keeps paging stable across requests. **Explicit contract DTO (§16.2, Revision 38):** every branch response — here, `POST` and `PATCH` alike — returns exactly `id`, `name`, `operational_start_date`, `display_order`, `address`, `phone`, `email`, `opening_hours_ar`, `google_maps_url` and `version`, in `snake_case`, built by an allow-list projection. `operational_start_date` is a **TD-11 calendar date (`YYYY-MM-DD`)**, never an instant — an instant invites a timezone conversion in a client. `created_at`, `updated_at`, `deleted_at` and `deleted_by` are **not** exposed: they are operational metadata no screen consumes. Until Revision 38 this endpoint returned the Prisma row itself, which is how a `camelCase` shape and four internal columns came to sit inside a `snake_case` envelope; a column added to `Branch` now joins the model and not this response. **Sorting (R76.1-R76.3):** optional `?sort_by=&sort_dir=asc|desc`. `sort_by` names a field in the CONTRACT and is matched against this endpoint's own allow-list — anything outside it is `400 VALIDATION_FAILED`, never ignored and never passed through to a query, so there is no path from a query string to a column. Absent, BR-19's order is preserved exactly. Every resolved order ends in an `id` tiebreaker, without which offset pagination can put a row on two pages or on neither. Allowed here: `name`, `operational_start_date`.",
         "responses": {
           "200": {
             "description": "Branch list."
@@ -2762,6 +2762,57 @@
           },
           "409": {
             "description": "Error envelope (TD-3.8). STATE_CONFLICT when referenced.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/branches/order": {
+      "patch": {
+        "summary": "Reorder branches",
+        "description": "R76.4 — the §5.6 Branches screen orders its rows by dragging one, not by typing a number. Body is `{ ids }`: **the sequence itself, not per-row numbers**. The server assigns `display_order` from each id's position, so duplicate and gapped values are *structurally impossible* rather than validated against, and no client does arithmetic that races another client doing the same. The sequence must be **the exact live set** in the caller's scope — a partial one cannot say where the omitted rows belong — refused as `DUPLICATE_ID`, `UNKNOWN_ID` or `INCOMPLETE_ORDER` by name, since \"invalid order\" is not something a caller can act on; a foreign id answers exactly like a nonexistent one (§20 rule 17). One transaction, and **idempotent** — the same sequence twice produces the same rows, so a retry after a dropped response is safe. Authority is **inherited** from the resource's existing write authority and TD-2 gains no row; TD-15's per-row `version` is deliberately not used, because it answers \"did this row change under me\" and a reorder is a statement about the collection. The result is `1..n`, contiguous and unique (R76.6).",
+        "responses": {
+          "200": {
+            "description": "The resulting order, so a client re-renders from the server rather than from its own optimistic guess."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a malformed body, or a sequence that is not the exact live set; details.reason names which.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
             "content": {
               "application/json": {
                 "schema": {
@@ -2933,10 +2984,214 @@
         }
       }
     },
+    "/admin/categories/order": {
+      "patch": {
+        "summary": "Reorder categories",
+        "description": "R76.4 — the §5.6 Categories & Subjects screen orders its rows by dragging one. Body is `{ ids }`: **the sequence itself, not per-row numbers**. The server assigns `display_order` from each id's position, so duplicate and gapped values are *structurally impossible* rather than validated against, and no client does arithmetic that races another client doing the same. The sequence must be **the exact live set** in the caller's scope — a partial one cannot say where the omitted rows belong — refused as `DUPLICATE_ID`, `UNKNOWN_ID` or `INCOMPLETE_ORDER` by name, since \"invalid order\" is not something a caller can act on; a foreign id answers exactly like a nonexistent one (§20 rule 17). One transaction, and **idempotent** — the same sequence twice produces the same rows, so a retry after a dropped response is safe. Authority is **inherited** from the resource's existing write authority and TD-2 gains no row; TD-15's per-row `version` is deliberately not used, because it answers \"did this row change under me\" and a reorder is a statement about the collection. The result is `1..n`, contiguous and unique (R76.6).",
+        "responses": {
+          "200": {
+            "description": "The resulting order, so a client re-renders from the server rather than from its own optimistic guess."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a malformed body, or a sequence that is not the exact live set; details.reason names which.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/subjects/order": {
+      "patch": {
+        "summary": "Reorder subjects",
+        "description": "R76.4 — the §5.6 Categories & Subjects screen orders its rows by dragging one. Body is `{ ids }`: **the sequence itself, not per-row numbers**. The server assigns `display_order` from each id's position, so duplicate and gapped values are *structurally impossible* rather than validated against, and no client does arithmetic that races another client doing the same. The sequence must be **the exact live set** in the caller's scope — a partial one cannot say where the omitted rows belong — refused as `DUPLICATE_ID`, `UNKNOWN_ID` or `INCOMPLETE_ORDER` by name, since \"invalid order\" is not something a caller can act on; a foreign id answers exactly like a nonexistent one (§20 rule 17). One transaction, and **idempotent** — the same sequence twice produces the same rows, so a retry after a dropped response is safe. Authority is **inherited** from the resource's existing write authority and TD-2 gains no row; TD-15's per-row `version` is deliberately not used, because it answers \"did this row change under me\" and a reorder is a statement about the collection. The result is `1..n`, contiguous and unique (R76.6).",
+        "responses": {
+          "200": {
+            "description": "The resulting order, so a client re-renders from the server rather than from its own optimistic guess."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a malformed body, or a sequence that is not the exact live set; details.reason names which.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/levels/order": {
+      "patch": {
+        "summary": "Reorder one Category's levels",
+        "description": "R76.4 — the §5.6 Levels screen orders one Category’s Levels by dragging one. Body is `{ within: categoryId, ids }`: **the sequence itself, not per-row numbers**. The server assigns `display_order` from each id's position, so duplicate and gapped values are *structurally impossible* rather than validated against, and no client does arithmetic that races another client doing the same. The sequence must be **the exact live set** in the caller's scope — a partial one cannot say where the omitted rows belong — refused as `DUPLICATE_ID`, `UNKNOWN_ID` or `INCOMPLETE_ORDER` by name, since \"invalid order\" is not something a caller can act on; a foreign id answers exactly like a nonexistent one (§20 rule 17). One transaction, and **idempotent** — the same sequence twice produces the same rows, so a retry after a dropped response is safe. Authority is **inherited** from the resource's existing write authority and TD-2 gains no row; TD-15's per-row `version` is deliberately not used, because it answers \"did this row change under me\" and a reorder is a statement about the collection. The result is `1..n`, contiguous and unique (R76.6). **`within` is required**, because §2.2 scopes `display_order` to the parent: the server must know which collection the sequence claims to be BEFORE it reads the live set to compare against, and a global sequence across every parent would write positions that mean nothing beside each other.",
+        "responses": {
+          "200": {
+            "description": "The resulting order, so a client re-renders from the server rather than from its own optimistic guess."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a malformed body, or a sequence that is not the exact live set; details.reason names which.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/administrative-groups/order": {
+      "patch": {
+        "summary": "Reorder one Level's administrative groups",
+        "description": "R76.4 — the §5.6 groups screen orders one Level’s groups by dragging one. Body is `{ within: levelId, ids }`: **the sequence itself, not per-row numbers**. The server assigns `display_order` from each id's position, so duplicate and gapped values are *structurally impossible* rather than validated against, and no client does arithmetic that races another client doing the same. The sequence must be **the exact live set** in the caller's scope — a partial one cannot say where the omitted rows belong — refused as `DUPLICATE_ID`, `UNKNOWN_ID` or `INCOMPLETE_ORDER` by name, since \"invalid order\" is not something a caller can act on; a foreign id answers exactly like a nonexistent one (§20 rule 17). One transaction, and **idempotent** — the same sequence twice produces the same rows, so a retry after a dropped response is safe. Authority is **inherited** from the resource's existing write authority and TD-2 gains no row; TD-15's per-row `version` is deliberately not used, because it answers \"did this row change under me\" and a reorder is a statement about the collection. The result is `1..n`, contiguous and unique (R76.6). **`within` is required**, because §2.2 scopes `display_order` to the parent: the server must know which collection the sequence claims to be BEFORE it reads the live set to compare against, and a global sequence across every parent would write positions that mean nothing beside each other.",
+        "responses": {
+          "200": {
+            "description": "The resulting order, so a client re-renders from the server rather than from its own optimistic guess."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a malformed body, or a sequence that is not the exact live set; details.reason names which.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/admin/administrative-groups": {
       "get": {
         "summary": "List administrative groups",
-        "description": "TD-3.12 (Revision 43) — the permanent **organisational** unit inside a Level (§4.4c). **Operational data**: Admin within branch scope, or Super Admin, asserted in the service (TD-2) — the `/admin/` prefix authenticates but does not authorise. A branch-scoped Admin sees only the groups of the branches they administer; an all-branches (`NULL`) scope means *every* branch, never *none*. `?level_id=` and `?branch_id=` narrow within that scope and can never reach outside it; a **malformed** id is `400`, not an empty list, because \"that is not an id\" and \"this Level has no groups\" are different answers and the second one misleads. Ordered by `display_order` then `name` — natively `ar-x-icu` collated (TD-6a), so correct Arabic ordering needs no per-query COLLATE (§20 rule 13). **Paginated (TD-10):** `?page=` (default 1), `?page_size=` (default 25, max 100 — capped, not refused). **Explicit contract DTO (§16.2):** exactly `id`, `name`, `level_id`, `branch_id`, `display_order` and `version`. **`branch_id` is load-bearing** (§4.4c): it is the single answer to *\"which branch is this person at\"*, which `User.intended_branch_id` deliberately does not give — that records only what an applicant asked for (§4.1, R39). Absent by design and never to be re-added (§20 rule 22): `room_id`, `teacher_id`, `assistant_id`, the weekly schedule, and **`max_students`** — there is no capacity anywhere in the model, informational or otherwise (BR-23), and `CAPACITY_FULL` is retired from the TD-3.8 catalogue.",
+        "description": "TD-3.12 (Revision 43) — the permanent **organisational** unit inside a Level (§4.4c). **Operational data**: Admin within branch scope, or Super Admin, asserted in the service (TD-2) — the `/admin/` prefix authenticates but does not authorise. A branch-scoped Admin sees only the groups of the branches they administer; an all-branches (`NULL`) scope means *every* branch, never *none*. `?level_id=` and `?branch_id=` narrow within that scope and can never reach outside it; a **malformed** id is `400`, not an empty list, because \"that is not an id\" and \"this Level has no groups\" are different answers and the second one misleads. Ordered by `display_order` then `name` — natively `ar-x-icu` collated (TD-6a), so correct Arabic ordering needs no per-query COLLATE (§20 rule 13). **Paginated (TD-10):** `?page=` (default 1), `?page_size=` (default 25, max 100 — capped, not refused). **Explicit contract DTO (§16.2):** exactly `id`, `name`, `level_id`, `branch_id`, `display_order` and `version`. **`branch_id` is load-bearing** (§4.4c): it is the single answer to *\"which branch is this person at\"*, which `User.intended_branch_id` deliberately does not give — that records only what an applicant asked for (§4.1, R39). Absent by design and never to be re-added (§20 rule 22): `room_id`, `teacher_id`, `assistant_id`, the weekly schedule, and **`max_students`** — there is no capacity anywhere in the model, informational or otherwise (BR-23), and `CAPACITY_FULL` is retired from the TD-3.8 catalogue. **Sorting (R76.1-R76.3):** optional `?sort_by=&sort_dir=asc|desc`. `sort_by` names a field in the CONTRACT and is matched against this endpoint's own allow-list — anything outside it is `400 VALIDATION_FAILED`, never ignored and never passed through to a query, so there is no path from a query string to a column. Absent, BR-19's order is preserved exactly. Every resolved order ends in an `id` tiebreaker, without which offset pagination can put a row on two pages or on neither. Allowed here: `name`.",
         "responses": {
           "200": {
             "description": "Group page in the TD-10 envelope."
@@ -3595,6 +3850,55 @@
       }
     },
     "/admin/teaching-groups/{id}/members": {
+      "get": {
+        "summary": "Read a teaching group’s members",
+        "description": "TD-3.12, §4.4c — who holds a seat in this circle. Staff only (TD-2), scoped. A student may hold **at most one** seat per (subject, level), which is what makes the membership list an answer rather than a set: the companion POST refuses a second with 409.",
+        "responses": {
+          "200": {
+            "description": "The circle’s members."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for a group outside the caller’s scope or nonexistent (§20 rule 17).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
       "post": {
         "summary": "Place a student into a teaching group",
         "description": "TD-3.12, §4.4c. **Admin or Super Admin, scoped by the branch the STUDENT is enrolled at** (Revision 43.3) — `Enrollment → AdministrativeGroup.branch_id` is a referent that exists where the group's own branch does not. A student outside that scope answers `404`, never `403` (§20 rule 17). Body: `{ student_id }` — **strictly** that one key; the Subject and Level come from the group, so the uniqueness rule is enforced against values this service chose. **A student not enrolled in the Level cannot be placed at all** (`409 STATE_CONFLICT`, `reason: NOT_ENROLLED_IN_LEVEL`) — BR-22 read from the other direction: enrolment precedes placement. **At most one seat per (student, Subject, Level)** (§4.4c), backed by a partial unique index (Revision 43.2): the same group twice is `409 DUPLICATE`, and a *different* split of the same Subject is `409 STATE_CONFLICT` with `reason: ALREADY_IN_SUBJECT_SPLIT` naming `current_teaching_group_id`, because the intended action was almost certainly a move. **The splits are independent between Subjects** — one student sits in Administrative Group 1, Quran Group 2 and Tajweed Group 1 at once, which falls out of the uniqueness being per `(student, subject, level)` rather than per student. Enqueues `consent.reevaluate` in the same transaction (§4.1a, TD-7).",
@@ -3939,7 +4243,7 @@
     "/admin/categories": {
       "get": {
         "summary": "List categories",
-        "description": "§5.6 *\"Categories & Subjects\"*, §14.1. **Not the same read as `/calendar/bootstrap`**, which also returns categories: that contract is the *public calendar screen's* reference data, cached, carrying neither `version` nor counts. Widening it to serve an editor would let an unrelated screen shape a public, cached payload — the reasoning already recorded for `/admin/subjects`. Admin+ read (TD-2 R26); Teachers excluded (R30). Unpaginated — the set is bounded by the curriculum, and a taxonomy screen with a hidden second page cannot answer *\"does this already exist\"*, which is the question it is opened to answer. Each row carries `level_count`, which is what says whether deleting it is possible at all without a request per row. **Categories are generic educational stages and must never encode sex** (Revision 27); who a Level admits lives on `Level.gender_restriction`, where a query can read it.",
+        "description": "§5.6 *\"Categories & Subjects\"*, §14.1. **Not the same read as `/calendar/bootstrap`**, which also returns categories: that contract is the *public calendar screen's* reference data, cached, carrying neither `version` nor counts. Widening it to serve an editor would let an unrelated screen shape a public, cached payload — the reasoning already recorded for `/admin/subjects`. Admin+ read (TD-2 R26); Teachers excluded (R30). Unpaginated — the set is bounded by the curriculum, and a taxonomy screen with a hidden second page cannot answer *\"does this already exist\"*, which is the question it is opened to answer. Each row carries `level_count`, which is what says whether deleting it is possible at all without a request per row. **Categories are generic educational stages and must never encode sex** (Revision 27); who a Level admits lives on `Level.gender_restriction`, where a query can read it. **Sorting (R76.1-R76.3):** optional `?sort_by=&sort_dir=asc|desc`. `sort_by` names a field in the CONTRACT and is matched against this endpoint's own allow-list — anything outside it is `400 VALIDATION_FAILED`, never ignored and never passed through to a query, so there is no path from a query string to a column. Absent, BR-19's order is preserved exactly. Every resolved order ends in an `id` tiebreaker, without which offset pagination can put a row on two pages or on neither. Allowed here: `name`.",
         "responses": {
           "200": {
             "description": "Every live category."
@@ -4159,7 +4463,7 @@
     "/admin/levels": {
       "get": {
         "summary": "List levels",
-        "description": "§5.6 *\"Levels\"*, §14.1 مستويات, §4.4b. Admin+ read (TD-2 R26); Teachers excluded (R30). **Ordered by Category first**, because §7 scopes a Level's `display_order` *within* its Category and a flat ordering would interleave two curricula. `?category_id=` narrows **server-side**, so the client never filters a list the server owns; a malformed value is `400`, not a silently unfiltered list. **Unpaginated** — a Levels screen that hides its second page cannot answer *\"does this Level already exist\"*. Each row carries `group_count`, `subject_count` and `enrollment_count`: without them the delete control is a guess and the only way to find out is to press it. `category_name` travels as a **label** for grouping, never as an identifier — `category_id` is that. **No `branch_id`**: a Level is Category-scoped and branch-independent and may hold groups at several branches (§4.4b).",
+        "description": "§5.6 *\"Levels\"*, §14.1 مستويات, §4.4b. Admin+ read (TD-2 R26); Teachers excluded (R30). **Ordered by Category first**, because §7 scopes a Level's `display_order` *within* its Category and a flat ordering would interleave two curricula. `?category_id=` narrows **server-side**, so the client never filters a list the server owns; a malformed value is `400`, not a silently unfiltered list. **Unpaginated** — a Levels screen that hides its second page cannot answer *\"does this Level already exist\"*. Each row carries `group_count`, `subject_count` and `enrollment_count`: without them the delete control is a guess and the only way to find out is to press it. `category_name` travels as a **label** for grouping, never as an identifier — `category_id` is that. **No `branch_id`**: a Level is Category-scoped and branch-independent and may hold groups at several branches (§4.4b). **Sorting (R76.1-R76.3):** optional `?sort_by=&sort_dir=asc|desc`. `sort_by` names a field in the CONTRACT and is matched against this endpoint's own allow-list — anything outside it is `400 VALIDATION_FAILED`, never ignored and never passed through to a query, so there is no path from a query string to a column. Absent, BR-19's order is preserved exactly. Every resolved order ends in an `id` tiebreaker, without which offset pagination can put a row on two pages or on neither. Allowed here: `name`, `category`.",
         "responses": {
           "200": {
             "description": "Every live level, ordered by category then display order."
@@ -5315,6 +5619,1351 @@
           },
           "404": {
             "description": "Error envelope (TD-3.8). NOT_FOUND for an unknown session, a session the caller does not staff, or content that is not linked to it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/enrollments": {
+      "get": {
+        "summary": "List enrolments",
+        "description": "§7 (R66), §14.1 (R74) — enrolment as its own surface, because R66 made a Level enrollable with no subdivision at all and that case had no route. Admin within branch scope or Super Admin (TD-2), asserted in the service; the /admin/ prefix authenticates and does not authorise. ?level_id= and ?branch_id= narrow WITHIN the caller's scope and can never reach outside it; a malformed id is 400, not an empty list. **administrative_group_id may be null and that is a real answer**, not a missing one: it means the student is enrolled in the Level itself.",
+        "responses": {
+          "200": {
+            "description": "The enrolments visible to the caller."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a malformed filter.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Enrol a student at a Level",
+        "description": "§7 (R66). Body is { student_id, level_id, branch_id, administrative_group_id? }, **strictly** — an unknown key is refused rather than dropped, so a client is told rather than silently ignored. **administrative_group_id is optional and null is meaningful**: it enrols into the Level itself, the case R66 opened and the one the roster route under a Group cannot express. branch_id is required and is the single answer to *where is this student* (R66) — reaching it through the Group is exactly why the Group could not previously be optional. R27's gender rule applies: a NULL sex is **not** eligible for a restricted Level, because a restriction nothing can compare against is a restriction in name only.",
+        "responses": {
+          "201": {
+            "description": "Created; answers the new enrolment id."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a missing field, an unknown key, or a Level whose gender restriction the student does not satisfy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for a Level, Branch or Group outside the caller’s scope (§20 rule 17).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). DUPLICATE — BR-21 makes (student, level) unique among live rows.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/enrollments/{id}": {
+      "patch": {
+        "summary": "Move an enrolment within its Level",
+        "description": "§7 (R66). Changes the placement — the Administrative Group, the Branch, or both. **level_id is deliberately absent from the body**: BR-21 makes (student, level) unique, so an enrolment IS that pair, and moving to another Level is ending one and beginning another — which DELETE and POST already express. .strict() refuses the key rather than dropping it. administrative_group_id: null moves the student out of every Group and into the Level itself (R66).",
+        "responses": {
+          "204": {
+            "description": "Updated; no body."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — an unknown key, or a Group that does not belong to this enrolment’s Level.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an enrolment, Group or Branch outside the caller’s scope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "End an enrolment",
+        "description": "§7 (R66), TD-5. Soft-deletes the enrolment row **only** — grades, submissions and Quran logs survive, because they record what happened and ending an enrolment does not unmake it. Subject-split seats for that Level go with it. Works whether or not the enrolment names a Group, which is the whole reason it is addressed by its own id rather than through a roster.",
+        "responses": {
+          "204": {
+            "description": "Ended; no body."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an enrolment outside the caller’s scope or already ended.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/teaching-groups": {
+      "get": {
+        "summary": "List teaching groups across Levels",
+        "description": "TD-3.12, §4.4c — the flat read behind the الحلقات screen, as opposed to the per-(Level, Subject) read that answers *how is this pairing split*. Staff only (TD-2), scoped in the service. ?level_id= ?subject_id= ?category_id= and ?q= narrow within that scope, each optional; **absent stays absent**, since *not filtering by Level* and *filtering by no Level* are different queries. **Paginated (TD-10).** Unlisted in TD-3's seed and shipping under TD-3.12's existing clause, by the same precedent as GET /students/me/quran under TD-3.3.",
+        "responses": {
+          "200": {
+            "description": "A page of teaching groups in the TD-10 envelope."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a malformed filter.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/quran-surahs": {
+      "get": {
+        "summary": "The 114 surahs",
+        "description": "§4.5 reference data (R73) — name and total ayah count, which is what makes a memorization log checkable at all: the end_ayah <= total_ayahs rule is a database **trigger** because it crosses tables, and this read is the same table the trigger consults. Staff only (TD-2). Unpaginated by nature: the set is 114 and fixed.",
+        "responses": {
+          "200": {
+            "description": "The surah list."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/levels/{levelId}/surahs": {
+      "get": {
+        "summary": "Which surahs a Level covers",
+        "description": "§4.5, BR-11 — the Level's memorization curriculum, and therefore the denominator of *completion*. Read by Admin and Super Admin (TD-2 R26).",
+        "responses": {
+          "200": {
+            "description": "The surahs assigned to this Level."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for a Level outside the caller’s scope or nonexistent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/levels/{levelId}/surahs/{surahId}": {
+      "put": {
+        "summary": "Assign a surah to a Level",
+        "description": "§4.5, BR-11. **Super Admin only** — curriculum is reference data (TD-2 R26). **Idempotent in effect**: assigning one already assigned is a no-op rather than an error, so a retried request cannot duplicate the pairing. surahId is the surah's 1–114 number, not a uuid.",
+        "responses": {
+          "204": {
+            "description": "Assigned; no body."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a surah number outside 1–114.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an unknown Level or surah.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Remove a surah from a Level",
+        "description": "§4.5, BR-11. **Super Admin only** (TD-2 R26). Removing a surah changes what *completion* means for that Level; the existing logs are **not** touched, because they record what a student actually memorized and that does not become untrue when a curriculum is edited.",
+        "responses": {
+          "204": {
+            "description": "Removed; no body."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an unknown Level or an unassigned surah.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/levels/{levelId}/completion": {
+      "get": {
+        "summary": "BR-11 completion for a Level",
+        "description": "§4.5, BR-11 — for every مستفيدة enrolled in the Level, how much of that Level's assigned surahs she has memorized. Derived on read from the logs and the Level's surah assignment; **nothing stores a completion percentage**, because a stored one would be wrong the moment either side changed. Staff only (TD-2), scoped.",
+        "responses": {
+          "200": {
+            "description": "Per-student completion for the Level."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for a Level outside the caller’s scope or nonexistent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quran-students": {
+      "get": {
+        "summary": "The students whose Quran progress the caller may log",
+        "description": "§4.5 (R73.1) — the selector's source, resolved **server-side from the caller's own teaching**, never from a parameter. R73 added the structural marker naming which Subject authorises a log: §4.4c's *own students* is subject-blind, so a مؤطرة teaching only Fiqh could otherwise log memorization. Matching on the Subject NAME is prohibited (R27 made Subjects editable; §4.4b requires rules checked generically), which is why the marker is a column and this read consults it.",
+        "responses": {
+          "200": {
+            "description": "The students the caller may log progress for."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/students/{id}/quran": {
+      "get": {
+        "summary": "A student’s memorization coverage",
+        "description": "§4.5 — the logs and what they add up to, for one student. Staff only, and a Teacher reaches only her **own** students, resolved through the §4.4c predicate and the R73 Quran-subject marker. Out of scope answers 404, never 403 (§20 rule 17).",
+        "responses": {
+          "200": {
+            "description": "The student’s coverage."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for a student outside the caller’s scope OR nonexistent — deliberately indistinguishable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/students/me/quran": {
+      "get": {
+        "summary": "The acting student’s own memorization",
+        "description": "§4.5, §5.3 (M4b). **me is the ACTING student, not the account**: for a parent those are different people, and the child is named by X-Active-Child-ID through an approved FamilyLink (§4.3). **No actor-scoped decision is taken**, because the request carries no identifier for a caller to have chosen — that absence is the security property, not an omission. Ships under TD-3.3's existing clause and is unlisted in TD-3's seed.",
+        "responses": {
+          "200": {
+            "description": "The acting student’s coverage."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a parent with no child named.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN when the named child is not an approved link.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quran-logs": {
+      "post": {
+        "summary": "Log memorization or revision",
+        "description": "§4.5, TD-3.6 (R73). Body is { student_id, surah_id, start_ayah, end_ayah, category }, .strict(). **The ayah bounds are checked in three places on purpose**: a schema CHECK for start <= end, a database **trigger** for end <= total_ayahs (TD-6 — it crosses tables), and the service, which turns both into a coded refusal rather than a driver error. Authority is the R73 marker: only a مؤطرة teaching the Quran-tracking Subject to that student, an Admin in scope, or a Super Admin.",
+        "responses": {
+          "201": {
+            "description": "Logged."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — an inverted range, an ayah past the surah’s end, or an unknown category.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN when the caller does not teach this student the Quran-tracking Subject.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for a student outside the caller’s scope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/quran-logs/{id}": {
+      "patch": {
+        "summary": "Correct a memorization log",
+        "description": "§4.5, TD-3.6. Corrects the range or the category — the same three-layer bounds check applies, because a correction can violate them exactly as an entry can. Authority is the log's own: whoever could write it may correct it.",
+        "responses": {
+          "200": {
+            "description": "The corrected log."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — an inverted range or an ayah past the surah’s end.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for a log outside the caller’s scope or nonexistent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete a memorization log",
+        "description": "§4.5, TD-3.6. Soft-deleted with the ordinary TD-4.8 transaction, so a mistaken entry can be removed without the record of the correction being lost.",
+        "responses": {
+          "200": {
+            "description": "The deleted log."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for a log outside the caller’s scope or nonexistent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/exams/{id}/grades": {
+      "get": {
+        "summary": "The grade sheet for one exam",
+        "description": "§4.6, TD-3.6 (R70) — every student in the exam's audience with their current mark, absence flag and TD-15 version. The **grading scale travels with the rows** because it is SystemSetting data (R14) and not a constant a client may assume: §4.6 refused a per-exam scale in terms (R58). Staff only, scoped to the exam's own teaching (§4.4c).",
+        "responses": {
+          "200": {
+            "description": "The sheet: the audience, their marks and the scale."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an exam outside the caller’s scope or nonexistent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "Save the grade sheet as a draft",
+        "description": "§4.6, TD-3.6 (R70). **The /20 ↔ basis-point conversion happens here and nowhere else on the write path**: Revision 8 requires the round-half-up exactly once, at final persistence, so the service deals only in the integers §20 rule 3 mandates and no client owns a rounding rule that decides whether somebody passed. **mark: null stays null all the way in** — it means *unmarked*, and turning it into 0 would erase the distinction BR-7 depends on. Per-row TD-15 version, so a stale row is refused rather than overwriting a colleague's entry. Saving a draft publishes nothing.",
+        "responses": {
+          "200": {
+            "description": "What was written, per row."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a mark outside the scale, or both a mark and an absence.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an exam outside the caller’s scope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). VERSION_CONFLICT when a row changed under the caller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/exams/{id}/grades/publish": {
+      "post": {
+        "summary": "Publish an exam’s grades",
+        "description": "§4.6, TD-3.6, TD-4.5 (R70). Publication is the moment grades become visible to students and guardians — before it, GET /students/me/grades returns nothing for this exam. One transaction, and the audit row records it. §4.8 (R6) means publication writes **no notification**: a student learns by the grade appearing, which is the substitute channel §4.8 names.",
+        "responses": {
+          "200": {
+            "description": "Published; reports what changed."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an exam outside the caller’s scope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT when the sheet is incomplete or already published.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/exams/{id}/grades/{studentId}/override": {
+      "post": {
+        "summary": "Override one student’s pass/fail verdict",
+        "description": "§4.6, BR-12, TD-3.6 (R70). The verdict is normally derived from the mark and the threshold; this records a **human decision to differ**, with its reason, and the reason is what makes it auditable rather than arbitrary. TD-15 version on the row it overrides. It changes the verdict and **never the mark** — rewriting the mark to force a verdict would destroy the evidence the override exists to sit beside.",
+        "responses": {
+          "204": {
+            "description": "Recorded; no body."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a missing reason or an unknown verdict.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an exam or student outside the caller’s scope.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). VERSION_CONFLICT when the row changed under the caller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/students/me/grades": {
+      "get": {
+        "summary": "The acting student’s published grades",
+        "description": "§5.3 (R63.3) — **published only**; a draft sheet is a teacher's working document and is not a grade a family has been given. me resolves exactly as GET /students/me and GET /students/me/quran do: the JWT sub, or an approved FamilyLink child named by X-Active-Child-ID (§4.3). **requireActor is deliberately not called** — the endpoint takes no actor-scoped decision because the request carries no identifier for a caller to have chosen, and that absence is the TD-12 property. The scale travels with the rows for the same reason it does on the sheet: it is SystemSetting data (R14). Unlisted in TD-3's seed, shipping under TD-3.3's clause.",
+        "responses": {
+          "200": {
+            "description": "The acting student’s published grades, with the scale."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a parent with no child named.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN when the named child is not an approved link.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/library/{id}/sessions": {
+      "get": {
+        "summary": "Which class sessions reference this content",
+        "description": "§4.9 (R43) read backwards. Content is **referenced, never owned** — this is the other half of that sentence, and it adds no relationship: it reads the existing SessionContent join in the direction the library screen needs, so a reader can answer *where is this used* before unlinking or replacing it. **Public at the caller's tier**, like the library list and the session page beside it: an invalid token is ignored rather than refused, so this never answers 401.",
+        "responses": {
+          "200": {
+            "description": "The sessions referencing this item, at the caller’s tier."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — the id is not a uuid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND when the item does not exist or is not visible at the caller’s tier.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/events/{id}/staff": {
+      "put": {
+        "summary": "Set an event’s staff",
+        "description": "§4.4, TD-3.4 (Revision 71). **Replaces the whole assignment** rather than adding to it: the request states who is staffing the event, which is the shape a staffing screen actually produces, and a partial verb would leave *who was removed* unanswerable. Staff only (TD-2), scoped to the event's branches. position distinguishes the responsible person from the rest; §20 rule 22 keeps this separate from a **Session's** staffing, which is CourseScheduleStaff and answers a different question.",
+        "responses": {
+          "204": {
+            "description": "Set; no body."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — an unknown user, a duplicate assignment, or an unknown position.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an event outside the caller’s scope or nonexistent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/notifications": {
+      "get": {
+        "summary": "The caller’s own notifications",
+        "description": "§4.8 as narrowed by Revision 77. **The caller's own, and nobody else's**: no id in the request names a user, so there is nothing to tamper with and no role widens it — the property is the shape rather than a check. Paginated (TD-10), newest first with the R76.3 id tiebreaker, without which two notices written in the same transaction share a created_at and can land on two pages or on neither. ?unread_only=true narrows. meta.unread travels with the list rather than as a second endpoint, which would disagree with it the moment one was marked read between the two calls.",
+        "responses": {
+          "200": {
+            "description": "A page of the caller’s notifications, with the unread count."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a malformed page parameter.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/notifications/{id}/read": {
+      "post": {
+        "summary": "Mark one notification read",
+        "description": "§4.8 as narrowed by Revision 77 (R77.6). **Idempotent, and it does not move the timestamp** on a retry — rewriting when a person actually read something would falsify the record R77.5 acts on: an unread notice is *withdrawn* when a class is reinstated, a read one is *corrected*. A row belonging to another user answers **404, never 403** (§20 rule 17): a 403 would confirm that a particular notification exists, which is a fact about another person's session.",
+        "responses": {
+          "200": {
+            "description": "The notification, now read."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — the id is not a uuid.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for a notification belonging to another user or nonexistent — deliberately indistinguishable.",
             "content": {
               "application/json": {
                 "schema": {

@@ -83,6 +83,16 @@ jobs:
             echo "Run 'npm --prefix backend run openapi:generate' and commit the result."
             exit 1
           fi
+      # The currency half, and it is a DIFFERENT question from the gate below.
+      # The gate compares the committed document against the registry and passes
+      # while that document is months out of date. This one asks whether it
+      # describes the API actually served. The step above catches the same drift
+      # in CI, but its failure surfaces under a step named "Regenerate", which
+      # reads as a build error rather than a contract gap — and nothing local
+      # ran the generator at all, which is how the document went stale from
+      # ed7212b to 4842def with every guard green.
+      - name: docs/openapi.json is current with the served API (§3.1)
+        run: bash scripts/ci/check-openapi-current.sh
       - name: OpenAPI ↔ documented-endpoint registry conformance (§3.1)
         run: bash scripts/ci/check-openapi-td3.sh
 

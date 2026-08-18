@@ -74,6 +74,43 @@ GET /events                                   # TD-3.4 (R56) — event DEFINITIO
 POST /events                                  # TD-3.4, §4.4
 PATCH /events/{id}                            # TD-3.4, §4.4
 DELETE /events/{id}                           # TD-3.4, TD-5
+# ── Enrolment as its own surface (§7 Revision 66, §14.1 Revision 74) ─────────
+# R66 made a Level enrollable with NO subdivision, and that case had no route:
+# the roster under an Administrative Group cannot express "enrolled in the Level
+# itself". These four are that case.
+GET /admin/enrollments                        # §7 R66, §14.1 R74; Admin in branch scope (TD-2)
+POST /admin/enrollments                       # §7 R66; administrative_group_id optional, null = the Level itself
+PATCH /admin/enrollments/{id}                 # §7 R66; placement within the Level; level_id refused (BR-21)
+DELETE /admin/enrollments/{id}                # §7 R66; TD-5 soft-delete of the enrolment row only
+
+# ── Teaching-group reads (TD-3.12, §4.4c) ───────────────────────────────────
+# Shipping under TD-3.12's existing clause, by the precedent GET /students/me/quran
+# set under TD-3.3 — see docs/development/audit-2026-08-17-ux-architecture.md §Z.
+GET /admin/teaching-groups                    # TD-3.12, §4.4c; the flat الحلقات read, paginated (TD-10)
+GET /admin/teaching-groups/{id}/members       # TD-3.12, §4.4c; who holds a seat in this circle
+
+# ── Quran memorization (§4.5, TD-3.6; M4a–M4b, Revision 73) ─────────────────
+GET /admin/quran-surahs                       # §4.5 R73; the 114 surahs and their ayah counts
+GET /admin/levels/{levelId}/surahs            # §4.5, BR-11; the Level's memorization curriculum
+PUT /admin/levels/{levelId}/surahs/{surahId}  # §4.5, BR-11; Super Admin (TD-2 R26); idempotent in effect
+DELETE /admin/levels/{levelId}/surahs/{surahId} # §4.5, BR-11; Super Admin (TD-2 R26); logs untouched
+GET /admin/levels/{levelId}/completion        # §4.5, BR-11; derived on read, never stored
+GET /quran-students                           # §4.5 R73.1; resolved from the caller's own teaching
+GET /students/{id}/quran                      # §4.5; own students only (§4.4c + R73 marker); 404 out of scope
+GET /students/me/quran                        # TD-3.3 clause, §4.5, §5.3; the ACTING student (§4.3)
+POST /quran-logs                              # §4.5, TD-3.6; three-layer ayah bounds (CHECK, trigger, service)
+
+# ── Grade entry (§4.6, TD-3.6; M5, Revision 70) ─────────────────────────────
+GET /exams/{id}/grades                        # §4.6, TD-3.6 R70; the sheet, with the R14 scale
+PUT /exams/{id}/grades                        # §4.6, TD-3.6 R70; draft; per-row TD-15 version
+POST /exams/{id}/grades/publish               # §4.6, TD-3.6, TD-4.5 R70; publication is the visibility moment
+POST /exams/{id}/grades/{studentId}/override  # §4.6, BR-12, TD-3.6 R70; verdict only, never the mark
+GET /students/me/grades                       # TD-3.3 clause, §5.3 R63.3; PUBLISHED only; the ACTING student
+
+# ── Reads added with their screens ──────────────────────────────────────────
+GET /library/{id}/sessions                    # §4.9 R43; SessionContent read backwards; public at the caller's tier
+PUT /events/{id}/staff                        # TD-3.4, §4.4 R71; replaces the whole assignment
+
 GET /notifications                            # R77.7; the caller's OWN, paginated (TD-10)
 POST /notifications/{id}/read                 # R77.6; idempotent; another user's answers 404 (§20 r17)
 GET /admin/branches/{id}/event-backfill       # §4.4 "listing applicable global/recurring events to attach"
