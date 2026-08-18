@@ -582,8 +582,24 @@ function renderHeader<T>(
  * announced as a control, and carries the platform's `:focus-visible` ring for
  * free. The cell keeps `aria-sort`, which is the column's property.
  *
- * The arrow is `aria-hidden`: the direction is already announced by `aria-sort`,
- * and reading "up arrow" aloud after "ascending" is reading punctuation.
+ * ## The indicator belongs to ITS OWN column
+ *
+ * It used to be `justify-content: space-between` across the full cell width,
+ * which pushed the glyph to the far edge — so in a row of headers it sat beside
+ * the **next** column's label and read as though it belonged to that one. It now
+ * follows its label immediately, separated by one space step, and the whole
+ * pair is the button. That is the entire fix, and it is here rather than in any
+ * page's CSS because the confusion was the shared component's.
+ *
+ * ## Sortable is legible before you click
+ *
+ * An inactive column shows a muted double chevron; an active one shows a single
+ * chevron in the accent colour, pointing the way the rows are ordered. A column
+ * that cannot be sorted has no glyph at all, so the two kinds of header are
+ * distinguishable at a glance rather than by trying one.
+ *
+ * The glyph is `aria-hidden`: `aria-sort` on the cell already announces the
+ * direction, and reading "up arrow" after "ascending" is reading punctuation.
  */
 function SortHeader({
   label,
@@ -595,12 +611,45 @@ function SortHeader({
   onToggle: () => void;
 }): ReactNode {
   return (
-    <button type="button" className="datatable__sort" onClick={onToggle}>
-      {label}
-      <span aria-hidden="true" className="datatable__sort-arrow">
-        {active === 'asc' ? '▲' : active === 'desc' ? '▼' : '⇅'}
-      </span>
+    <button
+      type="button"
+      className={active === null ? 'datatable__sort' : 'datatable__sort is-active'}
+      onClick={onToggle}
+    >
+      <span className="datatable__sort-label">{label}</span>
+      <SortGlyph active={active} />
     </button>
+  );
+}
+
+/**
+ * The indicator itself — **an inline SVG, not a text glyph**.
+ *
+ * `▲`/`▼`/`⇅` render in whatever the reader's font has for them: different
+ * sizes, different baselines, and on some systems an emoji-coloured arrow. An
+ * SVG is the same shape everywhere, scales with the type, and takes the
+ * platform's colours through `currentColor` like every other icon.
+ *
+ * It is **not mirrored in RTL**: up and down mean ascending and descending,
+ * which is a vertical relationship and has no horizontal handedness to flip.
+ */
+function SortGlyph({ active }: { active: 'asc' | 'desc' | null }): ReactNode {
+  return (
+    <svg
+      className="datatable__sort-glyph"
+      viewBox="0 0 12 16"
+      width="12"
+      height="16"
+      aria-hidden="true"
+      focusable="false"
+    >
+      {active === null || active === 'asc' ? (
+        <path d="M6 2.5 9.5 7h-7L6 2.5Z" className={active === 'asc' ? 'is-on' : ''} />
+      ) : null}
+      {active === null || active === 'desc' ? (
+        <path d="M6 13.5 2.5 9h7L6 13.5Z" className={active === 'desc' ? 'is-on' : ''} />
+      ) : null}
+    </svg>
   );
 }
 

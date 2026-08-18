@@ -356,6 +356,42 @@ describe('sortable column headers (R76.8)', () => {
     expect(html).toContain('الاسم');
   });
 
+  it('puts the indicator beside its OWN label, inside the same control', () => {
+    // The defect this guards: `space-between` across the full cell width pushed
+    // the glyph to the far edge, where it sat next to the NEXT column's label
+    // and read as belonging to that one.
+    const html = render({ by: 'name', dir: 'asc' }, () => undefined);
+    const button = /<button[^>]*datatable__sort[^>]*>([\s\S]*?)<\/button>/.exec(html)?.[1] ?? '';
+    expect(button).toContain('datatable__sort-label');
+    expect(button).toContain('datatable__sort-glyph');
+    // The label comes first, so the glyph trails it rather than leading.
+    expect(button.indexOf('datatable__sort-label')).toBeLessThan(button.indexOf('datatable__sort-glyph'));
+  });
+
+  it('marks the active column so sorted and sortable are distinguishable', () => {
+    expect(render({ by: 'name', dir: 'asc' }, () => undefined)).toContain('datatable__sort is-active');
+    // Sortable but not sorted: the control is there, the active marker is not.
+    expect(render(null, () => undefined)).toContain('class="datatable__sort"');
+    expect(render(null, () => undefined)).not.toContain('is-active');
+  });
+
+  it('draws ONE chevron when active and BOTH when merely sortable', () => {
+    const asc = render({ by: 'name', dir: 'asc' }, () => undefined);
+    const idle = render(null, () => undefined);
+    const paths = (html: string): number => (html.match(/<path/g) ?? []).length;
+    expect(paths(asc)).toBe(1);
+    expect(paths(idle)).toBe(2);
+    // Ascending and descending are different shapes, not the same one rotated
+    // by a class a stylesheet might drop.
+    expect(asc).not.toEqual(render({ by: 'name', dir: 'desc' }, () => undefined));
+  });
+
+  it('renders an SVG rather than a text glyph, so it cannot fall back to emoji', () => {
+    const html = render(null, () => undefined);
+    expect(html).toContain('<svg');
+    for (const glyph of ['▲', '▼', '⇅']) expect(html).not.toContain(glyph);
+  });
+
   it('cycles asc → desc → asc, never back to unsorted', () => {
     /**
      * A third state a reader cannot distinguish from ascending would make the

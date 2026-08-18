@@ -524,22 +524,24 @@
   padding: 0;
 }
 
-/* **A sortable column heading** (R76.8, 2026-08-18).
+/* **A sortable column heading** (R76.8; indicator reworked 2026-08-18).
  *
  * A real `<button>` inside the `<th>` rather than a click handler on the cell:
  * focusable, keyboard-reachable, announced as a control, and carrying the
  * platform's global `:focus-visible` ring for nothing. It inherits the header's
- * own type — a sortable column must not look like a different column — and only
- * the arrow is added.
+ * own type — a sortable column must not look like a different column.
  *
- * `justify-content: space-between` puts the arrow at the far edge of the cell in
- * both directions, so a column of arrows lines up in RTL as it does in LTR. */
+ * **`width: auto`, and no `space-between`.** The indicator used to be pushed to
+ * the far edge of the cell, where it sat beside the NEXT column's label and read
+ * as belonging to that one. It now follows its own label by one space step, and
+ * the label plus the glyph are one control — which is also what makes the target
+ * comfortable on a small screen without a separate rule. */
 .datatable__sort {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: var(--space-2);
-  justify-content: space-between;
-  width: 100%;
+  gap: var(--space-1);
+  width: auto;
+  max-width: 100%;
   padding: 0;
   border: 0;
   background: none;
@@ -548,19 +550,30 @@
   cursor: pointer;
   text-align: start;
 }
+.datatable__sort-label {
+  min-width: 0;
+}
 .datatable__sort:hover {
   color: var(--color-primary);
 }
-/* The inactive glyph is quieter than the active one: a column that COULD be
-   sorted should be discoverable without competing with the one that IS. */
-.datatable__sort-arrow {
+/* The glyph carries the state through `currentColor`, so hover and focus reach
+   it without a second selector. */
+.datatable__sort-glyph {
   flex: none;
-  font-size: var(--font-size-xs);
-  color: var(--color-text-muted);
+  fill: var(--color-text-muted);
 }
-.admin-table th[aria-sort='ascending'] .datatable__sort-arrow,
-.admin-table th[aria-sort='descending'] .datatable__sort-arrow {
-  color: var(--color-primary);
+/* An INACTIVE column shows both chevrons, quietly: discoverable without
+   competing with the column that is actually sorted. */
+.datatable__sort:hover .datatable__sort-glyph {
+  fill: var(--color-primary);
+}
+/* The active direction is the accent; the other chevron is not drawn at all,
+   so the sorted column reads at a glance rather than on inspection. */
+.datatable__sort.is-active .datatable__sort-glyph {
+  fill: var(--color-primary);
+}
+.datatable__sort-glyph .is-on {
+  fill: var(--color-primary);
 }
 
 /* **Manual ordering** (R76.8, 2026-08-18).
@@ -681,4 +694,34 @@
   border-inline-start: 3px solid var(--color-accent);
   background: var(--color-background);
   color: var(--color-text-secondary);
+}
+
+/* **The recorder as a BLOCK** (2026-08-18).
+ *
+ * In the materials dialog it sits beside two lists of rows, and as a plain
+ * bordered box it read as a third row-ish thing. It is not: it is a capability,
+ * not a list. The tinted ground and the accent rail on the inline start say so
+ * without a second heading level — and the rail is `border-inline-start`, so RTL
+ * needs no rule of its own.
+ *
+ * The dot beside the heading is the recording affordance's own mark. It is
+ * decorative (`aria-hidden`), because the state is already announced. */
+.recorder--block {
+  border: 0;
+  border-inline-start: 3px solid var(--color-primary);
+  border-radius: var(--radius-md);
+  background: var(--color-background);
+}
+.recorder__heading {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+}
+.recorder__dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: var(--radius-full);
+  background: var(--color-primary);
 }

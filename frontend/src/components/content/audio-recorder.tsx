@@ -8,7 +8,6 @@ import {
   extensionFor,
   formatElapsed,
   pickContainer,
-  recordingBaseName,
   RECORDER_OPTIONS,
   shouldGuardUnload,
   type RecordedSpan,
@@ -57,9 +56,17 @@ import { TextField } from '../ui/field.js';
 export interface AudioRecorderProps {
   meta: UploadMeta;
   token: string | null;
-  /** R75.6's three sources for the default name: the class's own title and
-   *  note, and the date of the occurrence being recorded. */
-  session: { title: string; description: string | null; date: string };
+  /**
+   * **The name to suggest, already composed by the caller.**
+   *
+   * The recorder is reachable from two places with different notions of what a
+   * recording is *of* — a class occurrence on الجدولة, a Subject-and-year scope
+   * in مكتبة المحتوى — so composing the name here would mean teaching this
+   * component about both. R75.6's session rule lives in `recordingBaseName`,
+   * beside the screen that has a session; the library composes its own. The
+   * suffix rule below is shared, because *that* part is the same everywhere.
+   */
+  baseName: string;
   /** The titles already linked to this session — the suffix is chosen from
    *  these, so two concurrent saves cannot land on the same name (R75.6). */
   existingTitles: readonly string[];
@@ -72,7 +79,7 @@ type RecorderState = 'idle' | 'recording' | 'paused' | 'saving';
 export function AudioRecorder({
   meta,
   token,
-  session,
+  baseName,
   existingTitles,
   onSaved,
   onCancel,
@@ -194,9 +201,7 @@ export function AudioRecorder({
     setState('saving');
     setError(null);
     const name =
-      title.trim() === ''
-        ? defaultRecordingName(recordingBaseName(session), existingTitles)
-        : title.trim();
+      title.trim() === '' ? defaultRecordingName(baseName, existingTitles) : title.trim();
     // The extension follows the MIME the browser agreed to: the server checks
     // the declared type AND the magic bytes (TD-9), so a mismatched name is
     // rejected at `complete`, after the whole upload has been spent.
@@ -233,8 +238,11 @@ export function AudioRecorder({
   }
 
   return (
-    <section className="recorder" aria-labelledby="recorder-heading">
-      <h3 id="recorder-heading">{t('recorder.title')}</h3>
+    <section className="recorder recorder--block" aria-labelledby="recorder-heading">
+      <h3 id="recorder-heading" className="recorder__heading">
+        <span aria-hidden="true" className="recorder__dot" />
+        {t('recorder.title')}
+      </h3>
 
       {error ? (
         <p className="field__error" role="alert">
@@ -312,7 +320,7 @@ export function AudioRecorder({
             label={t('recorder.name')}
             value={title}
             onChange={setTitle}
-            placeholder={defaultRecordingName(recordingBaseName(session), existingTitles)}
+            placeholder={defaultRecordingName(baseName, existingTitles)}
             hint={t('recorder.nameHint')}
           />
           {state === 'saving' ? (

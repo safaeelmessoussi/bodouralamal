@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { fetchSessionPage, type SessionContentRef } from '../../adapters/calendar.js';
 import { linkSessionContent, unlinkSessionContent } from '../../adapters/sessions.js';
 import { t } from '../../i18n/index.js';
+import { recordingBaseName } from '../../lib/recorder.js';
 import { api } from '../../lib/api.js';
 import { Button } from '../ui/button.js';
 import { Dialog } from '../ui/dialog.js';
@@ -224,7 +225,7 @@ export function SessionMaterialsDialog({
             branch_id: scope.branchId,
           }}
           token={token}
-          session={session}
+          baseName={recordingBaseName(session)}
           // R75.6 — the suffix is chosen from what is ALREADY LINKED, so two
           // people saving at once cannot land on the same name.
           existingTitles={[...linked, ...recordings].map((c) => c.title)}

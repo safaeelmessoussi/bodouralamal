@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import { kindOf, type ContentKind } from '../adapters/content.js';
 import { deleteContent } from '../adapters/uploads.js';
 import { AdminLayout } from '../components/admin/admin-layout.js';
+import { AudioRecorder } from '../components/content/audio-recorder.js';
 import { FileUploader } from '../components/content/file-uploader.js';
 import { TeacherLayout } from '../components/teacher/teacher-layout.js';
 import { ConfirmDialog } from '../components/ui/confirm-dialog.js';
@@ -160,6 +161,22 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
   }
 
   /** The upload target — the same scope the list is showing. */
+  const [recordingOpen, setRecordingOpen] = useState(false);
+
+  /**
+   * **What a library recording is named after.**
+   *
+   * There is no session here, so R75.6's *title · description · date* does not
+   * apply — that rule is about an occurrence, and this screen has none. What it
+   * does have is the scope the recording lands in, so the Subject in view and
+   * today's date are the two facts that identify it later. The ` 2` / ` 3`
+   * suffix rule is the shared one either way.
+   */
+  const libraryRecordingName = useMemo(() => {
+    const subject = scope.options.subjectId.find((o) => o.value === scope.value.subjectId)?.label;
+    return [subject, new Date().toISOString().slice(0, 10)].filter(Boolean).join(' — ');
+  }, [scope.options.subjectId, scope.value.subjectId]);
+
   const meta = useMemo(
     () => ({
       level_id: levelId,
@@ -245,9 +262,19 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
       title={t(`${portal}.nav.content`)}
       lede={t('content.lede')}
       actions={
-        <Button variant="add" onClick={() => setUploading(true)}>
-          {t('content.upload.action')}
-        </Button>
+        <>
+          {/* **The same recorder as الجدولة**, from the library's own scope
+              (§4.9 as amended by R75). A recording made here is an ordinary
+              `EducationalContent` and needs no occurrence to exist first; it is
+              linked to a Session later through the existing content-linking
+              flow, which is the half R43 already provides. */}
+          <Button variant="secondary" onClick={() => setRecordingOpen(true)}>
+            {t('recorder.title')}
+          </Button>
+          <Button variant="add" onClick={() => setUploading(true)}>
+            {t('content.upload.action')}
+          </Button>
+        </>
       }
     >
       {notice ? (
@@ -290,6 +317,40 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
         }
         pagination={{ page, pageSize: 25, total, onPage: setPage }}
       />
+
+      <Dialog
+        open={recordingOpen}
+        onClose={() => setRecordingOpen(false)}
+        title={t('recorder.title')}
+      >
+        {/* The scope guard is the uploader's, verbatim: a recording lands
+            through the same pipeline and needs the same four fields, so a
+            missing Level here fails for the same reason and says the same
+            thing rather than inventing a second wording. */}
+        {scopeProblem !== null ? (
+          <p className="state" role="status">
+            {scopeProblem}
+          </p>
+        ) : (
+          <AudioRecorder
+            meta={meta}
+            token={accessToken}
+            // Named from what the library actually knows: the Subject in scope
+            // and today's date. There is no session here, which is the point —
+            // R75.6's session rule belongs to the screen that has one.
+            baseName={libraryRecordingName}
+            // Numbered against what is on screen, so a second recording in the
+            // same scope cannot land on the first one's name.
+            existingTitles={rows.map((r) => r.title)}
+            onSaved={() => {
+              setRecordingOpen(false);
+              setNotice(t('content.uploaded'));
+              void load();
+            }}
+            onCancel={() => setRecordingOpen(false)}
+          />
+        )}
+      </Dialog>
 
       <Dialog open={uploading} onClose={() => setUploading(false)} title={t('content.upload.action')}>
         <FileUploader
