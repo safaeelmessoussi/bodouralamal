@@ -317,6 +317,10 @@ export const ar = {
     loading: 'جارٍ تحميل الجدول…',
     error: 'تعذّر تحميل الجدول حالياً.',
     monthEmpty: 'لا توجد أنشطة مسجّلة في هذا الشهر.',
+    // §4.4 — a cancelled occurrence STAYS on the calendar and says so: the
+    // calendar's job is to report that a class is not happening, not to hide
+    // that it was scheduled.
+    cancelled: 'ملغاة',
     allDay: 'طوال اليوم',
     eventCount: 'عدد الأنشطة',
     kindExam: 'امتحان',

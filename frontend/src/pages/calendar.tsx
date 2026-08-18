@@ -10,6 +10,8 @@ import {
 } from '../adapters/calendar.js';
 import { CalendarGrid } from '../components/calendar/calendar-grid.js';
 import { CalendarNav } from '../components/calendar/calendar-nav.js';
+import { OccurrenceList } from '../components/calendar/occurrence-list.js';
+import { ViewSwitch, viewFromUrl, type CalendarView } from '../components/calendar/view-switch.js';
 import { CalendarTitle } from '../components/calendar/calendar-title.js';
 import { CalendarToolbar } from '../components/calendar/calendar-toolbar.js';
 import { DayEventsDialog } from '../components/calendar/day-events-dialog.js';
@@ -55,6 +57,8 @@ export function CalendarPage(): ReactNode {
   const [bootstrapBusy, setBootstrapBusy] = useState(true);
   const [load, setLoad] = useState<Load>({ kind: 'loading' });
   const [openDay, setOpenDay] = useState<Date | null>(null);
+  /** `calendar` is the public default: the month grid is what §5.1 links to. */
+  const [view, setView] = useState<CalendarView>(() => viewFromUrl('calendar'));
   const [openEvent, setOpenEvent] = useState<Occurrence | null>(null);
   /** Prefilling happens once per visit, not once per fetch — see the effect. */
   const prefillApplied = useRef(false);
@@ -218,11 +222,21 @@ export function CalendarPage(): ReactNode {
                 hijriMonths={bootstrap?.hijri.months ?? []}
                 month={month}
               />
-              <CalendarNav
-                onPrevious={() => goToMonth(addMonths(month, -1))}
-                onToday={() => goToMonth(today)}
-                onNext={() => goToMonth(addMonths(month, 1))}
-              />
+              {/* **The switch leads, the month stepping follows** — and the
+                  stepping is compact and secondary, because the calendar is what
+                  the reader came for. `CalendarNav` renders `ghost` buttons for
+                  exactly that reason, and it is hidden in the قائمة view where
+                  stepping a month would move a list that is not month-shaped. */}
+              <div className="cal-head__controls">
+                <ViewSwitch view={view} onView={setView} />
+                {view === 'calendar' ? (
+                  <CalendarNav
+                    onPrevious={() => goToMonth(addMonths(month, -1))}
+                    onToday={() => goToMonth(today)}
+                    onNext={() => goToMonth(addMonths(month, 1))}
+                  />
+                ) : null}
+              </div>
             </div>
 
             <CalendarToolbar
@@ -243,19 +257,28 @@ export function CalendarPage(): ReactNode {
             <div aria-live="polite" aria-busy={load.kind === 'loading'}>
               {load.kind === 'error' ? <p className="muted">{t('calendar.error')}</p> : null}
 
-              <CalendarGrid
-                month={month}
-                byDate={byDate}
-                hijriByDate={hijriByDate}
-                today={today}
-                selected={openDay}
-                onSelect={setOpenDay}
-                onOpenEvent={setOpenEvent}
-              />
+              {view === 'calendar' ? (
+                <>
+                  <CalendarGrid
+                    month={month}
+                    byDate={byDate}
+                    hijriByDate={hijriByDate}
+                    today={today}
+                    selected={openDay}
+                    onSelect={setOpenDay}
+                    onOpenEvent={setOpenEvent}
+                  />
 
-              {load.kind === 'ready' && occurrences.length === 0 ? (
-                <p className="muted cal-page__empty">{t('calendar.monthEmpty')}</p>
-              ) : null}
+                  {load.kind === 'ready' && occurrences.length === 0 ? (
+                    <p className="muted cal-page__empty">{t('calendar.monthEmpty')}</p>
+                  ) : null}
+                </>
+              ) : (
+                /* **The same occurrences, read as a sequence.** No second fetch
+                   and no second projection — the §4.4 tiers have already decided
+                   what is in this array, so the list cannot widen them. */
+                <OccurrenceList occurrences={occurrences} onOpen={setOpenEvent} />
+              )}
             </div>
           </div>
         </section>

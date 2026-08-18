@@ -129,6 +129,10 @@ result is reported in the slice that ran them.
 |---|---|
 | `scripts/dev/browser/measure-page-header.sh` | Does the primary action stay put as the description grows, at nine widths |
 | `scripts/dev/browser/verify-reorder.sh` | R76 on the five real admin screens: is «الترتيب» gone, is the header a focusable button, does pressing it send `sort_by` to the server, does a dropped row move **and survive a reload**, is the handle disabled and explained when it cannot be used |
+| `scripts/dev/browser/verify-circles-reorder.sh` | R78.1 on the real حلقات المواد page: handle disabled and explained with no `(Level, Subject)` chosen, enabled once chosen, a circle dragged to last and **persisted server-side**, surviving a reload, and ↑/↓ reordering too. Circles addressed by **seeded id, never by title**. **Last run: 9/9.** |
+| `scripts/dev/browser/verify-sorting.sh` | The sorting contract **clicked** across four tables: ascending → descending → ascending, exactly one header claiming a direction, non-sortable headers not clickable, the actions column never sortable, and **no row on two pages** of a sorted collection (R76.3's `id` tiebreaker). **Last run: 39/39.** |
+| `scripts/dev/browser/verify-public-calendar.sh` | قائمة and تقويم driven **anonymously**: both views offered, the choice in the URL, month stepping withheld where it means nothing, RTL with the marker on the inline start — and what a public reader must NOT see (no student name, no notification surface, no recordings, **no cancellation reason**). A cancelled occurrence stays listed and says so. **Last run: 18/18.** |
+| `scripts/dev/browser/verify-library-recorder.sh` | The recorder's second entry point in مكتبة المحتوى, plus the sort indicator's **measured** placement. **Last run: 16/16.** |
 | `scripts/dev/browser/verify-recorder.sh` | R75 with a **real `MediaRecorder`**: start · elapsed advancing · pause freezing the reading · resume · stop · editable name · save · discard · a second recording numbered « 2» — then the bytes in **MinIO** through a presigned URL, the row in the library, and the link as a *recording* on the Session page. Chrome runs with `--use-fake-device-for-media-capture`, which supplies a synthetic microphone; **the API is not stubbed**. **Last run: 22/22.** |
 | `scripts/dev/browser/verify-schedule-edit.sh` | «تعديل العنصر»: the dialog opens with the row's own mode, a seeded المستوى and its own الحلقة; changing only «نهاية التكرار» saves; and `teaching_mode`/`target_id` are untouched afterwards. **Last run: 12/12.** |
 | `scripts/dev/browser/verify-notifications.sh` | R77 on the real student dashboard: does a student see her own occurrences, does a cancellation reach her **with its reason**, is the notice unread and singular, does «تم الاطّلاع» clear it, does restoring **withdraw** an unread notice and **correct** a read one — driven as three real sessions (student · administrator · unrelated student) against the scenario the seeder builds. **Last run: 18/18.** |
@@ -229,6 +233,14 @@ the strongest argument for this kind of verification the project has:
 None of the three is visible from source, and each needed the *next* step to
 expose it — the whitelist refusal only appears once a real container reaches the
 server, and the tier bug only once a private row exists to be hidden.
+
+**The trap that caught this session twice, stated plainly:** a probe that
+identifies a row by what it *renders* rather than by its **id** will one day
+match a different row. The public-calendar check matched an occurrence by date
+and found one another probe run had left behind — correctly not cancelled — and
+reported the rendering rule broken. Identity now comes from the API. The same
+mistake is why the recorder harness once matched a `تفسير` belonging to another
+schedule.
 
 A third correction was in the harness's own bookkeeping rather than its aim:
 TD-4.13 **rotates the refresh token on every use**, with reuse detection behind

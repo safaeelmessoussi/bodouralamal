@@ -19,6 +19,7 @@ import {
 import { searchUsers, type UserSummary } from '../../adapters/users.js';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
 import { CalendarGrid } from '../../components/calendar/calendar-grid.js';
+import { ViewSwitch } from '../../components/calendar/view-switch.js';
 import { CalendarNav } from '../../components/calendar/calendar-nav.js';
 import { CalendarTitle } from '../../components/calendar/calendar-title.js';
 import { DayEventsDialog } from '../../components/calendar/day-events-dialog.js';
@@ -275,26 +276,11 @@ export function SchedulingPage(): ReactNode {
         </p>
       ) : null}
 
-      {/* The view is a query parameter, not a second navigation node (§20 rule
-          16) — the same choice §5.2's library made for its two views. */}
-      <div className="cal-toolbar" role="tablist" aria-label={t('scheduling.viewLabel')}>
-        {(['list', 'calendar'] as const).map((v) => (
-          <Button
-            key={v}
-            variant={view === v ? 'primary' : 'ghost'}
-            role="tab"
-            aria-selected={view === v}
-            onClick={() => {
-              setView(v);
-              const url = new URL(window.location.href);
-              url.searchParams.set('view', v);
-              window.history.replaceState(null, '', url);
-            }}
-          >
-            {t(`scheduling.view.${v}`)}
-          </Button>
-        ))}
-      </div>
+      {/* **The shared switch.** This was inline markup here, and the public
+          calendar needed the same control — copying it would have made two that
+          drift. It is one component now, and the query-parameter behaviour lives
+          with it (§20 rule 16). */}
+      <ViewSwitch view={view} onView={setView} />
 
       {view === 'list' ? (
         <>
