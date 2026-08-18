@@ -22,7 +22,13 @@
  * non-loopback database, because a session minted without an identity check is
  * exactly what must never exist in production.
  *
- *   bash scripts/dev/issue-dev-session.sh            # prints the cookie value
+ *   bash scripts/dev/issue-dev-session.sh              # a Super Admin
+ *   bash scripts/dev/issue-dev-session.sh <user-uuid>  # an EXISTING user, as they are
+ *
+ * With a uuid it mints for that user **exactly as they already exist** — no role
+ * is granted and none is checked. That is the point: verifying a student's own
+ * screens must exercise a student's real authorisation, and a script that
+ * quietly widened it would be verifying a session nobody has.
  */
 import { loadConfig } from '../src/lib/config.js';
 import { createPrismaClient } from '../src/lib/prisma.js';
@@ -38,17 +44,28 @@ if (!/@(127\.0\.0\.1|localhost)[:/]/.test(config.DATABASE_URL)) {
 
 const prisma = createPrismaClient(config.DATABASE_URL, 2);
 const NAME = '[dev-session] مديرة النظام';
+const requested = process.argv[2];
 
 const user =
-  (await prisma.user.findFirst({ where: { nameArabic: NAME } })) ??
-  (await prisma.user.create({ data: { nameArabic: NAME, accountStatus: 'active' } }));
+  requested === undefined
+    ? ((await prisma.user.findFirst({ where: { nameArabic: NAME } })) ??
+      (await prisma.user.create({ data: { nameArabic: NAME, accountStatus: 'active' } })))
+    : await prisma.user.findUniqueOrThrow({ where: { id: requested } });
 
-const role = await prisma.role.findUniqueOrThrow({ where: { name: 'super_admin' } });
-const held = await prisma.userBranchRole.findFirst({
-  where: { userId: user.id, roleId: role.id, branchId: null },
-});
-if (held === null) {
-  await prisma.userBranchRole.create({ data: { userId: user.id, roleId: role.id, branchId: null } });
+// The Super Admin role is granted only to the script's OWN default user. A user
+// named on the command line is minted for as they are: verifying a student's
+// screens must exercise a student's real authorisation, and widening it here
+// would verify a session nobody has.
+if (requested === undefined) {
+  const role = await prisma.role.findUniqueOrThrow({ where: { name: 'super_admin' } });
+  const held = await prisma.userBranchRole.findFirst({
+    where: { userId: user.id, roleId: role.id, branchId: null },
+  });
+  if (held === null) {
+    await prisma.userBranchRole.create({
+      data: { userId: user.id, roleId: role.id, branchId: null },
+    });
+  }
 }
 
 const issued = await issueNewSession(prisma, user.id);

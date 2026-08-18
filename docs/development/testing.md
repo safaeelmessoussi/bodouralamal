@@ -115,14 +115,21 @@ Vitest here renders with `renderToStaticMarkup`: **no jsdom, no layout engine, n
 events, no fetches.** Whole classes of fact are therefore invisible to it — where
 a button actually lands, whether a header click issues a request, whether a
 dragged row moves. The project has no Playwright and §3.1a forbids adding a
-dependency casually, so both browser scripts drive the **installed Chrome** over
+dependency casually, so the browser scripts drive the **installed Chrome** over
 the DevTools Protocol using Node's built-in `WebSocket`: no install, no lockfile
-change.
+change. `scripts/dev/browser/cdp.mjs` is the shared client — connect, evaluate in
+the page, record a pass/fail line — extracted when the second script had grown
+its own copy of the same twenty lines and a third would have made three.
+
+**None of them runs in CI.** They need a live stack, a real Chrome and (for the
+seeded scenarios) a development database, so they are run by hand and their
+result is reported in the slice that ran them.
 
 | Script | Answers |
 |---|---|
 | `scripts/dev/browser/measure-page-header.sh` | Does the primary action stay put as the description grows, at nine widths |
 | `scripts/dev/browser/verify-reorder.sh` | R76 on the five real admin screens: is «الترتيب» gone, is the header a focusable button, does pressing it send `sort_by` to the server, does a dropped row move **and survive a reload**, is the handle disabled and explained when it cannot be used |
+| `scripts/dev/browser/verify-notifications.sh` | R77 on the real student dashboard: does a student see her own occurrences, does a cancellation reach her **with its reason**, is the notice unread and singular, does «تم الاطّلاع» clear it, does restoring **withdraw** an unread notice and **correct** a read one — driven as three real sessions (student · administrator · unrelated student) against the scenario the seeder builds. **Last run: 18/18.** |
 
 ### Getting past the login wall without bypassing it
 
@@ -140,6 +147,40 @@ is checked by the same TD-2 rules as any other. What is replaced is the identity
 *provider*, and only in a development database — the script refuses to run
 against a non-loopback `DATABASE_URL` or with `NODE_ENV=production`.
 
+It takes an optional user uuid:
+
+```bash
+bash scripts/dev/issue-dev-session.sh              # the script's own Super Admin
+bash scripts/dev/issue-dev-session.sh <user-uuid>  # an existing user, as they are
+```
+
+**With a uuid it grants nothing.** The Super Admin role is created only for the
+script's own default user; a user named on the command line is minted for exactly
+as they already exist. That distinction is the whole point of the argument:
+verifying a student's own screens has to exercise a student's real authorisation,
+and a script that quietly widened it would be verifying a session nobody has.
+
+### The scenario the browser reads
+
+`scripts/dev/seed-dev-scenario.sh` builds the association's own case in the
+development database and prints the ids as one JSON line:
+
+    المرأة — وميض الأمل · تفسير · كل اثنين 15:00–17:00 · تاركة · القاعة 5
+    صفاء (أستاذة) · أمينة (مساعدة) · مستفيدة مسجّلة · مستفيدة غير معنية
+
+The occurrences come from **`materializeSchedule`, the production materializer**,
+so what the browser then reads is what the platform would really have made —
+including the R43.4 staffing snapshot each Session carries. The unrelated
+مستفيدة is the control: she is enrolled in nothing, and a notification reaching
+her would mean the audience is not the audience.
+
+Every row it writes is tagged `[dev-scenario]`, and **`--clean` removes exactly
+those rows and nothing else**. It is idempotent — it cleans before it seeds — and
+`verify-notifications.sh` traps `EXIT` to clean up after itself, so a run leaves
+the database as it found it. Same guards as the session script: it refuses
+`NODE_ENV=production` and a non-loopback `DATABASE_URL`. It is local development
+and browser verification only; nothing in CI or in any suite calls it.
+
 ### What browser verification found that no test could
 
 The R76 drag worked from the keyboard and did nothing on a synthetic drag
@@ -152,6 +193,27 @@ refs drive the logic.
 The lesson generalises: *a behaviour that depends on a re-render happening between
 two events is a behaviour that works only when the machine is slow enough.*
 Neither a unit test nor a code reading would have asked.
+
+The R77 run found nothing wrong with the application, and two things wrong with
+the harness — worth recording because both are traps a later harness will set
+again:
+
+* **It aimed at an occurrence already past.** `restoreSession` refuses that with
+  `STATE_CONFLICT / SESSION_IN_PAST`, because reinstating a class that has
+  already not happened would put a session on the calendar claiming it did. The
+  refusal was correct; the harness was aiming at the one occurrence the scenario
+  cannot be run against. It now takes the next Monday ahead of today.
+* **It matched occurrences by title.** Other suites seed their own `تفسير`, so
+  the filter picked up an occurrence belonging to a different schedule. Selection
+  now comes from `GET /admin/course-schedules/{id}/sessions` — the same read the
+  admin screen uses before offering «إلغاء» or «استعادة». **The schedule is the
+  identity; a name never was.**
+
+A third correction was in the harness's own bookkeeping rather than its aim:
+TD-4.13 **rotates the refresh token on every use**, with reuse detection behind
+it, so re-presenting the token the script was handed works exactly once per
+identity. Switching between three sessions means carrying each one's *rotated*
+cookie forward — which is what a second person on a second device actually is.
 
 ## Four environment traps the integration suite sets
 

@@ -11,4 +11,4 @@ set +a
 export DATABASE_URL="${DATABASE_URL//@db:5432/@127.0.0.1:5433}"
 export MINIO_ENDPOINT="${MINIO_ENDPOINT//\/\/minio:9000/\/\/127.0.0.1:9001}"
 cd backend
-exec npx tsx scripts/issue-dev-session.ts
+exec npx tsx scripts/issue-dev-session.ts "$@"
