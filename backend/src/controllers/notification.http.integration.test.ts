@@ -1,0 +1,355 @@
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+
+import { issueAccessToken } from '../lib/access-token.js';
+import { loadConfig } from '../lib/config.js';
+import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
+import { httpCall } from '../test-support/http-client.js';
+
+/**
+ * **Session cancellation as a notification event** (§4.8 as narrowed by R77),
+ * over real HTTP.
+ *
+ * This file is the §12 scenario written down: cancel exactly one occurrence of a
+ * recurring class, and assert what a beneficiary can actually see afterwards.
+ * The properties that matter are the ones a service test cannot reach — that the
+ * *enrolled* student is told and the unrelated one is not, that a second
+ * student's notice is invisible to the first, and that restoring reconciles what
+ * was already delivered rather than quietly deleting it.
+ *
+ * Requires the compose stack, with the api image built from current source:
+ *   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build api
+ */
+const config = loadConfig();
+const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);
+const BASE = `${config.PUBLIC_BASE_URL}/api/v1`;
+const TAG = '[http-notification-test]';
+const YEAR_LABEL = '2097-2098';
+
+const KEYS = [
+  'created_at',
+  'id',
+  'level_name',
+  'read_at',
+  'reason',
+  'session_date',
+  'session_id',
+  'session_start_time',
+  'subject_name',
+  'type',
+];
+
+interface Res {
+  status: number;
+  body: Record<string, unknown> & {
+    error?: { code?: string };
+    data?: Record<string, unknown>[] & Record<string, unknown>;
+    meta?: { total: number; unread: number };
+    schedule?: { id: string };
+  };
+}
+
+const call = (method: string, path: string, token?: string, body?: unknown): Promise<Res> =>
+  httpCall<Res['body']>(BASE, method, path, {
+    token,
+    ...(body !== undefined ? { body } : {}),
+  });
+
+const bearer = (userId: string, scopes: { role: string; branches: string[] | null }[]): string =>
+  issueAccessToken(
+    { userId, roleScopes: scopes as never, accountStatus: 'active' as never },
+    config.JWT_SIGNING_KEY,
+  ).token;
+
+let superAdmin: string;
+let enrolledToken: string;
+let enrolledId: string;
+let secondToken: string;
+let outsiderToken: string;
+let scheduleId: string;
+let sessionId: string;
+
+async function makeUser(label: string): Promise<string> {
+  return (
+    await prisma.user.create({ data: { nameArabic: `${TAG} ${label}`, accountStatus: 'active' } })
+  ).id;
+}
+
+async function clear(): Promise<void> {
+  const schedules = await prisma.recurringCourseSchedule.findMany({
+    where: { branch: { name: { startsWith: TAG } } },
+    select: { id: true },
+  });
+  const ids = schedules.map((s) => s.id);
+  const sessions = await prisma.session.findMany({
+    where: { scheduleId: { in: ids } },
+    select: { id: true },
+  });
+  await prisma.notification.deleteMany({
+    where: { sessionId: { in: sessions.map((s) => s.id) } },
+  });
+  await prisma.sessionStaff.deleteMany({ where: { session: { scheduleId: { in: ids } } } });
+  await prisma.session.deleteMany({ where: { scheduleId: { in: ids } } });
+  await prisma.courseScheduleStaff.deleteMany({ where: { scheduleId: { in: ids } } });
+  if (ids.length > 0) {
+    await prisma.auditLog.deleteMany({ where: { targetId: { in: ids } } });
+    await prisma.trash.deleteMany({ where: { targetId: { in: ids } } });
+  }
+  await prisma.recurringCourseSchedule.deleteMany({ where: { id: { in: ids } } });
+
+  const levels = await prisma.level.findMany({
+    where: { name: { startsWith: TAG } },
+    select: { id: true },
+  });
+  const levelIds = levels.map((l) => l.id);
+  const groups = await prisma.administrativeGroup.findMany({
+    where: { levelId: { in: levelIds } },
+    select: { id: true },
+  });
+  await prisma.enrollment.deleteMany({ where: { levelId: { in: levelIds } } });
+  await prisma.administrativeGroup.deleteMany({ where: { id: { in: groups.map((g) => g.id) } } });
+  await prisma.levelSubject.deleteMany({ where: { levelId: { in: levelIds } } });
+  await prisma.level.deleteMany({ where: { id: { in: levelIds } } });
+  await prisma.subject.deleteMany({ where: { name: { startsWith: TAG } } });
+  await prisma.category.deleteMany({ where: { name: { startsWith: TAG } } });
+  await prisma.room.deleteMany({ where: { branch: { name: { startsWith: TAG } } } });
+  await prisma.branch.deleteMany({ where: { name: { startsWith: TAG } } });
+  await prisma.academicYear.deleteMany({ where: { label: YEAR_LABEL } });
+
+  const users = await prisma.user.findMany({
+    where: { nameArabic: { startsWith: TAG } },
+    select: { id: true },
+  });
+  const userIds = users.map((u) => u.id);
+  if (userIds.length > 0) {
+    await prisma.notification.deleteMany({ where: { userId: { in: userIds } } });
+    await prisma.auditLog.deleteMany({ where: { actorUserId: { in: userIds } } });
+    await prisma.auditLog.deleteMany({ where: { targetId: { in: userIds } } });
+    await prisma.trash.deleteMany({ where: { deletedById: { in: userIds } } });
+    await prisma.user.deleteMany({ where: { id: { in: userIds } } });
+  }
+}
+
+beforeAll(async () => {
+  const health = await fetch(`${config.PUBLIC_BASE_URL}/healthz`).catch(() => null);
+  if (!health || health.status !== 200) throw new Error('API not reachable');
+  await clear();
+
+  const branchId = (await prisma.branch.create({ data: { name: `${TAG} فرع` } })).id;
+  const roomId = (await prisma.room.create({ data: { name: `${TAG} قاعة`, branchId } })).id;
+  const category = await prisma.category.create({ data: { name: `${TAG} فئة` } });
+  const levelId = (
+    await prisma.level.create({
+      data: { name: `${TAG} مستوى`, categoryId: category.id, genderRestriction: 'any' },
+    })
+  ).id;
+  const subjectId = (await prisma.subject.create({ data: { name: `${TAG} مادة` } })).id;
+  await prisma.levelSubject.create({ data: { levelId, subjectId } });
+  const groupId = (
+    await prisma.administrativeGroup.create({
+      data: { name: `${TAG} مجموعة`, levelId, branchId },
+    })
+  ).id;
+  const academicYearId = (await prisma.academicYear.create({ data: { label: YEAR_LABEL } })).id;
+
+  superAdmin = bearer(await makeUser('مدير عام'), [{ role: 'super_admin', branches: null }]);
+
+  enrolledId = await makeUser('مستفيدة مسجّلة');
+  const secondId = await makeUser('مستفيدة ثانية');
+  const outsiderId = await makeUser('مستفيدة غير معنية');
+  enrolledToken = bearer(enrolledId, [{ role: 'student', branches: null }]);
+  secondToken = bearer(secondId, [{ role: 'student', branches: null }]);
+  // Enrolled in NOTHING — the control. A notification reaching her would mean
+  // the audience is not the audience.
+  outsiderToken = bearer(outsiderId, [{ role: 'student', branches: null }]);
+
+  for (const studentId of [enrolledId, secondId]) {
+    await prisma.enrollment.create({
+      data: { studentId, levelId, administrativeGroupId: groupId, branchId },
+    });
+  }
+
+  const created = await call('POST', '/admin/course-schedules', superAdmin, {
+    title: `${TAG} حلقة`,
+    subject_id: subjectId,
+    teaching_mode: 'administrative_group',
+    target_id: groupId,
+    branch_id: branchId,
+    room_id: roomId,
+    start_time: '15:00',
+    end_time: '17:00',
+    recurrence: 'weekly',
+    weekdays: ['monday'],
+    academic_year_id: academicYearId,
+  });
+  if (created.status !== 201) {
+    throw new Error(`fixture schedule failed: ${JSON.stringify(created.body)}`);
+  }
+  scheduleId = created.body.schedule!.id;
+  sessionId = (
+    await prisma.session.findFirstOrThrow({
+      where: { scheduleId, status: 'scheduled', deletedAt: null },
+      orderBy: { date: 'asc' },
+      select: { id: true },
+    })
+  ).id;
+});
+
+afterAll(async () => {
+  await clear();
+  await prisma.$disconnect();
+});
+
+const versionOf = async (): Promise<number> =>
+  (await prisma.session.findUniqueOrThrow({ where: { id: sessionId }, select: { version: true } }))
+    .version;
+
+const cancel = async (reason: string): Promise<Res> =>
+  call('POST', `/sessions/${sessionId}/cancel`, superAdmin, {
+    reason,
+    version: await versionOf(),
+  });
+
+const restore = async (): Promise<Res> =>
+  call('POST', `/sessions/${sessionId}/restore`, superAdmin, { version: await versionOf() });
+
+const inbox = async (token: string, query = ''): Promise<Res> =>
+  call('GET', `/notifications${query}`, token);
+
+describe('R77 — cancelling one occurrence notifies its enrolled students', () => {
+  it('reaches the enrolled student, carrying the REASON', async () => {
+    const cancelled = await cancel('الأستاذة مريضة');
+    expect(cancelled.status).toBe(200);
+
+    const res = await inbox(enrolledToken);
+    expect(res.status).toBe(200);
+    const mine = res.body.data!.filter((n) => n['session_id'] === sessionId);
+    expect(mine).toHaveLength(1);
+    // *Cancelled* without *why* is what §4.8's manual channels already managed,
+    // badly — the reason is the point of the notice.
+    expect(mine[0]!['reason']).toBe('الأستاذة مريضة');
+    expect(mine[0]!['type']).toBe('session_cancelled');
+    expect(mine[0]!['read_at']).toBeNull();
+    // TD-11 — a calendar date and a wall-clock time, never an instant.
+    expect(String(mine[0]!['session_date'])).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    expect(mine[0]!['session_start_time']).toBe('15:00');
+  });
+
+  it('is an explicit contract DTO, not the row', async () => {
+    const res = await inbox(enrolledToken);
+    expect(Object.keys(res.body.data![0]!).sort()).toEqual(KEYS);
+  });
+
+  it('does NOT reach a student enrolled in nothing', async () => {
+    const res = await inbox(outsiderToken);
+    expect(res.status).toBe(200);
+    expect(res.body.data!.filter((n) => n['session_id'] === sessionId)).toHaveLength(0);
+  });
+
+  it('reaches every enrolled student, each seeing only their own', async () => {
+    const second = await inbox(secondToken);
+    expect(second.body.data!.filter((n) => n['session_id'] === sessionId)).toHaveLength(1);
+    // The count is what the screen shows, and it is the caller's own.
+    expect(second.body.meta!.unread).toBeGreaterThan(0);
+    expect((await inbox(outsiderToken)).body.meta!.unread).toBe(0);
+  });
+
+  it('leaves the recurring schedule alive — only this occurrence is cancelled', async () => {
+    const others = await prisma.session.count({
+      where: { scheduleId, status: 'scheduled', deletedAt: null },
+    });
+    expect(others).toBeGreaterThan(0);
+    const schedule = await prisma.recurringCourseSchedule.findUniqueOrThrow({
+      where: { id: scheduleId },
+      select: { deletedAt: true },
+    });
+    expect(schedule.deletedAt).toBeNull();
+  });
+
+  it('records both the audience size and how many were told', async () => {
+    const row = await prisma.auditLog.findFirstOrThrow({
+      where: { actionType: 'session.cancel', targetId: sessionId },
+      orderBy: { createdAt: 'desc' },
+    });
+    const detail = row.detail as Record<string, unknown>;
+    expect(detail['audience_size']).toBe(2);
+    expect(detail['notified']).toBe(2);
+  });
+
+  it('is idempotent — a cancellation that is already in force writes no second notice', async () => {
+    // The state machine refuses `cancelled → cancelled`, so the honest assertion
+    // is that the notices did not multiply.
+    const again = await cancel('مرة أخرى');
+    expect(again.status).toBe(409);
+    const count = await prisma.notification.count({
+      where: { sessionId, type: 'session_cancelled' },
+    });
+    expect(count).toBe(2);
+  });
+
+  it('refuses an anonymous read and never leaks another caller’s notice', async () => {
+    expect((await inbox(undefined)).status).toBe(401);
+    const mine = (await inbox(enrolledToken)).body.data![0]!;
+    // §20 rule 17 — for a caller who is not the recipient this is NOT_FOUND, not
+    // FORBIDDEN, which would confirm the notice exists.
+    const stolen = await call('POST', `/notifications/${String(mine['id'])}/read`, outsiderToken);
+    expect(stolen.status).toBe(404);
+    expect(stolen.body.error?.code).toBe('NOT_FOUND');
+  });
+});
+
+describe('R77.5 — restoring reconciles what was already delivered', () => {
+  it('marks one read, and the unread filter answers accordingly', async () => {
+    const mine = (await inbox(enrolledToken)).body.data!.find(
+      (n) => n['session_id'] === sessionId,
+    )!;
+    const read = await call('POST', `/notifications/${String(mine['id'])}/read`, enrolledToken);
+    expect(read.status).toBe(200);
+    expect(read.body.data!['read_at']).not.toBeNull();
+
+    // Idempotent, and it does not move the timestamp — a retry must not rewrite
+    // when the person actually read it.
+    const first = read.body.data!['read_at'];
+    const twice = await call('POST', `/notifications/${String(mine['id'])}/read`, enrolledToken);
+    expect(twice.body.data!['read_at']).toBe(first);
+
+    const unread = await inbox(enrolledToken, '?unread_only=true');
+    expect(unread.body.data!.filter((n) => n['session_id'] === sessionId)).toHaveLength(0);
+  });
+
+  it('withdraws the UNREAD notice and CORRECTS the read one', async () => {
+    const restored = await restore();
+    expect(restored.status).toBe(200);
+
+    // The second student never read hers, so hers is simply gone: an unread
+    // notice of something no longer true is worth nothing.
+    const second = (await inbox(secondToken)).body.data!.filter(
+      (n) => n['session_id'] === sessionId,
+    );
+    expect(second).toHaveLength(0);
+
+    // The first student HAD read hers, so deleting it silently would leave her
+    // believing the class is cancelled with nothing to correct her.
+    const first = (await inbox(enrolledToken)).body.data!.filter(
+      (n) => n['session_id'] === sessionId,
+    );
+    expect(first).toHaveLength(1);
+    expect(first[0]!['type']).toBe('session_restored');
+    // The correction REPLACES the notice it corrects — two contradictory
+    // statements about one class in the same list would be worse than either.
+    expect(first[0]!['read_at']).toBeNull();
+  });
+
+  it('records what it reconciled, and is idempotent on a second restore', async () => {
+    const row = await prisma.auditLog.findFirstOrThrow({
+      where: { actionType: 'session.restore', targetId: sessionId },
+      orderBy: { createdAt: 'desc' },
+    });
+    const detail = row.detail as Record<string, unknown>;
+    expect(detail['withdrawn']).toBe(1);
+    expect(detail['corrected']).toBe(1);
+
+    // `scheduled → scheduled` is refused, and nothing multiplied.
+    expect((await restore()).status).toBe(409);
+    expect(await prisma.notification.count({ where: { sessionId } })).toBe(1);
+  });
+});

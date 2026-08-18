@@ -74,6 +74,8 @@ GET /events                                   # TD-3.4 (R56) — event DEFINITIO
 POST /events                                  # TD-3.4, §4.4
 PATCH /events/{id}                            # TD-3.4, §4.4
 DELETE /events/{id}                           # TD-3.4, TD-5
+GET /notifications                            # R77.7; the caller's OWN, paginated (TD-10)
+POST /notifications/{id}/read                 # R77.6; idempotent; another user's answers 404 (§20 r17)
 GET /admin/branches/{id}/event-backfill       # §4.4 "listing applicable global/recurring events to attach"
 
 # ── Official Moroccan Hijri calendar (TD-3.4, Revision 31)

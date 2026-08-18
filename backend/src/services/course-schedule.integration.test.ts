@@ -127,6 +127,10 @@ async function cleanup(): Promise<void> {
   // Session (TD-5), so it goes before them.
   await prisma.sessionStaff.deleteMany({ where: { session: scheduleWhere } });
   await prisma.educationalContent.deleteMany({ where: { title: { startsWith: TAG } } });
+  // R77 — `notification.session_id` is RESTRICT, like every other reference
+  // to a Session: a cancellation notice whose session vanished is unreadable.
+  // Fixtures therefore unwind notices before the occurrences they name.
+  await prisma.notification.deleteMany({ where: { session: scheduleWhere } });
   await prisma.session.deleteMany({ where: scheduleWhere });
   await prisma.courseScheduleStaff.deleteMany({ where: { schedule: { subject: tagged } } });
   await prisma.recurringCourseSchedule.deleteMany({ where: { subject: tagged } });

@@ -118,6 +118,10 @@ async function clear(): Promise<void> {
   // is part of the record of what happened, so it never disappears silently
   // beneath it. The fixture therefore unwinds in the same order.
   await prisma.sessionStaff.deleteMany({ where: { session: { scheduleId: { in: ids } } } });
+  // R77 — `notification.session_id` is RESTRICT, like every other reference
+  // to a Session: a cancellation notice whose session vanished is unreadable.
+  // Fixtures therefore unwind notices before the occurrences they name.
+  await prisma.notification.deleteMany({ where: { session: { scheduleId: { in: ids } } } });
   await prisma.session.deleteMany({ where: { scheduleId: { in: ids } } });
   await prisma.courseScheduleStaff.deleteMany({ where: { scheduleId: { in: ids } } });
   if (ids.length > 0) {

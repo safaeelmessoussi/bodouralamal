@@ -590,7 +590,7 @@
 }
 .admin-table__grip-btn:hover:not(:disabled) {
   color: var(--color-primary);
-  background: var(--color-surface-subtle);
+  background: var(--color-background);
 }
 .admin-table__grip-btn:active:not(:disabled) {
   cursor: grabbing;

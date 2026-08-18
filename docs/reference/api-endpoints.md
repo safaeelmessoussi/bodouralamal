@@ -32,6 +32,32 @@ service, not by the URL prefix).
 | `POST` | `/auth/logout` | 🔒 | Revokes **the current session only** — other devices keep working |
 | `GET` | `/me` | 🔒 | Identity, roles, scopes, status, approved child links. **One of only two endpoints a Pending session may call** |
 
+## Notifications
+
+**One event, and it is the only one in the MVP** (§4.8 as narrowed by Revision 77).
+Revision 6 removed in-app notifications entirely; R77 narrows that to the
+*framework* — the five-event catalogue, the tiers and `NotificationPreference`
+stay in §10.1 — and admits a class session's cancellation, which is the one thing
+a beneficiary genuinely cannot learn any other way inside the platform.
+
+| | Path | Notes |
+|---|---|---|
+| `GET` | `/notifications` | 🔒 **The caller's own, and nobody else's.** No id names a user, so there is nothing to tamper with and no role widens it. Paginated (TD-10), newest first with the `id` tiebreaker. `?unread_only=true` narrows. `meta.unread` travels with the list rather than as a second endpoint that would disagree with it |
+| `POST` | `/notifications/{id}/read` | 🔒 Idempotent, and it does **not** move the timestamp on a retry. Another user's row answers **`404`, never `403`** (§20 rule 17) |
+
+**Written in the same transaction as the cancellation**, because a committed
+cancellation with no notifications is a class nobody was told about and a retry
+cannot tell that state apart from one already notified. The audience is the
+Session's resolved audience (§4.4c) through **the same predicate** that produces
+the `session.cancel` audit row's `audience_size` — two that agree today are two
+that drift. **Students only**: not staff, who take the decision, and not parents,
+whose access is §4.3's child context rather than a mailbox of their own.
+
+**Restoring reconciles rather than deleting.** An *unread* notice of something no
+longer true is withdrawn; one already *read* becomes `session_restored`, because
+silently removing something a person has acted on leaves them believing a class
+is cancelled with nothing to correct them.
+
 ## Public
 
 Three anonymous endpoints, each a deliberate decision about what may be public.

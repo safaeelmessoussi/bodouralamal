@@ -1,4 +1,5 @@
 import type { Prisma, PrismaClient, Session, SessionStatus } from '../generated/prisma/client.js';
+import { notifyCancelled, notifyRestored } from './notification.service.js';
 import { AppError } from '../lib/errors.js';
 import { atMidnightUtc } from '../lib/recurrence.js';
 import * as scope from '../policies/branch-scope.js';
@@ -235,13 +236,17 @@ export async function cancelSession(
     });
   }
 
-  const affected = await audienceSize(prisma, {
+  // ONE spec, used by both the audit count and the notification write (R77.3):
+  // two resolutions that agree today are two that drift, and a notification list
+  // disagreeing with the audit's `audience_size` would make both unusable.
+  const spec = {
     teachingMode: session.schedule.teachingMode as never,
     levelId: session.schedule.levelId,
     administrativeGroupId: session.schedule.administrativeGroupId,
     teachingGroupId: session.schedule.teachingGroupId,
     branchId: session.schedule.branchId,
-  });
+  };
+  const affected = await audienceSize(prisma, spec);
 
   return prisma.$transaction(async (tx) => {
     const updated = await updateWithVersion<Session>({
@@ -251,6 +256,10 @@ export async function cancelSession(
       requireNotDeleted: true,
       data: { status: 'cancelled', cancellationReason: reason.trim() },
     });
+    // **In the same transaction** (R77.4). A committed cancellation with no
+    // notifications is a class nobody was told about, and a retry cannot tell
+    // that state apart from one already notified.
+    const notified = await notifyCancelled(tx, sessionId, spec);
     await audit.write(tx, {
       actorUserId: actor.userId,
       activeRole: actor.activeRole,
@@ -261,6 +270,9 @@ export async function cancelSession(
         reason: reason.trim(),
         date: session.date.toISOString().slice(0, 10),
         audience_size: affected,
+        // How many were actually told, which can be lower than the audience on a
+        // retry — the notices already existed and were not written twice.
+        notified,
       },
     });
     return updated;
@@ -301,13 +313,18 @@ export async function restoreSession(
       requireNotDeleted: true,
       data: { status: 'scheduled' },
     });
+    // R77.5 — an unread notice of something no longer true is withdrawn; one
+    // already read is CORRECTED instead, because silently removing it would
+    // leave a person believing the class is cancelled with nothing to tell them
+    // otherwise.
+    const reconciled = await notifyRestored(tx, sessionId);
     await audit.write(tx, {
       actorUserId: actor.userId,
       activeRole: actor.activeRole,
       actionType: 'session.restore',
       targetEntity: 'Session',
       targetId: sessionId,
-      detail: { date: session.date.toISOString().slice(0, 10) },
+      detail: { date: session.date.toISOString().slice(0, 10), ...reconciled },
     });
     return updated;
   });

@@ -304,10 +304,11 @@ enum ConsumedTokenPurpose {
 /// they are login-less and reached only through an approved FamilyLink
 /// (§4.3, BR-5).
 model User {
+  notifications Notification[] @relation("NotificationRecipient")
   examStaff     ExamStaff[]
-  eventStaff    EventStaff[]  @relation("EventStaffUser")
-  id            String        @id @default(uuid()) @db.Uuid
-  accountStatus AccountStatus @default(pending) @map("account_status")
+  eventStaff    EventStaff[]   @relation("EventStaffUser")
+  id            String         @id @default(uuid()) @db.Uuid
+  accountStatus AccountStatus  @default(pending) @map("account_status")
 
   // Person names. `nameArabic` is collated ar-x-icu by hand-written SQL
   // (TD-6a) so ordering is correct without per-query COLLATE (BR-19).
@@ -1137,6 +1138,7 @@ model Session {
 
   linkedContent SessionContent[]
   staff         SessionStaff[]
+  notifications Notification[]
 
   // What makes `session.materialize` idempotent: a second run over the same
   // horizon creates no duplicate occurrence.
@@ -2055,4 +2057,56 @@ model SystemSetting {
   updatedById String?  @map("updated_by") @db.Uuid
 
   @@map("system_setting")
+}
+
+/// **The one MVP notification event** (§4.8 as narrowed by Revision 77).
+///
+/// R6 removed in-app notifications from the MVP entirely, and R77 narrows that
+/// to the *framework*: the five-event catalogue, the critical/normal tiers and
+/// `NotificationPreference` stay in §10.1 and no schema may pre-create them.
+/// This table is deliberately the minimum that can carry one event — **no tier,
+/// no preference, no channel** — so it is not a head start on the postponed
+/// design but a different, smaller thing.
+///
+/// A notification is a **delivered fact**, which is why it is a row and not a
+/// derived read over cancelled sessions. Without a row there is nothing to mark
+/// read, so a screen could only ever say *this class is cancelled* and never
+/// *this is news*; and a student who left the Level would lose the notice of
+/// last week's cancellation, which is exactly when they need it.
+enum NotificationType {
+  session_cancelled
+  session_restored
+
+  @@map("notification_type")
+}
+
+model Notification {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @map("user_id") @db.Uuid
+  user   User   @relation("NotificationRecipient", fields: [userId], references: [id], onDelete: Restrict)
+
+  type NotificationType
+
+  /// The occurrence this is about. `Restrict`, like every other reference to a
+  /// Session: a cancellation notice whose session vanished would be unreadable.
+  sessionId String  @map("session_id") @db.Uuid
+  session   Session @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+
+  /// Null until the recipient reads it. R77.5 turns on this column: an UNREAD
+  /// notice of something no longer true is deleted on restore, while a READ one
+  /// is answered with `session_restored` instead — silently removing something a
+  /// person has already acted on is the worse failure.
+  readAt DateTime? @map("read_at") @db.Timestamptz(6)
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  /// One notification per recipient per session per type — what makes the write
+  /// idempotent (R77.5). Cancelling twice, or a retry after a dropped response,
+  /// produces the same rows rather than a second copy of the same news.
+  @@unique([userId, sessionId, type])
+  /// The list read: one user's newest first (R77.6).
+  @@index([userId, createdAt])
+  @@map("notification")
 }

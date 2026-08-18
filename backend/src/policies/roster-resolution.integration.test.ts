@@ -193,6 +193,10 @@ beforeAll(async () => {
 afterAll(async () => {
   // Order matters: every FK is RESTRICT (TD-5), so children go first.
   await prisma.courseScheduleStaff.deleteMany({ where: { schedule: { subject: { name: { startsWith: TAG } } } } });
+  // R77 — `notification.session_id` is RESTRICT, like every other reference
+  // to a Session: a cancellation notice whose session vanished is unreadable.
+  // Fixtures therefore unwind notices before the occurrences they name.
+  await prisma.notification.deleteMany({ where: { session: { schedule: { subject: { name: { startsWith: TAG } } } } } });
   await prisma.session.deleteMany({ where: { schedule: { subject: { name: { startsWith: TAG } } } } });
   await prisma.recurringCourseSchedule.deleteMany({ where: { subject: { name: { startsWith: TAG } } } });
   await prisma.studentTeachingGroup.deleteMany({ where: { student: { nameArabic: { startsWith: TAG } } } });

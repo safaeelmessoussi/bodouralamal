@@ -104,6 +104,10 @@ afterAll(async () => {
   await prisma.sessionContent.deleteMany({ where: { session: { scheduleId } } });
   await prisma.educationalContent.deleteMany({ where: { title: { startsWith: TAG } } });
   await prisma.sessionStaff.deleteMany({ where: { session: { scheduleId } } });
+  // R77 — `notification.session_id` is RESTRICT, like every other reference
+  // to a Session: a cancellation notice whose session vanished is unreadable.
+  // Fixtures therefore unwind notices before the occurrences they name.
+  await prisma.notification.deleteMany({ where: { session: { scheduleId } } });
   await prisma.session.deleteMany({ where: { scheduleId } });
   await prisma.recurringCourseSchedule.deleteMany({ where: { subject: tagged } });
   await prisma.subject.deleteMany({ where: tagged });

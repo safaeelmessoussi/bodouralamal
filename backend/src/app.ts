@@ -1,4 +1,5 @@
 import express, { type Express, type Request, type Response } from 'express';
+import * as notifications from './controllers/notification.controller.js';
 
 import * as auth from './controllers/auth.controller.js';
 import * as approvals from './controllers/approval.controller.js';
@@ -253,6 +254,12 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
   guarded.patch('/profile', profile.update(prisma));
 
   guarded.get('/students/me', childContext(prisma), students.me(prisma));
+
+  // R77 — the caller's OWN notifications. No `childContext`: a notification is
+  // addressed to a user, and a parent acting for a child reads the child's
+  // calendar, not the child's mailbox (§4.3, R77.3).
+  guarded.get('/notifications', notifications.list(prisma));
+  guarded.post('/notifications/:id/read', notifications.read(prisma));
 
   guarded.get('/admin/approvals', approvals.list(prisma));
   guarded.post('/admin/approvals/:id/approve', approvals.approve(prisma));
