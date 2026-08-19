@@ -74,7 +74,7 @@ describe('the Subject filter does not require a Level', () => {
   });
 
   it('the shared selector ignores the dependency only in filter mode', () => {
-    expect(code(SELECTORS)).toContain("mode === 'filter' && field === 'subjectId'");
+    expect(code(SELECTORS)).toContain("mode === 'filter'");
     // The edge itself stays — it is true of forms, which is where it works.
     expect(code(SELECTORS)).toContain('subjectId: [{ field: ');
   });

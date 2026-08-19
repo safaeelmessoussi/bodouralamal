@@ -155,7 +155,18 @@ export function StudentDashboard(): ReactNode {
                   whole public timetable, which is what she saw before.
                   **No filters**: her calendar is already hers, and a branch or
                   level control would imply a scope she does not have (rule O). */}
-              <PersonalCalendar token={accessToken} heading={t('studentDashboard.myCalendar')} />
+              {/* **R84's student matrix.** She may hold enrolments in several
+                  Levels, so المستوى is hers to narrow by — along with النوع,
+                  المادة, المجموعة and الحلقة, each restricted to her own
+                  occurrences by the server. **No الفرع and no الفئة**: her
+                  calendar is already hers, and either control would offer a
+                  scope she does not have (rule O). */}
+              <PersonalCalendar
+                token={accessToken}
+                fields={['levelId', 'type', 'subjectId', 'groupId', 'circleId']}
+                columns={['kind', 'title', 'date', 'time', 'level', 'subject', 'room']}
+                heading={t('studentDashboard.myCalendar')}
+              />
               <UpcomingSessions sessions={sessions} />
             </>
           ) : null}

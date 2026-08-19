@@ -7,13 +7,16 @@ import {
   type HijriDay,
   type Occurrence,
 } from '../../adapters/calendar.js';
-import { useCalendarFilters } from '../../hooks/use-calendar-filters.js';
+import {
+  useCalendarFilters,
+  type CalendarFilterField,
+} from '../../hooks/use-calendar-filters.js';
 import { t } from '../../i18n/index.js';
 import { CalendarFilters } from './calendar-filters.js';
 import { CalendarGrid } from './calendar-grid.js';
 import { CalendarHeader } from './calendar-header.js';
 import { DayEventsDialog } from './day-events-dialog.js';
-import { OccurrenceList } from './occurrence-list.js';
+import { OccurrenceTable, type OccurrenceColumn } from './occurrence-table.js';
 import { viewFromUrl, type CalendarView } from './view-switch.js';
 
 /**
@@ -40,11 +43,14 @@ import { viewFromUrl, type CalendarView } from './view-switch.js';
 export function PersonalCalendar({
   token,
   fields = [],
+  columns,
   heading,
 }: {
   token: string | null;
   /** Which filters this reader may narrow by — see the note above. */
-  fields?: readonly ('branchId' | 'categoryId' | 'levelId' | 'subjectId')[];
+  fields?: readonly CalendarFilterField[];
+  /** Which columns the list shows — the same authorization question (rule O). */
+  columns: readonly OccurrenceColumn[];
   heading: string;
 }): ReactNode {
   const today = useMemo(() => new Date(), []);
@@ -70,13 +76,28 @@ export function PersonalCalendar({
         ...(filters.value.branchId ? { branchId: filters.value.branchId } : {}),
         ...(filters.value.categoryId ? { categoryId: filters.value.categoryId } : {}),
         ...(filters.value.levelId ? { levelId: filters.value.levelId } : {}),
+        ...(filters.value.subjectId ? { subjectId: filters.value.subjectId } : {}),
+        ...(filters.value.groupId ? { groupId: filters.value.groupId } : {}),
+        ...(filters.value.circleId ? { circleId: filters.value.circleId } : {}),
+        ...(filters.value.type ? { kind: filters.value.type } : {}),
       });
       setOccurrences(rows);
       setState('ready');
     } catch {
       setState('error');
     }
-  }, [from, to, token, filters.value.branchId, filters.value.categoryId, filters.value.levelId]);
+  }, [
+    from,
+    to,
+    token,
+    filters.value.branchId,
+    filters.value.categoryId,
+    filters.value.levelId,
+    filters.value.subjectId,
+    filters.value.groupId,
+    filters.value.circleId,
+    filters.value.type,
+  ]);
 
   useEffect(() => {
     void load();
@@ -117,17 +138,15 @@ export function PersonalCalendar({
         onPrevious={() => setMonth(addMonths(month, -1))}
         onToday={() => setMonth(startOfMonth(today))}
         onNext={() => setMonth(addMonths(month, 1))}
-        {...(fields.length > 0
-          ? {
-              filters: (
-                <CalendarFilters
-                  filters={filters}
-                  categories={bootstrap?.categories ?? []}
-                  levels={bootstrap?.levels ?? []}
-                />
-              ),
-            }
-          : {})}
+        // **Rendered in both views, always** — the property R84 exists for.
+        filters={
+          <CalendarFilters
+            filters={filters}
+            categories={bootstrap?.categories ?? []}
+            levels={bootstrap?.levels ?? []}
+            types={KINDS.map((k) => ({ value: k, label: t(`calendar.kind.${k}`) }))}
+          />
+        }
       />
 
       <div aria-live="polite" aria-busy={state === 'loading'}>
@@ -149,7 +168,17 @@ export function PersonalCalendar({
             onOpenEvent={() => undefined}
           />
         ) : (
-          <OccurrenceList occurrences={occurrences} />
+          /* **The same table the public and back-office lists use** (R84):
+             قائمة is a table everywhere, and the two views of this surface show
+             the same month's occurrences under the same filters. */
+          <OccurrenceTable
+            occurrences={occurrences}
+            columns={columns}
+            status={state === 'loading' ? 'loading' : state === 'error' ? 'error' : 'ready'}
+            onRetry={() => void load()}
+            filtered={filters.active}
+            onClearFilters={() => filters.clear()}
+          />
         )}
       </div>
 
@@ -165,6 +194,9 @@ export function PersonalCalendar({
     </section>
   );
 }
+
+/** The occurrence kinds a reader can narrow by — the platform's own taxonomy. */
+const KINDS = ['session', 'event', 'exam'] as const;
 
 const startOfMonth = (d: Date): Date => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
 const addMonths = (d: Date, n: number): Date =>

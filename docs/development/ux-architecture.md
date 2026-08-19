@@ -1088,6 +1088,82 @@ on the next surface ([AE](#ae--a-dependency-between-selectors-belongs-to-forms-n
 bootstrap through `CalendarTitle` (§20 rule 14; R31, R36); the header decides
 position and nothing else.
 
+## AO · The calendar contract — one architecture, five surfaces
+
+Every calendar in the platform composes the **same** chrome. What differs is
+stated as data, not rebuilt per page.
+
+| Surface | Data | Month-scoped | Filters | Row actions |
+|---|---|---|---|---|
+| `/admin/schedules?view=list` | **definitions** (schedules · activities · exams) | **no** | the admin set | **yes** — it is an operational screen |
+| `/admin/schedules?view=calendar` | occurrences | yes | **the same admin set** | — |
+| `/calendar` (both views) | public occurrences | yes | المستوى · النوع | no |
+| `/dashboard/student` (both views) | **her own** occurrences | yes | المستوى · النوع · المادة · المجموعة · الحلقة | no |
+| `/teacher` (both views) | **her own** occurrences | yes | الفرع · الفئة · المستوى · النوع · المادة · المجموعة · الحلقة | no |
+
+**السنة الدراسية appears nowhere.** It narrowed definitions and meant nothing on
+a month of occurrences, so it made one surface's two views behave differently —
+the asymmetry this architecture exists to end. It remains a required field on the
+create/edit **form**, which is a different thing.
+
+### The filter section never depends on the view
+
+This is the property the whole architecture is for. The back office rendered its
+filters inside the **list's table toolbar**, so switching to تقويم made the
+entire section disappear while its values quietly survived in the URL — a grid
+that looked unfiltered and was not. The row is now built once per surface and
+handed to both views.
+
+**Month controls follow the DATA, not the view.** They were tied to
+`view === 'calendar'`, which was right for the back office's list and wrong for
+every other one: a public, beneficiary or مؤطرة **list** is *this month's
+occurrences*, and stepping is how a reader moves through it. A surface that is
+not month-scoped withholds the **month itself**, and `CalendarHeader` then omits
+the title and the stepping together — one fact, no second flag.
+
+### A filter narrows; it never gates
+
+`REQUIRES` governs **forms**, where a dependency is real — a Level needs its
+Category before it can be created. In `mode="filter"` **no field reads it**. The
+correction had been applied to `subjectId` alone and forgotten on the next field,
+which is how المستوى came to be disabled on the back office's list until a
+Category was chosen — a precondition §4.4b never states. Changing a parent
+**clears a stale child**; it disables nothing.
+
+### Which filters exist is an authorization question
+
+The caller names them (rule O). A beneficiary is offered no الفرع and no الفئة —
+her calendar is already hers and either control would imply a scope she does not
+have; a مؤطرة is offered both, because she works across them, with every option
+restricted server-side so the dropdown never becomes a way to enumerate branches
+she does not teach at.
+
+### قائمة is a table everywhere
+
+One `OccurrenceTable` with configurable columns, in the platform's `DataTable`
+language. The three hand-rolled lists it replaced had none of its states — no
+empty, no error, no retry. **No row actions** on the reading surfaces; the back
+office keeps its own definitions table with its own actions, because it is a
+different thing showing different rows.
+
+### What the domain does not support, and is not faked
+
+**الحلقة filters Session occurrences only.** A schedule may be addressed to a
+Teaching Circle (§4.4c), and an **Event cannot be** — there is no
+`EventTeachingGroup` join, and inventing one would be inventing a relationship
+the SRS does not define (§20 rule 16). The filter therefore narrows classes and
+leaves activities out, exactly as `subject_id` already did.
+
+**An Event has no location of its own** — only `EventBranch` *scope* rows, which
+say who it concerns rather than where it happens. So *خارج المقرات* cannot be
+expressed today, and **no fake Branch was created for it**. Recorded as an open
+Owner decision at the foot of this page rather than shoehorned into Branch.
+
+**An event for every Level of a Category at a Branch needs no `EventLevel` rows
+at all**: `EventBranch` + `EventCategory` with no Level rows already means
+exactly that, and the audience resolution reads it that way (R82.7). The filter
+shows such an event under any Level of that Category, which is what it concerns.
+
 ## AM · A calendar shows what is ON
 
 A cancelled occurrence **leaves** the calendar — every calendar: public,
@@ -1252,6 +1328,27 @@ filter** — the rule's fulfilment, which the old assertion called a violation.
 has it.**
 
 ## Open Owner decisions that touch these rules
+
+### An Event has no location — *خارج المقرات* cannot be expressed (2026-08-19)
+
+The Owner asked for calendar filtering of events held **outside association
+premises**: a rented hall, an off-site celebration. The model cannot say it.
+`Event` carries **no room, no address and no venue** — its only spatial relation
+is `EventBranch`, which is a **scope** (who it concerns), not a location (where
+it happens). A Session gets its place from its schedule's `room_id`; an Event has
+no equivalent.
+
+**Nothing was invented.** A Branch row called *«خارج المقرات»* would be a fake
+organisational unit that every branch filter, every enrolment scope and every
+audience resolution would then treat as real. The honest options are a nullable
+`Event.venue_name` plus an `is_offsite` marker, or a first-class `Venue` entity —
+and which one is right depends on whether the association wants to *reuse* named
+external venues, which is a question about the association rather than the code.
+
+**Awaiting the Owner's decision.** Until then the branch filter distinguishes the
+branches an event is scoped to, and an event scoped to none reads as *«خارج
+المقرات»* in the occurrence table's branch column — which is honest about scope
+and says nothing false about place.
 
 * **No structural marker identifies a مستفيدة.** Minors hold no role (§4.3),
   `intended_category_id` is unset on every live row, and one live account holds

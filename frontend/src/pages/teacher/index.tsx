@@ -86,9 +86,14 @@ function TeacherDashboard(): ReactNode {
   return (
     <TeacherLayout title={t('teacher.nav.dashboard')}>
       <NotificationList token={accessToken} />
+      {/* **R84's مؤطرة matrix**: everything the back office offers, because she
+          works across branches and levels — and every option is restricted to
+          her legitimate scope by the server, so the dropdown itself never
+          becomes a way to enumerate branches she does not teach at (rule O). */}
       <PersonalCalendar
         token={accessToken}
-        fields={['subjectId']}
+        fields={['branchId', 'categoryId', 'levelId', 'type', 'subjectId', 'groupId', 'circleId']}
+        columns={['kind', 'title', 'date', 'time', 'level', 'subject', 'audience', 'branch', 'room']}
         heading={t('teacher.myCalendar')}
       />
     </TeacherLayout>

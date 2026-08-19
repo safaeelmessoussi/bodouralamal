@@ -94,7 +94,21 @@ export function ScopeSelectors({
          * for this one field. `useScopeOptions({ subjectsUnscoped: true })` is
          * what fills the control in that case.
          */
-        const ignoreDependency = mode === 'filter' && field === 'subjectId';
+        /**
+         * **A FILTER never gates, whatever the field** (rule F, 2026-08-19).
+         *
+         * This read `mode === 'filter' && field === 'subjectId'` — the same
+         * correction, applied to one field and forgotten on the next. The Owner
+         * then found المستوى disabled on the back office's list, needing a
+         * Category first for no reason the domain gives: §4.4b makes a Level
+         * belong to a Category, which means choosing one **narrows** the other,
+         * not that either is a precondition.
+         *
+         * Generalising it is the fix. `REQUIRES` still governs FORMS, where a
+         * dependency is real — a Level genuinely needs its Category before it
+         * can be created — and that is the only place it now reads.
+         */
+        const ignoreDependency = mode === 'filter';
         const unmetDependency = ignoreDependency
           ? undefined
           : (REQUIRES[field] ?? []).find((dep) => scope.value[dep.field] === '');

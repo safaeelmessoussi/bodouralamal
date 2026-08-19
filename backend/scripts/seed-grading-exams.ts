@@ -29,6 +29,9 @@ const existing = await prisma.exam.findMany({
   select: { id: true },
 });
 const ids = existing.map((e) => e.id);
+// R82 — a `grade_published` notice RESTRICTs the exam it is about, so the
+// notices go before the exams here. Production soft-deletes and never hits this.
+await prisma.notification.deleteMany({ where: { examId: { in: ids } } });
 await prisma.grade.deleteMany({ where: { examId: { in: ids } } });
 await prisma.examStaff.deleteMany({ where: { examId: { in: ids } } });
 await prisma.exam.deleteMany({ where: { id: { in: ids } } });
@@ -47,8 +50,24 @@ if (process.argv.includes('--clean')) {
  * did exactly that, and the harness reported a missing field as though the page
  * were broken.
  */
+/**
+ * **An enrolment whose student holds the `student` ROLE**, not merely any
+ * enrolment.
+ *
+ * `/students/me/grades` resolves the acting student through §4.3's child
+ * context, which requires that role — so a beneficiary who has an enrolment and
+ * no role reads her own grades page as an error state. The harness picked such
+ * a person once the R82 fixtures started creating and removing enrolments, and
+ * reported her grades missing when what was missing was the role.
+ */
 const enrolment = await prisma.enrollment.findFirstOrThrow({
-  where: { deletedAt: null, student: { deletedAt: null } },
+  where: {
+    deletedAt: null,
+    student: {
+      deletedAt: null,
+      branchRoles: { some: { role: { name: 'student' } } },
+    },
+  },
   select: { levelId: true, branchId: true, studentId: true },
 });
 const level = await prisma.level.findUniqueOrThrow({ where: { id: enrolment.levelId } });

@@ -114,6 +114,11 @@ export interface CalendarQuery {
   to: string;
   branchId?: string | null;
   categoryId?: string | null;
+  /** R84 — the rest of the shared filter matrix, all server-side. */
+  subjectId?: string | null;
+  groupId?: string | null;
+  circleId?: string | null;
+  kind?: string | null;
   levelId?: string | null;
   /**
    * The caller's access token, when there is one (R62.10).
@@ -147,6 +152,14 @@ export async function fetchMyOccurrences(query: CalendarQuery): Promise<Occurren
   if (query.branchId) params.set('branch_id', query.branchId);
   if (query.categoryId) params.set('category_id', query.categoryId);
   if (query.levelId) params.set('level_id', query.levelId);
+  if (query.subjectId) params.set('subject_id', query.subjectId);
+  if (query.groupId) params.set('administrative_group_id', query.groupId);
+  if (query.circleId) params.set('teaching_group_id', query.circleId);
+  if (query.kind) params.set('type', query.kind);
+  if (query.subjectId) params.set('subject_id', query.subjectId);
+  if (query.groupId) params.set('administrative_group_id', query.groupId);
+  if (query.circleId) params.set('teaching_group_id', query.circleId);
+  if (query.kind) params.set('type', query.kind);
   const page = await api<CalendarPage>(`/me/calendar?${params.toString()}`, {
     token: query.token ?? null,
   });

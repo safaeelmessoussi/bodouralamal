@@ -31,7 +31,6 @@ import {
 import { ExamSection, examStaffOf } from '../../components/scheduling/exam-section.js';
 import { SchedulingForm } from '../../components/scheduling/scheduling-form.js';
 import { patternOf, type RecurrenceValue } from '../../components/scheduling/recurrence-editor.js';
-import { ScopeSelectors } from '../../components/scope/scope-selectors.js';
 import { CalendarFilters } from '../../components/calendar/calendar-filters.js';
 import {
   useCalendarFilters,
@@ -94,7 +93,12 @@ const SCOPE_FIELDS = ['branchId', 'levelId', 'groupId', 'subjectId', 'academicYe
 /** What the LIST filters by. A module constant like every other caller's —
  *  the hook no longer depends on identity, but a stable list is still the
  *  clearer way to say "these fields, always". */
-const LIST_SCOPE = ['branchId', 'levelId', 'subjectId', 'academicYearId'] as const;
+/**
+ * What `useScopeOptions` loads **for the filter row's options** — no academic
+ * year, which R84 removed from calendar filtering. It stays in `SCOPE_FIELDS`
+ * above, because the create/edit FORM genuinely requires one (§4.4).
+ */
+const LIST_SCOPE = ['branchId', 'categoryId', 'levelId', 'subjectId', 'groupId'] as const;
 
 /**
  * The fields the **shared** calendar filters own here — every one of which
@@ -105,13 +109,25 @@ const LIST_SCOPE = ['branchId', 'levelId', 'subjectId', 'academicYearId'] as con
  * definition list untouched — a filter that means different things in the two
  * views is the defect this set exists to end.
  */
-const CALENDAR_FILTER_FIELDS = ['branchId', 'levelId', 'type'] as const;
+const CALENDAR_FILTER_FIELDS = [
+  'branchId',
+  'categoryId',
+  'levelId',
+  'type',
+  'subjectId',
+  'groupId',
+  'circleId',
+] as const;
 
 /**
- * What stays on `useScopeOptions`: **class-only** concepts an occurrence does
- * not carry, so they have nothing to narrow on the grid (§4.4).
+ * **Nothing stays behind any more** (R84).
+ *
+ * `LIST_SCOPE_EXTRA` held Subject and Academic Year: Subject has joined the
+ * shared set, and **السنة الدراسية is removed from calendar filtering
+ * entirely** on the Owner's decision — it narrowed definitions and meant
+ * nothing on a month of occurrences, which is precisely the kind of asymmetry
+ * that made the two views feel like different screens.
  */
-const LIST_SCOPE_EXTRA = ['subjectId', 'academicYearId'] as const;
 
 function startOfMonth(d: Date): Date {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
@@ -141,6 +157,7 @@ export function SchedulingPage(): ReactNode {
    * and cannot reset a selection.
    */
   const filters = useCalendarFilters(CALENDAR_FILTER_FIELDS);
+
 
   const [items, setItems] = useState<SchedulingItem[]>([]);
   const [truncated, setTruncated] = useState(false);
@@ -189,20 +206,47 @@ export function SchedulingPage(): ReactNode {
     mode: 'filter',
   });
 
+  /**
+   * **The filter row itself, built once and rendered by BOTH views** (R84).
+   *
+   * It lived inside the list's table toolbar, so switching to تقويم made the
+   * whole section vanish while its values survived in the URL — the reader saw
+   * an unfiltered-looking grid that was in fact filtered.
+   */
+  const filterRow = (
+    <CalendarFilters
+      filters={filters}
+      branches={listScope.options.branchId.map((o) => ({ id: o.value, name: o.label }))}
+      // The shared row takes the calendar's reference shapes; `useScopeOptions`
+      // speaks `{value,label}`, and mapping here keeps ONE loader for the page
+      // rather than a second fetch of the same lists.
+      categories={listScope.options.categoryId.map((o) => ({
+        id: o.value,
+        name: o.label,
+        display_order: 0,
+      }))}
+      levels={listScope.options.levelId.map((o) => ({
+        id: o.value,
+        name: o.label,
+        category_id: '',
+        display_order: 0,
+      }))}
+      subjects={listScope.options.subjectId.map((o) => ({ id: o.value, name: o.label }))}
+      groups={listScope.options.groupId.map((o) => ({ id: o.value, name: o.label }))}
+      types={AVAILABLE_TYPES.map((k) => ({ value: k, label: t(`scheduling.type.${k}`) }))}
+    />
+  );
+
   const load = useCallback(async () => {
     setStatus('loading');
     try {
       const result = await listSchedulingItems(accessToken, {
-        // The SAME state the grid narrows by — branch and type come from the
-        // shared filters; subject and academic year stay on `listScope` because
-        // they are class-only concepts an occurrence does not carry (§4.4).
+        // **The SAME state the grid narrows by**, all of it (R84). Nothing is
+        // read from a second filter store any more.
         type: (filters.value.type ?? '') as SchedulingType | '',
         ...(filters.value.branchId ? { branchId: filters.value.branchId } : {}),
         ...(filters.value.levelId ? { levelId: filters.value.levelId } : {}),
-        ...(listScope.value.subjectId ? { subjectId: listScope.value.subjectId } : {}),
-        ...(listScope.value.academicYearId
-          ? { academicYearId: listScope.value.academicYearId }
-          : {}),
+        ...(filters.value.subjectId ? { subjectId: filters.value.subjectId } : {}),
       });
       setItems(result.items);
       setTruncated(result.truncated);
@@ -215,8 +259,7 @@ export function SchedulingPage(): ReactNode {
     filters.value.type,
     filters.value.branchId,
     filters.value.levelId,
-    listScope.value.subjectId,
-    listScope.value.academicYearId,
+    filters.value.subjectId,
   ]);
 
   useEffect(() => {
@@ -325,7 +368,15 @@ export function SchedulingPage(): ReactNode {
           are absent — see `CalendarHeader`. The calendar view renders the same
           component WITH its month, so there is exactly one header on screen
           either way, and only one place that decides where a control sits. */}
-      {view === 'list' ? <CalendarHeader view={view} onView={setView} /> : null}
+      {/* **The list is not month-scoped** (R84): it shows every matching
+          definition, so a month title and a السابق/اليوم/التالي would be
+          controls that mean nothing. `CalendarHeader` omits both when it is
+          given no month — the same shape-follows-data rule R82 established —
+          and the FILTER ROW is rendered either way, which is the property that
+          had been broken. */}
+      {view === 'list' ? (
+        <CalendarHeader view={view} onView={setView} filters={filterRow} />
+      ) : null}
 
       {view === 'list' ? (
         <>
@@ -337,38 +388,9 @@ export function SchedulingPage(): ReactNode {
             status={status}
             actions={actions}
             onRetry={() => void load()}
-            filtered={filters.active || listScope.value.subjectId !== ''}
-            onClearFilters={() => {
-              filters.clear();
-              listScope.setMany({ branchId: '', levelId: '', subjectId: '', academicYearId: '' });
-            }}
-            toolbar={
-              <>
-                {/* **The shared filter row**, reading the page's one state — so
-                    these controls narrow the grid as well, and survive a switch
-                    to it. The kinds are derived from the registry, not listed
-                    again: R56's promise is that a new kind is ONE entry, and a
-                    hand-written filter is exactly the copy that omits it. */}
-                <CalendarFilters
-                  filters={filters}
-                  // The branches `useScopeOptions` already loaded and scoped to
-                  // this caller — asked for once on the page, not twice.
-                  branches={listScope.options.branchId.map((o) => ({
-                    id: o.value,
-                    name: o.label,
-                  }))}
-                  types={AVAILABLE_TYPES.map((k) => ({
-                    value: k,
-                    label: t(`scheduling.type.${k}`),
-                  }))}
-                />
-                {/* Subject and academic year are **class-only** concepts an
-                    occurrence does not carry, so they narrow this list and have
-                    nothing to narrow on the grid — which is why they stay on
-                    `listScope` rather than joining the shared set. */}
-                <ScopeSelectors scope={listScope} fields={LIST_SCOPE_EXTRA} mode="filter" />
-              </>
-            }
+            filtered={filters.active}
+            onClearFilters={() => filters.clear()}
+            toolbar={filterRow}
           />
           {/* Stated rather than hidden: merging two independently paginated
               sources cannot produce a correct combined page without reading
@@ -376,7 +398,7 @@ export function SchedulingPage(): ReactNode {
           {truncated ? <p className="muted">{t('scheduling.truncated')}</p> : null}
         </>
       ) : (
-        <CalendarView view={view} onView={setView} filters={filters} />
+        <CalendarView view={view} onView={setView} filters={filters} filterRow={filterRow} />
       )}
 
       {editing ? (
@@ -472,11 +494,14 @@ function CalendarView({
   view,
   onView,
   filters,
+  filterRow,
 }: {
   view: View;
   onView: (view: View) => void;
   /** The page's filters — **not this view's**. See `useCalendarFilters`. */
   filters: CalendarFilterState;
+  /** The rendered row, so both views show the identical controls (R84). */
+  filterRow: ReactNode;
 }): ReactNode {
   const today = useMemo(() => new Date(), []);
   const [month, setMonth] = useState(() => startOfMonth(today));
@@ -498,6 +523,10 @@ function CalendarView({
       ...(filters.value.branchId ? { branchId: filters.value.branchId } : {}),
       ...(filters.value.categoryId ? { categoryId: filters.value.categoryId } : {}),
       ...(filters.value.levelId ? { levelId: filters.value.levelId } : {}),
+      ...(filters.value.subjectId ? { subjectId: filters.value.subjectId } : {}),
+      ...(filters.value.groupId ? { groupId: filters.value.groupId } : {}),
+      ...(filters.value.circleId ? { circleId: filters.value.circleId } : {}),
+      ...(filters.value.type ? { kind: filters.value.type } : {}),
     })
       .then((r) => setOccurrences(r.occurrences))
       .catch(() => setOccurrences([]));
@@ -508,7 +537,16 @@ function CalendarView({
     void fetchCalendarBootstrap({ from: iso(from), to: iso(to) })
       .then(setBootstrap)
       .catch(() => setBootstrap(null));
-  }, [month, filters.value.branchId, filters.value.categoryId, filters.value.levelId]);
+  }, [
+    month,
+    filters.value.branchId,
+    filters.value.categoryId,
+    filters.value.levelId,
+    filters.value.subjectId,
+    filters.value.groupId,
+    filters.value.circleId,
+    filters.value.type,
+  ]);
 
   /** Recorded official Hijri days, keyed for O(1) lookup per cell. */
   const hijriByDate = useMemo(() => {
@@ -539,6 +577,7 @@ function CalendarView({
         onPrevious={() => setMonth((m) => new Date(Date.UTC(m.getUTCFullYear(), m.getUTCMonth() - 1, 1)))}
         onToday={() => setMonth(startOfMonth(today))}
         onNext={() => setMonth((m) => new Date(Date.UTC(m.getUTCFullYear(), m.getUTCMonth() + 1, 1)))}
+        filters={filterRow}
       />
 
       <CalendarGrid

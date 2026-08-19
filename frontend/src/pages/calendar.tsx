@@ -10,7 +10,7 @@ import {
 } from '../adapters/calendar.js';
 import { CalendarGrid } from '../components/calendar/calendar-grid.js';
 import { CalendarHeader } from '../components/calendar/calendar-header.js';
-import { OccurrenceList } from '../components/calendar/occurrence-list.js';
+import { OccurrenceTable } from '../components/calendar/occurrence-table.js';
 import { viewFromUrl, type CalendarView } from '../components/calendar/view-switch.js';
 import { CalendarFilters } from '../components/calendar/calendar-filters.js';
 import { useCalendarFilters } from '../hooks/use-calendar-filters.js';
@@ -51,7 +51,12 @@ type Load =
  * may legitimately narrow. No subject and no type — a visitor is choosing where
  * and for whom, not inspecting the schedule's internals.
  */
-const PUBLIC_FILTER_FIELDS = ['branchId', 'categoryId', 'levelId'] as const;
+/**
+ * **R84's public set.** المستوى and النوع for everyone; الفرع and الفئة are
+ * back-office and مؤطرة controls, not a visitor's — the Owner's matrix. The
+ * public calendar stays the same page for everybody and is never personalised.
+ */
+const PUBLIC_FILTER_FIELDS = ['levelId', 'type'] as const;
 
 export function CalendarPage(): ReactNode {
   const today = useMemo(() => new Date(), []);
@@ -136,7 +141,14 @@ export function CalendarPage(): ReactNode {
     setLoad({ kind: 'loading' });
     void (async () => {
       try {
-        const result = await fetchOccurrences({ from, to, branchId, categoryId, levelId });
+        const result = await fetchOccurrences({
+          from,
+          to,
+          branchId,
+          categoryId,
+          levelId,
+          ...(filters.value.type ? { kind: filters.value.type } : {}),
+        });
         if (cancelled) return;
         setLoad({ kind: 'ready', occurrences: result.occurrences });
 
@@ -164,7 +176,7 @@ export function CalendarPage(): ReactNode {
     return () => {
       cancelled = true;
     };
-  }, [from, to, branchId, categoryId, levelId]);
+  }, [from, to, branchId, categoryId, levelId, filters.value.type]);
 
   const occurrences = load.kind === 'ready' ? load.occurrences : [];
 
@@ -252,10 +264,14 @@ export function CalendarPage(): ReactNode {
               filters={
                 <CalendarFilters
                   filters={filters}
-                  branches={branches}
                   categories={bootstrap?.categories ?? []}
                   levels={bootstrap?.levels ?? []}
                   levelsBusy={bootstrapBusy}
+                  types={[
+                    { value: 'session', label: t('calendar.kind.session') },
+                    { value: 'event', label: t('calendar.kind.event') },
+                    { value: 'exam', label: t('calendar.kind.exam') },
+                  ]}
                 />
               }
             />
@@ -282,10 +298,28 @@ export function CalendarPage(): ReactNode {
                   ) : null}
                 </>
               ) : (
-                /* **The same occurrences, read as a sequence.** No second fetch
+                /* **The same occurrences, as a table** (R84). No second fetch
                    and no second projection — the §4.4 tiers have already decided
-                   what is in this array, so the list cannot widen them. */
-                <OccurrenceList occurrences={occurrences} onOpen={setOpenEvent} />
+                   what is in this array, so the list cannot widen them — and it
+                   is now the platform's `DataTable` rather than this page's own
+                   markup, so it has the empty, error and retry states the
+                   hand-rolled list never had.
+
+                   **No room, no teacher, no actions**: a public visitor reads
+                   what is on and for whom, not who is teaching it or where in
+                   the building. */
+                <OccurrenceTable
+                  occurrences={occurrences}
+                  columns={['kind', 'title', 'date', 'time', 'level', 'subject', 'branch']}
+                  // `DataTable` derives *empty* from the rows themselves; the
+                  // status says only how the fetch went.
+                  status={
+                    load.kind === 'loading' ? 'loading' : load.kind === 'error' ? 'error' : 'ready'
+                  }
+                  onRetry={() => setMonth(new Date(month))}
+                  filtered={filters.active}
+                  onClearFilters={() => filters.clear()}
+                />
               )}
             </div>
           </div>

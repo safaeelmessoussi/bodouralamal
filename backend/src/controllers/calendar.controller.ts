@@ -45,6 +45,10 @@ const querySchema = z.object({
    * and no default anywhere turns it on.
    */
   include_cancelled: z.literal('true').optional(),
+  /** R84 — the Teaching Circle (Sessions only; see `CalendarQuery`). */
+  teaching_group_id: z.uuid().optional(),
+  /** R84 — the platform's own occurrence taxonomy. */
+  type: z.enum(['session', 'event', 'exam']).optional(),
 });
 
 /**
@@ -85,6 +89,8 @@ export function read(prisma: PrismaClient) {
         ...(q.subject_id ? { subjectId: q.subject_id } : {}),
         ...(q.teacher_id ? { teacherId: q.teacher_id } : {}),
         ...(q.include_cancelled === 'true' ? { includeCancelled: true } : {}),
+        ...(q.teaching_group_id ? { teachingGroupId: q.teaching_group_id } : {}),
+        ...(q.type ? { kind: q.type } : {}),
       }),
       prefilledFilters(prisma, actor),
     ]);
@@ -229,6 +235,9 @@ export function readMine(prisma: PrismaClient) {
         ...(q.category_id ? { categoryId: q.category_id } : {}),
         ...(q.subject_id ? { subjectId: q.subject_id } : {}),
         ...(q.include_cancelled === 'true' ? { includeCancelled: true } : {}),
+        ...(q.administrative_group_id ? { administrativeGroupId: q.administrative_group_id } : {}),
+        ...(q.teaching_group_id ? { teachingGroupId: q.teaching_group_id } : {}),
+        ...(q.type ? { kind: q.type } : {}),
       },
     );
     res.json({ data: occurrences.map(occurrenceDto) });

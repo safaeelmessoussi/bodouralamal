@@ -33,7 +33,21 @@ import { useCallback, useMemo, useState } from 'react';
  */
 
 /** Every field any calendar surface filters by. A surface names its own subset. */
-export type CalendarFilterField = 'branchId' | 'categoryId' | 'levelId' | 'subjectId' | 'type';
+/**
+ * Every field any calendar surface may filter by (R84's matrix).
+ *
+ * **`academicYearId` is deliberately absent.** It filtered definitions and meant
+ * nothing on a month of occurrences, so it made the two views of one surface
+ * behave differently — which is the asymmetry this architecture exists to end.
+ */
+export type CalendarFilterField =
+  | 'branchId'
+  | 'categoryId'
+  | 'levelId'
+  | 'subjectId'
+  | 'groupId'
+  | 'circleId'
+  | 'type';
 
 export type CalendarFilterValues = Partial<Record<CalendarFilterField, string>>;
 
@@ -43,6 +57,10 @@ const PARAM: Record<CalendarFilterField, string> = {
   categoryId: 'category_id',
   levelId: 'level_id',
   subjectId: 'subject_id',
+  // TD-3.4 spells the group parameter out; `group_id` was a paraphrase once and
+  // was corrected — the same spelling is used here.
+  groupId: 'administrative_group_id',
+  circleId: 'teaching_group_id',
   type: 'type',
 };
 
@@ -103,7 +121,26 @@ export function useCalendarFilters(fields: readonly CalendarFilterField[]): Cale
          * with no way to see why. The dependency is the platform's existing
          * selector rule, applied here once rather than per surface.
          */
-        if (field === 'categoryId') delete updated.levelId;
+        /**
+         * **Changing a parent reconciles its children, and gates nothing.**
+         *
+         * A Level belongs to a Category (§4.4b), a circle to a `(Level,
+         * Subject)` pair (§4.4c) — so changing the parent can leave a child
+         * naming a combination that does not exist, and the screen would go
+         * empty with no way to see why. Clearing the stale child is the whole
+         * of the dependency; **nothing here disables anything**, because a
+         * filter narrows and never gates (rule F).
+         */
+        if (field === 'categoryId') {
+          delete updated.levelId;
+          delete updated.groupId;
+          delete updated.circleId;
+        }
+        if (field === 'levelId') {
+          delete updated.groupId;
+          delete updated.circleId;
+        }
+        if (field === 'subjectId') delete updated.circleId;
 
         write(updated);
         return updated;

@@ -93,11 +93,18 @@ export function CalendarHeader({
           ) : null}
         </div>
         <div className="cal-header__end">
-          {/* Stepping a month is meaningless in the list view — the list is not
-              month-shaped — so the control is absent rather than inert. The grid
-              keeps the title centred either way, which is the point of the
-              1fr auto 1fr row. */}
-          {month && view === 'calendar' && onPrevious && onToday && onNext ? (
+          {/**
+            * **The stepping follows the MONTH, not the view** (R84).
+            *
+            * It read `view === 'calendar'`, on the reasoning that a list is not
+            * month-shaped. That was true of the back office's list — which
+            * shows every matching definition — and false of every other one:
+            * the public, beneficiary and مؤطرة lists are *this month's
+            * occurrences*, and stepping is exactly how a reader moves through
+            * them. The back office passes no month at all, so it still loses
+            * both together and needs no second flag.
+            */}
+          {month && onPrevious && onToday && onNext ? (
             <CalendarNav onPrevious={onPrevious} onToday={onToday} onNext={onNext} />
           ) : null}
         </div>

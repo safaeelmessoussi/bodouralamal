@@ -29,10 +29,22 @@ describe('CalendarHeader', () => {
     expect(html.indexOf('cal-header__centre')).toBeLessThan(html.indexOf('cal-header__end'));
   });
 
-  it('omits the month stepping in the list view, where a month step means nothing', () => {
+  /**
+   * **Restated by R84, and the premise is what changed.**
+   *
+   * This asserted the stepping is absent in the LIST view, on the reasoning
+   * that *a month step means nothing* there. True of the back office's list —
+   * which shows every matching definition and passes no month — and false of
+   * every other one: the public, beneficiary and مؤطرة lists are *this month's
+   * occurrences*, and stepping is how a reader moves through them.
+   *
+   * So the property is now stated where it actually lives: **the stepping
+   * follows the month**, and a surface that is not month-scoped withholds the
+   * month itself. The test below already asserts that half.
+   */
+  it('keeps the month stepping in the list view when the list IS month-scoped', () => {
     const html = render({ ...base, view: 'list' });
-    expect(html).not.toContain('تنقّل بين الأشهر');
-    // The switch survives — it is how the reader gets back.
+    expect(html).toContain('تنقّل بين الأشهر');
     expect(html).toContain('cal-header__start');
   });
 

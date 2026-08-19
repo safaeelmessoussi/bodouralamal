@@ -32,6 +32,8 @@ export function CalendarFilters({
   categories,
   levels,
   subjects,
+  groups,
+  circles,
   types,
   levelsBusy = false,
 }: {
@@ -46,6 +48,8 @@ export function CalendarFilters({
   categories?: CategoryRef[];
   levels?: LevelRef[];
   subjects?: { id: string; name: string }[];
+  groups?: { id: string; name: string }[];
+  circles?: { id: string; name: string }[];
   /** The event/session kinds this surface distinguishes, already labelled. */
   types?: { value: string; label: string }[];
   levelsBusy?: boolean;
@@ -93,6 +97,30 @@ export function CalendarFilters({
           options={[
             { value: '', label: t('calendar.filters.all') },
             ...(subjects ?? []).map((s) => ({ value: s.id, label: s.name })),
+          ]}
+        />
+      ) : null}
+
+      {has('groupId') ? (
+        <SelectField
+          label={t('calendar.filters.group')}
+          value={value('groupId') ?? ''}
+          onChange={(v) => filters.set('groupId', v || null)}
+          options={[
+            { value: '', label: t('calendar.filters.all') },
+            ...(groups ?? []).map((g) => ({ value: g.id, label: g.name })),
+          ]}
+        />
+      ) : null}
+
+      {has('circleId') ? (
+        <SelectField
+          label={t('calendar.filters.circle')}
+          value={value('circleId') ?? ''}
+          onChange={(v) => filters.set('circleId', v || null)}
+          options={[
+            { value: '', label: t('calendar.filters.all') },
+            ...(circles ?? []).map((c) => ({ value: c.id, label: c.name })),
           ]}
         />
       ) : null}

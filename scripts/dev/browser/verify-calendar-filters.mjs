@@ -163,36 +163,41 @@ check(
 /* ── the public calendar, same architecture ─────────────────────────────── */
 
 await goto('/calendar', '.cal-header');
-const pub = await choose('الفئة');
+/* **«المستوى», not «الفئة»** — restated for R84's matrix, not weakened. The
+   public surface offers المستوى and النوع; الفئة is a back-office and مؤطرة
+   control, because a visitor narrows by *which level* rather than by the
+   association's internal grouping. The property under test — that a public
+   choice survives the switch through the same hook — is unchanged. */
+const pub = await choose('المستوى');
 check(
-  `7 · public — a category can be chosen (${pub.label ?? 'none'})`,
+  `7 · public — a level can be chosen (${pub.label ?? 'none'})`,
   pub.value !== undefined,
   JSON.stringify(pub),
 );
 const pubUrl = await shown();
 check(
   '8 · public — the choice reaches the URL through the SAME hook',
-  pubUrl.url.includes('category_id='),
+  pubUrl.url.includes('level_id='),
   pubUrl.url,
 );
 await switchTo('قائمة');
 const pubList = await shown();
 check(
-  '9 · public — switching to قائمة keeps the category',
-  pubList.url.includes(`category_id=${pub.value}`),
+  '9 · public — switching to قائمة keeps the level',
+  pubList.url.includes(`level_id=${pub.value}`),
   pubList.url,
 );
 await switchTo('تقويم');
 const pubBack = await shown();
 check(
   '10 · public — and back again',
-  pubBack.url.includes(`category_id=${pub.value}`),
+  pubBack.url.includes(`level_id=${pub.value}`),
   pubBack.url,
 );
 
 /* ── a deep link arrives already filtered ───────────────────────────────── */
 
-await goto(`/calendar?category_id=${pub.value}&view=list`, '.cal-header');
+await goto(`/calendar?level_id=${pub.value}&view=list`, '.cal-header');
 const deep = await shown();
 check(
   '11 · a filtered calendar is a link somebody can send',

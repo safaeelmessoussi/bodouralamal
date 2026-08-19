@@ -53,6 +53,16 @@ export interface CalendarQuery {
   academicYearId?: string;
   subjectId?: string;
   teacherId?: string;
+  /**
+   * R84 — the Teaching Circle. **Sessions only, and that is the domain
+   * speaking**: a schedule may be addressed to a circle (§4.4c), and an Event
+   * cannot be — there is no `EventTeachingGroup` join, and inventing one would
+   * be inventing a relationship the SRS does not define. So this narrows to
+   * class occurrences, exactly as `subject_id` already does.
+   */
+  teachingGroupId?: string;
+  /** R84 — `session`, `event` or `exam`: the platform's own taxonomy. */
+  kind?: 'session' | 'event' | 'exam';
 }
 
 export interface Occurrence {
@@ -544,9 +554,15 @@ export async function readCalendar(
   const sessionOnlyFilter =
     query.subjectId !== undefined ||
     query.academicYearId !== undefined ||
-    query.teacherId !== undefined;
+    query.teacherId !== undefined ||
+    // R84 — a circle is a teaching concept an Event does not carry.
+    query.teachingGroupId !== undefined ||
+    query.kind === 'session';
 
-  const events = sessionOnlyFilter ? [] : await prisma.event.findMany({
+  const events =
+    sessionOnlyFilter || (query.kind !== undefined && query.kind !== 'event')
+      ? []
+      : await prisma.event.findMany({
     where: {
       deletedAt: null,
       startDate: { lte: query.to },
@@ -612,7 +628,12 @@ export async function readCalendar(
   //
   // The same subject/year filters that narrow the grid to Sessions apply: an
   // exam carries both, so it answers them honestly rather than being dropped.
-  const exams = query.teacherId !== undefined ? [] : await prisma.exam.findMany({
+  const exams =
+    query.teacherId !== undefined ||
+    query.teachingGroupId !== undefined ||
+    (query.kind !== undefined && query.kind !== 'exam')
+      ? []
+      : await prisma.exam.findMany({
     where: {
       deletedAt: null,
       mode: 'physical',
@@ -691,7 +712,10 @@ export async function readCalendar(
   // **Sessions are PUBLIC (§4.4, Revision 43)** — anonymous visitors browse the
   // timetable. That reverses the retired rule, under which a Group timetable was
   // visible only to signed-in users.
-  {
+  // R84 — asking for activities alone means no class occurrence belongs in the
+  // answer. Skipping the query beats filtering its result: the rows are never
+  // read at all.
+  if (query.kind === undefined || query.kind === 'session') {
     const sessions = await prisma.session.findMany({
       where: {
         deletedAt: null,
@@ -715,6 +739,7 @@ export async function readCalendar(
           ...(query.administrativeGroupId
             ? { administrativeGroupId: query.administrativeGroupId }
             : {}),
+          ...(query.teachingGroupId ? { teachingGroupId: query.teachingGroupId } : {}),
           ...(query.academicYearId ? { academicYearId: query.academicYearId } : {}),
           ...(query.subjectId ? { subjectId: query.subjectId } : {}),
         },

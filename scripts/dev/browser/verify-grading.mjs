@@ -232,6 +232,14 @@ if (studentCookie) {
   });
 
   await goto('/dashboard/student/grades', 'table, .state, main');
+  // The page fetches after mount, so `main` existing is not the page being
+  // ready — a fixed wait raced it and reported her grades missing. Wait for a
+  // ROW, which is the thing being measured.
+  for (let i = 0; i < 60; i += 1) {
+    const ready = await evaluate(`document.querySelectorAll('td').length > 0`).catch(() => false);
+    if (ready) break;
+    await new Promise((r) => setTimeout(r, 250));
+  }
   const mine = await evaluate(`(() => {
     const cells = [...document.querySelectorAll('td')].map((c) => c.textContent.trim());
     return {
@@ -254,7 +262,7 @@ if (studentCookie) {
   check(
     '13 · the beneficiary sees 15 / 20 for the first exam',
     mine.hasTwenty === true,
-    JSON.stringify(mine.cells),
+    JSON.stringify({ cells: mine.cells, body: mine.body.slice(0, 200) }),
   );
   check(
     '14 · and 8 / 10 for the second — two scales, one screen',
