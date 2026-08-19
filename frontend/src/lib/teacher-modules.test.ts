@@ -19,8 +19,19 @@ import {
  */
 describe('the teacher registry matches §14.1', () => {
   it('lists every teaching node the sitemap defines, and no others', () => {
+    // **Two nodes joined, and one of them had existed all along.**
+    // `/teacher/quran` has had a page and a router case since M4 and **no
+    // registry entry**, so the capability was complete and unreachable — rule
+    // P's defect. `/teacher/calendar` is new: her own week, from `/me/calendar`.
     expect(TEACHER_MODULES.map((m) => m.path).sort()).toEqual(
-      ['/teacher', '/teacher/content', '/teacher/exams', '/teacher/schedules'].sort(),
+      [
+        '/teacher',
+        '/teacher/calendar',
+        '/teacher/content',
+        '/teacher/exams',
+        '/teacher/quran',
+        '/teacher/schedules',
+      ].sort(),
     );
   });
 

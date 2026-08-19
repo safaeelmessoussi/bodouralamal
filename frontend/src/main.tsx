@@ -12,7 +12,7 @@ import { TeacherRouter } from './pages/teacher/index.js';
 import { CalendarPage } from './pages/calendar.js';
 import { StudentGradesPage } from './pages/dashboard/grades.js';
 import { StudentQuranPage } from './pages/dashboard/quran.js';
-import { StudentDashboard } from './pages/dashboard/student.js';
+import { StudentCalendarPage, StudentDashboard } from './pages/dashboard/student.js';
 import { RegisterChildPage } from './pages/profile/register-child.js';
 import { ProfilePage } from './pages/profile/index.js';
 import { Landing } from './pages/landing.js';
@@ -93,6 +93,14 @@ function App(): React.ReactNode {
       return (
         <PendingGuard>
           <StudentDashboard />
+        </PendingGuard>
+      );
+    case 'dashboard-student-calendar':
+      // R85 — `/me/calendar` behind the shared calendar components, in her own
+      // portal frame. Never the public timetable.
+      return (
+        <PendingGuard>
+          <StudentCalendarPage />
         </PendingGuard>
       );
     case 'dashboard-student-quran':

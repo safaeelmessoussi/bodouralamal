@@ -261,3 +261,65 @@
   max-width: none;
   justify-content: space-between;
 }
+
+/* ── The notification bell (§4.8) ─────────────────────────────────────────────
+ *
+ * A header control with a panel, not a page: the list was reachable from one
+ * dashboard, so a notice only reached somebody who happened to go home.
+ *
+ * The panel is positioned from the **inline end** so it hangs under the bell in
+ * RTL without a second rule — `inset-inline-end: 0` means *the side the reading
+ * direction ends on*, which is the left here and the right in an LTR locale.
+ */
+.bell {
+  position: relative;
+  display: inline-flex;
+}
+.bell__trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-2);
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+}
+.bell__trigger:hover {
+  background: var(--color-surface);
+  color: var(--color-primary);
+}
+/* The count rides the icon's corner. `pointer-events: none` so it can never
+   swallow the click that opens the panel. */
+.bell__count {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-end: 0;
+  min-inline-size: 1.1rem;
+  padding-inline: 0.25rem;
+  border-radius: var(--radius-full);
+  background: var(--color-accent);
+  color: var(--color-text-inverse);
+  font-size: var(--font-size-xs);
+  line-height: 1.1rem;
+  text-align: center;
+  pointer-events: none;
+}
+.bell__panel {
+  position: absolute;
+  inset-block-start: calc(100% + var(--space-2));
+  inset-inline-end: 0;
+  z-index: 40;
+  inline-size: min(22rem, calc(100vw - var(--space-6)));
+  /* Its own scroll once the list outgrows the panel, so a long history cannot
+     push the page or run off the screen. */
+  max-block-size: min(70vh, 32rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: var(--space-4);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface-raised);
+  box-shadow: var(--shadow-md);
+}

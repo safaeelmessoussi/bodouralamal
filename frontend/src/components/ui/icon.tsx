@@ -9,6 +9,7 @@ import type { ReactNode } from 'react';
  * the control that contains it, so they are hidden from assistive technology.
  */
 export type IconName =
+  | 'bell'
   | 'menu'
   | 'close'
   | 'check'
@@ -33,6 +34,9 @@ export type IconName =
 
 const PATHS: Record<IconName, string> = {
   menu: 'M4 7h16M4 12h16M4 17h16',
+  // A bell: the dome, its rim, and the clapper below — one stroke path, like
+  // every other icon here, so it inherits the same size and colour rules.
+  bell: 'M12 3a5 5 0 0 0-5 5v3l-2 4h14l-2-4V8a5 5 0 0 0-5-5zM10 19a2 2 0 0 0 4 0',
   close: 'M6 6l12 12M18 6L6 18',
   check: 'M20 6L9 17l-5-5',
   chevron: 'M6 9l6 6 6-6',

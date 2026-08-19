@@ -55,9 +55,15 @@ export interface NotificationPage {
 
 export async function listNotifications(
   token: string | null,
-  options: { unreadOnly?: boolean; page?: number } = {},
+  options: { unreadOnly?: boolean; page?: number; pageSize?: number } = {},
 ): Promise<NotificationPage> {
-  const params = new URLSearchParams({ page: String(options.page ?? 1), page_size: '25' });
+  // `pageSize` exists for the bell, which needs the unread META and none of the
+  // rows — fetching a full page to render one number would make every screen
+  // pay for a list nobody has opened.
+  const params = new URLSearchParams({
+    page: String(options.page ?? 1),
+    page_size: String(options.pageSize ?? 25),
+  });
   if (options.unreadOnly === true) params.set('unread_only', 'true');
   return api<NotificationPage>(`/notifications?${params.toString()}`, { token });
 }

@@ -1,39 +1,16 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 
-import { fetchOccurrences, type Occurrence } from '../../adapters/calendar.js';
 import { fetchStudentIdentity, type StudentIdentity } from '../../adapters/students.js';
-import { ApplicationHeader } from '../../components/header/application-header.js';
-import { NotificationList } from '../../components/notifications/notification-list.js';
 import { PersonalCalendar } from '../../components/calendar/personal-calendar.js';
-import { SiteFooter } from '../../components/site-footer.js';
+import { StudentLayout } from '../../components/student/student-layout.js';
 import { ButtonLink } from '../../components/ui/button.js';
 import { EmptyState, ErrorState, LoadingState } from '../../components/states.js';
-import { Container } from '../../components/ui/container.js';
 import { useActiveChild } from '../../contexts/active-child.js';
 import { useActiveRole } from '../../contexts/active-role.js';
 import { useSession } from '../../contexts/session.js';
 import { t } from '../../i18n/index.js';
 import { ApiError } from '../../lib/api.js';
 
-/**
- * `/dashboard/student` — the minimal Student Dashboard (§5.3, R62.10).
- *
- * **One route, two contexts.** It renders the caller's own record when they act
- * as a student, and the active child's when they act as a parent — because
- * `GET /students/me` resolves the *acting* student server-side (§4.3, R63). The
- * client sends the child header and reads whatever comes back; it never decides
- * whose data this is.
- *
- * **A persistent banner names whose data is shown** (R62.10). Not a toast and
- * not a subtitle: a parent who is looking at the wrong child's attendance must
- * find that out by reading the screen, not by noticing something is off.
- *
- * **Scope is R62.10's and stops there:** the identity block, today's and
- * upcoming sessions, and nothing else. Quran progress, grades and exams are
- * later milestones and are not stubbed here — an empty section promising a
- * feature is a §14.4 problem, not a placeholder.
- */
-const UPCOMING_DAYS = 14;
 
 export function StudentDashboard(): ReactNode {
   const { accessToken, status } = useSession();
@@ -41,7 +18,6 @@ export function StudentDashboard(): ReactNode {
   const { activeChild, activeChildId, children } = useActiveChild();
 
   const [identity, setIdentity] = useState<StudentIdentity | null>(null);
-  const [sessions, setSessions] = useState<Occurrence[]>([]);
   const [loading, setLoading] = useState(true);
   const [failure, setFailure] = useState<{ requestId?: string } | null>(null);
 
@@ -59,21 +35,9 @@ export function StudentDashboard(): ReactNode {
       const block = await fetchStudentIdentity(accessToken, childHeader);
       setIdentity(block);
 
-      // Today and the fortnight after it — "today's and upcoming" (R62.10)
-      // bounded, because an unbounded window is a growing request nobody
-      // asked for. Narrowed to the student's own Level so the list is theirs
-      // rather than the whole institute's.
-      const today = new Date().toISOString().slice(0, 10);
-      const until = new Date(Date.now() + UPCOMING_DAYS * 86_400_000)
-        .toISOString()
-        .slice(0, 10);
-      const result = await fetchOccurrences({
-        from: today,
-        to: until,
-        levelId: block.enrollments[0]?.level.id ?? null,
-        token: accessToken,
-      });
-      setSessions(result.occurrences);
+      // **The upcoming-sessions fetch went with the section it fed** (R85):
+      // those occurrences are in تقويمي, and one page asking for them twice was
+      // a request whose answer nobody rendered.
     } catch (error) {
       setIdentity(null);
       setFailure({
@@ -96,10 +60,7 @@ export function StudentDashboard(): ReactNode {
   const awaitingChild = asParent && activeChildId === null;
 
   return (
-    <>
-      <ApplicationHeader />
-      <main id="main" className="section">
-        <Container>
+    <StudentLayout title={t('studentDashboard.title')}>
           <h1>{t('studentDashboard.title')}</h1>
 
           {/* §14.1 lists *My Quran Progress* and *My Grades & Exams* under this
@@ -144,30 +105,12 @@ export function StudentDashboard(): ReactNode {
           ) : identity ? (
             <>
               <IdentityBlock identity={identity} />
-              {/* **Above the sessions, deliberately** (R77.8): a cancellation is
-                  news about the list below it, and a reader who saw the timetable
-                  first would have already drawn the wrong conclusion from it.
-                  Renders nothing at all when there is nothing to say. */}
-              <NotificationList token={accessToken} />
-              {/* **Her own calendar** (R83.5), from `GET /me/calendar`: the
-                  sessions her enrolments place her in and the activities
-                  addressed to a scope she belongs to — never the platform's
-                  whole public timetable, which is what she saw before.
-                  **No filters**: her calendar is already hers, and a branch or
-                  level control would imply a scope she does not have (rule O). */}
-              {/* **R84's student matrix.** She may hold enrolments in several
-                  Levels, so المستوى is hers to narrow by — along with النوع,
-                  المادة, المجموعة and الحلقة, each restricted to her own
-                  occurrences by the server. **No الفرع and no الفئة**: her
-                  calendar is already hers, and either control would offer a
-                  scope she does not have (rule O). */}
-              <PersonalCalendar
-                token={accessToken}
-                fields={['levelId', 'type', 'subjectId', 'groupId', 'circleId']}
-                columns={['kind', 'title', 'date', 'time', 'level', 'subject', 'room']}
-                heading={t('studentDashboard.myCalendar')}
-              />
-              <UpcomingSessions sessions={sessions} />
+              {/* **Deliberately nothing else here** (R85).
+                  «حصص اليوم والقادمة» is removed: those occurrences are in
+                  تقويمي, and showing them twice makes one of the two the wrong
+                  place to look. The notification list moved to the top bar's
+                  bell, reachable from every screen rather than only this one.
+                  The rest of this page is left to be designed. */}
             </>
           ) : null}
 
@@ -179,10 +122,7 @@ export function StudentDashboard(): ReactNode {
               {t('studentDashboard.noChildren')}
             </p>
           ) : null}
-        </Container>
-      </main>
-      <SiteFooter />
-    </>
+        </StudentLayout>
   );
 }
 
@@ -230,25 +170,29 @@ function IdentityBlock({ identity }: { identity: StudentIdentity }): ReactNode {
   );
 }
 
-function UpcomingSessions({ sessions }: { sessions: Occurrence[] }): ReactNode {
+/**
+ * **تقويمي** — her own week (R82.8, R85).
+ *
+ * Its own node rather than a block on the dashboard: the landing page stays
+ * minimal until it is designed, and a calendar somebody opens daily belongs one
+ * click from the menu. The components are the shared ones — a personal calendar
+ * is a narrower READ, never a different screen.
+ */
+export function StudentCalendarPage(): ReactNode {
+  const { accessToken } = useSession();
   return (
-    <section aria-labelledby="upcoming-heading">
-      <h2 id="upcoming-heading">{t('studentDashboard.upcoming')}</h2>
-      {sessions.length === 0 ? (
-        <EmptyState />
-      ) : (
-        <ul className="detail-list">
-          {sessions.map((occurrence) => (
-            <li key={`${occurrence.kind}-${occurrence.id}`}>
-              <a href={`/calendar/sessions/${occurrence.id}`}>{occurrence.title}</a>
-              {' — '}
-              {occurrence.date}
-              {occurrence.start_time ? ` · ${occurrence.start_time}` : ''}
-              {occurrence.room_name ? ` · ${occurrence.room_name}` : ''}
-            </li>
-          ))}
-        </ul>
-      )}
-    </section>
+    <StudentLayout title={t('student.nav.calendar')}>
+      {/* **R84's student matrix.** She may hold enrolments in several Levels, so
+          المستوى is hers to narrow by — with النوع, المادة, المجموعة and
+          الحلقة, each restricted to her own occurrences by the server. **No
+          الفرع and no الفئة**: her calendar is already hers, and either would
+          offer a scope she does not have (rule O). */}
+      <PersonalCalendar
+        token={accessToken}
+        fields={['levelId', 'type', 'subjectId', 'groupId', 'circleId']}
+        columns={['kind', 'title', 'date', 'time', 'level', 'subject', 'room']}
+        heading={t('studentDashboard.myCalendar')}
+      />
+    </StudentLayout>
   );
 }

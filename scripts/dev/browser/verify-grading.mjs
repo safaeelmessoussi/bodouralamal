@@ -88,6 +88,8 @@ const sheetHeader = () =>
   })()`);
 
 const exams = JSON.parse(process.env.R81_EXAMS ?? '{}');
+/** Injected into the page's evaluations so a row is found by WHO, not where. */
+const NAME_LITERAL = JSON.stringify(exams.studentName ?? '');
 if (!exams.outOf20 || !exams.outOf10) throw new Error('R81_EXAMS must name both exams');
 
 await goto(`/admin/exam-grades?exam=${exams.outOf20}`, 'table, .state');
@@ -125,7 +127,12 @@ check(
 
 await goto(`/admin/exam-grades?exam=${exams.outOf20}`, 'table');
 const entry = await evaluate(`(async () => {
-  const input = document.querySelector('table input[type=number]');
+  // **Her row, not the first row.** The sheet is ordered by name, so the first
+  // input belongs to whoever sorts first — which stopped being the person the
+  // harness then signs in as, and reported her grades missing.
+  const input = [...document.querySelectorAll('table input[type=number]')].find((el) =>
+    (el.getAttribute('aria-label') || '').includes(${NAME_LITERAL}),
+  );
   if (!input) return { noInput: true };
   const setNative = (el, value) => {
     Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), 'value').set.call(el, value);
@@ -148,7 +155,7 @@ const entry = await evaluate(`(async () => {
     overIsInvalid,
     fifteenIsValid,
     notice: (document.querySelector('.admin-notice') || {}).textContent || null,
-    stored: document.querySelector('table input[type=number]').value,
+    stored: input.value,
   };
 })()`);
 check(
@@ -164,7 +171,9 @@ check(
 
 await goto(`/admin/exam-grades?exam=${exams.outOf10}`, 'table');
 const entryB = await evaluate(`(async () => {
-  const input = document.querySelector('table input[type=number]');
+  const input = [...document.querySelectorAll('table input[type=number]')].find((el) =>
+    (el.getAttribute('aria-label') || '').includes(${NAME_LITERAL}),
+  );
   const setNative = (el, value) => {
     Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), 'value').set.call(el, value);
     el.dispatchEvent(new Event('input', { bubbles: true }));
@@ -183,7 +192,7 @@ const entryB = await evaluate(`(async () => {
     if (confirm) confirm.click();
     await new Promise((r) => setTimeout(r, 1500));
   }
-  return { stored: document.querySelector('table input[type=number]').value };
+  return { stored: input.value };
 })()`);
 check(
   '11 · 8 saves on the /10 exam, unaffected by the other exam',

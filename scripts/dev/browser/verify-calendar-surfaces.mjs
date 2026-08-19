@@ -208,10 +208,16 @@ check(
   publicList.hasTitle && publicList.hasStepping,
   JSON.stringify({ title: publicList.hasTitle, stepping: publicList.hasStepping }),
 );
+/* **Widened by the Owner (R85 §2), not by drift.** The public set gained الفرع,
+   الفئة and المادة — every option from data that is already public (the §5.1
+   branch directory and the calendar bootstrap's anonymous lists), so nothing
+   internal is exposed to populate a control. What is still guarded is that the
+   page is not personalised. */
 check(
-  `12 · public offers المستوى and النوع, and no organisational scope (${publicList.filters.join(' · ')})`,
-  publicList.filters.some((f) => f.includes('المستوى')) &&
-    !publicList.filters.some((f) => f.includes('الفرع') || f.includes('الفئة')),
+  `12 · public offers the public scopes (${publicList.filters.join(' · ')})`,
+  ['الفرع', 'الفئة', 'المستوى', 'المادة', 'النوع'].every((f) =>
+    publicList.filters.some((label) => label.includes(f)),
+  ),
   JSON.stringify(publicList.filters),
 );
 await surviveSwitch('13 · public', 'المستوى');
@@ -219,7 +225,9 @@ await surviveSwitch('13 · public', 'المستوى');
 /* ── the beneficiary ────────────────────────────────────────────────────── */
 
 await as(process.env.STUDENT_COOKIE);
-await open('/dashboard/student', '.cal-header');
+// **Her calendar moved to its own node** (R85): the dashboard stays minimal,
+// and a calendar somebody opens daily belongs one click from the menu.
+await open('/dashboard/student/calendar', '.cal-header');
 const student = await chrome();
 check(
   `14 · the beneficiary is offered المستوى and never الفرع/الفئة (${student.filters.join(' · ')})`,
@@ -236,7 +244,7 @@ check(
 /* ── the مؤطرة ──────────────────────────────────────────────────────────── */
 
 await as(process.env.TEACHER_COOKIE);
-await open('/teacher', '.cal-header');
+await open('/teacher/calendar', '.cal-header');
 const teacher = await chrome();
 check(
   `16 · the مؤطرة IS offered الفرع and الفئة (${teacher.filters.join(' · ')})`,

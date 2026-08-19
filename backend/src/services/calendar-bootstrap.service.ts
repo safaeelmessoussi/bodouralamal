@@ -40,6 +40,16 @@ export interface CalendarBootstrap {
   categories: { id: string; name: string; displayOrder: number | null }[];
   levels: { id: string; name: string; categoryId: string; displayOrder: number | null }[];
   branches: { id: string; name: string; displayOrder: number | null }[];
+  /**
+   * **The Subjects a public calendar filters by** (R84's public matrix).
+   *
+   * A Subject's *name* is already public: every class occurrence the anonymous
+   * calendar returns carries `subject_name`, so the list adds no fact a visitor
+   * could not already read off the timetable — it only saves them reading the
+   * whole month to discover which Subjects exist. `GET /admin/subjects` stays
+   * Admin-only for everything else it carries.
+   */
+  subjects: { id: string; name: string; displayOrder: number | null }[];
 }
 
 /** Moroccan month names, matching how the interface reads (§6, Arabic-first). */
@@ -76,7 +86,7 @@ export async function calendarBootstrap(
   // resolution walks BACK to the month containing a date, so a day early in
   // `from`'s month belongs to a month that began before it.
   const margin = 40 * MS_PER_DAY;
-  const [monthStartRows, categories, levels, branches] = await Promise.all([
+  const [monthStartRows, categories, levels, branches, subjects] = await Promise.all([
     prisma.hijriMonthStart.findMany({
       where: {
         deletedAt: null,
@@ -99,6 +109,11 @@ export async function calendarBootstrap(
       orderBy: [{ displayOrder: { sort: 'asc', nulls: 'last' } }, { name: 'asc' }, { id: 'asc' }],
     }),
     prisma.branch.findMany({
+      where: { deletedAt: null },
+      select: { id: true, name: true, displayOrder: true },
+      orderBy: [{ displayOrder: { sort: 'asc', nulls: 'last' } }, { name: 'asc' }, { id: 'asc' }],
+    }),
+    prisma.subject.findMany({
       where: { deletedAt: null },
       select: { id: true, name: true, displayOrder: true },
       orderBy: [{ displayOrder: { sort: 'asc', nulls: 'last' } }, { name: 'asc' }, { id: 'asc' }],
@@ -153,5 +168,6 @@ export async function calendarBootstrap(
     categories,
     levels,
     branches,
+    subjects,
   };
 }

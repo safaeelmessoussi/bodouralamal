@@ -2,7 +2,6 @@ import type { ReactNode } from 'react';
 
 import { ModulePending } from '../../components/portal/nav-item.js';
 import { TeacherLayout } from '../../components/teacher/teacher-layout.js';
-import { NotificationList } from '../../components/notifications/notification-list.js';
 import { PersonalCalendar } from '../../components/calendar/personal-calendar.js';
 import { useSession } from '../../contexts/session.js';
 import { ButtonLink } from '../../components/ui/button.js';
@@ -36,7 +35,9 @@ export function TeacherRouter(): ReactNode {
   if (module.status === 'ready') {
     switch (module.path) {
       case '/teacher':
-        return <TeacherDashboard />;
+        return <TeacherHome />;
+      case '/teacher/calendar':
+        return <TeacherCalendar />;
       case '/teacher/schedules':
         return <TeacherSchedulesPage />;
       case '/teacher/quran':
@@ -69,23 +70,38 @@ export function TeacherRouter(): ReactNode {
 }
 
 /**
- * **The مؤطرة's own screen** (R83.4, R83.5).
+ * **مساحة التدريس — deliberately minimal, for now.**
  *
- * It was `blocked` because there was nothing to put on it. There is now: what
- * the platform has told her, and her own week — the **same** notification list
- * and the **same** calendar components the beneficiary's dashboard renders, so
- * neither surface can drift from the other.
- *
- * **She is offered the Subject filter and no more.** She teaches several and
- * *which class* is the question she asks of her own week; a branch or level
- * control would offer a scope §4.4c does not give her, and the server would
- * refuse to widen it anyway (rule O).
+ * The Owner asked that this stay empty until the dashboard is designed: cards
+ * invented before the questions they answer are decided become the thing the
+ * design has to work around. The navigation beside it is the real answer for
+ * now, and every workflow is one click from it.
  */
-function TeacherDashboard(): ReactNode {
+function TeacherHome(): ReactNode {
+  return (
+    <TeacherLayout title={t('teacher.nav.dashboard')} lede={t('teacher.homeLede')}>
+      <div className="state" role="status">
+        <p>{t('teacher.homeBody')}</p>
+      </div>
+    </TeacherLayout>
+  );
+}
+
+/**
+ * **The مؤطرة's own calendar** (R83.4, R83.5).
+ *
+ * Its own node now, rather than the dashboard's content: the landing page stays
+ * minimal until it is designed, and the **same** calendar components the
+ * beneficiary's page renders are used here, so neither can drift from the other.
+ *
+ * **Notifications are not here any more** — they moved to the top bar's bell,
+ * reachable from every screen rather than only from the one she happened to
+ * land on.
+ */
+function TeacherCalendar(): ReactNode {
   const { accessToken } = useSession();
   return (
-    <TeacherLayout title={t('teacher.nav.dashboard')}>
-      <NotificationList token={accessToken} />
+    <TeacherLayout title={t('teacher.nav.calendar')}>
       {/* **R84's مؤطرة matrix**: everything the back office offers, because she
           works across branches and levels — and every option is restricted to
           her legitimate scope by the server, so the dropdown itself never

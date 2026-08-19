@@ -236,6 +236,8 @@ export interface CalendarBootstrap {
   categories: CategoryRef[];
   levels: LevelRef[];
   branches: BranchRef[];
+  /** R84 — the Subjects the public calendar filters by. */
+  subjects: { id: string; name: string; display_order: number | null }[];
 }
 
 export interface BootstrapQuery {

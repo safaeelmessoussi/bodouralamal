@@ -380,6 +380,11 @@ export function SchedulingPage(): ReactNode {
 
       {view === 'list' ? (
         <>
+          {/* **No `toolbar` prop** — the filter row lives in the shared header
+              above, for BOTH views. Passing it to the table as well rendered it
+              twice on the list (`cal-header__filters` and `datatable__toolbar`,
+              one above the other): R84 moved the row up and this was the half
+              that should have moved with it. */}
           <DataTable
             caption={t('admin.nav.scheduling')}
             columns={columns}
@@ -390,7 +395,6 @@ export function SchedulingPage(): ReactNode {
             onRetry={() => void load()}
             filtered={filters.active}
             onClearFilters={() => filters.clear()}
-            toolbar={filterRow}
           />
           {/* Stated rather than hidden: merging two independently paginated
               sources cannot produce a correct combined page without reading

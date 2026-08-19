@@ -96,13 +96,24 @@ describe('R84 — the role matrix the Owner set', () => {
     }
   });
 
-  it('the public visitor is offered Level and type, and no organisational scope', () => {
+  /**
+   * **Widened by the Owner, not by drift.** The public set was المستوى and
+   * النوع; the Owner asked for الفرع, الفئة and المادة as well. Every option
+   * comes from data that is **already public** — the §5.1 branch directory and
+   * the calendar bootstrap's anonymous reference lists — so nothing internal is
+   * exposed to populate a control. What the guard still protects is that the
+   * page is not personalised: it offers scopes to narrow BY, never the reader's
+   * own.
+   */
+  it('the public visitor is offered the public scopes, and nothing personal', () => {
     const at = code(PUBLIC_PAGE).indexOf('PUBLIC_FILTER_FIELDS');
     const decl = code(PUBLIC_PAGE).slice(at, at + 200);
-    expect(decl).toContain('levelId');
-    expect(decl).toContain('type');
-    expect(decl).not.toContain('branchId');
-    expect(decl).not.toContain('categoryId');
+    for (const field of ['branchId', 'categoryId', 'levelId', 'subjectId', 'type']) {
+      expect(decl, `public is missing ${field}`).toContain(field);
+    }
+    // A circle is a teaching subdivision, not something a visitor narrows by.
+    expect(decl).not.toContain('circleId');
+    expect(code(PUBLIC_PAGE)).not.toContain('/me/calendar');
   });
 });
 

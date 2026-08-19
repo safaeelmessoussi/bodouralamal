@@ -52,11 +52,15 @@ type Load =
  * and for whom, not inspecting the schedule's internals.
  */
 /**
- * **R84's public set.** المستوى and النوع for everyone; الفرع and الفئة are
- * back-office and مؤطرة controls, not a visitor's — the Owner's matrix. The
- * public calendar stays the same page for everybody and is never personalised.
+ * **The public set** — branch, category, level, subject and type.
+ *
+ * Every option comes from data that is **already public**: `GET /branches` is
+ * the §5.1 landing directory and the calendar bootstrap's categories and levels
+ * are anonymous reads (TD-3.10). Nothing internal is exposed to populate a
+ * control, and the page stays the same for everybody — a filter narrows what a
+ * visitor sees of the public timetable; it never personalises it.
  */
-const PUBLIC_FILTER_FIELDS = ['levelId', 'type'] as const;
+const PUBLIC_FILTER_FIELDS = ['branchId', 'categoryId', 'levelId', 'subjectId', 'type'] as const;
 
 export function CalendarPage(): ReactNode {
   const today = useMemo(() => new Date(), []);
@@ -264,6 +268,8 @@ export function CalendarPage(): ReactNode {
               filters={
                 <CalendarFilters
                   filters={filters}
+                  branches={branches}
+                  subjects={bootstrap?.subjects ?? []}
                   categories={bootstrap?.categories ?? []}
                   levels={bootstrap?.levels ?? []}
                   levelsBusy={bootstrapBusy}

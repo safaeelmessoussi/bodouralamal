@@ -5,13 +5,11 @@ import {
   type QuranLogRow,
   type SurahCoverage,
 } from '../../adapters/quran.js';
-import { ApplicationHeader } from '../../components/header/application-header.js';
-import { SiteFooter } from '../../components/site-footer.js';
-import { Container } from '../../components/ui/container.js';
 import { DataTable, type Column } from '../../components/ui/data-table.js';
 import { useActiveChild } from '../../contexts/active-child.js';
 import { useActiveRole } from '../../contexts/active-role.js';
 import { useSession } from '../../contexts/session.js';
+import { StudentLayout } from '../../components/student/student-layout.js';
 import { t } from '../../i18n/index.js';
 
 /**
@@ -141,17 +139,14 @@ function logColumns(surahs: SurahCoverage[]): Column<QuranLogRow>[] {
 }
 
 /** The same frame the Student Dashboard uses — header, measure, footer. */
+/**
+ * **Her portal frame** (R85), not this page's own chrome.
+ *
+ * It rendered header, `Container`, heading and footer itself, so the page had
+ * no menu — she reached it by typing a URL or from one dashboard.
+ * `StudentLayout` owns all of that, and owns it identically for the back office
+ * and the teaching portal, so the three cannot drift.
+ */
 function Frame({ children }: { children: ReactNode }): ReactNode {
-  return (
-    <>
-      <ApplicationHeader />
-      <main id="main" className="section">
-        <Container>
-          <h1>{t('student.quran.title')}</h1>
-          {children}
-        </Container>
-      </main>
-      <SiteFooter />
-    </>
-  );
+  return <StudentLayout title={t('student.quran.title')}>{children}</StudentLayout>;
 }

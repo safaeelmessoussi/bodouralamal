@@ -36,6 +36,19 @@ await prisma.grade.deleteMany({ where: { examId: { in: ids } } });
 await prisma.examStaff.deleteMany({ where: { examId: { in: ids } } });
 await prisma.exam.deleteMany({ where: { id: { in: ids } } });
 
+const mine = await prisma.user.findMany({
+  where: { nameArabic: { startsWith: TAG } },
+  select: { id: true },
+});
+const mineIds = mine.map((u) => u.id);
+await prisma.notification.deleteMany({ where: { userId: { in: mineIds } } });
+await prisma.grade.deleteMany({ where: { studentId: { in: mineIds } } });
+await prisma.enrollment.deleteMany({ where: { studentId: { in: mineIds } } });
+await prisma.auditLog.deleteMany({ where: { actorUserId: { in: mineIds } } });
+await prisma.refreshToken.deleteMany({ where: { userId: { in: mineIds } } });
+await prisma.userBranchRole.deleteMany({ where: { userId: { in: mineIds } } });
+await prisma.user.deleteMany({ where: { id: { in: mineIds } } });
+
 if (process.argv.includes('--clean')) {
   await prisma.$disconnect();
   process.exit(0);
@@ -51,27 +64,43 @@ if (process.argv.includes('--clean')) {
  * were broken.
  */
 /**
- * **An enrolment whose student holds the `student` ROLE**, not merely any
- * enrolment.
+ * **Her own beneficiary, created here** — not hunted for in the dev database.
  *
- * `/students/me/grades` resolves the acting student through §4.3's child
- * context, which requires that role — so a beneficiary who has an enrolment and
- * no role reads her own grades page as an error state. The harness picked such
- * a person once the R82 fixtures started creating and removing enrolments, and
- * reported her grades missing when what was missing was the role.
+ * The first version searched for an existing enrolment, and every run found a
+ * different person: one with no `student` role (her grades page refused), one
+ * who also teaches (R60 put her in the teaching portal, correctly), one still
+ * Pending (TD-1 blocked every authenticated screen). Each looked like a missing
+ * feature and none was. A fixture that states what it needs cannot drift.
  */
-const enrolment = await prisma.enrollment.findFirstOrThrow({
-  where: {
-    deletedAt: null,
-    student: {
-      deletedAt: null,
-      branchRoles: { some: { role: { name: 'student' } } },
-    },
-  },
-  select: { levelId: true, branchId: true, studentId: true },
+const level = await prisma.level.findFirstOrThrow({ where: { deletedAt: null } });
+// A branch that HAS a room: `exam_physical_place_all_or_none_check` requires
+// place and clock together, so a roomless branch cannot host a physical sitting.
+const branch = await prisma.branch.findFirstOrThrow({
+  where: { deletedAt: null, rooms: { some: { deletedAt: null } } },
 });
-const level = await prisma.level.findUniqueOrThrow({ where: { id: enrolment.levelId } });
-const branch = await prisma.branch.findUniqueOrThrow({ where: { id: enrolment.branchId } });
+const studentRole = await prisma.role.findFirstOrThrow({ where: { name: 'student' } });
+
+const beneficiary = await prisma.user.create({
+  data: {
+    nameArabic: `${TAG} المستفيدة`,
+    sex: 'female',
+    accountStatus: 'active',
+    isBeneficiary: true,
+  },
+});
+await prisma.userBranchRole.create({
+  data: { userId: beneficiary.id, roleId: studentRole.id, branchId: null },
+});
+await prisma.enrollment.create({
+  data: { studentId: beneficiary.id, levelId: level.id, branchId: branch.id },
+});
+
+const enrolment = {
+  levelId: level.id,
+  branchId: branch.id,
+  studentId: beneficiary.id,
+  student: { nameArabic: beneficiary.nameArabic },
+};
 const room = await prisma.room.findFirst({ where: { branchId: branch.id } });
 const levelSubject = await prisma.levelSubject.findFirst({ where: { levelId: level.id } });
 const year = await prisma.academicYear.findFirst();
@@ -101,5 +130,12 @@ const outOf20 = await make('امتحان من 20', 20);
 const outOf10 = await make('امتحان من 10', 10);
 // The student id travels too, so the harness can mint HER session and read the
 // screens she actually sees rather than an administrator's rendering of them.
-console.log(JSON.stringify({ outOf20, outOf10, studentId: enrolment.studentId }));
+console.log(
+  JSON.stringify({
+    outOf20,
+    outOf10,
+    studentId: enrolment.studentId,
+    studentName: enrolment.student.nameArabic,
+  }),
+);
 await prisma.$disconnect();

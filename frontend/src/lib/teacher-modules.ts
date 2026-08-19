@@ -69,6 +69,36 @@ export const TEACHER_MODULES: readonly TeacherModule[] = [
     status: 'ready',
   },
   {
+    /**
+     * **تقويمي** — her own week, from `/me/calendar` (R82.8).
+     *
+     * Its own node rather than the dashboard's content: the dashboard stays
+     * deliberately minimal until it is designed, and a calendar somebody opens
+     * daily should be one click from the menu rather than something they scroll
+     * a landing page to reach.
+     */
+    path: '/teacher/calendar',
+    labelKey: 'teacher.nav.calendar',
+    section: 'teaching',
+    roles: TEACHER,
+    status: 'ready',
+  },
+  {
+    /**
+     * **إدخال الحفظ** — recording a beneficiary's memorisation (§4.5, R73).
+     *
+     * The page and the router case have existed since M4; **the registry entry
+     * had not**, so the capability was complete and unreachable — rule P's
+     * defect for the seventh time. Nothing about the screen changes here; it
+     * gains the menu entry it never had.
+     */
+    path: '/teacher/quran',
+    labelKey: 'teacher.nav.quran',
+    section: 'teaching',
+    roles: TEACHER,
+    status: 'ready',
+  },
+  {
     // R70 — unblocked for **grading**. §4.6's online paper builder is still
     // declared and refused, so what this node opens is the grade sheet, which
     // is the same component `/admin/exam-grades` renders (R70.1).

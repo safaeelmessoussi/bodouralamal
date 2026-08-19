@@ -1,11 +1,8 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 
 import { fetchMyGrades, type PublishedGrade } from '../../adapters/grades.js';
-import { ApplicationHeader } from '../../components/header/application-header.js';
-import { SiteFooter } from '../../components/site-footer.js';
 import { EmptyState, ErrorState, LoadingState } from '../../components/states.js';
 import { Badge } from '../../components/ui/badge.js';
-import { Container } from '../../components/ui/container.js';
 import {
   DataTable,
   type Column,
@@ -14,6 +11,7 @@ import {
 import { useActiveChild } from '../../contexts/active-child.js';
 import { useActiveRole } from '../../contexts/active-role.js';
 import { useSession } from '../../contexts/session.js';
+import { StudentLayout } from '../../components/student/student-layout.js';
 import { t } from '../../i18n/index.js';
 import { formatDate } from '../../lib/format-date.js';
 
@@ -127,12 +125,10 @@ export function StudentGradesPage(): ReactNode {
   ];
 
   return (
-    <>
-      <ApplicationHeader />
-      <main id="main" className="section">
-        <Container>
-          <h1>{t('student.grades.title')}</h1>
-          <p className="lede">{t('student.grades.lede')}</p>
+    // **Her portal frame** (R85): the page rendered its own header, container,
+    // heading and footer, so it carried no menu. `StudentLayout` owns all four,
+    // identically to the other two portals.
+    <StudentLayout title={t('student.grades.title')} lede={t('student.grades.lede')}>
 
           {/* R62.10 — persistent, and the first thing under the heading. A
               parent looking at the wrong child's marks must find that out by
@@ -171,9 +167,6 @@ export function StudentGradesPage(): ReactNode {
               status="ready"
             />
           )}
-        </Container>
-      </main>
-      <SiteFooter />
-    </>
+    </StudentLayout>
   );
 }

@@ -31,6 +31,7 @@ export type Route =
   /** §5.3's Student Dashboard — one route, two contexts (R62.10, R63). */
   | 'dashboard-student'
   /** M4b — §14.1's *My Quran Progress*, read-only (§4.5). */
+  | 'dashboard-student-calendar'
   | 'dashboard-student-quran'
   /** §5.3's *My Grades & Exams* — PUBLISHED grades, read-only (2026-08-17). */
   | 'dashboard-student-grades'
@@ -90,6 +91,9 @@ export function resolveRoute(pathname: string): Route {
   // R62.10 delivered this one. A parent reaches it through the account
   // switcher with a child selected; a student reaches it as themselves.
   // Before the bare dashboard, so the longer path is not swallowed by it.
+  // R85 — her own calendar as its own node, so the menu can reach it and the
+  // dashboard can stay minimal.
+  if (path === '/dashboard/student/calendar') return 'dashboard-student-calendar';
   if (path === '/dashboard/student/quran') return 'dashboard-student-quran';
   // §5.3 has listed this node since R62 and nothing rendered it; the grades were
   // publishable and unreachable by the مستفيدة they were about.

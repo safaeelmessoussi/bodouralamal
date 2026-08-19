@@ -153,32 +153,30 @@ const screen = () =>
  * under it, and the dashboard then sits at «جارٍ التحميل…» — which reads as a
  * missing feature and is the harness breaking the app (TD-4.13).
  */
-await visit(process.env.CONCERNED_UI_COOKIE, '/dashboard/student');
-// The calendar and the notification list load independently, so waiting for
-// the calendar alone is a race the first run lost — it measured a dashboard
-// whose notices had not arrived and reported them missing.
+// R85 — her calendar is its own page now, and her notifications live in the
+// top bar's bell rather than on the dashboard.
+await visit(process.env.CONCERNED_UI_COOKIE, '/dashboard/student/calendar');
 await settled('.cal-header');
-await settled('.notifications__item');
 const studentScreen = await screen();
 check(
   'R83a · the beneficiary’s dashboard now HAS a calendar',
   studentScreen.calendars === 1 && studentScreen.grids >= 1,
   JSON.stringify({ calendars: studentScreen.calendars, grids: studentScreen.grids }),
 );
+/* **Her notifications moved to the bell** (R85), reachable from every screen
+   rather than only from the page she happened to land on. The bell's own
+   behaviour — the panel, the count, the Arabic copy — is measured in
+   `verify-portals.mjs`; what is asserted here is that the CONTROL is present on
+   her calendar too, which is what "every screen" means. */
 check(
-  'R83b · and her notifications are visible on it',
-  studentScreen.notices >= 1,
-  JSON.stringify({ notices: studentScreen.notices }),
-);
-check(
-  'R83c · the notice reads as an activity, not as a cancelled class',
-  studentScreen.text.includes('أُضيف نشاط') || studentScreen.text.includes('غُيّر موعد نشاط'),
-  studentScreen.text.slice(0, 160),
+  'R83b · the notification bell is present on her calendar',
+  await evaluate(`document.querySelector('.bell__trigger') !== null`),
+  'bell in the top bar',
 );
 
 // **As a مؤطرة**, not as the administrator: her dashboard is gated on the
 // teacher role, and asking as somebody who lacks it measures the gate.
-await visit(process.env.TEACHER_UI_COOKIE, '/teacher');
+await visit(process.env.TEACHER_UI_COOKIE, '/teacher/calendar');
 await settled('.cal-header');
 const teacherScreen = await screen();
 check(

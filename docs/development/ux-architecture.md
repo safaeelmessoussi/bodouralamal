@@ -1088,6 +1088,34 @@ on the next surface ([AE](#ae--a-dependency-between-selectors-belongs-to-forms-n
 bootstrap through `CalendarTitle` (§20 rule 14; R31, R36); the header decides
 position and nothing else.
 
+## AP · Three portals, one frame — and a registry is what makes a screen exist
+
+The back office, the teaching portal and the beneficiary's portal render the
+**same** `PortalShell`: header, sidebar, titled main region, §14.4's
+no-permission state, and R83's scroll restoration. What differs is the **list of
+modules**, which is why only the list is passed.
+
+**A capability with no registry entry does not exist to its user.** `/teacher/quran`
+had a page and a router case since M4 and no menu entry, so «إدخال الحفظ» was
+complete and unreachable — rule **P** for the eighth time. The beneficiary had no
+sidebar at all: her calendar, library, memorisation, grades and account were
+reachable by typing a URL. Adding the entries added no capability.
+
+**Landing pages stay minimal by decision, not by omission.** مساحة التدريس and
+لوحة المستفيدة render a sentence and their menu until they are designed: cards
+invented before the questions they answer are settled become the thing the
+design has to work around. «حصص اليوم والقادمة» was **removed** rather than
+restyled — those occurrences are in تقويمي, and showing them twice makes one of
+the two the wrong place to look.
+
+**Notifications live in the top bar, not on one page.** The list was mounted on a
+single dashboard, so a مؤطرة marking grades had no way to learn a class had moved
+without navigating home first — a notice nobody encounters was not delivered. The
+bell is **one component** rendering the **same** `NotificationList`; the panel is
+a container, not a second implementation. The badge shows the server's unread
+count rather than one the client derives, because a count a client computes
+disagrees with the server the moment the list paginates.
+
 ## AO · The calendar contract — one architecture, five surfaces
 
 Every calendar in the platform composes the **same** chrome. What differs is

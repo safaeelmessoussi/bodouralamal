@@ -89,6 +89,12 @@ export function read(prisma: PrismaClient) {
           name: b.name,
           display_order: b.displayOrder,
         })),
+        // R84's public matrix — see the note on `subjects` in the service.
+        subjects: bootstrap.subjects.map((s) => ({
+          id: s.id,
+          name: s.name,
+          display_order: s.displayOrder,
+        })),
       },
     };
 

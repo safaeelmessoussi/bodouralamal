@@ -59,7 +59,24 @@ const HEADLINE_KEYS: Record<NotificationItem['type'], string> = {
   grade_published: 'notifications.gradePublished',
 };
 
-export function NotificationList({ token }: { token: string | null }): ReactNode {
+export function NotificationList({
+  token,
+  alwaysRender = false,
+  onChange,
+}: {
+  token: string | null;
+  /**
+   * Render an empty state instead of nothing.
+   *
+   * On a dashboard, rendering nothing was right: an empty "no notifications"
+   * panel on the screen somebody uses most is noise. **Inside the bell's panel
+   * it is wrong** — a reader who deliberately opened it is owed an answer, and
+   * a blank box is not one.
+   */
+  alwaysRender?: boolean;
+  /** Told when a notice is marked read, so a badge elsewhere can re-count. */
+  onChange?: () => void;
+}): ReactNode {
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [unread, setUnread] = useState(0);
   const [status, setStatus] = useState<'loading' | 'ready' | 'error'>('loading');
@@ -89,6 +106,7 @@ export function NotificationList({ token }: { token: string | null }): ReactNode
       // the reader's position because they acknowledged one line of it.
       setItems((current) => current.map((n) => (n.id === id ? updated : n)));
       setUnread((n) => Math.max(0, n - 1));
+      onChange?.();
     } catch {
       setStatus('error');
     } finally {
@@ -99,7 +117,10 @@ export function NotificationList({ token }: { token: string | null }): ReactNode
   if (status === 'error') return <ErrorState onRetry={() => void load()} />;
   // Nothing to say is said by saying nothing: an empty "no notifications" panel
   // on every student's dashboard is noise on the screen they use most.
-  if (status === 'loading' || items.length === 0) return null;
+  if (status === 'loading') return alwaysRender ? <p className="muted">{t('notifications.loading')}</p> : null;
+  if (items.length === 0) {
+    return alwaysRender ? <p className="muted">{t('notifications.none')}</p> : null;
+  }
 
   return (
     <section className="card" aria-labelledby="notifications-heading">

@@ -83,6 +83,16 @@ export const ar = {
   // §5.3 (R62.10) — one screen, two contexts: the caller's own record, or the
   // child they are acting for. The banner names which.
   student: {
+    // R85 — قائمة المستفيدة: نفس معمار القائمة الجانبية في الإدارة والتدريس.
+    nav: {
+      label: 'أقسامي',
+      dashboard: 'لوحة المستفيدة',
+      calendar: 'تقويمي',
+      content: 'مكتبة المحتوى',
+      quran: 'حفظي',
+      grades: 'نقاطي',
+      account: 'حسابي',
+    },
     // §5.3 — نقاطي. PUBLISHED grades only; the draft is the مؤطِّرة's working
     // note (BR-8) and never reaches this surface. No pass/fail wording here by
     // decision (2026-08-17): the screen reports what she scored, not a verdict
@@ -263,6 +273,11 @@ export const ar = {
     sessionRescheduled: 'تغيّر موعد حصة {subject}. الموعد الجديد: {date} على الساعة {time}.',
     // R78.2 — تُرسَل لمن أُسنِدت إليه الحصة، ولا تُرسَل لمن قام بالإسناد بنفسه.
     sessionAssigned: 'أُسنِدت إليك حصة {subject} ليوم {date} على الساعة {time}.',
+    // جرس الإشعارات في الشريط العلوي — متاح من كل شاشة، لا من لوحة واحدة.
+    bell: 'الإشعارات',
+    bellWithCount: 'الإشعارات — {n} غير مقروء',
+    none: 'لا إشعارات بعد.',
+    loading: 'جارٍ التحميل…',
     // R82/R83 — إشعارات الأنشطة والنقاط. الصياغة تذكر ما يلزم للتصرّف: ما هو،
     // ومتى، ولا تصف قراراً لم يُتّخذ.
     eventCreated: 'أُضيف نشاط «{subject}» يوم {date} على الساعة {time}.',
@@ -555,6 +570,9 @@ export const ar = {
   teacher: {
     // R83.5 — تقويم المؤطرة الشخصي: حصصها وأنشطتها هي، لا تقويم المنصّة كلّه.
     myCalendar: 'تقويمي',
+    // مساحة التدريس تبقى بسيطة عن قصد حتى تُصمَّم؛ القائمة جانبها هي الطريق.
+    homeLede: 'من القائمة تصلين إلى تقويمك وجداولك ونقاط الامتحانات والمحتوى وإدخال الحفظ.',
+    homeBody: 'ستُضاف لوحة مختصرة هنا لاحقاً. حتى ذلك الحين، اختاري ما تريدين من القائمة.',
     schedules: {
       // R72 — the one kind TD-2 grants a مؤطرة on this screen.
       addActivity: 'نشاط جديد',
@@ -574,8 +592,12 @@ export const ar = {
       // authorization.
       schedules: 'الجدولة',
       content: 'مكتبة المحتوى',
-      exams: 'الامتحانات',
-      quran: 'تتبع الحفظ',
+      exams: 'نقاط الامتحانات',
+      // R85 — «إدخال الحفظ»: the Owner's word, and the operational one. «تتبع»
+      // describes watching; this screen is where a مؤطرة RECORDS what was
+      // memorised, which is what she comes to it to do.
+      quran: 'إدخال الحفظ',
+      calendar: 'تقويمي',
     },
     /** §14.1's grouping, applied to the teaching branch — the same headings the
      *  back-office sidebar uses, so the two portals read alike. */

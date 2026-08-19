@@ -11,6 +11,7 @@ import { DashboardButton, SignInButton } from './auth-buttons.js';
 import { MobileMenu } from './mobile-menu.js';
 import { NavigationMenu } from './navigation-menu.js';
 import { useActiveRole } from '../../contexts/active-role.js';
+import { NotificationBell } from '../notifications/notification-bell.js';
 import { RoleSwitcher } from './role-switcher.js';
 import { UserMenu } from './user-menu.js';
 
@@ -27,7 +28,7 @@ import { UserMenu } from './user-menu.js';
  * one role (§2.1) and a child switcher when they have approved links (§4.3).
  */
 export function ApplicationHeader(): ReactNode {
-  const { setAccessToken } = useSession();
+  const { accessToken, setAccessToken } = useSession();
   const navigation = useNavigation();
   const [open, setOpen] = useState(false);
   const pathname = typeof window === 'undefined' ? '/' : window.location.pathname;
@@ -82,6 +83,12 @@ export function ApplicationHeader(): ReactNode {
                       in a single action; two menus made that two. `hasLinkedChildren`
                       no longer gates anything here: a parent with no approved
                       children still needs the group's «＋ تسجيل طفل» action. */}
+                  {/* **The bell, on every authenticated screen** (§4.8). The
+                      list was mounted on ONE page, so a مؤطرة marking grades
+                      had no way to learn a class had moved without navigating
+                      home first — a notice nobody encounters is one that was
+                      not delivered. */}
+                  <NotificationBell token={accessToken} />
                   <RoleSwitcher />
                   <DashboardButton roles={roles} />
                   <UserMenu onSignOut={signOut} />
