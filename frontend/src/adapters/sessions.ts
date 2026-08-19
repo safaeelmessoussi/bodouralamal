@@ -147,3 +147,24 @@ export async function unlinkSessionContent(
 ): Promise<unknown> {
   return api(`/sessions/${sessionId}/content/${contentId}`, { method: 'DELETE', token });
 }
+
+/**
+ * `POST /sessions/{id}/notify` — **the optional send for an occurrence** (R83.3).
+ *
+ * R77.4 and R78.4 wrote these notices inside the changing transaction, which
+ * could not express *do not tell anyone*. The change now commits alone and this
+ * decides delivery; recipients are the server's — the schedule's resolved
+ * audience plus the occurrence's own staff, minus the actor.
+ */
+export async function notifySessionChange(
+  sessionId: string,
+  change: 'cancelled' | 'rescheduled',
+  token: string | null,
+): Promise<{ notified: number }> {
+  const body = await api<{ data: { notified: number } }>(`/sessions/${sessionId}/notify`, {
+    method: 'POST',
+    token,
+    body: { change },
+  });
+  return body.data;
+}

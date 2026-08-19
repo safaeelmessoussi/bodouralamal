@@ -72,6 +72,20 @@ async function student(label: string, levelId: string, branchId: string): Promis
     },
   });
   await prisma.enrollment.create({ data: { studentId: user.id, levelId, branchId } });
+  /**
+   * **The student ROLE, not only the enrolment.**
+   *
+   * R79 made *is she a beneficiary* a durable fact independent of roles, and her
+   * own dashboard still reads `GET /students/me`, which TD-2 gates on the role.
+   * Without the row the screen renders its error state — which the harness first
+   * reported as a missing calendar.
+   */
+  const role = await prisma.role.findFirst({ where: { name: 'student' } });
+  if (role) {
+    await prisma.userBranchRole.create({
+      data: { userId: user.id, roleId: role.id, branchId: null },
+    });
+  }
   return user.id;
 }
 
@@ -112,6 +126,36 @@ const branchCategoryEvent = await event('فرع أ + فئة أ', {
 });
 const categoryWideEvent = await event('فئة أ في كل الفروع', { categoryIds: [catA.id] });
 
+/**
+ * **A fifth event, for the UI phase alone.**
+ *
+ * Its notice is pre-delivered so the dashboard has something to render without
+ * the harness first driving the API — which would mint a token and rotate the
+ * refresh cookie out from under the app (TD-4.13). It is deliberately NOT one
+ * of the four the API checks use: seeding a notice for `levelEvent` made the
+ * *inbox is empty before sending* check false and the send idempotent, so two
+ * assertions started failing for a reason that had nothing to do with them.
+ */
+/**
+ * A مؤطرة, because her dashboard is gated on the **teacher role** and the dev
+ * super admin does not hold one — the first run reported her calendar missing
+ * when what was missing was the role to see it.
+ */
+const teacher = await prisma.user.create({
+  data: { nameArabic: `${TAG} المؤطرة`, sex: 'female', accountStatus: 'active' },
+});
+const teacherRole = await prisma.role.findFirst({ where: { name: 'teacher' } });
+if (teacherRole) {
+  await prisma.userBranchRole.create({
+    data: { userId: teacher.id, roleId: teacherRole.id, branchId: branchA.id },
+  });
+}
+
+const uiEvent = await event('نشاط للواجهة', { levelIds: [levelA.id] });
+await prisma.notification.create({
+  data: { userId: concerned, eventId: uiEvent, type: 'event_created' },
+});
+
 console.log(
   JSON.stringify({
     concerned,
@@ -120,6 +164,8 @@ console.log(
     otherLevelEvent,
     branchCategoryEvent,
     categoryWideEvent,
+    uiEvent,
+    teacher: teacher.id,
   }),
 );
 await prisma.$disconnect();

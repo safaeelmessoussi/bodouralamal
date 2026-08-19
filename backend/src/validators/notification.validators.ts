@@ -18,3 +18,16 @@ export const notifyEventSchema = z
     change: z.enum(['created', 'rescheduled', 'cancelled']),
   })
   .strict();
+
+/**
+ * The occurrence's equivalent (R83.3).
+ *
+ * Only the two changes a Session announces: `session_assigned` is written by the
+ * staffing path itself and `session_restored` by R77.5's reconciliation, neither
+ * of which is a decision somebody takes on a form.
+ */
+export const notifySessionSchema = z
+  .object({
+    change: z.enum(['cancelled', 'rescheduled']),
+  })
+  .strict();

@@ -374,22 +374,48 @@ describe("PATCH is a field edit, not a second entrance to the state machine", ()
 });
 
 describe("the TD-1 transitions own their obligations", () => {
-  it("refuses a cancellation with no reason, and does not cancel", async () => {
-    const s = await freshSession();
-    for (const reason of ["", "   "]) {
+  /**
+   * **Reversed by R83.2, and kept because the risk moved rather than vanished.**
+   *
+   * This asserted that a blank reason is refused — *the reason is the only
+   * record of WHY a class did not happen; a blank one is indistinguishable
+   * later from a reason that was lost.* The Owner decided a class is sometimes
+   * simply not held, and that demanding a sentence first is a gate with no
+   * purpose. So a blank reason is now **accepted and normalised to absent**,
+   * which is what keeps *«»* and *nothing* one state rather than two that
+   * render differently — the half of the old concern that survives.
+   */
+  it("accepts a cancellation with NO reason, storing absence rather than emptiness (R83.2)", async () => {
+    for (const reason of ["", "   ", undefined]) {
+      const s = await freshSession();
       const res = await call("POST", `/sessions/${s.id}/cancel`, superAdmin, {
         version: s.version,
-        reason,
+        ...(reason === undefined ? {} : { reason }),
       });
-      expect(res.status).toBe(400);
+      expect(res.status).toBe(200);
+
+      const row = await prisma.session.findUniqueOrThrow({
+        where: { id: s.id },
+        select: { status: true, cancellationReason: true },
+      });
+      expect(row.status).toBe("cancelled");
+      // Never the empty string: one state, not two.
+      expect(row.cancellationReason).toBeNull();
     }
-    // The reason is the only record of WHY a class did not happen; a blank one
-    // is indistinguishable later from a reason that was lost.
+  });
+
+  it("still records a reason when one is given", async () => {
+    const s = await freshSession();
+    const res = await call("POST", `/sessions/${s.id}/cancel`, superAdmin, {
+      version: s.version,
+      reason: "الأستاذة مريضة",
+    });
+    expect(res.status).toBe(200);
     const row = await prisma.session.findUniqueOrThrow({
       where: { id: s.id },
-      select: { status: true },
+      select: { cancellationReason: true },
     });
-    expect(row.status).toBe("scheduled");
+    expect(row.cancellationReason).toBe("الأستاذة مريضة");
   });
 
   it("cancels with a reason, and the reason travels on the DTO", async () => {

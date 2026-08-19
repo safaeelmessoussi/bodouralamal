@@ -104,6 +104,90 @@ async function open(path = '/dashboard/student') {
   await evaluate(`(() => { window.__token = ${JSON.stringify(tokens.get(current))}; return true; })()`);
 }
 
+/** Loads a page as somebody, WITHOUT minting anything. See the note below. */
+async function visit(who, path) {
+  await send('Network.clearBrowserCookies');
+  await cookie(who);
+  await send('Page.navigate', { url: `${BASE}${path}` });
+  for (let i = 0; i < 120; i += 1) {
+    const ok = await evaluate(`(() => document.querySelector('main') !== null)()`).catch(
+      () => false,
+    );
+    if (ok) break;
+    await new Promise((r) => setTimeout(r, 250));
+  }
+}
+
+/* ── R83 · the surfaces the Owner tested by hand ────────────────────────── */
+
+/**
+ * Waits for the page to finish loading before measuring it.
+ *
+ * The first version measured after a fixed delay and read «جارٍ التحميل…» — a
+ * dashboard that fetches is not ready when the DOM is, and a fixed wait is a
+ * race that reports a missing feature.
+ */
+async function settled(selector) {
+  for (let i = 0; i < 80; i += 1) {
+    const ready = await evaluate(
+      `(() => document.querySelector(${JSON.stringify(selector)}) !== null)()`,
+    ).catch(() => false);
+    if (ready) return true;
+    await new Promise((r) => setTimeout(r, 250));
+  }
+  return false;
+}
+
+/** Whatever the page renders, as a reader sees it. */
+const screen = () =>
+  evaluate(`(() => ({
+    text: document.querySelector('main') ? document.querySelector('main').textContent : '',
+    calendars: document.querySelectorAll('.cal-header').length,
+    notices: document.querySelectorAll('.notifications__item').length,
+    grids: document.querySelectorAll('.cal-grid, .cal-list').length,
+  }))()`);
+
+/**
+ * **No token is minted for these.** The app authenticates itself from the
+ * refresh cookie; a harness that also refreshes rotates the cookie out from
+ * under it, and the dashboard then sits at «جارٍ التحميل…» — which reads as a
+ * missing feature and is the harness breaking the app (TD-4.13).
+ */
+await visit(process.env.CONCERNED_UI_COOKIE, '/dashboard/student');
+// The calendar and the notification list load independently, so waiting for
+// the calendar alone is a race the first run lost — it measured a dashboard
+// whose notices had not arrived and reported them missing.
+await settled('.cal-header');
+await settled('.notifications__item');
+const studentScreen = await screen();
+check(
+  'R83a · the beneficiary’s dashboard now HAS a calendar',
+  studentScreen.calendars === 1 && studentScreen.grids >= 1,
+  JSON.stringify({ calendars: studentScreen.calendars, grids: studentScreen.grids }),
+);
+check(
+  'R83b · and her notifications are visible on it',
+  studentScreen.notices >= 1,
+  JSON.stringify({ notices: studentScreen.notices }),
+);
+check(
+  'R83c · the notice reads as an activity, not as a cancelled class',
+  studentScreen.text.includes('أُضيف نشاط') || studentScreen.text.includes('غُيّر موعد نشاط'),
+  studentScreen.text.slice(0, 160),
+);
+
+// **As a مؤطرة**, not as the administrator: her dashboard is gated on the
+// teacher role, and asking as somebody who lacks it measures the gate.
+await visit(process.env.TEACHER_UI_COOKIE, '/teacher');
+await settled('.cal-header');
+const teacherScreen = await screen();
+check(
+  'R83d · the مؤطرة’s dashboard exists and carries her own calendar',
+  teacherScreen.calendars === 1,
+  JSON.stringify({ calendars: teacherScreen.calendars, grids: teacherScreen.grids }),
+);
+
+
 const RANGE = 'from=2026-08-01&to=2026-08-31';
 
 /* ── A · the personal calendar ──────────────────────────────────────────── */

@@ -661,22 +661,30 @@ describe("session lifecycle (TD-1)", () => {
     return { id: s.id, version: s.version };
   }
 
-  it("cancel requires a reason, and keeps the row", async () => {
+  it("cancel does NOT require a reason, and keeps the row (R83.2)", async () => {
     const s = await oneSession();
-    const blank = await failure(() =>
-      cancelSession(prisma, superAdmin(), s.id, "   ", s.version),
-    );
-    expect(blank.details?.["reason"]).toBe("CANCELLATION_REASON_REQUIRED");
+    // Restated, not deleted: R77 required a reason and the Owner made it
+    // optional. What the guard protects — that cancelling KEEPS the row — is
+    // unchanged and asserted below.
+    const blank = await cancelSession(prisma, superAdmin(), s.id, "   ", s.version);
+    expect(blank.status).toBe("cancelled");
+    expect(blank.cancellationReason).toBeNull();
 
-    const cancelled = await cancelSession(
-      prisma,
-      superAdmin(),
-      s.id,
-      "عطلة رسمية",
-      s.version,
-    );
-    expect(cancelled.status).toBe("cancelled");
-    expect(cancelled.cancellationReason).toBe("عطلة رسمية");
+    // **The with-a-reason half is asserted over HTTP**, in
+    // `session.http.integration.test.ts` — *still records a reason when one is
+    // given*. It is not repeated here because this fixture's occurrence is in
+    // the past and cannot be restored to be cancelled twice, and a second
+    // `oneSession()` books the same room and staff at the same hour and is
+    // refused by the conflict guard. Asserting it once, where it can be
+    // asserted honestly, beats contorting the fixture to say it twice.
+
+    // The row is KEPT, which is the property this guard has always protected.
+    const row = await prisma.session.findUniqueOrThrow({
+      where: { id: s.id },
+      select: { status: true, deletedAt: true },
+    });
+    expect(row.status).toBe("cancelled");
+    expect(row.deletedAt).toBeNull();
   });
 
   it("records the audience size on cancellation — unanswerable later", async () => {

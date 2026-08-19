@@ -558,6 +558,15 @@ feature. `verify-notifications.mjs` mints **once per identity** and reuses it.
 **`/auth/refresh` compares `X-Requested-With` literally** — the value must be
 `XMLHttpRequest` (TD-12's CSRF posture). Any other value is `AUTH_REQUIRED`.
 
+**One refresh cookie, one consumer.** A harness that drives the API *and* loads
+the app needs a **separate session per phase**: the page's own refresh rotates
+the cookie, and the other phase's mint then fails. The symptom is a dashboard
+stuck at «جارٍ التحميل…», which reads as a missing feature.
+
+**A fixture user needs the ROLE its screen is gated on**, not only the domain
+fact. A beneficiary with an enrolment but no `student` role renders the error
+state — reported once as a missing calendar.
+
 **A negative check that cannot fail proves nothing.** In the same harness, every
 *unrelated person sees nothing* check passed while the reads were 401ing —
 an empty list because the request failed is not the same fact as an empty list.

@@ -25,6 +25,16 @@ export ADMIN_COOKIE="$(bash scripts/dev/issue-dev-session.sh)"
 export CONCERNED_COOKIE="$(bash scripts/dev/issue-dev-session.sh "$(node -e 'process.stdout.write(JSON.parse(process.env.R82_SCENARIO).concerned)')")"
 export UNRELATED_COOKIE="$(bash scripts/dev/issue-dev-session.sh "$(node -e 'process.stdout.write(JSON.parse(process.env.R82_SCENARIO).unrelated)')")"
 
+# **A second session per identity, for the UI phase.**
+#
+# The API phase mints an access token in the page, which ROTATES the refresh
+# cookie (TD-4.13). The app then cannot authenticate itself with the copy the
+# harness set, and the dashboard sits at «جارٍ التحميل…» — the harness breaking
+# the app and reading it as a missing feature. Each phase gets its own session.
+export CONCERNED_UI_COOKIE="$(bash scripts/dev/issue-dev-session.sh "$(node -e 'process.stdout.write(JSON.parse(process.env.R82_SCENARIO).concerned)')")"
+export ADMIN_UI_COOKIE="$(bash scripts/dev/issue-dev-session.sh)"
+export TEACHER_UI_COOKIE="$(bash scripts/dev/issue-dev-session.sh "$(node -e 'process.stdout.write(JSON.parse(process.env.R82_SCENARIO).teacher)')")"
+
 WORK="$(mktemp -d)"
 cleanup() {
   [[ -n "${CHROME_PID:-}" ]] && kill "$CHROME_PID" 2>/dev/null || true

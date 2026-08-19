@@ -1,6 +1,7 @@
 import type { Prisma, PrismaClient } from '../generated/prisma/client.js';
 import type { Actor } from '../policies/actor.js';
 import { assertMayEdit } from './event.service.js';
+import { loadForWrite } from './session.service.js';
 import { AppError } from '../lib/errors.js';
 import { page, pageWindow, type Page, type PageParams } from '../lib/pagination.js';
 import {
@@ -320,6 +321,50 @@ export async function notifyEventChange(
     skipDuplicates: true,
   });
   return { notified: created.count };
+}
+
+/**
+ * `POST /sessions/{id}/notify` — **the optional send for an occurrence** (R83.3).
+ *
+ * The Session equivalent of `notifyEventChange`, and deliberately the same
+ * shape: R77.4 and R78.4 wrote these notices inside the changing transaction,
+ * and R83 separated them so the person is **asked** rather than the platform
+ * deciding. Declining creates nothing; a failure here cannot roll back a
+ * cancellation or a reschedule that already committed.
+ *
+ * The audience is the one R77.3/R78.3 already define — the schedule's resolved
+ * students plus the occurrence's own staff, minus the actor — through
+ * `recipientsFor`, which is the same predicate the `session.cancel` audit row
+ * counts. Idempotent through `(user, session, type)`.
+ */
+export async function notifySessionChange(
+  prisma: PrismaClient,
+  actor: Actor,
+  sessionId: string,
+  change: 'cancelled' | 'rescheduled',
+): Promise<{ notified: number }> {
+  // **Authorization is the occurrence's own**: whoever may change it may
+  // announce the change, asked through the same guard the write used.
+  const session = await loadForWrite(prisma, actor, sessionId);
+
+  const spec = {
+    teachingMode: session.schedule.teachingMode as never,
+    levelId: session.schedule.levelId,
+    administrativeGroupId: session.schedule.administrativeGroupId,
+    teachingGroupId: session.schedule.teachingGroupId,
+    branchId: session.schedule.branchId,
+  };
+
+  return prisma.$transaction(async (tx) => {
+    const userIds = await recipientsFor(tx, sessionId, spec, actor.userId);
+    const notified = await writeFor(
+      tx,
+      sessionId,
+      change === 'cancelled' ? 'session_cancelled' : 'session_rescheduled',
+      userIds,
+    );
+    return { notified };
+  });
 }
 
 /* ── Grades (R82.4) ───────────────────────────────────────────────────────── */

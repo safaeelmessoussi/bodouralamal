@@ -1,7 +1,5 @@
 import type { Prisma, PrismaClient, Session, SessionStatus } from '../generated/prisma/client.js';
 import {
-  notifyCancelled,
-  notifyRescheduled,
   notifyRestored,
 } from './notification.service.js';
 import { AppError } from '../lib/errors.js';
@@ -68,7 +66,13 @@ function assertTransition(from: SessionStatus, to: SessionStatus): void {
  * confirm that a class exists at a branch — or in a course — the caller may not
  * see.
  */
-async function loadForWrite(
+/**
+ * **Exported for R83.3's optional send**: whoever may change an occurrence may
+ * announce the change, and the announcement asks the SAME question the write
+ * asked. A second implementation of *may this person touch this session* would
+ * be a second answer, and the two would drift.
+ */
+export async function loadForWrite(
   prisma: PrismaClient,
   actor: Actor,
   sessionId: string,
@@ -206,21 +210,17 @@ export async function overrideSession(
      * time actually changed — `changed` already records exactly that, having
      * been built from old-versus-new rather than from what was submitted.
      */
+    /**
+     * **R83.3 — a reschedule notice is the actor's decision, taken after this
+     * commits**, exactly as a cancellation's now is. R78.4 wrote it here; the
+     * write and the telling are separated so declining creates nothing.
+     *
+     * `moved_in_time` still travels on the audit row, because *whether this
+     * edit actually moved the class* is a fact about the edit and the screen
+     * uses it to decide whether to offer the notice at all — retiming nothing
+     * is not news.
+     */
     const movedInTime = ['date', 'start_time', 'end_time'].some((k) => k in changed);
-    const notified = movedInTime
-      ? await notifyRescheduled(
-          tx,
-          sessionId,
-          {
-            teachingMode: session.schedule.teachingMode as never,
-            levelId: session.schedule.levelId,
-            administrativeGroupId: session.schedule.administrativeGroupId,
-            teachingGroupId: session.schedule.teachingGroupId,
-            branchId: session.schedule.branchId,
-          },
-          actor.userId,
-        )
-      : 0;
 
     await audit.write(tx, {
       actorUserId: actor.userId,
@@ -230,7 +230,7 @@ export async function overrideSession(
       targetId: sessionId,
       // TD-8: the fields old→new, which is exactly the distinction that
       // protects this row from the next materialization.
-      detail: { changed, ...(movedInTime ? { notified } : {}) },
+      detail: { changed, moved_in_time: movedInTime },
     });
     return updated;
   });
@@ -239,9 +239,12 @@ export async function overrideSession(
 /**
  * Cancels one occurrence (TD-1 `scheduled → cancelled`).
  *
- * **The reason is mandatory** — enforced here *and* by
- * `session_cancellation_reason_check`, because a cancelled class with no stated
- * reason is indistinguishable from one cancelled by accident.
+ * **The reason is OPTIONAL (R83.2).** R43's `session_cancellation_reason_check`
+ * and R77's insistence are both retired: a class is sometimes simply not held,
+ * and demanding a sentence before the platform will record that is a gate with
+ * no purpose. `null` and `''` are one state, normalised at the boundary, so a
+ * notice renders the reason when there is one and says only that the class is
+ * cancelled when there is not.
  *
  * The audit row records **how many students this affected**, resolved at the
  * moment of the action (§4.4c). That number is unanswerable later once the
@@ -252,17 +255,24 @@ export async function cancelSession(
   prisma: PrismaClient,
   actor: Actor,
   sessionId: string,
-  reason: string,
+  reason: string | null,
   version: number,
 ): Promise<Session> {
   const session = await loadForWrite(prisma, actor, sessionId);
   assertTransition(session.status, 'cancelled');
 
-  if (reason.trim() === '') {
-    throw new AppError('VALIDATION_FAILED', 'a cancellation must state a reason', {
-      reason: 'CANCELLATION_REASON_REQUIRED',
-    });
-  }
+  /**
+   * **Normalised HERE, not at the boundary** (R83.2).
+   *
+   * The validator trims too, but a service that trusted it would store `'   '`
+   * for any caller that is not an HTTP request — which a test calling the
+   * service directly proved immediately. *Absent* and *blank* must be one
+   * state, or a notice renders an empty reason line for a cancellation that
+   * gave none.
+   */
+  const stated = reason === null || reason.trim() === '' ? null : reason.trim();
+
+
 
   // ONE spec, used by both the audit count and the notification write (R77.3):
   // two resolutions that agree today are two that drift, and a notification list
@@ -282,15 +292,21 @@ export async function cancelSession(
       id: sessionId,
       expectedVersion: version,
       requireNotDeleted: true,
-      data: { status: 'cancelled', cancellationReason: reason.trim() },
+      data: { status: 'cancelled', cancellationReason: stated },
     });
-    // **In the same transaction** (R77.4). A committed cancellation with no
-    // notifications is a class nobody was told about, and a retry cannot tell
-    // that state apart from one already notified.
-    // R78.3 — the audience is (students ∪ assigned staff) minus the actor: an
-    // administrator tells the مؤطرة something she did not decide, and a مؤطرة
-    // cancelling her own class tells herself nothing.
-    const notified = await notifyCancelled(tx, sessionId, spec, actor.userId);
+    /**
+     * **The notice is no longer written here (R83.3).**
+     *
+     * R77.4 wrote it inside this transaction, fearing *a committed cancellation
+     * nobody was told about*. The Owner's answer is better than the guard: the
+     * person is **asked, every time**, through `POST /sessions/{id}/notify`
+     * after this commits. Declining then creates nothing — which R77.4 could
+     * not express at all — and a failure to notify can never roll back a
+     * cancellation that succeeded.
+     *
+     * Idempotency now carries the whole weight and already did the work: the
+     * `(user, session, type)` unique index makes a repeated send the same rows.
+     */
     await audit.write(tx, {
       actorUserId: actor.userId,
       activeRole: actor.activeRole,
@@ -298,12 +314,9 @@ export async function cancelSession(
       targetEntity: 'Session',
       targetId: sessionId,
       detail: {
-        reason: reason.trim(),
+        reason: stated,
         date: session.date.toISOString().slice(0, 10),
         audience_size: affected,
-        // How many were actually told, which can be lower than the audience on a
-        // retry — the notices already existed and were not written twice.
-        notified,
       },
     });
     return updated;

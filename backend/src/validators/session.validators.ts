@@ -48,7 +48,22 @@ export const overrideSessionSchema = z
  * and it is the only record of *why* a class did not happen.
  */
 export const cancelSessionSchema = z
-  .object({ version, reason: z.string().trim().min(1).max(500) })
+  /**
+   * R83.2 — **the reason is OPTIONAL.** R77 required it, and the Owner has
+   * decided otherwise: a class is sometimes simply not held, and demanding a
+   * sentence before the platform will record that is a gate with no purpose.
+   * An empty string is normalised to absent, so *«»* and *nothing* are one
+   * state rather than two that render differently.
+   */
+  .object({
+    version,
+    reason: z
+      .string()
+      .trim()
+      .max(500)
+      .optional()
+      .transform((v) => (v === undefined || v === '' ? null : v)),
+  })
   .strict();
 
 export const restoreSessionSchema = z.object({ version }).strict();

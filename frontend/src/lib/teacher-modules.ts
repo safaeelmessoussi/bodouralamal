@@ -64,8 +64,9 @@ export const TEACHER_MODULES: readonly TeacherModule[] = [
     labelKey: 'teacher.nav.dashboard',
     section: null,
     roles: TEACHER,
-    status: 'blocked',
-    blockedReasonKey: 'teacher.blocked.dashboard',
+    // R83.4/R83.5 — it was `blocked` because there was nothing to put on it.
+    // There is now: what she has been told, and her own week.
+    status: 'ready',
   },
   {
     // R70 — unblocked for **grading**. §4.6's online paper builder is still

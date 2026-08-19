@@ -476,17 +476,64 @@ describe("cancelling ONE Monday leaves the series alone", () => {
     expect(stillScheduled).toBeGreaterThan(2);
   });
 
-  it("still SHOWS the cancelled Monday, marked — the calendar says a class is off", async () => {
-    // Hiding it would answer *is there a class* while the reader is asking
-    // *what happened to my class*.
+  /**
+   * **Restated by R83.1, and the direction reversed deliberately.**
+   *
+   * This asserted that the cancelled Monday still SHOWS, marked — on the
+   * reasoning that hiding it answers *is there a class* while the reader asks
+   * *what happened to my class*. The Owner decided the opposite: a calendar
+   * shows what is **on**, and a class that is not happening is not on. The
+   * reader's question is answered by the **notification**, which is where the
+   * news belongs and which R77 exists to deliver.
+   *
+   * The guard is kept because the risk is unchanged — that a cancellation
+   * silently takes the whole series with it — and that half is asserted below.
+   */
+  it("REMOVES the cancelled Monday from the calendar (R83.1)", async () => {
     const monday = (await occurrences(safaToken)).find(
       (r) => r.date === CANCELLED_DATE,
     );
-    expect(monday).toBeDefined();
-    expect(monday!.status).toBe("cancelled");
+    expect(monday).toBeUndefined();
   });
 
-  it("tells صفاء and أمينة, and nobody else", async () => {
+  it("and the row is still there, cancelled — hidden from the calendar, not deleted", async () => {
+    // The distinction R83.1 turns on: the occurrence keeps its state, its
+    // reason and its history, and restoring it brings it back.
+    // By ID, not by date: other suites materialise sessions on the same day,
+    // and identifying a row by rendered date is the trap this project has paid
+    // for before.
+    const row = await prisma.session.findUniqueOrThrow({
+      where: { id: cancelledId },
+      select: { status: true, deletedAt: true },
+    });
+    expect(row.status).toBe("cancelled");
+    expect(row.deletedAt).toBeNull();
+  });
+
+  /**
+   * **R83.3 — cancelling tells nobody until somebody decides to tell them.**
+   *
+   * R77.4 wrote the notices inside the cancelling transaction; the Owner made
+   * the send an explicit choice, so the cancellation alone leaves every inbox
+   * empty. This asserts that first — the half that used not to exist — and then
+   * the send, which is where the original property still lives.
+   */
+  it("tells NOBODY on cancellation alone (R83.3)", async () => {
+    for (const token of [safaToken, aminaToken]) {
+      const res = await call("GET", "/notifications", token);
+      const mine = (
+        res.body.data as unknown as Record<string, unknown>[]
+      ).filter((n) => n["session_id"] === cancelledId);
+      expect(mine).toHaveLength(0);
+    }
+  });
+
+  it("tells صفاء and أمينة when the send is chosen, and nobody else", async () => {
+    const sent = await call("POST", `/sessions/${cancelledId}/notify`, superAdmin, {
+      change: "cancelled",
+    });
+    expect(sent.status).toBe(200);
+
     for (const token of [safaToken, aminaToken]) {
       const res = await call("GET", "/notifications", token);
       const mine = (

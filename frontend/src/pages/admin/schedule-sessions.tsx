@@ -6,12 +6,14 @@ import {
   listScheduleSessions,
   restoreSession,
   updateSession,
+  notifySessionChange,
   type EditScope,
   type ScheduleSession,
 } from '../../adapters/sessions.js';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
 import { SessionMaterialsDialog } from '../../components/content/session-materials-dialog.js';
 import { Button } from '../../components/ui/button.js';
+import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
 import { DataTable, type Column, type RowAction, type TableStatus } from '../../components/ui/data-table.js';
 import { Dialog } from '../../components/ui/dialog.js';
 import { DateField, TextField } from '../../components/ui/field.js';
@@ -69,6 +71,11 @@ export function ScheduleSessionsPage({ scheduleId }: { scheduleId: string }): Re
   const [status, setStatus] = useState<TableStatus>('loading');
   const [editing, setEditing] = useState<ScheduleSession | null>(null);
   const [cancelling, setCancelling] = useState<ScheduleSession | null>(null);
+  /** The saved change awaiting the tell-or-not decision (R83.3). */
+  const [notifying, setNotifying] = useState<{
+    id: string;
+    change: 'cancelled' | 'rescheduled';
+  } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [materialsFor, setMaterialsFor] = useState<string | null>(null);
@@ -184,7 +191,19 @@ export function ScheduleSessionsPage({ scheduleId }: { scheduleId: string }): Re
     },
   ];
 
-  async function run(action: () => Promise<unknown>, okKey: string): Promise<void> {
+  /**
+   * Runs a mutation and, when it changed something people are waiting on,
+   * **asks whether to tell them** (R83.3).
+   *
+   * The change is already committed when the question is asked — R77.4 and
+   * R78.4 wrote the notices inside the changing transaction, which could not
+   * express *don't tell anyone*. Declining now creates nothing at all.
+   */
+  async function run(
+    action: () => Promise<unknown>,
+    okKey: string,
+    announce?: { id: string; change: 'cancelled' | 'rescheduled' },
+  ): Promise<void> {
     setBusy(true);
     setNotice(null);
     try {
@@ -193,6 +212,7 @@ export function ScheduleSessionsPage({ scheduleId }: { scheduleId: string }): Re
       setCancelling(null);
       await load();
       setNotice(t(okKey));
+      if (announce) setNotifying(announce);
     } catch (error) {
       const reason =
         error instanceof ApiError ? (error.details?.['reason'] as string | undefined) : undefined;
@@ -219,9 +239,19 @@ export function ScheduleSessionsPage({ scheduleId }: { scheduleId: string }): Re
     edit: { date: string; start_time: string; end_time: string },
   ): Promise<void> {
     if (scope === 'this_session') {
+      // **Only THIS scope announces** (R83.3): the two wider ones edit the RULE
+      // and re-materialize many occurrences, which is a different kind of news
+      // and not one a per-occurrence notice can carry honestly.
+      const moved =
+        edit.date !== session.date ||
+        edit.start_time !== session.start_time ||
+        edit.end_time !== session.end_time;
       await run(
         () => updateSession(session.id, session.version, edit, accessToken),
         'admin.sessions.savedOne',
+        // Retiming nothing is not news, so the question is only asked when the
+        // occurrence actually moved.
+        moved ? { id: session.id, change: 'rescheduled' } : undefined,
       );
       return;
     }
@@ -281,6 +311,46 @@ export function ScheduleSessionsPage({ scheduleId }: { scheduleId: string }): Re
         />
       ) : null}
 
+      {/* **R83.3 — the optional notice, after the change is saved.** The same
+          question the activity form asks, through the same shared dialog, so
+          «هل أُشعر المعنيين؟» is asked once in the platform's voice. */}
+      <ConfirmDialog
+        open={notifying !== null}
+        title={t('scheduling.notify.title')}
+        body={t('scheduling.notify.body')}
+        details={<p className="muted">{t('scheduling.notify.audience')}</p>}
+        confirmLabel={t('scheduling.notify.send')}
+        cancelLabel={t('scheduling.notify.skip')}
+        busy={busy}
+        onConfirm={() => {
+          void (async () => {
+            if (!notifying) return;
+            setBusy(true);
+            try {
+              const result = await notifySessionChange(
+                notifying.id,
+                notifying.change,
+                accessToken,
+              );
+              setNotice(t('scheduling.notify.sent').replace('{n}', String(result.notified)));
+            } catch {
+              // The change is saved; only the notice failed, and saying so
+              // precisely matters — a generic failure would read as though the
+              // cancellation had not happened.
+              setNotice(t('scheduling.notify.failed'));
+            } finally {
+              setBusy(false);
+              setNotifying(null);
+            }
+          })();
+        }}
+        onCancel={() => {
+          // Nothing is called. Declining is the absence of the request.
+          setNotifying(null);
+          setNotice(t('scheduling.notify.skipped'));
+        }}
+      />
+
       {cancelling ? (
         <CancelDialog
           session={cancelling}
@@ -290,6 +360,7 @@ export function ScheduleSessionsPage({ scheduleId }: { scheduleId: string }): Re
             void run(
               () => cancelSession(cancelling.id, cancelling.version, reason, accessToken),
               'admin.sessions.cancelled',
+              { id: cancelling.id, change: 'cancelled' },
             )
           }
         />
@@ -458,11 +529,14 @@ function CancelDialog({
     >
       <div className="form">
         <p>{t('admin.sessions.cancelBody')}</p>
+        {/* **R83.2 — optional.** R77 required it, on the reasoning that a
+            cancellation without a reason is indistinguishable from an accident.
+            The Owner has decided otherwise: a class is sometimes simply not
+            held, and demanding a sentence first is a gate with no purpose. */}
         <TextField
           label={t('admin.sessions.cancelReason')}
           value={reason}
           onChange={setReason}
-          required
           hint={t('admin.sessions.cancelReasonHint')}
         />
         <div className="form__actions">
@@ -471,7 +545,7 @@ function CancelDialog({
           </Button>
           <Button
             variant="danger"
-            disabled={busy || reason.trim() === ''}
+            disabled={busy}
             onClick={() => onConfirm(reason.trim())}
           >
             {t('admin.sessions.cancel')}

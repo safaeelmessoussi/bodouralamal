@@ -100,8 +100,16 @@ export interface Occurrence {
    * was — TD-3.4 (R43) gives it its own name.
    */
   audienceLabel: string | null;
-  /** TD-1 lifecycle. A cancelled occurrence still appears — the calendar's job
-   *  is to say a class is not happening, not to hide that it was scheduled. */
+  /**
+   * TD-1 lifecycle.
+   *
+   * **R83.1 — a cancelled occurrence does NOT appear in an ordinary calendar.**
+   * R77 said the opposite, on the reasoning that a calendar should say a class
+   * is not happening; the Owner's calendars show what is **on**, and a class
+   * that is not happening is not on. The row is never deleted — it keeps its
+   * cancellation state, its reason, its audit row and its notice, restoring
+   * returns it, and a history screen asks for it with `include_cancelled`.
+   */
   status: string | null;
   /**
    * The decorative Hijri overlay (§4.4, §5.7), read from the Ministry's
@@ -475,7 +483,7 @@ async function personalFilters(
 export async function readCalendar(
   prisma: PrismaClient,
   actor: CalendarActor | null,
-  query: CalendarQuery & { mine?: boolean },
+  query: CalendarQuery & { mine?: boolean; includeCancelled?: boolean },
 ): Promise<Occurrence[]> {
   if (query.to < query.from) {
     throw new AppError('VALIDATION_FAILED', 'to must not precede from');
@@ -688,6 +696,9 @@ export async function readCalendar(
       where: {
         deletedAt: null,
         date: { gte: from, lte: query.to },
+        // **R83.1** — the ordinary projection is what is ON. A history screen
+        // passes `include_cancelled` and gets them back; nothing else does.
+        ...(query.includeCancelled === true ? {} : { status: { not: 'cancelled' } }),
         ...(personal ? { AND: [personal.session] } : {}),
         schedule: {
           deletedAt: null,

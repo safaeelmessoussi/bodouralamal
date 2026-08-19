@@ -282,6 +282,16 @@ const cancel = async (reason: string): Promise<Res> =>
     version: await versionOf(),
   });
 
+/**
+ * **R83.3 — the send is a separate act.** R77.4 wrote the notices inside the
+ * cancelling transaction; the Owner made telling people a decision, so every
+ * test that used to assert *cancelling notified* now cancels and then sends.
+ * The property under test — who is reached, with what, and how idempotently —
+ * is unchanged; only the moment it happens moved.
+ */
+const announce = async (change: "cancelled" | "rescheduled" = "cancelled"): Promise<Res> =>
+  call("POST", `/sessions/${sessionId}/notify`, superAdmin, { change });
+
 const restore = async (): Promise<Res> =>
   call("POST", `/sessions/${sessionId}/restore`, superAdmin, {
     version: await versionOf(),
@@ -291,9 +301,16 @@ const inbox = async (token: string, query = ""): Promise<Res> =>
   call("GET", `/notifications${query}`, token);
 
 describe("R77 — cancelling one occurrence notifies its enrolled students", () => {
-  it("reaches the enrolled student, carrying the REASON", async () => {
+  it("writes NOTHING on cancellation alone (R83.3)", async () => {
     const cancelled = await cancel("الأستاذة مريضة");
     expect(cancelled.status).toBe(200);
+    // The half that did not exist before: declining costs nothing because
+    // nothing is written until somebody chooses to write it.
+    expect(await prisma.notification.count({ where: { sessionId } })).toBe(0);
+  });
+
+  it("reaches the enrolled student when sent, carrying the REASON", async () => {
+    expect((await announce()).status).toBe(200);
 
     const res = await inbox(enrolledToken);
     expect(res.status).toBe(200);
@@ -353,10 +370,10 @@ describe("R77 — cancelling one occurrence notifies its enrolled students", () 
     // `audience_size` counts the STUDENTS the class is for — §4.4c's resolved
     // audience, unchanged by R78.
     expect(detail["audience_size"]).toBe(2);
-    // `notified` counts who was actually told, which R78.3 widened to
-    // (students ∪ assigned staff) − the actor: the two students and the مؤطرة
-    // staffing the session, none of whom is the administrator who cancelled.
-    expect(detail["notified"]).toBe(3);
+    // **`notified` is no longer on this row** (R83.3): the cancellation no
+    // longer tells anybody, so how many were told is not a fact about it. The
+    // count is asserted where it now happens — on the send, below.
+    expect(detail["notified"]).toBeUndefined();
   });
 
   it("is idempotent — a cancellation that is already in force writes no second notice", async () => {
@@ -364,6 +381,13 @@ describe("R77 — cancelling one occurrence notifies its enrolled students", () 
     // is that the notices did not multiply.
     const again = await cancel("مرة أخرى");
     expect(again.status).toBe(409);
+
+    // **And sending twice writes no second notice** — which is now where the
+    // idempotency actually lives, since the send is what writes.
+    const second = await announce();
+    expect(second.status).toBe(200);
+    expect((second.body.data as { notified: number }).notified).toBe(0);
+
     const count = await prisma.notification.count({
       where: { sessionId, type: "session_cancelled" },
     });
@@ -488,6 +512,7 @@ describe("R78.3 — assigned staff are told, unless they did it themselves", () 
   it("an ADMIN cancelling reaches the students AND the assigned مؤطرة", async () => {
     await reset();
     expect((await cancel("الأستاذة مريضة")).status).toBe(200);
+    expect((await announce()).status).toBe(200);
     expect(await typesFor(enrolledToken)).toEqual(["session_cancelled"]);
     // She did not take this decision, so it is news to her.
     expect(await typesFor(teacherToken)).toEqual(["session_cancelled"]);
@@ -508,6 +533,13 @@ describe("R78.3 — assigned staff are told, unless they did it themselves", () 
       },
     );
     expect(res.status).toBe(200);
+    // R83.3 — she then chooses to tell people, and the actor exclusion applies
+    // to the send exactly as it applied to the write.
+    expect(
+      (await call("POST", `/sessions/${sessionId}/notify`, teacherToken, {
+        change: "cancelled",
+      })).status,
+    ).toBe(200);
     // The students still learn of it — the event happened.
     expect(await typesFor(enrolledToken)).toEqual(["session_cancelled"]);
     // She performed it. Telling her would be the platform reporting her own act
@@ -518,9 +550,11 @@ describe("R78.3 — assigned staff are told, unless they did it themselves", () 
   it("is idempotent for staff too — a retry writes no second notice", async () => {
     await reset();
     await cancel("الأستاذة مريضة");
-    // `cancelled → cancelled` is refused, so the honest assertion is that the
-    // rows did not multiply.
+    await announce();
+    // `cancelled → cancelled` is refused, and a repeated SEND writes no second
+    // notice — which is where idempotency lives now that the send is the write.
     expect((await cancel("مرة أخرى")).status).toBe(409);
+    expect((await announce()).status).toBe(200);
     expect(await typesFor(teacherToken)).toEqual(["session_cancelled"]);
   });
 });
@@ -562,6 +596,8 @@ describe("R78.4 — rescheduling tells the audience where the class now is", () 
 
     const moved = await moveTo("2098-03-09", "10:00", "12:00");
     expect(moved.status).toBe(200);
+    // R83.3 — moving it commits alone; this is the decision to tell people.
+    expect((await announce("rescheduled")).status).toBe(200);
 
     const res = await call("GET", "/notifications", enrolledToken);
     const mine = (res.body.data as unknown as Record<string, unknown>[]).filter(
@@ -591,6 +627,7 @@ describe("R78.4 — rescheduling tells the audience where the class now is", () 
 
   it("moving it AGAIN keeps one notice, showing where it is now", async () => {
     expect((await moveTo("2098-03-16", "11:00", "13:00")).status).toBe(200);
+    expect((await announce("rescheduled")).status).toBe(200);
     const res = await call("GET", "/notifications", enrolledToken);
     const mine = (res.body.data as unknown as Record<string, unknown>[]).filter(
       (n) => n["session_id"] === sessionId,

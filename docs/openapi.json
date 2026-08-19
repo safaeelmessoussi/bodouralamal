@@ -6781,6 +6781,67 @@
         }
       }
     },
+    "/sessions/{id}/notify": {
+      "post": {
+        "summary": "Announce a saved occurrence change",
+        "description": "§4.8, R83.3. **The change is already saved; this decides only who is told** — the Session equivalent of `POST /events/{id}/notify`, and deliberately the same shape. R77.4 and R78.4 wrote these notices INSIDE the cancelling or rescheduling transaction, which could not express *do not tell anyone*; the state change now commits alone and the person is asked. Declining creates nothing. `change` is `cancelled` or `rescheduled` — `session_assigned` is written by the staffing path and `session_restored` by R77.5's reconciliation, neither of which is a decision taken on a form. **The audience is the server's**: the schedule's resolved students (§4.4c) plus the occurrence's own staffing snapshot (R43.4), minus the actor (R78.3). **Idempotent** through `(user, session, type)`. Authorization is the occurrence's own — whoever may change it may announce the change.",
+        "responses": {
+          "200": {
+            "description": "How many people were notified."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — an unknown change kind, or a body attempting to name recipients.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for a session outside the caller’s scope or nonexistent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/me/calendar": {
       "get": {
         "summary": "The caller’s own calendar",

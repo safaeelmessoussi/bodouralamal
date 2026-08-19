@@ -2,9 +2,10 @@ import type { Request, Response } from 'express';
 
 import type { PrismaClient } from '../generated/prisma/client.js';
 import { requireActor } from '../middleware/authenticate.js';
-import { notifyEventSchema } from '../validators/notification.validators.js';
+import { notifyEventSchema, notifySessionSchema } from '../validators/notification.validators.js';
 import { pageParamsFrom } from '../lib/pagination.js';
 import {
+  notifySessionChange,
   notifyEventChange,
   listNotifications,
   markRead,
@@ -135,6 +136,18 @@ export function notifyEventHandler(prisma: PrismaClient) {
     const actor = requireActor(req);
     const body = parse(notifyEventSchema, req.body ?? {});
     const result = await notifyEventChange(prisma, actor, idParam(req, 'id'), body.change);
+    res.json({ data: result });
+  };
+}
+
+/**
+ * `POST /sessions/{id}/notify` — the same decision, for an occurrence (R83.3).
+ */
+export function notifySessionHandler(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const actor = requireActor(req);
+    const body = parse(notifySessionSchema, req.body ?? {});
+    const result = await notifySessionChange(prisma, actor, idParam(req, 'id'), body.change);
     res.json({ data: result });
   };
 }

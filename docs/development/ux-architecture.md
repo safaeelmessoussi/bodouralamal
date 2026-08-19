@@ -1088,6 +1088,50 @@ on the next surface ([AE](#ae--a-dependency-between-selectors-belongs-to-forms-n
 bootstrap through `CalendarTitle` (§20 rule 14; R31, R36); the header decides
 position and nothing else.
 
+## AM · A calendar shows what is ON
+
+A cancelled occurrence **leaves** the calendar — every calendar: public,
+personal and back office (R83.1).
+
+R77 decided the opposite, and the reasoning was good: *hiding it answers "is
+there a class" while the reader is asking "what happened to my class"*. The
+Owner's answer is better — that question is the **notification's** to answer,
+which is what R77 built the notification for. A calendar that lists things which
+are not happening makes the reader filter them out by eye, every time.
+
+**The row is never deleted.** The occurrence stays materialized with its status,
+its reason, its audit row and its notice; restoring it returns it to the
+calendar; future occurrences of the same schedule are untouched and the schedule
+stays active. A history screen asks with `?include_cancelled=true` — **an opt-in
+nothing turns on by default**, which is what keeps *the ordinary calendar* and
+*the administrative view* two different questions rather than one screen with a
+convention.
+
+The exclusion lives in the **read**, not in each screen: one `where` clause in
+`calendar.service.ts` makes it true on every surface at once, where a per-screen
+filter is a rule each new surface must remember.
+
+## AN · Telling people is a decision, and it is asked after the fact
+
+A change to an occurrence or an activity **commits alone**; a separate
+authorization-checked request then asks whether to notify the people it concerns
+(R82.5, R83.3). Declining creates nothing — it is the **absence** of a request,
+never a request that sends zero.
+
+R77.4 wrote the notices inside the changing transaction, fearing *a committed
+cancellation nobody was told about*. Separating them answers that fear better
+than the coupling did: the person is **asked, every time**, and a failure to
+notify can no longer roll back a change that succeeded. Idempotency carries the
+weight the transaction used to — `(user, target, type)` is unique, so pressing
+send twice writes the same rows.
+
+**The client names the KIND of change and never the recipients.** The audience is
+resolved server-side from the target's own scope, so there is no list to forge
+and no per-id permission check to write; a body attempting to name recipients is
+**refused**, not ignored. `ConfirmDialog` carries the question through its
+`cancelLabel`, because «بدون إشعار» is a decision rather than a cancellation of
+one.
+
 ## AL · A view switch changes presentation, never the dataset
 
 قائمة and تقويم are two renderings of **one** filtered set. The state that
@@ -1177,6 +1221,7 @@ system's internals, break on every restyle, and catch nothing.
 | [`scripts/dev/browser/verify-dialog-states.mjs`](../../scripts/dev/browser/verify-dialog-states.mjs) | **AG** — closed/open/close/reopen on 15 pages from BOTH the affected and unaffected sets, plus page-flow impact and scroll ownership |
 | [`scripts/dev/browser/verify-calendar-header.mjs`](../../scripts/dev/browser/verify-calendar-header.mjs) | **AJ/AK** — region geometry at 1440px and 390px on both calendars, title drift from the header centre, and the table note against its table's width |
 | [`components/calendar/calendar-header.test.tsx`](../../frontend/src/components/calendar/calendar-header.test.tsx) | **AJ** — the three regions, and the shape following the data rather than a flag |
+| [`scripts/dev/browser/verify-notifications.mjs`](../../scripts/dev/browser/verify-notifications.mjs) | **AM/AN** — asked as three different people: who sees what, who is told, and that declining tells nobody |
 | [`scripts/dev/browser/verify-calendar-filters.mjs`](../../scripts/dev/browser/verify-calendar-filters.mjs) | **AL** — a filter chosen in one view survives the switch, in the controls, in the URL **and in the other view's request** |
 | `grade.http.integration.test.ts` | a student reads published grades and **not drafts**, one student never reads another's, the projection carries no verdict |
 | `teaching-group.http.integration.test.ts` | the flat read grants nothing, every filter narrows, TD-10 pagination, Admin-only |

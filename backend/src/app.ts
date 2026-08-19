@@ -267,6 +267,9 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
   // separate request against the saved row, so declining sends nothing and a
   // failure here can never roll back a change that succeeded.
   guarded.post('/events/:id/notify', notifications.notifyEventHandler(prisma));
+  // R83.3 — the same decision for one occurrence: cancelling or moving a class
+  // commits alone, and this is where the person chooses to tell anybody.
+  guarded.post('/sessions/:id/notify', notifications.notifySessionHandler(prisma));
 
   guarded.get('/admin/approvals', approvals.list(prisma));
   guarded.post('/admin/approvals/:id/approve', approvals.approve(prisma));

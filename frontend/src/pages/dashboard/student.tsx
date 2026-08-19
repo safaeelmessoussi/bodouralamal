@@ -4,6 +4,7 @@ import { fetchOccurrences, type Occurrence } from '../../adapters/calendar.js';
 import { fetchStudentIdentity, type StudentIdentity } from '../../adapters/students.js';
 import { ApplicationHeader } from '../../components/header/application-header.js';
 import { NotificationList } from '../../components/notifications/notification-list.js';
+import { PersonalCalendar } from '../../components/calendar/personal-calendar.js';
 import { SiteFooter } from '../../components/site-footer.js';
 import { ButtonLink } from '../../components/ui/button.js';
 import { EmptyState, ErrorState, LoadingState } from '../../components/states.js';
@@ -148,6 +149,13 @@ export function StudentDashboard(): ReactNode {
                   first would have already drawn the wrong conclusion from it.
                   Renders nothing at all when there is nothing to say. */}
               <NotificationList token={accessToken} />
+              {/* **Her own calendar** (R83.5), from `GET /me/calendar`: the
+                  sessions her enrolments place her in and the activities
+                  addressed to a scope she belongs to — never the platform's
+                  whole public timetable, which is what she saw before.
+                  **No filters**: her calendar is already hers, and a branch or
+                  level control would imply a scope she does not have (rule O). */}
+              <PersonalCalendar token={accessToken} heading={t('studentDashboard.myCalendar')} />
               <UpcomingSessions sessions={sessions} />
             </>
           ) : null}

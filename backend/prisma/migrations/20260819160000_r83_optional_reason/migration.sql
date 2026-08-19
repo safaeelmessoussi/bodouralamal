@@ -1,0 +1,12 @@
+-- Revision 83.2 — a cancellation reason is OPTIONAL.
+--
+-- R43 added `session_cancellation_reason_check`, which required a non-empty
+-- reason whenever `status = 'cancelled'`; R77 reinforced it on the reasoning
+-- that *"the reason is the whole point of the notice"*. The Owner has decided
+-- otherwise: a class is sometimes simply not held, and demanding a sentence
+-- before the platform will record that is a gate with no purpose.
+--
+-- contract-phase: R83.2 relaxes a constraint. **No data is touched and nothing
+-- is dropped but the rule itself** — every reason already recorded stays, and
+-- the column remains nullable exactly as it was.
+ALTER TABLE "session" DROP CONSTRAINT IF EXISTS "session_cancellation_reason_check";

@@ -134,6 +134,25 @@ export interface CalendarResult {
   prefilled: PrefilledFilters | null;
 }
 
+/**
+ * `GET /me/calendar` — **the caller's own** (R82.8), as against `/calendar`'s
+ * *what is on at the association*.
+ *
+ * The same `Occurrence` shape, so every shared calendar component renders it
+ * unchanged: a personal calendar is a narrower READ, never a different screen.
+ * Cancelled occurrences are absent here as everywhere (R83.1).
+ */
+export async function fetchMyOccurrences(query: CalendarQuery): Promise<Occurrence[]> {
+  const params = new URLSearchParams({ from: query.from, to: query.to });
+  if (query.branchId) params.set('branch_id', query.branchId);
+  if (query.categoryId) params.set('category_id', query.categoryId);
+  if (query.levelId) params.set('level_id', query.levelId);
+  const page = await api<CalendarPage>(`/me/calendar?${params.toString()}`, {
+    token: query.token ?? null,
+  });
+  return page.data;
+}
+
 export async function fetchOccurrences(query: CalendarQuery): Promise<CalendarResult> {
   const params = new URLSearchParams({ from: query.from, to: query.to });
   if (query.branchId) params.set('branch_id', query.branchId);

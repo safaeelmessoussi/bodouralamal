@@ -2,6 +2,9 @@ import type { ReactNode } from 'react';
 
 import { ModulePending } from '../../components/portal/nav-item.js';
 import { TeacherLayout } from '../../components/teacher/teacher-layout.js';
+import { NotificationList } from '../../components/notifications/notification-list.js';
+import { PersonalCalendar } from '../../components/calendar/personal-calendar.js';
+import { useSession } from '../../contexts/session.js';
 import { ButtonLink } from '../../components/ui/button.js';
 import { t } from '../../i18n/index.js';
 import { teacherModuleForPath } from '../../lib/teacher-modules.js';
@@ -32,6 +35,8 @@ export function TeacherRouter(): ReactNode {
 
   if (module.status === 'ready') {
     switch (module.path) {
+      case '/teacher':
+        return <TeacherDashboard />;
       case '/teacher/schedules':
         return <TeacherSchedulesPage />;
       case '/teacher/quran':
@@ -59,6 +64,33 @@ export function TeacherRouter(): ReactNode {
   return (
     <TeacherLayout title={t(module.labelKey)}>
       <ModulePending module={module} />
+    </TeacherLayout>
+  );
+}
+
+/**
+ * **The مؤطرة's own screen** (R83.4, R83.5).
+ *
+ * It was `blocked` because there was nothing to put on it. There is now: what
+ * the platform has told her, and her own week — the **same** notification list
+ * and the **same** calendar components the beneficiary's dashboard renders, so
+ * neither surface can drift from the other.
+ *
+ * **She is offered the Subject filter and no more.** She teaches several and
+ * *which class* is the question she asks of her own week; a branch or level
+ * control would offer a scope §4.4c does not give her, and the server would
+ * refuse to widen it anyway (rule O).
+ */
+function TeacherDashboard(): ReactNode {
+  const { accessToken } = useSession();
+  return (
+    <TeacherLayout title={t('teacher.nav.dashboard')}>
+      <NotificationList token={accessToken} />
+      <PersonalCalendar
+        token={accessToken}
+        fields={['subjectId']}
+        heading={t('teacher.myCalendar')}
+      />
     </TeacherLayout>
   );
 }

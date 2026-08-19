@@ -39,6 +39,12 @@ const querySchema = z.object({
   academic_year_id: z.uuid().optional(),
   subject_id: z.uuid().optional(),
   teacher_id: z.uuid().optional(),
+  /**
+   * R83.1 — **the history view's opt-in.** An ordinary calendar shows what is
+   * ON; a screen that needs to see what was cancelled asks for it explicitly,
+   * and no default anywhere turns it on.
+   */
+  include_cancelled: z.literal('true').optional(),
 });
 
 /**
@@ -78,6 +84,7 @@ export function read(prisma: PrismaClient) {
         ...(q.academic_year_id ? { academicYearId: q.academic_year_id } : {}),
         ...(q.subject_id ? { subjectId: q.subject_id } : {}),
         ...(q.teacher_id ? { teacherId: q.teacher_id } : {}),
+        ...(q.include_cancelled === 'true' ? { includeCancelled: true } : {}),
       }),
       prefilledFilters(prisma, actor),
     ]);
@@ -221,6 +228,7 @@ export function readMine(prisma: PrismaClient) {
         ...(q.level_id ? { levelId: q.level_id } : {}),
         ...(q.category_id ? { categoryId: q.category_id } : {}),
         ...(q.subject_id ? { subjectId: q.subject_id } : {}),
+        ...(q.include_cancelled === 'true' ? { includeCancelled: true } : {}),
       },
     );
     res.json({ data: occurrences.map(occurrenceDto) });

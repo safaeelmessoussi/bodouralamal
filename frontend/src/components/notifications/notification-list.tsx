@@ -38,11 +38,25 @@ import { ErrorState } from '../states.js';
  * not know, which is the worst possible default: a class that MOVED would have
  * been announced as one that was called off.
  */
+/**
+ * **A `Record` over the union, not a lookup with a fallback.**
+ *
+ * The fallback was the danger this comment described: a chain of ternaries fell
+ * through to *cancelled*, so a class that MOVED would have been announced as one
+ * called off. Keying by the exported union means adding a type without a
+ * headline **fails the type check** — which is exactly what happened when R82's
+ * four types arrived, and is why nothing shipped announcing a published grade as
+ * a cancellation.
+ */
 const HEADLINE_KEYS: Record<NotificationItem['type'], string> = {
   session_cancelled: 'notifications.sessionCancelled',
   session_restored: 'notifications.sessionRestored',
   session_rescheduled: 'notifications.sessionRescheduled',
   session_assigned: 'notifications.sessionAssigned',
+  event_created: 'notifications.eventCreated',
+  event_rescheduled: 'notifications.eventRescheduled',
+  event_cancelled: 'notifications.eventCancelled',
+  grade_published: 'notifications.gradePublished',
 };
 
 export function NotificationList({ token }: { token: string | null }): ReactNode {
@@ -106,10 +120,13 @@ export function NotificationList({ token }: { token: string | null }): ReactNode
             }
           >
             <p className="notifications__headline">
-              {t(HEADLINE_KEYS[item.type] ?? 'notifications.sessionCancelled')
-                .replace('{subject}', item.subject_name ?? t('notifications.theClass'))
-                .replace('{date}', item.session_date)
-                .replace('{time}', item.session_start_time)}
+              {/* The target-neutral fields (R82.1): a notice is about a class,
+                  an activity or an exam, and the reader experiences one list. */}
+              {t(HEADLINE_KEYS[item.type])
+                .replace('{subject}', item.title ?? t('notifications.theClass'))
+                .replace('{date}', item.date ?? '')
+                .replace('{time}', item.start_time ?? '')
+                .trim()}
             </p>
             {/* The reason is the whole point of the notice — «ألغيت» without
                 «لماذا» is what the association's manual channels already
@@ -118,7 +135,10 @@ export function NotificationList({ token }: { token: string | null }): ReactNode
             {/* The reason belongs to a cancellation. On a restoration or a
                 reschedule the stored reason describes something that no longer
                 applies, and on an assignment there is none. */}
-            {item.type === 'session_cancelled' && item.reason ? (
+            {/* R83.2 — a cancellation may carry NO reason, and that is a
+                complete answer rather than a gap: the line is simply absent. */}
+            {(item.type === 'session_cancelled' || item.type === 'event_cancelled') &&
+            item.reason ? (
               <p className="notifications__reason">
                 {t('notifications.reason').replace('{reason}', item.reason)}
               </p>
