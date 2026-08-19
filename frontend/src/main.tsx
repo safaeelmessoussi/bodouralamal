@@ -12,6 +12,8 @@ import { TeacherRouter } from './pages/teacher/index.js';
 import { CalendarPage } from './pages/calendar.js';
 import { StudentGradesPage } from './pages/dashboard/grades.js';
 import { StudentQuranPage } from './pages/dashboard/quran.js';
+import { StudentAccountPage } from './pages/dashboard/account.js';
+import { StudentLibraryPage } from './pages/dashboard/library.js';
 import { StudentCalendarPage, StudentDashboard } from './pages/dashboard/student.js';
 import { RegisterChildPage } from './pages/profile/register-child.js';
 import { ProfilePage } from './pages/profile/index.js';
@@ -101,6 +103,20 @@ function App(): React.ReactNode {
       return (
         <PendingGuard>
           <StudentCalendarPage />
+        </PendingGuard>
+      );
+    case 'dashboard-student-library':
+      // R86 — the library scoped to her own enrolments, in her own frame. The
+      // ITEMS still come from the server's authorized read.
+      return (
+        <PendingGuard>
+          <StudentLibraryPage />
+        </PendingGuard>
+      );
+    case 'dashboard-student-account':
+      return (
+        <PendingGuard>
+          <StudentAccountPage />
         </PendingGuard>
       );
     case 'dashboard-student-quran':

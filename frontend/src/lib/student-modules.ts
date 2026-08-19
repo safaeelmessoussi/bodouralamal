@@ -51,11 +51,11 @@ export const STUDENT_MODULES: readonly StudentModule[] = [
   },
   {
     /**
-     * §5.2's library at **her** tier. The same screen the back office and the
-     * teacher portal render; what differs is what the server returns, which is
-     * where it belongs (§4.9).
+     * §5.2's library, **scoped to her enrolments and inside her frame** (R86).
+     * It pointed at `/resources` — the PUBLIC index — so her sidebar vanished
+     * and she landed on the whole curriculum to hunt for her own Level.
      */
-    path: '/resources',
+    path: '/dashboard/student/library',
     labelKey: 'student.nav.content',
     roles: STUDENT,
     status: 'ready',
@@ -78,11 +78,12 @@ export const STUDENT_MODULES: readonly StudentModule[] = [
     /**
      * **The existing personal surface** (`/profile`), not a new one.
      *
-     * R65 put it outside the portals deliberately: it is about the PERSON and
-     * is reachable whatever role the account is working as. Listing it here is
-     * a way in, not a second implementation.
+     * R65 put `/profile` outside the portals deliberately: it is about the
+     * PERSON and is reachable whatever role the account is working as. **That
+     * route is unchanged**; this is the framed way in, which also carries the
+     * Category/Level/Branch the Owner moved off the landing page (R86).
      */
-    path: '/profile',
+    path: '/dashboard/student/account',
     labelKey: 'student.nav.account',
     roles: STUDENT,
     status: 'ready',

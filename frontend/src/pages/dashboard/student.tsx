@@ -104,7 +104,10 @@ export function StudentDashboard(): ReactNode {
             />
           ) : identity ? (
             <>
-              <IdentityBlock identity={identity} />
+              {/* **R86 — the Category, Level and Branch moved to حسابي.** They
+                  are facts about her account, not about her day, and the Owner
+                  asked that this page show nothing until it is designed. */}
+              <p className="muted">{t('studentDashboard.landing')}</p>
               {/* **Deliberately nothing else here** (R85).
                   «حصص اليوم والقادمة» is removed: those occurrences are in
                   تقويمي, and showing them twice makes one of the two the wrong
@@ -126,49 +129,6 @@ export function StudentDashboard(): ReactNode {
   );
 }
 
-/** R62.10's identity block: name, reference code, Category, Level, branch. */
-function IdentityBlock({ identity }: { identity: StudentIdentity }): ReactNode {
-  const enrolment = identity.enrollments[0];
-  return (
-    <section className="card" aria-labelledby="identity-heading">
-      <h2 id="identity-heading">{identity.name_arabic}</h2>
-      <dl className="detail-list">
-        {/* R62.6 — how a parent quotes a child without speaking a name aloud.
-            Absent for an adult student, and the row disappears rather than
-            rendering an empty value. */}
-        {identity.reference_code ? (
-          <>
-            <dt>{t('studentDashboard.referenceCode')}</dt>
-            <dd>{identity.reference_code}</dd>
-          </>
-        ) : null}
-        {enrolment ? (
-          <>
-            <dt>{t('studentDashboard.category')}</dt>
-            <dd>{enrolment.category.name}</dd>
-            <dt>{t('studentDashboard.level')}</dt>
-            <dd>{enrolment.level.name}</dd>
-            <dt>{t('studentDashboard.branch')}</dt>
-            <dd>{enrolment.branch.name}</dd>
-          </>
-        ) : null}
-      </dl>
-      {/* Honest about a student the administration has not placed yet, rather
-          than rendering three blank rows. */}
-      {enrolment ? null : <p className="muted">{t('studentDashboard.notPlaced')}</p>}
-      {/* The list is plural in the contract because the model permits it; the
-          block renders the first and says so instead of discarding the rest. */}
-      {identity.enrollments.length > 1 ? (
-        <p className="muted">
-          {t('studentDashboard.moreEnrollments').replace(
-            '{count}',
-            String(identity.enrollments.length - 1),
-          )}
-        </p>
-      ) : null}
-    </section>
-  );
-}
 
 /**
  * **تقويمي** — her own week (R82.8, R85).

@@ -93,6 +93,24 @@ export const ar = {
       grades: 'نقاطي',
       account: 'حسابي',
     },
+    // R86 — مكتبة المحتوى وحسابي داخل بوابة المستفيدة، لا صفحات عامة بلا قائمة.
+    library: {
+      lede: 'المحتوى التعليمي لمستوى {level}.',
+      level: 'المستوى',
+      title: 'العنوان',
+      subject: 'المادة',
+      open: 'فتح',
+      noEnrolment: 'لا تسجيل فعّال بعد، فلا محتوى لعرضه.',
+    },
+    account: {
+      lede: 'بياناتك وتسجيلاتك التعليمية.',
+      identity: 'بياناتي',
+      name: 'الاسم',
+      reference: 'الرقم المرجعي',
+      // بصيغة الجمع عن قصد: المستفيدة قد تسجَّل في أكثر من مستوى (BR-21).
+      enrolments: 'التسجيلات التعليمية',
+      noEnrolments: 'لا تسجيلات فعّالة.',
+    },
     // §5.3 — نقاطي. PUBLISHED grades only; the draft is the مؤطِّرة's working
     // note (BR-8) and never reaches this surface. No pass/fail wording here by
     // decision (2026-08-17): the screen reports what she scored, not a verdict
@@ -123,6 +141,8 @@ export const ar = {
     },
   },
   studentDashboard: {
+    // R86 — الصفحة تبقى فارغة عن قصد حتى تُصمَّم؛ التفاصيل انتقلت إلى «حسابي».
+    landing: 'اختاري ما تريدين من القائمة على اليمين.',
     // R83.5 — تقويمها هي: حصص مستوياتها وأنشطة نطاقها، لا تقويم المنصّة كلّه.
     myCalendar: 'تقويمي',
     title: 'لوحة المستفيدة',
@@ -668,6 +688,9 @@ export const ar = {
     notes: 'ملاحظات',
     recordings: 'التسجيلات',
     materials: 'المواد المرفقة',
+    // R86 — يُعرَض محتوى الحصة داخل النافذة مباشرة، لا خلف رابط.
+    attachments: 'المواد المرفقة',
+    noMaterials: 'لا تسجيلات ولا مواد مرفقة بهذه الحصة.',
     // إدارة مواد الحصة (§4.9, TD-3.12). الإزالة تفكّ الارتباط ولا تحذف الملف.
     // **«المواد» said nothing about what the action does** (Owner, 2026-08-17):
     // on a row of class sessions it reads as *subjects*, which is a different

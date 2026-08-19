@@ -1,7 +1,12 @@
-import type { ReactNode } from 'react';
+import { useContext, useEffect, useState, type ReactNode } from 'react';
 
-import type { Occurrence } from '../../adapters/calendar.js';
-import { OCCURRENCE_KIND_BADGE, OCCURRENCE_KIND_LABEL } from '../../adapters/calendar.js';
+import type { Occurrence, SessionPage } from '../../adapters/calendar.js';
+import {
+  fetchSessionPage,
+  OCCURRENCE_KIND_BADGE,
+  OCCURRENCE_KIND_LABEL,
+} from '../../adapters/calendar.js';
+import { SessionContext } from '../../contexts/session.js';
 import { t, tList } from '../../i18n/index.js';
 import { ButtonLink } from '../ui/button.js';
 import { Dialog } from '../ui/dialog.js';
@@ -191,16 +196,111 @@ export function EventDetailsDialog({
  * decision** (2026-08-17). If it is taken, the list belongs here and the kind
  * check is what widens.
  */
+/**
+ * **The Session's own content, in the popup** (R86).
+ *
+ * It rendered a link — «فتح صفحة الحصة وموادها» — so answering *what was
+ * recorded for this class* cost a navigation away from the calendar somebody was
+ * reading. The content is now shown where the question is asked.
+ *
+ * **A focused read when the popup opens**, not a wider calendar payload: a month
+ * carries dozens of occurrences and almost none of them are opened, so attaching
+ * every session's content to the grid's response would fetch far more than any
+ * reader uses. `GET /calendar/sessions/{id}` already exists and already answers
+ * **at the caller's tier** (TD-3.4) — an anonymous visitor sees a public
+ * session's materials and never its private recordings, and a signed-in reader
+ * sees what her own authorisation allows. Nothing about visibility is decided
+ * here; this renders what the server returned (rule O).
+ *
+ * The link survives as a secondary action, because the Session page also carries
+ * what a popup should not grow: the full description and the staffing.
+ */
 function OccurrenceMaterials({ occurrence }: { occurrence: Occurrence }): ReactNode {
+  /**
+   * **The context directly, not `useSession()`** — which throws outside a
+   * provider.
+   *
+   * This dialog is the one the **public** calendar opens, where there may be no
+   * session at all, and it is rendered standalone in tests. A component that
+   * must work for an anonymous reader cannot require the authenticated
+   * container; `null` here means *ask anonymously*, which is exactly what the
+   * public tier expects (TD-3.4).
+   */
+  const accessToken = useContext(SessionContext)?.accessToken ?? null;
+  const [page, setPage] = useState<SessionPage | null>(null);
+  const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
+
+  useEffect(() => {
+    if (occurrence.kind !== 'session') return;
+    let live = true;
+    setState('loading');
+    fetchSessionPage(occurrence.id, accessToken)
+      .then((result) => {
+        // The dialog can close before the read lands; writing state then would
+        // be a warning and, worse, a render of the previous session's content.
+        if (live) {
+          setPage(result);
+          setState('ready');
+        }
+      })
+      .catch(() => {
+        if (live) setState('error');
+      });
+    return () => {
+      live = false;
+    };
+  }, [occurrence.id, occurrence.kind, accessToken]);
+
   if (occurrence.kind !== 'session') return null;
+
+  const recordings = page?.recordings ?? [];
+  const materials = page?.linked_content ?? [];
+
   return (
     <section className="details__section" aria-labelledby="details-materials">
       <h3 id="details-materials" className="details__section-title">
         {t('session.materials')}
       </h3>
-      {/* The shared button as a link — it emits an `<a>`, so middle-click and
-          "open in new tab" keep working while the affordance matches every other
-          action on the platform. */}
+
+      {state === 'loading' ? <p className="muted">{t('notifications.loading')}</p> : null}
+      {state === 'error' ? <p className="muted">{t('calendar.error')}</p> : null}
+
+      {/* **Nothing attached is an answer**, and saying so beats an empty
+          heading a reader has to interpret. */}
+      {state === 'ready' && recordings.length === 0 && materials.length === 0 ? (
+        <p className="muted">{t('session.noMaterials')}</p>
+      ) : null}
+
+      {recordings.length > 0 ? (
+        <>
+          <h4 className="details__section-subtitle">{t('session.recordings')}</h4>
+          <ul className="details__list">
+            {recordings.map((item) => (
+              <li key={item.id}>
+                {/* Opened through the existing library flow, which is where the
+                    download permission and the presigned URL live (TD-3.5). */}
+                <a href={`/resources?content=${item.id}`}>{item.title}</a>
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : null}
+
+      {materials.length > 0 ? (
+        <>
+          <h4 className="details__section-subtitle">{t('session.attachments')}</h4>
+          <ul className="details__list">
+            {materials.map((item) => (
+              <li key={item.id}>
+                <a href={`/resources?content=${item.id}`}>{item.title}</a>
+              </li>
+            ))}
+          </ul>
+        </>
+      ) : null}
+
+      {/* Secondary now, not the only way in: the Session page carries the
+          description and the staffing a popup should not grow. */}
       <ButtonLink variant="secondary" href={`/calendar/sessions/${occurrence.id}`}>
         {t('calendar.detailsOpenSession')}
       </ButtonLink>

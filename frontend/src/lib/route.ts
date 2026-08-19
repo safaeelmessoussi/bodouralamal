@@ -32,6 +32,8 @@ export type Route =
   | 'dashboard-student'
   /** M4b — §14.1's *My Quran Progress*, read-only (§4.5). */
   | 'dashboard-student-calendar'
+  | 'dashboard-student-library'
+  | 'dashboard-student-account'
   | 'dashboard-student-quran'
   /** §5.3's *My Grades & Exams* — PUBLISHED grades, read-only (2026-08-17). */
   | 'dashboard-student-grades'
@@ -94,6 +96,10 @@ export function resolveRoute(pathname: string): Route {
   // R85 — her own calendar as its own node, so the menu can reach it and the
   // dashboard can stay minimal.
   if (path === '/dashboard/student/calendar') return 'dashboard-student-calendar';
+  // R86 — her library and her account, INSIDE the portal. `/resources` and
+  // `/profile` remain what they are for every other context.
+  if (path === '/dashboard/student/library') return 'dashboard-student-library';
+  if (path === '/dashboard/student/account') return 'dashboard-student-account';
   if (path === '/dashboard/student/quran') return 'dashboard-student-quran';
   // §5.3 has listed this node since R62 and nothing rendered it; the grades were
   // publishable and unreachable by the مستفيدة they were about.

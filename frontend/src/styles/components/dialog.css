@@ -147,6 +147,24 @@
   font-size: var(--font-size-sm);
   margin-block-end: var(--space-2);
 }
+
+/* **The Session's content, listed in the popup** (R86).
+ *
+ * A sub-heading per kind — التسجيلات and المواد المرفقة — because a reader
+ * scanning for the recording of a class should not have to tell one from the
+ * other by its filename. */
+.details__section-subtitle {
+  margin-block: var(--space-3) var(--space-1);
+  font-size: var(--font-size-sm);
+  font-weight: 600;
+  color: var(--color-text-secondary);
+}
+.details__list {
+  margin: 0;
+  padding-inline-start: var(--space-5);
+  display: grid;
+  gap: var(--space-1);
+}
 .details__resources {
   list-style: none;
   margin: 0;

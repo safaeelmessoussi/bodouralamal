@@ -32,6 +32,26 @@ async function wipe(): Promise<void> {
   });
   const ids = users.map((u) => u.id);
   await prisma.notification.deleteMany({ where: { userId: { in: ids } } });
+  // The class, its occurrence and their staffing — before the people and the
+  // Level they hang off, every reference being RESTRICT.
+  const schedules = await prisma.recurringCourseSchedule.findMany({
+    where: { title: { startsWith: TAG } },
+    select: { id: true },
+  });
+  const scheduleIds = schedules.map((s) => s.id);
+  const sessions = await prisma.session.findMany({
+    where: { scheduleId: { in: scheduleIds } },
+    select: { id: true },
+  });
+  const sessionIds = sessions.map((s) => s.id);
+  await prisma.notification.deleteMany({ where: { sessionId: { in: sessionIds } } });
+  await prisma.sessionStaff.deleteMany({ where: { sessionId: { in: sessionIds } } });
+  await prisma.session.deleteMany({ where: { id: { in: sessionIds } } });
+  await prisma.courseScheduleStaff.deleteMany({ where: { scheduleId: { in: scheduleIds } } });
+  await prisma.recurringCourseSchedule.deleteMany({ where: { id: { in: scheduleIds } } });
+  await prisma.levelSubject.deleteMany({ where: { level: { name: { startsWith: TAG } } } });
+  await prisma.room.deleteMany({ where: { name: { startsWith: TAG } } });
+
   await prisma.enrollment.deleteMany({ where: { studentId: { in: ids } } });
   await prisma.userBranchRole.deleteMany({ where: { userId: { in: ids } } });
   // The dev sessions minted for these people wrote `auth.refresh` audit rows,
@@ -156,6 +176,63 @@ await prisma.notification.create({
   data: { userId: concerned, eventId: uiEvent, type: 'event_created' },
 });
 
+/**
+ * **A real Quran class with a real occurrence** (R86 §7/§16).
+ *
+ * The Owner cancelled a class and the enrolled beneficiary was told nothing.
+ * Proving that end to end needs a Session whose schedule genuinely resolves to
+ * her — a whole-Level class at HER branch, staffed by the مؤطرة — rather than a
+ * notification row inserted directly, which would prove only that the table
+ * accepts writes.
+ */
+const subject = await prisma.subject.findFirstOrThrow({ where: { deletedAt: null } });
+await prisma.levelSubject.upsert({
+  where: { levelId_subjectId: { levelId: levelA.id, subjectId: subject.id } },
+  create: { levelId: levelA.id, subjectId: subject.id },
+  update: {},
+});
+const room = await prisma.room.findFirst({ where: { branchId: branchA.id, deletedAt: null } })
+  ?? (await prisma.room.create({
+    data: { name: `${TAG} قاعة`, branchId: branchA.id, capacity: 20 },
+  }));
+const year = await prisma.academicYear.findFirst();
+
+const schedule = await prisma.recurringCourseSchedule.create({
+  data: {
+    title: `${TAG} حلقة الحفظ`,
+    subjectId: subject.id,
+    // **Whole Level at that branch** — R66's pairing, which is what makes the
+    // audience *her Level's students at this branch* rather than everywhere.
+    teachingMode: 'entire_level',
+    levelId: levelA.id,
+    branchId: branchA.id,
+    roomId: room.id,
+    academicYearId: year ? year.id : undefined,
+    startTime: new Date('1970-01-01T09:00:00Z'),
+    endTime: new Date('1970-01-01T10:00:00Z'),
+    recurrence: 'weekly',
+    weekdays: ['monday'],
+    anchorDate: new Date('2026-08-24T00:00:00Z'),
+  },
+  select: { id: true },
+});
+await prisma.courseScheduleStaff.create({
+  data: { scheduleId: schedule.id, userId: teacher.id, position: 'teacher' },
+});
+const session = await prisma.session.create({
+  data: {
+    scheduleId: schedule.id,
+    date: new Date('2026-08-24T00:00:00Z'),
+    startTime: new Date('1970-01-01T09:00:00Z'),
+    endTime: new Date('1970-01-01T10:00:00Z'),
+    status: 'scheduled',
+  },
+  select: { id: true },
+});
+await prisma.sessionStaff.create({
+  data: { sessionId: session.id, userId: teacher.id, position: 'teacher' },
+});
+
 console.log(
   JSON.stringify({
     concerned,
@@ -166,6 +243,9 @@ console.log(
     categoryWideEvent,
     uiEvent,
     teacher: teacher.id,
+    schedule: schedule.id,
+    session: session.id,
+    subject: subject.id,
   }),
 );
 await prisma.$disconnect();
