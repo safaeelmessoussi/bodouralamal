@@ -513,6 +513,19 @@ export async function updateCourseSchedule(
      * the schedule**: see `splitCourseSchedule`.
      */
     scope?: 'all_sessions' | 'this_and_future';
+    /**
+     * **Who staffs it now** (R90) — replaced whole, or left alone when absent.
+     *
+     * This was accepted on CREATE and refused on UPDATE while the form rendered
+     * the controls on both, so reassigning a class was a `400` an administrator
+     * could not act on.
+     *
+     * **History is not rewritten.** The rows here are the *schedule's*;
+     * materialization then resyncs only FUTURE, un-overridden, still-scheduled
+     * occurrences (§4.4, R43.4), so whoever actually delivered a past class
+     * stays recorded against it.
+     */
+    staff?: ScheduleStaffInput[];
     /** Required by `this_and_future` — the occurrence the split begins at. */
     fromDate?: Date;
   },
@@ -561,7 +574,11 @@ export async function updateCourseSchedule(
       dayOfMonth: data.dayOfMonth === undefined ? existing.dayOfMonth : data.dayOfMonth,
       monthOfYear: data.monthOfYear === undefined ? existing.monthOfYear : data.monthOfYear,
       anchorDate: data.anchorDate === undefined ? existing.anchorDate : data.anchorDate,
-      staff: existing.staff.map((s) => ({ userId: s.userId, position: s.position })),
+      // **The proposed staffing, not the stored one.** Checking the old names
+      // would clear a reassignment that double-books the new مؤطِّرة, which is
+      // the one conflict a staffing edit is most likely to introduce.
+      staff:
+        data.staff ?? existing.staff.map((s) => ({ userId: s.userId, position: s.position })),
     };
 
     // Its own sessions are excluded, or the schedule would conflict with itself.
@@ -592,6 +609,47 @@ export async function updateCourseSchedule(
         ...(data.effectiveUntil === undefined ? {} : { effectiveUntil: data.effectiveUntil }),
       },
     });
+
+    /**
+     * **Replaced whole, and written BEFORE materialization** (R90).
+     *
+     * Ordering is the whole of it: `loadSchedule` below reads these rows, and
+     * `materializeSchedule` snapshots them onto every future un-overridden
+     * occurrence (R43.4). Writing them afterwards would update the schedule and
+     * leave every session still naming the previous مؤطِّرة — the same silent
+     * half-change the create path's ordering comment warns about.
+     *
+     * Soft-deleted rather than removed, so a name that was on this class stays
+     * visible in the record.
+     */
+    if (data.staff !== undefined) {
+      const wanted = new Map(data.staff.map((s) => [s.userId, s.position]));
+      const rows = await tx.courseScheduleStaff.findMany({
+        where: { scheduleId: id },
+        select: { id: true, userId: true, deletedAt: true },
+      });
+      for (const row of rows) {
+        if (!wanted.has(row.userId) && row.deletedAt === null) {
+          await tx.courseScheduleStaff.update({
+            where: { id: row.id },
+            data: { deletedAt: new Date(), deletedById: actor.userId },
+          });
+        }
+      }
+      for (const [userId, position] of wanted) {
+        const found = rows.find((r) => r.userId === userId);
+        if (found) {
+          await tx.courseScheduleStaff.update({
+            where: { id: found.id },
+            data: { position, deletedAt: null, deletedById: null },
+          });
+        } else {
+          await tx.courseScheduleStaff.create({
+            data: { scheduleId: id, userId, position },
+          });
+        }
+      }
+    }
 
     const loaded = await loadSchedule(tx, id);
     if (!loaded) throw new AppError('INTERNAL', 'schedule vanished mid-transaction');

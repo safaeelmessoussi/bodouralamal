@@ -124,6 +124,20 @@ export const updateCourseScheduleSchema = z
     anchor_date: calendarDate.nullable().optional(),
     effective_until: calendarDate.nullable().optional(),
     /**
+     * **Staffing is editable** (R90).
+     *
+     * It was accepted on CREATE and refused on UPDATE, while the form rendered
+     * the controls on both — so an administrator could change the مؤطِّرة on an
+     * existing class, save, and be told the request was invalid. Replaced whole
+     * for the same reason the create path takes it whole: *this is who staffs
+     * it now*, and a partial verb leaves *who was removed* unanswerable.
+     *
+     * **Past occurrences are never rewritten.** A reassignment changes the
+     * schedule and its FUTURE un-overridden sessions; whoever actually
+     * delivered a past class stays recorded against it (§4.4, R43.4).
+     */
+    staff: staff.optional(),
+    /**
      * **SRS Revision 50 — which occurrences this edit applies to.**
      *
      * Absent or `all_sessions` is the behaviour that predates R50: future

@@ -51,6 +51,13 @@ async function wipe(): Promise<void> {
   await prisma.recurringCourseSchedule.deleteMany({ where: { id: { in: scheduleIds } } });
   await prisma.levelSubject.deleteMany({ where: { level: { name: { startsWith: TAG } } } });
   await prisma.room.deleteMany({ where: { name: { startsWith: TAG } } });
+  // The Quran Subject this scenario owns. Everything that RESTRICTs it — the
+  // schedule, the level join, any declared capability — is already gone above.
+  await prisma.teacherSubjectCapability.deleteMany({
+    where: { subject: { name: { startsWith: TAG } } },
+  });
+  await prisma.levelSubject.deleteMany({ where: { subject: { name: { startsWith: TAG } } } });
+  await prisma.subject.deleteMany({ where: { name: { startsWith: TAG } } });
 
   await prisma.enrollment.deleteMany({ where: { studentId: { in: ids } } });
   // R88 — the planning profile goes with the person it describes.
@@ -211,7 +218,22 @@ await prisma.notification.create({
  * notification row inserted directly, which would prove only that the table
  * accepts writes.
  */
-const subject = await prisma.subject.findFirstOrThrow({ where: { deletedAt: null } });
+/**
+ * **Its OWN Quran Subject, marked as one.**
+ *
+ * This read `findFirstOrThrow({ deletedAt: null })` — *whichever Subject happens
+ * to sort first in the development database* — and named the schedule «حلقة
+ * الحفظ» on the strength of it. The dev DB's first Subject is called «حفظ
+ * القران» and carries `tracks_quran_progress: false`, so R87 §M correctly hid
+ * «إدخال الحفظ» from a مؤطرة who staffs no Quran class, and `verify-portals`
+ * read that correct behaviour as a defect. **A fixture that borrows whichever
+ * row sorts first asserts something nobody chose.**
+ */
+const subject =
+  (await prisma.subject.findFirst({ where: { name: `${TAG} حفظ القرآن` } })) ??
+  (await prisma.subject.create({
+    data: { name: `${TAG} حفظ القرآن`, tracksQuranProgress: true },
+  }));
 await prisma.levelSubject.upsert({
   where: { levelId_subjectId: { levelId: levelA.id, subjectId: subject.id } },
   create: { levelId: levelA.id, subjectId: subject.id },

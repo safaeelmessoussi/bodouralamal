@@ -48,3 +48,45 @@ export const teachingProfileSchema = z
       .max(50),
   })
   .strict();
+
+/**
+ * **The planning appraisal's read boundary** (R90).
+ *
+ * A query, not a body: this asks *who would suit this class* and stores nothing.
+ * `.strict()` all the same — a query parameter the server silently ignores is
+ * one a screen believes it is using, which is how `?content_id=` shipped for
+ * months reading nothing at all (rule AB).
+ *
+ * **Every filter is optional except the time and the recurrence**, because
+ * those are what the appraisal is *about*. A class with no Subject named yet is
+ * a form half filled in, and the appraisal answers what it can rather than
+ * refusing until the administrator finishes.
+ */
+export const teachingCandidatesQuerySchema = z
+  .object({
+    subject_id: uuid.optional(),
+    level_id: uuid.optional(),
+    branch_id: uuid.optional(),
+    exclude_schedule_id: uuid.optional(),
+    recurrence: z.enum([
+      'daily',
+      'weekly',
+      'multiple_weekdays',
+      'biweekly_alternating',
+      'monthly',
+      'yearly',
+    ]),
+    // Comma-separated, the shape every other list parameter on this API uses.
+    weekdays: z
+      .string()
+      .optional()
+      .transform((v) => (v ? v.split(',').filter(Boolean) : []))
+      .pipe(z.array(z.enum(WEEKDAYS)).max(7)),
+    start_time: clock,
+    end_time: clock,
+  })
+  .strict()
+  .refine((v) => v.start_time < v.end_time, {
+    message: 'start_time must precede end_time',
+    path: ['end_time'],
+  });

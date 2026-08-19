@@ -572,6 +572,43 @@ state — reported once as a missing calendar.
 an empty list because the request failed is not the same fact as an empty list.
 The inbox helper now reports a non-200 rather than swallowing it.
 
+**A harness that finds its target outside the scope it clicked in will pass
+while testing something else.** `verify-teaching-profile` clicked a row's action
+and then searched the **whole document** for the dialog it opens, so it opened
+whichever مؤطِّرة sorted first and read *her* stale data as proof that a save had
+persisted. Three checks were green and all three described the wrong person.
+Scope the query to the row, and assert **whose** record the dialog is showing.
+
+**A loading state is not a ready one.** `verify-sorting` and `verify-reorder`
+waited for `.datatable__skeleton` and then accepted `.state` as ready — but the
+shared `LoadingState` renders `.state[role="status"]`, so the *loading* state
+satisfied the *ready* predicate. Both failed intermittently, naming a screen that
+worked; the tell was «جارٍ التحميل…» sitting in the diagnostic.
+
+**Discriminate a control by what it OFFERS, not by its label.** `verify-staff-picker`
+looked for the lead selector by label text and got an empty result the moment the
+catalogue said «المؤطّرة المسؤولة» rather than «المؤطّرة»; matching on the fixture
+tag alone then found the *Branch* selector, whose one option was the seeded
+branch. It now matches the select that offers a seeded مؤطِّرة **by name**.
+
+**A fixture that takes whichever row sorts first asserts something nobody chose.**
+`seed-r82-scenario` read `subject.findFirstOrThrow({ deletedAt: null })` and
+titled its schedule «حلقة الحفظ» on the strength of it. That Subject carries
+`tracks_quran_progress: false`, so R87 §M **correctly** hid «إدخال الحفظ» from a
+مؤطرة who staffs no Quran class — and `verify-portals` reported the correct
+behaviour as a defect. Seeds create the reference data their assertions turn on.
+
+### Running them is what makes them coverage
+
+On 2026-08-19 all nineteen harnesses were run for the first time in one pass.
+**Three could not have been counted**: one asserted a rule R83 had reversed and
+read markup R84 had replaced, one was reading a correct behaviour as a defect,
+and two were racing the loading state. All three had existed, been cited in the
+documentation, and been treated as coverage. A harness nobody runs decays against
+the product exactly as documentation does — and it decays *silently*. The current
+inventory, with the count each one actually produced, is in
+[qa-inventory](qa-inventory.md#browser-harnesses-that-exist-today).
+
 ## Acceptance checklists
 
 A module is Done only when its checklist is fully ticked, its test gates pass, and its

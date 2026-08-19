@@ -66,6 +66,14 @@ async function evaluate(expression) {
 }
 
 async function goto(path) {
+    /**
+     * **A loading table is not a ready one** (restated 2026-08-19). This looked
+     * for `.datatable__skeleton` and then accepted `.state` as ready — but the
+     * shared `LoadingState` renders `.state[role="status"]` containing
+     * `.skeleton`, so the loading state satisfied the ready predicate and the
+     * harness read `التسجيلات` mid-fetch. It failed intermittently, naming a
+     * screen that was working: the tell was «جارٍ التحميل…» in the diagnostic.
+     */
   await send('Page.navigate', { url: `${BASE}${path}` });
   // Wait for the table to have rendered rows, or for the screen to say it is
   // empty — a fixed sleep would be a flake generator.
@@ -73,7 +81,7 @@ async function goto(path) {
     const state = await evaluate(`(() => {
       const t = document.querySelector('.admin-table');
       if (t && t.querySelectorAll('tbody tr').length > 0) return 'rows';
-      if (document.querySelector('.datatable__skeleton')) return 'loading';
+      if (document.querySelector('.datatable__skeleton, .state[role="status"]')) return 'loading';
       if (document.querySelector('.state')) return 'state';
       return document.location.pathname;
     })()`).catch(() => null);

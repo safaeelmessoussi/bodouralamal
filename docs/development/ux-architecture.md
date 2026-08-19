@@ -1116,6 +1116,73 @@ a container, not a second implementation. The badge shows the server's unread
 count rather than one the client derives, because a count a client computes
 disagrees with the server the moment the list paginates.
 
+## AR · Planning data advises the chooser; it never narrows the choice
+
+A screen that knows something about the people in a list may **annotate** them.
+It may not shorten the list, disable an entry, or gate the submit — because the
+one thing an administrator cannot override is an option that is not there.
+
+**The R88 teaching profile is the case that established this.** It records what a
+مؤطِّرة says she can teach and when she is free, so the staff picker can appraise
+every candidate against the class being planned: *Subject not declared* ·
+*Category not declared* · *not available then* · *already has a clashing class*.
+All four are **warnings**, and R88.4 states why: the association resolves
+exceptional cases outside the system — an unmaintained profile, an emergency
+replacement, a temporary substitution, something the administrator knows and the
+platform does not.
+
+### The two questions, and which one may answer which
+
+| Question | Answered by | May it decide? |
+|---|---|---|
+| *Would this person appear suitable for this planned class?* | the R88 teaching profile | **never** |
+| *May this person operate as teacher or assistant for this class?* | the assignment — `CourseScheduleStaff` / `SessionStaff` (§4.4c) | **only this** |
+
+**The former must not answer the latter, in either direction.** A مؤطِّرة with
+four warnings holds full authority the moment she is assigned; one with a
+flawless profile and no assignment holds none. Both halves are asserted, in the
+API tests and in the browser, because a separation only stated in prose is one a
+later refactor quietly closes.
+
+### What this forbids in an interface
+
+* **No filtering.** The picker's only `filter` is the lead's exclusion from her
+  own assistant list, and that exists because the server refuses the pair as a
+  duplicate — offering it would be offering a refusal.
+* **No `disabled` driven by a warning.** `disabled` is the caller's
+  authorization prop (R71.4) and nothing else may drive it: a disabled option is
+  a refusal wearing a hint.
+* **No copy that reads as a prohibition.** «لا يمكن», «ممنوع», «غير مسموح» are
+  guarded against in the warning strings.
+
+### *Not declared* is not *unavailable*
+
+An empty profile means **not declared**, never *forbidden* (R88.9 read at the
+point of use). Somebody who has declared no availability is not somebody who is
+busy, so «لم تُسجَّل أوقاتها بعد» is a different string from «غير متاحة في هذا
+الوقت» — and a profile empty in all three respects is said **once**, quietly,
+rather than as three accusations. A recurrence the appraisal genuinely cannot
+evaluate (`monthly`, `yearly` — a day of the month lands on a different weekday
+almost every time) says so rather than guessing in either direction.
+
+### Quiet by default
+
+A candidate with nothing wrong renders **nothing**. Four indicators beside every
+name would be four things to read past on the ordinary case, which is most
+cases. The concern is visible twice and cheaply: a short marker on the option so
+it is legible *before* the choice, and named chips under the control *after* it
+— beside the control, never on submit (rule **AH**).
+
+### Written once, on the shared control
+
+The appraisal lives on `StaffPicker`, not on the section that first needed it.
+Rule **AE**'s lesson applies exactly: *a behaviour each caller must opt into is a
+behaviour that will be missing somewhere.* Adopting it also closed a rule **C**
+violation that had stood since R71 — `ClassSection` hand-wrote a `SelectField`
+and a `fieldset` of checkboxes while `StaffPicker`'s own docstring named *a
+course schedule* as one of its three users. **The extraction had been written
+down and only two thirds applied.**
+
 ## AQ · A screen's population is what decides which operations it may offer
 
 A row action is an operation offered to **every row the screen lists**. So the
@@ -1379,6 +1446,9 @@ system's internals, break on every restyle, and catch nothing.
 | `teaching-group.http.integration.test.ts` | the flat read grants nothing, every filter narrows, TD-10 pagination, Admin-only |
 | [`pages/admin/teachers.test.tsx`](../../frontend/src/pages/admin/teachers.test.tsx) | **AQ** — the action left `المستخدمون` (label *and* component) · the node exists, is routed and sits beside `التسجيلات` · the population is asked by role and never excludes beneficiaries · **one** teaching-profile editor · **X** — the weekday keys resolve, `calendar.weekday` stays absent |
 | `user-management.http.integration.test.ts` | **AQ** — `role=teacher` and `beneficiaries_only` are complements: a مؤطِّرة who also studies is in both lists, and a revoked role leaves the teaching list |
+| [`components/scheduling/staff-picker.test.ts`](../../frontend/src/components/scheduling/staff-picker.test.ts) | **AR/C** — all three sections delegate to the shared picker and none hand-rolls a checkbox list · exactly one `filter`, and nothing `disabled` by a warning · every warning kind has its own catalogue key · no warning string reads as a prohibition |
+| `teaching-candidates.http.integration.test.ts` | **AR** — the four appraisals, the containment rule, ranges never merged, *not declared* ≠ *unavailable*, `monthly` indeterminate, a schedule never conflicting with itself · **and both halves of R88.3**: four warnings do not block the assignment, and a flawless profile with no assignment reaches nothing |
+| [`scripts/dev/browser/verify-staff-picker.mjs`](../../scripts/dev/browser/verify-staff-picker.mjs) | **AR** — five مؤطِّرات an administrator must tell apart, in the real form: all offered, each marked, each concern named in Arabic, nothing disabled, the one with no profile assigned anyway, and authority following the assignment |
 | [`scripts/dev/browser/verify-teaching-profile.mjs`](../../scripts/dev/browser/verify-teaching-profile.mjs) | **AQ/X** — 13 steps through the real screens: no profile action on `المستخدمون`, the menu node, the population (teacher · teacher+beneficiary · beneficiary-only), the dialog opened **from the clicked row**, Arabic weekdays with no key leak, and a range that survives a reload |
 
 ### A guard must be able to read what it guards

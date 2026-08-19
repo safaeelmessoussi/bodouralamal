@@ -578,6 +578,17 @@
   - `kind` derived client-side from the MIME type: §14.6 is a *presentation* rule, and presentation is the client's job
   - Note: the public calendar's *screen* filters (branch · category · level) stay identical for everyone and are compliant. Adding TD-3.4's `subject_id`/`teacher_id`/`academic_year_id` to a **public** screen would need public reference lists that do not exist — `/admin/subjects` is Admin-only by design
 
+### R90 — staff-picker planning warnings (2026-08-19)
+- [x] **SRS Revision 89** closes the §14.1 gap: `/admin/teachers` is in the sitemap, with the three ownerships stated
+- [x] **SRS Revision 90 + `GET /admin/teaching-candidates`** (TD-3 registered, OpenAPI generated). Four appraisals; **the list is never shortened and nothing is disabled**
+- [x] Rendered on the **shared `StaffPicker`** — marker on the option before the choice, named chips under the control after it, silence for a clean candidate
+- [x] **Recurrence-aware**: every occupied weekday must be covered, `daily` = seven, `monthly`/`yearly` = *indeterminate*, alternating series collide only on shared anchor parity. No second recurrence engine
+- [x] **Both halves of R88.3 proved** in the API and in real Chrome: هـ with no profile teaches once assigned; أ with a flawless profile teaches nothing unassigned
+- [x] **Defect fixed:** class staffing was refused on UPDATE while the form offered the controls — now replaced whole, future occurrences resynced, past ones untouched
+- [x] **Defect fixed:** `ClassSection` hand-wrote the picker (rule C) — the extraction had been written down and only two thirds applied
+- [x] QA inventory reconciled: **447 checks across 19 harnesses**, every count measured. Three harnesses were repaired first — see CHANGES.log
+- [ ] **NEXT SLICE — effective-dated staffing.** `CourseScheduleStaff` is time-blind: conflicts are bounded only by the schedule's `deleted_at` and R50's `effective_until`, and *A until 15 November, B from 16 November* cannot be expressed. R90 takes the proposed class as input and reads staffing through **one** query, so bounding that query by a date range is the whole of the change
+
 ### R88 correction — إدارة المؤطِّرات gets its own screen (2026-08-19)
 - [x] **The row action left `المستخدمون`.** A teaching profile was offered on a screen whose population is every account — guardians, minors, administrators. The backend is untouched; only ownership moved. New rule **AQ** in [ux-architecture](development/ux-architecture.md)
 - [x] `/admin/teachers` under الشؤون التعليمية, beside `التسجيلات`: the section now holds the people being **taught** and the people **doing the teaching**
@@ -586,7 +597,7 @@
 - [x] **Weekday i18n root-caused:** `calendar.weekday.*` never existed (labels live at `scheduling.weekday.*`), and `resolves.test.ts` scanned only *quoted literals*, so a computed key was invisible to it. The guard now resolves every **computed** key's namespace, and was proved against the defect before the fix
 - [x] Time inputs use the platform's `TextField` + `scheduling.timeHint` — the same control `RecurrenceEditor` uses for the same value; a hard-coded «HH:MM» is gone
 - [x] 13/13 browser checks; 14 frontend tests; 5 backend HTTP tests. **Two harness defects found and fixed**: it searched the whole document for the row action and opened the wrong مؤطِّرة's profile, then read her stale data as persistence; and it clicked each row's last button to "open a menu" that `DataTable` does not have — on `المستخدمون` that button is «إيقاف الحساب»
-- [ ] **§14.1 does not list `/admin/teachers`** — the sitemap is authoritative ("no invented sections"), so it needs a one-line addition. **Document Owner's edit**, not this agent's
+- [x] **§14.1 gap closed — SRS Revision 89** (2026-08-19): the node joins the Academic group, and the revision states the three ownerships (`المستخدمون` = accounts · `التسجيلات` = beneficiary placement · `إدارة المؤطِّرات` = teacher planning). **R88 semantics untouched**; TD-2 gains no row and TD-3 no route
 
 ### Admin Dashboard — session management and content (Owner priority, 2026-08-05)
 - [x] **Recurrence edit scopes — APPLIED to `docs/SRS.md` as Revision 50** (Owner-authorised direct edit, 2026-08-05). The SRS is the source of truth; `SRS-PROPOSAL-R50.md` is retained for the rationale

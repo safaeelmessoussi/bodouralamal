@@ -6952,6 +6952,57 @@
         }
       }
     },
+    "/admin/teaching-candidates": {
+      "get": {
+        "summary": "Appraise مؤطِّرات against a class being planned",
+        "description": "§4.4c, R88.4, R90. **Warnings, never a filtered list.** Given the class being planned — Subject, Level, recurrence, weekdays and wall-clock start and end — this returns **every** candidate the caller may assign, each with the reasons she may not suit: `subject_not_declared`, `category_not_declared` (the Category is resolved from the Level, §4.4b), `unavailable`, `conflict`, plus `availability_not_declared` and `availability_indeterminate`, which are **different facts and are reported differently** — a مؤطِّرة who declared no availability is not accused of being busy, and a `monthly` or `yearly` recurrence lands on a different weekday almost every time, so the appraisal says it cannot tell rather than guessing. **Shortening the list is the one refusal an administrator could not override**, and the association resolves exceptional cases outside the system: an unmaintained profile, an emergency replacement, a temporary substitution. **This grants and denies nothing** (R88.3): `CourseScheduleStaff` remains the sole source of teaching authority, so a مؤطِّرة with four warnings holds full authority the moment she is assigned and one with a flawless profile and no assignment holds none. **The appraisal is about the CLASS, not one occurrence** — every weekday the recurrence occupies must be covered by ONE declared range, ranges are never merged, and two `biweekly_alternating` series collide only when their anchor weeks share parity. **Limitation, stated rather than papered over:** `CourseScheduleStaff` carries no effective dating, so conflicts are bounded only by the schedule's `deleted_at` and R50's `effective_until` and cannot distinguish a staffing that has ended in practice from one still running.",
+        "responses": {
+          "200": {
+            "description": "Every candidate, each with its warnings and the schedules it clashes with."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a missing or inverted time, an unknown recurrence, or an unknown query key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN below Admin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/me/calendar": {
       "get": {
         "summary": "The caller’s own calendar",

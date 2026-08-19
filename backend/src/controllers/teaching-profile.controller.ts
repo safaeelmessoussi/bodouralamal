@@ -6,7 +6,11 @@ import {
   readTeachingProfile,
   replaceTeachingProfile,
 } from '../services/teaching-profile.service.js';
-import { teachingProfileSchema } from '../validators/teaching-profile.validators.js';
+import { listTeachingCandidates } from '../services/teaching-candidates.service.js';
+import {
+  teachingCandidatesQuerySchema,
+  teachingProfileSchema,
+} from '../validators/teaching-profile.validators.js';
 import { idParam, parse } from './parse.js';
 
 /**
@@ -38,5 +42,29 @@ export function replace(prisma: PrismaClient) {
       })),
     });
     res.json({ data: profile });
+  };
+}
+
+/**
+ * **Who would suit this class** (R90) — a read that decides nothing.
+ *
+ * Behind the guarded router beside the profile itself, and for the same reason:
+ * the appraisal republishes what people have declared about themselves.
+ */
+export function candidates(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const q = parse(teachingCandidatesQuerySchema, req.query ?? {});
+    res.json({
+      data: await listTeachingCandidates(prisma, requireActor(req), {
+        subjectId: q.subject_id,
+        levelId: q.level_id,
+        branchId: q.branch_id,
+        excludeScheduleId: q.exclude_schedule_id,
+        recurrence: q.recurrence,
+        weekdays: q.weekdays,
+        startTime: q.start_time,
+        endTime: q.end_time,
+      }),
+    });
   };
 }

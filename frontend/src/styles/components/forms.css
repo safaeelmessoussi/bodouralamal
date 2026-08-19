@@ -351,3 +351,32 @@
   width: 100%;
   padding-block: var(--space-2);
 }
+
+/**
+ * **R90 — the staff picker's planning warnings.**
+ *
+ * Chips on one wrapping line, tight under the control they belong to (rule AH:
+ * a message about a field goes under that field). `p` deliberately, so the
+ * `--measure` rule that governs prose is overridden here for the same reason
+ * rule AK gives: this is UI text, not prose, and a chip row that wraps at 65
+ * characters under a wide select reads as a mistake.
+ */
+.staff-picker__warnings {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2, 0.5rem);
+  margin-block: calc(-1 * var(--space-2, 0.5rem)) var(--space-3, 0.75rem);
+  max-width: none;
+}
+
+.staff-picker__assistant {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: var(--space-2, 0.5rem);
+  margin-block-end: var(--space-2, 0.5rem);
+}
+
+.staff-picker__assistant .staff-picker__warnings {
+  margin-block: 0;
+}

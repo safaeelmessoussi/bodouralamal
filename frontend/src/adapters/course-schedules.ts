@@ -241,6 +241,9 @@ export async function updateCourseSchedule(
       // *when* a class recurs must be able to change *between which dates*.
       | 'anchor_date'
       | 'effective_until'
+      // **R90 — who staffs it.** Accepted on create and refused here, while the
+      // form rendered the controls on both.
+      | 'staff'
     >
   > & { scope?: 'all_sessions' | 'this_and_future'; from_date?: string },
   token: string | null,

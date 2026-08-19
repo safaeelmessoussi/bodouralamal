@@ -95,7 +95,11 @@ export function update(prisma: PrismaClient) {
         ...(body.description !== undefined ? { description: body.description } : {}),
         ...(body.anchor_date !== undefined ? { anchorDate: body.anchor_date } : {}),
         ...(body.effective_until !== undefined ? { effectiveUntil: body.effective_until } : {}),
-      ...(body.effective_until !== undefined ? { effectiveUntil: body.effective_until } : {}),
+        // R90 — staffing is editable now; it was accepted on create and refused
+        // here while the form offered the controls on both.
+        ...(body.staff !== undefined
+          ? { staff: body.staff.map((x) => ({ userId: x.user_id, position: x.position })) }
+          : {}),
         ...(body.scope !== undefined ? { scope: body.scope } : {}),
         ...(body.from_date !== undefined ? { fromDate: body.from_date } : {}),
       },

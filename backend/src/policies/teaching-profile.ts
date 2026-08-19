@@ -84,3 +84,72 @@ export function firstOverlap(ranges: readonly Range[]): [Range, Range] | null {
 export function conflictsWith(proposed: Range, existing: readonly Range[]): Range[] {
   return existing.filter((range) => overlaps(proposed, range));
 }
+
+/**
+ * **Which weekdays does a proposed recurrence actually occupy?** (§7)
+ *
+ * The warnings must be true of the *class*, not of one arbitrary occurrence, so
+ * the appraisal asks the recurrence which days it lands on and evaluates every
+ * one of them. **No second recurrence engine**: this reads the fields
+ * `RecurringCourseSchedule` already stores (§4.4) and computes nothing the
+ * materializer does not.
+ *
+ * `null` means **indeterminate, not empty** — `monthly` and `yearly` recur on a
+ * day of the MONTH, which lands on a different weekday almost every time, so
+ * *is she available then* has no single answer. Saying "available" would be a
+ * guess and saying "unavailable" would be a false accusation; the appraisal says
+ * it cannot tell.
+ */
+export const ALL_WEEKDAYS = [
+  'monday',
+  'tuesday',
+  'wednesday',
+  'thursday',
+  'friday',
+  'saturday',
+  'sunday',
+] as const;
+
+export function occupiedWeekdays(
+  recurrence: string,
+  weekdays: readonly string[],
+): string[] | null {
+  switch (recurrence) {
+    case 'weekly':
+    case 'multiple_weekdays':
+    case 'biweekly_alternating':
+      return [...weekdays];
+    case 'daily':
+      return [...ALL_WEEKDAYS];
+    default:
+      return null;
+  }
+}
+
+/**
+ * **Do two recurrences ever land on the same day?**
+ *
+ * Sharing a weekday is not enough when one of them alternates. Two
+ * `biweekly_alternating` series on the same weekday collide only when their
+ * anchors fall in weeks of the **same parity** — otherwise they interleave
+ * forever and neither ever meets the other. A weekly series against a
+ * fortnightly one collides every other week, which is a collision.
+ *
+ * Parity comes from `anchor_date`, which §4.4 stores for exactly this reason:
+ * *"without an anchor, 'week on' is undefined and the two halves of the
+ * alternation are indistinguishable."* An alternating series with no anchor is
+ * treated as colliding — the safe direction for a warning, since the cost of an
+ * unnecessary warning the administrator overrides is far below the cost of a
+ * silent double-booking.
+ */
+export function seriesCanCoincide(
+  a: { recurrence: string; anchorDate: Date | null },
+  b: { recurrence: string; anchorDate: Date | null },
+): boolean {
+  const alternating = (x: { recurrence: string }): boolean =>
+    x.recurrence === 'biweekly_alternating';
+  if (!alternating(a) || !alternating(b)) return true;
+  if (a.anchorDate === null || b.anchorDate === null) return true;
+  const week = (d: Date): number => Math.floor(d.getTime() / (7 * 24 * 60 * 60 * 1000));
+  return (week(a.anchorDate) - week(b.anchorDate)) % 2 === 0;
+}

@@ -1,8 +1,10 @@
 import type { ReactNode } from 'react';
 
+import { Badge } from '../ui/badge.js';
 import { SelectField } from '../ui/field.js';
 import { MultiSelectField } from '../ui/multi-select.js';
 import { t } from '../../i18n/index.js';
+import type { TeachingCandidate } from '../../adapters/teaching-candidates.js';
 import type { UserSummary } from '../../adapters/users.js';
 
 /**
@@ -28,6 +30,24 @@ import type { UserSummary } from '../../adapters/users.js';
  *
  * This renders no fieldset wrapper of its own beyond the assistants' one,
  * because it is composed into sections that already own their layout.
+ *
+ * ## The planning appraisal (R90)
+ *
+ * When `appraisal` is supplied, a candidate the R88 teaching profile suggests
+ * may not suit this class is marked — **before** selection in the option's own
+ * label, and **after** it as compact chips naming exactly what is wrong. Neither
+ * removes her from the list and neither disables anything: R88.4 is explicit
+ * that a mismatch **warns and never blocks**, and the association resolves
+ * exceptional cases outside the system.
+ *
+ * **A candidate with nothing wrong is completely silent.** Four indicators
+ * beside every name would be four things to read past on the ordinary case,
+ * which is most cases.
+ *
+ * **The picker does not decide who may teach and never has** (rule O). The
+ * caller passes the permitted dataset; the appraisal only annotates it; the
+ * server is the authority, and what grants teaching authority is the assignment
+ * this control produces — not anything it displays.
  */
 export interface StaffPickerProps {
   staff: UserSummary[];
@@ -42,6 +62,65 @@ export interface StaffPickerProps {
   /** Rendered read-only for a caller who may see the assignment and not set it
    *  — R71.4 keeps event staffing with Admins, and the server enforces it. */
   disabled?: boolean;
+  /**
+   * R90's planning appraisal, keyed by user id. **Optional**: an exam sitting
+   * and a celebration have no Subject and no curriculum Category, so there is
+   * nothing there for a teaching profile to be appraised against, and a picker
+   * with no appraisal behaves exactly as it did before.
+   */
+  appraisal?: Record<string, TeachingCandidate>;
+}
+
+/** The words for each warning. One per kind, in the catalogue — never composed
+ *  from fragments, which is how a sentence ends up half-translated. */
+const WARNING_KEY: Record<string, string> = {
+  subject_not_declared: 'admin.schedules.warnSubject',
+  category_not_declared: 'admin.schedules.warnCategory',
+  availability_not_declared: 'admin.schedules.warnNoAvailability',
+  unavailable: 'admin.schedules.warnUnavailable',
+  conflict: 'admin.schedules.warnConflict',
+  availability_indeterminate: 'admin.schedules.warnIndeterminate',
+};
+
+/**
+ * The chips for one chosen person, or nothing at all.
+ *
+ * **An empty profile is said once.** Somebody who has declared nothing is not
+ * three separate failures; she is one fact the administration may want to fix,
+ * and «لم تُسجَّل بيانات تخطيط» says it without accusing her of being busy.
+ */
+function Warnings({ candidate }: { candidate: TeachingCandidate | undefined }): ReactNode {
+  if (!candidate) return null;
+  if (candidate.no_profile) {
+    return (
+      <p className="staff-picker__warnings">
+        <Badge tone="neutral">{t('admin.schedules.warnNoProfile')}</Badge>
+      </p>
+    );
+  }
+  if (candidate.warnings.length === 0) return null;
+  return (
+    <p className="staff-picker__warnings">
+      {candidate.warnings.map((w) => (
+        <Badge key={w} tone="warn">
+          {t(WARNING_KEY[w] ?? 'admin.schedules.warnUnknown')}
+        </Badge>
+      ))}
+    </p>
+  );
+}
+
+/** The marker an option carries in the list, so a concern is visible BEFORE the
+ *  choice rather than only after it. A clean candidate carries none. */
+function markedLabel(
+  person: UserSummary,
+  appraisal: Record<string, TeachingCandidate> | undefined,
+): string {
+  const found = appraisal?.[person.id];
+  if (!found) return person.name_arabic;
+  if (found.no_profile) return `${person.name_arabic} — ${t('admin.schedules.warnMarkNoProfile')}`;
+  if (found.warnings.length === 0) return person.name_arabic;
+  return `${person.name_arabic} — ${t('admin.schedules.warnMark')}`;
 }
 
 export function StaffPicker({
@@ -54,6 +133,7 @@ export function StaffPicker({
   assistantIds,
   onAssistants,
   disabled = false,
+  appraisal,
 }: StaffPickerProps): ReactNode {
   return (
     <>
@@ -64,9 +144,13 @@ export function StaffPicker({
         disabled={disabled}
         options={[
           { value: '', label: t('common.choose') },
-          ...staff.map((x) => ({ value: x.id, label: x.name_arabic })),
+          ...staff.map((x) => ({ value: x.id, label: markedLabel(x, appraisal) })),
         ]}
       />
+      {/* **Immediately after selection, beside the control it belongs to**
+          (rule AH) — not on submit, and not as a page-level message about
+          somebody the reader has to go and find. */}
+      <Warnings candidate={appraisal?.[leadId]} />
 
       {/* **The assistants are a multi-select, not an expanded list** (2026-08-13).
           Every person rendered as a checkbox reads fine for a handful and turns
@@ -83,12 +167,25 @@ export function StaffPicker({
         label={assistantsLabel}
         options={staff
           .filter((x) => x.id !== leadId)
-          .map((x) => ({ value: x.id, label: x.name_arabic }))}
+          .map((x) => ({ value: x.id, label: markedLabel(x, appraisal) }))}
         selected={assistantIds}
         onChange={onAssistants}
         hint={assistantsHint}
         disabled={disabled}
       />
+      {/* **The same warnings for an assistant as for the lead** (R88.8): one
+          profile per person, no assistant variant, and R87 §G's operational
+          parity means the appraisal has no reason to differ. */}
+      {assistantIds.map((id) => {
+        const candidate = appraisal?.[id];
+        if (!candidate || (candidate.warnings.length === 0 && !candidate.no_profile)) return null;
+        return (
+          <div key={id} className="staff-picker__assistant">
+            <span className="muted">{candidate.name_arabic}</span>
+            <Warnings candidate={candidate} />
+          </div>
+        );
+      })}
     </>
   );
 }

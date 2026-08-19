@@ -472,6 +472,13 @@ export async function saveSchedulingItem(
           anchor_date: input.startDate || null,
           effective_until: input.repeatUntil,
           ...(input.roomId !== undefined ? { room_id: input.roomId } : {}),
+          // **Staffing, which was silently absent here** (R90). The form has
+          // always rendered the مؤطِّرة and her assistants on edit; the payload
+          // omitted them and the server refused the key, so reassigning an
+          // existing class was impossible through the only screen that offers
+          // it. Past occurrences are not rewritten — the server resyncs future
+          // un-overridden sessions only (R43.4).
+          ...(input.staff ? { staff: input.staff } : {}),
         },
         token,
       );

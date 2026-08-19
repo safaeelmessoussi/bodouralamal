@@ -58,9 +58,9 @@ describe('the registry matches §14.1', () => {
         // placed) but no node for the people DOING the teaching, so the teaching
         // profile lived as a row action on the generic account screen and was
         // offered for guardians, minors and administrators alike.
-        // **§14.1 is authoritative and does not list this path yet**: the
-        // sitemap needs a one-line addition, which is the Document Owner's edit,
-        // not this agent's.
+        // **Applied to §14.1 as Revision 89** (2026-08-19): the sitemap now
+        // lists the node, so this expectation and the SRS agree because they
+        // were both read, not because they were copied from each other.
         '/admin/teachers',
         // R52 — §14.1's Administration group gained the Trash node when the
         // Revision 6 deferral was superseded.

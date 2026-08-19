@@ -5,6 +5,7 @@ import { SelectField } from '../ui/field.js';
 import { StaffPicker } from './staff-picker.js';
 import { t } from '../../i18n/index.js';
 import type { ScopeOptions } from '../../hooks/use-scope-options.js';
+import type { TeachingCandidate } from '../../adapters/teaching-candidates.js';
 import type { UserSummary } from '../../adapters/users.js';
 
 /**
@@ -35,6 +36,10 @@ export interface ClassSectionProps {
   teachers: UserSummary[];
   teacherId: string;
   onTeacher: (v: string) => void;
+  /** R90's planning appraisal for the class being planned, keyed by user id.
+   *  Absent while the form has no time yet — there is nothing to appraise
+   *  against, and an appraisal of a blank class would be noise. */
+  appraisal?: Record<string, TeachingCandidate>;
   assistantIds: string[];
   onAssistants: (ids: string[]) => void;
 }
@@ -51,6 +56,7 @@ export function ClassSection({
   teachers,
   teacherId,
   onTeacher,
+  appraisal,
   assistantIds,
   onAssistants,
 }: ClassSectionProps): ReactNode {
@@ -116,47 +122,30 @@ export function ClassSection({
         ]}
       />
 
-      {/* §4.4c — one primary teacher and zero or more assistants. Both are
-          `CourseScheduleStaff` rows differing only in `position`, and both reach
-          the schedule's students identically; the distinction records which of
-          them the class is *taught by*. */}
-      <SelectField
-        label={t('admin.schedules.teacher')}
-        value={teacherId}
-        onChange={onTeacher}
-        options={[
-          { value: '', label: t('common.choose') },
-          ...teachers.map((x) => ({ value: x.id, label: x.name_arabic })),
-        ]}
-      />
+      {/* **§4.4c — one primary مؤطِّرة and zero or more assistants**, through the
+          SHARED `StaffPicker` (rule C, corrected 2026-08-19).
 
-      <fieldset className="field">
-        <legend className="field__label">{t('admin.schedules.assistants')}</legend>
-        <div className="field__choices">
-          {teachers
-            // The primary teacher is not offered as their own assistant: one
-            // person holds one position on one schedule, and the pair would be
-            // refused by the server as a duplicate assignment.
-            .filter((x) => x.id !== teacherId)
-            .map((x) => (
-              <label key={x.id} className="field field--choice">
-                <input
-                  type="checkbox"
-                  checked={assistantIds.includes(x.id)}
-                  onChange={(e) =>
-                    onAssistants(
-                      e.target.checked
-                        ? [...assistantIds, x.id]
-                        : assistantIds.filter((id) => id !== x.id),
-                    )
-                  }
-                />
-                <span>{x.name_arabic}</span>
-              </label>
-            ))}
-        </div>
-        <p className="field__hint">{t('admin.schedules.assistantsHint')}</p>
-      </fieldset>
+          This section hand-wrote a `SelectField` and a `fieldset` of checkboxes
+          — the exact markup `StaffPicker` was extracted to replace, and its own
+          docstring named *a course schedule* as one of its three users while no
+          course schedule used it. The assistants were an expanded checkbox list,
+          which the extraction comment records as the thing that "turns the form
+          into a page of checkboxes for a real roster".
+
+          Adopting it is also what puts R90's planning warnings here: written
+          once on the shared control, they reach the exam sitting and the
+          celebration the moment those have something to appraise. */}
+      <StaffPicker
+        staff={teachers}
+        leadLabel={t('admin.schedules.teacher')}
+        leadId={teacherId}
+        onLead={onTeacher}
+        assistantsLabel={t('admin.schedules.assistants')}
+        assistantsHint={t('admin.schedules.assistantsHint')}
+        assistantIds={assistantIds}
+        onAssistants={onAssistants}
+        {...(appraisal ? { appraisal } : {})}
+      />
     </>
   );
 }

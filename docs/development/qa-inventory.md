@@ -48,6 +48,8 @@ rather than summarised.
 | 14d | Grade published | publish → notice (R82.4) | ✓ | ✓ `notification-targets` | ✓ within `verify-grading` | draft is silent; republish idempotent |
 | 15 | Teaching profile | «الملف التدريسي» on **إدارة المؤطِّرات** (R88) | ✓ | ✓ `teaching-profile` (15) | ✓ 13/13 `verify-teaching-profile` | **planning data**; the screen says it grants nothing. Moved off `المستخدمون` 2026-08-19 — see 15b |
 | 15b | إدارة المؤطِّرات | `/admin/teachers` | ✓ `teachers.test.tsx` (14) | ✓ `user-management` R88 block (5) | ✓ within 13/13 | population = live `teacher` role; a مؤطِّرة who also studies is listed, a beneficiary who does not teach is not |
+| 15c | Staff-picker warnings | the scheduling form's مؤطِّرة + assistants (R90) | ✓ `staff-picker.test.ts` (18) | ✓ `teaching-candidates` (23) | ✓ 13/13 `verify-staff-picker` | four appraisals; **warnings never block**; assignment is the only authority |
+| 15d | Class staffing on EDIT | `PATCH /admin/course-schedules/{id}` | ✓ | ✓ within the 23 | ✓ within 13/13 | **fixed 2026-08-19** — the form offered the controls and the server refused the key |
 | 15a | Capability ≠ authorization | declared-everything teacher (R88.3) | ✓ | ✓ within the 15 | — | no roster, no Quran marker, no class in her calendar |
 | 15 | Content library | `/admin/content`, `/teacher/content` | ✓ | ✓ `library`, `content`, `upload` | ✓ 16/16 recorder | |
 | 16 | Session materials | materials dialog | ✓ | ✓ `session-page` | ✓ 22/22 | |
@@ -71,35 +73,71 @@ rather than summarised.
 
 ## Browser harnesses that exist today
 
-| Harness | Covers | Last run |
-|---|---|---|
-| `verify-reorder.sh` | R76 ordering, five screens | 30/30 |
-| `verify-notifications.sh` | R77 cancel → read → restore | 18/18 |
-| `verify-schedule-edit.sh` | «تعديل العنصر» | 12/12 |
-| `verify-recorder.sh` | R75, real `MediaRecorder` | 22/22 |
-| `verify-library-recorder.sh` | Second entry point + sort indicator | 16/16 |
-| `verify-circles-reorder.sh` | R78.1 حلقات المواد | 9/9 |
-| `verify-sorting.sh` | Sort contract, four tables | 39/39 |
-| `verify-public-calendar.sh` | قائمة / تقويم, anonymous | 18/18 |
-| `verify-enrolment-gender.sh` | R79 beneficiary identity (six shapes) + R27/BR-21 Level narrowing | 17/17 |
-| `verify-teaching-profile.sh` | R88 — ownership of «الملف التدريسي», population, Arabic weekdays | 13/13 |
-| `measure-page-header.sh` | Header layout, nine widths | 9/9 |
+**Every row below was RUN on 2026-08-19** and carries the count that run
+produced — not a count copied forward. Three harnesses had to be repaired before
+they could be counted honestly; those repairs are in the *Reconciliation* note
+under the table.
 
-**194 browser checks across eleven harnesses.**
+| Harness | Area | Covers | 2026-08-19 |
+|---|---|---|---|
+| `verify-dialog-states.sh` | shared UI | **AG** — closed/open/close/reopen across 15 pages, from both the affected and the unaffected sets, plus page-flow impact and scroll ownership | 110/110 |
+| `verify-sorting.sh` | 2, 3, 4–9 | R76 sort contract across four tables: one directed header, the actions column never sortable, order survives paging | 39/39 |
+| `verify-reorder.sh` | 4–9 | R76 manual ordering on five screens; canonical order is the only state that offers the grip | 30/30 |
+| `verify-portals.sh` | 21, 22 | **AP** — three portals, one frame: each menu reaches what its role may reach and nothing else; R87 §M gates «إدخال الحفظ» on real staffing | 26/26 |
+| `verify-calendar-surfaces.sh` | 14c, 20 | **AO** — the five calendar surfaces against one contract matrix | 23/23 |
+| `verify-recorder.sh` | 19 | R75 through a real `MediaRecorder`: pause/resume produce one file, the beforeunload guard holds | 22/22 |
+| `verify-ux-slice.sh` | shared UI | **AG/AI/W** as rendered boxes — scroll ownership at two viewports, control geometry, sidebar `scrollTop` across a navigation | 22/22 |
+| `verify-notifications.sh` | 12, 13, 14a–14c | **AM/AN** — asked as three different people: who sees what, who is told, and that declining tells nobody | 22/22 |
+| `verify-public-calendar.sh` | 20 | قائمة / تقويم driven anonymously; **R83** — a cancelled occurrence leaves the ordinary projection and `include_cancelled=true` still carries it; the reason never leaks | 18/18 |
+| `verify-enrolment-gender.sh` | 3 | R79 beneficiary identity across six person-shapes + R27/BR-21 Level narrowing | 17/17 |
+| `verify-calendar-header.sh` | 20 | **AJ/AK** — region geometry at 1440px and 390px on both calendars, title drift, the table note against its table | 17/17 |
+| `verify-library-recorder.sh` | 19 | The second recorder entry point, and the sort indicator | 16/16 |
+| `verify-grading.sh` | 14d, 16 | R81 — the exam's own maximum, empty ≠ zero, publish notifies and a draft is silent | 16/16 |
+| `verify-teaching-profile.sh` | 15, 15b | **AQ/X** — ownership of «الملف التدريسي», the population, Arabic weekdays, a range that survives a reload | 13/13 |
+| `verify-staff-picker.sh` | 15c, 10 | **AR** — five مؤطِّرات an administrator must tell apart; all offered, each marked, nothing disabled, the one with no profile assigned anyway, authority following the assignment | 13/13 |
+| `verify-schedule-edit.sh` | 10, 11 | «تعديل العنصر» — R50's scopes through the real dialog | 12/12 |
+| `verify-student-flows.sh` | 22 | The beneficiary's own portal: calendar, library, memorisation, grades, account | 11/11 |
+| `verify-calendar-filters.sh` | 20 | **AL** — a filter chosen in one view survives the switch, in the controls, in the URL **and in the other view's request** | 11/11 |
+| `verify-circles-reorder.sh` | 9 | R78.1 — ordering حلقات المواد within a `(level, subject)` pairing | 9/9 |
+| `measure-page-header.sh` | shared UI | Header layout measured in a browser at nine widths | 9/9 widths |
 
-> **This table is behind the directory** (noted 2026-08-19). `scripts/dev/browser/`
-> also holds `verify-grading`, `verify-portals`, `verify-student-flows`,
-> `verify-calendar-filters`, `verify-calendar-header`, `verify-calendar-surfaces`,
-> `verify-dialog-states` and `verify-ux-slice`, each cited from the rule it guards
-> in [ux-architecture](ux-architecture.md#the-guards) but never added here. The
-> counts above therefore understate coverage; folding them in means re-running
-> each for its current tally, which is its own task.
+**447 checks across 19 harnesses, all green**, plus `measure-page-header`'s nine
+width measurements — 20 scripts in `scripts/dev/browser/` and 20 rows here.
 
-**The beneficiary-identification gap is closed** (R79, 2026-08-18): `is_beneficiary`
-is a durable fact on `User`, independent of every role and of every enrolment. The
-fixture set deliberately spans the six shapes — beneficiary-only, staff-only,
-staff **and** beneficiary, a minor with no role at all, guardian-only, admin-only —
-so the independence is demonstrable rather than argued.
+### Reconciliation (2026-08-19) — what the old table was hiding
+
+The previous table listed **ten** harnesses and claimed **181** checks. Eight
+scripts existed and were cited from the rule each one guards in
+[ux-architecture](ux-architecture.md#the-guards), but had never been added here;
+two of the counts it did carry were stale (`verify-notifications` had grown from
+18 to 22). **A file existing is not coverage** — running all nineteen found three
+harnesses that could not have been counted:
+
+* **`verify-portals`** — «إدخال الحفظ» absent from the مؤطرة's menu. **The
+  product was right and the fixture was wrong.** The seed took
+  `subject.findFirstOrThrow({ deletedAt: null })` — *whichever Subject sorts
+  first in the development database* — and titled the schedule «حلقة الحفظ» on
+  the strength of it. That Subject carries `tracks_quran_progress: false`, so
+  R87 §M correctly hid the entry from somebody who staffs no Quran class. The
+  seed now creates its own marked Subject.
+* **`verify-public-calendar`** — 11/18, then a crash. It waited on `.cal-toolbar`
+  (retired by R84 when the filters and the view switch moved into the one shared
+  header), read the hand-rolled `.occurrence-list` that R84 replaced with the
+  platform's `DataTable`, and asserted **R77's rule that R83 reversed**: a
+  cancelled occurrence used to stay on the public calendar and now leaves it.
+  Every check was **restated with its reason recorded, never deleted** — and the
+  reversal kept a half that can still regress, so *omitted from the ordinary
+  read* is now pinned beside *still carried by `include_cancelled=true`*.
+* **`verify-sorting`** and **`verify-reorder`** — intermittent, naming a screen
+  that worked. The readiness predicate looked for `.datatable__skeleton` and then
+  accepted `.state` as ready; the shared `LoadingState` renders
+  `.state[role="status"]`, so **the loading state satisfied the ready
+  predicate**. Fixed in both; three consecutive clean runs each.
+
+**The lesson is the one this page exists for:** a harness nobody runs decays
+against the product exactly as documentation does, and it decays *silently* —
+two of these three would have been counted as coverage by anybody reading the
+directory listing.
 
 ## The gaps, ranked
 

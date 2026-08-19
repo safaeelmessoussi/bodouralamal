@@ -1512,6 +1512,22 @@ export const ar = {
       // §4.4c: وصول المساعدة إلى المستفيدات مطابق لوصول المؤطّرة؛ الفرق في
       // الموقع لا في الصلاحية.
       assistantsHint: 'اختياري. للمساعدة الوصول نفسه إلى المستفيدات، ويبقى الفرق في الموقع.',
+      // **R90 — the planning appraisal's words.** One string per warning kind,
+      // never composed from fragments: a sentence assembled at runtime is one
+      // that ends up half translated. They describe the PROFILE and refuse
+      // nothing — «لم تُسجَّل» is deliberately not «غير متاحة», because somebody
+      // who has declared nothing is not somebody who is busy.
+      warnSubject: 'المادة غير مذكورة في ملفها',
+      warnCategory: 'الفئة غير مذكورة في ملفها',
+      warnUnavailable: 'غير متاحة في هذا الوقت',
+      warnNoAvailability: 'لم تُسجَّل أوقاتها بعد',
+      warnConflict: 'لديها حصة متعارضة',
+      warnIndeterminate: 'تعذّر تقدير التفرغ لهذا التكرار',
+      warnNoProfile: 'لم تُسجَّل بيانات تخطيط',
+      warnUnknown: 'ملاحظة على ملفها',
+      // The marker on an option, so a concern is visible BEFORE the choice.
+      warnMark: 'ملاحظة',
+      warnMarkNoProfile: 'بلا ملف',
       fixedAfterCreate:
         'المادة ونمط التدريس وهدفه والفرع والسنة تُحدَّد عند الإنشاء ولا تُعدَّل — تغييرها يعيد توجيه حصص مُولّدة سابقاً.',
       clash: 'القاعة أو أحد المؤطرين مرتبط بحصة أخرى في نفس الوقت. اختر توقيتاً أو قاعة أخرى.',

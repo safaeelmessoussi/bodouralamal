@@ -244,6 +244,10 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
   // data**, owned by the administration, granting no operational authority.
   guarded.get('/admin/users/:id/teaching-profile', teachingProfile.read(prisma));
   guarded.put('/admin/users/:id/teaching-profile', teachingProfile.replace(prisma));
+  // R90 — who would SUIT a class being planned, and why she might not. A read
+  // that returns warnings and never a filtered list: shortening it would be the
+  // one refusal an administrator could not override.
+  guarded.get('/admin/teaching-candidates', teachingProfile.candidates(prisma));
   guarded.get('/admin/settings', settings.list(prisma));
   guarded.put('/admin/settings/:key', settings.update(prisma));
 

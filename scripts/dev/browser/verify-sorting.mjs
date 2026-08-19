@@ -28,11 +28,19 @@ await send('Network.setCookie', {
 });
 
 async function goto(path) {
+    /**
+     * **A loading table is not a ready one** (restated 2026-08-19). This looked
+     * for `.datatable__skeleton` and then accepted `.state` as ready — but the
+     * shared `LoadingState` renders `.state[role="status"]` containing
+     * `.skeleton`, so the loading state satisfied the ready predicate and the
+     * harness read `التسجيلات` mid-fetch. It failed intermittently, naming a
+     * screen that was working: the tell was «جارٍ التحميل…» in the diagnostic.
+     */
   await send('Page.navigate', { url: `${BASE}${path}` });
   for (let i = 0; i < 100; i += 1) {
     const state = await evaluate(`(() => {
       if (document.location.pathname.startsWith('/login')) return 'login';
-      if (document.querySelector('.datatable__skeleton')) return 'loading';
+      if (document.querySelector('.datatable__skeleton, .state[role="status"]')) return 'loading';
       return document.querySelector('.admin-table tbody tr, .state') ? 'ready' : 'waiting';
     })()`).catch(() => null);
     if (state === 'ready' || state === 'login') return state;

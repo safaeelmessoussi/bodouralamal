@@ -14,6 +14,7 @@ import {
   deleteSchedulingItem,
   listSchedulingItems,
   saveSchedulingItem,
+  weekdaysForClass,
   type SavedSchedulingItem,
   type SchedulingItem,
   type SchedulingType,
@@ -49,6 +50,7 @@ import { useScopeOptions } from '../../hooks/use-scope-options.js';
 import { useSession } from '../../contexts/session.js';
 import { useActiveRole } from '../../contexts/active-role.js';
 import { isDirty } from '../../lib/form-dirty.js';
+import { useTeachingCandidates } from '../../hooks/use-teaching-candidates.js';
 import { t } from '../../i18n/index.js';
 import { ApiError } from '../../lib/api.js';
 import { Feedback } from '../../components/ui/feedback.js';
@@ -833,6 +835,36 @@ export function SchedulingDialog({
     mode === 'entire_level' ? scope.value.levelId : scope.value.groupId;
 
   /**
+   * **R90 — appraise the مؤطِّرات against the class as it stands on the form.**
+   *
+   * Only for a class: an exam sitting and a celebration carry no Subject and no
+   * curriculum Category, so a teaching profile has nothing to be appraised
+   * against and the picker renders unannotated.
+   *
+   * **The Level, not the target.** A class taught to an Administrative Group
+   * still belongs to a Level, and the Level is what carries the Category the
+   * profile declares (§4.4b) — so `scope.value.levelId` is passed whichever
+   * teaching mode is chosen.
+   *
+   * `exclude_schedule_id` on an edit, or the schedule's own staffing would be
+   * reported as clashing with itself — the commonest false warning there is.
+   */
+  const appraisal = useTeachingCandidates(
+    type === 'class' && startTime !== '' && endTime !== ''
+      ? {
+          recurrence: recurrence.type,
+          weekdays: weekdaysForClass(recurrence.type, recurrence.weekdays, recurrence.startDate),
+          startTime,
+          endTime,
+          ...(scope.value.subjectId ? { subjectId: scope.value.subjectId } : {}),
+          ...(scope.value.levelId ? { levelId: scope.value.levelId } : {}),
+          ...(item?.id ? { excludeScheduleId: item.id } : {}),
+        }
+      : null,
+    token,
+  );
+
+  /**
    * **What is missing, in the person's words — not a disabled button.**
    *
    * The form used to disable Save until everything was set, which is why it
@@ -1030,6 +1062,7 @@ export function SchedulingDialog({
             onTeacher={setTeacherId}
             assistantIds={assistantIds}
             onAssistants={setAssistantIds}
+            appraisal={appraisal}
           />
         ) : type === 'exam' ? (
           <ExamSection

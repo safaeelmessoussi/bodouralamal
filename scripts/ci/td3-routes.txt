@@ -118,6 +118,7 @@ POST /sessions/{id}/notify                    # R83.3; the same decision for one
 GET /me/calendar                              # R82.8; the caller's own occurrences; /calendar stays the public tier read
 GET /admin/users/{id}/teaching-profile        # R88; PLANNING data — declared Subjects/Categories/availability, grants nothing
 PUT /admin/users/{id}/teaching-profile        # R88; replaced whole; Admin-owned; capability is not authorization
+GET /admin/teaching-candidates                # R90; the staff picker's planning appraisal — WARNINGS, never a filtered list
 GET /admin/branches/{id}/event-backfill       # §4.4 "listing applicable global/recurring events to attach"
 
 # ── Official Moroccan Hijri calendar (TD-3.4, Revision 31)
