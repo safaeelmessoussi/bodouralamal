@@ -2,6 +2,7 @@ import type { PrismaClient } from "../generated/prisma/client.js";
 import type { Actor } from "../policies/actor.js";
 import { AppError } from "../lib/errors.js";
 import * as scope from "../policies/branch-scope.js";
+import { effectiveWithin } from "../policies/effective-staffing.js";
 import {
   isWithinAvailability,
   occupiedWeekdays,
@@ -74,6 +75,16 @@ export interface ProposedClass {
   /** The schedule being EDITED. Its own staffing must not be reported as a
    *  clash with itself — the commonest false warning there is. */
   excludeScheduleId?: string | undefined;
+  /**
+   * **R91 — the period the proposed class runs for.**
+   *
+   * A conflict now needs BOTH halves: the recurrence and time must collide
+   * **and** the two assignments' effective periods must intersect. Absent, the
+   * proposed class is treated as open-ended, which is what a class with no
+   * stated bounds is.
+   */
+  effectiveFrom?: Date | undefined;
+  effectiveUntil?: Date | undefined;
 }
 
 const hhmm = (d: Date): string => d.toISOString().slice(11, 16);
@@ -150,10 +161,27 @@ export async function listTeachingCandidates(
    */
   const today = new Date();
   today.setUTCHours(0, 0, 0, 0);
+  /**
+   * **R91 — the clean-up this appraisal was designed for.**
+   *
+   * The pre-R91 query took every live staffing row, because a row had no period
+   * and *she staffs this schedule* was all it could say. It therefore reported a
+   * **historical** assignment — one whose replacement period ended months ago —
+   * as a live conflict for a new class, and could not see that a **future**
+   * assignment outside the proposed class's own period does not clash either.
+   *
+   * The bound is now the intersection of two date ranges: the proposed class's
+   * period against each assignment's. A class with no stated bounds is
+   * open-ended and intersects everything, which is the pre-R91 answer and
+   * remains correct for it.
+   */
+  const proposedFrom = proposed.effectiveFrom ?? today;
+  const proposedUntil =
+    proposed.effectiveUntil ?? new Date("9999-12-31T00:00:00.000Z");
   const staffing = await prisma.courseScheduleStaff.findMany({
     where: {
-      deletedAt: null,
       userId: { in: candidates.map((c) => c.id) },
+      ...effectiveWithin(proposedFrom, proposedUntil),
       schedule: {
         deletedAt: null,
         ...(proposed.excludeScheduleId

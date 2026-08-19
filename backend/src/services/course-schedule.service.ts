@@ -3,28 +3,43 @@ import type {
   PrismaClient,
   RecurringCourseSchedule,
   TeachingMode,
-} from '../generated/prisma/client.js';
-import { AppError } from '../lib/errors.js';
-import { page, pageWindow, type Page, type PageParams } from '../lib/pagination.js';
-import { addDays, atMidnightUtc, expandSchedule, timesOverlap } from '../lib/recurrence.js';
-import * as scope from '../policies/branch-scope.js';
-import { assertSubjectTaughtAtLevel } from '../policies/curriculum.js';
-import { resolveAudience } from '../policies/roster-resolution.js';
-import * as audit from '../repositories/audit.repository.js';
-import * as trash from '../repositories/trash.repository.js';
-import { enqueue, JOB_QUEUES } from '../repositories/jobs.repository.js';
-import { updateWithVersion } from '../repositories/optimistic-lock.js';
-import type { Actor } from '../policies/actor.js';
+} from "../generated/prisma/client.js";
+import { AppError } from "../lib/errors.js";
+import {
+  intervalsOverlap,
+  withinScheduleLife,
+  type Interval,
+} from "../policies/effective-staffing.js";
+import {
+  page,
+  pageWindow,
+  type Page,
+  type PageParams,
+} from "../lib/pagination.js";
+import {
+  addDays,
+  atMidnightUtc,
+  expandSchedule,
+  timesOverlap,
+} from "../lib/recurrence.js";
+import * as scope from "../policies/branch-scope.js";
+import { assertSubjectTaughtAtLevel } from "../policies/curriculum.js";
+import { resolveAudience } from "../policies/roster-resolution.js";
+import * as audit from "../repositories/audit.repository.js";
+import * as trash from "../repositories/trash.repository.js";
+import { enqueue, JOB_QUEUES } from "../repositories/jobs.repository.js";
+import { updateWithVersion } from "../repositories/optimistic-lock.js";
+import type { Actor } from "../policies/actor.js";
 import {
   protectionReasons,
   SELECT_PROTECTABLE,
-} from '../policies/session-protection.js';
+} from "../policies/session-protection.js";
 import {
   horizonFor,
   loadSchedule,
   materializeSchedule,
   type MaterializeResult,
-} from './session-materialize.service.js';
+} from "./session-materialize.service.js";
 
 /**
  * Recurring Course Schedules — the unit of **delivery** (SRS §4.4, §4.4c,
@@ -52,13 +67,19 @@ import {
  * file were written then, because nothing had needed them before.
  */
 
-const MANAGING_ROLE = 'admin';
+const MANAGING_ROLE = "admin";
 
-const isSuperAdmin = (actor: Actor): boolean => scope.isSuperAdmin(actor.roleScopes);
+const isSuperAdmin = (actor: Actor): boolean =>
+  scope.isSuperAdmin(actor.roleScopes);
 
 function assertCanManage(actor: Actor): void {
-  if (!(scope.hasRole(actor.roleScopes, MANAGING_ROLE) || isSuperAdmin(actor))) {
-    throw new AppError('FORBIDDEN', 'course schedule management requires admin');
+  if (!(
+    scope.hasRole(actor.roleScopes, MANAGING_ROLE) || isSuperAdmin(actor)
+  )) {
+    throw new AppError(
+      "FORBIDDEN",
+      "course schedule management requires admin",
+    );
   }
 }
 
@@ -82,8 +103,11 @@ const isManager = (actor: Actor): boolean =>
  * applied to who may read as well as to which branch they may reach.
  */
 function assertCanRead(actor: Actor): void {
-  if (!(isManager(actor) || scope.hasRole(actor.roleScopes, 'teacher'))) {
-    throw new AppError('FORBIDDEN', 'reading course schedules requires admin or teaching staff');
+  if (!(isManager(actor) || scope.hasRole(actor.roleScopes, "teacher"))) {
+    throw new AppError(
+      "FORBIDDEN",
+      "reading course schedules requires admin or teaching staff",
+    );
   }
 }
 
@@ -103,12 +127,124 @@ function readableScope(actor: Actor): Prisma.RecurringCourseScheduleWhereInput {
     // `null` means all-branches (§7, R24) — not "no branches".
     return branches === null ? {} : { branchId: { in: branches } };
   }
+  /**
+   * **Period-blind, deliberately** (R91).
+   *
+   * Every *operational* consumer became date-aware — whom she may act on, whose
+   * memorisation she may enter, whose calendar she appears on. This is not one
+   * of them: it decides which class DEFINITIONS a مؤطِّرة may read, and hiding a
+   * class she taught last term would hide her own history from her while
+   * granting nobody anything. She may read it; `studentsTaughtBy` decides what
+   * she may do about its students, and that is the check that moved.
+   */
   return { staff: { some: { userId: actor.userId, deletedAt: null } } };
 }
 
 export interface ScheduleStaffInput {
   userId: string;
-  position: 'teacher' | 'assistant';
+  position: "teacher" | "assistant";
+  /**
+   * **R91 — the assignment's inclusive calendar bounds.** `null`/absent at
+   * either end is open-ended there: *from the schedule's beginning* and
+   * *through the schedule's end*. Absent on both is what every pre-R91 row
+   * means, which is why the migration needed no backfill.
+   */
+  effectiveFrom?: Date | null;
+  effectiveUntil?: Date | null;
+}
+
+/**
+ * **The interval invariants, enforced under a row lock** (R91 §6, §7, §28).
+ *
+ * Two rules, and neither is a unique index:
+ *
+ * 1. **At most one main مؤطِّرة active on any date.** Two overlapping
+ *    `teacher` rows mean the class has two people in charge on the overlapping
+ *    days, and every consumer would then have to pick one arbitrarily.
+ * 2. **No overlapping intervals for the SAME person on one schedule** — of any
+ *    position. Two overlapping rows for Safa are two answers to *is she
+ *    assigned on the 5th*, and being both main teacher and assistant on one day
+ *    is not a thing the association can mean.
+ *
+ * **Assistants are not subject to rule 1**, deliberately: any number of them may
+ * be active at once, which is the whole point of the position existing.
+ *
+ * **The lock is why this is safe against two administrators at once.** Validating
+ * against a read and then writing would let both pass — the classic
+ * check-then-act race — so the schedule's staffing rows are locked `FOR UPDATE`
+ * first, exactly as TD-15.2 prescribes for the room-conflict check, and the
+ * second transaction blocks until the first commits and then sees its rows.
+ *
+ * The alternative — a PostgreSQL `EXCLUDE USING gist` constraint — needs the
+ * `btree_gist` extension, which §3.1's deployment does not install and TD-13
+ * does not list. §28 says not to make migrations fragile for a declarative
+ * invariant; this is that trade, taken deliberately and recorded.
+ */
+async function assertStaffIntervals(
+  tx: Prisma.TransactionClient,
+  scheduleId: string,
+  staff: ScheduleStaffInput[],
+  schedule: { anchorDate: Date | null; effectiveUntil: Date | null },
+): Promise<void> {
+  // TD-15.2 — lock the governing rows BEFORE the check.
+  await tx.$queryRaw`
+    SELECT id FROM "course_schedule_staff"
+    WHERE schedule_id = ${scheduleId}::uuid AND deleted_at IS NULL
+    FOR UPDATE`;
+
+  const asInterval = (s: ScheduleStaffInput): Interval => ({
+    from: s.effectiveFrom ?? null,
+    until: s.effectiveUntil ?? null,
+  });
+
+  for (const s of staff) {
+    // §5 — a period entirely outside the schedule's own life is meaningless,
+    // and REFUSED rather than clipped: silently rewriting a date an
+    // administrator typed leaves her believing she recorded something she did
+    // not, and the boundary she got wrong is the one she needs told about.
+    if (!withinScheduleLife(asInterval(s), schedule)) {
+      throw new AppError(
+        "VALIDATION_FAILED",
+        "staffing period falls outside the schedule",
+        {
+          reason: "STAFF_PERIOD_OUTSIDE_SCHEDULE",
+          user_id: s.userId,
+        },
+      );
+    }
+  }
+
+  const clash = (a: ScheduleStaffInput, b: ScheduleStaffInput): boolean =>
+    intervalsOverlap(asInterval(a), asInterval(b));
+
+  for (let i = 0; i < staff.length; i += 1) {
+    for (let j = i + 1; j < staff.length; j += 1) {
+      const a = staff[i]!;
+      const b = staff[j]!;
+      if (!clash(a, b)) continue;
+
+      if (a.userId === b.userId) {
+        throw new AppError(
+          "VALIDATION_FAILED",
+          "overlapping assignments for one person",
+          {
+            reason: "OVERLAPPING_ASSIGNMENT",
+            user_id: a.userId,
+          },
+        );
+      }
+      if (a.position === "teacher" && b.position === "teacher") {
+        throw new AppError(
+          "VALIDATION_FAILED",
+          "two main teachers on overlapping dates",
+          {
+            reason: "OVERLAPPING_MAIN_TEACHER",
+            user_ids: [a.userId, b.userId],
+          },
+        );
+      }
+    }
+  }
 }
 
 export interface CourseScheduleInput {
@@ -134,7 +270,7 @@ export interface CourseScheduleInput {
 
 /** One overlap the administrator has to resolve. */
 export interface ScheduleConflict {
-  kind: 'room' | 'teacher' | 'assistant';
+  kind: "room" | "teacher" | "assistant";
   date: string;
   sessionId: string;
   scheduleId: string;
@@ -170,12 +306,12 @@ async function resolveTarget(
   effectiveLevelId: string;
 }> {
   switch (mode) {
-    case 'entire_level': {
+    case "entire_level": {
       const level = await tx.level.findFirst({
         where: { id: targetId, deletedAt: null },
         select: { id: true },
       });
-      if (!level) throw new AppError('NOT_FOUND', 'no such level');
+      if (!level) throw new AppError("NOT_FOUND", "no such level");
       return {
         levelId: targetId,
         administrativeGroupId: null,
@@ -183,21 +319,26 @@ async function resolveTarget(
         effectiveLevelId: targetId,
       };
     }
-    case 'administrative_group': {
+    case "administrative_group": {
       const group = await tx.administrativeGroup.findFirst({
         where: { id: targetId, deletedAt: null },
         select: { id: true, branchId: true, levelId: true },
       });
-      if (!group) throw new AppError('NOT_FOUND', 'no such administrative group');
+      if (!group)
+        throw new AppError("NOT_FOUND", "no such administrative group");
       // §4.4: "The schedule's branch must match its target's branch wherever the
       // target is branch-bound." A room belongs to a branch, so a mismatch would
       // book a room the students cannot reach.
       if (group.branchId !== branchId) {
-        throw new AppError('VALIDATION_FAILED', 'group is at a different branch', {
-          reason: 'BRANCH_MISMATCH',
-          target_branch_id: group.branchId,
-          schedule_branch_id: branchId,
-        });
+        throw new AppError(
+          "VALIDATION_FAILED",
+          "group is at a different branch",
+          {
+            reason: "BRANCH_MISMATCH",
+            target_branch_id: group.branchId,
+            schedule_branch_id: branchId,
+          },
+        );
       }
       return {
         levelId: null,
@@ -206,12 +347,12 @@ async function resolveTarget(
         effectiveLevelId: group.levelId,
       };
     }
-    case 'teaching_group': {
+    case "teaching_group": {
       const group = await tx.teachingGroup.findFirst({
         where: { id: targetId, deletedAt: null },
         select: { id: true, levelId: true },
       });
-      if (!group) throw new AppError('NOT_FOUND', 'no such teaching group');
+      if (!group) throw new AppError("NOT_FOUND", "no such teaching group");
       // A Teaching Group has no branch (§4.4c, R43.3), so there is nothing to
       // match here — the branch is the schedule's own statement of where it
       // meets.
@@ -259,7 +400,9 @@ export async function findConflicts(
   if (dates.length === 0) return [];
 
   const staffIds = candidate.staff.map((s) => s.userId);
-  const positionOf = new Map(candidate.staff.map((s) => [s.userId, s.position]));
+  const positionOf = new Map(
+    candidate.staff.map((s) => [s.userId, s.position]),
+  );
 
   // TD-15.2: lock the governing rows BEFORE the check. Without it two
   // administrators booking the same room at the same instant both see it free.
@@ -281,7 +424,7 @@ export async function findConflicts(
       date: { in: dates },
       // A cancelled class frees its room: TD-1 keeps the row so the
       // cancellation is visible, but it no longer occupies anything.
-      status: { not: 'cancelled' },
+      status: { not: "cancelled" },
       ...(excludeScheduleId ? { scheduleId: { not: excludeScheduleId } } : {}),
       OR: [
         ...(candidate.roomId !== null ? [{ roomId: candidate.roomId }] : []),
@@ -289,9 +432,24 @@ export async function findConflicts(
         // about who is committed on that date. Asking the schedule instead
         // would miss a session whose staff were individually changed — exactly
         // the case the snapshot exists for.
-        ...(staffIds.length > 0
-          ? [{ staff: { some: { userId: { in: staffIds }, deletedAt: null } } }]
-          : []),
+        /**
+         * **One arm per person, bounded by HER period** (R91).
+         *
+         * This asked *is any of these people busy on any of these dates*, which
+         * after R91 is the wrong question: Safa assigned September–November and
+         * Amina December–June are both `candidate.staff`, and a December
+         * occurrence clashing with something of Safa's is not a clash at all —
+         * she is not teaching this class in December. One flat `in` produced
+         * exactly that false refusal, and a false 409 on a save is worse than a
+         * warning: there is nothing for the administrator to override.
+         */
+        ...candidate.staff.map((s) => ({
+          date: {
+            ...(s.effectiveFrom ? { gte: s.effectiveFrom } : {}),
+            ...(s.effectiveUntil ? { lte: s.effectiveUntil } : {}),
+          },
+          staff: { some: { userId: s.userId, deletedAt: null } },
+        })),
       ],
     },
     select: {
@@ -307,11 +465,25 @@ export async function findConflicts(
 
   const out: ScheduleConflict[] = [];
   for (const s of clashes) {
-    if (!timesOverlap(candidate.startTime, candidate.endTime, s.startTime, s.endTime)) continue;
+    if (
+      !timesOverlap(
+        candidate.startTime,
+        candidate.endTime,
+        s.startTime,
+        s.endTime,
+      )
+    )
+      continue;
     const date = s.date.toISOString().slice(0, 10);
 
     if (candidate.roomId !== null && s.roomId === candidate.roomId) {
-      out.push({ kind: 'room', date, sessionId: s.id, scheduleId: s.scheduleId, resourceId: candidate.roomId });
+      out.push({
+        kind: "room",
+        date,
+        sessionId: s.id,
+        scheduleId: s.scheduleId,
+        resourceId: candidate.roomId,
+      });
     }
     const busy = new Set<string>(s.staff.map((t) => t.userId));
     for (const userId of staffIds) {
@@ -320,7 +492,7 @@ export async function findConflicts(
         // Assistants are reported under their own kind: an administrator
         // resolving a clash needs to know whether the person is the teacher or
         // a helper, because the remedies differ.
-        kind: positionOf.get(userId) === 'assistant' ? 'assistant' : 'teacher',
+        kind: positionOf.get(userId) === "assistant" ? "assistant" : "teacher",
         date,
         sessionId: s.id,
         scheduleId: s.scheduleId,
@@ -334,11 +506,15 @@ export async function findConflicts(
 /** TD-3.8: conflicts are a coded 409 naming what clashed, never a 500. */
 function assertNoConflicts(conflicts: ScheduleConflict[]): void {
   if (conflicts.length === 0) return;
-  throw new AppError('SCHEDULE_CONFLICT', 'the room or a member of staff is already committed', {
-    reason: 'OVERLAPPING_SESSIONS',
-    conflicts: conflicts.slice(0, 20),
-    total: conflicts.length,
-  });
+  throw new AppError(
+    "SCHEDULE_CONFLICT",
+    "the room or a member of staff is already committed",
+    {
+      reason: "OVERLAPPING_SESSIONS",
+      conflicts: conflicts.slice(0, 20),
+      total: conflicts.length,
+    },
+  );
 }
 
 export async function createCourseSchedule(
@@ -348,7 +524,12 @@ export async function createCourseSchedule(
   now: Date = new Date(),
 ): Promise<{ id: string; materialized: MaterializeResult }> {
   assertCanManage(actor);
-  scope.assertCanActOnBranch(actor.roleScopes, MANAGING_ROLE, input.branchId, 'no such branch');
+  scope.assertCanActOnBranch(
+    actor.roleScopes,
+    MANAGING_ROLE,
+    input.branchId,
+    "no such branch",
+  );
 
   const horizon = await horizonFor(prisma, now);
 
@@ -357,9 +538,14 @@ export async function createCourseSchedule(
       where: { id: input.subjectId, deletedAt: null },
       select: { id: true },
     });
-    if (!subject) throw new AppError('NOT_FOUND', 'no such subject');
+    if (!subject) throw new AppError("NOT_FOUND", "no such subject");
 
-    const target = await resolveTarget(tx, input.teachingMode, input.targetId, input.branchId);
+    const target = await resolveTarget(
+      tx,
+      input.teachingMode,
+      input.targetId,
+      input.branchId,
+    );
 
     // **The rule this surface was missing entirely.** Teaching Groups and
     // content both refused a Subject the Level does not teach; scheduling did
@@ -367,7 +553,11 @@ export async function createCourseSchedule(
     // `level_subject` held none — classes delivering a Subject their Level
     // officially does not offer, and to which no content could then be attached.
     // One policy, all three surfaces (`policies/curriculum.ts`).
-    await assertSubjectTaughtAtLevel(tx, target.effectiveLevelId, input.subjectId);
+    await assertSubjectTaughtAtLevel(
+      tx,
+      target.effectiveLevelId,
+      input.subjectId,
+    );
 
     // **`effectiveLevelId` is derived, not a column.** Separated here because
     // the row below is built by spreading `target`, and a derived field carried
@@ -381,11 +571,15 @@ export async function createCourseSchedule(
         where: { id: input.roomId, deletedAt: null },
         select: { branchId: true },
       });
-      if (!room) throw new AppError('NOT_FOUND', 'no such room');
+      if (!room) throw new AppError("NOT_FOUND", "no such room");
       if (room.branchId !== input.branchId) {
-        throw new AppError('VALIDATION_FAILED', 'room is at a different branch', {
-          reason: 'ROOM_BRANCH_MISMATCH',
-        });
+        throw new AppError(
+          "VALIDATION_FAILED",
+          "room is at a different branch",
+          {
+            reason: "ROOM_BRANCH_MISMATCH",
+          },
+        );
       }
       // BR-23: the room's capacity is NOT consulted. It informs planning and
       // refuses nothing — re-adding a check here would resurrect the invariant
@@ -435,9 +629,21 @@ export async function createCourseSchedule(
       select: { id: true },
     });
 
+    await assertStaffIntervals(tx, schedule.id, staff, {
+      anchorDate: input.anchorDate ?? null,
+      effectiveUntil: input.effectiveUntil ?? null,
+    });
     for (const s of staff) {
       await tx.courseScheduleStaff.create({
-        data: { scheduleId: schedule.id, userId: s.userId, position: s.position },
+        data: {
+          scheduleId: schedule.id,
+          userId: s.userId,
+          position: s.position,
+          // R91 — absent is open-ended at that end, which is what every row
+          // written before this revision means.
+          effectiveFrom: s.effectiveFrom ?? null,
+          effectiveUntil: s.effectiveUntil ?? null,
+        },
       });
     }
 
@@ -450,19 +656,25 @@ export async function createCourseSchedule(
     // written ABOVE, so `loadSchedule` sees them and every session materializes
     // with its staffing snapshot already in place.
     const loaded = await loadSchedule(tx, schedule.id);
-    if (!loaded) throw new AppError('INTERNAL', 'schedule vanished mid-transaction');
+    if (!loaded)
+      throw new AppError("INTERNAL", "schedule vanished mid-transaction");
     const materialized = await materializeSchedule(tx, loaded, now, horizon);
 
     // The pg-boss row is enqueued too, so the nightly horizon extension has a
     // record to work from even though the sessions already exist (§16.2: same
     // transaction, via the repository, never `boss.send()`).
-    await enqueue(tx, JOB_QUEUES.sessionMaterialize, { schedule_id: schedule.id }, schedule.id);
+    await enqueue(
+      tx,
+      JOB_QUEUES.sessionMaterialize,
+      { schedule_id: schedule.id },
+      schedule.id,
+    );
 
     await audit.write(tx, {
       actorUserId: actor.userId,
       activeRole: actor.activeRole,
-      actionType: 'courseschedule.create',
-      targetEntity: 'RecurringCourseSchedule',
+      actionType: "courseschedule.create",
+      targetEntity: "RecurringCourseSchedule",
       targetId: schedule.id,
       detail: {
         subject_id: input.subjectId,
@@ -503,7 +715,7 @@ export async function updateCourseSchedule(
     dayOfMonth?: number | null;
     monthOfYear?: number | null;
     anchorDate?: Date | null;
-  effectiveUntil?: Date | null;
+    effectiveUntil?: Date | null;
     version: number;
     /**
      * **SRS Revision 50 — which occurrences this edit applies to.**
@@ -512,7 +724,7 @@ export async function updateCourseSchedule(
      * future un-overridden Sessions of this schedule. `this_and_future` **splits
      * the schedule**: see `splitCourseSchedule`.
      */
-    scope?: 'all_sessions' | 'this_and_future';
+    scope?: "all_sessions" | "this_and_future";
     /**
      * **Who staffs it now** (R90) — replaced whole, or left alone when absent.
      *
@@ -530,14 +742,22 @@ export async function updateCourseSchedule(
     fromDate?: Date;
   },
   now: Date = new Date(),
-): Promise<{ id: string; successorId?: string; materialized: MaterializeResult }> {
+): Promise<{
+  id: string;
+  successorId?: string;
+  materialized: MaterializeResult;
+}> {
   assertCanManage(actor);
 
-  if (data.scope === 'this_and_future') {
+  if (data.scope === "this_and_future") {
     if (!data.fromDate) {
-      throw new AppError('VALIDATION_FAILED', 'this_and_future requires from_date (§4.4, R50)', {
-        reason: 'FROM_DATE_REQUIRED',
-      });
+      throw new AppError(
+        "VALIDATION_FAILED",
+        "this_and_future requires from_date (§4.4, R50)",
+        {
+          reason: "FROM_DATE_REQUIRED",
+        },
+      );
     }
     return splitCourseSchedule(prisma, actor, id, data.fromDate, data, now);
   }
@@ -555,11 +775,27 @@ export async function updateCourseSchedule(
       monthOfYear: true,
       anchorDate: true,
       effectiveUntil: true,
-      staff: { where: { deletedAt: null }, select: { userId: true, position: true } },
+      // R91 — the periods travel with the assignment, or the conflict check
+      // below would treat every stored row as open-ended and refuse a save on a
+      // clash that belongs to a period nobody is editing.
+      staff: {
+        where: { deletedAt: null },
+        select: {
+          userId: true,
+          position: true,
+          effectiveFrom: true,
+          effectiveUntil: true,
+        },
+      },
     },
   });
-  if (!existing) throw new AppError('NOT_FOUND', 'no such schedule');
-  scope.assertCanActOnBranch(actor.roleScopes, MANAGING_ROLE, existing.branchId, 'no such schedule');
+  if (!existing) throw new AppError("NOT_FOUND", "no such schedule");
+  scope.assertCanActOnBranch(
+    actor.roleScopes,
+    MANAGING_ROLE,
+    existing.branchId,
+    "no such schedule",
+  );
 
   const horizon = await horizonFor(prisma, now);
 
@@ -571,14 +807,25 @@ export async function updateCourseSchedule(
       endTime: data.endTime ?? existing.endTime,
       recurrence: data.recurrence ?? existing.recurrence,
       weekdays: data.weekdays ?? existing.weekdays,
-      dayOfMonth: data.dayOfMonth === undefined ? existing.dayOfMonth : data.dayOfMonth,
-      monthOfYear: data.monthOfYear === undefined ? existing.monthOfYear : data.monthOfYear,
-      anchorDate: data.anchorDate === undefined ? existing.anchorDate : data.anchorDate,
+      dayOfMonth:
+        data.dayOfMonth === undefined ? existing.dayOfMonth : data.dayOfMonth,
+      monthOfYear:
+        data.monthOfYear === undefined
+          ? existing.monthOfYear
+          : data.monthOfYear,
+      anchorDate:
+        data.anchorDate === undefined ? existing.anchorDate : data.anchorDate,
       // **The proposed staffing, not the stored one.** Checking the old names
       // would clear a reassignment that double-books the new مؤطِّرة, which is
       // the one conflict a staffing edit is most likely to introduce.
       staff:
-        data.staff ?? existing.staff.map((s) => ({ userId: s.userId, position: s.position })),
+        data.staff ??
+        existing.staff.map((s) => ({
+          userId: s.userId,
+          position: s.position,
+          effectiveFrom: s.effectiveFrom,
+          effectiveUntil: s.effectiveUntil,
+        })),
     };
 
     // Its own sessions are excluded, or the schedule would conflict with itself.
@@ -597,16 +844,28 @@ export async function updateCourseSchedule(
       // because that revision was only ever tested through the CREATE path.
       data: {
         ...(data.title === undefined ? {} : { title: data.title }),
-        ...(data.description === undefined ? {} : { description: data.description }),
+        ...(data.description === undefined
+          ? {}
+          : { description: data.description }),
         ...(data.roomId === undefined ? {} : { roomId: data.roomId }),
         ...(data.startTime === undefined ? {} : { startTime: data.startTime }),
         ...(data.endTime === undefined ? {} : { endTime: data.endTime }),
-        ...(data.recurrence === undefined ? {} : { recurrence: data.recurrence }),
+        ...(data.recurrence === undefined
+          ? {}
+          : { recurrence: data.recurrence }),
         ...(data.weekdays === undefined ? {} : { weekdays: data.weekdays }),
-        ...(data.dayOfMonth === undefined ? {} : { dayOfMonth: data.dayOfMonth }),
-        ...(data.monthOfYear === undefined ? {} : { monthOfYear: data.monthOfYear }),
-        ...(data.anchorDate === undefined ? {} : { anchorDate: data.anchorDate }),
-        ...(data.effectiveUntil === undefined ? {} : { effectiveUntil: data.effectiveUntil }),
+        ...(data.dayOfMonth === undefined
+          ? {}
+          : { dayOfMonth: data.dayOfMonth }),
+        ...(data.monthOfYear === undefined
+          ? {}
+          : { monthOfYear: data.monthOfYear }),
+        ...(data.anchorDate === undefined
+          ? {}
+          : { anchorDate: data.anchorDate }),
+        ...(data.effectiveUntil === undefined
+          ? {}
+          : { effectiveUntil: data.effectiveUntil }),
       },
     });
 
@@ -623,50 +882,64 @@ export async function updateCourseSchedule(
      * visible in the record.
      */
     if (data.staff !== undefined) {
-      const wanted = new Map(data.staff.map((s) => [s.userId, s.position]));
-      const rows = await tx.courseScheduleStaff.findMany({
-        where: { scheduleId: id },
-        select: { id: true, userId: true, deletedAt: true },
+      await assertStaffIntervals(tx, id, data.staff, {
+        anchorDate: merged.anchorDate,
+        effectiveUntil:
+          data.effectiveUntil === undefined
+            ? existing.effectiveUntil
+            : data.effectiveUntil,
       });
-      for (const row of rows) {
-        if (!wanted.has(row.userId) && row.deletedAt === null) {
-          await tx.courseScheduleStaff.update({
-            where: { id: row.id },
-            data: { deletedAt: new Date(), deletedById: actor.userId },
-          });
-        }
-      }
-      for (const [userId, position] of wanted) {
-        const found = rows.find((r) => r.userId === userId);
-        if (found) {
-          await tx.courseScheduleStaff.update({
-            where: { id: found.id },
-            data: { position, deletedAt: null, deletedById: null },
-          });
-        } else {
-          await tx.courseScheduleStaff.create({
-            data: { scheduleId: id, userId, position },
-          });
-        }
+
+      /**
+       * **Withdrawn and rewritten, not matched by user** (R91).
+       *
+       * The pre-R91 version keyed on `(schedule, user)` because the database
+       * did — one row per person. Effective dating retires that: **Safa may
+       * legitimately hold two rows** on one schedule, September–November and
+       * January onward, with Amina's replacement between them. Matching by user
+       * would collapse her two periods into whichever arrived first.
+       *
+       * So the live set is soft-deleted whole and the submitted set written
+       * fresh. Soft, not hard: a name that was on this class stays in the
+       * record, and R43.4's session snapshots — which are the historical truth —
+       * are untouched by any of it.
+       */
+      await tx.courseScheduleStaff.updateMany({
+        where: { scheduleId: id, deletedAt: null },
+        data: { deletedAt: new Date(), deletedById: actor.userId },
+      });
+      for (const s of data.staff) {
+        await tx.courseScheduleStaff.create({
+          data: {
+            scheduleId: id,
+            userId: s.userId,
+            position: s.position,
+            effectiveFrom: s.effectiveFrom ?? null,
+            effectiveUntil: s.effectiveUntil ?? null,
+          },
+        });
       }
     }
 
     const loaded = await loadSchedule(tx, id);
-    if (!loaded) throw new AppError('INTERNAL', 'schedule vanished mid-transaction');
+    if (!loaded)
+      throw new AppError("INTERNAL", "schedule vanished mid-transaction");
     const materialized = await materializeSchedule(tx, loaded, now, horizon);
 
     await audit.write(tx, {
       actorUserId: actor.userId,
       activeRole: actor.activeRole,
-      actionType: 'courseschedule.update',
-      targetEntity: 'RecurringCourseSchedule',
+      actionType: "courseschedule.update",
+      targetEntity: "RecurringCourseSchedule",
       targetId: id,
       detail: {
         sessions_created: materialized.created,
         // Both numbers, because §4.4 makes reporting the untouched ones part of
         // the behaviour rather than a nicety.
         sessions_left_alone: materialized.protectedSessions.length,
-        protected_reasons: materialized.protectedSessions.flatMap((p) => p.reasons),
+        protected_reasons: materialized.protectedSessions.flatMap(
+          (p) => p.reasons,
+        ),
       },
     });
 
@@ -721,11 +994,15 @@ async function splitCourseSchedule(
     dayOfMonth?: number | null;
     monthOfYear?: number | null;
     anchorDate?: Date | null;
-  effectiveUntil?: Date | null;
+    effectiveUntil?: Date | null;
     version: number;
   },
   now: Date,
-): Promise<{ id: string; successorId: string; materialized: MaterializeResult }> {
+): Promise<{
+  id: string;
+  successorId: string;
+  materialized: MaterializeResult;
+}> {
   const existing = await prisma.recurringCourseSchedule.findFirst({
     where: { id, deletedAt: null },
     select: {
@@ -747,19 +1024,40 @@ async function splitCourseSchedule(
       anchorDate: true,
       effectiveUntil: true,
       academicYearId: true,
-      staff: { where: { deletedAt: null }, select: { userId: true, position: true } },
+      // R91 — carried onto the successor unchanged by the split below.
+      staff: {
+        where: { deletedAt: null },
+        select: {
+          userId: true,
+          position: true,
+          effectiveFrom: true,
+          effectiveUntil: true,
+        },
+      },
     },
   });
-  if (!existing) throw new AppError('NOT_FOUND', 'no such schedule');
-  scope.assertCanActOnBranch(actor.roleScopes, MANAGING_ROLE, existing.branchId, 'no such schedule');
+  if (!existing) throw new AppError("NOT_FOUND", "no such schedule");
+  scope.assertCanActOnBranch(
+    actor.roleScopes,
+    MANAGING_ROLE,
+    existing.branchId,
+    "no such schedule",
+  );
 
   const splitOn = atMidnightUtc(fromDate);
   // Splitting at or before a date the series never reached would produce a
   // closed schedule covering nothing and a successor identical to the original.
-  if (existing.effectiveUntil && splitOn > atMidnightUtc(existing.effectiveUntil)) {
-    throw new AppError('VALIDATION_FAILED', 'that date is after this schedule already ends', {
-      reason: 'SPLIT_AFTER_END',
-    });
+  if (
+    existing.effectiveUntil &&
+    splitOn > atMidnightUtc(existing.effectiveUntil)
+  ) {
+    throw new AppError(
+      "VALIDATION_FAILED",
+      "that date is after this schedule already ends",
+      {
+        reason: "SPLIT_AFTER_END",
+      },
+    );
   }
   const closeAt = addDays(splitOn, -1);
   const horizon = await horizonFor(prisma, now);
@@ -769,7 +1067,10 @@ async function splitCourseSchedule(
       // **The successor IS the same class**, split at a date (R50) — so it keeps
       // its name, and an edit that renames it renames both halves' successor.
       title: data.title ?? existing.title,
-      description: data.description === undefined ? existing.description : data.description,
+      description:
+        data.description === undefined
+          ? existing.description
+          : data.description,
       subjectId: existing.subjectId,
       teachingMode: existing.teachingMode,
       levelId: existing.levelId,
@@ -783,10 +1084,16 @@ async function splitCourseSchedule(
       // Cast to the Prisma enums: the caller's values are already validated by
       // the same Zod schema the create path uses, and the database CHECKs are
       // the backstop either way.
-      recurrence: (data.recurrence ?? existing.recurrence) as typeof existing.recurrence,
-      weekdays: (data.weekdays ?? existing.weekdays) as typeof existing.weekdays,
-      dayOfMonth: data.dayOfMonth === undefined ? existing.dayOfMonth : data.dayOfMonth,
-      monthOfYear: data.monthOfYear === undefined ? existing.monthOfYear : data.monthOfYear,
+      recurrence: (data.recurrence ??
+        existing.recurrence) as typeof existing.recurrence,
+      weekdays: (data.weekdays ??
+        existing.weekdays) as typeof existing.weekdays,
+      dayOfMonth:
+        data.dayOfMonth === undefined ? existing.dayOfMonth : data.dayOfMonth,
+      monthOfYear:
+        data.monthOfYear === undefined
+          ? existing.monthOfYear
+          : data.monthOfYear,
       // The successor is anchored at the split, which is what makes
       // `biweekly_alternating` keep counting from the right week.
       anchorDate: splitOn,
@@ -811,7 +1118,15 @@ async function splitCourseSchedule(
     // a clash with rows that are about to stop existing.
     const conflicts = await findConflicts(
       tx,
-      { ...successorValues, staff: existing.staff.map((s) => ({ userId: s.userId, position: s.position })) },
+      {
+        ...successorValues,
+        staff: existing.staff.map((s) => ({
+          userId: s.userId,
+          position: s.position,
+          effectiveFrom: s.effectiveFrom,
+          effectiveUntil: s.effectiveUntil,
+        })),
+      },
       splitOn,
       horizon,
       id,
@@ -830,6 +1145,14 @@ async function splitCourseSchedule(
           scheduleId: successor.id,
           userId: s.userId,
           position: s.position,
+          // **R91 — the periods carry across the split untouched.** A split
+          // divides the RULE at a date; it does not re-decide who is assigned,
+          // and rewriting the bounds here would silently alter a replacement
+          // the administrator arranged separately. Periods that no longer
+          // intersect the successor's life simply resolve to nobody on its
+          // dates, which is the correct answer rather than an error.
+          effectiveFrom: s.effectiveFrom,
+          effectiveUntil: s.effectiveUntil,
         })),
       });
     }
@@ -852,17 +1175,23 @@ async function splitCourseSchedule(
     }
 
     const loaded = await loadSchedule(tx, successor.id);
-    if (!loaded) throw new AppError('INTERNAL', 'successor vanished mid-transaction');
-    const materialized = await materializeSchedule(tx, loaded, splitOn, horizon);
+    if (!loaded)
+      throw new AppError("INTERNAL", "successor vanished mid-transaction");
+    const materialized = await materializeSchedule(
+      tx,
+      loaded,
+      splitOn,
+      horizon,
+    );
 
     await audit.write(tx, {
       actorUserId: actor.userId,
       activeRole: actor.activeRole,
-      actionType: 'courseschedule.update',
-      targetEntity: 'RecurringCourseSchedule',
+      actionType: "courseschedule.update",
+      targetEntity: "RecurringCourseSchedule",
       targetId: id,
       detail: {
-        scope: 'this_and_future',
+        scope: "this_and_future",
         split_on: splitOn.toISOString().slice(0, 10),
         successor_id: successor.id,
         sessions_created: materialized.created,
@@ -889,8 +1218,13 @@ export async function deleteCourseSchedule(
     where: { id, deletedAt: null },
     select: { id: true, branchId: true },
   });
-  if (!schedule) throw new AppError('NOT_FOUND', 'no such schedule');
-  scope.assertCanActOnBranch(actor.roleScopes, MANAGING_ROLE, schedule.branchId, 'no such schedule');
+  if (!schedule) throw new AppError("NOT_FOUND", "no such schedule");
+  scope.assertCanActOnBranch(
+    actor.roleScopes,
+    MANAGING_ROLE,
+    schedule.branchId,
+    "no such schedule",
+  );
 
   return prisma.$transaction(async (tx) => {
     // The SAME predicate materialization uses (§4.4, Revision 43.5). This used
@@ -935,7 +1269,7 @@ export async function deleteCourseSchedule(
     // the ids are what a restore needs to know it is not resurrecting the ones
     // protection deliberately spared.
     await trash.snapshot(tx, {
-      targetEntity: 'RecurringCourseSchedule',
+      targetEntity: "RecurringCourseSchedule",
       targetId: id,
       snapshot: {
         ...row,
@@ -948,15 +1282,20 @@ export async function deleteCourseSchedule(
       deletedById: actor.userId,
     });
 
-    const retained = await tx.session.count({ where: { scheduleId: id, deletedAt: null } });
+    const retained = await tx.session.count({
+      where: { scheduleId: id, deletedAt: null },
+    });
 
     await audit.write(tx, {
       actorUserId: actor.userId,
       activeRole: actor.activeRole,
-      actionType: 'courseschedule.delete',
-      targetEntity: 'RecurringCourseSchedule',
+      actionType: "courseschedule.delete",
+      targetEntity: "RecurringCourseSchedule",
       targetId: id,
-      detail: { future_sessions_removed: removable.length, sessions_retained: retained },
+      detail: {
+        future_sessions_removed: removable.length,
+        sessions_retained: retained,
+      },
     });
     return { futureRemoved: removable.length, retained };
   });
@@ -996,7 +1335,7 @@ export async function listScheduleSessions(
   });
   // Out of reach answers 404, never 403 (§20 rule 17) — the scope is expressed
   // in the lookup rather than as a check afterwards.
-  if (!schedule) throw new AppError('NOT_FOUND', 'no such schedule');
+  if (!schedule) throw new AppError("NOT_FOUND", "no such schedule");
 
   const where = { scheduleId: id, deletedAt: null };
   const window = pageWindow(params);
@@ -1005,7 +1344,7 @@ export async function listScheduleSessions(
       where,
       // Chronological: this list is read as a timetable, and `id` is the stable
       // tiebreaker that keeps pagination from repeating a row.
-      orderBy: [{ date: 'asc' }, { id: 'asc' }],
+      orderBy: [{ date: "asc" }, { id: "asc" }],
       skip: window.skip,
       take: window.take,
       select: {
@@ -1017,7 +1356,13 @@ export async function listScheduleSessions(
         overridden: true,
         roomId: true,
         version: true,
-        staff: { where: { deletedAt: null }, select: { userId: true, position: true } },
+        // **`SessionStaff` carries NO period** (R91). The snapshot IS the
+        // occurrence's own truth — who took this class — so a date on it would
+        // be a second answer to a question the row already settles.
+        staff: {
+          where: { deletedAt: null },
+          select: { userId: true, position: true },
+        },
       },
     }),
     prisma.session.count({ where }),
@@ -1025,7 +1370,12 @@ export async function listScheduleSessions(
 
   const reasons = await protectionReasons(
     prisma as unknown as Prisma.TransactionClient,
-    rows.map((r) => ({ id: r.id, date: r.date, overridden: r.overridden, status: r.status })),
+    rows.map((r) => ({
+      id: r.id,
+      date: r.date,
+      overridden: r.overridden,
+      status: r.status,
+    })),
   );
 
   return page(
@@ -1074,17 +1424,33 @@ export async function previewConflicts(
       monthOfYear: true,
       anchorDate: true,
       effectiveUntil: true,
-      staff: { where: { deletedAt: null }, select: { userId: true, position: true } },
+      staff: {
+        where: { deletedAt: null },
+        select: {
+          userId: true,
+          position: true,
+          effectiveFrom: true,
+          effectiveUntil: true,
+        },
+      },
     },
   });
-  if (!s) throw new AppError('NOT_FOUND', 'no such schedule');
-  scope.assertCanActOnBranch(actor.roleScopes, MANAGING_ROLE, s.branchId, 'no such schedule');
+  if (!s) throw new AppError("NOT_FOUND", "no such schedule");
+  scope.assertCanActOnBranch(
+    actor.roleScopes,
+    MANAGING_ROLE,
+    s.branchId,
+    "no such schedule",
+  );
 
   const horizon = await horizonFor(prisma, now);
   return prisma.$transaction((tx) =>
     findConflicts(
       tx,
-      { ...s, staff: s.staff.map((x) => ({ userId: x.userId, position: x.position })) },
+      {
+        ...s,
+        staff: s.staff.map((x) => ({ userId: x.userId, position: x.position })),
+      },
       now,
       horizon,
       id,
@@ -1112,14 +1478,20 @@ export async function listCourseSchedules(
     subjectId?: string;
     academicYearId?: string;
   } & PageParams,
-): Promise<Page<RecurringCourseSchedule & { staff: { userId: string; position: string }[] }>> {
+): Promise<
+  Page<
+    RecurringCourseSchedule & { staff: { userId: string; position: string }[] }
+  >
+> {
   assertCanRead(actor);
 
   const where: Prisma.RecurringCourseScheduleWhereInput = {
     deletedAt: null,
     ...(filters.branchId ? { branchId: filters.branchId } : {}),
     ...(filters.subjectId ? { subjectId: filters.subjectId } : {}),
-    ...(filters.academicYearId ? { academicYearId: filters.academicYearId } : {}),
+    ...(filters.academicYearId
+      ? { academicYearId: filters.academicYearId }
+      : {}),
     // Applied last so an explicit filter can NARROW the caller's reach but
     // never widen it — a teacher passing `branch_id` still sees only what they
     // staff, because both conditions must hold.
@@ -1134,9 +1506,17 @@ export async function listCourseSchedules(
       take: window.take,
       // A timetable reads by day then by time; `startTime` is a wall-clock
       // column (TD-11), so this is a clock ordering and not an instant one.
-      orderBy: [{ startTime: 'asc' }, { endTime: 'asc' }],
+      orderBy: [{ startTime: "asc" }, { endTime: "asc" }],
       include: {
-        staff: { where: { deletedAt: null }, select: { userId: true, position: true } },
+        staff: {
+          where: { deletedAt: null },
+          select: {
+            userId: true,
+            position: true,
+            effectiveFrom: true,
+            effectiveUntil: true,
+          },
+        },
         // **The labels the ids stand for**, resolved here for the same reason
         // `libraryItemDto` resolves its own (TD-3.13): a client cannot render a
         // timetable from ids, and this list was showing raw UUIDs where every
@@ -1189,9 +1569,10 @@ export async function resolveScheduleRoster(
   });
   // Out of scope answers 404, never 403 (§20 rule 17) — a 403 confirms the
   // schedule exists somewhere the caller may not look.
-  if (!schedule) throw new AppError('NOT_FOUND', 'no such schedule');
+  if (!schedule) throw new AppError("NOT_FOUND", "no such schedule");
 
-  return resolveAudience(prisma, schedule, { id: true, nameArabic: true }) as Promise<
-    { id: string; nameArabic: string | null }[]
-  >;
+  return resolveAudience(prisma, schedule, {
+    id: true,
+    nameArabic: true,
+  }) as Promise<{ id: string; nameArabic: string | null }[]>;
 }

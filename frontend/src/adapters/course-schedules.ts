@@ -22,6 +22,10 @@ export interface Page<T> {
 export interface ScheduleStaff {
   user_id: string;
   position: string;
+  /** R91 — the assignment's inclusive effective period. `null` at either end is
+   *  open-ended there: from the schedule's beginning, through its end. */
+  effective_from?: string | null;
+  effective_until?: string | null;
 }
 
 export interface CourseSchedule {

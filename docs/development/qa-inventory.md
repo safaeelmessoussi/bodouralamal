@@ -50,6 +50,8 @@ rather than summarised.
 | 15b | إدارة المؤطِّرات | `/admin/teachers` | ✓ `teachers.test.tsx` (14) | ✓ `user-management` R88 block (5) | ✓ within 13/13 | population = live `teacher` role; a مؤطِّرة who also studies is listed, a beneficiary who does not teach is not |
 | 15c | Staff-picker warnings | the scheduling form's مؤطِّرة + assistants (R90) | ✓ `staff-picker.test.ts` (18) | ✓ `teaching-candidates` (23) | ✓ 13/13 `verify-staff-picker` | four appraisals; **warnings never block**; assignment is the only authority |
 | 15d | Class staffing on EDIT | `PATCH /admin/course-schedules/{id}` | ✓ | ✓ within the 23 | ✓ within 13/13 | **fixed 2026-08-19** — the form offered the controls and the server refused the key |
+| 15e | Effective-dated staffing | `CourseScheduleStaff.effective_from/until` (R91) | ✓ `effective-staffing.test.ts` (14) | ✓ `effective-staffing` (24) | ✓ 13/13 `verify-effective-staffing` | **history is never rewritten**; one main per date; many assistants |
+| 15f | One-off Session cover | «مؤطّرة هذه الحصة» on `/admin/schedules/{id}/sessions` | ✓ | ✓ within the 24 | ✓ within 13/13 | occurrence staffing **overrides** the schedule, and reaches nothing beyond it |
 | 15a | Capability ≠ authorization | declared-everything teacher (R88.3) | ✓ | ✓ within the 15 | — | no roster, no Quran marker, no class in her calendar |
 | 15 | Content library | `/admin/content`, `/teacher/content` | ✓ | ✓ `library`, `content`, `upload` | ✓ 16/16 recorder | |
 | 16 | Session materials | materials dialog | ✓ | ✓ `session-page` | ✓ 22/22 | |
@@ -94,15 +96,39 @@ under the table.
 | `verify-library-recorder.sh` | 19 | The second recorder entry point, and the sort indicator | 16/16 |
 | `verify-grading.sh` | 14d, 16 | R81 — the exam's own maximum, empty ≠ zero, publish notifies and a draft is silent | 16/16 |
 | `verify-teaching-profile.sh` | 15, 15b | **AQ/X** — ownership of «الملف التدريسي», the population, Arabic weekdays, a range that survives a reload | 13/13 |
-| `verify-staff-picker.sh` | 15c, 10 | **AR** — five مؤطِّرات an administrator must tell apart; all offered, each marked, nothing disabled, the one with no profile assigned anyway, authority following the assignment | 13/13 |
+| `verify-effective-staffing.sh` | 15e, 15f | **R91** — the replacement as four identities: dated rows, Safa twice, per-date occurrences, and a handover that leaves the past alone | 13/13 |
+| `verify-staff-picker.sh` | 15c, 10 | **AR** — five مؤطِّرات an administrator must tell apart; the appraisal, the assignment and the authority pair | **6/13 — KNOWN FAILING, see below** |
 | `verify-schedule-edit.sh` | 10, 11 | «تعديل العنصر» — R50's scopes through the real dialog | 12/12 |
 | `verify-student-flows.sh` | 22 | The beneficiary's own portal: calendar, library, memorisation, grades, account | 11/11 |
 | `verify-calendar-filters.sh` | 20 | **AL** — a filter chosen in one view survives the switch, in the controls, in the URL **and in the other view's request** | 11/11 |
 | `verify-circles-reorder.sh` | 9 | R78.1 — ordering حلقات المواد within a `(level, subject)` pairing | 9/9 |
 | `measure-page-header.sh` | shared UI | Header layout measured in a browser at nine widths | 9/9 widths |
 
-**447 checks across 19 harnesses, all green**, plus `measure-page-header`'s nine
-width measurements — 20 scripts in `scripts/dev/browser/` and 20 rows here.
+**453 of 460 checks across 20 harnesses**, plus `measure-page-header`'s nine
+width measurements — 21 scripts in `scripts/dev/browser/` and 21 rows here.
+**Nineteen harnesses are fully green; `verify-staff-picker` is at 6/13** and is
+described immediately below rather than quietly excluded from the count.
+
+### `verify-staff-picker` — 6/13, open (2026-08-19)
+
+R91 replaced the class form's `StaffPicker` with the dated `StaffingPeriods`
+editor, and this R90 harness has not been brought across correctly. Checks 6, 7,
+8, 10 and 11 fail.
+
+**Established:** «إضافة إسناد» is *not present* on the dialog the harness has
+open, while a select offering the seeded مؤطِّرات *is* — which is `StaffPicker`'s
+lead selector rather than the periods editor. The dialog is very likely not
+rendering `ClassSection` for this fixture's row.
+
+**Not established, and not guessed at:** whether the R90 fixture's schedule is
+being typed as something other than a class by the list, or the form is opening a
+different section. Both would be product findings; neither has been demonstrated.
+
+**What this does NOT put in doubt.** Checks 1, 2, 9, 12 and 13 pass, and R90's
+behaviour is covered by `teaching-candidates.http.integration.test.ts` (23 tests,
+green) and by `verify-effective-staffing` (13/13), which drives the periods
+editor with real data through the same form. What is unverified is this
+harness's interface half.
 
 ### Reconciliation (2026-08-19) — what the old table was hiding
 

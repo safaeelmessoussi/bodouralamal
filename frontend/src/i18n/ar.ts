@@ -942,6 +942,14 @@ export const ar = {
     },
     // §4.4 (المراجعة 50): كل عملية قد تمسّ سلسلة متكررة تسأل عن نطاقها أولًا.
     sessions: {
+      // **R91 §11 — the one-off cover.** The words say *this occurrence*, because
+      // that is exactly the thing an administrator would otherwise have to infer
+      // from what did not change.
+      staffAction: 'مؤطّرة هذه الحصة',
+      staffTitle: 'مؤطّرة حصة {date}',
+      staffHint:
+        'يخص هذه الحصة وحدها. لا يتغيّر إسناد الحصص المتكرّرة، وتعود الحصة التالية إلى المؤطّرة المعتادة.',
+      staffSaved: 'حُفظت مؤطّرة هذه الحصة.',
       title: 'حصص الجدول',
       lede: 'مواعيد هذا الجدول. أي تعديل يسأل أولًا: هذه الحصة وحدها، أم هي وما بعدها، أم كل الحصص.',
       caption: 'الحصص',
@@ -1528,6 +1536,26 @@ export const ar = {
       // The marker on an option, so a concern is visible BEFORE the choice.
       warnMark: 'ملاحظة',
       warnMarkNoProfile: 'بلا ملف',
+      // **R91 — staffing has periods now.** The words say *from* and *until*
+      // rather than naming a database column, and a blank date is explained
+      // rather than left to guess: «من بداية الحصة» is the commonest answer.
+      staffing: 'المؤطّرات وفتراتهن',
+      staffingHint:
+        'كل سطر إسناد بمدّته. لتعويض مؤقّت: حدّي نهاية إسناد المؤطّرة الأولى، وأضيفي المؤطّرة البديلة بمدّة التعويض، ثم سطرًا جديدًا لعودة الأولى.',
+      noStaffing: 'لم تُسنَد أي مؤطّرة بعد.',
+      addStaffing: 'إضافة إسناد',
+      staffMember: 'المؤطّرة',
+      staffPosition: 'الصفة',
+      positionTeacher: 'مؤطّرة مسؤولة',
+      positionAssistant: 'مؤطّرة مساعدة',
+      effectiveFrom: 'من تاريخ',
+      effectiveUntil: 'إلى تاريخ',
+      effectiveFromHint: 'اتركيه فارغًا ليبدأ الإسناد مع بداية الحصة.',
+      effectiveUntilHint: 'اتركيه فارغًا ليستمر إلى نهاية الحصة.',
+      // §6 — واحدة مسؤولة في التاريخ الواحد؛ والمساعدات بلا عدد.
+      overlappingMain: 'لا يمكن أن تكون مؤطّرتان مسؤولتين في تواريخ متداخلة. عدّلي المدد.',
+      overlappingAssignment: 'لهذه المؤطّرة إسنادان متداخلان في هذه الحصة. عدّلي المدد.',
+      staffPeriodOutside: 'مدّة الإسناد خارج فترة الحصة كلّها.',
       fixedAfterCreate:
         'المادة ونمط التدريس وهدفه والفرع والسنة تُحدَّد عند الإنشاء ولا تُعدَّل — تغييرها يعيد توجيه حصص مُولّدة سابقاً.',
       clash: 'القاعة أو أحد المؤطرين مرتبط بحصة أخرى في نفس الوقت. اختر توقيتاً أو قاعة أخرى.',

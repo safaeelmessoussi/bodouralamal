@@ -10,6 +10,7 @@ Contributing to the platform.
 |---|---|
 | [**Engineering constitution**](engineering-constitution.md) | **The laws every implementation must satisfy — required reading before any production code** |
 | [**Platform UX & atomic design**](ux-architecture.md) | **Cross-cutting UI rules — data-first pages, one concept → one component, the Level label, scope, verdicts. Consult before implementing any UI request** |
+| [**Teaching authority**](teaching-authority.md) | **Who may act on whom, and WHEN — the three facts, the period model, and which date each consumer asks about (R88 · R90 · R91)** |
 | [Getting started](getting-started.md) | From clone to a running stack |
 | [Conventions](conventions.md) | Layering, naming, TypeScript, commits, version policy |
 | [Testing](testing.md) | Four layers, what each is for, how to run them |

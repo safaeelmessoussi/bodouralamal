@@ -10,11 +10,14 @@ import {
   type EditScope,
   type ScheduleSession,
 } from '../../adapters/sessions.js';
+import { searchUsers, type UserSummary } from '../../adapters/users.js';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
 import { SessionMaterialsDialog } from '../../components/content/session-materials-dialog.js';
 import { Button } from '../../components/ui/button.js';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
+import { StaffPicker } from '../../components/scheduling/staff-picker.js';
 import { DataTable, type Column, type RowAction, type TableStatus } from '../../components/ui/data-table.js';
+import { FormDialog } from '../../components/ui/form-dialog.js';
 import { Dialog } from '../../components/ui/dialog.js';
 import { DateField, TextField } from '../../components/ui/field.js';
 import { useActiveRole } from '../../contexts/active-role.js';
@@ -71,6 +74,9 @@ export function ScheduleSessionsPage({ scheduleId }: { scheduleId: string }): Re
   const [status, setStatus] = useState<TableStatus>('loading');
   const [editing, setEditing] = useState<ScheduleSession | null>(null);
   const [cancelling, setCancelling] = useState<ScheduleSession | null>(null);
+  /** R91 §11 — the occurrence whose own staffing is being set. */
+  const [staffingFor, setStaffingFor] = useState<ScheduleSession | null>(null);
+  const [teachers, setTeachers] = useState<UserSummary[]>([]);
   /** The saved change awaiting the tell-or-not decision (R83.3). */
   const [notifying, setNotifying] = useState<{
     id: string;
@@ -167,8 +173,23 @@ export function ScheduleSessionsPage({ scheduleId }: { scheduleId: string }): Re
     },
   ];
 
+  useEffect(() => {
+    // The people who may be named. Asked of the server by role, exactly as
+    // إدارة المؤطِّرات does (rule AQ) — never filtered here.
+    void searchUsers(accessToken, { role: 'teacher' })
+      .then((p) => setTeachers(p.data))
+      .catch(() => setTeachers([]));
+  }, [accessToken]);
+
   const actions: RowAction<ScheduleSession>[] = [
     { label: t('common.edit'), onSelect: (r) => setEditing(r) },
+    {
+      // **R91 §11 — a one-off cover.** The schedule answers *who is assigned
+      // for this period*; this answers *who took this lesson*, which is a fact
+      // about one date and lives on the occurrence (R43.4).
+      label: t('admin.sessions.staffAction'),
+      onSelect: (r) => setStaffingFor(r),
+    },
     {
       label: t('session.materialsAction'),
       onSelect: (r) => setMaterialsFor(r.id),
@@ -365,6 +386,25 @@ export function ScheduleSessionsPage({ scheduleId }: { scheduleId: string }): Re
           }
         />
       ) : null}
+      {staffingFor ? (
+        // **The flat picker is exactly right here** (R91 §11): an occurrence IS
+        // a date, so a staffing period on it would be a field with one possible
+        // value. The dated editor belongs to the recurring schedule.
+        <OccurrenceStaffDialog
+          key={staffingFor.id}
+          session={staffingFor}
+          teachers={teachers}
+          onClose={() => setStaffingFor(null)}
+          onSave={async (staff) => {
+            await run(
+              () => updateSession(staffingFor.id, staffingFor.version, { staff }, accessToken),
+              'admin.sessions.staffSaved',
+            );
+            setStaffingFor(null);
+          }}
+        />
+      ) : null}
+
       {scope ? (
         <SessionMaterialsDialog
           sessionId={materialsFor}
@@ -553,5 +593,73 @@ function CancelDialog({
         </div>
       </div>
     </Dialog>
+  );
+}
+
+/**
+ * **Who takes THIS lesson** (R43.4, surfaced by R91 §11).
+ *
+ * A cover for one occurrence: the schedule's own assignments are untouched, the
+ * next occurrence resolves to the normal مؤطِّرة, and a past occurrence keeps
+ * whoever actually took it whatever the schedule later says.
+ *
+ * The sentence on the dialog says so, because *this occurrence only* is exactly
+ * the thing an administrator would otherwise have to infer from what did not
+ * change.
+ */
+function OccurrenceStaffDialog({
+  session,
+  teachers,
+  onClose,
+  onSave,
+}: {
+  session: ScheduleSession;
+  teachers: UserSummary[];
+  onClose: () => void;
+  onSave: (staff: { user_id: string; position: 'teacher' | 'assistant' }[]) => Promise<void>;
+}): ReactNode {
+  const initialLead = session.staff.find((x) => x.position === 'teacher')?.user_id ?? '';
+  const initialAssistants = session.staff
+    .filter((x) => x.position === 'assistant')
+    .map((x) => x.user_id);
+  const [leadId, setLeadId] = useState(initialLead);
+  const [assistantIds, setAssistantIds] = useState<string[]>(initialAssistants);
+  const [busy, setBusy] = useState(false);
+
+  const dirty =
+    leadId !== initialLead ||
+    [...assistantIds].sort().join(',') !== [...initialAssistants].sort().join(',');
+
+  return (
+    <FormDialog
+      open
+      title={t('admin.sessions.staffTitle').replace('{date}', formatDate(session.date))}
+      onCancel={onClose}
+      dirty={dirty}
+      busy={busy}
+      onSubmit={async () => {
+        setBusy(true);
+        try {
+          await onSave([
+            ...(leadId ? [{ user_id: leadId, position: 'teacher' as const }] : []),
+            ...assistantIds.map((id) => ({ user_id: id, position: 'assistant' as const })),
+          ]);
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      <p className="field__hint">{t('admin.sessions.staffHint')}</p>
+      <StaffPicker
+        staff={teachers}
+        leadLabel={t('admin.schedules.teacher')}
+        leadId={leadId}
+        onLead={setLeadId}
+        assistantsLabel={t('admin.schedules.assistants')}
+        assistantsHint={t('admin.schedules.assistantsHint')}
+        assistantIds={assistantIds}
+        onAssistants={setAssistantIds}
+      />
+    </FormDialog>
   );
 }

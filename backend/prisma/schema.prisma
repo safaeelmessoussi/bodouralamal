@@ -1111,12 +1111,38 @@ model CourseScheduleStaff {
 
   position ScheduleStaffPosition
 
+  /// **SRS Revision 91 — the assignment's effective period.**
+  ///
+  /// Calendar dates, never instants (TD-11): a replacement runs *from the 1st to
+  /// the 30th* at each branch's own clock.
+  ///
+  /// **NULL is open-ended at that end**, and is the only ambiguity-free reading:
+  /// `effective_from = NULL` means *from the schedule's own beginning* and
+  /// `effective_until = NULL` means *through the schedule's own end* — which is
+  /// itself possibly open (`RecurringCourseSchedule.effectiveUntil`). Every row
+  /// written before R91 therefore keeps its exact meaning with **no backfill**,
+  /// because a time-blind row already meant *the schedule's whole life*.
+  ///
+  /// Both bounds are INCLUSIVE. A single-day assignment sets them equal, which
+  /// is how one covered lesson is expressed.
+  effectiveFrom  DateTime? @map("effective_from") @db.Date
+  effectiveUntil DateTime? @map("effective_until") @db.Date
+
   createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
   deletedById String?   @map("deleted_by") @db.Uuid
 
-  @@unique([scheduleId, userId])
+  /// **`@@unique([scheduleId, userId])` was withdrawn by R91.** It encoded *one
+  /// person holds one position on one schedule*, true only while an assignment
+  /// had no period — and it refuses the case R91 exists for: Safa until
+  /// November, Amina for November, Safa again from December is two rows for
+  /// Safa. The replacement rules are interval invariants and live in the
+  /// service under TD-15.2's row lock: **no overlapping intervals for one
+  /// person on one schedule**, and **at most one main teacher active on any
+  /// date**.
   @@index([userId, deletedAt])
+  @@index([scheduleId, deletedAt, effectiveFrom, effectiveUntil])
+  @@index([scheduleId, userId, deletedAt])
   @@map("course_schedule_staff")
 }
 

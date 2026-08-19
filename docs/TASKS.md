@@ -578,6 +578,20 @@
   - `kind` derived client-side from the MIME type: §14.6 is a *presentation* rule, and presentation is the client's job
   - Note: the public calendar's *screen* filters (branch · category · level) stay identical for everyone and are compliant. Adding TD-3.4's `subject_id`/`teacher_id`/`academic_year_id` to a **public** screen would need public reference lists that do not exist — `/admin/subjects` is Admin-only by design
 
+### R91 — effective-dated teaching staffing (2026-08-19)
+- [x] **SRS Revision 91** + migration `20260819230000_r91_effective_staffing`. `effective_from`/`effective_until`, inclusive calendar dates, `NULL` open-ended
+- [x] **No backfill, nothing fabricated** — a pre-R91 row's two NULLs already meant *the schedule's whole life*. Proved by **1349 existing integration tests passing unchanged** on the migrated schema
+- [x] `@@unique(schedule_id, user_id)` **withdrawn** — it refuses the case R91 exists for. Replaced by two interval invariants under a `FOR UPDATE` lock; `btree_gist` declined per §28
+- [x] **One shared resolver** `policies/effective-staffing.ts` — `effectiveOn` · `effectiveWithin` · `staffForScheduleOn` · `effectiveSchedulesForTeacher`. No second date predicate anywhere
+- [x] **History is never rewritten**: materialization snapshots per occurrence date; resync reaches only future un-overridden ones; `SessionStaff` overrides the schedule always
+- [x] Every consumer time-aware, **each one's date documented** in the new [teaching-authority](development/teaching-authority.md) page
+- [x] **Defect closed:** `studentsTaughtBy` gained an occurrence arm — R87 §J opened «إدخال الحفظ» for a cover while the resolver handed her an empty roster (rule P inverted)
+- [x] UI: `StaffingPeriods` for a class · «مؤطّرة هذه الحصة» for a one-off cover · three refusals each in Arabic. New rule **AS**
+- [x] R90's conflict query now needs **both** halves — the limitation R90 recorded is closed
+- [x] 222 backend unit · 1373 integration · 613 frontend · 13/13 new browser checks · 18 CI guards · OpenAPI current
+- [ ] **OPEN DEFECT — `verify-staff-picker` at 6/13.** R91 changed the control it drives; «إضافة إسناد» is absent from the dialog it opens while `StaffPicker`'s lead select is present, so it is very likely not rendering `ClassSection` for that fixture's row. Cause not established and not guessed. R90's behaviour is covered elsewhere (23 API tests, and `verify-effective-staffing` 13/13 through the same form)
+- [ ] **NEXT — cross-branch occurrence audience (§D).** Deliberately NOT started: the Owner's brief instructs re-checking capacity before D and stopping after C with a clean tree if D cannot be completed whole. It needs its own migration (a `Session` audience override), one shared audience resolver, the counterpart-Session decision, UI, tests, browser verification and docs
+
 ### R90 — staff-picker planning warnings (2026-08-19)
 - [x] **SRS Revision 89** closes the §14.1 gap: `/admin/teachers` is in the sitemap, with the three ownerships stated
 - [x] **SRS Revision 90 + `GET /admin/teaching-candidates`** (TD-3 registered, OpenAPI generated). Four appraisals; **the list is never shortened and nothing is disabled**

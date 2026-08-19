@@ -1,6 +1,13 @@
-import type { Prisma, PrismaClient } from '../generated/prisma/client.js';
-import { atMidnightUtc, expandSchedule, type ScheduleRecurrence } from '../lib/recurrence.js';
-import { protectionReasons, SELECT_PROTECTABLE } from '../policies/session-protection.js';
+import type { Prisma, PrismaClient } from "../generated/prisma/client.js";
+import {
+  atMidnightUtc,
+  expandSchedule,
+  type ScheduleRecurrence,
+} from "../lib/recurrence.js";
+import {
+  protectionReasons,
+  SELECT_PROTECTABLE,
+} from "../policies/session-protection.js";
 
 /**
  * `session.materialize` — turning a Recurring Course Schedule into dated
@@ -41,8 +48,21 @@ export interface MaterializableSchedule extends ScheduleRecurrence {
   endTime: Date;
   roomId: string | null;
   academicYearId: string;
-  /** Snapshot onto every future session this run touches (Revision 43.4). */
-  staff: { userId: string; position: 'teacher' | 'assistant' }[];
+  /**
+   * Snapshot onto every future session this run touches (Revision 43.4).
+   *
+   * **R91 — each row carries its own effective period**, and each occurrence is
+   * snapshotted with the people assigned on ITS OWN date. That is what makes a
+   * bounded replacement work without touching a single occurrence by hand: the
+   * October sessions get Safa, the November ones get Amina, the December ones
+   * get Safa again, from one edit to the schedule.
+   */
+  staff: {
+    userId: string;
+    position: "teacher" | "assistant";
+    effectiveFrom?: Date | null;
+    effectiveUntil?: Date | null;
+  }[];
 }
 
 export interface MaterializeResult {
@@ -72,7 +92,7 @@ export interface MaterializeResult {
  * missing setting.
  */
 export async function horizonFor(
-  db: Pick<PrismaClient, 'academicYear'>,
+  db: Pick<PrismaClient, "academicYear">,
   today: Date,
 ): Promise<Date> {
   const current = await db.academicYear.findFirst({
@@ -85,7 +105,13 @@ export async function horizonFor(
     // into the next academic year, which the next run will pick up.
     return new Date(Date.UTC(endYear, 7, 31));
   }
-  return new Date(Date.UTC(today.getUTCFullYear() + 1, today.getUTCMonth(), today.getUTCDate()));
+  return new Date(
+    Date.UTC(
+      today.getUTCFullYear() + 1,
+      today.getUTCMonth(),
+      today.getUTCDate(),
+    ),
+  );
 }
 
 /**
@@ -127,7 +153,9 @@ export async function materializeSchedule(
     where: { scheduleId: schedule.id, date: { gte: from, lte: horizon } },
     select: { id: true, date: true },
   });
-  const existingByDate = new Map(existingRows.map((r) => [r.date.toISOString().slice(0, 10), r.id]));
+  const existingByDate = new Map(
+    existingRows.map((r) => [r.date.toISOString().slice(0, 10), r.id]),
+  );
   const protectedIds = await protectedSessionIds(tx, schedule.id, from);
 
   let created = 0;
@@ -150,12 +178,12 @@ export async function materializeSchedule(
         // occurrence, not re-derived from the schedule at read time, so a held
         // session stays historically correct when the schedule later changes.
         roomId: schedule.roomId,
-        status: 'scheduled',
+        status: "scheduled",
         overridden: false,
       },
       select: { id: true },
     });
-    await snapshotStaff(tx, row.id, schedule.staff);
+    await snapshotStaff(tx, row.id, staffOn(schedule.staff, date));
     created += 1;
   }
 
@@ -177,12 +205,17 @@ export async function materializeSchedule(
         roomId: schedule.roomId,
       },
     });
-    await snapshotStaff(tx, row.id, schedule.staff);
+    // **The occurrence's own date decides, not the edit's** (R91). Resyncing
+    // every future session with the whole staff list is precisely how a
+    // replacement would leak outside its period.
+    await snapshotStaff(tx, row.id, staffOn(schedule.staff, row.date));
     resynced += 1;
   }
 
   const wanted = new Set(dates.map((d) => d.toISOString().slice(0, 10)));
-  const orphaned = existingRows.filter((r) => !wanted.has(r.date.toISOString().slice(0, 10)));
+  const orphaned = existingRows.filter(
+    (r) => !wanted.has(r.date.toISOString().slice(0, 10)),
+  );
 
   // A date the rule no longer produces: the schedule moved from Tuesdays to
   // Wednesdays, say. Un-protected orphans are removed so the calendar matches
@@ -209,6 +242,29 @@ export async function materializeSchedule(
 }
 
 /**
+ * **Who is assigned on THIS occurrence's date** (R91).
+ *
+ * Inclusive at both ends, `null` open-ended at that end — the same reading
+ * `policies/effective-staffing.ts` states once for the database side. It is
+ * repeated here as a comparison over already-loaded rows rather than a query,
+ * because materialization holds the whole staff list in memory and asking the
+ * database once per occurrence would be a query per session per edit.
+ */
+function staffOn(
+  staff: MaterializableSchedule["staff"],
+  date: Date,
+): { userId: string; position: "teacher" | "assistant" }[] {
+  const day = date.getTime();
+  return staff
+    .filter(
+      (s) =>
+        (s.effectiveFrom == null || s.effectiveFrom.getTime() <= day) &&
+        (s.effectiveUntil == null || s.effectiveUntil.getTime() >= day),
+    )
+    .map((s) => ({ userId: s.userId, position: s.position }));
+}
+
+/**
  * Writes one occurrence's staffing snapshot (Revision 43.4).
  *
  * Replaces whatever was there rather than merging: the snapshot states *the
@@ -219,7 +275,7 @@ export async function materializeSchedule(
 async function snapshotStaff(
   tx: Prisma.TransactionClient,
   sessionId: string,
-  staff: { userId: string; position: 'teacher' | 'assistant' }[],
+  staff: { userId: string; position: "teacher" | "assistant" }[],
 ): Promise<void> {
   const keep = new Set(staff.map((s) => s.userId));
   const existing = await tx.sessionStaff.findMany({
@@ -229,7 +285,10 @@ async function snapshotStaff(
 
   for (const row of existing) {
     if (!keep.has(row.userId) && row.deletedAt === null) {
-      await tx.sessionStaff.update({ where: { id: row.id }, data: { deletedAt: new Date() } });
+      await tx.sessionStaff.update({
+        where: { id: row.id },
+        data: { deletedAt: new Date() },
+      });
     }
   }
 
@@ -270,7 +329,17 @@ export async function loadSchedule(
       // `expandSchedule` applies it, and a schedule loaded without it would
       // materialize past its end as though the split had never happened.
       effectiveUntil: true,
-      staff: { where: { deletedAt: null }, select: { userId: true, position: true } },
+      // R91 — the periods come with them, so each occurrence can be snapshotted
+      // with the people assigned on its own date.
+      staff: {
+        where: { deletedAt: null },
+        select: {
+          userId: true,
+          position: true,
+          effectiveFrom: true,
+          effectiveUntil: true,
+        },
+      },
     },
   });
   return s;

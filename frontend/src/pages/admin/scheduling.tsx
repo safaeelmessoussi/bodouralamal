@@ -50,6 +50,7 @@ import { useScopeOptions } from '../../hooks/use-scope-options.js';
 import { useSession } from '../../contexts/session.js';
 import { useActiveRole } from '../../contexts/active-role.js';
 import { isDirty } from '../../lib/form-dirty.js';
+import type { StaffingPeriod } from '../../components/scheduling/staffing-periods.js';
 import { useTeachingCandidates } from '../../hooks/use-teaching-candidates.js';
 import { t } from '../../i18n/index.js';
 import { ApiError } from '../../lib/api.js';
@@ -91,6 +92,13 @@ import { Feedback } from '../../components/ui/feedback.js';
 type View = 'list' | 'calendar';
 
 const MODES = ['administrative_group', 'entire_level'] as const;
+/** R91 — the three interval refusals, each with its own sentence. */
+const STAFFING_REFUSALS: Record<string, string> = {
+  OVERLAPPING_MAIN_TEACHER: 'admin.schedules.overlappingMain',
+  OVERLAPPING_ASSIGNMENT: 'admin.schedules.overlappingAssignment',
+  STAFF_PERIOD_OUTSIDE_SCHEDULE: 'admin.schedules.staffPeriodOutside',
+};
+
 const SCOPE_FIELDS = ['branchId', 'levelId', 'groupId', 'subjectId', 'academicYearId'] as const;
 /** What the LIST filters by. A module constant like every other caller's —
  *  the hook no longer depends on identity, but a stable list is still the
@@ -687,7 +695,28 @@ export function SchedulingDialog({
   // enforced nowhere, so putting it on this wire is a further contract change
   // and is recorded as such rather than smuggled in here.
   const [teachers, setTeachers] = useState<UserSummary[]>([]);
-  const [teacherId, setTeacherId] = useState(
+  /**
+   * **R91 — staffing is a list of dated assignments**, for a class.
+   *
+   * `teacherId` + `assistantIds` could not express the association's own cases:
+   * a temporary replacement gives Safa two periods on one schedule, and a flat
+   * lead selector has one slot. The exam and the celebration keep the flat pair
+   * below, because they staff a single dated thing.
+   */
+  const [staffing, setStaffing] = useState<StaffingPeriod[]>(() =>
+    (item?.ids.staff ?? []).map((x) => ({
+      user_id: x.user_id,
+      position: (x.position === 'teacher' ? 'teacher' : 'assistant') as 'teacher' | 'assistant',
+      effective_from: x.effective_from ?? '',
+      effective_until: x.effective_until ?? '',
+    })),
+  );
+  /**
+   * The exam sitting's and the celebration's flat staffing, which R91 did not
+   * change: they staff one dated thing, so a period would be a field with one
+   * possible value. **A class no longer uses these** — see `staffing` above.
+   */
+  const [teacherId] = useState(
     item?.ids.staff.find((x) => x.position === 'teacher')?.user_id ?? '',
   );
   const [assistantIds, setAssistantIds] = useState<string[]>(
@@ -754,6 +783,15 @@ export function SchedulingDialog({
     mode: item?.ids.teachingMode ?? 'administrative_group',
     roomId: item?.ids.roomId ?? '',
     teacherId: item?.ids.staff.find((x) => x.position === 'teacher')?.user_id ?? '',
+    // **R91 — the dated assignments join the dirty check** (rule U). A form
+    // holding an unsaved replacement must not close on a stray click, and
+    // `dirty` defaults to false, so a field left out here is silently lost.
+    staffing: (item?.ids.staff ?? []).map((x) => ({
+      user_id: x.user_id,
+      position: x.position,
+      effective_from: x.effective_from ?? '',
+      effective_until: x.effective_until ?? '',
+    })),
     assistantIds: (item?.ids.staff ?? [])
       .filter((x) => x.position === 'assistant')
       .map((x) => x.user_id)
@@ -778,6 +816,7 @@ export function SchedulingDialog({
       mode,
       roomId,
       teacherId,
+      staffing,
       assistantIds: [...assistantIds].sort(),
       examMode,
       supervisorId,
@@ -980,10 +1019,25 @@ export function SchedulingDialog({
           branchId: scope.value.branchId,
           roomId: roomId || null,
           academicYearId: scope.value.academicYearId,
-          staff: [
-            ...(teacherId ? [{ user_id: teacherId, position: 'teacher' as const }] : []),
-            ...assistantIds.map((id) => ({ user_id: id, position: 'assistant' as const })),
-          ],
+          /**
+           * **R91 — the dated assignments, as typed.**
+           *
+           * A blank date is `null` on the wire, which is *open-ended at that
+           * end*. Converted once, here, at the boundary: a date input produces
+           * `''` and the contract wants `null`, and letting either leak into the
+           * other half is how a bound silently becomes 1970.
+           *
+           * Rows with nobody chosen are dropped rather than refused — an empty
+           * row is a row the administrator started and abandoned, not a request.
+           */
+          staff: staffing
+            .filter((row) => row.user_id !== '')
+            .map((row) => ({
+              user_id: row.user_id,
+              position: row.position,
+              effective_from: row.effective_from === '' ? null : row.effective_from,
+              effective_until: row.effective_until === '' ? null : row.effective_until,
+            })),
         },
         item ? { id: item.id, version: item.version } : null,
         token,
@@ -995,6 +1049,15 @@ export function SchedulingDialog({
       // a different remedy from any other refusal.
       if (error instanceof ApiError && error.code === 'SCHEDULE_CONFLICT') {
         setNotice(t('admin.schedules.clash'));
+      } else if (
+        error instanceof ApiError &&
+        // **R91's interval invariants, in the administrator's words.** The
+        // server names the rule in `details.reason`; a generic «تعذّر الحفظ»
+        // would leave her to guess which of three date rules she broke.
+        typeof (error.details as { reason?: string } | undefined)?.reason === 'string' &&
+        STAFFING_REFUSALS[(error.details as { reason: string }).reason] !== undefined
+      ) {
+        setNotice(t(STAFFING_REFUSALS[(error.details as { reason: string }).reason]!));
       } else if (error instanceof ApiError && error.status === 409) {
         setNotice(t('common.conflict'));
       } else {
@@ -1058,10 +1121,8 @@ export function SchedulingDialog({
             roomId={roomId}
             onRoom={setRoomId}
             teachers={teachers}
-            teacherId={teacherId}
-            onTeacher={setTeacherId}
-            assistantIds={assistantIds}
-            onAssistants={setAssistantIds}
+            staffing={staffing}
+            onStaffing={setStaffing}
             appraisal={appraisal}
           />
         ) : type === 'exam' ? (

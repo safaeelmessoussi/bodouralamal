@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { ScopeSelectors } from '../scope/scope-selectors.js';
 import { SelectField } from '../ui/field.js';
 import { StaffPicker } from './staff-picker.js';
+import { StaffingPeriods, type StaffingPeriod } from './staffing-periods.js';
 import { t } from '../../i18n/index.js';
 import type { ScopeOptions } from '../../hooks/use-scope-options.js';
 import type { TeachingCandidate } from '../../adapters/teaching-candidates.js';
@@ -34,14 +35,13 @@ export interface ClassSectionProps {
   roomId: string;
   onRoom: (v: string) => void;
   teachers: UserSummary[];
-  teacherId: string;
-  onTeacher: (v: string) => void;
+  /** R91 — one row per assignment, each with its own effective period. */
+  staffing: StaffingPeriod[];
+  onStaffing: (next: StaffingPeriod[]) => void;
   /** R90's planning appraisal for the class being planned, keyed by user id.
    *  Absent while the form has no time yet — there is nothing to appraise
    *  against, and an appraisal of a blank class would be noise. */
   appraisal?: Record<string, TeachingCandidate>;
-  assistantIds: string[];
-  onAssistants: (ids: string[]) => void;
 }
 
 export function ClassSection({
@@ -54,11 +54,9 @@ export function ClassSection({
   roomId,
   onRoom,
   teachers,
-  teacherId,
-  onTeacher,
+  staffing,
+  onStaffing,
   appraisal,
-  assistantIds,
-  onAssistants,
 }: ClassSectionProps): ReactNode {
   const chosenRoom = rooms.find((r) => r.id === roomId);
 
@@ -122,28 +120,21 @@ export function ClassSection({
         ]}
       />
 
-      {/* **§4.4c — one primary مؤطِّرة and zero or more assistants**, through the
-          SHARED `StaffPicker` (rule C, corrected 2026-08-19).
+      {/* **§4.4c staffing, with its EFFECTIVE PERIODS** (R91).
 
-          This section hand-wrote a `SelectField` and a `fieldset` of checkboxes
-          — the exact markup `StaffPicker` was extracted to replace, and its own
-          docstring named *a course schedule* as one of its three users while no
-          course schedule used it. The assistants were an expanded checkbox list,
-          which the extraction comment records as the thing that "turns the form
-          into a page of checkboxes for a real roster".
+          The lead-plus-assistants control moved out: it expresses *one lead and
+          any number of assistants*, which a class only had while an assignment
+          carried no period. A temporary replacement is Safa → 30 Nov, Amina
+          1–30 Nov, Safa 1 Dec → open — **two rows for Safa**, which a single
+          «المؤطّرة» selector cannot say.
 
-          Adopting it is also what puts R90's planning warnings here: written
-          once on the shared control, they reach the exam sitting and the
-          celebration the moment those have something to appraise. */}
-      <StaffPicker
+          `StaffPicker` is unchanged and still serves the exam sitting and the
+          celebration, which staff a single dated thing. R90's warnings ride on
+          each row here through the same appraisal. */}
+      <StaffingPeriods
         staff={teachers}
-        leadLabel={t('admin.schedules.teacher')}
-        leadId={teacherId}
-        onLead={onTeacher}
-        assistantsLabel={t('admin.schedules.assistants')}
-        assistantsHint={t('admin.schedules.assistantsHint')}
-        assistantIds={assistantIds}
-        onAssistants={onAssistants}
+        value={staffing}
+        onChange={onStaffing}
         {...(appraisal ? { appraisal } : {})}
       />
     </>

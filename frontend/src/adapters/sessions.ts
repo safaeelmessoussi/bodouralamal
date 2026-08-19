@@ -71,6 +71,18 @@ export interface SessionEdit {
   start_time?: string;
   end_time?: string;
   room_id?: string | null;
+  /**
+   * **This occurrence's own staffing** (R43.4, surfaced by R91 §11).
+   *
+   * A one-off cover: whoever is named here takes THIS lesson and nothing else.
+   * The schedule's assignments are untouched, so the next occurrence resolves
+   * to the normal مؤطِّرة — and a past occurrence keeps whoever actually took
+   * it, whatever the schedule later says.
+   *
+   * **No period**: an occurrence IS a date, so a period on it would be a field
+   * with one possible value.
+   */
+  staff?: { user_id: string; position: 'teacher' | 'assistant' }[];
 }
 
 /**

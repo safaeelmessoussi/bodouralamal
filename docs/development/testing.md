@@ -598,6 +598,21 @@ titled its schedule «حلقة الحفظ» on the strength of it. That Subject 
 مؤطرة who staffs no Quran class — and `verify-portals` reported the correct
 behaviour as a defect. Seeds create the reference data their assertions turn on.
 
+**A fixture created with a raw insert has no occurrences.** `seed-r91-scenario`
+wrote its schedule with `prisma.create` and every per-date assertion came back
+empty — materialization lives in the **service**, and the thing under test was
+exactly that materialization snapshots each occurrence with the staff effective
+on its own date. The seed calls `createCourseSchedule`; a seed that wrote the
+Sessions by hand would be re-implementing the behaviour it exists to prove.
+
+**Navigate to the route that exists.** The same harness read an empty menu for a
+مؤطِّرة whose roster and marker were both correct, because `/dashboard/teacher` is
+not a route — the teacher portal is `/teacher`, and «الصفحة غير موجودة» has no
+menu. **Check what the page actually rendered before believing an absence.**
+
+**`.admin-nav a`, not `nav a`.** All three portals render the same `PortalShell`
+(rule AP), and its menu carries that class.
+
 ### Running them is what makes them coverage
 
 On 2026-08-19 all nineteen harnesses were run for the first time in one pass.

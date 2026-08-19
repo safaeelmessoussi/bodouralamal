@@ -25,9 +25,9 @@
  * being one.
  */
 
-import type { Prisma } from '../generated/prisma/client.js';
-import { toNumber } from '../policies/grading.js';
-import type { Page } from '../lib/pagination.js';
+import type { Prisma } from "../generated/prisma/client.js";
+import { toNumber } from "../policies/grading.js";
+import type { Page } from "../lib/pagination.js";
 
 /**
  * A `Date` column rendered as a TD-11 calendar date.
@@ -109,7 +109,12 @@ export function roomDto(row: {
   branchId: string;
   version: number;
 }): RoomDto {
-  return { id: row.id, name: row.name, branch_id: row.branchId, version: row.version };
+  return {
+    id: row.id,
+    name: row.name,
+    branch_id: row.branchId,
+    version: row.version,
+  };
 }
 
 /* ── Administrative Group (§4.4c, Revision 43) ───────────────────────────── */
@@ -522,7 +527,14 @@ export interface CourseScheduleDto {
   /** R50's bound, published by R55. `null` is open-ended. */
   effective_until: string | null;
   academic_year_id: string;
-  staff: { user_id: string; position: string }[];
+  /** R91 — each assignment with its inclusive effective period. `null` at
+   *  either end is open-ended there. */
+  staff: {
+    user_id: string;
+    position: string;
+    effective_from: string | null;
+    effective_until: string | null;
+  }[];
   /** TD-15: the client sends this back on edit; a stale one is a `409`. */
   version: number;
 }
@@ -542,12 +554,12 @@ function targetOf(row: {
   teachingGroupId: string | null;
 }): string {
   switch (row.teachingMode) {
-    case 'entire_level':
-      return row.levelId ?? '';
-    case 'administrative_group':
-      return row.administrativeGroupId ?? '';
+    case "entire_level":
+      return row.levelId ?? "";
+    case "administrative_group":
+      return row.administrativeGroupId ?? "";
     default:
-      return row.teachingGroupId ?? '';
+      return row.teachingGroupId ?? "";
   }
 }
 
@@ -571,7 +583,12 @@ export function courseScheduleDto(row: {
   anchorDate: Date | null;
   effectiveUntil: Date | null;
   academicYearId: string;
-  staff: { userId: string; position: string }[];
+  staff: {
+    userId: string;
+    position: string;
+    effectiveFrom?: Date | null;
+    effectiveUntil?: Date | null;
+  }[];
   version: number;
   /**
    * **The labels the ids stand for**, resolved server-side — optional because
@@ -597,12 +614,19 @@ export function courseScheduleDto(row: {
     target_id: targetOf(row),
     // Resolved rather than read from one column: only `entire_level` carries a
     // `level_id` of its own, and the other two reach theirs through the target.
-    level_id: row.levelId ?? row.administrativeGroup?.levelId ?? row.teachingGroup?.levelId ?? null,
+    level_id:
+      row.levelId ??
+      row.administrativeGroup?.levelId ??
+      row.teachingGroup?.levelId ??
+      null,
     // Whichever of the three the mode names (§4.4c) — the timetable reads *who
     // this class is for*, and the caller should not have to resolve that from
     // three nullable ids.
     target_name:
-      row.level?.name ?? row.administrativeGroup?.name ?? row.teachingGroup?.name ?? null,
+      row.level?.name ??
+      row.administrativeGroup?.name ??
+      row.teachingGroup?.name ??
+      null,
     branch_id: row.branchId,
     branch_name: row.branch?.name ?? null,
     room_id: row.roomId,
@@ -618,7 +642,12 @@ export function courseScheduleDto(row: {
     // than presenting an open-ended class that is not one.
     effective_until: dateOnly(row.effectiveUntil),
     academic_year_id: row.academicYearId,
-    staff: row.staff.map((s) => ({ user_id: s.userId, position: s.position })),
+    staff: row.staff.map((s) => ({
+      user_id: s.userId,
+      position: s.position,
+      effective_from: dateOnly(s.effectiveFrom ?? null),
+      effective_until: dateOnly(s.effectiveUntil ?? null),
+    })),
     version: row.version,
   };
 }
@@ -679,7 +708,10 @@ export function courseScheduleWriteDto(
   row: Parameters<typeof courseScheduleDto>[0],
   materialized: Parameters<typeof materializationDto>[0],
 ): CourseScheduleWriteDto {
-  return { schedule: courseScheduleDto(row), materialization: materializationDto(materialized) };
+  return {
+    schedule: courseScheduleDto(row),
+    materialization: materializationDto(materialized),
+  };
 }
 
 /** What deleting a schedule removed, and what it deliberately kept (§4.4). */
@@ -820,7 +852,11 @@ export function sessionContentLinkDto(row: {
   sessionId: string;
   contentId: string;
 }): SessionContentLinkDto {
-  return { id: row.id, session_id: row.sessionId, educational_content_id: row.contentId };
+  return {
+    id: row.id,
+    session_id: row.sessionId,
+    educational_content_id: row.contentId,
+  };
 }
 
 /* ── Educational Library (§5.2, §4.9, TD-3.13, Revision 43) ──────────────── */
@@ -943,7 +979,12 @@ export function subjectRefDto(row: {
   displayOrder: number | null;
   version: number;
 }): SubjectRefDto {
-  return { id: row.id, name: row.name, display_order: row.displayOrder, version: row.version };
+  return {
+    id: row.id,
+    name: row.name,
+    display_order: row.displayOrder,
+    version: row.version,
+  };
 }
 
 /**
@@ -1156,7 +1197,8 @@ export function academicYearRefDto(row: {
 
 export interface ApprovalDto {
   id: string;
-  type: 'registration' | 'family-link' | 'child-application' | 'identity-review';
+  type:
+    "registration" | "family-link" | "child-application" | "identity-review";
   /**
    * What a self-service applicant asked to become (Revision 49) — `'teacher'`
    * or `null`. **A hint, never an authority**: it is what makes a staff request
@@ -1170,7 +1212,11 @@ export interface ApprovalDto {
    */
   category: { id: string; name: string } | null;
   /** §14.2 column: Applicant(s). */
-  applicants: { id: string; name: string; role: 'applicant' | 'child' | 'parent' }[];
+  applicants: {
+    id: string;
+    name: string;
+    role: "applicant" | "child" | "parent";
+  }[];
   /** An instant, correctly — a submission is a moment, not a calendar date. */
   submitted_at: string;
   /** §14.2 column: Bundle contents — what approving this will actually change. */
@@ -1211,8 +1257,13 @@ export interface ApprovalDto {
  */
 export function approvalDto(row: {
   id: string;
-  type: 'registration' | 'family-link' | 'child-application' | 'identity-review';
-  applicants: { id: string; nameArabic: string; role: 'applicant' | 'child' | 'parent' }[];
+  type:
+    "registration" | "family-link" | "child-application" | "identity-review";
+  applicants: {
+    id: string;
+    nameArabic: string;
+    role: "applicant" | "child" | "parent";
+  }[];
   submittedAt: Date;
   bundle: { childCount: number; linkCount: number };
   children: {
@@ -1228,9 +1279,16 @@ export function approvalDto(row: {
   return {
     id: row.id,
     type: row.type,
-    applicants: row.applicants.map((a) => ({ id: a.id, name: a.nameArabic, role: a.role })),
+    applicants: row.applicants.map((a) => ({
+      id: a.id,
+      name: a.nameArabic,
+      role: a.role,
+    })),
     submitted_at: row.submittedAt.toISOString(),
-    bundle: { child_count: row.bundle.childCount, link_count: row.bundle.linkCount },
+    bundle: {
+      child_count: row.bundle.childCount,
+      link_count: row.bundle.linkCount,
+    },
     children: row.children.map((c) => ({
       application_id: c.applicationId,
       name: c.nameArabic,
@@ -1242,7 +1300,9 @@ export function approvalDto(row: {
     branch: row.branch ? { id: row.branch.id, name: row.branch.name } : null,
     requested_role: row.requestedRole,
     // Field by field, never a spread — two fields, the same as the branch.
-    category: row.category ? { id: row.category.id, name: row.category.name } : null,
+    category: row.category
+      ? { id: row.category.id, name: row.category.name }
+      : null,
   };
 }
 
@@ -1270,7 +1330,7 @@ export interface SettingDto {
    * `value` stays a **string** whatever the kind, so one control and one audit
    * format serve both. The storage keeps a number a number.
    */
-  kind: 'text' | 'integer';
+  kind: "text" | "integer";
   /** TD-15: sent back on save; a stale one is a `409`. */
   version: number;
 }
@@ -1280,7 +1340,7 @@ export function settingDto(row: {
   label_key: string;
   hint_key: string;
   value: string | null;
-  kind: 'text' | 'integer';
+  kind: "text" | "integer";
   version: number;
 }): SettingDto {
   return {
@@ -1325,7 +1385,11 @@ export interface UserDto {
    * identifier on a staff-only screen (TD-2).
    */
   email: string | null;
-  roles: { role: string; branch_id: string | null; branch_name: string | null }[];
+  roles: {
+    role: string;
+    branch_id: string | null;
+    branch_name: string | null;
+  }[];
   /** TD-15 — what the edit dialog sends back. Its presence here is why there is
    *  no separate single-user read. */
   version: number;
@@ -1550,7 +1614,10 @@ export function eventDefinitionDto(row: {
     recurrence: String(row.recurrenceType),
     recurrence_end_date: dateOnly(row.recurrenceEndDate),
     branch_ids: row.branchScopes.map((b) => b.branchId),
-    staff: row.staff.map((x) => ({ user_id: x.userId, position: String(x.position) })),
+    staff: row.staff.map((x) => ({
+      user_id: x.userId,
+      position: String(x.position),
+    })),
     version: row.version,
   };
 }
@@ -1640,7 +1707,10 @@ export function examDto(row: {
     administrative_group_id: row.administrativeGroupId,
     administrative_group_name: row.administrativeGroup?.name ?? null,
     max_grade: toNumber(row.maxGrade),
-    staff: row.staff.map((s) => ({ user_id: s.userId, position: String(s.position) })),
+    staff: row.staff.map((s) => ({
+      user_id: s.userId,
+      position: String(s.position),
+    })),
     version: row.version,
   };
 }

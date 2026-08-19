@@ -1,6 +1,11 @@
-import type { Prisma, PrismaClient, TeachingMode } from '../generated/prisma/client.js';
-import { AppError } from '../lib/errors.js';
-import * as scope from './branch-scope.js';
+import type {
+  Prisma,
+  PrismaClient,
+  TeachingMode,
+} from "../generated/prisma/client.js";
+import { AppError } from "../lib/errors.js";
+import * as scope from "./branch-scope.js";
+import { calendarDay, effectiveOn } from "./effective-staffing.js";
 
 /**
  * **Roster resolution — the single definition of "which students is this for"
@@ -62,8 +67,9 @@ export interface AudienceSpec {
  */
 export function audienceWhere(spec: AudienceSpec): Prisma.UserWhereInput {
   switch (spec.teachingMode) {
-    case 'entire_level': {
-      if (spec.levelId === null) throw new Error(unreachable('entire_level', 'levelId'));
+    case "entire_level": {
+      if (spec.levelId === null)
+        throw new Error(unreachable("entire_level", "levelId"));
       return {
         deletedAt: null,
         levelEnrollments: {
@@ -80,9 +86,11 @@ export function audienceWhere(spec: AudienceSpec): Prisma.UserWhereInput {
         },
       };
     }
-    case 'administrative_group': {
+    case "administrative_group": {
       if (spec.administrativeGroupId === null) {
-        throw new Error(unreachable('administrative_group', 'administrativeGroupId'));
+        throw new Error(
+          unreachable("administrative_group", "administrativeGroupId"),
+        );
       }
       return {
         deletedAt: null,
@@ -97,9 +105,9 @@ export function audienceWhere(spec: AudienceSpec): Prisma.UserWhereInput {
       // No branch filter here, and none is wanted: the group IS at one branch
       // (§7), so the constraint is already carried by the target itself.
     }
-    case 'teaching_group': {
+    case "teaching_group": {
       if (spec.teachingGroupId === null) {
-        throw new Error(unreachable('teaching_group', 'teachingGroupId'));
+        throw new Error(unreachable("teaching_group", "teachingGroupId"));
       }
       return {
         deletedAt: null,
@@ -135,14 +143,17 @@ export async function resolveAudience(
   return prisma.user.findMany({
     where: audienceWhere(spec),
     select: select ?? { id: true },
-    orderBy: { nameArabic: 'asc' },
+    orderBy: { nameArabic: "asc" },
   }) as Promise<{ id: string }[]>;
 }
 
 /** How many students a schedule's audience resolves to. Used by the TD-8
  *  `session.cancel` audit row, where "how many people did this affect" becomes
  *  unanswerable later once the roster has moved on. */
-export async function audienceSize(prisma: PrismaClient, spec: AudienceSpec): Promise<number> {
+export async function audienceSize(
+  prisma: PrismaClient,
+  spec: AudienceSpec,
+): Promise<number> {
   return prisma.user.count({ where: audienceWhere(spec) });
 }
 
@@ -186,15 +197,65 @@ export async function studentsTaughtBy(
    * single definition of what a member of staff may reach, and a parallel
    * implementation is the drift its own wording warns about.
    */
-  filter: { subjectId?: string } = {},
+  /**
+   * **R91 — which day's assignments count.**
+   *
+   * `on` defaults to **today**, because every existing caller was asking *whom
+   * do I teach now* and reading a time-blind row as the answer. The parameter
+   * exists so a caller with a different date in hand — an occurrence being
+   * graded, a class being planned — says so rather than being silently answered
+   * about today. Each caller's meaning is documented at its call site and in
+   * `docs/development/teaching-authority.md`.
+   *
+   * **A past occurrence is NOT this function's question.** Who actually took a
+   * class is `SessionStaff` (R43.4), and resolving it through the schedule is
+   * precisely what would let a staffing change rewrite history.
+   */
+  filter: { subjectId?: string; on?: Date } = {},
 ): Promise<Prisma.UserWhereInput> {
-  const staffed = { some: { userId: teacherId, deletedAt: null } };
-  const subject = filter.subjectId === undefined ? {} : { subjectId: filter.subjectId };
+  const on = filter.on ?? new Date();
+  const staffed = { some: { userId: teacherId, ...effectiveOn(on) } };
+
+  /**
+   * **The occurrence arm** (R91, §11/§27).
+   *
+   * A مؤطِّرة may be assigned to ONE Session and to no schedule at all — a cover
+   * for a single lesson, which lives in R43.4's snapshot. She must reach that
+   * occurrence's students on its day, and reach nobody through it on any other.
+   *
+   * Without this arm the platform had a menu with no roster behind it: R87 §J
+   * opened «إدخال الحفظ» for a one-off cover while this resolver, which knew
+   * only about schedules, handed her an empty list. Rule **P** inverted.
+   */
+  const covering = await prisma.session.findMany({
+    where: {
+      deletedAt: null,
+      date: calendarDay(on),
+      staff: { some: { userId: teacherId, deletedAt: null } },
+      schedule: {
+        deletedAt: null,
+        ...(filter.subjectId ? { subjectId: filter.subjectId } : {}),
+      },
+    },
+    select: {
+      schedule: {
+        select: {
+          teachingMode: true,
+          levelId: true,
+          administrativeGroupId: true,
+          teachingGroupId: true,
+          branchId: true,
+        },
+      },
+    },
+  });
+  const subject =
+    filter.subjectId === undefined ? {} : { subjectId: filter.subjectId };
 
   const entireLevel = await prisma.recurringCourseSchedule.findMany({
     where: {
       deletedAt: null,
-      teachingMode: 'entire_level',
+      teachingMode: "entire_level",
       staff: staffed,
       ...subject,
     },
@@ -211,7 +272,7 @@ export async function studentsTaughtBy(
             schedules: {
               some: {
                 deletedAt: null,
-                teachingMode: 'administrative_group',
+                teachingMode: "administrative_group",
                 staff: staffed,
                 ...subject,
               },
@@ -227,7 +288,12 @@ export async function studentsTaughtBy(
           teachingGroup: {
             deletedAt: null,
             schedules: {
-              some: { deletedAt: null, teachingMode: 'teaching_group', staff: staffed, ...subject },
+              some: {
+                deletedAt: null,
+                teachingMode: "teaching_group",
+                staff: staffed,
+                ...subject,
+              },
             },
           },
         },
@@ -240,12 +306,18 @@ export async function studentsTaughtBy(
     // enrolled directly in an unsubdivided Level**, making them invisible to
     // their own teacher. The branch is read where R66 put it.
     ...entireLevel
-      .filter((s): s is { levelId: string; branchId: string } => s.levelId !== null)
+      .filter(
+        (s): s is { levelId: string; branchId: string } => s.levelId !== null,
+      )
       .map((s) => ({
         levelEnrollments: {
           some: { deletedAt: null, levelId: s.levelId, branchId: s.branchId },
         },
       })),
+    // The covered occurrences' own audiences, resolved through the SAME
+    // `audienceWhere` every other reader uses (§4.4c) — never a fourth arm
+    // written by hand here.
+    ...covering.map((c) => audienceWhere(c.schedule)),
   ];
 
   return { deletedAt: null, OR: arms };
@@ -260,9 +332,15 @@ export async function studentsTaughtBy(
 export async function teacherBranchIds(
   prisma: PrismaClient,
   teacherId: string,
+  /** R91 — the day whose assignments decide her branches. Today by default:
+   *  uploading content and listing branches are things somebody does *now*. */
+  on: Date = new Date(),
 ): Promise<string[]> {
   const rows = await prisma.recurringCourseSchedule.findMany({
-    where: { deletedAt: null, staff: { some: { userId: teacherId, deletedAt: null } } },
+    where: {
+      deletedAt: null,
+      staff: { some: { userId: teacherId, ...effectiveOn(on) } },
+    },
     select: { branchId: true },
   });
   return [...new Set(rows.map((r) => r.branchId))];
@@ -276,15 +354,43 @@ export async function staffsSession(
   teacherId: string,
   sessionId: string,
 ): Promise<boolean> {
-  const found = await prisma.session.findFirst({
-    where: {
-      id: sessionId,
-      deletedAt: null,
-      schedule: { deletedAt: null, staff: { some: { userId: teacherId, deletedAt: null } } },
-    },
-    select: { id: true },
+  /**
+   * **R91 — the OCCURRENCE's own staffing decides, then the schedule as it
+   * stands on that occurrence's date.**
+   *
+   * This asked only *does she staff the schedule*, time-blind, which after R91
+   * would give a replacement authority over occurrences outside her period and
+   * would strip the previous teacher of the ones she actually took.
+   *
+   * The two arms are the two truths, in precedence order:
+   *
+   * 1. `SessionStaff` — R43.4's snapshot, and an occurrence-specific override
+   *    (a one-off cover) lives here and nowhere else. It is *who took this
+   *    class*, and for a past date it is the only honest answer.
+   * 2. The schedule's assignments **effective on that occurrence's date** — for
+   *    a future occurrence not yet re-snapshotted, and for one whose snapshot
+   *    is being written.
+   */
+  const session = await prisma.session.findFirst({
+    where: { id: sessionId, deletedAt: null },
+    select: { id: true, date: true, scheduleId: true },
   });
-  return found !== null;
+  if (!session) return false;
+
+  const snapshot = await prisma.sessionStaff.count({
+    where: { sessionId: session.id, userId: teacherId, deletedAt: null },
+  });
+  if (snapshot > 0) return true;
+
+  const assigned = await prisma.courseScheduleStaff.count({
+    where: {
+      scheduleId: session.scheduleId,
+      userId: teacherId,
+      ...effectiveOn(session.date),
+      schedule: { deletedAt: null },
+    },
+  });
+  return assigned > 0;
 }
 
 /**
@@ -308,6 +414,9 @@ export async function staffsSession(
 export async function teacherEventScope(
   prisma: PrismaClient,
   teacherId: string,
+  /** R91 — hidden-event visibility is a *now* question: what she is teaching
+   *  today decides what she may see today. */
+  on: Date = new Date(),
 ): Promise<{
   branchIds: string[];
   levelIds: string[];
@@ -315,15 +424,22 @@ export async function teacherEventScope(
   administrativeGroupIds: string[];
 }> {
   const schedules = await prisma.recurringCourseSchedule.findMany({
-    where: { deletedAt: null, staff: { some: { userId: teacherId, deletedAt: null } } },
+    where: {
+      deletedAt: null,
+      staff: { some: { userId: teacherId, ...effectiveOn(on) } },
+    },
     select: {
       branchId: true,
       levelId: true,
       administrativeGroupId: true,
       teachingGroupId: true,
       level: { select: { id: true, categoryId: true } },
-      administrativeGroup: { select: { levelId: true, level: { select: { categoryId: true } } } },
-      teachingGroup: { select: { levelId: true, level: { select: { categoryId: true } } } },
+      administrativeGroup: {
+        select: { levelId: true, level: { select: { categoryId: true } } },
+      },
+      teachingGroup: {
+        select: { levelId: true, level: { select: { categoryId: true } } },
+      },
     },
   });
 
@@ -338,8 +454,13 @@ export async function teacherEventScope(
     if (s.administrativeGroupId) groupIds.add(s.administrativeGroupId);
     if (s.teachingGroupId) teachingGroupIds.push(s.teachingGroupId);
 
-    const level = s.level ?? s.administrativeGroup?.level ?? s.teachingGroup?.level ?? null;
-    const levelId = s.levelId ?? s.administrativeGroup?.levelId ?? s.teachingGroup?.levelId ?? null;
+    const level =
+      s.level ?? s.administrativeGroup?.level ?? s.teachingGroup?.level ?? null;
+    const levelId =
+      s.levelId ??
+      s.administrativeGroup?.levelId ??
+      s.teachingGroup?.levelId ??
+      null;
     if (levelId) levelIds.add(levelId);
     if (level) categoryIds.add(level.categoryId);
   }
@@ -404,7 +525,7 @@ export async function teacherEventScope(
 export async function eventsStaffedBy(
   prisma: PrismaClient,
   userId: string,
-): Promise<Map<string, 'responsible' | 'assistant'>> {
+): Promise<Map<string, "responsible" | "assistant">> {
   const rows = await prisma.eventStaff.findMany({
     where: { userId, deletedAt: null, event: { deletedAt: null } },
     select: { eventId: true, position: true },
@@ -425,7 +546,7 @@ export async function isResponsibleForEvent(
   eventId: string,
 ): Promise<boolean> {
   const row = await prisma.eventStaff.findFirst({
-    where: { userId, eventId, position: 'responsible', deletedAt: null },
+    where: { userId, eventId, position: "responsible", deletedAt: null },
     select: { id: true },
   });
   return row !== null;
@@ -452,25 +573,49 @@ export async function isResponsibleForEvent(
  * **Position-blind**, like every other teaching predicate here: an assistant on
  * a Quran class teaches Quran (R87 §G).
  */
-export async function teachesQuran(prisma: PrismaClient, userId: string): Promise<boolean> {
+export async function teachesQuran(
+  prisma: PrismaClient,
+  userId: string,
+  /** R91 — «إدخال الحفظ» answers *do I teach Quran now*, so the marker is about
+   *  today and about what is still ahead. */
+  on: Date = new Date(),
+): Promise<boolean> {
   const subjectId = await quranSubjectId(prisma);
   if (subjectId === null) return false;
 
+  // **R91 — an assignment that ENDED must not keep the menu open.** This
+  // counted any live staffing row, so a مؤطِّرة whose Quran period finished in
+  // November still saw «إدخال الحفظ» in March and, worse, still resolved a
+  // roster through `studentsTaughtBy`. The period is now part of the question.
   const staffed = await prisma.recurringCourseSchedule.count({
     where: {
       deletedAt: null,
       subjectId,
-      staff: { some: { userId, deletedAt: null } },
+      staff: { some: { userId, ...effectiveOn(on) } },
     },
   });
   if (staffed > 0) return true;
 
-  // **A one-off occurrence counts too** (R87 §J): a مؤطرة assigned to a single
-  // Quran session teaches Quran that day, and the menu that hid the screen from
-  // her would hide the only thing she was asked to do.
+  /**
+   * **A one-off occurrence counts — on ITS OWN DAY** (R87 §J, narrowed by R91).
+   *
+   * R87 opened the screen for a مؤطرة assigned to a single Quran session,
+   * because hiding it would hide the only thing she was asked to do. R91 makes
+   * *which day* part of the question, and the day is **this one**:
+   *
+   * * `{ gte: today }` would open the menu for a cover a month away while
+   *   `studentsTaughtBy` — which answers about today — handed her an empty
+   *   roster. **A menu that opens an empty screen is rule P inverted**, and it
+   *   is worse than a hidden one because it looks like a defect in the data.
+   * * A cover taken last term is history, not a current assignment.
+   *
+   * The marker and the roster now ask the same question of the same day, which
+   * is the property that makes them agree.
+   */
   const occurrence = await prisma.session.count({
     where: {
       deletedAt: null,
+      date: calendarDay(on),
       schedule: { subjectId, deletedAt: null },
       staff: { some: { userId, deletedAt: null } },
     },
@@ -478,7 +623,9 @@ export async function teachesQuran(prisma: PrismaClient, userId: string): Promis
   return occurrence > 0;
 }
 
-export async function quranSubjectId(prisma: PrismaClient): Promise<string | null> {
+export async function quranSubjectId(
+  prisma: PrismaClient,
+): Promise<string | null> {
   const row = await prisma.subject.findFirst({
     where: { tracksQuranProgress: true, deletedAt: null },
     select: { id: true },
@@ -511,8 +658,8 @@ export async function assertCanManageQuranProgress(
 ): Promise<void> {
   if (scope.isSuperAdmin(actor.roleScopes)) return;
 
-  if (scope.hasRole(actor.roleScopes, 'admin')) {
-    const managed = scope.branchesForRole(actor.roleScopes, 'admin');
+  if (scope.hasRole(actor.roleScopes, "admin")) {
+    const managed = scope.branchesForRole(actor.roleScopes, "admin");
     if (managed === null) return;
     const inScope = await prisma.enrollment.findFirst({
       where: { studentId, deletedAt: null, branchId: { in: managed } },
@@ -523,7 +670,7 @@ export async function assertCanManageQuranProgress(
     // reach the student that way, checked below.
   }
 
-  if (scope.hasRole(actor.roleScopes, 'teacher')) {
+  if (scope.hasRole(actor.roleScopes, "teacher")) {
     const subjectId = await quranSubjectId(prisma);
     if (subjectId !== null) {
       const where = await studentsTaughtBy(prisma, actor.userId, { subjectId });
@@ -535,7 +682,7 @@ export async function assertCanManageQuranProgress(
     }
   }
 
-  throw new AppError('NOT_FOUND', 'no such student');
+  throw new AppError("NOT_FOUND", "no such student");
 }
 
 /** What an exam names, for the §4.4c scope test (R58's shape). */
@@ -576,13 +723,22 @@ export async function assertExamInTeacherScope(
   prisma: PrismaClient,
   teacherId: string,
   spec: ExamScopeSpec,
+  /**
+   * **R91 — the date the exam's authority is judged on.**
+   *
+   * The exam's own date when it has one, so a مؤطِّرة authoring a paper for a
+   * sitting inside her replacement period is authorised for it, and one whose
+   * assignment ended before the sitting is not. Falls back to today for the
+   * grade-sheet reads that carry no date of their own.
+   */
+  on: Date = new Date(),
 ): Promise<void> {
   const schedules = await prisma.recurringCourseSchedule.findMany({
     where: {
       deletedAt: null,
       branchId: spec.branchId,
       subjectId: spec.subjectId,
-      staff: { some: { userId: teacherId, deletedAt: null } },
+      staff: { some: { userId: teacherId, ...effectiveOn(on) } },
     },
     select: {
       teachingMode: true,
@@ -595,21 +751,27 @@ export async function assertExamInTeacherScope(
 
   const forThisLevel = schedules.filter(
     (s) =>
-      (s.levelId ?? s.administrativeGroup?.levelId ?? s.teachingGroup?.levelId ?? null) ===
-      spec.levelId,
+      (s.levelId ??
+        s.administrativeGroup?.levelId ??
+        s.teachingGroup?.levelId ??
+        null) === spec.levelId,
   );
 
   if (forThisLevel.length === 0) {
-    throw new AppError('FORBIDDEN', 'this level and subject are outside your teaching scope', {
-      reason: 'EXAM_OUT_OF_SCOPE',
-    });
+    throw new AppError(
+      "FORBIDDEN",
+      "this level and subject are outside your teaching scope",
+      {
+        reason: "EXAM_OUT_OF_SCOPE",
+      },
+    );
   }
 
   if (spec.administrativeGroupId === null) {
     // The whole Level — held, never inferred. See the docstring.
-    if (!forThisLevel.some((s) => s.teachingMode === 'entire_level')) {
-      throw new AppError('FORBIDDEN', 'you do not teach this whole level', {
-        reason: 'WHOLE_LEVEL_OUT_OF_SCOPE',
+    if (!forThisLevel.some((s) => s.teachingMode === "entire_level")) {
+      throw new AppError("FORBIDDEN", "you do not teach this whole level", {
+        reason: "WHOLE_LEVEL_OUT_OF_SCOPE",
       });
     }
     return;
@@ -620,9 +782,13 @@ export async function assertExamInTeacherScope(
   // reused rather than restated.
   const reachable = await teacherEventScope(prisma, teacherId);
   if (!reachable.administrativeGroupIds.includes(spec.administrativeGroupId)) {
-    throw new AppError('FORBIDDEN', 'that group is outside your teaching scope', {
-      reason: 'GROUP_OUT_OF_SCOPE',
-    });
+    throw new AppError(
+      "FORBIDDEN",
+      "that group is outside your teaching scope",
+      {
+        reason: "GROUP_OUT_OF_SCOPE",
+      },
+    );
   }
 }
 
@@ -674,8 +840,8 @@ export async function assertCanAccessStudent(
 ): Promise<void> {
   if (scope.isSuperAdmin(actor.roleScopes)) return;
 
-  if (scope.hasRole(actor.roleScopes, 'admin')) {
-    const managed = scope.branchesForRole(actor.roleScopes, 'admin');
+  if (scope.hasRole(actor.roleScopes, "admin")) {
+    const managed = scope.branchesForRole(actor.roleScopes, "admin");
     if (managed === null) return; // all-branches Admin
 
     // R66 (R70.5) — `Enrollment.branch_id` is the single answer to *where is
@@ -691,13 +857,13 @@ export async function assertCanAccessStudent(
   }
 
   if (
-    scope.hasRole(actor.roleScopes, 'teacher') &&
+    scope.hasRole(actor.roleScopes, "teacher") &&
     (await teachesStudent(prisma, actor.userId, studentId))
   ) {
     return;
   }
 
-  throw new AppError('NOT_FOUND', 'no such student in scope');
+  throw new AppError("NOT_FOUND", "no such student in scope");
 }
 
 /* ── Event audiences (R82) ────────────────────────────────────────────────── */
@@ -749,7 +915,9 @@ export interface EventScopeRows {
   administrativeGroupIds: string[];
 }
 
-export function eventAudienceWhere(scopes: EventScopeRows): Prisma.UserWhereInput | null {
+export function eventAudienceWhere(
+  scopes: EventScopeRows,
+): Prisma.UserWhereInput | null {
   const { branchIds, categoryIds, levelIds, administrativeGroupIds } = scopes;
   if (
     branchIds.length === 0 &&
@@ -774,7 +942,8 @@ export function eventAudienceWhere(scopes: EventScopeRows): Prisma.UserWhereInpu
   const enrolment: Prisma.EnrollmentWhereInput = { deletedAt: null };
   if (branchIds.length > 0) enrolment.branchId = { in: branchIds };
   if (levelIds.length > 0) enrolment.levelId = { in: levelIds };
-  if (categoryIds.length > 0) enrolment.level = { categoryId: { in: categoryIds } };
+  if (categoryIds.length > 0)
+    enrolment.level = { categoryId: { in: categoryIds } };
   if (administrativeGroupIds.length > 0) {
     enrolment.administrativeGroupId = { in: administrativeGroupIds };
     enrolment.administrativeGroup = { deletedAt: null };

@@ -126,7 +126,14 @@ export interface SchedulingIds {
    * have SENT that mode back and rewritten an `entire_level` class's audience.
    */
   teachingMode: string | null;
-  staff: { user_id: string; position: string }[];
+  /** R91 — each assignment with its inclusive effective period; `null` at
+   *  either end is open-ended there. */
+  staff: {
+    user_id: string;
+    position: string;
+    effective_from?: string | null;
+    effective_until?: string | null;
+  }[];
 }
 
 /* ── Reading ─────────────────────────────────────────────────────────────── */
@@ -144,7 +151,14 @@ interface EventDefinitionWire {
   recurrence_end_date: string | null;
   branch_ids: string[];
   /** R71 — who answers for it. Empty for events created before R71. */
-  staff: { user_id: string; position: string }[];
+  /** R91 — each assignment with its inclusive effective period; `null` at
+   *  either end is open-ended there. */
+  staff: {
+    user_id: string;
+    position: string;
+    effective_from?: string | null;
+    effective_until?: string | null;
+  }[];
   version: number;
 }
 
@@ -196,7 +210,12 @@ export function fromSchedule(row: CourseSchedule): SchedulingItem {
       teachingMode: row.teaching_mode,
       subjectId: row.subject_id,
       academicYearId: row.academic_year_id,
-      staff: row.staff.map((x) => ({ user_id: x.user_id, position: x.position })),
+      staff: row.staff.map((x) => ({
+        user_id: x.user_id,
+        position: x.position,
+        effective_from: x.effective_from ?? null,
+        effective_until: x.effective_until ?? null,
+      })),
     },
   };
 }
@@ -226,7 +245,12 @@ function fromEvent(row: EventDefinitionWire): SchedulingItem {
     // gave it**: an event now has somebody answerable for it.
     ids: {
       ...EMPTY_IDS,
-      staff: row.staff.map((x) => ({ user_id: x.user_id, position: x.position })),
+      staff: row.staff.map((x) => ({
+        user_id: x.user_id,
+        position: x.position,
+        effective_from: x.effective_from ?? null,
+        effective_until: x.effective_until ?? null,
+      })),
     },
   };
 }
@@ -268,6 +292,8 @@ function fromExam(row: Exam): SchedulingItem {
       teachingMode: null,
       subjectId: row.subject_id,
       academicYearId: row.academic_year_id,
+      // **An exam sitting has no staffing PERIOD** (R91): it happens on one
+      // date, so a period would be a field with one possible value.
       staff: row.staff.map((x) => ({ user_id: x.user_id, position: x.position })),
     },
   };
@@ -403,7 +429,13 @@ export interface SchedulingInput {
   branchId?: string;
   roomId?: string | null;
   academicYearId?: string;
-  staff?: { user_id: string; position: 'teacher' | 'assistant' }[];
+  staff?: {
+    user_id: string;
+    position: 'teacher' | 'assistant';
+    /** R91 — `null` is open-ended at that end. */
+    effective_from?: string | null;
+    effective_until?: string | null;
+  }[];
 }
 
 /**

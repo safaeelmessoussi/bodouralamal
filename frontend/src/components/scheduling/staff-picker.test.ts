@@ -80,18 +80,37 @@ describe('the picker never offers a refusal', () => {
  * the failure mode rule AE names: *a behaviour each caller must opt into is a
  * behaviour that will be missing somewhere.*
  */
-describe('the class section stopped hand-writing the control (rule C)', () => {
-  it('delegates to the shared picker, like the other two', () => {
-    // Its own docstring named *a course schedule* as one of the picker's three
-    // users while no course schedule used it: the extraction was written down
-    // and only two thirds applied.
-    expect(code(CLASS)).toContain('<StaffPicker');
+describe('the class section hand-writes nothing (rule C)', () => {
+  /**
+   * **Restated 2026-08-19 — the PROPERTY changed, so the check did.**
+   *
+   * It asserted that the class section delegates to `StaffPicker`. R91 gave a
+   * class's assignments **effective periods**, which that control cannot say:
+   * a temporary replacement is Safa → 30 Nov, Amina 1–30 Nov, Safa 1 Dec → open,
+   * and a single «المؤطّرة» selector has one slot for a person who needs two.
+   * The class section now composes `StaffingPeriods`; the exam sitting and the
+   * celebration keep `StaffPicker`, because they staff one dated thing.
+   *
+   * The property that survives, and is what this block was ever about, is
+   * **rule C**: the section composes a shared component and writes no markup of
+   * its own.
+   */
+  it('composes the dated staffing editor', () => {
+    expect(code(CLASS)).toContain('<StaffingPeriods');
+  });
+
+  it('and the flat picker no longer serves a class', () => {
+    // Presence is not absence, the lesson the parity guard records: keeping
+    // both would be two ways to staff one class, and the flat one silently
+    // discards every period.
+    const classSection = code(CLASS).slice(0, code(CLASS).indexOf('ActivitySection'));
+    expect(classSection).not.toContain('<StaffPicker');
   });
 
   it('keeps no checkbox list of its own beside it', () => {
-    // Presence is not absence. The assistants were an expanded checkbox list —
-    // the exact markup the extraction comment records as turning the form into
-    // a page of checkboxes for a real roster.
+    // The assistants were an expanded checkbox list — the exact markup the
+    // extraction comment records as turning the form into a page of checkboxes
+    // for a real roster.
     expect(code(CLASS)).not.toContain('field__choices');
     expect(code(CLASS)).not.toContain('type="checkbox"');
   });

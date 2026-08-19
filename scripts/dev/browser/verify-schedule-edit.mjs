@@ -95,9 +95,21 @@ check(
 /** The reported action: change ONLY «نهاية التكرار», then save. */
 const saved = await evaluate(`(async () => {
   const dialog = document.querySelector('dialog[open], .dialog');
+  /**
+   * **By its LABEL, not by position** (restated 2026-08-19).
+   *
+   * This took the LAST date input on the form. R91 gave a class a staffing
+   * editor whose rows each carry «من تاريخ» and «إلى تاريخ», so the last date
+   * input became a staffing period — the harness edited that instead, saved
+   * successfully, and then correctly reported that the recurrence end had not
+   * changed. A green save and a red assertion, both describing the wrong field.
+   *
+   * The property is unchanged and the selector is.
+   */
+  const labelOf = (el) => el.closest('.field')?.querySelector('label')?.textContent?.trim() ?? '';
   const dates = [...dialog.querySelectorAll('input[type="date"]')];
-  const field = dates[dates.length - 1];
-  const label = field.closest('.field')?.querySelector('label')?.textContent?.trim() ?? '';
+  const field = dates.find((el) => labelOf(el).includes('نهاية')) ?? dates[dates.length - 1];
+  const label = labelOf(field);
   const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
   setter.call(field, '2027-06-30');
   field.dispatchEvent(new Event('input', { bubbles: true }));

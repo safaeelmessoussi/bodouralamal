@@ -1116,6 +1116,48 @@ a container, not a second implementation. The badge shows the server's unread
 count rather than one the client derives, because a count a client computes
 disagrees with the server the moment the list paginates.
 
+## AS · A staffing control must be able to say WHEN
+
+An assignment that carries dates cannot be edited by a control that has one slot
+per person. R91 gave `CourseScheduleStaff` an effective period, and the
+association's own cases stopped fitting the old shape immediately:
+
+| Case | Rows |
+|---|---|
+| ordinary | Safa, main, open → open |
+| temporary replacement | Safa → 30 Nov · **Amina 1–30 Nov** · Safa 1 Dec → open |
+| rest of semester | Safa → 15 Jan · Amina 16 Jan → open |
+
+**Safa holds two rows in the first**, which a single «المؤطّرة» selector cannot
+represent — and which the platform's `(schedule, user)` unique index could not
+store, which is why R91 withdrew it. A class therefore composes
+`StaffingPeriods`: one row per assignment, each with who · main or assistant ·
+from · until.
+
+**`StaffPicker` is unchanged and still correct for an exam sitting, a
+celebration and a single occurrence.** They staff one dated thing, so a period
+would be a field with one possible value. This is not two implementations of one
+concept — it is two concepts, and the test that used to assert *the class
+delegates to StaffPicker* was **restated with its reason**, not deleted.
+
+**A blank date means open-ended, and the form says so.** «اتركيه فارغًا ليبدأ
+الإسناد مع بداية الحصة» — a blank field that carries meaning must state it, or
+the reader supplies her own. The empty string a date input produces is converted
+to `null` **once, at the wire boundary**; letting either leak into the other half
+is how a bound silently becomes 1970.
+
+**A new row defaults to *assistant*.** At most one main مؤطِّرة may be active on
+a date, so defaulting to the capped position would make the commonest next action
+a refusal.
+
+**The server's three interval refusals each get their own sentence.** «لا يمكن أن
+تكون مؤطّرتان مسؤولتين في تواريخ متداخلة» tells an administrator which of three
+date rules she broke; a generic «تعذّر الحفظ» leaves her to guess.
+
+**The one-off cover belongs to the occurrence, not to the recurring form.**
+«مؤطّرة هذه الحصة» on the occurrences screen, and the dialog says *this occurrence
+only* rather than leaving her to infer it from what did not change.
+
 ## AR · Planning data advises the chooser; it never narrows the choice
 
 A screen that knows something about the people in a list may **annotate** them.
@@ -1446,6 +1488,8 @@ system's internals, break on every restyle, and catch nothing.
 | `teaching-group.http.integration.test.ts` | the flat read grants nothing, every filter narrows, TD-10 pagination, Admin-only |
 | [`pages/admin/teachers.test.tsx`](../../frontend/src/pages/admin/teachers.test.tsx) | **AQ** — the action left `المستخدمون` (label *and* component) · the node exists, is routed and sits beside `التسجيلات` · the population is asked by role and never excludes beneficiaries · **one** teaching-profile editor · **X** — the weekday keys resolve, `calendar.weekday` stays absent |
 | `user-management.http.integration.test.ts` | **AQ** — `role=teacher` and `beneficiaries_only` are complements: a مؤطِّرة who also studies is in both lists, and a revoked role leaves the teaching list |
+| [`components/scheduling/staffing-periods.test.ts`](../../frontend/src/components/scheduling/staffing-periods.test.ts) | **AS** — a blank date is open-ended and converted once at the wire · many assistants and one person on several rows · a new row defaults to assistant · each interval refusal has its own Arabic sentence |
+| [`scripts/dev/browser/verify-effective-staffing.mjs`](../../scripts/dev/browser/verify-effective-staffing.mjs) | **AS/R91** — the replacement driven as four identities: dated rows on the form, Safa twice, per-date occurrences, four different answers on one class at one moment, and a handover that leaves the past alone |
 | [`components/scheduling/staff-picker.test.ts`](../../frontend/src/components/scheduling/staff-picker.test.ts) | **AR/C** — all three sections delegate to the shared picker and none hand-rolls a checkbox list · exactly one `filter`, and nothing `disabled` by a warning · every warning kind has its own catalogue key · no warning string reads as a prohibition |
 | `teaching-candidates.http.integration.test.ts` | **AR** — the four appraisals, the containment rule, ranges never merged, *not declared* ≠ *unavailable*, `monthly` indeterminate, a schedule never conflicting with itself · **and both halves of R88.3**: four warnings do not block the assignment, and a flawless profile with no assignment reaches nothing |
 | [`scripts/dev/browser/verify-staff-picker.mjs`](../../scripts/dev/browser/verify-staff-picker.mjs) | **AR** — five مؤطِّرات an administrator must tell apart, in the real form: all offered, each marked, each concern named in Arabic, nothing disabled, the one with no profile assigned anyway, and authority following the assignment |

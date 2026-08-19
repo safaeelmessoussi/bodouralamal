@@ -1,6 +1,6 @@
-import { z } from 'zod';
+import { z } from "zod";
 
-import { uuid, version } from './common.js';
+import { uuid, version } from "./common.js";
 
 /**
  * Zod schemas for the Recurring Course Schedule boundary (TD-3.12, §4.4).
@@ -13,26 +13,30 @@ import { uuid, version } from './common.js';
  * violation rather than as the ambiguity it is. One field cannot be ambiguous.
  */
 
-export const teachingMode = z.enum(['entire_level', 'administrative_group', 'teaching_group']);
+export const teachingMode = z.enum([
+  "entire_level",
+  "administrative_group",
+  "teaching_group",
+]);
 
 export const recurrence = z.enum([
-  'none',
-  'daily',
-  'weekly',
-  'multiple_weekdays',
-  'biweekly_alternating',
-  'monthly',
-  'yearly',
+  "none",
+  "daily",
+  "weekly",
+  "multiple_weekdays",
+  "biweekly_alternating",
+  "monthly",
+  "yearly",
 ]);
 
 export const weekday = z.enum([
-  'monday',
-  'tuesday',
-  'wednesday',
-  'thursday',
-  'friday',
-  'saturday',
-  'sunday',
+  "monday",
+  "tuesday",
+  "wednesday",
+  "thursday",
+  "friday",
+  "saturday",
+  "sunday",
 ]);
 
 /**
@@ -46,17 +50,47 @@ export const weekday = z.enum([
  */
 export const wallClock = z
   .string()
-  .regex(/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/, 'expected HH:MM or HH:MM:SS')
+  .regex(/^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/, "expected HH:MM or HH:MM:SS")
   .transform((v) => new Date(`1970-01-01T${v.length === 5 ? `${v}:00` : v}Z`));
 
 /** A TD-11 calendar date — `YYYY-MM-DD`, never an instant. */
 export const calendarDate = z
   .string()
-  .regex(/^\d{4}-\d{2}-\d{2}$/, 'expected YYYY-MM-DD')
+  .regex(/^\d{4}-\d{2}-\d{2}$/, "expected YYYY-MM-DD")
   .transform((v) => new Date(`${v}T00:00:00Z`));
 
+/**
+ * **R91 — an assignment carries its effective period.**
+ *
+ * Both bounds optional and **explicitly nullable**: `null` is *open-ended at
+ * that end*, and omitting the key means the same thing. That equivalence is
+ * deliberate — a form that clears a date sends `null`, and one that never had
+ * the field sends nothing, and both must mean *no bound*.
+ *
+ * `effective_from <= effective_until` is refused here as well as by the database
+ * CHECK, so the caller gets a field-level message rather than a constraint name.
+ */
 const staff = z
-  .array(z.object({ user_id: uuid, position: z.enum(['teacher', 'assistant']) }).strict())
+  .array(
+    z
+      .object({
+        user_id: uuid,
+        position: z.enum(["teacher", "assistant"]),
+        effective_from: calendarDate.nullable().optional(),
+        effective_until: calendarDate.nullable().optional(),
+      })
+      .strict()
+      .refine(
+        (v) =>
+          v.effective_from == null ||
+          v.effective_until == null ||
+          v.effective_from <= v.effective_until,
+        {
+          message: "effective_from must not follow effective_until",
+          path: ["effective_until"],
+        },
+      ),
+  )
   .max(20);
 
 /** R57 — TD-9's bounds for a class's own name. The same limits `Event` takes,
@@ -148,19 +182,19 @@ export const updateCourseScheduleSchema = z
      * `PATCH /sessions/{id}`, a different endpoint on a different resource,
      * because it edits one occurrence rather than the rule that produced it.
      */
-    scope: z.enum(['all_sessions', 'this_and_future']).optional(),
+    scope: z.enum(["all_sessions", "this_and_future"]).optional(),
     /** The occurrence the split begins at. Refused without the scope, so a
      *  stray date can never silently split a series. */
     from_date: calendarDate.optional(),
   })
   .strict()
-  .refine((v) => v.scope !== 'this_and_future' || v.from_date !== undefined, {
-    path: ['from_date'],
-    message: 'this_and_future requires from_date (§4.4, Revision 50)',
+  .refine((v) => v.scope !== "this_and_future" || v.from_date !== undefined, {
+    path: ["from_date"],
+    message: "this_and_future requires from_date (§4.4, Revision 50)",
   })
-  .refine((v) => v.from_date === undefined || v.scope === 'this_and_future', {
-    path: ['from_date'],
-    message: 'from_date is only meaningful with scope this_and_future',
+  .refine((v) => v.from_date === undefined || v.scope === "this_and_future", {
+    path: ["from_date"],
+    message: "from_date is only meaningful with scope this_and_future",
   });
 
 /** Not `.strict()`: TD-10's `page`/`page_size` share the query object. */
