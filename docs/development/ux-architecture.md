@@ -1116,6 +1116,54 @@ a container, not a second implementation. The badge shows the server's unread
 count rather than one the client derives, because a count a client computes
 disagrees with the server the moment the list paginates.
 
+## AQ · A screen's population is what decides which operations it may offer
+
+A row action is an operation offered to **every row the screen lists**. So the
+question a new action must answer is not *does this operation make sense for this
+entity* but **does it make sense for everybody this screen shows** — and if it
+does not, the action belongs on a screen whose population is the right one.
+
+`الملف التدريسي` was added to `/admin/users` on the reasoning that a teaching
+profile is "a fact about a person, and the person is where the administration
+already goes". The premise was true and the conclusion was wrong: `المستخدمون`
+administers **accounts**, and its population is every account — guardians,
+minors, administrators, beneficiaries. All of them were offered a form asking
+which Subjects they could teach.
+
+**The correction is a screen, not a permission check.** Hiding the action for
+some rows would have left the same screen answering two unrelated questions, and
+`available` per row is for an action that *cannot apply to this row right now*
+(a suspended account cannot be suspended), not for an action that belongs to a
+different subject entirely.
+
+### الشؤون التعليمية holds two populations, and they are not the same list
+
+| Screen | Population | What it decides |
+|---|---|---|
+| `التسجيلات` — `/admin/enrollments` | the people being **taught** | which Level, in which branch, optionally which Group |
+| `إدارة المؤطِّرات` — `/admin/teachers` | the people **doing the teaching** | what each can teach, for which Categories, and when she is free |
+| `المستخدمون` — `/admin/users` | **every account** | identity, roles, branch scope, whether the account may sign in |
+
+**Neither teaching list is derivable from the other.** R79 made *beneficiary* a
+durable fact independent of every role precisely so a مؤطِّرة may also study, so
+`beneficiaries_only=true` and `role=teacher` are **complements, not variants**:
+the same woman appears in both. A screen that reached for `is_beneficiary` as an
+exclusion would have hidden a real member of teaching staff — which is why the
+teaching screen never asks the question at all, and asks the server for the live
+`teacher` assignment instead.
+
+**The population is asked of the server** (rule F): `role=teacher` is a filter
+`/admin/users` already defines, so the page states who it wants rather than
+fetching a page of accounts and filtering it — a client-side predicate over one
+page is wrong the moment there is a second page.
+
+**Narrowing by a fact only this screen holds is not the same defect.** The
+Subject and Category filters here run over the teaching profiles the page has
+already loaded, because the list endpoint carries no planning data and putting it
+there would push a teaching concern onto a general-purpose account contract. The
+line is: **the population comes from the server; a narrowing may come from data
+the server did not carry.**
+
 ## AO · The calendar contract — one architecture, five surfaces
 
 Every calendar in the platform composes the **same** chrome. What differs is
@@ -1329,6 +1377,9 @@ system's internals, break on every restyle, and catch nothing.
 | [`scripts/dev/browser/verify-calendar-filters.mjs`](../../scripts/dev/browser/verify-calendar-filters.mjs) | **AL** — a filter chosen in one view survives the switch, in the controls, in the URL **and in the other view's request** |
 | `grade.http.integration.test.ts` | a student reads published grades and **not drafts**, one student never reads another's, the projection carries no verdict |
 | `teaching-group.http.integration.test.ts` | the flat read grants nothing, every filter narrows, TD-10 pagination, Admin-only |
+| [`pages/admin/teachers.test.tsx`](../../frontend/src/pages/admin/teachers.test.tsx) | **AQ** — the action left `المستخدمون` (label *and* component) · the node exists, is routed and sits beside `التسجيلات` · the population is asked by role and never excludes beneficiaries · **one** teaching-profile editor · **X** — the weekday keys resolve, `calendar.weekday` stays absent |
+| `user-management.http.integration.test.ts` | **AQ** — `role=teacher` and `beneficiaries_only` are complements: a مؤطِّرة who also studies is in both lists, and a revoked role leaves the teaching list |
+| [`scripts/dev/browser/verify-teaching-profile.mjs`](../../scripts/dev/browser/verify-teaching-profile.mjs) | **AQ/X** — 13 steps through the real screens: no profile action on `المستخدمون`, the menu node, the population (teacher · teacher+beneficiary · beneficiary-only), the dialog opened **from the clicked row**, Arabic weekdays with no key leak, and a range that survives a reload |
 
 ### A guard must be able to read what it guards
 

@@ -14,6 +14,8 @@ export DATABASE_URL="${DATABASE_URL//@db:5432/@127.0.0.1:5433}"
 
 export R82_SCENARIO="$(cd backend && npx tsx scripts/seed-r82-scenario.ts | tail -1)"
 export TEACHER_NAME='[r82-browser] المؤطرة'
+export TEACHING_STUDENT_NAME='[r82-browser] المؤطرة الدارسة'
+export BENEFICIARY_NAME='[r82-browser] المعنية'
 export ADMIN_COOKIE="$(bash scripts/dev/issue-dev-session.sh)"
 
 WORK="$(mktemp -d)"

@@ -1,9 +1,10 @@
 /**
- * **The teaching profile, through the real screens** (R88 §19).
+ * **The teaching profile, through the real screens** (R88, and its correction).
  *
- * The point being verified is not that a form saves. It is that the
- * administration can record what a مؤطِّرة says she can teach — and that the
- * screen says, in Arabic, that recording it grants nothing.
+ * The point being verified is not that a form saves. It is *whose screen owns
+ * the question*: المستخدمون administers accounts and must no longer offer a
+ * teaching profile to guardians, minors and administrators; إدارة المؤطِّرات
+ * manages the people who teach, and is where the profile lives.
  */
 import { connect, results } from './cdp.mjs';
 
@@ -31,87 +32,233 @@ async function open(path, ready = 'main') {
     if (ok) break;
     await new Promise((r) => setTimeout(r, 250));
   }
-  await new Promise((r) => setTimeout(r, 900));
+  await new Promise((r) => setTimeout(r, 1200));
 }
 
 const TEACHER = process.env.TEACHER_NAME ?? '';
+const TEACHING_STUDENT = process.env.TEACHING_STUDENT_NAME ?? '';
+const BENEFICIARY = process.env.BENEFICIARY_NAME ?? '';
 
-/** Opens the profile dialog for the seeded مؤطِّرة, by NAME rather than row. */
+/* ── 1–2 · the generic account screen no longer owns the question ───────── */
+
+await open('/admin/users', '.admin-table, .state');
+
+const onUsers = await evaluate(`(() => {
+  // \`DataTable\` renders row actions as INLINE buttons — there is no menu to
+  // open — so every action on the screen is already in the document text. The
+  // first harness clicked each row's last button to "open the menu", which on
+  // this screen is «إيقاف الحساب».
+  const rows = [...document.querySelectorAll('.admin-table tbody tr')];
+  return {
+    rows: rows.length,
+    actions: [...new Set(
+      [...document.querySelectorAll('.admin-table__actions button')].map((b) => b.textContent.trim()),
+    )],
+  };
+})()`);
+
+check(
+  '1 · المستخدمون still lists accounts',
+  onUsers.rows > 0,
+  JSON.stringify(onUsers),
+);
+check(
+  '2 · and offers NO teaching profile on any row',
+  !onUsers.actions.includes('الملف التدريسي'),
+  JSON.stringify(onUsers),
+);
+
+/* ── 3–4 · الشؤون التعليمية carries the new node ────────────────────────── */
+
+const inMenu = await evaluate(`(() => {
+  const link = [...document.querySelectorAll('nav a')].find(
+    (a) => a.textContent.trim() === 'إدارة المؤطِّرات',
+  );
+  return {
+    present: link !== undefined,
+    href: link ? link.getAttribute('href') : null,
+    // Its section heading, to prove it landed under the teaching group rather
+    // than wherever the registry happened to put it.
+    section: link
+      ? (link.closest('[class*=nav__group], li, section, div')?.parentElement?.textContent ?? '').slice(0, 60)
+      : null,
+  };
+})()`);
+
+check(
+  '3 · إدارة المؤطِّرات appears in the navigation',
+  inMenu.present === true,
+  JSON.stringify(inMenu),
+);
+check(
+  '4 · pointing at its own route',
+  inMenu.href === '/admin/teachers',
+  JSON.stringify(inMenu),
+);
+
+/* ── 5–8 · the population ───────────────────────────────────────────────── */
+
+await open('/admin/teachers', '.admin-table, .state');
+
+const listed = await evaluate(`(() => {
+  const rows = [...document.querySelectorAll('.admin-table tbody tr')];
+  const text = rows.map((tr) => tr.textContent);
+  return {
+    count: rows.length,
+    teacher: text.some((t) => t.includes(${JSON.stringify(TEACHER)})),
+    teachingStudent: text.some((t) => t.includes(${JSON.stringify(TEACHING_STUDENT)})),
+    beneficiary: text.some((t) => t.includes(${JSON.stringify(BENEFICIARY)})),
+    // Data first (rule A): the table is populated on arrival, with no filter
+    // touched. A gated screen would show the empty state here instead.
+    headings: [...document.querySelectorAll('.admin-table thead th')].map((th) => th.textContent.trim()),
+    lede: (document.querySelector('main')?.textContent ?? '').includes('بيانات تخطيط'),
+  };
+})()`);
+
+check(
+  '5 · the page lists مؤطِّرات on arrival, with no filter touched',
+  listed.count > 0 && listed.teacher === true,
+  JSON.stringify(listed),
+);
+check(
+  '6 · a مؤطِّرة who is ALSO a beneficiary is listed',
+  listed.teachingStudent === true,
+  JSON.stringify(listed),
+);
+check(
+  '7 · a beneficiary who does not teach is NOT listed',
+  listed.beneficiary === false,
+  JSON.stringify(listed),
+);
+check(
+  '8 · showing المواد · الفئات · الأوقات المتاحة',
+  listed.headings.includes('المواد') &&
+    listed.headings.includes('الفئات') &&
+    listed.headings.includes('الأوقات المتاحة'),
+  JSON.stringify(listed.headings),
+);
+
+/* ── 9–11 · the same dialog, opened from the page that owns it ──────────── */
+
 const openProfile = () =>
   evaluate(`(async () => {
     const row = [...document.querySelectorAll('.admin-table tbody tr')].find((tr) =>
       tr.textContent.includes(${JSON.stringify(TEACHER)}),
     );
     if (!row) return { noRow: true };
-    // The row's action menu, then the profile entry — found by label, because
-    // the order of row actions is DataTable's to decide (rule AC).
+    /**
+     * **Her OWN row's button.** By label, because the order of row actions is
+     * DataTable's to decide (rule AC) — but scoped to the row, because the
+     * first harness searched the whole document and opened the profile of
+     * whichever مؤطِّرة happened to sort first. Every check downstream then
+     * described the wrong person, and read her stale data as persistence.
+     */
     const trigger = [...row.querySelectorAll('button')].find((b) =>
-      b.textContent.includes('الملف التدريسي'),
-    ) ?? [...row.querySelectorAll('button')].pop();
-    if (!trigger) return { noAction: true };
-    trigger.click();
-    await new Promise((r) => setTimeout(r, 700));
-    let entry = [...document.querySelectorAll('button, a')].find((b) =>
       b.textContent.trim() === 'الملف التدريسي',
     );
-    if (entry) {
-      entry.click();
-      await new Promise((r) => setTimeout(r, 1400));
-    }
+    if (!trigger) return { noAction: true };
+    trigger.click();
+    await new Promise((r) => setTimeout(r, 1600));
     const dialog = document.querySelector('dialog[open]');
+    // A مؤطِّرة with no availability yet has no day selector to read, so the
+    // range is added first. The seven raw keys shipped in exactly this control,
+    // and only the browser could show that they had.
+    const stored = dialog ? dialog.querySelectorAll('select').length : 0;
+    if (dialog && stored === 0) {
+      const add = [...dialog.querySelectorAll('button')].find((b) =>
+        b.textContent.includes('إضافة فترة'),
+      );
+      if (add) {
+        add.click();
+        await new Promise((r) => setTimeout(r, 600));
+      }
+    }
     return {
       opened: dialog !== null,
-      // The whole dialog: the first 400 characters stopped before «الأوقات
-      // المتاحة» and reported a section that was on screen as missing.
+      // Whose profile this is. The check that was missing when the harness
+      // opened the wrong row.
+      about: dialog ? (dialog.querySelector('h2, h3, .dialog__title')?.textContent ?? '') : '',
       text: dialog ? dialog.textContent : null,
+      // Ranges the SERVER sent, counted before the harness added one. This is
+      // what "persisted" means; the row this function may have just added is
+      // not evidence of anything.
+      storedRanges: stored,
+      weekdays: dialog
+        ? [...dialog.querySelectorAll('select')].map((s) =>
+            [...s.options].map((o) => o.textContent.trim()),
+          )
+        : [],
     };
   })()`);
 
-await open('/admin/users', '.admin-table, .state');
 const opened = await openProfile();
 
 check(
-  '1 · الملف التدريسي opens from the person it is about',
-  opened.opened === true,
-  JSON.stringify(opened),
+  '9 · الملف التدريسي opens from إدارة المؤطِّرات, for the row it was clicked on',
+  opened.opened === true && opened.about.includes(TEACHER),
+  JSON.stringify({ ...opened, text: (opened.text ?? '').slice(0, 160) }),
 );
 check(
-  '2 · and the screen SAYS it grants no permission',
+  '10 · and the screen SAYS it grants no permission',
   (opened.text ?? '').includes('لا تمنح بذاتها'),
   JSON.stringify({ text: (opened.text ?? '').slice(0, 200) }),
 );
+
+const ARABIC_DAYS = ['الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس', 'الجمعة', 'السبت', 'الأحد'];
+const dayOptions = (opened.weekdays ?? []).find((opts) =>
+  opts.some((o) => ARABIC_DAYS.includes(o)),
+);
 check(
-  '3 · offering Subjects, Categories and availability',
-  (opened.text ?? '').includes('المواد') &&
-    (opened.text ?? '').includes('الفئات') &&
-    (opened.text ?? '').includes('الأوقات المتاحة'),
-  JSON.stringify({ length: (opened.text ?? '').length }),
+  '11 · the weekday selector is in Arabic, and leaks no translation key',
+  dayOptions !== undefined &&
+    ARABIC_DAYS.every((d) => dayOptions.includes(d)) &&
+    !(opened.text ?? '').includes('calendar.weekday') &&
+    !(opened.text ?? '').includes('scheduling.weekday'),
+  JSON.stringify({ dayOptions, selects: (opened.weekdays ?? []).length }),
 );
 
-/* ── record a profile ───────────────────────────────────────────────────── */
+/* ── 12–13 · record availability, and prove it persisted ────────────────── */
 
 const filled = await evaluate(`(async () => {
   const dialog = document.querySelector('dialog[open]');
   if (!dialog) return { noDialog: true };
 
-  // One Subject and one Category through the shared multi-select.
-  const boxes = [...dialog.querySelectorAll('input[type=checkbox]')];
-  if (boxes[0]) boxes[0].click();
+  // The shared multi-select offers each option as a «＋ label» button — there is
+  // no checkbox. Matching on one silently selected nothing and the harness
+  // reported a save that recorded no Subject.
+  const offer = [...dialog.querySelectorAll('button')].find((b) =>
+    b.textContent.trim().startsWith('＋'),
+  );
+  if (offer) offer.click();
+  await new Promise((r) => setTimeout(r, 400));
+
+  // The range \`openProfile\` opened is FILLED, not joined by a second one: two
+  // untouched rows carry the same default hours, and the server refuses the
+  // overlap — correctly, which the first run mistook for a save defect.
+  const set = (el, value) => {
+    const proto = Object.getPrototypeOf(el);
+    Object.getOwnPropertyDescriptor(proto, 'value').set.call(el, value);
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  };
+  const day = dialog.querySelector('select');
+  if (day) set(day, 'wednesday');
+  const times = [...dialog.querySelectorAll('input[type=time]')];
+  if (times[0]) set(times[0], '14:00');
+  if (times[1]) set(times[1], '16:30');
   await new Promise((r) => setTimeout(r, 300));
 
-  const add = [...dialog.querySelectorAll('button')].find((b) => b.textContent.includes('إضافة فترة'));
-  if (!add) return { noAdd: true, buttons: [...dialog.querySelectorAll('button')].map((b) => b.textContent.trim()) };
-  add.click();
-  await new Promise((r) => setTimeout(r, 500));
-
-  const rows = dialog.querySelectorAll('.form__row').length;
-  return { rows, checked: boxes.filter((b) => b.checked).length };
+  return {
+    ranges: dialog.querySelectorAll('select').length,
+    chosen: [...dialog.querySelectorAll('button')].filter((b) =>
+      b.textContent.trim().endsWith('✕'),
+    ).length,
+    times: times.map((i) => i.value),
+    day: day ? day.value : null,
+    // No raw key anywhere in the dialog, not only in the day selector.
+    leaks: /[a-z]+\\.[a-z]+\\.[a-z]+/.test(dialog.textContent),
+  };
 })()`);
-check(
-  '4 · «إضافة فترة» adds an availability row',
-  filled.rows >= 1,
-  JSON.stringify(filled),
-);
 
 const saved = await evaluate(`(async () => {
   const dialog = document.querySelector('dialog[open]');
@@ -124,40 +271,50 @@ const saved = await evaluate(`(async () => {
   const submit = [...dialog.querySelectorAll('button')].find(
     (b) => b.textContent.trim() === 'حفظ',
   );
-  if (!submit) return { noSubmit: true, labels: [...dialog.querySelectorAll('button')].map((b) => b.textContent.trim()) };
+  if (!submit) return { noSubmit: true };
   submit.click();
   await new Promise((r) => setTimeout(r, 2500));
-  const open = document.querySelector('dialog[open]');
+  const still = document.querySelector('dialog[open]');
   return {
-    closed: open === null,
+    closed: still === null,
     notice: document.body.textContent.includes('حُفظ الملف التدريسي'),
-    // What the dialog says when it did NOT close — a refusal a harness swallows
-    // is a defect it reports as a mystery.
-    stillSays: open ? open.textContent.slice(0, 200) : null,
+    stillSays: still ? still.textContent.slice(0, 200) : null,
   };
 })()`);
+
 check(
-  '5 · saving persists and reports it',
-  saved.closed === true && saved.notice === true,
-  JSON.stringify(saved),
+  '12 · a Subject and an availability range can be recorded and saved',
+  filled.ranges >= 1 &&
+    filled.chosen >= 1 &&
+    filled.day === 'wednesday' &&
+    filled.leaks === false &&
+    saved.closed === true &&
+    saved.notice === true,
+  JSON.stringify({ filled, saved }),
 );
 
-/* ── it survives a reload, which is what «persisted» means ──────────────── */
-
-await open('/admin/users', '.admin-table, .state');
+await open('/admin/teachers', '.admin-table, .state');
 const reopened = await openProfile();
 const persisted = await evaluate(`(() => {
   const dialog = document.querySelector('dialog[open]');
   if (!dialog) return { noDialog: true };
+  const day = dialog.querySelector('select');
   return {
-    checked: [...dialog.querySelectorAll('input[type=checkbox]')].filter((b) => b.checked).length,
-    ranges: dialog.querySelectorAll('.form__row').length,
+    chosen: [...dialog.querySelectorAll('button')].filter((b) =>
+      b.textContent.trim().endsWith('✕'),
+    ).length,
+    day: day ? day.value : null,
+    times: [...dialog.querySelectorAll('input[type=time]')].map((i) => i.value),
   };
 })()`);
+
 check(
-  '6 · and it is still there after a reload',
-  reopened.opened === true && (persisted.checked >= 1 || persisted.ranges >= 1),
-  JSON.stringify(persisted),
+  '13 · and it is still there after a reload',
+  reopened.opened === true &&
+    reopened.storedRanges >= 1 &&
+    persisted.day === 'wednesday' &&
+    persisted.chosen >= 1,
+  JSON.stringify({ storedRanges: reopened.storedRanges, ...persisted }),
 );
 
 close();

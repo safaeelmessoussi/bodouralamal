@@ -46,7 +46,8 @@ rather than summarised.
 | 14b | Event audience | scope → recipients (R82.7) | ✓ | ✓ `notification-targets` | ✓ within 19/19 | Level · Branch+Category · Category-wide · global |
 | 14c | Personal calendar | `GET /me/calendar` (R82.8) | ✓ | ✓ `notification-targets` | ✓ within 19/19 | asked as each of three people |
 | 14d | Grade published | publish → notice (R82.4) | ✓ | ✓ `notification-targets` | ✓ within `verify-grading` | draft is silent; republish idempotent |
-| 15 | Teaching profile | «الملف التدريسي» on المستخدمون (R88) | ✓ | ✓ `teaching-profile` (15) | ✓ 6/6 `verify-teaching-profile` | **planning data**; the screen says it grants nothing |
+| 15 | Teaching profile | «الملف التدريسي» on **إدارة المؤطِّرات** (R88) | ✓ | ✓ `teaching-profile` (15) | ✓ 13/13 `verify-teaching-profile` | **planning data**; the screen says it grants nothing. Moved off `المستخدمون` 2026-08-19 — see 15b |
+| 15b | إدارة المؤطِّرات | `/admin/teachers` | ✓ `teachers.test.tsx` (14) | ✓ `user-management` R88 block (5) | ✓ within 13/13 | population = live `teacher` role; a مؤطِّرة who also studies is listed, a beneficiary who does not teach is not |
 | 15a | Capability ≠ authorization | declared-everything teacher (R88.3) | ✓ | ✓ within the 15 | — | no roster, no Quran marker, no class in her calendar |
 | 15 | Content library | `/admin/content`, `/teacher/content` | ✓ | ✓ `library`, `content`, `upload` | ✓ 16/16 recorder | |
 | 16 | Session materials | materials dialog | ✓ | ✓ `session-page` | ✓ 22/22 | |
@@ -81,9 +82,18 @@ rather than summarised.
 | `verify-sorting.sh` | Sort contract, four tables | 39/39 |
 | `verify-public-calendar.sh` | قائمة / تقويم, anonymous | 18/18 |
 | `verify-enrolment-gender.sh` | R79 beneficiary identity (six shapes) + R27/BR-21 Level narrowing | 17/17 |
+| `verify-teaching-profile.sh` | R88 — ownership of «الملف التدريسي», population, Arabic weekdays | 13/13 |
 | `measure-page-header.sh` | Header layout, nine widths | 9/9 |
 
-**181 browser checks across ten harnesses.**
+**194 browser checks across eleven harnesses.**
+
+> **This table is behind the directory** (noted 2026-08-19). `scripts/dev/browser/`
+> also holds `verify-grading`, `verify-portals`, `verify-student-flows`,
+> `verify-calendar-filters`, `verify-calendar-header`, `verify-calendar-surfaces`,
+> `verify-dialog-states` and `verify-ux-slice`, each cited from the rule it guards
+> in [ux-architecture](ux-architecture.md#the-guards) but never added here. The
+> counts above therefore understate coverage; folding them in means re-running
+> each for its current tally, which is its own task.
 
 **The beneficiary-identification gap is closed** (R79, 2026-08-18): `is_beneficiary`
 is a durable fact on `User`, independent of every role and of every enrolment. The

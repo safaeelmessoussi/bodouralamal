@@ -578,6 +578,16 @@
   - `kind` derived client-side from the MIME type: §14.6 is a *presentation* rule, and presentation is the client's job
   - Note: the public calendar's *screen* filters (branch · category · level) stay identical for everyone and are compliant. Adding TD-3.4's `subject_id`/`teacher_id`/`academic_year_id` to a **public** screen would need public reference lists that do not exist — `/admin/subjects` is Admin-only by design
 
+### R88 correction — إدارة المؤطِّرات gets its own screen (2026-08-19)
+- [x] **The row action left `المستخدمون`.** A teaching profile was offered on a screen whose population is every account — guardians, minors, administrators. The backend is untouched; only ownership moved. New rule **AQ** in [ux-architecture](development/ux-architecture.md)
+- [x] `/admin/teachers` under الشؤون التعليمية, beside `التسجيلات`: the section now holds the people being **taught** and the people **doing the teaching**
+- [x] **Population asked of the server** (`role=teacher`), never `is_beneficiary` as an exclusion — a مؤطِّرة who also studies is listed, proved in the browser and at the API. `role=teacher` and `beneficiaries_only` are **complements**
+- [x] **The R88 dialog reused unchanged** — one teaching-profile editor, asserted by a source scan
+- [x] **Weekday i18n root-caused:** `calendar.weekday.*` never existed (labels live at `scheduling.weekday.*`), and `resolves.test.ts` scanned only *quoted literals*, so a computed key was invisible to it. The guard now resolves every **computed** key's namespace, and was proved against the defect before the fix
+- [x] Time inputs use the platform's `TextField` + `scheduling.timeHint` — the same control `RecurrenceEditor` uses for the same value; a hard-coded «HH:MM» is gone
+- [x] 13/13 browser checks; 14 frontend tests; 5 backend HTTP tests. **Two harness defects found and fixed**: it searched the whole document for the row action and opened the wrong مؤطِّرة's profile, then read her stale data as persistence; and it clicked each row's last button to "open a menu" that `DataTable` does not have — on `المستخدمون` that button is «إيقاف الحساب»
+- [ ] **§14.1 does not list `/admin/teachers`** — the sitemap is authoritative ("no invented sections"), so it needs a one-line addition. **Document Owner's edit**, not this agent's
+
 ### Admin Dashboard — session management and content (Owner priority, 2026-08-05)
 - [x] **Recurrence edit scopes — APPLIED to `docs/SRS.md` as Revision 50** (Owner-authorised direct edit, 2026-08-05). The SRS is the source of truth; `SRS-PROPOSAL-R50.md` is retained for the rationale
   - *This session only* and *all sessions* are **already built**; only *this and all future* lacked a mechanism

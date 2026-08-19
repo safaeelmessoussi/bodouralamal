@@ -35,14 +35,23 @@ import { describe, expect, it } from "vitest";
  * whose blind spot is written down.
  */
 
-/** Queries that legitimately require a live group, with the reason. */
-const GROUP_SPECIFIC_BY_DESIGN: Record<string, string> = {
-  // The audit's P2, left deliberately: it degrades the calendar's *prefill*
-  // only — no wrong data, nothing hidden that authorization would allow — and
-  // the Owner scoped it out of this slice.
-  "calendar.service.ts:676":
-    "prefill only; recorded as P2, deliberately out of scope",
-};
+/**
+ * Queries that legitimately require a live group, with the reason.
+ *
+ * **Empty, and that is the point** (2026-08-19). It held one entry — the
+ * calendar's scope prefill, recorded as the audit's P2 and deliberately scoped
+ * out — and the guard then failed, because the query had drifted from line 676
+ * to line 836 and no longer matched its own exemption. **An allowlist keyed by
+ * LINE NUMBER expires whenever the file above it changes**, which is a guard
+ * that fails for a reason unrelated to what it guards. The occasion was used to
+ * fix the query instead: a beneficiary enrolled directly in an unsubdivided
+ * Level now gets her scope prefill, which is the sixth instance of this class.
+ *
+ * If a genuinely group-specific enrolment query ever needs exempting here,
+ * **key it by something the file cannot invalidate** — a nearby marker comment
+ * or the query's own shape — rather than adding another line number.
+ */
+const GROUP_SPECIFIC_BY_DESIGN: Record<string, string> = {};
 
 function blockAt(source: string, from: number): string {
   let depth = 0;

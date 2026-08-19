@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { ar } from './ar.js';
 import { t, tList } from './index.js';
 
 /**
@@ -63,8 +64,6 @@ function usages(): Usage[] {
     // defect. A test asserting a miss is not a screen rendering one.
     if (/\.test\.tsx?$/.test(path)) continue;
     const code = stripComments(text);
-    // Single- or double-quoted literal only — a template literal is a computed
-    // key and belongs to a registry guard, not to this one.
     for (const m of code.matchAll(/\b(t|tList)\((['"])([A-Za-z0-9_.]+)\2/g)) {
       found.push({ file: path.replace('/src/', ''), key: m[3]!, fn: m[1] as 't' | 'tList' });
     }
@@ -72,7 +71,54 @@ function usages(): Usage[] {
   return found;
 }
 
+/**
+ * **The computed keys' NAMESPACE, which is checkable even when the leaf is not**
+ * (2026-08-19).
+ *
+ * This guard scanned quoted literals only, and said so: *"a template literal is
+ * a computed key and belongs to a registry guard, not to this one."* Then
+ * `t(`calendar.weekday.${'${'}d}`)` shipped — pointing at a namespace that does not
+ * exist, because the weekday labels live under `scheduling.weekday`. Seven raw
+ * keys rendered on screen, and every test passed.
+ *
+ * The leaf genuinely cannot be resolved here; **the prefix can**. A computed key
+ * `a.b.${'${'}x}` requires `a.b` to be an OBJECT in the catalogue, and asserting that
+ * would have caught this the moment it was written. It is the cheap half of the
+ * registry guard that page still recommends, and it closes the class rather than
+ * the instance.
+ */
+function computedPrefixes(): { file: string; prefix: string }[] {
+  const found: { file: string; prefix: string }[] = [];
+  for (const [path, text] of Object.entries(RAW)) {
+    if (path.endsWith('/i18n/ar.ts') || path.endsWith('/i18n/index.ts')) continue;
+    if (/\.test\.tsx?$/.test(path)) continue;
+    const code = stripComments(text);
+    // `t(`some.namespace.${'${'}expr}`)` — the literal head before the first hole.
+    for (const m of code.matchAll(/\b(?:t|tList)\(`([A-Za-z0-9_.]+)\.\$\{/g)) {
+      found.push({ file: path.replace('/src/', ''), prefix: m[1]! });
+    }
+  }
+  return found;
+}
+
 const ALL = usages();
+const COMPUTED = computedPrefixes();
+
+describe('every COMPUTED key points at a namespace that exists', () => {
+  it('finds computed keys at all — this guard exists because one escaped', () => {
+    expect(COMPUTED.length).toBeGreaterThan(0);
+  });
+
+  it('resolves each prefix to an object in the catalogue', () => {
+    const offenders = COMPUTED.filter(({ prefix }) => {
+      const node = prefix
+        .split('.')
+        .reduce<unknown>((acc, part) => (acc as Record<string, unknown>)?.[part], ar);
+      return typeof node !== 'object' || node === null;
+    }).map(({ file, prefix }) => `${prefix}  (${file})`);
+    expect(offenders).toEqual([]);
+  });
+});
 
 describe('every literal translation key resolves', () => {
   it('finds keys to check at all — a scan that matches nothing proves nothing', () => {

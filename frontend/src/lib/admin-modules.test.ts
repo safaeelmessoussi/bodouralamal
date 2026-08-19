@@ -53,6 +53,15 @@ describe('the registry matches §14.1', () => {
         '/admin/categories',
         '/admin/subjects',
         '/admin/teaching-groups',
+        // R88 correction — the teaching side of الشؤون التعليمية, on the Owner's
+        // instruction. §14.1 lists التسجيلات (where the people being TAUGHT are
+        // placed) but no node for the people DOING the teaching, so the teaching
+        // profile lived as a row action on the generic account screen and was
+        // offered for guardians, minors and administrators alike.
+        // **§14.1 is authoritative and does not list this path yet**: the
+        // sitemap needs a one-line addition, which is the Document Owner's edit,
+        // not this agent's.
+        '/admin/teachers',
         // R52 — §14.1's Administration group gained the Trash node when the
         // Revision 6 deferral was superseded.
         '/admin/trash',

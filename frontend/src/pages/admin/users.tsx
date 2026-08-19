@@ -14,9 +14,6 @@ import {
   type UserSummary,
 } from '../../adapters/users.js';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
-import { TeachingProfileDialog } from '../../components/admin/teaching-profile-dialog.js';
-import { listSubjects } from '../../adapters/reference-data.js';
-import { listCategories } from '../../adapters/taxonomy.js';
 import { Button } from '../../components/ui/button.js';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
 import { DataTable, type Column, type RowAction, type TableStatus } from '../../components/ui/data-table.js';
@@ -77,28 +74,7 @@ export function UsersPage(): ReactNode {
 
   const [editing, setEditing] = useState<UserSummary | null>(null);
   const [assigning, setAssigning] = useState<UserSummary | null>(null);
-  /** The person whose teaching profile is open (R88) — planning, not permission. */
-  const [profiling, setProfiling] = useState<UserSummary | null>(null);
-  /**
-   * The reference data the teaching profile chooses from — loaded **once, when
-   * the profile is first opened**, rather than on every page load: most visits
-   * to المستخدمون never open it, and a list nobody sees is a request nobody
-   * asked for.
-   */
-  const [subjectOptions, setSubjectOptions] = useState<{ id: string; name: string }[]>([]);
-  const [categoryOptions, setCategoryOptions] = useState<{ id: string; name: string }[]>([]);
 
-  useEffect(() => {
-    if (profiling === null || subjectOptions.length > 0) return;
-    void Promise.all([listSubjects(accessToken), listCategories(accessToken)])
-      .then(([subjects, categories]) => {
-        setSubjectOptions(subjects.map((x) => ({ id: x.id, name: x.name })));
-        setCategoryOptions(categories.map((x) => ({ id: x.id, name: x.name })));
-      })
-      // The dialog reports its own failure; an empty list here simply offers
-      // nothing to choose, which the form states.
-      .catch(() => undefined);
-  }, [profiling, subjectOptions.length, accessToken]);
   const [suspending, setSuspending] = useState<UserSummary | null>(null);
   const [reactivating, setReactivating] = useState<UserSummary | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -218,9 +194,6 @@ export function UsersPage(): ReactNode {
   const actions: RowAction<UserSummary>[] = [
     { label: t('common.edit'), onSelect: (r) => setEditing(r) },
     { label: t('admin.users.assignRoles'), onSelect: (r) => setAssigning(r) },
-    // R88 — **planning data**, opened from the person it is about. It grants
-    // nothing; assignment does, which the dialog says on its own face.
-    { label: t('admin.teachingProfile.action'), onSelect: (r) => setProfiling(r) },
     // Offered only where TD-1 allows the transition, rather than shown and
     // refused: a control that exists only to fail teaches nothing (§14.2).
     {
@@ -407,21 +380,6 @@ export function UsersPage(): ReactNode {
         }
         onCancel={() => setReactivating(null)}
       />
-      {profiling ? (
-        <TeachingProfileDialog
-          userId={profiling.id}
-          userName={profiling.name_arabic}
-          subjects={subjectOptions}
-          categories={categoryOptions}
-          token={accessToken}
-          onClose={() => setProfiling(null)}
-          onSaved={() => {
-            setProfiling(null);
-            setNotice(t('admin.teachingProfile.saved'));
-          }}
-        />
-      ) : null}
-
     </AdminLayout>
   );
 }

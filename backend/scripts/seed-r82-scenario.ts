@@ -175,6 +175,28 @@ if (teacherRole) {
   });
 }
 
+/**
+ * **A مؤطرة who is ALSO a beneficiary** (R88 — إدارة المؤطِّرات).
+ *
+ * The decisive row for the teaching screen's population. R79 made *beneficiary*
+ * a durable fact independent of every role precisely so that a مؤطرة may also
+ * study, so a screen that excluded beneficiaries would hide her — and only a
+ * person holding both can prove it did not.
+ */
+const teachingStudent = await prisma.user.create({
+  data: {
+    nameArabic: `${TAG} المؤطرة الدارسة`,
+    sex: 'female',
+    accountStatus: 'active',
+    isBeneficiary: true,
+  },
+});
+if (teacherRole) {
+  await prisma.userBranchRole.create({
+    data: { userId: teachingStudent.id, roleId: teacherRole.id, branchId: branchA.id },
+  });
+}
+
 const uiEvent = await event('نشاط للواجهة', { levelIds: [levelA.id] });
 await prisma.notification.create({
   data: { userId: concerned, eventId: uiEvent, type: 'event_created' },

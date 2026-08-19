@@ -834,6 +834,9 @@ export const ar = {
       // R69 — each of the two subject screens gets its own node; they were
       // reachable only through row actions borrowed by unrelated screens.
       enrollments: 'التسجيلات',
+      // R88 correction — التسجيلات places the people being taught; this
+      // manages the people doing the teaching. Both belong to الشؤون التعليمية.
+      teachers: 'إدارة المؤطِّرات',
       examGrades: 'نقاط الامتحانات',
       levelSubjects: 'مواد المستوى',
       levelSurahs: 'مقرر الحفظ',
@@ -1062,6 +1065,18 @@ export const ar = {
       },
     },
     // R88 — الملف التدريسي: بيانات تخطيط لا صلاحيات. الإسناد وحده يمنح الصلاحية.
+    teachers: {
+      lede: 'المؤطِّرات وما تستطيع كلٌّ منهن تدريسه والأوقات التي تتاح فيها. بيانات تخطيط تُعين على اختيار الإسناد؛ الصلاحية تأتي من إسناد الحصة نفسه.',
+      caption: 'المؤطِّرات',
+      // عناوين الأعمدة موجزة عمدًا؛ الشرح الكامل داخل الملف التدريسي.
+      colSubjects: 'المواد',
+      colCategories: 'الفئات',
+      colAvailability: 'الأوقات المتاحة',
+      filterSubject: 'المادة',
+      filterCategory: 'الفئة',
+      noAvailability: 'لم تُسجَّل',
+      ranges: '{n} فترة',
+    },
     teachingProfile: {
       action: 'الملف التدريسي',
       title: 'الملف التدريسي — {name}',

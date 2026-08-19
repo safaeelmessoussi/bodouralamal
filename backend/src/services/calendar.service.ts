@@ -837,7 +837,12 @@ export async function prefilledFilters(
     where: {
       studentId: { in: [actor.userId, ...links.map((l) => l.studentId)] },
       deletedAt: null,
-      administrativeGroup: { deletedAt: null },
+      // **R66 for the sixth time.** A Prisma relation filter never matches a
+      // NULL relation, so `administrativeGroup: { deletedAt: null }` silently
+      // dropped every beneficiary enrolled directly in an unsubdivided Level —
+      // she got no scope prefill on her own calendar, with no error to notice.
+      // The null arm is the platform's predicate (`enrollment.service.ts`).
+      OR: [{ administrativeGroupId: null }, { administrativeGroup: { deletedAt: null } }],
     },
     select: {
       levelId: true,

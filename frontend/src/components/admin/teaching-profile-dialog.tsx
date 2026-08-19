@@ -14,9 +14,13 @@ import { SelectField, TextField } from '../ui/field.js';
 /**
  * **الملف التدريسي — what she can teach, and when** (R88).
  *
- * Opened from المستخدمون rather than a top-level page, because it is a fact
- * *about a person* and the person is where the administration already goes to
- * manage them — a separate section would make somebody remember it exists.
+ * **Opened from إدارة المؤطِّرات**, and from nowhere else. It shipped as a row
+ * action on المستخدمون — "the person is where the administration already goes"
+ * — and that reasoning was wrong about *which* people: المستخدمون administers
+ * every account, so a guardian, a minor and an administrator were each offered
+ * a teaching profile. Whether somebody can teach a Subject is a question of the
+ * teaching section, which now has a screen for the people who do the teaching
+ * beside the one for the people being taught.
  *
  * **Nothing here grants anything.** The dialog says so in its own hint, and it
  * is the truth: assignment is what carries authority, and this only helps the
@@ -147,19 +151,31 @@ export function TeachingProfileDialog({
               label={t('admin.teachingProfile.weekday')}
               value={range.weekday}
               onChange={(v) => update(index, { weekday: v })}
-              options={WEEKDAYS.map((d) => ({ value: d, label: t(`calendar.weekday.${d}`) }))}
+              // **`scheduling.weekday`, which is where the labels actually
+              //   live.** This read `calendar.weekday` and rendered seven raw
+              //   keys on screen: a computed key's namespace was never checked,
+              //   which `resolves.test.ts` now does.
+              options={WEEKDAYS.map((d) => ({ value: d, label: t(`scheduling.weekday.${d}`) }))}
             />
+            {/* **The platform's wall-clock input, not a second one.** A
+                24-hour `TextField` with the scheduling hint is what
+                `RecurrenceEditor` uses for exactly this value, and TD-11 times
+                are stored as the string the reader typed — a native
+                `type="time"` would hand the two screens different locale
+                behaviour for one concept. The hint is `scheduling.timeHint`
+                rather than a hard-coded «HH:MM»: an Arabic sentence the reader
+                understands, written once, and it sits on the pair rather than
+                on each field. */}
             <TextField
               label={t('admin.teachingProfile.from')}
               value={range.start_time}
               onChange={(v) => update(index, { start_time: v })}
-              hint="HH:MM"
+              hint={t('scheduling.timeHint')}
             />
             <TextField
               label={t('admin.teachingProfile.to')}
               value={range.end_time}
               onChange={(v) => update(index, { end_time: v })}
-              hint="HH:MM"
             />
             <Button
               variant="danger"

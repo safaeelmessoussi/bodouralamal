@@ -155,6 +155,24 @@ export const ADMIN_MODULES: readonly AdminModule[] = [
     status: 'ready',
   },
   {
+    /**
+     * **إدارة المؤطِّرات — the teaching side of الشؤون التعليمية** (R88).
+     *
+     * The section holds the two operational populations, and they are parallel:
+     * التسجيلات places **the people being taught**, and this manages **the
+     * people doing the teaching**. The teaching profile lived as a row action on
+     * المستخدمون, which offered it for guardians, minors and administrators
+     * alike — a generic account screen answering a question it does not own.
+     *
+     * Placed immediately after التسجيلات so the two read as a pair.
+     */
+    path: '/admin/teachers',
+    labelKey: 'admin.nav.teachers',
+    section: 'academic',
+    roles: STAFF,
+    status: 'ready',
+  },
+  {
     path: '/admin/groups',
     labelKey: 'admin.nav.groups',
     section: 'academic',

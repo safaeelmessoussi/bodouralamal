@@ -13,6 +13,7 @@ import { ContentPage } from '../content.js';
 import { GroupsPage } from './groups.js';
 import { HijriCalendarPage } from './hijri-calendar.js';
 import { EnrollmentsPage } from './enrollments.js';
+import { TeachersPage } from './teachers.js';
 import { ExamGradesPage } from './exam-grades.js';
 import { LevelSubjectsPage } from './level-subjects.js';
 import { LevelSurahsPage } from './level-surahs.js';
@@ -53,6 +54,7 @@ export const IMPLEMENTED_ADMIN_PATHS: readonly string[] = [
   '/admin/groups',
   '/admin/levels',
   '/admin/enrollments',
+  '/admin/teachers',
   '/admin/exam-grades',
   '/admin/level-subjects',
   '/admin/level-surahs',
@@ -189,6 +191,12 @@ export function AdminRouter(): ReactNode {
     case '/admin/enrollments':
       // R74 — the Level view of the enrolment rows the roster shows per group.
       return <EnrollmentsPage />;
+    // R88 correction — the teaching side of الشؤون التعليمية. التسجيلات above
+    // places the people being taught; this manages the people doing the
+    // teaching, and it is where the teaching profile lives now that the generic
+    // account screen no longer offers it.
+    case '/admin/teachers':
+      return <TeachersPage />;
     case '/admin/groups':
       return <GroupsPage />;
     case '/admin/levels':

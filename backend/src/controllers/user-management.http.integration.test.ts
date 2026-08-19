@@ -782,3 +782,107 @@ describe("R79 — who the enrolment selector offers", () => {
     }
   });
 });
+
+/**
+ * R88 — who **إدارة المؤطِّرات** lists.
+ *
+ * The teaching profile used to be a row action on the generic account screen,
+ * which offered it to guardians, minors and administrators alike. Its own screen
+ * needs an authoritative answer to *who may act as a مؤطِّرة*, and the answer is
+ * a **live `teacher` assignment** — asked of this endpoint through the `role`
+ * filter §14.2 already defines, so the page filters nothing client-side.
+ *
+ * The decisive case is the pair below: **`is_beneficiary` must play no part**.
+ * R79 made it a durable fact independent of every role precisely so a مؤطِّرة may
+ * also study; using it as an exclusion here would hide a real member of teaching
+ * staff. `beneficiaries_only=true` selects the opposite population — the two
+ * filters are complements, not variants, and this pins that.
+ */
+describe("R88 — who إدارة المؤطِّرات lists", () => {
+  let teacherOnly: string;
+  let teacherAndBeneficiary: string;
+  let beneficiaryOnly: string;
+  let guardianOnly: string;
+  let adminOnly: string;
+
+  const listed = async (): Promise<string[]> => {
+    const res = await call(
+      "GET",
+      "/admin/users?page_size=100&role=teacher",
+      superAdmin,
+    );
+    expect(res.status).toBe(200);
+    return (res.body.data as unknown as Record<string, unknown>[]).map((u) =>
+      String(u["id"]),
+    );
+  };
+
+  beforeAll(async () => {
+    // Its own rows: a test that borrows another suite's fixtures fails for
+    // reasons that have nothing to do with what it asserts.
+    teacherOnly = await makeUser("R88 مؤطرة", "active", "female", false);
+    teacherAndBeneficiary = await makeUser(
+      "R88 مؤطرة ودارسة",
+      "active",
+      "female",
+      true,
+    );
+    beneficiaryOnly = await makeUser("R88 مستفيدة", "active", "female", true);
+    guardianOnly = await makeUser("R88 ولية أمر", "active", "female", false);
+    adminOnly = await makeUser("R88 مسؤولة", "active", "female", false);
+
+    await grant(teacherOnly, "teacher", null);
+    await grant(teacherAndBeneficiary, "teacher", null);
+    await grant(beneficiaryOnly, "student", null);
+    await grant(guardianOnly, "parent", null);
+    await grant(adminOnly, "admin", null);
+  });
+
+  it("lists a مؤطِّرة", async () => {
+    expect(await listed()).toContain(teacherOnly);
+  });
+
+  it("lists a مؤطِّرة WHO IS ALSO a beneficiary", async () => {
+    // The whole reason the page must not exclude beneficiaries: she teaches.
+    expect(await listed()).toContain(teacherAndBeneficiary);
+  });
+
+  it("omits beneficiary-only, guardian-only and admin-only accounts", async () => {
+    const list = await listed();
+    expect(list).not.toContain(beneficiaryOnly);
+    expect(list).not.toContain(guardianOnly);
+    expect(list).not.toContain(adminOnly);
+  });
+
+  it("selects the complement of beneficiaries_only, not a variant of it", async () => {
+    const teaching = await listed();
+    const res = await call(
+      "GET",
+      "/admin/users?page_size=100&beneficiaries_only=true",
+      superAdmin,
+    );
+    const beneficiaries = (
+      res.body.data as unknown as Record<string, unknown>[]
+    ).map((u) => String(u["id"]));
+
+    // She is in BOTH lists. Neither filter is derivable from the other, which
+    // is why neither screen may be built from the other's population.
+    expect(teaching).toContain(teacherAndBeneficiary);
+    expect(beneficiaries).toContain(teacherAndBeneficiary);
+    expect(teaching).not.toContain(beneficiaryOnly);
+    expect(beneficiaries).not.toContain(teacherOnly);
+  });
+
+  it("survives a revoked role — the list follows LIVE assignments", async () => {
+    const spare = await makeUser("R88 مؤطرة سابقة", "active", "female", false);
+    await grant(spare, "teacher", null);
+    expect(await listed()).toContain(spare);
+    await prisma.userBranchRole.updateMany({
+      where: { userId: spare },
+      data: { deletedAt: new Date() },
+    });
+    // A مؤطِّرة who has stopped teaching leaves the planning screen; her profile
+    // rows are untouched, because history is not rewritten by a role change.
+    expect(await listed()).not.toContain(spare);
+  });
+});
