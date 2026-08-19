@@ -30,6 +30,11 @@ import { ExamSection, examStaffOf } from '../../components/scheduling/exam-secti
 import { SchedulingForm } from '../../components/scheduling/scheduling-form.js';
 import { patternOf, type RecurrenceValue } from '../../components/scheduling/recurrence-editor.js';
 import { ScopeSelectors } from '../../components/scope/scope-selectors.js';
+import { CalendarFilters } from '../../components/calendar/calendar-filters.js';
+import {
+  useCalendarFilters,
+  type CalendarFilters as CalendarFilterState,
+} from '../../hooks/use-calendar-filters.js';
 import { Button } from '../../components/ui/button.js';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
 import {
@@ -39,7 +44,6 @@ import {
   type TableStatus,
 } from '../../components/ui/data-table.js';
 import { FormDialog } from '../../components/ui/form-dialog.js';
-import { SelectField } from '../../components/ui/field.js';
 import { useScopeOptions } from '../../hooks/use-scope-options.js';
 import { useSession } from '../../contexts/session.js';
 import { useActiveRole } from '../../contexts/active-role.js';
@@ -90,6 +94,23 @@ const SCOPE_FIELDS = ['branchId', 'levelId', 'groupId', 'subjectId', 'academicYe
  *  clearer way to say "these fields, always". */
 const LIST_SCOPE = ['branchId', 'levelId', 'subjectId', 'academicYearId'] as const;
 
+/**
+ * The fields the **shared** calendar filters own here — every one of which
+ * narrows both قائمة and تقويم (2026-08-19).
+ *
+ * Category is deliberately absent: the back office filters by Branch and Level
+ * directly, and a Category control would narrow the grid while leaving the
+ * definition list untouched — a filter that means different things in the two
+ * views is the defect this set exists to end.
+ */
+const CALENDAR_FILTER_FIELDS = ['branchId', 'levelId', 'type'] as const;
+
+/**
+ * What stays on `useScopeOptions`: **class-only** concepts an occurrence does
+ * not carry, so they have nothing to narrow on the grid (§4.4).
+ */
+const LIST_SCOPE_EXTRA = ['subjectId', 'academicYearId'] as const;
+
 function startOfMonth(d: Date): Date {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
 }
@@ -103,10 +124,25 @@ export function SchedulingPage(): ReactNode {
     new URLSearchParams(window.location.search).get('view') === 'calendar' ? 'calendar' : 'list',
   );
 
+  /**
+   * **One filter state, above both views** (2026-08-19).
+   *
+   * The defect: قائمة applied branch, subject, year and type while تقويم called
+   * `GET /calendar` with a date range and **nothing else**, so switching view
+   * silently changed the dataset. Each view owned its own state, which is why
+   * *the filters* were two things that merely looked alike.
+   *
+   * The two views read genuinely different sources — the list shows the
+   * **definitions** (a recurring schedule, an event, an exam) and the grid shows
+   * the **occurrences** they produce — so the shared thing is the filter VALUES,
+   * not the rows. Held here, in the URL, so the switch changes presentation only
+   * and cannot reset a selection.
+   */
+  const filters = useCalendarFilters(CALENDAR_FILTER_FIELDS);
+
   const [items, setItems] = useState<SchedulingItem[]>([]);
   const [truncated, setTruncated] = useState(false);
   const [status, setStatus] = useState<TableStatus>('loading');
-  const [typeFilter, setTypeFilter] = useState<SchedulingType | ''>('');
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   /**
@@ -153,8 +189,12 @@ export function SchedulingPage(): ReactNode {
     setStatus('loading');
     try {
       const result = await listSchedulingItems(accessToken, {
-        type: typeFilter,
-        ...(listScope.value.branchId ? { branchId: listScope.value.branchId } : {}),
+        // The SAME state the grid narrows by — branch and type come from the
+        // shared filters; subject and academic year stay on `listScope` because
+        // they are class-only concepts an occurrence does not carry (§4.4).
+        type: (filters.value.type ?? '') as SchedulingType | '',
+        ...(filters.value.branchId ? { branchId: filters.value.branchId } : {}),
+        ...(filters.value.levelId ? { levelId: filters.value.levelId } : {}),
         ...(listScope.value.subjectId ? { subjectId: listScope.value.subjectId } : {}),
         ...(listScope.value.academicYearId
           ? { academicYearId: listScope.value.academicYearId }
@@ -168,8 +208,9 @@ export function SchedulingPage(): ReactNode {
     }
   }, [
     accessToken,
-    typeFilter,
-    listScope.value.branchId,
+    filters.value.type,
+    filters.value.branchId,
+    filters.value.levelId,
     listScope.value.subjectId,
     listScope.value.academicYearId,
   ]);
@@ -292,26 +333,36 @@ export function SchedulingPage(): ReactNode {
             status={status}
             actions={actions}
             onRetry={() => void load()}
-            filtered={typeFilter !== '' || listScope.value.branchId !== ''}
+            filtered={filters.active || listScope.value.subjectId !== ''}
             onClearFilters={() => {
-              setTypeFilter('');
+              filters.clear();
               listScope.setMany({ branchId: '', levelId: '', subjectId: '', academicYearId: '' });
             }}
             toolbar={
               <>
-                <SelectField
-                  label={t('scheduling.itemType')}
-                  value={typeFilter}
-                  onChange={(v) => setTypeFilter(v as SchedulingType | '')}
-                  options={[
-                    { value: '', label: t('scheduling.allTypes') },
-                    // Derived from the registry, not listed again: R56's promise
-                    // is that a new kind is ONE entry, and a hand-written filter
-                    // is exactly the copy that silently omits it.
-                    ...AVAILABLE_TYPES.map((k) => ({ value: k, label: t(`scheduling.type.${k}`) })),
-                  ]}
+                {/* **The shared filter row**, reading the page's one state — so
+                    these controls narrow the grid as well, and survive a switch
+                    to it. The kinds are derived from the registry, not listed
+                    again: R56's promise is that a new kind is ONE entry, and a
+                    hand-written filter is exactly the copy that omits it. */}
+                <CalendarFilters
+                  filters={filters}
+                  // The branches `useScopeOptions` already loaded and scoped to
+                  // this caller — asked for once on the page, not twice.
+                  branches={listScope.options.branchId.map((o) => ({
+                    id: o.value,
+                    name: o.label,
+                  }))}
+                  types={AVAILABLE_TYPES.map((k) => ({
+                    value: k,
+                    label: t(`scheduling.type.${k}`),
+                  }))}
                 />
-                <ScopeSelectors scope={listScope} fields={LIST_SCOPE} mode="filter" />
+                {/* Subject and academic year are **class-only** concepts an
+                    occurrence does not carry, so they narrow this list and have
+                    nothing to narrow on the grid — which is why they stay on
+                    `listScope` rather than joining the shared set. */}
+                <ScopeSelectors scope={listScope} fields={LIST_SCOPE_EXTRA} mode="filter" />
               </>
             }
           />
@@ -321,7 +372,7 @@ export function SchedulingPage(): ReactNode {
           {truncated ? <p className="muted">{t('scheduling.truncated')}</p> : null}
         </>
       ) : (
-        <CalendarView view={view} onView={setView} />
+        <CalendarView view={view} onView={setView} filters={filters} />
       )}
 
       {editing ? (
@@ -362,9 +413,12 @@ export function SchedulingPage(): ReactNode {
 function CalendarView({
   view,
   onView,
+  filters,
 }: {
   view: View;
   onView: (view: View) => void;
+  /** The page's filters — **not this view's**. See `useCalendarFilters`. */
+  filters: CalendarFilterState;
 }): ReactNode {
   const today = useMemo(() => new Date(), []);
   const [month, setMonth] = useState(() => startOfMonth(today));
@@ -378,7 +432,15 @@ function CalendarView({
     // `GET /calendar` is public with optional authentication: the credential
     // travels on the request and REORDERS nothing here, it only widens the tier
     // a staff caller sees (§5.2). The adapter reads the session itself.
-    void fetchOccurrences({ from: iso(from), to: iso(to) })
+    // **The filters the list uses, applied here too** — the defect this fixes
+    // was that this call took a date range and nothing else.
+    void fetchOccurrences({
+      from: iso(from),
+      to: iso(to),
+      ...(filters.value.branchId ? { branchId: filters.value.branchId } : {}),
+      ...(filters.value.categoryId ? { categoryId: filters.value.categoryId } : {}),
+      ...(filters.value.levelId ? { levelId: filters.value.levelId } : {}),
+    })
       .then((r) => setOccurrences(r.occurrences))
       .catch(() => setOccurrences([]));
     // **The Hijri overlay comes from the same bootstrap the public calendar
@@ -388,7 +450,7 @@ function CalendarView({
     void fetchCalendarBootstrap({ from: iso(from), to: iso(to) })
       .then(setBootstrap)
       .catch(() => setBootstrap(null));
-  }, [month]);
+  }, [month, filters.value.branchId, filters.value.categoryId, filters.value.levelId]);
 
   /** Recorded official Hijri days, keyed for O(1) lookup per cell. */
   const hijriByDate = useMemo(() => {

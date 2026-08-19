@@ -60,6 +60,9 @@ describe('the adapter type matches the wire contract', () => {
       'id',
       'level_id',
       'level_name',
+      // R81 — mirrors the server test's exact key set, which is the point of
+      // this assertion: the two contracts are asserted against each other.
+      'max_grade',
       'mode',
       'room_id',
       'room_name',

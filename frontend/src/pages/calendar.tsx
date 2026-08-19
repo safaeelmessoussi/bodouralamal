@@ -12,7 +12,8 @@ import { CalendarGrid } from '../components/calendar/calendar-grid.js';
 import { CalendarHeader } from '../components/calendar/calendar-header.js';
 import { OccurrenceList } from '../components/calendar/occurrence-list.js';
 import { viewFromUrl, type CalendarView } from '../components/calendar/view-switch.js';
-import { CalendarToolbar } from '../components/calendar/calendar-toolbar.js';
+import { CalendarFilters } from '../components/calendar/calendar-filters.js';
+import { useCalendarFilters } from '../hooks/use-calendar-filters.js';
 import { DayEventsDialog } from '../components/calendar/day-events-dialog.js';
 import { EventDetailsDialog } from '../components/calendar/event-details-dialog.js';
 import { ApplicationHeader } from '../components/header/application-header.js';
@@ -45,12 +46,29 @@ type Load =
   | { kind: 'ready'; occurrences: Occurrence[] }
   | { kind: 'error' };
 
+/**
+ * What the **public** calendar filters by: the three scopes an anonymous visitor
+ * may legitimately narrow. No subject and no type — a visitor is choosing where
+ * and for whom, not inspecting the schedule's internals.
+ */
+const PUBLIC_FILTER_FIELDS = ['branchId', 'categoryId', 'levelId'] as const;
+
 export function CalendarPage(): ReactNode {
   const today = useMemo(() => new Date(), []);
   const [month, setMonth] = useState(() => startOfMonth(today));
-  const [branchId, setBranchId] = useState<string | null>(null);
-  const [categoryId, setCategoryId] = useState<string | null>(null);
-  const [levelId, setLevelId] = useState<string | null>(null);
+  /**
+   * **The same filter state the back office uses** (2026-08-19).
+   *
+   * It held three `useState`s of its own, which worked — this surface renders
+   * both views from ONE `occurrences` array, so it never had the back office's
+   * defect. Sharing the hook is not a fix here; it is what stops the two
+   * surfaces drifting, and it moves the filters into the URL, so a filtered
+   * calendar is now a link somebody can send.
+   */
+  const filters = useCalendarFilters(PUBLIC_FILTER_FIELDS);
+  const branchId = filters.value.branchId ?? null;
+  const categoryId = filters.value.categoryId ?? null;
+  const levelId = filters.value.levelId ?? null;
   const [branches, setBranches] = useState<PublicBranch[]>([]);
   const [bootstrap, setBootstrap] = useState<CalendarBootstrap | null>(null);
   const [bootstrapBusy, setBootstrapBusy] = useState(true);
@@ -133,9 +151,11 @@ export function CalendarPage(): ReactNode {
         if (!prefillApplied.current && result.prefilled) {
           prefillApplied.current = true;
           const p = result.prefilled;
-          if (p.branch_id && branchId === null) setBranchId(p.branch_id);
-          if (p.category_id && categoryId === null) setCategoryId(p.category_id);
-          if (p.level_id && levelId === null) setLevelId(p.level_id);
+          // The server's prefilled filters seed the state only where the reader
+          // has chosen nothing — a choice already made is never overwritten.
+          if (p.branch_id && branchId === null) filters.set('branchId', p.branch_id);
+          if (p.category_id && categoryId === null) filters.set('categoryId', p.category_id);
+          if (p.level_id && levelId === null) filters.set('levelId', p.level_id);
         }
       } catch {
         if (!cancelled) setLoad({ kind: 'error' });
@@ -193,13 +213,11 @@ export function CalendarPage(): ReactNode {
     setOpenDay(null);
   }
 
-  /** Changing category **resets the level**: the previous level almost certainly
-   *  belongs to the category just left, and keeping it would filter the grid to
-   *  nothing while both selects looked reasonable. */
-  function changeCategory(next: string | null): void {
-    setCategoryId(next);
-    setLevelId(null);
-  }
+  /* **Changing category resets the level** — the rule this page used to own in
+     `changeCategory`, and which now lives in `useCalendarFilters` so every
+     surface gets it. The previous Level almost certainly belongs to the Category
+     just left, and keeping it filters the grid to nothing while both selects
+     look perfectly reasonable (§4.4b). */
 
   return (
     <>
@@ -232,17 +250,12 @@ export function CalendarPage(): ReactNode {
               onToday={() => goToMonth(today)}
               onNext={() => goToMonth(addMonths(month, 1))}
               filters={
-                <CalendarToolbar
+                <CalendarFilters
+                  filters={filters}
                   branches={branches}
-                  branchId={branchId}
-                  onBranchChange={setBranchId}
                   categories={bootstrap?.categories ?? []}
-                  categoryId={categoryId}
-                  onCategoryChange={changeCategory}
                   levels={bootstrap?.levels ?? []}
-                  levelId={levelId}
                   levelsBusy={bootstrapBusy}
-                  onLevelChange={setLevelId}
                 />
               }
             />

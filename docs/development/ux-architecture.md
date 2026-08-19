@@ -1088,6 +1088,44 @@ on the next surface ([AE](#ae--a-dependency-between-selectors-belongs-to-forms-n
 bootstrap through `CalendarTitle` (§20 rule 14; R31, R36); the header decides
 position and nothing else.
 
+## AL · A view switch changes presentation, never the dataset
+
+قائمة and تقويم are two renderings of **one** filtered set. The state that
+narrows them is held **above both**, so switching cannot reset a selection and
+the two cannot disagree about what is being shown.
+
+The defect (2026-08-19): the back office's list queried with branch, subject,
+year and type while its grid called `GET /calendar` with a date range and
+**nothing else**. Each view owned its own state, so *the filters* were two things
+that merely looked alike — nothing was duplicated for a duplication guard to
+catch, and the screen looked right in both views separately.
+
+Canonical: [`use-calendar-filters.ts`](../../frontend/src/hooks/use-calendar-filters.ts)
+holds the values; [`calendar-filters.tsx`](../../frontend/src/components/calendar/calendar-filters.tsx)
+renders whichever fields the surface offers. **Which fields exist is the
+caller's**, because that is a permission decision ([O](#o--scope-and-authorization)):
+a beneficiary reading her own calendar is offered no branch filter, since the
+control would imply a scope she does not have.
+
+**The URL is the state.** `?view=` already survives a reload and a shared link
+(§20 rule 16); the filters join it by the same mechanism, which is what makes
+*switching view must not reset the filters* true **by construction** — the switch
+writes one parameter and leaves the others alone, so there is nothing to lose.
+A filtered calendar becomes a link somebody can send, which the three-`useState`
+version could not produce.
+
+**The two views may read different sources, and that is not a defect.** The back
+office's list shows the *definitions* — a recurring schedule, an event, an exam —
+and its grid shows the *occurrences* they produce. So the shared thing is the
+filter **values**, not the rows; a field that cannot narrow both (subject and
+academic year are class-only concepts an occurrence does not carry) stays out of
+the shared set rather than pretending.
+
+**Measured, because a control that still shows a value while the request ignores
+it is the same defect wearing the fix**: `verify-calendar-filters.mjs` chooses a
+branch in the list, switches to the grid, and asserts the **grid's own request**
+carries `branch_id`.
+
 ## AK · UI text is not prose, and does not take the prose measure
 
 `p { max-width: var(--measure) }` — 64ch — is right for a paragraph somebody
@@ -1124,7 +1162,7 @@ system's internals, break on every restyle, and catch nothing.
 
 | Guard | What it pins |
 |---|---|
-| [`ui/atomic-components.test.tsx`](../../frontend/src/components/ui/atomic-components.test.tsx) | one Button (both class vocabularies, and no second system in CSS) · the `＋` convention, in code and in the catalogue · one table, with reasoned exceptions · one Level label · no engineering reference in a user-facing string · no data gate in the copy · no pass/fail on the sheet · no account creation on `المستخدمون`, **in code and in the catalogue** · **the dirty-state wiring, and that no form omits `dirty`** · **AH — one action message, and that it still announces politely** · **AJ — only the shared header composes the calendar atoms** |
+| [`ui/atomic-components.test.tsx`](../../frontend/src/components/ui/atomic-components.test.tsx) | one Button (both class vocabularies, and no second system in CSS) · the `＋` convention, in code and in the catalogue · one table, with reasoned exceptions · one Level label · no engineering reference in a user-facing string · no data gate in the copy · no pass/fail on the sheet · no account creation on `المستخدمون`, **in code and in the catalogue** · **the dirty-state wiring, and that no form omits `dirty`** · **AH — one action message, and that it still announces politely** · **AJ — only the shared header composes the calendar atoms** · **AL — one calendar filter state, read from the URL in one place** |
 | [`i18n/resolves.test.ts`](../../frontend/src/i18n/resolves.test.ts) | **every literal `t()` key resolves** — and that `t()` still returns the key on a miss, which is the behaviour the guard exists to police |
 | [`lib/admin-modules.test.ts`](../../frontend/src/lib/admin-modules.test.ts) | §14.1's sitemap · R61's section rule · **the الإدارة curriculum order** · every label resolves |
 | [`lib/teacher-modules.test.ts`](../../frontend/src/lib/teacher-modules.test.ts) | the teaching nodes, their sections, and **no `/admin/*` path in her menu** |
@@ -1139,6 +1177,7 @@ system's internals, break on every restyle, and catch nothing.
 | [`scripts/dev/browser/verify-dialog-states.mjs`](../../scripts/dev/browser/verify-dialog-states.mjs) | **AG** — closed/open/close/reopen on 15 pages from BOTH the affected and unaffected sets, plus page-flow impact and scroll ownership |
 | [`scripts/dev/browser/verify-calendar-header.mjs`](../../scripts/dev/browser/verify-calendar-header.mjs) | **AJ/AK** — region geometry at 1440px and 390px on both calendars, title drift from the header centre, and the table note against its table's width |
 | [`components/calendar/calendar-header.test.tsx`](../../frontend/src/components/calendar/calendar-header.test.tsx) | **AJ** — the three regions, and the shape following the data rather than a flag |
+| [`scripts/dev/browser/verify-calendar-filters.mjs`](../../scripts/dev/browser/verify-calendar-filters.mjs) | **AL** — a filter chosen in one view survives the switch, in the controls, in the URL **and in the other view's request** |
 | `grade.http.integration.test.ts` | a student reads published grades and **not drafts**, one student never reads another's, the projection carries no verdict |
 | `teaching-group.http.integration.test.ts` | the flat read grants nothing, every filter narrows, TD-10 pagination, Admin-only |
 

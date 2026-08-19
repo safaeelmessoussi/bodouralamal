@@ -309,6 +309,12 @@ export const ar = {
     navNext: 'التالي',
     navLabel: 'تنقّل بين الأشهر',
     filtersLabel: 'تصفية الجدول',
+    // تصفية موحّدة لكل التقاويم: نفس الحقول تصفّي «قائمة» و«تقويم» معاً.
+    filters: {
+      all: 'الكل',
+      subject: 'المادة',
+      type: 'النوع',
+    },
     previousMonth: 'الشهر السابق',
     nextMonth: 'الشهر التالي',
     dayDialogTitle: 'أنشطة اليوم',

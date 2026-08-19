@@ -65,6 +65,45 @@ function stripComments(text: string): string {
   return text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/^\s*\/\/.*$/gm, '');
 }
 
+describe('one calendar filter state', () => {
+  /**
+   * **The defect: قائمة filtered and تقويم did not** (2026-08-19).
+   *
+   * The back office's list queried with branch, subject, year and type while its
+   * grid called `GET /calendar` with a date range and nothing else, so switching
+   * view silently changed the dataset. The cause was that each view owned its
+   * own filter state — *the filters* were two things that merely looked alike.
+   *
+   * What is pinned here is that the state has ONE implementation. Whether a
+   * given surface passes it to both of its views is geometry, and
+   * `verify-calendar-filters.mjs` measures that in the browser: it chooses a
+   * branch in the list, switches to the grid, and asserts the GRID's own request
+   * carries `branch_id` — a control that still shows a value while the request
+   * ignores it is the same defect wearing the fix.
+   */
+  const ALLOWED = new Set(['hooks/use-calendar-filters.ts']);
+
+  it('only the shared hook reads calendar filter parameters from the URL', () => {
+    const offenders = FILES.filter((f) => {
+      if (ALLOWED.has(f.path)) return false;
+      const text = stripComments(f.text);
+      return /searchParams?\.get\((['"])(branch_id|category_id|level_id|subject_id)\1\)/.test(text)
+        || /URLSearchParams[\s\S]{0,120}get\((['"])(branch_id|category_id|level_id)\1\)/.test(text);
+    }).map((f) => f.path);
+    expect(offenders).toEqual([]);
+  });
+
+  it('the hook still writes the filters to the URL, which is what shares them', () => {
+    // Without this the hook could become plain component state and every
+    // property above would keep passing while a reload lost the selection.
+    const source = RAW['/src/hooks/use-calendar-filters.ts'] ?? '';
+    expect(source).not.toBe('');
+    expect(source).toContain('replaceState');
+    // The dependency rule lives here once, rather than on each surface.
+    expect(source).toContain("delete updated.levelId");
+  });
+});
+
 describe('one calendar header', () => {
   /**
    * **The atoms were shared; the ARRANGEMENT was not** — and that is where the
