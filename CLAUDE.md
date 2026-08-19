@@ -202,6 +202,19 @@ You are working on the بذور الأمل Platform.
 - **UI text is not prose (AK).** `p { max-width: var(--measure) }` reaches every
   paragraph in the application, so short helper text under a table wraps early.
   Six components had already patched it locally before the rule was written once.
+- **Teaching authority is an ASSIGNMENT, never a role or a declared ability.**
+  Four rules that future work must preserve (SRS §4.4c, R73, R87):
+  - **Capability/availability ≠ authorization.** *«I can teach Quran»* is
+    planning data for the administration; it grants nothing.
+  - **Teaching authority = effective assignment + that assignment's audience.**
+    Scope comes from `CourseScheduleStaff`/`SessionStaff`, resolved through
+    `studentsTaughtBy` — never from role membership.
+  - **An assistant IS the main teacher for operational authorization** on the
+    class they staff. `position` is responsibility and audit, not a weaker
+    permission branch. `EventStaff`'s responsible/assistant asymmetry is R71's
+    and is deliberately NOT the same rule.
+  - **Staffing changes must not rewrite history.** A future reassignment leaves
+    past occurrences owned by whoever actually delivered them.
 - **A layout property must be measured in a browser, not asserted from CSS.** The
   header guard asserted `align-items: start` — present, correct, and irrelevant,
   because `flex-wrap` put the action on its own line. Run

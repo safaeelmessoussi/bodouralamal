@@ -36,6 +36,7 @@ import type { PrismaClient } from './generated/prisma/client.js';
 import { verifyAccessToken } from './lib/access-token.js';
 import type { AppConfig } from './lib/config.js';
 import { AppError } from './lib/errors.js';
+import { teachesQuran } from './policies/roster-resolution.js';
 import { toRoleScopes } from './policies/branch-scope.js';
 import { createStorageClients } from './lib/storage.js';
 import { authenticate, optionalAuthenticate } from './middleware/authenticate.js';
@@ -110,6 +111,21 @@ function meController(prisma: PrismaClient, config: AppConfig) {
        * un-narrowed session, which is a real answer rather than a missing one.
        */
       active_role: verified.claims.active_role ?? null,
+      /**
+       * **R87 §M — does this person actually teach Quran?**
+       *
+       * The teaching menu shows «إدخال الحفظ» only to somebody who does, and
+       * the Owner named what it may NOT be derived from: the teacher role, a
+       * declared capability, the Subject's name, or hard-coded text. It is a
+       * **structural** answer — staffing a schedule (or a single occurrence)
+       * whose Subject carries R73's `tracks_quran_progress` marker — computed
+       * on the server, because a client deriving it would need the whole
+       * staffing graph to do so.
+       *
+       * `false` for everybody who is not staff, at no cost: the predicate
+       * short-circuits on the marker before touching the staffing tables.
+       */
+      teaches_quran: await teachesQuran(prisma, user.id),
       /**
        * §14.3 ChildContextSwitcher renders approved links only (§4.3).
        *

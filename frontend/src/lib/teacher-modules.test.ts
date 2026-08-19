@@ -49,9 +49,40 @@ describe('the teacher registry matches §14.1', () => {
     // Revision 30: teachers do not browse reference data, and the converse
     // holds here — the teaching portal is not a second door into the back
     // office. The server enforces TD-2 regardless; this is the UX layer.
-    expect(visibleTeacherModules(['teacher'])).toHaveLength(TEACHER_MODULES.length);
+    // **R87 §M — the role is no longer sufficient for every entry.** «إدخال
+    // الحفظ» additionally requires actually staffing a Quran class, so the full
+    // list needs the capability as well as the role.
+    expect(visibleTeacherModules(['teacher'], { teachesQuran: true })).toHaveLength(
+      TEACHER_MODULES.length,
+    );
     expect(visibleTeacherModules(['admin'])).toHaveLength(0);
     expect(visibleTeacherModules([])).toHaveLength(0);
+  });
+
+  /**
+   * **A capability hides a menu entry; it authorises nothing** (R87 §M).
+   *
+   * A مؤطرة teaching only Tafseer holds the teacher role and must not meet
+   * «إدخال الحفظ» — the condition is staffing a schedule whose Subject carries
+   * R73's marker, never the role, a declared capability or the Subject's name.
+   * The server refuses the write regardless of what the menu shows.
+   */
+  it('hides إدخال الحفظ from a teacher with no Quran assignment', () => {
+    const withQuran = visibleTeacherModules(['teacher'], { teachesQuran: true });
+    const without = visibleTeacherModules(['teacher'], { teachesQuran: false });
+
+    expect(withQuran.some((m) => m.path === '/teacher/quran')).toBe(true);
+    expect(without.some((m) => m.path === '/teacher/quran')).toBe(false);
+    // Exactly one entry differs: gating one module must not hide another.
+    expect(without).toHaveLength(withQuran.length - 1);
+  });
+
+  it('hides it when the capability is unknown, which is the safe direction', () => {
+    // A caller that has not asked the server sees LESS, rather than an entry the
+    // server would then refuse.
+    expect(
+      visibleTeacherModules(['teacher']).some((m) => m.path === '/teacher/quran'),
+    ).toBe(false);
   });
 
   it('resolves sub-paths to their parent, longest match winning', () => {

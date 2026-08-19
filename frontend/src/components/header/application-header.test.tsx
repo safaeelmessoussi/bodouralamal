@@ -39,6 +39,7 @@ const person = (over: Partial<Me> = {}): Me => ({
   role_scopes: [{ role: 'student', branches: null }],
   active_role: null,
   approved_child_links: [],
+    teaches_quran: false,
   ...over,
 });
 
@@ -124,6 +125,7 @@ describe('the switchers appear only when they mean something', () => {
       person({
         roles: ['parent', 'teacher'],
         approved_child_links: [{ id: 'c1', display_name: 'مريم بنعلي' }],
+    teaches_quran: false,
       }),
     );
     expect(html).toContain('اختر الدور الذي تعمل به');

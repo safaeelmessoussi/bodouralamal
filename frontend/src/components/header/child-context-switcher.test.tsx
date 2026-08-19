@@ -19,7 +19,7 @@ const me = (links: { id: string; display_name: string }[]): Me => ({
   roles: ['parent'],
   role_scopes: [{ role: 'parent', branches: null }],
   active_role: 'parent',
-  approved_child_links: links,
+  approved_child_links: links, teaches_quran: false,
 });
 
 function render(links: { id: string; display_name: string }[]): string {

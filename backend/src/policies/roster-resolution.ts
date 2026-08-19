@@ -439,6 +439,45 @@ export async function isResponsibleForEvent(
  * Quran scope** rather than that every مؤطرة does. Failing open here would
  * reinstate exactly the behaviour R73.3 was written to stop.
  */
+/**
+ * **Does this person staff a Quran class at all?** (R87 §M.)
+ *
+ * The teaching menu shows «إدخال الحفظ» only to somebody who actually teaches
+ * the Subject, and the Owner named exactly what that may NOT be derived from:
+ * the teacher role, a declared capability, the Subject's Arabic name, or
+ * hard-coded text. It is derived from **staffing a schedule whose Subject
+ * carries R73's `tracks_quran_progress` marker** — the same structural fact the
+ * student list already narrows by, asked as a yes/no.
+ *
+ * **Position-blind**, like every other teaching predicate here: an assistant on
+ * a Quran class teaches Quran (R87 §G).
+ */
+export async function teachesQuran(prisma: PrismaClient, userId: string): Promise<boolean> {
+  const subjectId = await quranSubjectId(prisma);
+  if (subjectId === null) return false;
+
+  const staffed = await prisma.recurringCourseSchedule.count({
+    where: {
+      deletedAt: null,
+      subjectId,
+      staff: { some: { userId, deletedAt: null } },
+    },
+  });
+  if (staffed > 0) return true;
+
+  // **A one-off occurrence counts too** (R87 §J): a مؤطرة assigned to a single
+  // Quran session teaches Quran that day, and the menu that hid the screen from
+  // her would hide the only thing she was asked to do.
+  const occurrence = await prisma.session.count({
+    where: {
+      deletedAt: null,
+      schedule: { subjectId, deletedAt: null },
+      staff: { some: { userId, deletedAt: null } },
+    },
+  });
+  return occurrence > 0;
+}
+
 export async function quranSubjectId(prisma: PrismaClient): Promise<string | null> {
   const row = await prisma.subject.findFirst({
     where: { tracksQuranProgress: true, deletedAt: null },

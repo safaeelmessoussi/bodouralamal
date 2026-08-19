@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 
 import { useActiveRole } from '../../contexts/active-role.js';
+import { useSession, type Me } from '../../contexts/session.js';
 import { t } from '../../i18n/index.js';
 import {
   canAccess,
@@ -34,6 +35,7 @@ export function TeacherLayout({
 }): ReactNode {
   // The ACTIVE role, not the account's roles (R60) — see `admin-layout.tsx`.
   const { activeRoles: roles } = useActiveRole();
+  const { me } = useSession();
   const current = teacherModuleForPath(window.location.pathname);
   const permitted = current ? canAccess(current, roles) : false;
 
@@ -43,7 +45,7 @@ export function TeacherLayout({
       lede={lede}
       actions={actions}
       permitted={permitted}
-      sidebar={<TeacherSidebar roles={roles} current={current} />}
+      sidebar={<TeacherSidebar roles={roles} current={current} me={me} />}
     >
       {children}
     </PortalShell>
@@ -68,11 +70,15 @@ export function TeacherLayout({
 function TeacherSidebar({
   roles,
   current,
+  me,
 }: {
   roles: readonly string[];
   current: TeacherModule | null;
+  me: Me | null;
 }): ReactNode {
-  const modules = visibleTeacherModules(roles);
+  // **R87 §M** — what she actually teaches, as the server computed it. Without
+  // it every capability-gated entry stays hidden, which is the safe direction.
+  const modules = visibleTeacherModules(roles, { teachesQuran: me?.teaches_quran === true });
   const ungrouped = modules.filter((m) => m.section === null);
 
   return (

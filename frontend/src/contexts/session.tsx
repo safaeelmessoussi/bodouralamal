@@ -27,6 +27,15 @@ export interface Me {
    * switcher can label an option with a person rather than an index.
    */
   approved_child_links: { id: string; display_name: string }[];
+  /**
+   * **R87 §M — does this person actually staff a Quran class?**
+   *
+   * A structural answer from the server: staffing a schedule (or one occurrence)
+   * whose Subject carries R73's `tracks_quran_progress` marker. The menu shows
+   * «إدخال الحفظ» on this and on nothing else — not the teacher role, not a
+   * declared capability, not the Subject's name.
+   */
+  teaches_quran: boolean;
 }
 
 interface SessionState {

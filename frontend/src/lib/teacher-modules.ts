@@ -97,6 +97,13 @@ export const TEACHER_MODULES: readonly TeacherModule[] = [
     section: 'teaching',
     roles: TEACHER,
     status: 'ready',
+    /**
+     * **R87 §M — only for somebody who actually teaches Quran.** A مؤطرة
+     * teaching only Tafseer holds the same role and must not see this entry;
+     * the condition is staffing a schedule whose Subject carries R73's marker,
+     * never the role, a declared capability or the Subject's name.
+     */
+    requiresCapability: 'teachesQuran',
   },
   {
     // R70 — unblocked for **grading**. §4.6's online paper builder is still
@@ -155,8 +162,11 @@ export const TEACHER_MODULES: readonly TeacherModule[] = [
 export const canAccess = canAccessModule;
 
 /** The teaching modules a given session may see, in §14.1's order. */
-export function visibleTeacherModules(roles: readonly string[]): TeacherModule[] {
-  return visibleIn(TEACHER_MODULES, roles);
+export function visibleTeacherModules(
+  roles: readonly string[],
+  capabilities: { teachesQuran?: boolean } = {},
+): TeacherModule[] {
+  return visibleIn(TEACHER_MODULES, roles, capabilities);
 }
 
 export function teacherModuleForPath(pathname: string): TeacherModule | null {

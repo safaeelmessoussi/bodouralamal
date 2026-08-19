@@ -92,12 +92,25 @@ async function clear(): Promise<void> {
   await prisma.levelSubject.deleteMany({
     where: { level: { name: { startsWith: TAG } } },
   });
+  // R87's Quran/Tafseer schedules and their staffing.
+  const schedules = await prisma.recurringCourseSchedule.findMany({
+    where: { title: { startsWith: TAG } },
+    select: { id: true },
+  });
+  const scheduleIds = schedules.map((s) => s.id);
+  await prisma.courseScheduleStaff.deleteMany({ where: { scheduleId: { in: scheduleIds } } });
+  await prisma.recurringCourseSchedule.deleteMany({ where: { id: { in: scheduleIds } } });
+  await prisma.room.deleteMany({ where: { name: { startsWith: TAG } } });
+  await prisma.levelSubject.deleteMany({ where: { subject: { name: { startsWith: TAG } } } });
+  await prisma.subject.deleteMany({ where: { name: { startsWith: TAG } } });
 
   await prisma.enrollment.deleteMany({ where: { studentId: { in: ids } } });
   await prisma.auditLog.deleteMany({ where: { actorUserId: { in: ids } } });
   await prisma.userBranchRole.deleteMany({ where: { userId: { in: ids } } });
   await prisma.user.deleteMany({ where: { id: { in: ids } } });
   await prisma.room.deleteMany({ where: { name: { startsWith: TAG } } });
+  await prisma.levelSubject.deleteMany({ where: { subject: { name: { startsWith: TAG } } } });
+  await prisma.subject.deleteMany({ where: { name: { startsWith: TAG } } });
   await prisma.level.deleteMany({ where: { name: { startsWith: TAG } } });
   await prisma.category.deleteMany({ where: { name: { startsWith: TAG } } });
   await prisma.branch.deleteMany({ where: { name: { startsWith: TAG } } });
@@ -432,5 +445,119 @@ describe("a personal calendar shows what concerns the caller (R82.8)", () => {
   it("requires authentication — there is no id in the request to widen", async () => {
     const res = await call("GET", "/me/calendar?from=2099-05-01&to=2099-05-31");
     expect([401, 403]).toContain(res.status);
+  });
+});
+
+/**
+ * **R87 §M — «إدخال الحفظ» follows real Quran assignments** (and §G's parity).
+ *
+ * The Owner named what the condition may NOT be: the teacher role, a declared
+ * capability, the Subject's Arabic name, or hard-coded text. It is staffing a
+ * schedule whose Subject carries R73's `tracks_quran_progress` marker — and an
+ * **assistant** on that class teaches Quran exactly as the main teacher does.
+ */
+describe("teaching Quran is an assignment, not a role (R87 §M/§G)", () => {
+  let quranSubject: string;
+  let otherSubject: string;
+  let quranTeacher: string;
+  let quranAssistant: string;
+  let tafseerTeacher: string;
+  let scheduleId: string;
+
+  beforeAll(async () => {
+    // **Its own Subjects**, not whichever the database happens to hold: the
+    // marker is the whole point of the test, and a fixture that hunts finds a
+    // different answer on every machine.
+    quranSubject = (
+      await prisma.subject.create({
+        data: { name: `${TAG} حفظ`, displayOrder: 90, tracksQuranProgress: true },
+      })
+    ).id;
+    otherSubject = (
+      await prisma.subject.create({
+        data: { name: `${TAG} تفسير`, displayOrder: 91, tracksQuranProgress: false },
+      })
+    ).id;
+
+    const make = async (label: string): Promise<string> => {
+      const u = await prisma.user.create({
+        data: { nameArabic: `${TAG} ${label}`, sex: "female", accountStatus: "active" },
+      });
+      return u.id;
+    };
+    quranTeacher = await make("مؤطرة الحفظ");
+    quranAssistant = await make("مساعدة الحفظ");
+    tafseerTeacher = await make("مؤطرة التفسير");
+
+    const room = await prisma.room.create({
+      data: { name: `${TAG} قاعة الحفظ`, branchId: branchA, capacity: 10 },
+    });
+    for (const [subjectId, staff] of [
+      [quranSubject, [quranTeacher, quranAssistant]],
+      [otherSubject, [tafseerTeacher]],
+    ] as [string, string[]][]) {
+      await prisma.levelSubject.upsert({
+        where: { levelId_subjectId: { levelId: levelA, subjectId } },
+        create: { levelId: levelA, subjectId },
+        update: {},
+      });
+      const schedule = await prisma.recurringCourseSchedule.create({
+        data: {
+          title: `${TAG} ${subjectId === quranSubject ? "حفظ" : "تفسير"}`,
+          subjectId,
+          teachingMode: "entire_level",
+          levelId: levelA,
+          branchId: branchA,
+          roomId: room.id,
+          // Required: without it Prisma falls back to the checked input and
+          // reports a missing RELATION, which is a confusing way to say
+          // "a schedule belongs to an academic year".
+          academicYearId: (await prisma.academicYear.findFirstOrThrow()).id,
+          startTime: new Date("1970-01-01T09:00:00Z"),
+          endTime: new Date("1970-01-01T10:00:00Z"),
+          recurrence: "weekly",
+          weekdays: ["monday"],
+          anchorDate: new Date("2099-01-05T00:00:00Z"),
+        },
+        select: { id: true },
+      });
+      if (subjectId === quranSubject) scheduleId = schedule.id;
+      await prisma.courseScheduleStaff.createMany({
+        data: staff.map((userId, i) => ({
+          scheduleId: schedule.id,
+          userId,
+          // **The assistant is the point**: parity is asserted, not assumed.
+          position: i === 0 ? "teacher" : "assistant",
+        })),
+      });
+    }
+  });
+
+  const asks = async (userId: string): Promise<boolean> => {
+    const res = await call("GET", "/me", bearer(userId, [{ role: "teacher", branches: null }]));
+    return (res.body as unknown as { teaches_quran: boolean }).teaches_quran;
+  };
+
+  it("says YES to the مؤطرة staffing the Quran class", async () => {
+    expect(await asks(quranTeacher)).toBe(true);
+  });
+
+  it("says YES to her ASSISTANT — parity, not a weaker branch (§G)", async () => {
+    expect(await asks(quranAssistant)).toBe(true);
+  });
+
+  it("says NO to a مؤطرة who teaches only another Subject", async () => {
+    // She holds the same teacher role; the role is exactly what must not decide.
+    expect(await asks(tafseerTeacher)).toBe(false);
+  });
+
+  it("says NO once the Quran assignment is withdrawn", async () => {
+    await prisma.courseScheduleStaff.updateMany({
+      where: { scheduleId, userId: quranTeacher },
+      data: { deletedAt: new Date() },
+    });
+    expect(await asks(quranTeacher)).toBe(false);
+    // And her assistant is unaffected by the other's withdrawal.
+    expect(await asks(quranAssistant)).toBe(true);
   });
 });

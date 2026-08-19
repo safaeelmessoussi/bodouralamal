@@ -30,6 +30,7 @@ const person = (roles: string[]): Me => ({
   role_scopes: roles.map((role) => ({ role, branches: null })),
   active_role: null,
   approved_child_links: [],
+    teaches_quran: false,
 });
 
 /** Renders a probe inside the provider and returns what it observed. */

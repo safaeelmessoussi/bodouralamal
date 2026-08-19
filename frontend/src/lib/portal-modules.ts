@@ -43,6 +43,19 @@ export interface PortalModule {
   roles: readonly string[];
   status: ModuleStatus;
   /**
+   * **A capability this module additionally requires** (R87 §M).
+   *
+   * Roles say *what kind of person you are*; this says *what you actually do*.
+   * «إدخال الحفظ» is the first case: a مؤطرة who teaches only Tafseer holds the
+   * teacher role and must not see it. `undefined` — the ordinary case — means
+   * the roles alone decide.
+   *
+   * **It hides a menu entry; it authorises nothing.** The server refuses a
+   * Quran write from somebody with no Quran assignment whatever the menu shows
+   * (rule O), which is what keeps this a UX rule rather than a permission.
+   */
+  requiresCapability?: 'teachesQuran';
+  /**
    * For a blocked module: what is missing, as an i18n key. Shown on the page so
    * the reader learns the reason rather than meeting an apology.
    */
@@ -58,8 +71,20 @@ export function canAccess(module: PortalModule, roles: readonly string[]): boole
 export function visibleIn<T extends PortalModule>(
   modules: readonly T[],
   roles: readonly string[],
+  /**
+   * What this person actually DOES, as the server computed it (R87 §M).
+   *
+   * Omitted, every capability-gated module is hidden — the safe direction: a
+   * caller that has not asked the server sees less rather than a menu entry the
+   * server would then refuse.
+   */
+  capabilities: { teachesQuran?: boolean } = {},
 ): T[] {
-  return modules.filter((module) => canAccess(module, roles));
+  return modules.filter((module) => {
+    if (!canAccess(module, roles)) return false;
+    if (module.requiresCapability === 'teachesQuran') return capabilities.teachesQuran === true;
+    return true;
+  });
 }
 
 /**
