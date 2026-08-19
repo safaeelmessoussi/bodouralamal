@@ -53,6 +53,10 @@ async function wipe(): Promise<void> {
   await prisma.room.deleteMany({ where: { name: { startsWith: TAG } } });
 
   await prisma.enrollment.deleteMany({ where: { studentId: { in: ids } } });
+  // R88 — the planning profile goes with the person it describes.
+  await prisma.teacherSubjectCapability.deleteMany({ where: { userId: { in: ids } } });
+  await prisma.teacherCategoryCapability.deleteMany({ where: { userId: { in: ids } } });
+  await prisma.teacherAvailability.deleteMany({ where: { userId: { in: ids } } });
   await prisma.userBranchRole.deleteMany({ where: { userId: { in: ids } } });
   // The dev sessions minted for these people wrote `auth.refresh` audit rows,
   // and `AuditLog.actor_user_id` is RESTRICT — the trail outlives the fixture

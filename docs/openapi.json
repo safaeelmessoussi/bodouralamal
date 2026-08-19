@@ -6842,6 +6842,116 @@
         }
       }
     },
+    "/admin/users/{id}/teaching-profile": {
+      "get": {
+        "summary": "Read a مؤطِّرة’s teaching profile",
+        "description": "§4.4c, R88. **Planning data, and nothing else**: the Subjects she declares she can teach, the Categories she is interested in, and her weekly availability ranges. It exists so the administration can build the year’s schedule before it starts, and it **grants no operational authority whatever it says** — a person who declares Quran and staffs no Quran class reaches no beneficiary’s memorisation. Authority is `CourseScheduleStaff`/`SessionStaff`, unchanged by this revision. **Administration-owned for the MVP**: teacher self-service is a separate decision the Owner has not taken, so a مؤطِّرة may neither read nor write her own. Not public — what a person says she can do is hers rather than the platform’s to publish.",
+        "responses": {
+          "200": {
+            "description": "Her declared Subjects, Categories and availability ranges."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN below Admin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an unknown or deleted user.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "Replace a مؤطِّرة’s teaching profile",
+        "description": "§4.4c, R88. **Replaced whole, not patched**: the profile is three small sets, and a partial update across three tables invites the half-applied state where the Subjects moved and the availability did not. One transaction, one meaning — *this is her profile now*. **Availability ranges are wall-clock (TD-11)**, `HH:MM`, and a value carrying seconds is refused rather than truncated by the column. **Overlapping ranges on one day are REFUSED** (`OVERLAPPING_AVAILABILITY`, naming the clash) because an overlap has two readings and no canonical one; **exactly touching ranges are accepted**, since 09:00–12:00 and 12:00–15:00 is how somebody free across both writes it. An unknown Subject or Category is refused rather than silently dropped, so the administration never plans against a declaration it cannot see. Audited (TD-8) — *who decided she teaches Quran* is a question somebody asks later.",
+        "responses": {
+          "200": {
+            "description": "The stored profile."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — an inverted or overlapping range, an unknown Subject or Category, or an unknown key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN below Admin — including the مؤطِّرة herself.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/me/calendar": {
       "get": {
         "summary": "The caller’s own calendar",

@@ -304,6 +304,10 @@ enum ConsumedTokenPurpose {
 /// they are login-less and reached only through an approved FamilyLink
 /// (§4.3, BR-5).
 model User {
+  /// R88 — the teaching profile: planning data, never authority.
+  subjectCapabilities   TeacherSubjectCapability[]
+  categoryCapabilities  TeacherCategoryCapability[]
+  availability          TeacherAvailability[]
   notifications Notification[] @relation("NotificationRecipient")
   examStaff     ExamStaff[]
   eventStaff    EventStaff[]   @relation("EventStaffUser")
@@ -660,6 +664,7 @@ model Room {
 
 /// The three tracks (§4.4b): المرأة / اليافعات / الطفل.
 model Category {
+  teacherCapabilities TeacherCategoryCapability[]
   id           String @id @default(uuid()) @db.Uuid
   name         String @db.VarChar(120)
   displayOrder Int?   @map("display_order")
@@ -737,6 +742,7 @@ model Level {
 /// `LevelSubject` auto-creates NO grading components (BR-9 carve-out).
 model Subject {
   id           String @id @default(uuid()) @db.Uuid
+  teacherCapabilities TeacherSubjectCapability[]
   name         String @db.VarChar(120)
   displayOrder Int?   @map("display_order")
 
@@ -2177,4 +2183,63 @@ model Notification {
   /// The list read: one user's newest first (R77.6).
   @@index([userId, createdAt])
   @@map("notification")
+}
+
+/// **The teaching profile — what a مؤطِّرة CAN teach, and when** (R88).
+///
+/// **Planning data, and nothing else.** It exists so the administration can
+/// choose assignments before the year starts; it grants no operational
+/// authority whatever it says. Authority is `CourseScheduleStaff` and
+/// `SessionStaff`, and this revision leaves both untouched.
+///
+/// Attached to `User` because `User` already IS the person: a مؤطِّرة may also
+/// be a beneficiary (R79), and a second person entity would make one human two
+/// rows. `position` on an assignment decides main teacher or assistant, so
+/// there is one profile per person and no assistant variant.
+model TeacherSubjectCapability {
+  userId    String  @map("user_id") @db.Uuid
+  user      User    @relation(fields: [userId], references: [id], onDelete: Restrict)
+  subjectId String  @map("subject_id") @db.Uuid
+  subject   Subject @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  /// The pair IS the fact: declaring one Subject twice is not two declarations.
+  @@id([userId, subjectId])
+  @@index([subjectId])
+  @@map("teacher_subject_capability")
+}
+
+model TeacherCategoryCapability {
+  userId     String   @map("user_id") @db.Uuid
+  user       User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  categoryId String   @map("category_id") @db.Uuid
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@id([userId, categoryId])
+  @@index([categoryId])
+  @@map("teacher_category_capability")
+}
+
+/// One weekly range she is available. Several per day are allowed; overlapping
+/// ones are refused in the service, where the message can name the conflict.
+///
+/// **Wall-clock times (TD-11), never instants** — *available Thursday 15:00–18:00*
+/// is true at each branch's own clock, exactly as a class's times are.
+model TeacherAvailability {
+  id     String @id @default(uuid()) @db.Uuid
+  userId String @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  weekday   DayOfWeek
+  startTime DateTime  @map("start_time") @db.Time(0)
+  endTime   DateTime  @map("end_time") @db.Time(0)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([userId, weekday, startTime, endTime])
+  @@index([userId, weekday])
+  @@map("teacher_availability")
 }

@@ -4,6 +4,7 @@ import * as notifications from './controllers/notification.controller.js';
 import * as auth from './controllers/auth.controller.js';
 import * as approvals from './controllers/approval.controller.js';
 import * as settings from './controllers/setting.controller.js';
+import * as teachingProfile from './controllers/teaching-profile.controller.js';
 import * as familyLinks from './controllers/family-link.controller.js';
 import * as consents from './controllers/consent.controller.js';
 import * as calendar from './controllers/calendar.controller.js';
@@ -239,6 +240,10 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
   // R59.1 — the permanent delete Revision 52 forbade until a revision existed.
   guarded.delete('/admin/trash/:id', trash.purge(prisma, storage));
 
+  // R88 — the teaching profile: what a مؤطِّرة can teach and when. **Planning
+  // data**, owned by the administration, granting no operational authority.
+  guarded.get('/admin/users/:id/teaching-profile', teachingProfile.read(prisma));
+  guarded.put('/admin/users/:id/teaching-profile', teachingProfile.replace(prisma));
   guarded.get('/admin/settings', settings.list(prisma));
   guarded.put('/admin/settings/:key', settings.update(prisma));
 

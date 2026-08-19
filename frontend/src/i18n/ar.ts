@@ -1061,6 +1061,24 @@ export const ar = {
         User: 'مستخدم',
       },
     },
+    // R88 — الملف التدريسي: بيانات تخطيط لا صلاحيات. الإسناد وحده يمنح الصلاحية.
+    teachingProfile: {
+      action: 'الملف التدريسي',
+      title: 'الملف التدريسي — {name}',
+      planningOnly:
+        'هذه بيانات تخطيط تساعد الإدارة على اختيار الإسناد. لا تمنح بذاتها أيّ صلاحية: الصلاحية تأتي من إسناد الحصة فعلاً.',
+      subjects: 'المواد التي يمكنها تدريسها',
+      categories: 'الفئات',
+      availability: 'الأوقات المتاحة',
+      noAvailability: 'لم تُسجَّل أوقات بعد.',
+      addRange: 'إضافة فترة',
+      weekday: 'اليوم',
+      from: 'من',
+      to: 'إلى',
+      saved: 'حُفظ الملف التدريسي.',
+      saveFailed: 'تعذّر حفظ الملف التدريسي. تحقّقي من الفترات: لا يجوز تداخلها.',
+      loadFailed: 'تعذّر تحميل الملف التدريسي.',
+    },
     users: {
       // **The pre-provisioning dialog's strings are gone with it** (2026-08-17):
       // `create`, `created`, `emailHint`, `emailInvalid`, `noRole` and

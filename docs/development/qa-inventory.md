@@ -46,6 +46,8 @@ rather than summarised.
 | 14b | Event audience | scope → recipients (R82.7) | ✓ | ✓ `notification-targets` | ✓ within 19/19 | Level · Branch+Category · Category-wide · global |
 | 14c | Personal calendar | `GET /me/calendar` (R82.8) | ✓ | ✓ `notification-targets` | ✓ within 19/19 | asked as each of three people |
 | 14d | Grade published | publish → notice (R82.4) | ✓ | ✓ `notification-targets` | ✓ within `verify-grading` | draft is silent; republish idempotent |
+| 15 | Teaching profile | «الملف التدريسي» on المستخدمون (R88) | ✓ | ✓ `teaching-profile` (15) | ✓ 6/6 `verify-teaching-profile` | **planning data**; the screen says it grants nothing |
+| 15a | Capability ≠ authorization | declared-everything teacher (R88.3) | ✓ | ✓ within the 15 | — | no roster, no Quran marker, no class in her calendar |
 | 15 | Content library | `/admin/content`, `/teacher/content` | ✓ | ✓ `library`, `content`, `upload` | ✓ 16/16 recorder | |
 | 16 | Session materials | materials dialog | ✓ | ✓ `session-page` | ✓ 22/22 | |
 | 17 | Audio recordings | recorder, both entry points | ✓ | ✓ upload pipeline | ✓ 22/22 + 16/16, real MediaRecorder | |
