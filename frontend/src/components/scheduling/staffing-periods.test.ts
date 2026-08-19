@@ -90,6 +90,20 @@ describe('R90’s warnings still ride along, and still refuse nothing', () => {
     expect(code(PERIODS)).toContain('<Warnings candidate={appraisal?.[row.user_id]} />');
   });
 
+  it('marks the option BEFORE the choice, through the SHARED helper', () => {
+    /**
+     * The half that was lost and is now guarded. Moving a class from
+     * `StaffPicker` to this editor dropped the option marker while the chips
+     * below kept working — which is exactly what made the loss hard to see.
+     * `markedLabel` is imported, never re-implemented: a second copy is how the
+     * two controls would drift apart again.
+     */
+    expect(code(PERIODS)).toContain('markedLabel(x, appraisal)');
+    expect(code(PERIODS)).toContain("from './staff-picker.js'");
+    expect(code(PERIODS)).not.toContain('const WARNING_KEY');
+    expect(code(PERIODS)).not.toContain('function Warnings');
+  });
+
   it('and disables nothing on account of one', () => {
     // `disabled` is the caller's authorization prop and nothing else may drive
     // it — a disabled option is a refusal wearing a hint (rule AR).

@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 
-import { Badge } from '../ui/badge.js';
 import { Button } from '../ui/button.js';
+import { markedLabel, Warnings } from './staff-picker.js';
 import { DateField, SelectField } from '../ui/field.js';
 import { t } from '../../i18n/index.js';
 import type { TeachingCandidate } from '../../adapters/teaching-candidates.js';
@@ -56,37 +56,6 @@ export interface StaffingPeriodsProps {
   appraisal?: Record<string, TeachingCandidate>;
 }
 
-const WARNING_KEY: Record<string, string> = {
-  subject_not_declared: 'admin.schedules.warnSubject',
-  category_not_declared: 'admin.schedules.warnCategory',
-  availability_not_declared: 'admin.schedules.warnNoAvailability',
-  unavailable: 'admin.schedules.warnUnavailable',
-  conflict: 'admin.schedules.warnConflict',
-  availability_indeterminate: 'admin.schedules.warnIndeterminate',
-};
-
-/** The chips for one row, or nothing — quiet is the ordinary case. */
-function Warnings({ candidate }: { candidate: TeachingCandidate | undefined }): ReactNode {
-  if (!candidate) return null;
-  if (candidate.no_profile) {
-    return (
-      <p className="staff-picker__warnings">
-        <Badge tone="neutral">{t('admin.schedules.warnNoProfile')}</Badge>
-      </p>
-    );
-  }
-  if (candidate.warnings.length === 0) return null;
-  return (
-    <p className="staff-picker__warnings">
-      {candidate.warnings.map((w) => (
-        <Badge key={w} tone="warn">
-          {t(WARNING_KEY[w] ?? 'admin.schedules.warnUnknown')}
-        </Badge>
-      ))}
-    </p>
-  );
-}
-
 export function StaffingPeriods({
   staff,
   value,
@@ -117,9 +86,16 @@ export function StaffingPeriods({
             value={row.user_id}
             onChange={(v) => update(index, { user_id: v })}
             disabled={disabled}
+            /**
+             * **Marked BEFORE the choice** (rule AR). This rendered bare names,
+             * so moving a class onto this editor silently dropped half of R90:
+             * the chips below still appeared once somebody was chosen, which is
+             * what made the loss hard to see. `markedLabel` is the shared
+             * `StaffPicker` helper, not a second copy.
+             */
             options={[
               { value: '', label: t('common.choose') },
-              ...staff.map((x) => ({ value: x.id, label: x.name_arabic })),
+              ...staff.map((x) => ({ value: x.id, label: markedLabel(x, appraisal) })),
             ]}
           />
           <SelectField

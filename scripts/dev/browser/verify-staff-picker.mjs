@@ -135,8 +135,11 @@ const addRow = () =>
   evaluate(`(async () => {
     const dialog = document.querySelector('dialog[open]');
     if (!dialog) return { noDialog: true };
-    const add = [...dialog.querySelectorAll('button')].find(
-      (b) => b.textContent.trim() === 'إضافة إسناد',
+    // **Substring, not exact equality** — the shared Button renders the add
+    // variant as ＋إضافة إسناد, and === silently matched nothing.
+    // (No backticks in this comment: it lives inside a template literal.)
+    const add = [...dialog.querySelectorAll('button')].find((b) =>
+      b.textContent.includes('إضافة إسناد'),
     );
     if (!add) return { noAdd: true, labels: [...dialog.querySelectorAll('button')].map((b) => b.textContent.trim()) };
     add.click();
@@ -178,30 +181,26 @@ check(
 );
 
 /**
- * **KNOWN FAILING — 6/13, recorded rather than hidden** (2026-08-19).
+ * **Restated for R91's staffing editor — and one harness bug that was hiding it.**
  *
- * Checks 6, 7, 8, 10 and 11 do not pass. The R91 slice changed the class form's
- * staffing control from `StaffPicker` to the dated `StaffingPeriods` editor, and
- * this harness has not been brought across correctly.
+ * Two layers were wrong, and only the second was obvious:
  *
- * **What is established:** «إضافة إسناد» is *not present* on the dialog this
- * harness has open (`hasAdd: false`), while a select offering the seeded
- * مؤطِّرات *is* — which is `StaffPicker`'s lead selector, not the periods
- * editor. So the dialog is very likely not rendering `ClassSection` at all for
- * this fixture's row.
+ * 1. **Intentional UX change.** R91 gave an assignment an effective period, so a
+ *    class composes `StaffingPeriods` — one dated row per assignment — instead
+ *    of `StaffPicker`'s single «المؤطّرة» selector. An unstaffed class starts
+ *    with **no rows at all**, so there is no person select until one is added.
+ * 2. **Harness defect.** The add control was matched with
+ *    `textContent.trim() === 'إضافة إسناد'`, and the shared `Button` renders
+ *    `variant="add"` as **`＋إضافة إسناد`** — the platform's one add convention,
+ *    deliberately carried by the variant so the glyph cannot be forgotten on the
+ *    seventh screen. Exact equality never matched, the row was never added, and
+ *    the probe reported an empty picker on a control that works. **Production
+ *    was correct throughout**; a form probe traced it in one pass (type `class`,
+ *    `ClassSection`, legend «المؤطّرات وفتراتهن», button `＋إضافة إسناد`).
  *
- * **What is NOT established:** whether the fixture's schedule is being typed as
- * something other than a class by the list, or the form is opening a different
- * section. Both would be product findings; neither has been demonstrated, and
- * guessing between them in the comment would be worse than saying so.
- *
- * **The R90 behaviour itself is not in doubt** — checks 1, 2, 9, 12 and 13 pass
- * here, and the appraisal, its warnings and the assignment-grants-authority pair
- * are covered by `teaching-candidates.http.integration.test.ts` (23) and by
- * `verify-effective-staffing` (13/13), which drives the periods editor with real
- * data. What is unverified is this harness's *interface* half.
- *
- * ---
+ * The properties asserted are unchanged: every candidate offered, the ones with
+ * a concern marked before the choice, each concern named in Arabic beside the
+ * control, nothing disabled, and the one with no profile assignable anyway.
  *
  * **Add the row and read every case in ONE evaluate.**
  *
@@ -219,8 +218,11 @@ const cases = await evaluate(`(async () => {
       [...sel.options].some((o) => o.textContent.includes('[r90-picker] أ')),
     );
   if (!person()) {
-    const add = [...dialog.querySelectorAll('button')].find(
-      (b) => b.textContent.trim() === 'إضافة إسناد',
+    // **Substring, not exact equality** — the shared Button renders the add
+    // variant as ＋إضافة إسناد, and === silently matched nothing.
+    // (No backticks in this comment: it lives inside a template literal.)
+    const add = [...dialog.querySelectorAll('button')].find((b) =>
+      b.textContent.includes('إضافة إسناد'),
     );
     if (add) {
       add.click();

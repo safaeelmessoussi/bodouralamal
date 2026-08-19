@@ -589,7 +589,8 @@
 - [x] UI: `StaffingPeriods` for a class · «مؤطّرة هذه الحصة» for a one-off cover · three refusals each in Arabic. New rule **AS**
 - [x] R90's conflict query now needs **both** halves — the limitation R90 recorded is closed
 - [x] 222 backend unit · 1373 integration · 613 frontend · 13/13 new browser checks · 18 CI guards · OpenAPI current
-- [ ] **OPEN DEFECT — `verify-staff-picker` at 6/13.** R91 changed the control it drives; «إضافة إسناد» is absent from the dialog it opens while `StaffPicker`'s lead select is present, so it is very likely not rendering `ClassSection` for that fixture's row. Cause not established and not guessed. R90's behaviour is covered elsewhere (23 API tests, and `verify-effective-staffing` 13/13 through the same form)
+- [x] **`verify-staff-picker` closed 2026-08-20 — 13/13.** Harness defect (`===` against the shared add-Button's `＋` prefix) on top of R91's intentional control change. Fixing it exposed a **real regression**: the periods editor rendered bare names, dropping R90's *marked before the choice* half. `markedLabel`/`Warnings` now shared and guarded
+- [x] **All 20 harnesses green in one pass — 460 checks** (plus `measure-page-header`'s 9 widths)
 - [ ] **NEXT — cross-branch occurrence audience (§D).** Deliberately NOT started: the Owner's brief instructs re-checking capacity before D and stopping after C with a clean tree if D cannot be completed whole. It needs its own migration (a `Session` audience override), one shared audience resolver, the counterpart-Session decision, UI, tests, browser verification and docs
 
 ### R90 — staff-picker planning warnings (2026-08-19)

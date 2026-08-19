@@ -73,7 +73,9 @@ export interface StaffPickerProps {
 
 /** The words for each warning. One per kind, in the catalogue — never composed
  *  from fragments, which is how a sentence ends up half-translated. */
-const WARNING_KEY: Record<string, string> = {
+/** One key per warning kind. Exported for the same reason `markedLabel` is:
+ *  two controls render these words and neither may own a private copy. */
+export const WARNING_KEY: Record<string, string> = {
   subject_not_declared: 'admin.schedules.warnSubject',
   category_not_declared: 'admin.schedules.warnCategory',
   availability_not_declared: 'admin.schedules.warnNoAvailability',
@@ -89,7 +91,7 @@ const WARNING_KEY: Record<string, string> = {
  * three separate failures; she is one fact the administration may want to fix,
  * and «لم تُسجَّل بيانات تخطيط» says it without accusing her of being busy.
  */
-function Warnings({ candidate }: { candidate: TeachingCandidate | undefined }): ReactNode {
+export function Warnings({ candidate }: { candidate: TeachingCandidate | undefined }): ReactNode {
   if (!candidate) return null;
   if (candidate.no_profile) {
     return (
@@ -110,9 +112,17 @@ function Warnings({ candidate }: { candidate: TeachingCandidate | undefined }): 
   );
 }
 
-/** The marker an option carries in the list, so a concern is visible BEFORE the
- *  choice rather than only after it. A clean candidate carries none. */
-function markedLabel(
+/**
+ * The marker an option carries in the list, so a concern is visible BEFORE the
+ * choice rather than only after it. A clean candidate carries none.
+ *
+ * **Exported, and that is the point** (rule AR, 2026-08-19). It lived here as a
+ * private helper, so when R91 moved a class onto `StaffingPeriods` the *before
+ * the choice* half of the rule was silently lost — the chips after selection
+ * still worked, which is exactly what made it hard to notice. One
+ * implementation, used by both controls.
+ */
+export function markedLabel(
   person: UserSummary,
   appraisal: Record<string, TeachingCandidate> | undefined,
 ): string {

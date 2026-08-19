@@ -97,73 +97,46 @@ under the table.
 | `verify-grading.sh` | 14d, 16 | R81 — the exam's own maximum, empty ≠ zero, publish notifies and a draft is silent | 16/16 |
 | `verify-teaching-profile.sh` | 15, 15b | **AQ/X** — ownership of «الملف التدريسي», the population, Arabic weekdays, a range that survives a reload | 13/13 |
 | `verify-effective-staffing.sh` | 15e, 15f | **R91** — the replacement as four identities: dated rows, Safa twice, per-date occurrences, and a handover that leaves the past alone | 13/13 |
-| `verify-staff-picker.sh` | 15c, 10 | **AR** — five مؤطِّرات an administrator must tell apart; the appraisal, the assignment and the authority pair | **6/13 — KNOWN FAILING, see below** |
+| `verify-staff-picker.sh` | 15c, 10 | **AR** — five مؤطِّرات an administrator must tell apart; all offered, each marked **before** the choice and named after it, nothing disabled, the one with no profile assigned anyway | 13/13 |
 | `verify-schedule-edit.sh` | 10, 11 | «تعديل العنصر» — R50's scopes through the real dialog | 12/12 |
 | `verify-student-flows.sh` | 22 | The beneficiary's own portal: calendar, library, memorisation, grades, account | 11/11 |
 | `verify-calendar-filters.sh` | 20 | **AL** — a filter chosen in one view survives the switch, in the controls, in the URL **and in the other view's request** | 11/11 |
 | `verify-circles-reorder.sh` | 9 | R78.1 — ordering حلقات المواد within a `(level, subject)` pairing | 9/9 |
 | `measure-page-header.sh` | shared UI | Header layout measured in a browser at nine widths | 9/9 widths |
 
-**453 of 460 checks across 20 harnesses**, plus `measure-page-header`'s nine
-width measurements — 21 scripts in `scripts/dev/browser/` and 21 rows here.
-**Nineteen harnesses are fully green; `verify-staff-picker` is at 6/13** and is
-described immediately below rather than quietly excluded from the count.
+**460 checks across 20 harnesses, all green** (2026-08-20), plus
+`measure-page-header`'s nine width measurements — 21 scripts in
+`scripts/dev/browser/` and 21 rows here. Every row was run in one pass; none is
+carried forward.
 
-### `verify-staff-picker` — 6/13, open (2026-08-19)
+### `verify-staff-picker` — closed (2026-08-20), and it was hiding a regression
 
-R91 replaced the class form's `StaffPicker` with the dated `StaffingPeriods`
-editor, and this R90 harness has not been brought across correctly. Checks 6, 7,
-8, 10 and 11 fail.
+Two layers were wrong, and only the second was obvious.
 
-**Established:** «إضافة إسناد» is *not present* on the dialog the harness has
-open, while a select offering the seeded مؤطِّرات *is* — which is `StaffPicker`'s
-lead selector rather than the periods editor. The dialog is very likely not
-rendering `ClassSection` for this fixture's row.
+**Intentional UX change.** R91 gave an assignment an effective period, so a class
+composes `StaffingPeriods` — one dated row per assignment — instead of
+`StaffPicker`'s single «المؤطّرة» selector. An unstaffed class starts with **no
+rows**, so there is no person select until one is added.
 
-**Not established, and not guessed at:** whether the R90 fixture's schedule is
-being typed as something other than a class by the list, or the form is opening a
-different section. Both would be product findings; neither has been demonstrated.
+**Harness defect.** The add control was matched with
+`textContent.trim() === 'إضافة إسناد'`, and the shared `Button` renders
+`variant="add"` as **`＋إضافة إسناد`** — the platform's one add convention,
+carried by the variant precisely so the glyph cannot be forgotten on the seventh
+screen. Exact equality never matched, the row was never added, and the probe
+reported an empty picker on a control that worked. A single form probe settled it
+in one pass: type `class`, `ClassSection`, legend «المؤطّرات وفتراتهن», button
+`＋إضافة إسناد`.
 
-**What this does NOT put in doubt.** Checks 1, 2, 9, 12 and 13 pass, and R90's
-behaviour is covered by `teaching-candidates.http.integration.test.ts` (23 tests,
-green) and by `verify-effective-staffing` (13/13), which drives the periods
-editor with real data through the same form. What is unverified is this
-harness's interface half.
+**And then it earned its keep.** With the row finally being added, check 5 failed
+on a **real production regression**: `StaffingPeriods` rendered bare names, so
+moving a class onto it had silently dropped R90's *visible before the choice*
+half. The chips after selection still worked, which is exactly what made the loss
+invisible. `markedLabel` and `Warnings` are now **exported from `StaffPicker` and
+shared**, with a source guard asserting the periods editor holds no private copy.
 
-### Reconciliation (2026-08-19) — what the old table was hiding
-
-The previous table listed **ten** harnesses and claimed **181** checks. Eight
-scripts existed and were cited from the rule each one guards in
-[ux-architecture](ux-architecture.md#the-guards), but had never been added here;
-two of the counts it did carry were stale (`verify-notifications` had grown from
-18 to 22). **A file existing is not coverage** — running all nineteen found three
-harnesses that could not have been counted:
-
-* **`verify-portals`** — «إدخال الحفظ» absent from the مؤطرة's menu. **The
-  product was right and the fixture was wrong.** The seed took
-  `subject.findFirstOrThrow({ deletedAt: null })` — *whichever Subject sorts
-  first in the development database* — and titled the schedule «حلقة الحفظ» on
-  the strength of it. That Subject carries `tracks_quran_progress: false`, so
-  R87 §M correctly hid the entry from somebody who staffs no Quran class. The
-  seed now creates its own marked Subject.
-* **`verify-public-calendar`** — 11/18, then a crash. It waited on `.cal-toolbar`
-  (retired by R84 when the filters and the view switch moved into the one shared
-  header), read the hand-rolled `.occurrence-list` that R84 replaced with the
-  platform's `DataTable`, and asserted **R77's rule that R83 reversed**: a
-  cancelled occurrence used to stay on the public calendar and now leaves it.
-  Every check was **restated with its reason recorded, never deleted** — and the
-  reversal kept a half that can still regress, so *omitted from the ordinary
-  read* is now pinned beside *still carried by `include_cancelled=true`*.
-* **`verify-sorting`** and **`verify-reorder`** — intermittent, naming a screen
-  that worked. The readiness predicate looked for `.datatable__skeleton` and then
-  accepted `.state` as ready; the shared `LoadingState` renders
-  `.state[role="status"]`, so **the loading state satisfied the ready
-  predicate**. Fixed in both; three consecutive clean runs each.
-
-**The lesson is the one this page exists for:** a harness nobody runs decays
-against the product exactly as documentation does, and it decays *silently* —
-two of these three would have been counted as coverage by anybody reading the
-directory listing.
+**The lesson**: a harness that cannot reach its control reports the product as
+broken *and* stops testing it. Both failures were in this one file, and the
+second was only reachable once the first was fixed.
 
 ## The gaps, ranked
 
