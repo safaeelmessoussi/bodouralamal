@@ -55,6 +55,14 @@ export function ConfirmDialog({
    */
   details,
   confirmLabel,
+  /**
+   * The wording of the way OUT, when «إلغاء» is not what declining means.
+   *
+   * R82.5's notice asks *shall I tell everyone concerned* — and the answer is
+   * «بدون إشعار», a decision, not a cancellation of one. Defaulting to
+   * `common.cancel` leaves every existing caller unchanged.
+   */
+  cancelLabel,
   danger = false,
   /** When set, a justification is required and passed back on confirm. */
   reasonLabel,
@@ -70,6 +78,7 @@ export function ConfirmDialog({
   body: string;
   details?: ReactNode;
   confirmLabel?: string;
+  cancelLabel?: string;
   danger?: boolean;
   reasonLabel?: string;
   reasonHint?: string;
@@ -116,7 +125,7 @@ export function ConfirmDialog({
 
         <div className="confirm__actions">
           <Button variant="secondary" onClick={onCancel}>
-            {t('common.cancel')}
+            {cancelLabel ?? t('common.cancel')}
           </Button>
           <Button
             variant={danger ? 'danger' : 'primary'}

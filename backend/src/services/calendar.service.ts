@@ -365,10 +365,117 @@ function sessionOccurrence(
   };
 }
 
+/**
+ * **What a personal calendar is** (R82.8).
+ *
+ * `GET /calendar` answers *what is on at the association*, by visibility tier.
+ * That is the right answer for a visitor and the wrong one for a signed-in
+ * person, who wants *what concerns me* — and the difference is not cosmetic: a
+ * beneficiary sees every public session in the platform today, including Levels
+ * she is not enrolled in.
+ *
+ * The personal read is a **filter over the same projection**, never a second
+ * one, and it creates **no per-user rows**: the pipeline stays *definition →
+ * occurrence → audience filter at read time*, which is what §4.4 already
+ * describes and what keeps a moved enrolment correct on the next read rather
+ * than needing a backfill.
+ *
+ * Two populations, and they are different questions:
+ *
+ * * **a beneficiary** — the sessions her enrolments place her in, and the events
+ *   addressed to a scope she belongs to;
+ * * **a مؤطرة** — the sessions and events she is **assigned to**, from the
+ *   Session's own staffing snapshot (R43.4) and `EventStaff`.
+ *
+ * Somebody who is both gets the union, which is the honest answer for a مؤطرة
+ * who also studies (R79 makes that expressible).
+ */
+async function personalFilters(
+  prisma: PrismaClient,
+  userId: string,
+): Promise<{ event: Prisma.EventWhereInput; session: Prisma.SessionWhereInput }> {
+  const enrolments = await prisma.enrollment.findMany({
+    where: { studentId: userId, deletedAt: null },
+    select: {
+      levelId: true,
+      branchId: true,
+      administrativeGroupId: true,
+      level: { select: { categoryId: true } },
+    },
+  });
+  const seats = await prisma.studentTeachingGroup.findMany({
+    where: { studentId: userId, deletedAt: null, teachingGroup: { deletedAt: null } },
+    select: { teachingGroupId: true },
+  });
+
+  const levelIds = [...new Set(enrolments.map((e) => e.levelId))];
+  const branchIds = [...new Set(enrolments.map((e) => e.branchId))];
+  const categoryIds = [...new Set(enrolments.map((e) => e.level.categoryId))];
+  const groupIds = enrolments
+    .map((e) => e.administrativeGroupId)
+    .filter((id): id is string => id !== null);
+  const circleIds = seats.map((s) => s.teachingGroupId);
+
+  /**
+   * **An event concerns her if ANY of its scopes names something she is in** —
+   * a union, unlike the notification audience, which intersects the scopes of an
+   * event to find its recipients. The two are different questions asked from
+   * different ends: *does this event's scope include me* versus *who does this
+   * event's scope include*.
+   *
+   * A **global** event (no scope rows at all) is on everybody's calendar, which
+   * is exactly where R82.7 puts it: visible to all, notified to none.
+   */
+  const event: Prisma.EventWhereInput = {
+    OR: [
+      { AND: [{ branchScopes: { none: {} } }, { categoryScopes: { none: {} } }, { levelScopes: { none: {} } }, { administrativeGroupScopes: { none: {} } }] },
+      ...(branchIds.length ? [{ branchScopes: { some: { branchId: { in: branchIds } } } }] : []),
+      ...(categoryIds.length ? [{ categoryScopes: { some: { categoryId: { in: categoryIds } } } }] : []),
+      ...(levelIds.length ? [{ levelScopes: { some: { levelId: { in: levelIds } } } }] : []),
+      ...(groupIds.length
+        ? [{ administrativeGroupScopes: { some: { administrativeGroupId: { in: groupIds } } } }]
+        : []),
+      // Her own assignments, whatever the scope says.
+      { staff: { some: { userId, deletedAt: null } } },
+    ],
+  };
+
+  const session: Prisma.SessionWhereInput = {
+    OR: [
+      // Assigned — the Session's OWN snapshot (R43.4), so a مؤطرة who covered
+      // one occurrence keeps it and one merely removed from the schedule does
+      // not lose the ones she actually took.
+      { staff: { some: { userId, deletedAt: null } } },
+      ...(levelIds.length || groupIds.length || circleIds.length
+        ? [
+            {
+              schedule: {
+                OR: [
+                  // *That Level at that branch* — the R66 pairing, not the Level
+                  // alone: a Level spans branches and her class does not.
+                  ...enrolments.map((e) => ({
+                    levelId: e.levelId,
+                    branchId: e.branchId,
+                  })),
+                  ...(groupIds.length
+                    ? [{ administrativeGroupId: { in: groupIds } }]
+                    : []),
+                  ...(circleIds.length ? [{ teachingGroupId: { in: circleIds } }] : []),
+                ],
+              },
+            },
+          ]
+        : []),
+    ],
+  };
+
+  return { event, session };
+}
+
 export async function readCalendar(
   prisma: PrismaClient,
   actor: CalendarActor | null,
-  query: CalendarQuery,
+  query: CalendarQuery & { mine?: boolean },
 ): Promise<Occurrence[]> {
   if (query.to < query.from) {
     throw new AppError('VALIDATION_FAILED', 'to must not precede from');
@@ -376,6 +483,19 @@ export async function readCalendar(
   if (daysBetween(query.from, query.to) > MAX_RANGE_DAYS) {
     throw new AppError('VALIDATION_FAILED', `range must not exceed ${MAX_RANGE_DAYS} days`);
   }
+
+  /**
+   * **The personal narrowing, composed into the same queries** (R82.8) — not a
+   * second pipeline, and not a filter applied after expansion: narrowing after
+   * the fact would still have read every occurrence in the platform to throw
+   * most of them away.
+   *
+   * It requires an authenticated actor by construction: `mine` is only reachable
+   * through the guarded route, and there is no user id in the request for a
+   * caller to have chosen (the TD-12 property `GET /students/me` relies on).
+   */
+  const personal =
+    query.mine === true && actor !== null ? await personalFilters(prisma, actor.userId) : null;
 
   const floor = await operationalFloor(prisma, query.branchId);
   const from = floor && floor > query.from ? floor : query.from;
@@ -422,8 +542,11 @@ export async function readCalendar(
     where: {
       deletedAt: null,
       startDate: { lte: query.to },
+      // The tier still applies on a personal calendar: being concerned by an
+      // event does not widen what she may see of it.
       ...(await visibilityFilter(prisma, actor)),
       ...(scopeFilters.length ? { AND: scopeFilters } : {}),
+      ...(personal ? { AND: [...scopeFilters, personal.event] } : {}),
     },
     include: {
       branchScopes: { select: { branch: { select: { id: true, name: true } } }, take: 1 },
@@ -565,6 +688,7 @@ export async function readCalendar(
       where: {
         deletedAt: null,
         date: { gte: from, lte: query.to },
+        ...(personal ? { AND: [personal.session] } : {}),
         schedule: {
           deletedAt: null,
           ...(query.branchId ? { branchId: query.branchId } : {}),

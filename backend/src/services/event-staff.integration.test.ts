@@ -80,6 +80,8 @@ async function clear(): Promise<void> {
     await prisma.eventLevel.deleteMany({ where: { eventId: { in: ids } } });
     await prisma.auditLog.deleteMany({ where: { targetId: { in: ids } } });
     await prisma.trash.deleteMany({ where: { targetId: { in: ids } } });
+    // R82 — notices RESTRICT the event they are about; teardown clears them first.
+    await prisma.notification.deleteMany({ where: { event: { id: { in: ids } } } });
     await prisma.event.deleteMany({ where: { id: { in: ids } } });
   }
 

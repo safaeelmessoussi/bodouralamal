@@ -545,6 +545,24 @@ usually in the output already.
 - **The staging origin never exercises authenticated flows** — it is cross-origin by design,
   so those run against the local same-origin stack and the production rehearsal.
 
+## Browser harnesses and the traps they have paid for
+
+Two recorded once, because both were mistaken for product defects:
+
+**Never mint a second access token while the app is running.** The app refreshes
+on load; a harness refreshing again against the cookie it had just rotated is
+exactly what TD-4.13's **reuse detection revokes a session for**. The first read
+succeeds and everything after it answers `401`, which reads like a broken
+feature. `verify-notifications.mjs` mints **once per identity** and reuses it.
+
+**`/auth/refresh` compares `X-Requested-With` literally** — the value must be
+`XMLHttpRequest` (TD-12's CSRF posture). Any other value is `AUTH_REQUIRED`.
+
+**A negative check that cannot fail proves nothing.** In the same harness, every
+*unrelated person sees nothing* check passed while the reads were 401ing —
+an empty list because the request failed is not the same fact as an empty list.
+The inbox helper now reports a non-200 rather than swallowing it.
+
 ## Acceptance checklists
 
 A module is Done only when its checklist is fully ticked, its test gates pass, and its

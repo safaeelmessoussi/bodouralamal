@@ -8,11 +8,13 @@ import {
   type Occurrence,
 } from '../../adapters/calendar.js';
 import { listRooms } from '../../adapters/branches-admin.js';
+import { notifyEventChange } from '../../adapters/events.js';
 import { AVAILABLE_TYPES, specOfType } from '../../adapters/scheduling-types.js';
 import {
   deleteSchedulingItem,
   listSchedulingItems,
   saveSchedulingItem,
+  type SavedSchedulingItem,
   type SchedulingItem,
   type SchedulingType,
 } from '../../adapters/scheduling.js';
@@ -169,6 +171,8 @@ export function SchedulingPage(): ReactNode {
       : null;
   });
   const [deleting, setDeleting] = useState<SchedulingItem | null>(null);
+  /** The saved event awaiting the send-or-not decision (R82.5). */
+  const [notifying, setNotifying] = useState<SavedSchedulingItem | null>(null);
 
   /**
    * **A FILTER, and it must say so** (2026-08-18).
@@ -381,13 +385,67 @@ export function SchedulingPage(): ReactNode {
           {...(editing === 'new' && initialType ? { initialType } : {})}
           token={accessToken}
           onCancel={() => setEditing(null)}
-          onSaved={() => {
+          onSaved={(saved) => {
             setEditing(null);
             setNotice(t('common.saved'));
             void load();
+            /**
+             * **R82.5 — the change is already saved; this only decides who is
+             * told.** Offered for an EVENT only: a class's occurrences notify
+             * through R77/R78 when they are cancelled or moved, inside the
+             * transaction that changes them, and an exam notifies at
+             * publication — neither asks the person to decide.
+             */
+            if (saved.id !== null) setNotifying(saved);
           }}
         />
       ) : null}
+
+      {/* **R82.5 — the optional notice.** The change is saved and stays saved
+          whichever button is pressed; only delivery is decided here. The shared
+          `ConfirmDialog` asks it, so *"are you sure"* and *"shall I tell
+          people"* are asked with the same voice (§14.3). */}
+      <ConfirmDialog
+        open={notifying !== null}
+        title={t('scheduling.notify.title')}
+        body={t('scheduling.notify.body')}
+        details={
+          <p className="muted">{t('scheduling.notify.audience')}</p>
+        }
+        confirmLabel={t('scheduling.notify.send')}
+        cancelLabel={t('scheduling.notify.skip')}
+        busy={busy}
+        onConfirm={() => {
+          void (async () => {
+            if (!notifying?.id) return;
+            setBusy(true);
+            try {
+              const result = await notifyEventChange(
+                notifying.id,
+                notifying.created ? 'created' : 'rescheduled',
+                accessToken,
+              );
+              setNotice(
+                t('scheduling.notify.sent').replace('{n}', String(result.notified)),
+              );
+            } catch {
+              // The change is already saved; only the notice failed. Saying so
+              // precisely matters — a generic failure here would read as though
+              // the event had not been created.
+              setNotice(t('scheduling.notify.failed'));
+            } finally {
+              setBusy(false);
+              setNotifying(null);
+            }
+          })();
+        }}
+        onCancel={() => {
+          // **Nothing is called.** Declining is not a request that sends zero
+          // notifications; it is the absence of the request.
+          setNotifying(null);
+          setNotice(t('scheduling.notify.skipped'));
+        }}
+      />
 
       <ConfirmDialog
         open={deleting !== null}
@@ -533,7 +591,7 @@ export function SchedulingDialog({
   item: SchedulingItem | null;
   token: string | null;
   onCancel: () => void;
-  onSaved: () => void;
+  onSaved: (saved: SavedSchedulingItem) => void;
   /** R72 — the kinds this caller may create. One kind locks the field. */
   types?: readonly SchedulingType[];
   /**
@@ -798,7 +856,7 @@ export function SchedulingDialog({
     setBusy(true);
     setNotice(null);
     try {
-      await saveSchedulingItem(
+      const saved = await saveSchedulingItem(
         {
           type,
           title,
@@ -855,7 +913,7 @@ export function SchedulingDialog({
         item ? { id: item.id, version: item.version } : null,
         token,
       );
-      onSaved();
+      onSaved(saved);
     } catch (error) {
       // A booking clash is the interesting failure and has its own code: the
       // room or a person is already committed on a materialized date, which is

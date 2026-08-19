@@ -42,6 +42,10 @@ rather than summarised.
 | 12 | Cancellation | session row action | ✓ | ✓ `notification`, `business-scenario` | ✓ 18/18 | |
 | 13 | Restoration | session row action | ✓ | ✓ same | ✓ 18/18 | |
 | 14 | Rescheduling | session override | ✓ | ✓ `notification` (R78.4) | **gap** | API-verified only |
+| 14a | Event notice, optional | «إشعار المعنيين» after a save (R82.5) | ✓ | ✓ `notification-targets` | ✓ 19/19 `verify-notifications` | send / decline / repeat |
+| 14b | Event audience | scope → recipients (R82.7) | ✓ | ✓ `notification-targets` | ✓ within 19/19 | Level · Branch+Category · Category-wide · global |
+| 14c | Personal calendar | `GET /me/calendar` (R82.8) | ✓ | ✓ `notification-targets` | ✓ within 19/19 | asked as each of three people |
+| 14d | Grade published | publish → notice (R82.4) | ✓ | ✓ `notification-targets` | ✓ within `verify-grading` | draft is silent; republish idempotent |
 | 15 | Content library | `/admin/content`, `/teacher/content` | ✓ | ✓ `library`, `content`, `upload` | ✓ 16/16 recorder | |
 | 16 | Session materials | materials dialog | ✓ | ✓ `session-page` | ✓ 22/22 | |
 | 17 | Audio recordings | recorder, both entry points | ✓ | ✓ upload pipeline | ✓ 22/22 + 16/16, real MediaRecorder | |

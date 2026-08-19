@@ -145,6 +145,11 @@ async function clear(): Promise<void> {
     await prisma.trash.deleteMany({ where: { targetId: { in: ids } } });
     await prisma.auditLog.deleteMany({ where: { targetId: { in: ids } } });
   }
+  // R82 — a notification RESTRICTs the exam or event it is about, deliberately:
+  // a notice whose subject vanished would be unreadable. Test teardown is the
+  // only place anything here is HARD-deleted (production soft-deletes), so the
+  // notices go first.
+  await prisma.notification.deleteMany({ where: { exam: { id: { in: ids } } } });
   await prisma.exam.deleteMany({ where: { id: { in: ids } } });
 
   const levels = await prisma.level.findMany({

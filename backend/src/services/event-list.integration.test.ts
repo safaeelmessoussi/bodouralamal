@@ -44,6 +44,8 @@ async function clear(): Promise<void> {
   // R71 — `event_staff` is RESTRICT like the other event children, so it
   // goes before the event it points at.
   await prisma.eventStaff.deleteMany({ where: { eventId: { in: events } } });
+  // R82 — notices RESTRICT the event they are about; teardown clears them first.
+  await prisma.notification.deleteMany({ where: { event: { id: { in: events } } } });
   await prisma.event.deleteMany({ where: { id: { in: events } } });
   const ids = (
     await prisma.user.findMany({

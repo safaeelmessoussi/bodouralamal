@@ -6720,6 +6720,108 @@
         }
       }
     },
+    "/events/{id}/notify": {
+      "post": {
+        "summary": "Announce a saved event change",
+        "description": "§4.8, R82.5. **The change is already saved; this decides only who is told.** A separate request rather than a flag on the write, for two reasons: the person has not decided at the moment the form submits, and a failure to notify must never roll back a change that succeeded. Declining costs nothing because nothing is called. **The body names the KIND of change and never the recipients** — `created`, `rescheduled` or `cancelled` — and the audience is resolved server-side from the event's own scope rows (R82.7): a Branch, a Category, a Level, an Administrative Group, or the intersection when several are named, plus the event's own staff. A **global** event (no scope rows) notifies nobody, deliberately. **The actor is never a recipient** (R78.3). **Idempotent** through the partial unique index on `(user, event, type)`: pressing send twice writes the same rows. Authorization is the event's own — whoever may edit it may announce it, asked through the same assertion the write used.",
+        "responses": {
+          "200": {
+            "description": "How many people were notified."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — an unknown change kind, or a body attempting to name recipients.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an event outside the caller’s scope or nonexistent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/calendar": {
+      "get": {
+        "summary": "The caller’s own calendar",
+        "description": "§4.4, R82.8. **What concerns me**, as against `GET /calendar`'s *what is on at the association*. The same projection — definition → occurrence — narrowed at read time to the caller: for a beneficiary the sessions her enrolments place her in and the events addressed to a scope she belongs to; for a مؤطرة the sessions and events she is **assigned** to, from the Session's own staffing snapshot (R43.4) rather than the schedule's. Somebody who is both gets the union. **No per-user rows exist**: this is a filter over the shared projection, never a copy of it, so a moved enrolment is correct on the next read rather than needing a backfill. A **global** event is on everybody's calendar — visible to all, notified to none. **The visibility tier still applies**: being concerned by something does not widen what the caller may see of it. **There is no user id in the request** — the subject is the authenticated actor, which is the same property that makes `GET /students/me` untamperable (TD-12, R63.3).",
+        "responses": {
+          "200": {
+            "description": "The caller’s own occurrences in the range."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — missing dates or an inverted range.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/students/me/grades": {
       "get": {
         "summary": "The acting student’s published grades",

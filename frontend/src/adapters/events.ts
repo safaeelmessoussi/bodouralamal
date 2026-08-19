@@ -109,3 +109,25 @@ export async function setEventStaff(
 ): Promise<void> {
   await api<void>(`/events/${id}/staff`, { method: 'PUT', token, body: { staff } });
 }
+
+/**
+ * `POST /events/{id}/notify` — **the optional send, after the save** (R82.5).
+ *
+ * The client says *which change happened* and never *who to tell*: recipients
+ * are resolved on the server from the event's own scope rows, and a body that
+ * tried to name them is refused by the `.strict()` schema. That is what makes
+ * *"do not invent recipient lists in the frontend"* a property of the contract
+ * rather than a convention somebody has to remember.
+ */
+export async function notifyEventChange(
+  eventId: string,
+  change: 'created' | 'rescheduled' | 'cancelled',
+  token: string | null,
+): Promise<{ notified: number }> {
+  const body = await api<{ data: { notified: number } }>(`/events/${eventId}/notify`, {
+    method: 'POST',
+    token,
+    body: { change },
+  });
+  return body.data;
+}

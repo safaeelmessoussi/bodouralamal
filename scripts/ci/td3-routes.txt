@@ -113,6 +113,8 @@ PUT /events/{id}/staff                        # TD-3.4, §4.4 R71; replaces the 
 
 GET /notifications                            # R77.7; the caller's OWN, paginated (TD-10)
 POST /notifications/{id}/read                 # R77.6; idempotent; another user's answers 404 (§20 r17)
+POST /events/{id}/notify                      # R82.5; the OPTIONAL send after a saved change; audience is the event's own scope
+GET /me/calendar                              # R82.8; the caller's own occurrences; /calendar stays the public tier read
 GET /admin/branches/{id}/event-backfill       # §4.4 "listing applicable global/recurring events to attach"
 
 # ── Official Moroccan Hijri calendar (TD-3.4, Revision 31)

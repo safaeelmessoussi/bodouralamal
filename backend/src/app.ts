@@ -258,8 +258,15 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
   // R77 — the caller's OWN notifications. No `childContext`: a notification is
   // addressed to a user, and a parent acting for a child reads the child's
   // calendar, not the child's mailbox (§4.3, R77.3).
+  // R82.8 — the caller's OWN calendar: the same projection, narrowed to what
+  // concerns her. `GET /calendar` stays the public, visibility-tier read.
+  guarded.get('/me/calendar', calendar.readMine(prisma));
   guarded.get('/notifications', notifications.list(prisma));
   guarded.post('/notifications/:id/read', notifications.read(prisma));
+  // R82.5 — the OPTIONAL send, after an event change is already saved. A
+  // separate request against the saved row, so declining sends nothing and a
+  // failure here can never roll back a change that succeeded.
+  guarded.post('/events/:id/notify', notifications.notifyEventHandler(prisma));
 
   guarded.get('/admin/approvals', approvals.list(prisma));
   guarded.post('/admin/approvals/:id/approve', approvals.approve(prisma));

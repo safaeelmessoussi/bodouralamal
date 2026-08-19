@@ -253,7 +253,13 @@ export async function createEvent(
  * A caller who fails the test gets `NOT_FOUND`, not `FORBIDDEN` (§20 rule 17):
  * whether an event they cannot reach exists is not information they are owed.
  */
-async function assertMayEdit(
+/**
+ * **Exported for R82's optional send**: whoever may edit an event may announce a
+ * change to it, and the announcement asks the *same* question the write asked.
+ * A second implementation of "may this person touch this event" would be a
+ * second answer, and the two would drift.
+ */
+export async function assertMayEdit(
   tx: Prisma.TransactionClient,
   actor: Actor,
   eventId: string,

@@ -428,17 +428,38 @@ export function weekdaysForClass(recurrence: string, weekdays: string[], startDa
   return name ? [name] : [];
 }
 
+/**
+ * What a save reports back, so the caller can offer R82.5's optional notice.
+ *
+ * The **id and whether it was a creation** are what the confirmation needs, and
+ * neither is knowable from the input alone: a creation returns a new id, and
+ * *which change happened* decides which notification type the send would write.
+ */
+export interface SavedSchedulingItem {
+  id: string | null;
+  created: boolean;
+}
+
+/**
+ * **Only an EVENT save reports an id here**, and that is the domain speaking
+ * rather than an omission: R82.5's optional notice is about Events. A class's
+ * occurrences already notify through R77/R78 when they are cancelled or moved,
+ * inside the transaction that changes them, and an exam sitting notifies at
+ * publication (R82.4) — neither asks the person to decide.
+ */
+const NOT_AN_EVENT: SavedSchedulingItem = { id: null, created: false };
+
 export async function saveSchedulingItem(
   input: SchedulingInput,
   existing: { id: string; version: number } | null,
   token: string | null,
-): Promise<unknown> {
+): Promise<SavedSchedulingItem> {
   if (input.type === 'class') {
     if (existing) {
       // §4.4: subject, target, branch and year are not editable — changing what
       // is taught, to whom or where would re-point sessions already materialized
       // against the old answer. The form locks them; the server refuses them.
-      return updateCourseSchedule(
+      await updateCourseSchedule(
         existing.id,
         existing.version,
         {
@@ -454,8 +475,9 @@ export async function saveSchedulingItem(
         },
         token,
       );
+      return NOT_AN_EVENT;
     }
-    return createCourseSchedule(
+    await createCourseSchedule(
       {
         title: input.title,
         description: input.description,
@@ -475,13 +497,14 @@ export async function saveSchedulingItem(
       },
       token,
     );
+    return NOT_AN_EVENT;
   }
 
   if (input.type === 'exam') {
     if (existing) {
       // **Arrangements only.** The server refuses the identity fields rather
       // than dropping them, so they are not sent — see `updateExam`.
-      return updateExam(
+      await updateExam(
         existing.id,
         existing.version,
         {
@@ -499,8 +522,9 @@ export async function saveSchedulingItem(
         },
         token,
       );
+      return NOT_AN_EVENT;
     }
-    return createExam(
+    await createExam(
       {
         // Sent explicitly: `online` must be refused by the SERVER with a coded
         // reason, not silently prevented here, so a client learns which
@@ -522,6 +546,7 @@ export async function saveSchedulingItem(
       },
       token,
     );
+    return NOT_AN_EVENT;
   }
 
   const payload: EventInput = {
@@ -556,11 +581,11 @@ export async function saveSchedulingItem(
     ? await updateEvent(existing.id, existing.version, payload, token)
     : await createEvent(payload, token);
 
+  const eventId = existing?.id ?? (saved as { id: string }).id;
   if (input.eventStaff) {
-    const id = existing?.id ?? (saved as { id: string }).id;
-    await setEventStaff(id, input.eventStaff, token);
+    await setEventStaff(eventId, input.eventStaff, token);
   }
-  return saved;
+  return { id: eventId, created: existing === null };
 }
 
 export async function deleteSchedulingItem(

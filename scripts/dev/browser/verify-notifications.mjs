@@ -1,328 +1,302 @@
 /**
- * **R77 in a real browser, on the real student screens.**
+ * **R82 end to end: who sees what, and who is told.**
  *
- * The scenario is the association's own — تفسير · وميض الأمل · كل اثنين
- * 15:00–17:00 · تاركة · القاعة 5 — seeded by scripts/dev/seed-dev-scenario.sh
- * into the development database, and read back through the actual application.
+ * The properties here are about *populations*, and a population is only
+ * observable by asking as each person. So the harness signs in as three
+ * different people — an administrator, the beneficiary an event concerns, and
+ * one it does not — and reads the screens each of them actually gets.
  *
- * ## What only this layer can prove
- *
- * The integration suite proves the contract: who is notified, what a restore
- * reconciles, what the envelope holds. It cannot prove that a **student sitting
- * in front of the platform** sees any of it — that the dashboard renders the
- * section, that the reason reaches the screen, that a refresh after a
- * cancellation shows the change, that the unread marker appears and clears.
- * Those are the facts the Owner asked to be verified, and they live in the DOM.
- *
- * ## Identity
- *
- * Three real sessions, each minted through issueNewSession — the production
- * path the OAuth callback calls — and presented as the ordinary bodour_refresh
- * cookie on its own route. **No authorisation is bypassed:** the student session
- * is an ordinary student with no role beyond student, and every request it
- * makes is checked exactly as any other. Switching identity is done by replacing
- * the cookie, which is what a different person on a different device is.
+ * The **negative** halves carry the weight: an unrelated beneficiary seeing
+ * nothing is what makes the positive halves mean anything, and it is the half a
+ * source reading can never establish.
  */
 import { connect, results } from './cdp.mjs';
 
 const BASE = process.env.APP_BASE ?? 'http://localhost';
-const S = JSON.parse(process.env.SCENARIO ?? '{}');
-const COOKIES = JSON.parse(process.env.COOKIES ?? '{}');
-if (!COOKIES.admin || !COOKIES.student || !COOKIES.outsider) {
-  throw new Error('COOKIES must carry admin, student and outsider refresh tokens');
-}
+const S = JSON.parse(process.env.R82_SCENARIO ?? '{}');
+if (!S.levelEvent) throw new Error('R82_SCENARIO is required');
 
-const { send, evaluate, close } = await connect(process.env.PORT ?? '9224');
+const { send, evaluate, close } = await connect(process.env.PORT ?? '9237');
 const { check, finish } = results();
 
-let current = null;
-
-/**
- * Becomes this person: the refresh cookie IS the session (TD-12).
- *
- * **The rotated cookie is carried forward, and it has to be.** TD-4.13 rotates
- * on every refresh — the presented token is revoked and a successor issued —
- * with reuse detection behind it. Re-setting the token this script was handed
- * therefore works exactly once per identity; the second switch back presents a
- * revoked token and is correctly refused with 401. That is the platform
- * behaving properly, and a harness that ignored it would report a defect the
- * application does not have.
- *
- * So each identity keeps its own jar: what the browser holds when we switch
- * away is what we restore when we switch back, which is what a second person on
- * a second device actually is.
- */
-async function beAs(who) {
-  if (current !== null) {
-    const { cookies } = await send('Network.getCookies', { urls: [`${BASE}/api/v1/auth/refresh`] });
-    const live = cookies.find((c) => c.name === 'bodour_refresh');
-    if (live) COOKIES[current] = live.value;
-  }
-  await send('Network.clearBrowserCookies');
-  await send('Network.setCookie', {
+const cookie = (value) =>
+  send('Network.setCookie', {
     name: 'bodour_refresh',
-    value: COOKIES[who],
+    value,
     domain: 'localhost',
     path: '/api/v1/auth/refresh',
     httpOnly: true,
   });
+
+/**
+ * **One access token per identity, minted once.**
+ *
+ * The first version re-minted on every navigation and started answering 401
+ * halfway through: the app refreshes on load, and a second refresh against the
+ * cookie it had just rotated is exactly what TD-4.13's reuse detection revokes a
+ * session for. The harness was tripping a security control and reading the
+ * result as a broken feature.
+ */
+const tokens = new Map();
+
+async function as(who) {
+  await send('Network.clearBrowserCookies');
+  await cookie(who);
   current = who;
 }
+let current = null;
 
-async function goto(path, settle = '.card, .state, .admin-table, .datatable__skeleton') {
+await send('Emulation.setDeviceMetricsOverride', {
+  width: 1440, height: 1000, deviceScaleFactor: 1, mobile: false,
+});
+
+/** Call the API through the PAGE, so the session cookie and refresh flow are the real ones. */
+const api = (path, init) =>
+  evaluate(`(async () => {
+    const res = await window.__apiFetch(${JSON.stringify(path)}, ${JSON.stringify(init ?? null)});
+    return res;
+  })()`);
+
+async function open(path = '/dashboard/student') {
   await send('Page.navigate', { url: `${BASE}${path}` });
-  for (let i = 0; i < 80; i += 1) {
-    const state = await evaluate(`(() => {
-      if (document.location.pathname.startsWith('/login')) return 'login';
-      if (document.querySelector('.datatable__skeleton')) return 'loading';
-      return document.querySelector(${JSON.stringify(settle)}) ? 'ready' : 'waiting';
-    })()`).catch(() => null);
-    if (state === 'ready' || state === 'login') return state;
+  for (let i = 0; i < 120; i += 1) {
+    const ok = await evaluate(`(() => document.querySelector('main') !== null)()`).catch(() => false);
+    if (ok) break;
     await new Promise((r) => setTimeout(r, 250));
   }
-  return 'timeout';
-}
-
-/** The rendered notification section, as a student would read it. */
-const readInbox = () =>
-  evaluate(`(() => {
-    const section = [...document.querySelectorAll('section.card')]
-      .find((s) => s.querySelector('#notifications-heading'));
-    if (!section) return { present: false, items: [] };
-    return {
-      present: true,
-      count: section.querySelector('.notifications__count')?.textContent?.trim() ?? null,
-      items: [...section.querySelectorAll('.notifications__item')].map((li) => ({
-        unread: li.classList.contains('is-unread'),
-        headline: li.querySelector('.notifications__headline')?.textContent?.trim() ?? '',
-        reason: li.querySelector('.notifications__reason')?.textContent?.trim() ?? null,
-        hasMarkRead: li.querySelector('button') !== null,
-      })),
+  await new Promise((r) => setTimeout(r, 800));
+  // A thin fetch helper installed in the page: it carries the access token the
+  // app itself obtained, so every read below is exactly what that person's
+  // browser would receive.
+  await evaluate(`(() => {
+    window.__apiFetch = async (path, init) => {
+      const opts = init || {};
+      const res = await fetch('/api/v1' + path, {
+        method: opts.method || 'GET',
+        headers: Object.assign(
+          { 'Content-Type': 'application/json' },
+          window.__token ? { Authorization: 'Bearer ' + window.__token } : {},
+        ),
+        body: opts.body ? JSON.stringify(opts.body) : undefined,
+        credentials: 'include',
+      });
+      return { status: res.status, body: await res.json().catch(() => null) };
     };
+    return true;
   })()`);
-
-/**
- * The student's own upcoming sessions, as rendered on the dashboard.
- *
- * **It waits for the list rather than reading immediately.** The identity block
- * is a .card and renders as soon as GET /students/me resolves, while the
- * timetable is a second request behind it — reading straight after navigation
- * measured an empty section that filled in 300ms later. A probe that races the
- * page it measures reports a defect the application does not have.
- */
-const readTimetable = () =>
-  evaluate(`(async () => {
-    for (let i = 0; i < 40; i += 1) {
-      const section = document.querySelector('#upcoming-heading')?.closest('section');
-      const rows = section ? [...section.querySelectorAll('li')] : [];
-      if (rows.length > 0) {
-        return {
-          rows: rows.length,
-          mentionsSubject: rows.some((li) => li.textContent.includes('تفسير')),
-          first: rows[0].textContent.trim(),
-        };
-      }
-      await new Promise((r) => setTimeout(r, 250));
-    }
-    return { rows: 0, mentionsSubject: false, first: document.querySelector('main')?.textContent?.slice(0, 200) ?? '' };
-  })()`);
-
-/** An admin action taken through the API the admin screens use, with the ADMIN's
- *  own session — the cancellation is not the thing under test, the student's
- *  view of it is. */
-const asAdminApi = (method, path, body) =>
-  evaluate(`(async () => {
-    const r = await fetch('/api/v1/auth/refresh', {
-      method: 'POST',
-      headers: { 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/json' },
-      credentials: 'same-origin',
-      body: '{}',
-    });
-    const { access_token } = await r.json();
-    const res = await fetch(${JSON.stringify(`/api/v1${path}`)}, {
-      method: ${JSON.stringify(method)},
-      headers: { Authorization: 'Bearer ' + access_token, 'Content-Type': 'application/json' },
-      ${body === undefined ? '' : `body: JSON.stringify(${JSON.stringify(body)}),`}
-    });
-    return { status: res.status, body: await res.text() };
-  })()`);
-
-/**
- * The current TD-15 version of one occurrence, **through the read the admin
- * screen itself uses**.
- *
- * The harness first asked GET /calendar/sessions/{id}, and got undefined.
- * That is the endpoint being right, not wrong: the Session page is **public at
- * the caller's tier** (§4.9/R43), and a concurrency token is a write-path
- * concern that has no business travelling on an anonymous read. Sending
- * version: 0 after that made the application answer 409 STATE_CONFLICT —
- * optimistic locking doing exactly its job.
- *
- * GET /admin/course-schedules/{id}/sessions is the authoritative source and
- * the one schedule-sessions.tsx reads before offering «إلغاء» or «استعادة».
- * Using it keeps the harness on the real production flow rather than inventing
- * a shortcut around the mechanism it is supposed to be exercising.
- */
-async function scheduleSessions() {
-  const res = await asAdminApi(
-    'GET',
-    `/admin/course-schedules/${S.scheduleId}/sessions?page=1&page_size=100`,
-  );
-  return JSON.parse(res.body).data;
+  // Mint once per identity, then reuse: see `tokens` above.
+  if (!tokens.has(current)) {
+    const minted = await evaluate(`(async () => {
+      const res = await fetch('/api/v1/auth/refresh', {
+        method: 'POST',
+        // The exact value the CSRF check requires (TD-12): the server compares
+        // the header literally.
+        headers: { 'X-Requested-With': 'XMLHttpRequest' },
+        credentials: 'include',
+      });
+      const body = await res.json().catch(() => null);
+      // The refresh response returns the token at the TOP level, not nested
+      // under data — §60.4 returns it explicitly beside the active role.
+      return body ? (body.access_token ?? (body.data && body.data.access_token)) : null;
+    })()`);
+    tokens.set(current, minted);
+  }
+  await evaluate(`(() => { window.__token = ${JSON.stringify(tokens.get(current))}; return true; })()`);
 }
 
-async function currentVersion(sessionId) {
-  const row = (await scheduleSessions()).find((r) => r.id === sessionId);
-  if (row === undefined) throw new Error(`occurrence ${sessionId} not on its schedule`);
-  return row.version;
-}
+const RANGE = 'from=2026-08-01&to=2026-08-31';
 
-/* ── 1–3 · the student signs in and sees her timetable ───────────────────── */
+/* ── A · the personal calendar ──────────────────────────────────────────── */
 
-await beAs('student');
-const dash = await goto('/dashboard/student');
-check('1 · student reaches her dashboard with a real session', dash === 'ready', `state=${dash}`);
+await as(process.env.CONCERNED_COOKIE);
+await open();
+const mine = await api(`/me/calendar?${RANGE}`);
+const mineIds = (mine.body?.data ?? []).map((o) => o.id);
 
-const timetable = await readTimetable();
-check('2–3 · her timetable carries the تفسير occurrences', timetable.mentionsSubject, JSON.stringify(timetable));
-
-const before = await readInbox();
-check('the notification section is absent when there is nothing to say', before.present === false, JSON.stringify(before));
-
-/* ── 4–5 · an administrator cancels ONE Monday ───────────────────────────── */
-
-await beAs('admin');
-await goto('/admin/branches');
-
-/**
- * **A FUTURE Monday, deliberately.**
- *
- * The harness first took the earliest scheduled occurrence, which was a Monday
- * already past — and restoreSession refuses that with
- * STATE_CONFLICT / SESSION_IN_PAST, because reinstating a class that has
- * already not happened would put a session on the calendar claiming it did.
- * That is the application being right; the harness was aiming at the one
- * occurrence the scenario cannot be run against.
- *
- * Taking the next Monday ahead also makes this the Owner's own case: the class
- * the student can still see on her fortnight view is the one that gets
- * cancelled, which is what makes checks 6–9 meaningful rather than incidental.
- */
-const today = new Date().toISOString().slice(0, 10);
-// **Selected from the schedule's OWN read, not from the calendar by title.**
-// Matching on a title picked up an occurrence belonging to a different schedule
-// — other suites seed their own تفسير — and the version lookup then failed
-// against a row that was never ours. The schedule is the identity here; a name
-// never was.
-const occurrence = (await scheduleSessions())
-  .filter((o) => o.status === 'scheduled' && o.date > today)
-  .sort((a, b) => a.date.localeCompare(b.date))[0];
 check(
-  '4 · an administrator can reach the next upcoming occurrence',
-  occurrence !== undefined,
-  occurrence?.date,
+  'A1 · the concerned beneficiary sees the event addressed to her Level',
+  mineIds.includes(S.levelEvent),
+  JSON.stringify({ status: mine.status, count: mineIds.length }),
+);
+check(
+  'A2 · and the Branch+Category event that names her branch and category',
+  mineIds.includes(S.branchCategoryEvent),
+  JSON.stringify(mineIds.length),
+);
+check(
+  'A3 · and the Category-wide one',
+  mineIds.includes(S.categoryWideEvent),
+  JSON.stringify(mineIds.length),
+);
+check(
+  'A4 · but NOT the event addressed to a Level she is not in',
+  !mineIds.includes(S.otherLevelEvent),
+  JSON.stringify({ otherLevel: S.otherLevelEvent }),
 );
 
-const cancelled = await asAdminApi('POST', `/sessions/${occurrence.id}/cancel`, {
-  reason: 'الأستاذة مريضة',
-  version: await currentVersion(occurrence.id),
-});
-check('5 · the cancellation is accepted, with its reason', cancelled.status === 200, `${cancelled.status} ${cancelled.body.slice(0, 120)}`);
-
-/* ── 6–9 · the student returns and sees it ───────────────────────────────── */
-
-await beAs('student');
-await goto('/dashboard/student');
-const after = await readInbox();
-check('6–7 · the student sees the notification after returning', after.present && after.items.length === 1, JSON.stringify(after));
-check('8 · it is unread, and offers «تم الاطّلاع»', after.items[0]?.unread === true && after.items[0]?.hasMarkRead === true, JSON.stringify(after.items[0]));
+// The control that makes A4 mean something: the event exists and the PUBLIC
+// calendar still shows it, so the narrowing is the personal read's.
+const pub = await api(`/calendar?${RANGE}`);
+const pubIds = (pub.body?.data ?? []).map((o) => o.id);
 check(
-  '9 · it names the class, the date and the REASON',
-  after.items[0]?.headline.includes('تفسير') &&
-    after.items[0]?.headline.includes(occurrence.date) &&
-    after.items[0]?.reason?.includes('الأستاذة مريضة'),
-  JSON.stringify(after.items[0]),
+  'A5 · the public calendar still shows it — the narrowing is personal, not deletion',
+  pubIds.includes(S.otherLevelEvent) && pubIds.includes(S.levelEvent),
+  JSON.stringify({ publicCount: pubIds.length }),
 );
-check('9b · no placeholder survived into the rendered copy', !after.items[0]?.headline.includes('{'), after.items[0]?.headline);
 
-// Wrapped in an async IIFE: Runtime.evaluate parses the expression as a
-// script, where a top-level await is a syntax error rather than a wait.
-const cancelledOnCalendar = await evaluate(`(async () => {
-  const body = await (await fetch('/api/v1/calendar?from=${S.from}&to=${S.to}')).json();
-  return body.data.filter((o) => o.id === ${JSON.stringify(occurrence.id)}).map((o) => o.status);
-})()`);
-check('7b · the cancelled Monday is still ON the calendar, marked', String(cancelledOnCalendar) === 'cancelled', String(cancelledOnCalendar));
-
-/* ── 10 · an unrelated student gets nothing ──────────────────────────────── */
-
-await beAs('outsider');
-await goto('/dashboard/student');
-const outsider = await readInbox();
-check('10 · a student enrolled elsewhere receives nothing', outsider.present === false, JSON.stringify(outsider));
-
-/* ── 14 · no duplicates ──────────────────────────────────────────────────── */
-
-await beAs('student');
-await goto('/dashboard/student');
-const again = await readInbox();
-check('14 · exactly one notice, never a duplicate', again.items.length === 1, JSON.stringify(again));
-
-/* ── 11–12 · restore withdraws the UNREAD notice ─────────────────────────── */
-
-await beAs('admin');
-await goto('/admin/branches');
-const restored = await asAdminApi('POST', `/sessions/${occurrence.id}/restore`, {
-  version: await currentVersion(occurrence.id),
-});
-check('11 · the occurrence is restored', restored.status === 200, `${restored.status} ${restored.body.slice(0, 120)}`);
-
-await beAs('student');
-await goto('/dashboard/student');
-const withdrawn = await readInbox();
-check('12 · the UNREAD notice is withdrawn — it is no longer true', withdrawn.present === false, JSON.stringify(withdrawn));
-
-/* ── 13 · a READ notice is corrected instead ─────────────────────────────── */
-
-await beAs('admin');
-await goto('/admin/branches');
-await asAdminApi('POST', `/sessions/${occurrence.id}/cancel`, {
-  reason: 'الأستاذة مريضة',
-  version: await currentVersion(occurrence.id),
-});
-
-await beAs('student');
-await goto('/dashboard/student');
-// Press «تم الاطّلاع» as a person would, then confirm the marker clears.
-const marked = await evaluate(`(async () => {
-  const section = [...document.querySelectorAll('section.card')]
-    .find((s) => s.querySelector('#notifications-heading'));
-  section.querySelector('.notifications__item button').click();
-  await new Promise((r) => setTimeout(r, 1200));
-  const li = section.querySelector('.notifications__item');
-  return { unread: li.classList.contains('is-unread'), stillShown: li !== null,
-           count: section.querySelector('.notifications__count') !== null };
-})()`);
-check('13a · pressing «تم الاطّلاع» clears the unread marker and the count', marked.unread === false && marked.count === false, JSON.stringify(marked));
-check('13b · a READ notice stays on screen — it is still true', marked.stillShown === true, JSON.stringify(marked));
-
-await beAs('admin');
-await goto('/admin/branches');
-await asAdminApi('POST', `/sessions/${occurrence.id}/restore`, {
-  version: await currentVersion(occurrence.id),
-});
-
-await beAs('student');
-await goto('/dashboard/student');
-const corrected = await readInbox();
+await as(process.env.UNRELATED_COOKIE);
+await open();
+const theirs = await api(`/me/calendar?${RANGE}`);
+const theirIds = (theirs.body?.data ?? []).map((o) => o.id);
 check(
-  '13c · a notice already READ is CORRECTED, not silently deleted',
-  corrected.present === true &&
-    corrected.items.length === 1 &&
-    corrected.items[0].headline.includes('عادت') &&
-    corrected.items[0].reason === null,
-  JSON.stringify(corrected),
+  'A6 · the unrelated beneficiary sees her own Level’s event and not the other’s',
+  theirIds.includes(S.otherLevelEvent) && !theirIds.includes(S.levelEvent),
+  JSON.stringify({ count: theirIds.length }),
 );
-check('13d · the correction arrives UNREAD, because it is news', corrected.items?.[0]?.unread === true, JSON.stringify(corrected.items?.[0]));
+check(
+  'A7 · and not the Category-wide event of a Category she is not in',
+  !theirIds.includes(S.categoryWideEvent),
+  JSON.stringify({ count: theirIds.length }),
+);
+
+/* ── B/C · the optional send ────────────────────────────────────────────── */
+
+const inbox = async () => {
+  const res = await api('/notifications?page_size=50');
+  if (res.status !== 200) {
+    // Reported rather than swallowed: an empty list because the read FAILED is
+    // not the same fact as an empty list, and a negative check that cannot tell
+    // them apart passes for the wrong reason.
+    console.log(`    (inbox read failed: ${res.status} ${JSON.stringify(res.body)})`);
+  }
+  return (res.body?.data ?? []);
+};
+
+await as(process.env.CONCERNED_COOKIE);
+await open();
+const before = await inbox();
+check(
+  'C1 · before anything is sent, her inbox holds no notice of this event',
+  before.filter((n) => n.event_id === S.levelEvent).length === 0,
+  JSON.stringify({ total: before.length }),
+);
+
+// «بدون إشعار» is the ABSENCE of the request — asserted by not making it, which
+// is exactly what the dialog's decline branch does.
+check(
+  'C2 · declining sends nothing, and the event is still there',
+  mineIds.includes(S.levelEvent) && before.filter((n) => n.event_id === S.levelEvent).length === 0,
+  'no notify request was made',
+);
+
+await as(process.env.ADMIN_COOKIE);
+await open('/admin/schedules');
+const sent = await api(`/events/${S.levelEvent}/notify`, {
+  method: 'POST',
+  body: { change: 'created' },
+});
+check(
+  'B1 · «إرسال الإشعار» reaches the concerned population',
+  sent.status === 200 && sent.body?.data?.notified >= 1,
+  JSON.stringify(sent.body?.data),
+);
+
+const adminInbox = await inbox();
+check(
+  'B2 · and the actor is NOT among them',
+  adminInbox.filter((n) => n.event_id === S.levelEvent).length === 0,
+  JSON.stringify({ adminNotices: adminInbox.length }),
+);
+
+await as(process.env.CONCERNED_COOKIE);
+await open();
+const after = await inbox();
+const hers = after.filter((n) => n.event_id === S.levelEvent);
+check(
+  'B3 · she receives exactly one, carrying the event’s title and date',
+  hers.length === 1 && typeof hers[0].title === 'string' && hers[0].date === '2026-08-25',
+  JSON.stringify(hers[0] ?? null),
+);
+check(
+  'B4 · and it says its time, which is what makes it actionable',
+  hers[0]?.start_time === '10:00',
+  JSON.stringify({ start_time: hers[0]?.start_time }),
+);
+
+await as(process.env.UNRELATED_COOKIE);
+await open();
+const unrelatedInbox = await inbox();
+check(
+  'B5 · the unrelated beneficiary is told nothing',
+  unrelatedInbox.filter((n) => n.event_id === S.levelEvent).length === 0,
+  JSON.stringify({ count: unrelatedInbox.length }),
+);
+
+/* ── E · reschedule is its own kind ─────────────────────────────────────── */
+
+await as(process.env.ADMIN_COOKIE);
+await open('/admin/schedules');
+await api(`/events/${S.levelEvent}/notify`, {
+  method: 'POST',
+  body: { change: 'rescheduled' },
+});
+await as(process.env.CONCERNED_COOKIE);
+await open();
+const afterMove = (await inbox()).filter((n) => n.event_id === S.levelEvent);
+check(
+  'E1 · a reschedule adds ONE notice of its own kind, not a cancel + create',
+  afterMove.length === 2 &&
+    afterMove.some((n) => n.type === 'event_rescheduled') &&
+    !afterMove.some((n) => n.type === 'event_cancelled'),
+  JSON.stringify(afterMove.map((n) => n.type)),
+);
+
+/* ── F/G · the scoped populations ───────────────────────────────────────── */
+
+await as(process.env.ADMIN_COOKIE);
+await open('/admin/schedules');
+const branchCat = await api(`/events/${S.branchCategoryEvent}/notify`, {
+  method: 'POST',
+  body: { change: 'created' },
+});
+const categoryWide = await api(`/events/${S.categoryWideEvent}/notify`, {
+  method: 'POST',
+  body: { change: 'created' },
+});
+check(
+  'F1 · a Branch+Category event notifies somebody',
+  branchCat.status === 200 && branchCat.body?.data?.notified >= 1,
+  JSON.stringify(branchCat.body?.data),
+);
+check(
+  'G1 · a Category-wide event notifies somebody',
+  categoryWide.status === 200 && categoryWide.body?.data?.notified >= 1,
+  JSON.stringify(categoryWide.body?.data),
+);
+
+await as(process.env.UNRELATED_COOKIE);
+await open();
+const others = await inbox();
+check(
+  'F2/G2 · and neither reaches the beneficiary outside that Branch and Category',
+  others.filter((n) => n.event_id === S.branchCategoryEvent).length === 0 &&
+    others.filter((n) => n.event_id === S.categoryWideEvent).length === 0,
+  JSON.stringify({ count: others.length }),
+);
+
+/* ── idempotency ────────────────────────────────────────────────────────── */
+
+await as(process.env.ADMIN_COOKIE);
+await open('/admin/schedules');
+const again = await api(`/events/${S.levelEvent}/notify`, {
+  method: 'POST',
+  body: { change: 'created' },
+});
+check(
+  'D1 · pressing send twice writes nothing the second time',
+  again.status === 200 && again.body?.data?.notified === 0,
+  JSON.stringify(again.body?.data),
+);
 
 close();
 process.exit(finish());

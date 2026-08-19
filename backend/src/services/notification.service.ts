@@ -1,8 +1,13 @@
 import type { Prisma, PrismaClient } from '../generated/prisma/client.js';
 import type { Actor } from '../policies/actor.js';
+import { assertMayEdit } from './event.service.js';
 import { AppError } from '../lib/errors.js';
 import { page, pageWindow, type Page, type PageParams } from '../lib/pagination.js';
-import { resolveAudience, type AudienceSpec } from '../policies/roster-resolution.js';
+import {
+  eventAudienceWhere,
+  resolveAudience,
+  type AudienceSpec,
+} from '../policies/roster-resolution.js';
 
 /**
  * **The one MVP notification event** (§4.8 as narrowed by Revision 77).
@@ -73,10 +78,27 @@ async function recipientsFor(
   return [...everyone];
 }
 
+export type NotificationKind =
+  | 'session_cancelled'
+  | 'session_restored'
+  | 'session_assigned'
+  | 'session_rescheduled'
+  | 'event_created'
+  | 'event_rescheduled'
+  | 'event_cancelled'
+  | 'grade_published';
+
+/**
+ * One row, **exactly one of whose targets is present** (R82.1). The reader
+ * renders from whichever it finds; the CHECK constraint is what guarantees there
+ * is one and only one to find.
+ */
 export interface NotificationRow {
   id: string;
-  type: 'session_cancelled' | 'session_restored' | 'session_assigned' | 'session_rescheduled';
-  sessionId: string;
+  type: NotificationKind;
+  sessionId: string | null;
+  eventId: string | null;
+  examId: string | null;
   readAt: Date | null;
   createdAt: Date;
   session: {
@@ -84,9 +106,27 @@ export interface NotificationRow {
     startTime: Date;
     cancellationReason: string | null;
     schedule: { subject: { name: string } | null; level: { name: string } | null };
-  };
+  } | null;
+  event: {
+    title: string;
+    startDate: Date;
+    startTime: Date | null;
+  } | null;
+  exam: {
+    title: string;
+    date: Date;
+    subject: { name: string } | null;
+  } | null;
 }
 
+/**
+ * **What a notice needs to be readable, per target** (R82.1).
+ *
+ * Three different shapes, which is the concrete reason R82 chose three foreign
+ * keys over a `target_type`/`target_id` pair: a polymorphic id could not be
+ * joined at all, and the screen would need a second round trip per row to say
+ * anything more than *something happened*.
+ */
 const LIST_INCLUDE = {
   session: {
     select: {
@@ -97,6 +137,23 @@ const LIST_INCLUDE = {
         select: { subject: { select: { name: true } }, level: { select: { name: true } } },
       },
     },
+  },
+  /**
+   * **An Event carries no cancellation reason, and none is invented here.**
+   * `Session.cancellation_reason` exists because R77 added it for exactly that
+   * notice; an Event is cancelled by being soft-deleted into Trash (R59), which
+   * records who and when in the audit log but asks for no reason. So an
+   * `event_cancelled` notice names the event, its date and its time — and the
+   * DTO publishes `reason: null` rather than a column that does not exist.
+   */
+  event: {
+    select: { title: true, startDate: true, startTime: true },
+  },
+  // The exam and its subject — enough to say WHICH grade was published. The
+  // score is deliberately absent: the notice says it is available, and her own
+  // screen shows the current number (R82.4).
+  exam: {
+    select: { title: true, date: true, subject: { select: { name: true } } },
   },
 } satisfies Prisma.NotificationInclude;
 
@@ -177,6 +234,122 @@ async function writeFor(
   if (userIds.length === 0) return 0;
   const created = await tx.notification.createMany({
     data: userIds.map((userId) => ({ userId, sessionId, type })),
+    skipDuplicates: true,
+  });
+  return created.count;
+}
+
+/* ── Events (R82) ─────────────────────────────────────────────────────────── */
+
+/**
+ * **Who an Event's notice goes to** — resolved here, from the event's own scope
+ * rows, and never from anything a client sent.
+ *
+ * Two halves, unioned: the people the scope places in its audience
+ * (`eventAudienceWhere`, the same enrolment relations the Session predicate
+ * uses) and the **staff assigned to the event itself**, who are concerned by
+ * definition whatever the scope says.
+ *
+ * The actor is removed last, so an administrator who staffs the event she just
+ * moved is still not told about her own act (R78.3).
+ */
+export async function eventRecipients(
+  prisma: PrismaClient,
+  eventId: string,
+  actorUserId: string,
+): Promise<string[]> {
+  const event = await prisma.event.findFirst({
+    where: { id: eventId, deletedAt: null },
+    select: {
+      branchScopes: { select: { branchId: true } },
+      categoryScopes: { select: { categoryId: true } },
+      levelScopes: { select: { levelId: true } },
+      administrativeGroupScopes: { select: { administrativeGroupId: true } },
+      staff: { where: { deletedAt: null }, select: { userId: true } },
+    },
+  });
+  if (!event) throw new AppError('NOT_FOUND', 'no such event');
+
+  const where = eventAudienceWhere({
+    branchIds: event.branchScopes.map((r) => r.branchId),
+    categoryIds: event.categoryScopes.map((r) => r.categoryId),
+    levelIds: event.levelScopes.map((r) => r.levelId),
+    administrativeGroupIds: event.administrativeGroupScopes.map((r) => r.administrativeGroupId),
+  });
+
+  // A GLOBAL event resolves to no audience at all (R82.7) — but its own staff
+  // are still concerned by it, which is a different question from its scope.
+  const audience = where === null ? [] : await prisma.user.findMany({ where, select: { id: true } });
+
+  const everyone = new Set([...audience.map((u) => u.id), ...event.staff.map((s) => s.userId)]);
+  everyone.delete(actorUserId);
+  return [...everyone];
+}
+
+/**
+ * `POST /events/{id}/notify` — **the optional send, after the change is saved**
+ * (R82.5).
+ *
+ * A separate request against the already-saved row, deliberately: a flag on the
+ * write would make a failure to notify able to roll back a change that
+ * succeeded, and the person has not decided yet at the moment the write leaves
+ * the form. Declining costs nothing because nothing is called.
+ *
+ * Idempotent through the partial unique index on `(user, event, type)`: pressing
+ * send twice, or retrying after a dropped response, writes the same rows.
+ */
+export async function notifyEventChange(
+  prisma: PrismaClient,
+  actor: Actor,
+  eventId: string,
+  change: 'created' | 'rescheduled' | 'cancelled',
+): Promise<{ notified: number }> {
+  // **Authorization is the event's own**: whoever may edit it may announce it,
+  // asked through the SAME assertion the write used rather than a second answer
+  // to the same question.
+  await assertMayEdit(prisma as unknown as Prisma.TransactionClient, actor, eventId);
+
+  const type = (
+    { created: 'event_created', rescheduled: 'event_rescheduled', cancelled: 'event_cancelled' } as const
+  )[change];
+  const userIds = await eventRecipients(prisma, eventId, actor.userId);
+  if (userIds.length === 0) return { notified: 0 };
+
+  const created = await prisma.notification.createMany({
+    data: userIds.map((userId) => ({ userId, eventId, type })),
+    skipDuplicates: true,
+  });
+  return { notified: created.count };
+}
+
+/* ── Grades (R82.4) ───────────────────────────────────────────────────────── */
+
+/**
+ * **Written at publication, and only there** (BR-8).
+ *
+ * A draft sheet is a مؤطرة's working document, so a draft save writes nothing —
+ * the caller is `publishGrades`, inside its transaction, because publication and
+ * the notice that it happened are one fact.
+ *
+ * **Re-publication writes nothing new.** The unique index on
+ * `(user, exam, type)` absorbs it, and that is the coherent behaviour rather
+ * than a limitation: the row points at the exam, so a student who has been told
+ * her grade is available is not told a second time because the number changed —
+ * her screen already shows the current one.
+ *
+ * The actor is excluded like everywhere else, which in practice matters for a
+ * مؤطرة who is also enrolled somewhere (R79 makes that expressible).
+ */
+export async function notifyGradePublished(
+  tx: Prisma.TransactionClient,
+  examId: string,
+  studentIds: readonly string[],
+  actorUserId: string,
+): Promise<number> {
+  const recipients = studentIds.filter((id) => id !== actorUserId);
+  if (recipients.length === 0) return 0;
+  const created = await tx.notification.createMany({
+    data: recipients.map((userId) => ({ userId, examId, type: 'grade_published' as const })),
     skipDuplicates: true,
   });
   return created.count;

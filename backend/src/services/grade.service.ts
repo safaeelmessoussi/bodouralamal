@@ -4,6 +4,7 @@ import { AppError } from '../lib/errors.js';
 import type { Actor } from '../policies/actor.js';
 import * as scope from '../policies/branch-scope.js';
 import { isValidScore, toNumber } from '../policies/grading.js';
+import { notifyGradePublished } from './notification.service.js';
 import { assertExamInTeacherScope, audienceWhere } from '../policies/roster-resolution.js';
 import * as audit from '../repositories/audit.repository.js';
 
@@ -550,13 +551,13 @@ export async function publishGrades(
   prisma: PrismaClient,
   actor: Actor,
   examId: string,
-): Promise<{ published: number; republished: boolean }> {
+): Promise<{ published: number; republished: boolean; notified: number }> {
   await loadForGrading(prisma, actor, examId);
 
   return prisma.$transaction(async (tx) => {
     const rows = await tx.grade.findMany({
       where: { examId },
-      select: { id: true, status: true, publishedAt: true },
+      select: { id: true, status: true, publishedAt: true, studentId: true },
     });
     if (rows.length === 0) {
       throw new AppError('STATE_CONFLICT', 'there is nothing to publish', {
@@ -577,15 +578,36 @@ export async function publishGrades(
       });
     }
 
+    /**
+     * **R82.4 — the student is told, at publication and only there.**
+     *
+     * Inside this transaction, like R77.4's cancellation notices and for the
+     * same reason: a committed publication nobody was told about cannot be told
+     * apart, on retry, from one already announced. A draft save writes nothing
+     * at all, because a draft sheet is a مؤطرة's working document (BR-8).
+     *
+     * **Re-publication adds nothing**, absorbed by the `(user, exam, type)`
+     * unique index — a student who has been told her grade is available is not
+     * told again because the number changed, and her screen shows the current
+     * one. The notice is written for the rows published *now*, so a student
+     * added to a later sheet gets hers when it is published.
+     */
+    const notified = await notifyGradePublished(
+      tx,
+      examId,
+      rows.filter((r) => draft.some((d) => d.id === r.id)).map((r) => r.studentId),
+      actor.userId,
+    );
+
     await audit.write(tx, {
       actorUserId: actor.userId,
       activeRole: actor.activeRole,
       actionType: republished ? 'grade.republish' : 'grade.publish',
       targetEntity: 'Exam',
       targetId: examId,
-      detail: { students_affected: draft.length },
+      detail: { students_affected: draft.length, notified },
     });
 
-    return { published: draft.length, republished };
+    return { published: draft.length, republished, notified };
   });
 }

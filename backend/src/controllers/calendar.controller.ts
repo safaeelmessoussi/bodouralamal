@@ -2,6 +2,7 @@ import type { Request, Response } from 'express';
 import { z } from 'zod';
 
 import type { PrismaClient } from '../generated/prisma/client.js';
+import { requireActor } from '../middleware/authenticate.js';
 import { AppError } from '../lib/errors.js';
 import {
   listSessionsForContent,
@@ -179,5 +180,49 @@ export function readSession(prisma: PrismaClient) {
       recordings: page.recordings.map(contentDto),
       linked_content: page.linkedContent.map(contentDto),
     });
+  };
+}
+
+/**
+ * `GET /me/calendar` — **the caller's own calendar** (R82.8).
+ *
+ * A separate route rather than a `?mine=1` flag on the public one, deliberately:
+ * the public read is anonymous by design (TD-3.4) and this one cannot be, so
+ * the guard belongs in the routing table where it is visible rather than inside
+ * a branch. **There is no user id in the request** — the subject is the
+ * authenticated actor and nothing else, which is the same property that makes
+ * `GET /students/me` untamperable (TD-12, R63.3).
+ *
+ * The tier still applies: being concerned by something does not widen what the
+ * caller may see of it.
+ */
+export function readMine(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const parsed = querySchema.safeParse(req.query);
+    if (!parsed.success) {
+      throw new AppError('VALIDATION_FAILED', 'from and to are required as YYYY-MM-DD');
+    }
+    const q = parsed.data;
+    const actor = requireActor(req);
+
+    const occurrences = await readCalendar(
+      prisma,
+      {
+        userId: actor.userId,
+        roles: actor.roles,
+        roleScopes: actor.roleScopes,
+        accountStatus: actor.accountStatus ?? 'active',
+      },
+      {
+        from: q.from,
+        to: q.to,
+        mine: true,
+        ...(q.branch_id ? { branchId: q.branch_id } : {}),
+        ...(q.level_id ? { levelId: q.level_id } : {}),
+        ...(q.category_id ? { categoryId: q.category_id } : {}),
+        ...(q.subject_id ? { subjectId: q.subject_id } : {}),
+      },
+    );
+    res.json({ data: occurrences.map(occurrenceDto) });
   };
 }

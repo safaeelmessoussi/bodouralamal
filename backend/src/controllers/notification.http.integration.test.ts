@@ -25,16 +25,33 @@ const BASE = `${config.PUBLIC_BASE_URL}/api/v1`;
 const TAG = "[http-notification-test]";
 const YEAR_LABEL = "2097-2098";
 
+/**
+ * The DTO's exact key set — asserted rather than sampled, so a field cannot join
+ * the contract by accident.
+ *
+ * **R82 widened it**, and the shape of the widening is the decision: a notice is
+ * now about a Session, an Event or an Exam, and the client renders ONE list — so
+ * the fields that mean the same thing across targets are published under the
+ * same names (`title`, `date`, `start_time`, `reason`, `scope_name`) with the
+ * three target ids beside them. R77's `session_*` keys stay **in addition** and
+ * unchanged: a contract does not break to be tidier.
+ */
 const KEYS = [
   "created_at",
+  "date",
+  "event_id",
+  "exam_id",
   "id",
   "level_name",
   "read_at",
   "reason",
+  "scope_name",
   "session_date",
   "session_id",
   "session_start_time",
+  "start_time",
   "subject_name",
+  "title",
   "type",
 ];
 

@@ -660,3 +660,86 @@ export async function assertCanAccessStudent(
 
   throw new AppError('NOT_FOUND', 'no such student in scope');
 }
+
+/* ── Event audiences (R82) ────────────────────────────────────────────────── */
+
+/**
+ * **Who an Event concerns**, resolved from the scope rows it was addressed to.
+ *
+ * An Event's scope is not a schedule's: it has no `teaching_mode` and no single
+ * target, but any combination of Branch, Category, Level and Administrative
+ * Group rows (§7). So this is a second *predicate* over the same `User` table
+ * rather than a second audience *system* — it composes the same enrolment
+ * relations `audienceWhere` uses, and both are read at request time so neither
+ * takes a snapshot of a roster that can move underneath it.
+ *
+ * ## The rules, and why each is what it is
+ *
+ * | Scope | Audience |
+ * |---|---|
+ * | **Branch** | everyone enrolled at that branch |
+ * | **Category** | everyone enrolled in a Level of that Category, **across branches** |
+ * | **Level** | everyone enrolled in that Level |
+ * | **Administrative Group** | its members |
+ * | **Branch + Category** | the **intersection** — enrolled in that Category's Levels *at* that branch |
+ *
+ * Scopes of *different* kinds intersect and scopes of the *same* kind union: an
+ * event addressed to two branches concerns both, while an event addressed to a
+ * branch and a category concerns the people in both at once. That is what the
+ * scope rows say — naming a Category alongside a Branch narrows the Branch, it
+ * does not add a second, unrelated population.
+ *
+ * ## A global Event notifies nobody
+ *
+ * An Event with **no scope rows at all** is global (§7, BR-20). This returns a
+ * predicate matching nobody rather than everybody, and R82 states the reason:
+ * *everyone in the platform* is not an audience the association has asked for,
+ * and a notification sent to it cannot be recalled. It still appears on the
+ * public calendar, which is how a global event reaches people.
+ *
+ * **Teaching Circles are absent because the model has none**: there is no
+ * `EventTeachingGroup` join, so an event cannot be addressed to a circle. A
+ * *Session* can, through its schedule's `teaching_mode`, which `audienceWhere`
+ * already resolves. Inventing the join here would be inventing a domain
+ * relationship the SRS does not define (§20 rule 16).
+ */
+export interface EventScopeRows {
+  branchIds: string[];
+  categoryIds: string[];
+  levelIds: string[];
+  administrativeGroupIds: string[];
+}
+
+export function eventAudienceWhere(scopes: EventScopeRows): Prisma.UserWhereInput | null {
+  const { branchIds, categoryIds, levelIds, administrativeGroupIds } = scopes;
+  if (
+    branchIds.length === 0 &&
+    categoryIds.length === 0 &&
+    levelIds.length === 0 &&
+    administrativeGroupIds.length === 0
+  ) {
+    // Global: see the note above. `null` rather than an empty `where`, because
+    // an empty `where` matches EVERY user and would be the exact accident this
+    // returns early to prevent.
+    return null;
+  }
+
+  /**
+   * One enrolment must satisfy **all** the named kinds at once.
+   *
+   * Written as a single `some` rather than one `some` per kind: separate ones
+   * would be satisfied by *different* enrolments, so a student enrolled in
+   * Category A at Branch 1 and Category B at Branch 2 would match an event for
+   * "Category A at Branch 2" — which describes nobody.
+   */
+  const enrolment: Prisma.EnrollmentWhereInput = { deletedAt: null };
+  if (branchIds.length > 0) enrolment.branchId = { in: branchIds };
+  if (levelIds.length > 0) enrolment.levelId = { in: levelIds };
+  if (categoryIds.length > 0) enrolment.level = { categoryId: { in: categoryIds } };
+  if (administrativeGroupIds.length > 0) {
+    enrolment.administrativeGroupId = { in: administrativeGroupIds };
+    enrolment.administrativeGroup = { deletedAt: null };
+  }
+
+  return { deletedAt: null, levelEnrollments: { some: enrolment } };
+}
