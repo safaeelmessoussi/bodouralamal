@@ -598,7 +598,8 @@
 - [x] Four guards restated with their reasons: registry list · R84 filter matrix source · two portal checks
 - [x] 643 frontend · 222 backend unit · 1403 integration · TD-3 + OpenAPI current
 - [x] **The activity SAVE is proven — `verify-teacher-scheduling` 6/6** (2026-08-20). Three causes, all captured from the wire: an unset scope submitted as an empty id · her scope selector fed by `/admin/levels` (403 for her) · the assistants control disabled for her. Plus a platform-wide defect: the shared `Button` had no `type`, so every one inside a form submitted it
-- [ ] **NEXT**: assistant-assignment notification (§6–§8) · one shared occurrence-details dialog (§9–§10) · direct Session recordings/materials (§11–§15) · beneficiary QR (§16–§25)
+- [x] **R93 — assistant-assignment notification** (2026-08-20): `event_staff_assigned`, automatic, newly-assigned only, re-assignment resurfaces, actor excluded. Proven in the assistant's own bell (9/9)
+- [ ] **NEXT**: one shared occurrence-details dialog (§9–§10) · direct Session recordings/materials (§11–§15) · beneficiary QR (§16–§25)
 
 ### Notification root causes + landing pages (2026-08-20)
 - [x] **Level cancellation root cause**: the resolver was right. The only beneficiary in that Level+Branch was the Owner's own account, excluded as the actor (R78.3) — so the send reached nobody and said «أُرسل الإشعار إلى 0» which reads as success. **Zero now answers explicitly.**

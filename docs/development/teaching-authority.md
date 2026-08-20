@@ -136,6 +136,45 @@ does not cancel the other branch's occurrence. The administrator combines the
 audience and then cancels the counterpart explicitly, through the flow that
 already asks whether to tell people.
 
+## An Event is not a class, and being assigned to one is its own news (R93)
+
+`EventStaff` (R71) and `CourseScheduleStaff` (R91) are separate concepts and
+must stay separate — §20 rule 22. Nothing about event staffing touches teaching
+authority, and nothing here is effective-dated.
+
+**A مؤطرة staffs the event she answers for, and only that.** She may name the
+assistants; she may not make anybody else responsible, and the server refuses
+it (`RESPONSIBLE_MUST_BE_SELF`) rather than the interface hiding it. Admin reach
+is unchanged.
+
+**Two narrow reads exist because the grant would otherwise be unreachable.**
+`GET /admin/users` and `GET /admin/levels` both answer **403** for her, so her
+assistants control and her scope selector were empty and she could fill the whole
+form before finding out. `GET /me/event-staff-options` answers *whom may I name
+here*; `GET /me/event-scope-options` answers *what may I address this to* — the
+Administrative Groups she teaches, through §4.4c and bounded by R91's effective
+staffing. **Neither widens anything**: the admin endpoints still refuse her.
+
+> **The standing rule this is the third instance of:** when a screen cannot
+> work, the fix is a *smaller question*, never a wider permission (rule O).
+
+### The assignment notice
+
+| | |
+|---|---|
+| `event_created` | this activity is happening — to the people it is **for**, and **optional** (R82.5) |
+| `event_staff_assigned` | **you are working on this** — to the person named, and **automatic** |
+
+Announcing an assignment as `event_created` would tell her the association is
+holding a celebration: true, and not the thing she has to act on.
+
+**Only the newly assigned are told** — the difference between the staffing in
+force and the staffing submitted — so an edit to the title tells nobody again. A
+person removed and later re-added **is** newly assigned: her row was withdrawn in
+between, so the notice returns unread to the top rather than duplicating. The
+actor is excluded (R78.3), and **the rule is about being assigned, not about who
+assigns** — an Admin naming an assistant tells her exactly as a مؤطرة does.
+
 ## Where the invariants are enforced, and why not in SQL
 
 `assertStaffIntervals` in

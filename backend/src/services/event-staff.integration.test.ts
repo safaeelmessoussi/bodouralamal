@@ -526,3 +526,148 @@ describe("R71 — educational authorization is unchanged", () => {
     ).toBe(`${TAG} نشاط مشرفة`);
   });
 });
+
+/**
+ * **R93 — being assigned is its own news.**
+ *
+ * `event_created` announces an activity to the people it is for. A مؤطرة named
+ * as an assistant needs the other thing: *you are working on this*, so she can
+ * say she is unavailable. These pin who hears it and, just as importantly, who
+ * does not hear it twice.
+ */
+describe("R93 — the newly assigned are told, and only them", () => {
+  const noticesFor = (userId: string, eventId: string) =>
+    prisma.notification.findMany({
+      where: { userId, eventId, type: "event_staff_assigned", deletedAt: null },
+      select: { id: true, readAt: true },
+    });
+
+  it("tells a newly assigned assistant, and not the actor", async () => {
+    const eventId = await adminEvent("حفل بمساعدة");
+    const her = await person("مساعدة جديدة");
+
+    await setEventStaff(prisma, superAdmin(), eventId, [
+      { userId: her, position: "assistant" },
+    ]);
+
+    expect(await noticesFor(her, eventId)).toHaveLength(1);
+    // R78.3 — never notified of your own act, applied to assignment too.
+    expect(await noticesFor(adminId, eventId)).toHaveLength(0);
+  });
+
+  it("tells each of several new assistants exactly once", async () => {
+    const eventId = await adminEvent("حفل بمساعدتين");
+    const one = await person("مساعدة أولى");
+    const two = await person("مساعدة ثانية");
+
+    await setEventStaff(prisma, superAdmin(), eventId, [
+      { userId: one, position: "assistant" },
+      { userId: two, position: "assistant" },
+    ]);
+
+    expect(await noticesFor(one, eventId)).toHaveLength(1);
+    expect(await noticesFor(two, eventId)).toHaveLength(1);
+  });
+
+  it("does NOT tell an assistant again when the staffing is re-saved unchanged", async () => {
+    const eventId = await adminEvent("حفل يُعاد حفظه");
+    const her = await person("مساعدة ثابتة");
+    await setEventStaff(prisma, superAdmin(), eventId, [
+      { userId: her, position: "assistant" },
+    ]);
+    const first = await noticesFor(her, eventId);
+    await prisma.notification.update({
+      where: { id: first[0]!.id },
+      data: { readAt: new Date() },
+    });
+
+    // The same set again — what an edit to the title produces.
+    await setEventStaff(prisma, superAdmin(), eventId, [
+      { userId: her, position: "assistant" },
+    ]);
+
+    const after = await noticesFor(her, eventId);
+    expect(after).toHaveLength(1);
+    // **Still read.** Re-saving told her nothing, so nothing resurfaced.
+    expect(after[0]!.readAt).not.toBeNull();
+  });
+
+  it("tells only the NEW one when a second assistant joins", async () => {
+    const eventId = await adminEvent("حفل ينضم إليه أحد");
+    const one = await person("مساعدة قائمة");
+    const two = await person("مساعدة منضمة");
+    await setEventStaff(prisma, superAdmin(), eventId, [
+      { userId: one, position: "assistant" },
+    ]);
+    await prisma.notification.updateMany({
+      where: { userId: one, eventId, type: "event_staff_assigned" },
+      data: { readAt: new Date() },
+    });
+
+    await setEventStaff(prisma, superAdmin(), eventId, [
+      { userId: one, position: "assistant" },
+      { userId: two, position: "assistant" },
+    ]);
+
+    expect(await noticesFor(two, eventId)).toHaveLength(1);
+    const unchanged = await noticesFor(one, eventId);
+    expect(unchanged).toHaveLength(1);
+    expect(unchanged[0]!.readAt).not.toBeNull();
+  });
+
+  it("treats a re-addition after removal as a NEW assignment", async () => {
+    const eventId = await adminEvent("حفل تعود إليه");
+    const her = await person("مساعدة عائدة");
+    await setEventStaff(prisma, superAdmin(), eventId, [
+      { userId: her, position: "assistant" },
+    ]);
+    await prisma.notification.updateMany({
+      where: { userId: her, eventId, type: "event_staff_assigned" },
+      data: { readAt: new Date() },
+    });
+
+    // Removed…
+    await setEventStaff(prisma, superAdmin(), eventId, []);
+    // …and named again. Her row was withdrawn in between, so this is a second
+    // fact and she is told — the notice resurfaces rather than duplicating.
+    await setEventStaff(prisma, superAdmin(), eventId, [
+      { userId: her, position: "assistant" },
+    ]);
+
+    const after = await noticesFor(her, eventId);
+    expect(after).toHaveLength(1);
+    expect(after[0]!.readAt).toBeNull();
+  });
+
+  it("tells nobody who was never named", async () => {
+    const eventId = await adminEvent("حفل بلا علاقة");
+    const her = await person("مؤطرة أخرى");
+    await setEventStaff(prisma, superAdmin(), eventId, []);
+    expect(await noticesFor(her, eventId)).toHaveLength(0);
+  });
+
+  it("applies when a مؤطرة staffs her OWN event, not only when an Admin does", async () => {
+    // The rule is about being assigned, not about who created the event.
+    const eventId = await adminEvent("حفل تُسنده مؤطرة");
+    const owner = await person("مؤطرة مالكة");
+    const helper = await person("مساعدتها");
+    await setEventStaff(prisma, superAdmin(), eventId, [
+      { userId: owner, position: "responsible" },
+    ]);
+    // **She already has one**, and rightly: an Admin named her, and being
+    // assigned is the news whoever does the assigning. The question here is
+    // whether HER OWN action adds to it.
+    const ownerBefore = await noticesFor(owner, eventId);
+    expect(ownerBefore).toHaveLength(1);
+
+    await setEventStaff(prisma, teacher(owner), eventId, [
+      { userId: owner, position: "responsible" },
+      { userId: helper, position: "assistant" },
+    ]);
+
+    expect(await noticesFor(helper, eventId)).toHaveLength(1);
+    // Her own re-save tells her nothing further — she was already assigned, and
+    // the actor is excluded regardless.
+    expect(await noticesFor(owner, eventId)).toHaveLength(1);
+  });
+});

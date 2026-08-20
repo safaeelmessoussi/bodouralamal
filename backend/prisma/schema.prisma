@@ -2189,6 +2189,12 @@ enum NotificationType {
   event_created
   event_rescheduled
   event_cancelled
+  /// R93 — a person was named on an event's staffing. **Not `event_created`**:
+  /// that announces the activity to its audience, while this tells the person
+  /// assigned that she is working on it, so she can say she is unavailable.
+  /// Written when the assignment is committed, never as part of the optional
+  /// audience announcement — the two are different meanings.
+  event_staff_assigned
   /// R82 — a grade became visible to the student it is about (BR-8). Written at
   /// publication only, and idempotent across re-publication.
   grade_published

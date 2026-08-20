@@ -96,6 +96,7 @@ export type NotificationKind =
   | "event_created"
   | "event_rescheduled"
   | "event_cancelled"
+  | "event_staff_assigned"
   | "grade_published";
 
 /**
@@ -643,4 +644,77 @@ export async function markRead(
     data: { readAt: now },
     include: LIST_INCLUDE,
   })) as unknown as NotificationRow;
+}
+
+/* ── Event staffing (R93) ─────────────────────────────────────────────────── */
+
+/**
+ * **«you are working on this», which is not «this is happening»** (R93).
+ *
+ * `event_created` announces an activity to the people it is for. A مؤطرة named
+ * as an assistant needs the other thing entirely — that she is rostered — so
+ * she can tell the administration if she cannot be there. Announcing it as
+ * `event_created` would tell her the association is holding a celebration:
+ * true, and not the thing she has to act on.
+ *
+ * **Automatic, and deliberately not part of the optional audience question.**
+ * R82.5 makes announcing a change a decision the administrator takes after it
+ * is saved; an assignment is communication *to the person assigned*, and
+ * declining the announcement must not leave her rostered without knowing.
+ *
+ * **Only the NEW ones.** Renaming an event, moving it, or re-saving the same
+ * staffing tells nobody again: the recipients are the difference between the
+ * staffing that was there and the staffing submitted. A person removed and
+ * later re-added **is** newly assigned, and is told — the row was withdrawn in
+ * between, and the second assignment is a second fact.
+ *
+ * **The actor is excluded**, like everywhere else: a مؤطرة who names herself
+ * responsible on the event she just created is not told she was assigned to it.
+ */
+export async function notifyEventStaffAssigned(
+  tx: Prisma.TransactionClient,
+  eventId: string,
+  newlyAssigned: readonly string[],
+  actorUserId: string,
+): Promise<number> {
+  const recipients = [...new Set(newlyAssigned)].filter((id) => id !== actorUserId);
+  if (recipients.length === 0) return 0;
+
+  const created = await tx.notification.createMany({
+    data: recipients.map((userId) => ({
+      userId,
+      eventId,
+      type: 'event_staff_assigned' as const,
+    })),
+    // The `(user, event, type)` unique index. A re-assignment after a removal
+    // collides with the old row rather than creating a second — see the
+    // reactivation below, which is what makes the second assignment visible.
+    skipDuplicates: true,
+  });
+
+  /**
+   * **Re-assignment surfaces again.** Somebody removed in March and named again
+   * in May has a spent notice sitting read at the bottom of her bell; leaving it
+   * there would mean the platform knew she was rostered and said nothing. The
+   * row becomes unread and moves to the top — the same shape R82.4's grade
+   * notice takes, and for the same reason.
+   */
+  const existing = await tx.notification.findMany({
+    where: {
+      eventId,
+      type: 'event_staff_assigned',
+      userId: { in: recipients },
+      deletedAt: null,
+      readAt: { not: null },
+    },
+    select: { id: true },
+  });
+  for (const row of existing) {
+    await tx.notification.update({
+      where: { id: row.id },
+      data: { readAt: null, createdAt: new Date() },
+    });
+  }
+
+  return created.count + existing.length;
 }

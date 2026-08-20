@@ -267,5 +267,57 @@ check(
   JSON.stringify(forged),
 );
 
+/* ── 7–9 · the assistant is told she was assigned (R93) ──────────────────── */
+
+/** Opens the real bell for an identity and reads it, status included. */
+const bellOf = async (cookie, home) => {
+  await beIdentity(cookie);
+  await open(home, 'main');
+  await new Promise((r) => setTimeout(r, 1800));
+  const read = await evaluate(`(async () => {
+    const trigger = document.querySelector('.bell__trigger');
+    if (!trigger) return { noBell: true, body: document.body.textContent.slice(0, 160) };
+    const count = document.querySelector('.bell__count');
+    trigger.click();
+    await new Promise((r) => setTimeout(r, 2200));
+    const panel = document.querySelector('.bell__panel');
+    const requests = (window.__calls || []).filter((c) => c.url.includes('/notifications'));
+    return {
+      badge: count ? count.textContent.trim() : null,
+      text: panel ? panel.textContent.trim() : null,
+      requests,
+    };
+  })()`);
+  // A negative check is only valid after a 200 — an empty panel behind a 401 is
+  // a failure, never an absence of notifications.
+  if ((read.requests ?? []).some((r) => r.status !== 200)) {
+    throw new Error(`notification list failed: ${JSON.stringify(read.requests)}`);
+  }
+  return read;
+};
+
+const aminaBell = await bellOf(process.env.AMINA2_COOKIE, '/teacher');
+check(
+  '7 · the assistant she named is TOLD she was assigned',
+  (aminaBell.text ?? '').includes('أُسندت إليكِ') &&
+    (aminaBell.text ?? '').includes('نشاط المؤطرة') &&
+    !(aminaBell.text ?? '').includes('event_staff_assigned'),
+  JSON.stringify({ badge: aminaBell.badge, text: (aminaBell.text ?? '').slice(0, 260) }),
+);
+console.error('OBSERVED-ASSISTANT', JSON.stringify((aminaBell.text ?? '').slice(0, 300)));
+
+check(
+  '8 · and her bell counts it as unread',
+  aminaBell.badge !== null && aminaBell.badge !== '0',
+  JSON.stringify({ badge: aminaBell.badge }),
+);
+
+const safaBell = await bellOf(process.env.SAFA3_COOKIE, '/teacher');
+check(
+  '9 · the مؤطرة who created it is NOT told she assigned herself',
+  !(safaBell.text ?? '').includes('أُسندت إليكِ'),
+  JSON.stringify({ text: (safaBell.text ?? '').slice(0, 200) }),
+);
+
 close();
 process.exit(finish());

@@ -4,6 +4,7 @@ import * as scope from '../policies/branch-scope.js';
 import { isResponsibleForEvent, teacherEventScope } from '../policies/roster-resolution.js';
 import { page, pageWindow, type Page, type PageParams } from '../lib/pagination.js';
 import * as audit from '../repositories/audit.repository.js';
+import { notifyEventStaffAssigned } from './notification.service.js';
 import { updateWithVersion } from '../repositories/optimistic-lock.js';
 import * as trash from '../repositories/trash.repository.js';
 import type { Actor } from '../policies/actor.js';
@@ -523,6 +524,29 @@ export async function setEventStaff(
       }
     }
 
+    /**
+     * **The people who were not on it a moment ago** (R93).
+     *
+     * *Newly assigned* is the difference between the live staffing and the
+     * submitted set — not everybody in the request. Re-saving the same staffing
+     * after an edit to the title tells nobody again, which is the whole reason
+     * this is computed rather than taken from `staff`.
+     *
+     * A person **removed and later re-added counts as new**: her row was
+     * withdrawn in between, and the second assignment is a second fact.
+     *
+     * **Inside this transaction**, like R77.4's cancellation notices and for the
+     * same reason — an event saved with assistants and no communication cannot
+     * be told apart, on retry, from one already announced.
+     */
+    const newlyAssigned = staff
+      .filter((person) => {
+        const before = existing.find((row) => row.userId === person.userId);
+        return before === undefined || before.deletedAt !== null;
+      })
+      .map((person) => person.userId);
+    const notified = await notifyEventStaffAssigned(tx, eventId, newlyAssigned, actor.userId);
+
     // R71.4 — its own action type: *who answers for this celebration* is not an
     // attribute edit, and `event.update` would bury the decision.
     await audit.write(tx, {
@@ -531,7 +555,13 @@ export async function setEventStaff(
       actionType: 'event.staff_change',
       targetEntity: 'Event',
       targetId: eventId,
-      detail: { positions: staff.map((p) => ({ user_id: p.userId, position: p.position })) },
+      detail: {
+        positions: staff.map((p) => ({ user_id: p.userId, position: p.position })),
+        // *Who was told, and how many* — the question somebody asks when an
+        // assistant says she never heard.
+        newly_assigned: newlyAssigned,
+        notified,
+      },
     });
   });
 }

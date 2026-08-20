@@ -160,6 +160,7 @@ describe('R82/R83 — a notice of any kind reads as itself', () => {
     session_rescheduled: 'notifications.sessionRescheduled',
     session_assigned: 'notifications.sessionAssigned',
     event_created: 'notifications.eventCreated',
+    event_staff_assigned: 'notifications.eventStaffAssigned',
     event_rescheduled: 'notifications.eventRescheduled',
     event_cancelled: 'notifications.eventCancelled',
     grade_published: 'notifications.gradePublished',

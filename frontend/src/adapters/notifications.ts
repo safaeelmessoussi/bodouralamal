@@ -21,6 +21,7 @@ export type NotificationType =
   | 'session_assigned'
   | 'session_rescheduled'
   | 'event_created'
+  | 'event_staff_assigned'
   | 'event_rescheduled'
   | 'event_cancelled'
   | 'grade_published';
