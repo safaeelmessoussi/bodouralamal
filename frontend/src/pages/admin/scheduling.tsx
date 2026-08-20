@@ -28,6 +28,7 @@ import { AdminLayout } from '../../components/admin/admin-layout.js';
 import { CalendarGrid } from '../../components/calendar/calendar-grid.js';
 import { CalendarHeader } from '../../components/calendar/calendar-header.js';
 import { DayEventsDialog } from '../../components/calendar/day-events-dialog.js';
+import { EventDetailsDialog } from '../../components/calendar/event-details-dialog.js';
 import {
   ActivitySection,
   ClassSection,
@@ -547,6 +548,8 @@ function CalendarView({
   const [occurrences, setOccurrences] = useState<Occurrence[]>([]);
   const [bootstrap, setBootstrap] = useState<CalendarBootstrap | null>(null);
   const [openDay, setOpenDay] = useState<Date | null>(null);
+  /** The occurrence whose details are open — the shared dialog, not a fork. */
+  const [openEvent, setOpenEvent] = useState<Occurrence | null>(null);
 
   useEffect(() => {
     const from = startOfMonth(month);
@@ -626,7 +629,7 @@ function CalendarView({
         today={today}
         selected={openDay}
         onSelect={setOpenDay}
-        onOpenEvent={() => undefined}
+        onOpenEvent={setOpenEvent}
       />
 
       <DayEventsDialog
@@ -634,7 +637,21 @@ function CalendarView({
         hijri={null}
         occurrences={openDay ? (byDate.get(iso(openDay)) ?? []) : []}
         onClose={() => setOpenDay(null)}
-        onOpenEvent={() => undefined}
+        onOpenEvent={setOpenEvent}
+      />
+
+      {/**
+        * **The same shared dialog the other three calendars open**
+        * (2026-08-20). Clicking an occurrence in the back office did nothing:
+        * `onOpenEvent` was `() => undefined` here and on the personal
+        * calendars, so the component existed and one surface out of four used
+        * it. The difference between surfaces is the caller's own token, which
+        * is what decides the tier of the session content it reads.
+        */}
+      <EventDetailsDialog
+        occurrence={openEvent}
+        branchNames={new Map()}
+        onClose={() => setOpenEvent(null)}
       />
     </div>
   );

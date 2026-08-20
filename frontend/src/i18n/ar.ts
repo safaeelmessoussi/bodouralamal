@@ -697,7 +697,10 @@ export const ar = {
     materials: 'المواد المرفقة',
     // R86 — يُعرَض محتوى الحصة داخل النافذة مباشرة، لا خلف رابط.
     attachments: 'المواد المرفقة',
-    noMaterials: 'لا تسجيلات ولا مواد مرفقة بهذه الحصة.',
+    // **مفهومان لا جملة واحدة** (2026-08-20): «لا تسجيلات ولا مواد» كانت تدمج
+    // سؤالين، ثم يتكرّر أحدهما كعنوان تحتها.
+    noRecordings: 'لا توجد تسجيلات.',
+    noAttachments: 'لا توجد مواد مرفقة.',
     // إدارة مواد الحصة (§4.9, TD-3.12). الإزالة تفكّ الارتباط ولا تحذف الملف.
     // **«المواد» said nothing about what the action does** (Owner, 2026-08-17):
     // on a row of class sessions it reads as *subjects*, which is a different

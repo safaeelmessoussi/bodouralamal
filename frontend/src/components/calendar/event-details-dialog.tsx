@@ -8,7 +8,6 @@ import {
 } from '../../adapters/calendar.js';
 import { SessionContext } from '../../contexts/session.js';
 import { t, tList } from '../../i18n/index.js';
-import { ButtonLink } from '../ui/button.js';
 import { Dialog } from '../ui/dialog.js';
 
 /**
@@ -265,45 +264,58 @@ function OccurrenceMaterials({ occurrence }: { occurrence: Occurrence }): ReactN
       {state === 'loading' ? <p className="muted">{t('notifications.loading')}</p> : null}
       {state === 'error' ? <p className="muted">{t('calendar.error')}</p> : null}
 
-      {/* **Nothing attached is an answer**, and saying so beats an empty
-          heading a reader has to interpret. */}
-      {state === 'ready' && recordings.length === 0 && materials.length === 0 ? (
-        <p className="muted">{t('session.noMaterials')}</p>
-      ) : null}
-
-      {recordings.length > 0 ? (
+      {/**
+        * **Two sections, always both** (2026-08-20).
+        *
+        * The combined «لا تسجيلات ولا مواد مرفقة بهذه الحصة» collapsed two
+        * different questions into one sentence, and then a heading repeated one
+        * of them underneath. A reader looking for *is there a recording* had to
+        * parse a sentence about something else as well.
+        *
+        * They are separate concepts and are rendered separately, each with its
+        * own empty state — and **only after a successful read**: an error says
+        * so instead of claiming there is nothing (§B8).
+        */}
+      {state === 'ready' ? (
         <>
           <h4 className="details__section-subtitle">{t('session.recordings')}</h4>
-          <ul className="details__list">
-            {recordings.map((item) => (
-              <li key={item.id}>
-                {/* Opened through the existing library flow, which is where the
-                    download permission and the presigned URL live (TD-3.5). */}
-                <a href={`/resources?content=${item.id}`}>{item.title}</a>
-              </li>
-            ))}
-          </ul>
-        </>
-      ) : null}
+          {recordings.length === 0 ? (
+            <p className="muted">{t('session.noRecordings')}</p>
+          ) : (
+            <ul className="details__list">
+              {recordings.map((item) => (
+                <li key={item.id}>
+                  {/* The existing library flow, which is where the download
+                      permission and the presigned URL live (TD-3.5) — never a
+                      second viewer. */}
+                  <a href={`/resources?content=${item.id}`}>{item.title}</a>
+                </li>
+              ))}
+            </ul>
+          )}
 
-      {materials.length > 0 ? (
-        <>
           <h4 className="details__section-subtitle">{t('session.attachments')}</h4>
-          <ul className="details__list">
-            {materials.map((item) => (
-              <li key={item.id}>
-                <a href={`/resources?content=${item.id}`}>{item.title}</a>
-              </li>
-            ))}
-          </ul>
+          {materials.length === 0 ? (
+            <p className="muted">{t('session.noAttachments')}</p>
+          ) : (
+            <ul className="details__list">
+              {materials.map((item) => (
+                <li key={item.id}>
+                  <a href={`/resources?content=${item.id}`}>{item.title}</a>
+                </li>
+              ))}
+            </ul>
+          )}
         </>
       ) : null}
 
-      {/* Secondary now, not the only way in: the Session page carries the
-          description and the staffing a popup should not grow. */}
-      <ButtonLink variant="secondary" href={`/calendar/sessions/${occurrence.id}`}>
-        {t('calendar.detailsOpenSession')}
-      </ButtonLink>
+      {/**
+        * **No longer here** (2026-08-20). «فتح صفحة الحصة وموادها» was the way
+        * to answer *what was recorded for this class*, so inspecting materials
+        * cost a navigation away from the calendar being read. Both sections are
+        * above; the Session page keeps its other uses and is reachable from the
+        * library, but it is not the route to this answer any more.
+        */}
     </section>
   );
 }

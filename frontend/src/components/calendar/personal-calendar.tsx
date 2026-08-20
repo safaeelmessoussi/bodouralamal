@@ -16,6 +16,7 @@ import { CalendarFilters } from './calendar-filters.js';
 import { CalendarGrid } from './calendar-grid.js';
 import { CalendarHeader } from './calendar-header.js';
 import { DayEventsDialog } from './day-events-dialog.js';
+import { EventDetailsDialog } from './event-details-dialog.js';
 import { OccurrenceTable, type OccurrenceColumn } from './occurrence-table.js';
 import { viewFromUrl, type CalendarView } from './view-switch.js';
 
@@ -59,6 +60,9 @@ export function PersonalCalendar({
   const [occurrences, setOccurrences] = useState<Occurrence[]>([]);
   const [bootstrap, setBootstrap] = useState<CalendarBootstrap | null>(null);
   const [openDay, setOpenDay] = useState<Date | null>(null);
+  /** The occurrence whose details are open — the same shared dialog the public
+   *  calendar uses, which nothing but that page opened until now. */
+  const [openEvent, setOpenEvent] = useState<Occurrence | null>(null);
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
 
   const filters = useCalendarFilters(fields);
@@ -165,7 +169,7 @@ export function PersonalCalendar({
             today={today}
             selected={openDay}
             onSelect={setOpenDay}
-            onOpenEvent={() => undefined}
+            onOpenEvent={setOpenEvent}
           />
         ) : (
           /* **The same table the public and back-office lists use** (R84):
@@ -188,9 +192,30 @@ export function PersonalCalendar({
           occurrences={byDate.get(iso(openDay)) ?? []}
           hijri={hijriByDate.get(iso(openDay)) ?? null}
           onClose={() => setOpenDay(null)}
-          onOpenEvent={() => undefined}
+          onOpenEvent={setOpenEvent}
         />
       ) : null}
+
+      {/**
+        * **The SAME dialog the public calendar opens** (2026-08-20).
+        *
+        * Clicking an occurrence here did nothing at all: `onOpenEvent` was
+        * `() => undefined` on both the grid and the day dialog, so a
+        * beneficiary and a مؤطرة could see a class on their calendars and had
+        * no way to ask anything about it. The component already existed and one
+        * surface out of four used it.
+        *
+        * **What differs between surfaces is the caller, not the component**: it
+        * reads the session's own details with the caller's token, so each
+        * reader sees her own tier (§B6).
+        */}
+      <EventDetailsDialog
+        occurrence={openEvent}
+        // The occurrences carry their own branch names (TD-3.4 makes the
+        // calendar self-sufficient), so the dialog needs no lookup table here.
+        branchNames={new Map()}
+        onClose={() => setOpenEvent(null)}
+      />
     </section>
   );
 }

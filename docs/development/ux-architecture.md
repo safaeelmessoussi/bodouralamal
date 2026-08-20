@@ -1158,6 +1158,44 @@ date rules she broke; a generic «تعذّر الحفظ» leaves her to guess.
 «مؤطّرة هذه الحصة» on the occurrences screen, and the dialog says *this occurrence
 only* rather than leaving her to infer it from what did not change.
 
+## AT · A shared component nobody opens is not a shared surface
+
+`EventDetailsDialog` was written once and used once. Three of the four calendars
+— the back office's, the مؤطرة's and the beneficiary's — passed
+`onOpenEvent={() => undefined}`, so clicking an occurrence **did nothing at
+all**. Each of those readers could see a class on her calendar and had no way to
+ask anything about it.
+
+**This is harder to see than a fork.** A duplicated dialog shows up in a grep
+and drifts visibly; a shared one that is never mounted looks perfectly healthy
+in isolation, and every source-level check for *is the component shared* passes.
+The tell is the **handler that discards its argument** — `() => undefined` where
+a callback is expected is almost always a wire nobody finished.
+
+**So the guard asserts the wiring, not the import**: every calendar renders
+`<EventDetailsDialog>` *and* contains no `onOpenEvent={() => undefined}`. The
+difference between the four surfaces is the caller's own token, which is what
+decides the tier of the session content the dialog reads — not a second
+component.
+
+### Two questions get two answers
+
+A class occurrence carries **التسجيلات** and **المواد المرفقة**, and they are
+separate concepts. The combined «لا تسجيلات ولا مواد مرفقة بهذه الحصة» made a
+reader looking for one parse a sentence about both — and a heading then repeated
+one of them underneath. Each section now has its own heading and its own empty
+state.
+
+**And neither says anything until the read succeeded.** A 401, 403 or 500 must
+never render as «لا توجد مواد»: empty is a valid answer only after a 200, which
+is the same rule the notification panel follows.
+
+### The extra page step is gone
+
+«فتح صفحة الحصة وموادها» made answering *what was recorded for this class* cost
+a navigation away from the calendar being read. The materials are in the popup;
+the Session page keeps its other uses and is no longer the route to that answer.
+
 ## AR · Planning data advises the chooser; it never narrows the choice
 
 A screen that knows something about the people in a list may **annotate** them.
@@ -1488,6 +1526,8 @@ system's internals, break on every restyle, and catch nothing.
 | `teaching-group.http.integration.test.ts` | the flat read grants nothing, every filter narrows, TD-10 pagination, Admin-only |
 | [`pages/admin/teachers.test.tsx`](../../frontend/src/pages/admin/teachers.test.tsx) | **AQ** — the action left `المستخدمون` (label *and* component) · the node exists, is routed and sits beside `التسجيلات` · the population is asked by role and never excludes beneficiaries · **one** teaching-profile editor · **X** — the weekday keys resolve, `calendar.weekday` stays absent |
 | `user-management.http.integration.test.ts` | **AQ** — `role=teacher` and `beneficiaries_only` are complements: a مؤطِّرة who also studies is in both lists, and a revoked role leaves the teaching list |
+| [`components/calendar/shared-details.test.ts`](../../frontend/src/components/calendar/shared-details.test.ts) | **AT** — all four calendars render the shared dialog **and** none discards the click · two content sections with two empty states · nothing claimed before a 200 · no Session-page step · the focused read carries the caller's token |
+| [`scripts/dev/browser/verify-occurrence-details.mjs`](../../scripts/dev/browser/verify-occurrence-details.mjs) | **AT** — the dialog opened from public, back-office, مؤطرة and beneficiary calendars on a real Session, with both sections present and every focused read a 200 |
 | [`components/scheduling/staffing-periods.test.ts`](../../frontend/src/components/scheduling/staffing-periods.test.ts) | **AS** — a blank date is open-ended and converted once at the wire · many assistants and one person on several rows · a new row defaults to assistant · each interval refusal has its own Arabic sentence |
 | [`scripts/dev/browser/verify-effective-staffing.mjs`](../../scripts/dev/browser/verify-effective-staffing.mjs) | **AS/R91** — the replacement driven as four identities: dated rows on the form, Safa twice, per-date occurrences, four different answers on one class at one moment, and a handover that leaves the past alone |
 | [`components/scheduling/staff-picker.test.ts`](../../frontend/src/components/scheduling/staff-picker.test.ts) | **AR/C** — all three sections delegate to the shared picker and none hand-rolls a checkbox list · exactly one `filter`, and nothing `disabled` by a warning · every warning kind has its own catalogue key · no warning string reads as a prohibition |

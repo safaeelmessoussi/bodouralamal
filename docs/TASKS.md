@@ -604,6 +604,11 @@
 - [x] Her exam's scope comes from **«الحصة المعنية»** — one of her own classes — because the curriculum chain answers 403 for her. No new endpoint
 - [x] She supervises the sitting she organises, locked to one name; the server refuses anything else
 - [x] `verify-teacher-scheduling` **12/12** · 643 frontend · 222 backend unit · 1412 integration
+### Shared occurrence details + direct content (2026-08-20)
+- [x] **The dialog was never duplicated — it was never opened.** Three of four calendars discarded the click; all four now open the shared component. New rule **AT**
+- [x] **التسجيلات** and **المواد المرفقة** are separate sections with separate empty states, and neither claims anything before a 200
+- [x] «فتح صفحة الحصة وموادها» removed from the dialog; the combined sentence deleted from the catalogue
+- [x] `verify-occurrence-details` **13/13** across public/Admin/مؤطرة/beneficiary · 655 frontend
 - [ ] **NEXT**: one shared occurrence-details dialog (§9–§10) · direct Session recordings/materials (§11–§15) · beneficiary QR (§16–§25)
 
 ### Notification root causes + landing pages (2026-08-20)
