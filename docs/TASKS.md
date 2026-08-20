@@ -618,6 +618,18 @@
 - [x] **Backend CI typecheck was red on `develop`** — 12 pre-existing errors fixed
 - [x] 26 new integration cases · 16 frontend guards + 1 CI shell guard (the CSS invariant cannot live in vitest) · `verify-quran-entry` **24/24** · 19 CI guards · 25 browser harnesses / 556 checks
 - [x] **SRS Revision 95** ratifies the memorisation-vs-revision semantics — `new_memorization` alone feeds coverage, `revision` is recorded and never inflates it, BR-13's merge and BR-11 unchanged in substance
+### R99 — an online class MAY be recorded (2026-08-21) — SRS gate only
+
+- [x] **BR-2 checked against the Owner's STOP condition** — it governs ACCESS, not capture (`SRS.md:813-818`, `:1079`), so **no** per-participant consent workflow
+- [x] **§4.9's "Video remains excluded entirely" qualified IN PLACE**, not rewritten — still in force for uploads; R99 admits a **provenance**, not a file type
+- [x] **TD-9 +1 row**, reachable only by the ingestion pipeline: `video/mp4`, 500 MB, same magic-byte + delete-on-mismatch verification. `/uploads/*` still refuses `video/*`
+- [x] **`EducationalContent.origin`** (`uploaded` | `session_recording`) specified — reusable semantic field, **no separate recording table**
+- [x] **Backfill rule specified**: audio + live `SessionContent` link → `session_recording`; everything else `uploaded` — reproduces today's screens exactly
+- [x] Recording is **optional and explicit**; `دخول الحصة` never records; `جاري التسجيل` visible to every participant including latecomers
+- [x] Provider output is temporary; **a provider URL is never the content asset**
+- [ ] **C1** — Egress + Redis, recording-job entity + state machine, start/stop authorization with R91 parity, verified idempotent webhook, real local-media proof
+- [ ] **C2** — ingestion, storage import, `EducationalContent` + `SessionContent`, «التسجيلات» rendering, beneficiary visibility ladder, failure/retry
+
 ### R98 — entering a class عن بُعد (2026-08-20)
 
 - [x] **The durable rule:** بذور الأمل authorizes; the media provider executes the media session. Never the reverse.
