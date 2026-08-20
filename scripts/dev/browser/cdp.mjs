@@ -17,9 +17,28 @@
  * adding a browser-automation dependency casually, and this is what makes real
  * browser verification possible without one.
  */
-export async function connect(port = '9222') {
+/**
+ * **A SECOND page in the same browser**, for the one thing a single tab cannot
+ * show: several people in one room at the same time.
+ *
+ * Cookies are browser-wide, so identities are established **sequentially** —
+ * set the cookie, open the next tab, and the tab already connected keeps its
+ * in-memory access token and its live media connection. That is what makes a
+ * genuine three-party room provable without three browsers.
+ */
+export async function newPage(port = '9222') {
+  const res = await fetch(`http://127.0.0.1:${port}/json/new?url=about:blank`, {
+    method: 'PUT',
+  });
+  const target = await res.json();
+  return connect(port, target.id);
+}
+
+export async function connect(port = '9222', targetId = null) {
   const list = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json();
-  const page = list.find((t) => t.type === 'page');
+  const page = targetId
+    ? list.find((t) => t.id === targetId)
+    : list.find((t) => t.type === 'page');
   if (!page) throw new Error('no page target in Chrome');
   const ws = new WebSocket(page.webSocketDebuggerUrl);
   await new Promise((res, rej) => {

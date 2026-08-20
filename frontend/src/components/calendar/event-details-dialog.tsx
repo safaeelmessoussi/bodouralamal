@@ -8,6 +8,7 @@ import {
 } from '../../adapters/calendar.js';
 import { SessionContext } from '../../contexts/session.js';
 import { t, tList } from '../../i18n/index.js';
+import { ButtonLink } from '../ui/button.js';
 import { Dialog } from '../ui/dialog.js';
 import { deliveryLabel, mediaLabel } from '../scheduling/delivery.js';
 
@@ -137,9 +138,9 @@ export function EventDetailsDialog({
               * rather than asserting «حضوري» about something the row does not
               * say. Same discipline as every other field here.
               *
-              * There is deliberately **no «دخول الحصة» button**: joining an
-              * online class needs room and token infrastructure that does not
-              * exist yet, and a control that cannot work is worse than none.
+              * «دخول الحصة» now exists (R98) and is rendered below the list —
+              * an action, not a field, so it does not sit in the definition
+              * list beside the facts.
               */}
             {deliveryLabel(occurrence) ? (
               <>
@@ -181,10 +182,53 @@ export function EventDetailsDialog({
             ) : null}
           </dl>
 
+          <JoinAction occurrence={occurrence} />
+
           <OccurrenceMaterials occurrence={occurrence} />
         </>
       ) : null}
     </Dialog>
+  );
+}
+
+/**
+ * **«دخول الحصة» — offered only where it can mean something** (R98.19).
+ *
+ * Three conditions, and each excludes a case that would otherwise ship a door
+ * to nowhere:
+ *
+ * 1. **A class**, not an Event or an Exam — neither has a delivery model at all
+ *    (R97.10), so neither has a room.
+ * 2. **Delivered عن بُعد.** An in-person occurrence has a room at a branch and
+ *    joining it is a bus ride, not a button.
+ * 3. **An authenticated reader.** The public calendar shows «عن بُعد» to
+ *    anonymous visitors — it is a fact about the class — but a teaching room is
+ *    never reachable without a Bodour identity, and offering a control that can
+ *    only refuse would be a worse answer than offering none (R98.30).
+ *
+ * **It is a link, and authorization is NOT decided here** (rule O). Whether this
+ * particular reader may enter — whether she is in the R92 audience, staffs it
+ * under R91, or is a guardian of somebody who is — is answered by the server
+ * when the classroom asks, and the classroom says so in her own words.
+ *
+ * Probing that answer at dialog-open time was rejected on two grounds: it would
+ * cost an authorization request for every occurrence anybody merely *looked* at,
+ * and it would be **stale by the time she clicked** — the join window opens
+ * fifteen minutes before the class, so the honest answer changes while the
+ * dialog is open.
+ */
+function JoinAction({ occurrence }: { occurrence: Occurrence }): ReactNode {
+  const accessToken = useContext(SessionContext)?.accessToken ?? null;
+  if (occurrence.kind !== 'session') return null;
+  if (occurrence.delivery_mode !== 'online') return null;
+  if (!accessToken) return null;
+
+  return (
+    <p className="details__action">
+      <ButtonLink variant="primary" href={`/classroom/${occurrence.id}`}>
+        {t('classroom.join')}
+      </ButtonLink>
+    </p>
   );
 }
 

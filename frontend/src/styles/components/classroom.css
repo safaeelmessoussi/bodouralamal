@@ -1,0 +1,119 @@
+/*
+ * The online classroom (R98) — the platform's own frame around a live media
+ * surface.
+ *
+ * **Why any CSS at all, when the provider ships a stylesheet.** Because the
+ * provider's is written for a left-to-right English product on a dark ground,
+ * and this platform is RTL, light-only and Arabic. Everything below is either
+ * the platform's own layout around the media area, or the smallest correction
+ * that stops the vendor's sheet contradicting a decision this project already
+ * took. The video tiles themselves are left entirely to the vendor: restyling
+ * them would be maintaining a fork of somebody else's component.
+ */
+
+.classroom {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  /* The media area is the point of the page, so it gets the height. `min-height`
+   * rather than `height`: a class with twelve participants must be able to grow
+   * instead of scrolling inside a box that is shorter than its content. */
+  min-height: 60vh;
+}
+
+.classroom__stage {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.classroom__grid {
+  /* The vendor's grid sizes itself from its container; without a floor it
+   * collapses to nothing while the first track is still negotiating, and the
+   * page jumps when it arrives. */
+  min-height: 40vh;
+}
+
+/*
+ * Connection state — a LINE OF TEXT, never a spinner alone.
+ *
+ * §14.4's rule that colour never carries meaning applies here twice over: a
+ * reconnecting class and a connecting one look identical as a spinner, and the
+ * difference is exactly what the reader needs.
+ */
+.classroom__state {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.classroom__state--warn {
+  color: var(--color-text);
+  font-weight: 600;
+}
+
+/* ── صوت فقط ───────────────────────────────────────────────────────────────
+ * A listening surface, not a video layout with the pictures removed. There is
+ * no empty grid here at all — an empty grid would say "nobody has a camera on"
+ * about a class that has no cameras.
+ */
+.classroom__audio {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.classroom__notice {
+  margin: 0;
+  color: var(--color-text-muted);
+  /* Rule AK — helper text is UI, not prose, so the global `p { max-width:
+   * var(--measure) }` must not wrap it early under a wide panel. */
+  max-width: none;
+}
+
+.classroom__participants {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.classroom__participant {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+}
+
+/* Speaking is marked by a WORD in the markup (rule AV); this only reinforces
+ * it, so removing the highlight loses emphasis and never information. */
+.classroom__participant.is-speaking {
+  border-color: var(--color-accent);
+  box-shadow: inset 0 0 0 1px var(--color-accent);
+}
+
+.classroom__participant-state {
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+}
+
+/* ── Controls ─────────────────────────────────────────────────────────────── */
+
+.classroom__controls,
+.classroom__exit {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.classroom__controls {
+  /* Below the media area, where a control bar belongs, and reachable with one
+   * thumb at 360 px — which is why it wraps rather than scrolls. */
+  padding-block-start: var(--space-2);
+}

@@ -49,6 +49,11 @@ jobs:
       # API without changing a test.
       - name: Contract DTOs — no ORM entity on the wire (§16.2, Revision 38)
         run: bash scripts/ci/check-contract-dto.sh
+      # R97.9 makes provider-independence normative, and a rule like that erodes
+      # rather than breaks: one convenient import in a service, then a vendor's
+      # name in a heading, and the SRS is describing a codebase that has moved.
+      - name: The online-class provider seam stays one file (R97.9, R98)
+        run: bash scripts/ci/check-provider-seam.sh
       # The documentation hierarchy is built on cross-references rather than
       # duplication, so a broken link degrades "single source of truth" into
       # "the truth is somewhere". Link integrity is mechanically checkable and

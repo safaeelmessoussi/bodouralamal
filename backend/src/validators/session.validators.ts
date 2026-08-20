@@ -118,3 +118,22 @@ export const sessionAudienceSchema = z
     branch_ids: z.array(uuid).max(20),
   })
   .strict();
+
+/**
+ * **R98 — joining an online class carries NOTHING.**
+ *
+ * An empty `.strict()` object, and that emptiness is the security property
+ * rather than an omission waiting to be filled. Participant identity, room,
+ * role, grants and expiry are all resolved server-side from the authenticated
+ * caller and the Session in the path; a body that could name any of them is a
+ * body that could name somebody else's.
+ *
+ * `.strict()` means a forged `identity`, `room`, `role`, `student_id` or
+ * `can_publish` is a `400` at the boundary rather than a field quietly ignored
+ * by a service — the same discipline R97's delivery fields are refused with
+ * (rule AF: identity is refused by the server, not hidden by the form).
+ *
+ * **No `version`.** Joining reads; it changes no row, so there is nothing to
+ * lose to a concurrent edit (TD-15).
+ */
+export const onlineJoinSchema = z.object({}).strict();

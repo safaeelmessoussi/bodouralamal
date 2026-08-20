@@ -37,6 +37,15 @@ export type Route =
   | 'dashboard-student-quran'
   /** §5.3's *My Grades & Exams* — PUBLISHED grades, read-only (2026-08-17). */
   | 'dashboard-student-grades'
+  /**
+   * **R98 — the online classroom**, `/classroom/{sessionId}`.
+   *
+   * One route for every portal: a مستفيدة, a guardian acting for her child, a
+   * مؤطِّرة, an assistant and an administrator all arrive at the same page and
+   * the server decides who each of them is. Parameterised, so it is matched by
+   * pattern rather than by the literal switch.
+   */
+  | 'classroom'
   /** §14.1, §5.2 (R65) — the PERSONAL section: role-independent, every account. */
   | 'profile'
   /** §14.1 (R65) — any account registers a child, from the personal section. */
@@ -80,6 +89,11 @@ export function resolveRoute(pathname: string): Route {
   // registry because it is public and parameterised, and the literal switch
   // above cannot express an id.
   if (/^\/calendar\/sessions\/[^/]+$/.test(path)) return 'session';
+
+  // R98's classroom. Before the registries below, for the same reason the
+  // Session page is: it is parameterised and belongs to no portal — every role
+  // enters the same room through the same URL.
+  if (/^\/classroom\/[^/]+$/.test(path)) return 'classroom';
 
   // The back office owns its own sub-paths, so it is checked before the role
   // homes — `/admin` appears in both lists and the registry is the authority.

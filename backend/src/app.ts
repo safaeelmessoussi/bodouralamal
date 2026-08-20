@@ -19,6 +19,7 @@ import * as administrativeGroups from './controllers/administrative-group.contro
 import * as teachingGroups from './controllers/teaching-group.controller.js';
 import * as courseSchedules from './controllers/course-schedule.controller.js';
 import * as sessionsCtl from './controllers/session.controller.js';
+import * as onlineClassCtl from './controllers/online-class.controller.js';
 import * as libraryCtl from './controllers/library.controller.js';
 import * as referenceData from './controllers/reference-data.controller.js';
 import * as taxonomy from './controllers/taxonomy.controller.js';
@@ -40,6 +41,7 @@ import { AppError } from './lib/errors.js';
 import { teachesQuran } from './policies/roster-resolution.js';
 import { toRoleScopes } from './policies/branch-scope.js';
 import { createStorageClients } from './lib/storage.js';
+import { createOnlineClassProvider } from './lib/online-class-provider.js';
 import { authenticate, optionalAuthenticate } from './middleware/authenticate.js';
 import { childContext } from './middleware/child-context.js';
 import {
@@ -231,6 +233,11 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
   // reap its object as well as its row (R59.1) — the upload routes below use the
   // same clients.
   const storage = createStorageClients(config);
+
+  // R98 — `null` when the association runs no online classes, which is a
+  // complete configuration; the join route then answers `503` naming the
+  // settings rather than failing at boot for a capability nobody uses.
+  const onlineClass = createOnlineClassProvider(config);
 
   // §7/TD-5/BR-15 (R52, R59) — soft-deleted records. Super Admin only, asserted
   // in the SERVICE against live role rows: the `/admin/` prefix is a URL, not a
@@ -493,6 +500,19 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
   // coincide for every occurrence but the combined one.
   guarded.get('/sessions/:id/roster', sessionsCtl.roster(prisma));
   guarded.put('/sessions/:id/audience-branches', sessionsCtl.setAudience(prisma));
+  /**
+   * **R98 — the door into an online class.**
+   *
+   * Not under `/admin/` and not under a portal prefix, for the reason the
+   * sibling routes above give: a مستفيدة, a guardian acting for her child, a
+   * مؤطِّرة and an administrator all reach the same occurrence, and the service
+   * is the only place that knows which of them is asking.
+   *
+   * `childContext` is NOT mounted (see the controller): staff would be asked
+   * for a header they have no reason to send. The §4.3 resolver is called
+   * inside the service, for exactly the callers it governs.
+   */
+  guarded.post('/sessions/:id/online-join', onlineClassCtl.join(prisma, onlineClass));
   guarded.post('/sessions/:id/content', sessionsCtl.linkContent(prisma));
   guarded.delete('/sessions/:id/content/:contentId', sessionsCtl.unlinkContent(prisma));
 

@@ -7,6 +7,7 @@ import { ActiveRoleProvider } from './contexts/active-role.js';
 import { SessionProvider } from './contexts/session.js';
 import { resolveRoute } from './lib/route.js';
 import { AdminRouter } from './pages/admin/index.js';
+import { ClassroomPage } from './pages/classroom.js';
 import { SessionPage } from './pages/session.js';
 import { TeacherRouter } from './pages/teacher/index.js';
 import { CalendarPage } from './pages/calendar.js';
@@ -61,6 +62,16 @@ function App(): React.ReactNode {
     case 'session':
       // Public at the caller's tier, exactly like the grid it is opened from.
       return <SessionPage />;
+    case 'classroom':
+      // R98 — one classroom for every portal. Inside `PendingGuard` like every
+      // authenticated screen; the JOIN itself is authorised by the server, which
+      // is the only place that knows whether this caller is in the audience or
+      // staffs the occurrence.
+      return (
+        <PendingGuard>
+          <ClassroomPage />
+        </PendingGuard>
+      );
     case 'pending-approval':
       // The guard owns the Pending decision, so it renders the screen itself.
       return <PendingGuard>{null}</PendingGuard>;

@@ -45,3 +45,37 @@ services:
       - ./nginx/html:/usr/share/nginx/errors:ro
       - ./frontend/dist:/usr/share/nginx/html:ro
       - ./nginx/snippets/rate-limits.dev.conf:/etc/nginx/snippets/rate-limits.conf:ro
+      # R98 — the media server's origin for the CSP `connect-src`. Same
+      # mechanism as the rate limits above and for the same reason: the
+      # production file stays exactly what production ships, and development
+      # substitutes one value rather than a different security posture.
+      - ./nginx/snippets/media-origin.dev.conf:/etc/nginx/snippets/media-origin.conf:ro
+
+  # ── R98: a REAL LiveKit server, locally, on no paid credentials ────────────
+  #
+  # `--dev` runs the whole signalling stack in one container with a fixed key
+  # pair, which is what lets `verify-livekit-join` prove an actual join instead
+  # of asserting that a mock was called. It is a DEV OVERLAY service and is
+  # deliberately absent from docker-compose.yml: production points at LiveKit
+  # Cloud (or a self-hosted deployment) through LIVEKIT_URL and never at this.
+  #
+  # **No Egress and no Redis.** Recording is Section C, and `--dev` carries
+  # neither — see `docs/development/online-class-provider.md`, which recorded
+  # that finding before this container existed.
+  livekit:
+    image: livekit/livekit-server:v1.9.1
+    command: --dev --bind 0.0.0.0
+    environment:
+      # The key pair the API mints tokens with in development. Fixed and
+      # committed ON PURPOSE: it authorises nothing beyond this loopback
+      # container, and a generated one could not be written into .env.example.
+      LIVEKIT_KEYS: "devkey: devsecretdevsecretdevsecretdevsecret"
+    ports:
+      # The BROWSER connects to LiveKit directly, so unlike db and minio this
+      # one has to be reachable from the host — that is what LIVEKIT_URL points
+      # at in development (`ws://127.0.0.1:7880`). Loopback-bound, as everything
+      # in this overlay is.
+      - "127.0.0.1:7880:7880"
+      - "127.0.0.1:7881:7881"
+      - "127.0.0.1:7882:7882/udp"
+    restart: unless-stopped

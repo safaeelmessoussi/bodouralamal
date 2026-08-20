@@ -138,6 +138,19 @@
 .details dd {
   margin: 0;
 }
+/**
+ * **The one ACTION in the details dialog** (R98) — «دخول الحصة».
+ *
+ * A block of its own between the facts and the materials, because it is not a
+ * field: putting it inside the definition list would make a door read as an
+ * attribute. `max-width: none` for the same reason rule AK gives — this is UI,
+ * not prose, and the global paragraph measure would narrow it for nothing.
+ */
+.details__action {
+  margin: var(--space-4) 0 0;
+  max-width: none;
+}
+
 .details__section {
   margin-block-start: var(--space-5);
   padding-block-start: var(--space-4);

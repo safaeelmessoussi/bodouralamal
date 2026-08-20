@@ -7003,6 +7003,77 @@
         }
       }
     },
+    "/sessions/{id}/online-join": {
+      "post": {
+        "summary": "Enter an online class",
+        "description": "**§4.4c, §4.3, R97, R98.** Mints a **short-lived participant credential** for one online occurrence. The durable rule this endpoint exists to hold: **بذور الأمل authorizes; the media provider executes the media session** — never the reverse. Authorization completes before a credential exists, and it is the platform's own: the R92 audience for a beneficiary (through the single `audienceForSession`, never a second query), R91 effective staffing for a مؤطِّرة (`SessionStaff` first, then the schedule's assignments **effective on this occurrence's date**), the branch scope that already edits the occurrence for an administrator, and §4.3's approved `FamilyLink` for a guardian. **The body is empty and `.strict()`** — participant identity, room, role, grants and expiry are all derived server-side, so a client cannot name its own identity, ask for teaching permissions, or choose a room. An **assistant receives identical operational authority to the main مؤطِّرة** (R87 §G); **R88 declared capability grants nothing**. A **guardian acting for a linked child enters AS THE CHILD** — the credential carries the child's identity and display name, never the guardian's, and she gains no beneficiary role by it. **Only an `online` occurrence can be joined** (`409 NOT_ONLINE` for an in-person one), and only inside the **join window**: fifteen minutes before the scheduled start until thirty minutes after the scheduled end, on server time (`409 BEFORE_WINDOW` / `AFTER_WINDOW`, each carrying `opens_at` and `closes_at`). **The window is evaluated AFTER authorization**, so an unauthorised caller learns nothing about the timetable — anything out of reach is `404`, never `403` (§20 rule 17). **Nothing is persisted.** The room is **derived** from the Session's own identity (R97.9 — no vendor identifier on any schedule, session or occurrence projection, and no room table), so repeating the request creates no duplicate state and a page refresh costs nothing. **No API key or secret is ever returned**, no room-management capability is granted, and joining is **not attendance** (§4.7). Recording is a later revision and no recording grant is issued.",
+        "responses": {
+          "200": {
+            "description": "The media server URL, a bounded participant token, and the presentation the classroom adapts to — media mode, role and display name."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — any body key at all; the request carries none.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an unknown occurrence, one the caller is not in the audience of and does not staff, or a forged or revoked child context (§4.3 — no distinction, deliberately).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT with reason NOT_ONLINE, CANCELLED, BEFORE_WINDOW or AFTER_WINDOW.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error envelope (TD-3.8). SERVICE_UNAVAILABLE naming the unset settings, when the association has configured no online-class provider.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/sessions/{id}/roster": {
       "get": {
         "summary": "Who is expected at this occurrence",

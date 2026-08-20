@@ -117,6 +117,7 @@ The technical core. Written for an engineer who has never seen the repository.
 | [**Teaching authority**](development/teaching-authority.md) | **Who may act on whom, and when — capability vs assignment, effective dating, the occurrence override, cross-branch audiences** |
 | [**Class delivery**](development/class-delivery.md) | **حضوري and عن بُعد — one inheritance mechanism, why an online occurrence has no room, and the three independent dimensions** |
 | [**Online-class provider**](development/online-class-provider.md) | The MVP media-provider decision and the two infrastructure findings that shape it — an implementation choice the delivery domain must survive |
+| [**Online classroom**](development/online-classroom.md) | **بذور الأمل authorizes; the provider executes** — who may enter a class عن بُعد, the derived room, the join window, the credential, and the one classroom every portal shares |
 | [**Person identity**](development/person-identity.md) | **The QR and the two identifiers beside it — one per person, role-independent, and why it identifies but never authenticates** |
 | [**Quran progress**](development/quran-progress.md) | **One engine behind إدخال الحفظ and حفظي — what authorises an entry, why مراجعة never raises the percentage, why the log stores no Level** |
 | [Testing](development/testing.md) | The four layers, what each is for, and how to run them |

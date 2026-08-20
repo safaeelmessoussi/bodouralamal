@@ -395,10 +395,43 @@ check(
     dialogShows.saysRoom === false,
   JSON.stringify(dialogShows).slice(0, 400),
 );
+/**
+ * **17 — RESTATED, not deleted (R98).**
+ *
+ * This check read *«there is no «دخول الحصة» — the infrastructure does not
+ * exist yet»*, which was R97's true and deliberate claim. R98 built that
+ * infrastructure, so the sentence stopped being the property. **The property
+ * was never the absence of a button**: it is that **delivery decides whether
+ * the class has a door at all**, and that is exactly as much a delivery fact
+ * now as it was when there were no doors.
+ *
+ * So it asserts the asymmetry instead — an online class offers the way in, an
+ * in-person one never does. *Who* may walk through it is R98's question and is
+ * proved by `verify-livekit-join`.
+ */
+// Close the previous dialog in its OWN evaluation and reload the page before
+// the next click: React re-renders on close, so a chip captured in the same
+// turn is a stale node and its click reaches nothing.
+await evaluate(`(() => { for (const d of document.querySelectorAll('dialog[open]')) d.close(); return true; })()`);
+await open(`/calendar`, 'main');
+const inPersonDialog = await evaluate(`(async () => {
+  const buttons = [...document.querySelectorAll('.event-chip--interactive')];
+  const target = buttons.find((b) => b.textContent.includes('فقه'));
+  if (!target) return { notFound: true };
+  target.click();
+  await new Promise((r) => setTimeout(r, 1500));
+  const dialog = document.querySelector('dialog[open]');
+  if (!dialog) return { noDialog: true };
+  const text = dialog.textContent;
+  return { opened: true, saysInPerson: text.includes('حضوري'), hasJoin: text.includes('دخول الحصة') };
+})()`);
 check(
-  '17 · and offers NO «دخول الحصة» — the infrastructure for it does not exist yet',
-  dialogShows.hasJoin === false,
-  JSON.stringify({ hasJoin: dialogShows.hasJoin }),
+  '17 · delivery decides whether there is a door: عن بُعد offers «دخول الحصة», حضوري never does',
+  dialogShows.hasJoin === true &&
+    inPersonDialog.opened === true &&
+    inPersonDialog.saysInPerson === true &&
+    inPersonDialog.hasJoin === false,
+  JSON.stringify({ online: dialogShows.hasJoin, inPerson: inPersonDialog }),
 );
 
 /* ── 18 · The month grid marks the exception and stays quiet otherwise ───── */

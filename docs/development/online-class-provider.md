@@ -6,8 +6,15 @@ This is an **implementation choice**, recorded separately from the delivery
 domain on purpose. [SRS R97.9](class-delivery.md) makes provider-independence
 normative: the domain must survive replacing what is written here.
 
-> **Nothing on this page is implemented yet.** Section A built the delivery
-> domain only. No LiveKit dependency, no room, no token, no recording.
+> **Status (R98, 2026-08-20): rooms, join authorization and the embedded
+> classroom are IMPLEMENTED** — see [online-classroom.md](online-classroom.md),
+> which is where the join architecture and the durable rule live. **Recording is
+> still not built**: no Egress, no Redis, no recording grant, no import into
+> `EducationalContent`.
+>
+> The decision below is reached through **one narrow application seam**
+> (`backend/src/lib/online-class-provider.ts`, guarded by
+> `scripts/ci/check-provider-seam.sh`), so the reach of it stays visible.
 
 ---
 
@@ -93,6 +100,30 @@ participant-minutes — about **two classes a month** before the tier is
 exhausted, so realistic use means a paid tier. The paid tier's *WebRTC*
 inclusions and the Egress rates were **not verifiable** from the public pricing
 page and must be confirmed at signup rather than assumed.
+
+---
+
+## What implementing it actually cost (R98, 2026-08-20)
+
+Recorded because the next section inherits it, and because two of the three were
+invisible to every test that is not a browser.
+
+* **The packages are the four pinned above, exactly**, and nothing else. No
+  egress client, no Redis client, no package added "for later recording". The
+  backend takes `livekit-server-sdk` only; the client takes
+  `livekit-client`, `@livekit/components-react` and `@livekit/components-styles`.
+  None introduced a security advisory.
+* **§3.1's CSP blocks the media server**, and must name its origin in **both**
+  schemes — `wss:` *and* `https:` — because the client validates over HTTP
+  before upgrading. Listing only the socket origin fails with *«could not
+  establish signal connection: Failed to fetch»* and **no CSP violation event**,
+  since the blocked request is the HTTP one. `nginx/snippets/media-origin.conf`.
+* **Local development needs no account at all.** `livekit-server --dev` is a
+  dev-overlay container with a fixed key pair, so the browser harness proves a
+  real three-party room and CI consumes no cloud minutes.
+* **A headless browser needs fake media devices** (`--use-fake-device-for-media-stream`,
+  `--use-fake-ui-for-media-stream`): the tracks are synthetic, the signalling,
+  the room and the connection are real.
 
 ---
 

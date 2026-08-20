@@ -618,6 +618,29 @@
 - [x] **Backend CI typecheck was red on `develop`** — 12 pre-existing errors fixed
 - [x] 26 new integration cases · 16 frontend guards + 1 CI shell guard (the CSS invariant cannot live in vitest) · `verify-quran-entry` **24/24** · 19 CI guards · 25 browser harnesses / 556 checks
 - [x] **SRS Revision 95** ratifies the memorisation-vs-revision semantics — `new_memorization` alone feeds coverage, `revision` is recorded and never inflates it, BR-13's merge and BR-11 unchanged in substance
+### R98 — entering a class عن بُعد (2026-08-20)
+
+- [x] **The durable rule:** بذور الأمل authorizes; the media provider executes the media session. Never the reverse.
+- [x] **`POST /sessions/{id}/online-join`** — one route, **empty `.strict()` body**; identity, room, role, permissions and expiry all derived server-side
+- [x] **Room DERIVED from the Session, never stored** — no column, no `OnlineRoom` table, no migration (R97.9 holds by construction)
+- [x] **One narrow provider seam** (`lib/online-class-provider.ts`) + `check-provider-seam.sh`, proved against all three defects it exists for
+- [x] **Authorization reuses the canonical resolvers** — `audienceForSession` (R92), `staffsSession` (R91), `resolveActingStudent` (§4.3), branch scope (TD-2). No second audience query.
+- [x] **Refusals proved, each for its own reason** — expired مؤطِّرة · future مؤطِّرة · R88 capability-only · unrelated beneficiary · forged/revoked child · in-person occurrence · outside the window
+- [x] **Assistant parity** and a **one-off cover** confined to its occurrence
+- [x] **Guardian enters AS THE CHILD**; no beneficiary role granted
+- [x] **Join window** −15 min … +30 min, server time; no timeless credential; window checked **after** authorization so a stranger learns nothing about the timetable
+- [x] **Minimum permissions**: no moderation for a beneficiary or an administrator; `audio_only` permits **the microphone alone**, on the credential
+- [x] **One classroom for every portal** at `/classroom/{id}`; audio-only is a listening surface and never requests a camera
+- [x] **Defect found only in a browser: §3.1's CSP blocked the media server** — and needed BOTH schemes, because the client validates over HTTP before upgrading. `nginx/snippets/media-origin.conf`.
+- [x] **Defect: a `SessionStaff` cover on a non-overridden occurrence is resynced away** — the fixture was writing a state the platform cannot reach
+- [x] **Defect: a fixture's «today» was UTC's, not the association's** — local weekday, UTC date; broken for the first hour after local midnight
+- [x] Tests: 38 backend integration · 9 HTTP wire · 23 frontend · 1 new CI guard
+- [x] Browser: `verify-livekit-join` **46/46** against a **real local LiveKit** — a genuine three-party room through the real screens
+- [x] `livekit-server-sdk` 2.18.0 · `livekit-client` 2.22.0 · `@livekit/components-react` 2.9.24 · `@livekit/components-styles` 1.2.0, all exact, no new advisories
+- [x] TD-13 gains three **grouped-optional** settings — all three or none; half-configured is refused at boot
+
+**Deliberately NOT built (next section):** Egress, Redis, recording start/stop, webhooks, a recording job entity, import of recordings as `EducationalContent`.
+
 ### R97 — a class is delivered حضوري or عن بُعد (2026-08-20)
 
 - [x] **Delivery domain, provider-independent** — `delivery_mode` + `online_media_mode` on schedule and occurrence, migration `20260820180000_r97_delivery_mode`, 14 schedules / 773 sessions backfilled to `in_person`

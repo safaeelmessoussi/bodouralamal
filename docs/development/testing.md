@@ -750,6 +750,74 @@ cost a debugging cycle. Two rules follow:
 `verify-delivery.mjs` now **throws** on «ليست لديك صلاحية» rather than reporting
 it as a delivery failure, so the next person meets the real cause immediately.
 
+### A live media surface needs fake devices, and a REAL server
+
+`verify-livekit-join` is the only harness where several people are in one place
+at once, and three things make that possible without a paid account or a human:
+
+* **`livekit-server --dev`** in the dev overlay — the whole signalling stack in
+  one container with a fixed key pair. CI consumes no cloud minutes.
+* **`--use-fake-device-for-media-stream --use-fake-ui-for-media-stream`** — a
+  headless browser has no microphone, and a permission dialog nobody can click
+  makes every join time out. The tracks are synthetic; the signalling, the room
+  and the connection are real.
+* **Sequential identities across tabs.** Cookies are browser-wide, so a second
+  participant is: set the cookie, open a new tab. The tab already connected keeps
+  its in-memory access token and its live connection, which is what lets one
+  browser hold a genuine three-party room.
+
+### Assert the STATE, not the surface that displays it
+
+The first version of that harness waited for the classroom element to appear and
+called it *connected*. The element renders while the connection is still
+negotiating, so **three tabs reported success while one was actually connected**
+— and the check that counted participants was the only thing that noticed.
+
+The component now puts the connection state in the DOM (`data-connection`), and
+the harness asserts on that. The general rule: when a check needs a state, make
+the state readable and read it; a proxy for it will eventually be true when the
+state is not.
+
+### A CSP is invisible to every test that is not a browser
+
+R98's classroom could not open at all: §3.1's `connect-src 'self'` blocked the
+media server. Neither typechecker, no unit test and no HTTP integration test can
+see a CSP — the request is refused inside the browser before it reaches the
+network.
+
+**And the second half cost as much as the first.** Naming only the socket origin
+(`ws://…`) left the *validation* request — plain HTTP, made before the upgrade —
+still blocked, and it produces **no `securitypolicyviolation` event** on the
+socket, only «could not establish signal connection: Failed to fetch». Both
+schemes must be listed. See `nginx/snippets/media-origin.conf`.
+
+### A fixture's "today" must be the association's clock, not UTC's
+
+`verify-livekit-join` needs **today's** occurrence, because the join window is
+real. Its fixture computed the date by zeroing the UTC hours of `new Date()` —
+the idiom every other fixture here uses — while taking the weekday from
+`new Date().getDay()`, which is **local**. At 00:34 in Casablanca those are two
+different days, and the seed died with «no record was found» while the
+occurrence sat there under tomorrow's date.
+
+The other fixtures never noticed because they ask for occurrences **after**
+today (`date: { gt: day(0) }`), where being a day out changes nothing. Build a
+calendar date from the local parts — `Date.UTC(y, m, d + offset)` — whenever a
+fixture needs *today* exactly, and make sure every date in it comes from the
+same clock.
+
+### A one-off cover must be written the way the platform writes it
+
+The R98 fixture created a `SessionStaff` row directly and the harness then
+reported the cover as *refused*. The row was real; materialization had
+soft-deleted it seconds later, because an occurrence that is not `overridden`
+gets resynced from its schedule — which named nobody (R43.6).
+
+The platform's own cover flow is `PATCH /sessions/{id}` with `staff`, and it
+sets `overridden` precisely so that cannot happen. **A fixture that writes rows
+the application would have written differently is testing a state the
+application cannot reach.**
+
 ## Acceptance checklists
 
 A module is Done only when its checklist is fully ticked, its test gates pass, and its

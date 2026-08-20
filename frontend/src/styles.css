@@ -99,3 +99,9 @@
 @import './styles/components/progress.css';
 /* The shared person QR (R96). Standalone — extends nothing. */
 @import './styles/components/user-qr.css';
+/* The online classroom (R98). Loaded LAST and deliberately so: it is the one
+ * surface that also carries a third party's stylesheet
+ * (`@livekit/components-styles`, imported by the component itself), and the
+ * platform's own rules must win over it. Standalone otherwise — nothing else
+ * extends it. */
+@import './styles/components/classroom.css';

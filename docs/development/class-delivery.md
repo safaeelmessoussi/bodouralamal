@@ -6,9 +6,15 @@ nothing about which media platform carries it.
 > **Scope note.** This page describes the **delivery domain**, which is
 > provider-independent and normatively so (R97.9). The MVP media provider is a
 > separate decision, recorded in
-> [online-class-provider.md](online-class-provider.md). Joining a class, tokens,
-> recording and the import of recordings are **later revisions** and are not
-> built.
+> [online-class-provider.md](online-class-provider.md).
+>
+> **Entering a class عن بُعد is R98** and lives in
+> [online-classroom.md](online-classroom.md) — who may join, the derived room,
+> the join window and the credential. Delivery decides *whether a class has a
+> room to enter*; it decides nothing about *who may enter it*.
+>
+> **Recording and the import of recordings are still later revisions** and are
+> not built.
 
 ---
 

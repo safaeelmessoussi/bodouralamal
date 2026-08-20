@@ -1793,3 +1793,58 @@ export function sessionRosterDto(row: {
     })),
   };
 }
+
+/**
+ * **R98 — the credentials for one online class, and nothing else.**
+ *
+ * Four rules decided this shape, each by exclusion:
+ *
+ * 1. **No API key and no secret.** They never leave the API process. What the
+ *    browser receives is a participant token derived from them, bounded in time,
+ *    naming one room and one identity.
+ * 2. **No room name.** The client does not need it — the room is inside the
+ *    token — and R97.9's posture is that a provider identifier belongs on no
+ *    projection the platform hands out. Withholding it costs nothing and keeps
+ *    the vendor's vocabulary out of the client contract.
+ * 3. **No room-management capability.** The token carries `roomJoin` for one
+ *    room; nothing here can list, create or record anything.
+ * 4. **`role` and `media_mode` because the ONE classroom adapts to them** — the
+ *    moderation controls and the audio-only surface are decided from these two
+ *    fields rather than from a second component per portal (rule C).
+ *
+ * `expires_at` is reported so the classroom can say «انتهت صلاحية الدخول» and
+ * offer to ask again, instead of showing a connection that silently stops
+ * working.
+ */
+export function onlineJoinDto(result: {
+  url: string;
+  token: string;
+  expiresAt: Date;
+  authorization: {
+    sessionId: string;
+    displayName: string;
+    role: string;
+    mediaMode: string;
+    closesAt: Date;
+  };
+}): {
+  session_id: string;
+  url: string;
+  token: string;
+  expires_at: string;
+  media_mode: string;
+  role: string;
+  display_name: string;
+  closes_at: string;
+} {
+  return {
+    session_id: result.authorization.sessionId,
+    url: result.url,
+    token: result.token,
+    expires_at: result.expiresAt.toISOString(),
+    media_mode: result.authorization.mediaMode,
+    role: result.authorization.role,
+    display_name: result.authorization.displayName,
+    closes_at: result.authorization.closesAt.toISOString(),
+  };
+}
