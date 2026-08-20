@@ -17,6 +17,7 @@ import { TeacherLayout } from '../../components/teacher/teacher-layout.js';
 import { Button } from '../../components/ui/button.js';
 import { SchedulingDialog } from '../admin/scheduling.js';
 import { useSession } from '../../contexts/session.js';
+import { PersonalCalendar } from '../../components/calendar/personal-calendar.js';
 import { t } from '../../i18n/index.js';
 import { recurrenceLabel, timeLabel } from '../../components/scheduling/labels.js';
 
@@ -121,12 +122,36 @@ export function TeacherSchedulesPage(): ReactNode {
       lede={t('teacher.schedules.lede')}
       actions={
         <Button variant="add" onClick={() => setComposing(true)}>
-          {t('teacher.schedules.addActivity')}
+          {t('teacher.schedules.addItem')}
         </Button>
       }
     >
-      {/* The list below is Course Schedules — read-only (§14.1). The action
-          above creates an ACTIVITY, which is the one kind TD-2 grants. */}
+      {/**
+        * **Her own occurrences, on the shared calendar surface** (merged
+        * 2026-08-20).
+        *
+        * `/teacher/calendar` and `/teacher/schedules` were two menu entries onto
+        * the same operational question — *what am I teaching, and when* — so a
+        * مؤطرة had to know which of the two held the thing she wanted. They are
+        * one page now: this calendar plus the definitions table below it.
+        *
+        * **The projection is unchanged.** This is the same `PersonalCalendar`
+        * the beneficiary's portal renders, reading `/me/calendar` (R82.8), with
+        * the مؤطرة's own filter set (R84) — nothing about her scope moved, and
+        * the server still decides every option she is offered (rule O).
+        */}
+      <PersonalCalendar
+        token={accessToken}
+        fields={['branchId', 'categoryId', 'levelId', 'type', 'subjectId', 'groupId', 'circleId']}
+        columns={['kind', 'title', 'date', 'time', 'level', 'subject', 'audience', 'branch', 'room']}
+        heading={t('teacher.myCalendar')}
+      />
+
+      {/* The list below is Course Schedules — read-only (§14.1) — and is a
+          different question from the calendar above it: **the rules**, not the
+          occurrences they produce. It stays because it carries the roster
+          action, which nothing else offers her. The button above creates an
+          ACTIVITY, the one kind TD-2 grants. */}
       <DataTable
         caption={t('teacher.schedules.caption')}
         columns={columns}

@@ -7125,6 +7125,47 @@
         }
       }
     },
+    "/me/event-staff-options": {
+      "get": {
+        "summary": "Whom the caller may name on an event",
+        "description": "§4.4, R71 as narrowed by R93. A مؤطرة may staff the event she answers for, and listing people is `GET /admin/users`, which **refuses her (403)** — so the assistants control was empty and the capability was complete and unreachable. **The fix is a narrower question, never a wider permission**: this answers *whom may I name here* — active teaching staff, **names and ids only**. No email, no phone, no status, no roles, no branch scope; `/admin/users` is untouched and still refuses her, so this is not a user directory by another door. **There is no id in the request** — the subject is the authenticated actor, the property that makes `GET /students/me` untamperable (TD-12, R63.3). Naming somebody else RESPONSIBLE is refused by `PUT /events/{id}/staff` regardless of what this returns.",
+        "responses": {
+          "200": {
+            "description": "Active teaching staff, as names and ids."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN for a caller who is neither teaching staff nor an administrator.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/me/calendar": {
       "get": {
         "summary": "The caller’s own calendar",

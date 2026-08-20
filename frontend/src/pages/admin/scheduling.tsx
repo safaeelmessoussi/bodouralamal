@@ -8,7 +8,7 @@ import {
   type Occurrence,
 } from '../../adapters/calendar.js';
 import { listRooms } from '../../adapters/branches-admin.js';
-import { notifyEventChange } from '../../adapters/events.js';
+import { listEventStaffOptions, notifyEventChange } from '../../adapters/events.js';
 import { AVAILABLE_TYPES, specOfType } from '../../adapters/scheduling-types.js';
 import {
   deleteSchedulingItem,
@@ -756,6 +756,11 @@ export function SchedulingDialog({
   // control the server will refuse. R71.4 keeps event staffing with Admins.
   const { activeRoles } = useActiveRole();
   const canAssignStaff = activeRoles.some((r) => r === 'admin' || r === 'super_admin');
+  // **Her own identity**, so a مؤطرة's event carries her as responsible without
+  // a control that could name anybody else. The server refuses any other name
+  // regardless (`RESPONSIBLE_MUST_BE_SELF`) — this is the honest payload, not
+  // the enforcement.
+  const { me } = useSession();
 
   const [responsibleId, setResponsibleId] = useState(
     item?.ids.staff.find((x) => x.position === 'responsible')?.user_id ?? '',
@@ -875,8 +880,29 @@ export function SchedulingDialog({
   const spec = specOfType(type);
 
   useEffect(() => {
-    void searchUsers(token, { role: 'teacher' }).then((p) => setTeachers(p.data));
-  }, [token]);
+    /**
+     * **Two different questions, asked by whoever may ask them** (R93).
+     *
+     * `GET /admin/users` answers **403** for a مؤطرة, so this used to leave her
+     * staff list empty — and the assistants control on her own event with
+     * nothing in it. An Admin still reads the full list, because she also
+     * staffs classes from it and needs more than names; a مؤطرة reads the
+     * narrow one, which is only *whom may I name here*.
+     */
+    if (canAssignStaff) {
+      void searchUsers(token, { role: 'teacher' })
+        .then((p) => setTeachers(p.data))
+        .catch(() => setTeachers([]));
+      return;
+    }
+    void listEventStaffOptions(token)
+      .then((rows) =>
+        setTeachers(
+          rows.map((r) => ({ id: r.id, name_arabic: r.name }) as unknown as UserSummary),
+        ),
+      )
+      .catch(() => setTeachers([]));
+  }, [token, canAssignStaff]);
 
   // Rooms belong to a branch, so the list follows the branch choice — a room at
   // another branch is one the class cannot meet in (§4.4).
@@ -1024,16 +1050,26 @@ export function SchedulingDialog({
           // R71 — sent only when this caller may set it; the server refuses
           // otherwise, and sending it anyway would turn an ordinary save into
           // a refusal for a مؤطرة editing her own event.
-          ...(canAssignStaff
-            ? {
-                eventStaff: [
-                  ...(responsibleId
-                    ? [{ user_id: responsibleId, position: 'responsible' as const }]
-                    : []),
-                  ...assistantIds.map((id) => ({ user_id: id, position: 'assistant' as const })),
-                ],
-              }
-            : {}),
+          /**
+           * **R71 for an Admin; her own event for a مؤطرة** (2026-08-20).
+           *
+           * This was sent only when the caller could assign staff, because the
+           * server refused a مؤطرة outright — so she could create a celebration
+           * and not name the people helping her run it. She may now, with the
+           * responsible position pinned to **herself**: the server refuses any
+           * other name, and sending her own id keeps that fact in the payload
+           * rather than leaving it implied.
+           */
+          eventStaff: [
+            ...(canAssignStaff
+              ? responsibleId
+                ? [{ user_id: responsibleId, position: 'responsible' as const }]
+                : []
+              : me?.id
+                ? [{ user_id: me.id, position: 'responsible' as const }]
+                : []),
+            ...assistantIds.map((id) => ({ user_id: id, position: 'assistant' as const })),
+          ],
           teachingMode: mode,
           targetId,
           branchId: scope.value.branchId,
@@ -1170,9 +1206,25 @@ export function SchedulingDialog({
             onScopeKind={setScopeKind}
             scopeId={scopeId}
             onScopeId={setScopeId}
+            /**
+             * **A مؤطرة is offered only herself as responsible** (2026-08-20).
+             *
+             * She may now staff her own event, and the one thing she may not do
+             * is hand it to somebody else — so the selector holds exactly one
+             * name. Not a hidden control: the list she is offered is the list
+             * the server will accept, and a forged body naming anybody else is
+             * refused there (`RESPONSIBLE_MUST_BE_SELF`).
+             *
+             * **The assistants list stays whole**, because choosing who helps
+             * her run it is precisely the thing this grant is for.
+             */
             staff={teachers}
-            responsibleId={responsibleId}
+            leadStaff={
+              canAssignStaff ? teachers : teachers.filter((x) => x.id === me?.id)
+            }
+            responsibleId={canAssignStaff ? responsibleId : (me?.id ?? '')}
             onResponsible={setResponsibleId}
+            responsibleLocked={!canAssignStaff}
             assistantIds={assistantIds}
             onAssistants={setAssistantIds}
             canAssignStaff={canAssignStaff}

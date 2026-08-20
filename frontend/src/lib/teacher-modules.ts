@@ -70,21 +70,6 @@ export const TEACHER_MODULES: readonly TeacherModule[] = [
   },
   {
     /**
-     * **تقويمي** — her own week, from `/me/calendar` (R82.8).
-     *
-     * Its own node rather than the dashboard's content: the dashboard stays
-     * deliberately minimal until it is designed, and a calendar somebody opens
-     * daily should be one click from the menu rather than something they scroll
-     * a landing page to reach.
-     */
-    path: '/teacher/calendar',
-    labelKey: 'teacher.nav.calendar',
-    section: 'teaching',
-    roles: TEACHER,
-    status: 'ready',
-  },
-  {
-    /**
      * **إدخال الحفظ** — recording a beneficiary's memorisation (§4.5, R73).
      *
      * The page and the router case have existed since M4; **the registry entry

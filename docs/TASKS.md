@@ -591,6 +591,15 @@
 - [x] 222 backend unit · 1373 integration · 613 frontend · 13/13 new browser checks · 18 CI guards · OpenAPI current
 - [x] **`verify-staff-picker` closed 2026-08-20 — 13/13.** Harness defect (`===` against the shared add-Button's `＋` prefix) on top of R91's intentional control change. Fixing it exposed a **real regression**: the periods editor rendered bare names, dropping R90's *marked before the choice* half. `markedLabel`/`Warnings` now shared and guarded
 - [x] **All 20 harnesses green in one pass — 460 checks** (plus `measure-page-header`'s 9 widths)
+### Teacher scheduling merge + responsible=self (2026-08-20)
+- [x] **One node «الجدولة»** — the shared `PersonalCalendar` plus her classes table; `/teacher/calendar` still renders it so links survive
+- [x] **Responsible = self, enforced server-side** (`RESPONSIBLE_MUST_BE_SELF`); she may now set assistants on the event she answers for, and only that one
+- [x] **`GET /me/event-staff-options`** — the narrow read that makes it reachable; `/admin/users` still refuses her (rule O)
+- [x] Four guards restated with their reasons: registry list · R84 filter matrix source · two portal checks
+- [x] 643 frontend · 222 backend unit · 1403 integration · TD-3 + OpenAPI current
+- [ ] **UNPROVEN: the teacher's activity SAVE.** `verify-teacher-scheduling` is 4/6 — the merged page, the single node and the self-only responsible selector are proven; the save is refused («تعذّر الحفظ») and the group scope selector reads no options in the harness. **Cause not established.** Checks 5–6 stay red rather than being weakened
+- [ ] **NOT STARTED**: assistant-assignment notification (§6–§8) · one shared occurrence-details dialog (§9–§10) · direct Session recordings/materials (§11–§15) · beneficiary QR (§16–§25)
+
 ### Notification root causes + landing pages (2026-08-20)
 - [x] **Level cancellation root cause**: the resolver was right. The only beneficiary in that Level+Branch was the Owner's own account, excluded as the actor (R78.3) — so the send reached nobody and said «أُرسل الإشعار إلى 0» which reads as success. **Zero now answers explicitly.**
 - [x] **Grade republish root cause**: two blockers — only newly-drafted rows were offered to the notifier, and `skipDuplicates` absorbed the rest. New semantics: one row per (student, exam), **unread again when the score changed**, silent when it did not

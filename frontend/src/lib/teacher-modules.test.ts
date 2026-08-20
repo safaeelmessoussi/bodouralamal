@@ -22,11 +22,17 @@ describe('the teacher registry matches §14.1', () => {
     // **Two nodes joined, and one of them had existed all along.**
     // `/teacher/quran` has had a page and a router case since M4 and **no
     // registry entry**, so the capability was complete and unreachable — rule
-    // P's defect. `/teacher/calendar` is new: her own week, from `/me/calendar`.
+    // P's defect.
+    //
+    // **`/teacher/calendar` left this list on 2026-08-20**, and the property is
+    // restated rather than dropped: it and `/teacher/schedules` were two menu
+    // entries onto the same operational question, so a مؤطرة had to know which
+    // of the two held what she wanted. The MENU offers الجدولة alone; the old
+    // PATH still renders the merged page, which is why the router test below
+    // still names it and this one does not.
     expect(TEACHER_MODULES.map((m) => m.path).sort()).toEqual(
       [
         '/teacher',
-        '/teacher/calendar',
         '/teacher/content',
         '/teacher/exams',
         '/teacher/quran',

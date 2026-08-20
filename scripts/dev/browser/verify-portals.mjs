@@ -64,7 +64,13 @@ check(
   teacherHome.menu.length >= 5,
   JSON.stringify(teacherHome.menu),
 );
-for (const label of ['تقويمي', 'الجدولة', 'نقاط الامتحانات', 'مكتبة المحتوى', 'إدخال الحفظ']) {
+/**
+ * **«تقويمي» left her menu on 2026-08-20**, and the property is restated rather
+ * than dropped: it and «الجدولة» were two entries onto one operational question,
+ * so she had to know which of the two held what she wanted. Her calendar is now
+ * the top of الجدولة — check 5 below opens it there.
+ */
+for (const label of ['الجدولة', 'نقاط الامتحانات', 'مكتبة المحتوى', 'إدخال الحفظ']) {
   check(
     `2 · her menu reaches «${label}»`,
     teacherHome.menu.some((m) => m.includes(label)),
@@ -82,10 +88,10 @@ check(
   JSON.stringify({ label: teacherHome.bellLabel }),
 );
 
-await open('/teacher/calendar');
+await open('/teacher/schedules');
 const teacherCalendar = await shell();
 check(
-  '5 · her تقويمي opens the shared calendar',
+  '5 · her الجدولة opens the shared calendar (merged)',
   teacherCalendar.calendars === 1,
   JSON.stringify({ calendars: teacherCalendar.calendars }),
 );

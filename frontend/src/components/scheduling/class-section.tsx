@@ -189,6 +189,8 @@ export function ActivitySection({
   scopeOptions,
   locked,
   staff,
+  leadStaff,
+  responsibleLocked = false,
   responsibleId,
   onResponsible,
   assistantIds,
@@ -214,6 +216,14 @@ export function ActivitySection({
   onAssistants: (ids: string[]) => void;
   /** R71.4 — assigning staff is Admin and above. */
   canAssignStaff: boolean;
+  /**
+   * **Who may be named responsible**, which is not always everyone staffable.
+   * A مؤطرة is offered exactly herself: she may staff her own event and may not
+   * hand it to somebody else. Absent, it is `staff` — the Admin's case.
+   */
+  leadStaff?: UserSummary[];
+  /** True when the lead is fixed and only the assistants are hers to choose. */
+  responsibleLocked?: boolean;
   /** R72 — the scope kinds this caller may choose. A Teacher gets `group` and
    *  only `group`: §4.9 and TD-2 forbid them a branch, category, level or the
    *  Global scope, so offering those would offer a refusal. */
@@ -264,6 +274,8 @@ export function ActivitySection({
           مؤطرة changes without the celebration changing. */}
       <StaffPicker
         staff={staff}
+        leadStaff={leadStaff ?? staff}
+        leadLocked={responsibleLocked}
         leadLabel={t('admin.calendar.responsible')}
         leadId={responsibleId}
         onLead={onResponsible}

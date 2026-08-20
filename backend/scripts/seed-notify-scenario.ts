@@ -77,6 +77,10 @@ async function wipe(): Promise<void> {
   await prisma.userBranchRole.deleteMany({ where: { userId: { in: uids } } });
   await prisma.user.deleteMany({ where: { id: { in: uids } } });
 
+  await prisma.enrollment.deleteMany({
+    where: { administrativeGroup: { name: { startsWith: TAG } } },
+  });
+  await prisma.administrativeGroup.deleteMany({ where: { name: { startsWith: TAG } } });
   await prisma.levelSubject.deleteMany({ where: { subject: { name: { startsWith: TAG } } } });
   await prisma.subject.deleteMany({ where: { name: { startsWith: TAG } } });
   await prisma.room.deleteMany({ where: { name: { startsWith: TAG } } });
@@ -184,6 +188,28 @@ const secondClass = await createCourseSchedule(prisma, actor, {
   staff: [{ userId: nadia, position: 'teacher', effectiveUntil: day(20) }],
 });
 
+/**
+ * **A group Safa teaches**, because TD-2 grants a مؤطرة event scope over the
+ * Administrative Groups she teaches and nothing wider (R72). Without one she
+ * cannot create an activity at all — correct behaviour, and a fixture that
+ * omitted it made a working rule look like a broken form.
+ */
+const group = await prisma.administrativeGroup.create({
+  data: { name: `${TAG} المجموعة 1`, levelId: level.id, branchId: targa.id },
+  select: { id: true },
+});
+const groupClass = await createCourseSchedule(prisma, actor, {
+  ...base,
+  title: `${TAG} حصة المجموعة`,
+  branchId: targa.id,
+  teachingMode: 'administrative_group' as const,
+  targetId: group.id,
+  weekdays: ['monday'],
+  startTime: new Date('1970-01-01T09:00:00Z'),
+  endTime: new Date('1970-01-01T10:00:00Z'),
+  staff: [{ userId: safa, position: 'teacher' }],
+});
+
 const upcoming = await prisma.session.findMany({
   where: { scheduleId: targaClass.id, deletedAt: null, date: { gt: day(0) } },
   orderBy: { date: 'asc' },
@@ -255,6 +281,8 @@ console.log(
     secondDate: secondOcc.date.toISOString().slice(0, 10),
     inReplacement: inReplacement.id,
     inReplacementDate: inReplacement.date.toISOString().slice(0, 10),
+    group: group.id,
+    groupSchedule: groupClass.id,
     combinable: combinable.id,
     combinableDate: combinable.date.toISOString().slice(0, 10),
     spare: spare.id,

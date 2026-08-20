@@ -316,6 +316,8 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
   guarded.get('/admin/hijri-calendar/:year/history', hijri.history(prisma));
   // R71 — who answers for an event. Its own route because assigning staff is
   // its own capability (TD-2) and its own audit action, not an attribute edit.
+  // **Before** the parameterised route, or `staff-options` is read as an id.
+  guarded.get('/me/event-staff-options', events.staffOptions(prisma));
   guarded.put('/events/:id/staff', events.setStaff(prisma));
   guarded.delete('/events/:id', events.remove(prisma));
   guarded.get('/admin/branches/:id/event-backfill', events.listBackfill(prisma));

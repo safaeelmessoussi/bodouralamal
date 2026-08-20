@@ -596,7 +596,10 @@ export const ar = {
     homeLede: 'من القائمة تصلين إلى تقويمك وجداولك ونقاط الامتحانات والمحتوى وإدخال الحفظ.',
     schedules: {
       // R72 — the one kind TD-2 grants a مؤطرة on this screen.
-      addActivity: 'نشاط جديد',
+      // **«إضافة عنصر»** since the merge: the page now holds her calendar and
+      // her classes as well as the activities she may author, and «نشاط جديد»
+      // named only the third of those.
+      addItem: 'إضافة عنصر',
       lede: 'الجداول التي تؤطّرينها. لعرض المستفيدات اضغطي على الجدول.',
       caption: 'حصصي',
       empty: 'لا توجد جداول مسندة إليك حالياً.',

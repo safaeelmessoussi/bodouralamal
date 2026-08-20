@@ -69,6 +69,22 @@ export interface StaffPickerProps {
    * with no appraisal behaves exactly as it did before.
    */
   appraisal?: Record<string, TeachingCandidate>;
+  /**
+   * **The people who may hold the LEAD position**, when that is narrower than
+   * the people who may assist. The case that added it: a مؤطرة staffing her own
+   * celebration is offered exactly herself here and the whole staff list below
+   * — she may choose who helps her and may not hand the event to somebody else.
+   *
+   * Absent, it is `staff`, which is every existing caller's behaviour.
+   *
+   * **Named `lead`, not for the feature that needed it** (§20 rule 22): the
+   * control owns the shape and each caller owns its word, and the guard beside
+   * this file failed the moment the prop carried the event's vocabulary.
+   */
+  leadStaff?: UserSummary[];
+  /** Renders the lead read-only. The server refuses any other name regardless;
+   *  this stops the control implying a choice that does not exist. */
+  leadLocked?: boolean;
 }
 
 /** The words for each warning. One per kind, in the catalogue — never composed
@@ -144,17 +160,22 @@ export function StaffPicker({
   onAssistants,
   disabled = false,
   appraisal,
+  leadStaff,
+  leadLocked = false,
 }: StaffPickerProps): ReactNode {
+  const leadOptions = leadStaff ?? staff;
   return (
     <>
       <SelectField
         label={leadLabel}
         value={leadId}
         onChange={onLead}
-        disabled={disabled}
+        disabled={disabled || leadLocked}
         options={[
-          { value: '', label: t('common.choose') },
-          ...staff.map((x) => ({ value: x.id, label: markedLabel(x, appraisal) })),
+          // A locked lead offers no empty choice: there is one answer, and
+          // «اختر…» would suggest otherwise.
+          ...(leadLocked ? [] : [{ value: '', label: t('common.choose') }]),
+          ...leadOptions.map((x) => ({ value: x.id, label: markedLabel(x, appraisal) })),
         ]}
       />
       {/* **Immediately after selection, beside the control it belongs to**

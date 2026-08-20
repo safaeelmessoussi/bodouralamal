@@ -293,23 +293,104 @@ describe("R71 — creating an event is what makes a مؤطرة answerable", () =
   });
 });
 
-describe("R71 — assigning staff is Admin and above (R71.4)", () => {
-  it("the responsible مؤطرة may not decide who else answers for it", async () => {
-    // Being answerable is not authority over who else is. Granting it would let
-    // a مؤطرة with momentary edit rights make herself permanently responsible.
+describe("R71.4 as narrowed 2026-08-20 — she staffs her OWN event, and only that", () => {
+  /**
+   * **Restated, because the rule changed and the reason it existed did not.**
+   *
+   * R71.4 kept all event staffing with Admins, on the reasoning that *being
+   * answerable for an event is not authority over who else answers for it*.
+   * That is right about the **responsible** position and was wrong about
+   * assistants: a مؤطرة who may create a celebration in her own scope could not
+   * name the two people helping her run it, so she had to ask an Admin.
+   *
+   * What survives unchanged, and is asserted below: she may not hand the event
+   * to somebody else, and she may not staff one she does not answer for.
+   */
+  it("may now name her assistants on the event she answers for", async () => {
     const eventId = await adminEvent("حفل بمسؤولة");
     const her = await person("مؤطرة مسؤولة");
     await setEventStaff(prisma, superAdmin(), eventId, [
       { userId: her, position: "responsible" },
     ]);
 
+    await setEventStaff(prisma, teacher(her), eventId, [
+      { userId: her, position: "responsible" },
+      { userId: adminId, position: "assistant" },
+    ]);
+
+    const rows = await prisma.eventStaff.findMany({
+      where: { eventId, deletedAt: null },
+      select: { userId: true, position: true },
+    });
+    expect(rows).toHaveLength(2);
+    expect(rows.find((r) => r.userId === adminId)?.position).toBe("assistant");
+  });
+
+  it("may NOT hand the event to somebody else", async () => {
+    const eventId = await adminEvent("حفل لا يُسلَّم");
+    const her = await person("مسؤولة أخرى");
+    const other = await person("مؤطرة ثالثة");
+    await setEventStaff(prisma, superAdmin(), eventId, [
+      { userId: her, position: "responsible" },
+    ]);
+
+    // **A forged body, not a hidden control.** The screen offers her only
+    // herself; this is the request that never opens a screen.
     const denied = await failure(() =>
       setEventStaff(prisma, teacher(her), eventId, [
-        { userId: her, position: "responsible" },
-        { userId: adminId, position: "assistant" },
+        { userId: other, position: "responsible" },
       ]),
     );
     expect(denied.code).toBe("FORBIDDEN");
+    expect(denied.details?.["reason"]).toBe("RESPONSIBLE_MUST_BE_SELF");
+
+    // And nothing moved.
+    const still = await prisma.eventStaff.findFirst({
+      where: { eventId, position: "responsible", deletedAt: null },
+      select: { userId: true },
+    });
+    expect(still?.userId).toBe(her);
+  });
+
+  it("may NOT staff an event she does not answer for", async () => {
+    const eventId = await adminEvent("حفل زميلة");
+    const her = await person("مؤطرة بلا مسؤولية");
+    const denied = await failure(() =>
+      setEventStaff(prisma, teacher(her), eventId, [
+        { userId: her, position: "responsible" },
+      ]),
+    );
+    /**
+     * **`NOT_FOUND`, and that is the stricter answer.** `assertMayEdit` refuses
+     * her before the ownership check is reached, because a celebration outside
+     * her teaching scope is one she may not know exists (§20 rule 17). The
+     * ownership check behind it covers the narrower case — an event she CAN
+     * edit but does not answer for — and `assertMayEdit` running first is why
+     * this fixture cannot reach it. Both refusals are the same property: she
+     * staffs her own event and nothing else.
+     */
+    expect(["NOT_FOUND", "FORBIDDEN"]).toContain(denied.code);
+
+    // And nothing moved.
+    const rows = await prisma.eventStaff.findMany({
+      where: { eventId, deletedAt: null },
+    });
+    expect(rows.filter((r) => r.userId === her)).toHaveLength(0);
+  });
+
+  it("and an Admin's reach is untouched", async () => {
+    const eventId = await adminEvent("حفل إداري");
+    const one = await person("مؤطرة أ");
+    const two = await person("مؤطرة ب");
+    await setEventStaff(prisma, superAdmin(), eventId, [
+      { userId: one, position: "responsible" },
+      { userId: two, position: "assistant" },
+    ]);
+    const rows = await prisma.eventStaff.findMany({
+      where: { eventId, deletedAt: null },
+      select: { userId: true },
+    });
+    expect(rows).toHaveLength(2);
   });
 
   it("refuses two responsible مؤطرات", async () => {

@@ -121,6 +121,7 @@ PUT /admin/users/{id}/teaching-profile        # R88; replaced whole; Admin-owned
 GET /admin/teaching-candidates                # R90; the staff picker's planning appraisal — WARNINGS, never a filtered list
 GET /sessions/{id}/roster                     # R92; who is expected at ONE occurrence — venue and audience as separate facts
 PUT /sessions/{id}/audience-branches          # R92; this occurrence's audience branches; empty list clears the override
+GET /me/event-staff-options                   # R93; whom the CALLER may name on an event she answers for — names only, no directory
 GET /admin/branches/{id}/event-backfill       # §4.4 "listing applicable global/recurring events to attach"
 
 # ── Official Moroccan Hijri calendar (TD-3.4, Revision 31)

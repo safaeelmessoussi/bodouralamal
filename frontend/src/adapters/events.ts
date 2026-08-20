@@ -131,3 +131,19 @@ export async function notifyEventChange(
   });
   return body.data;
 }
+
+/**
+ * **Whom this caller may name on an event she answers for** (R93).
+ *
+ * Not a user directory: names and ids only, and `GET /admin/users` still
+ * refuses a مؤطرة. It exists because she may staff her own celebration and had
+ * no way to see who was available to help her run it.
+ */
+export async function listEventStaffOptions(
+  token: string | null,
+): Promise<{ id: string; name: string }[]> {
+  const res = await api<{ data: { id: string; name: string }[] }>('/me/event-staff-options', {
+    token,
+  });
+  return res.data;
+}

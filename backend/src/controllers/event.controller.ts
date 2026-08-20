@@ -10,6 +10,7 @@ import {
   backfillCandidates,
   createEvent,
   deleteEvent,
+  listEventStaffOptions,
   listEvents,
   setEventStaff,
   updateEvent,
@@ -261,5 +262,12 @@ export function setStaff(prisma: PrismaClient) {
       b.staff.map((p) => ({ userId: p.user_id, position: p.position })),
     );
     res.status(204).end();
+  };
+}
+
+/** Who the caller may name on an event she answers for (2026-08-20). */
+export function staffOptions(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    res.json({ data: await listEventStaffOptions(prisma, requireActor(req)) });
   };
 }

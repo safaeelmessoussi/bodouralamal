@@ -437,7 +437,8 @@ export async function setEventStaff(
   eventId: string,
   staff: EventStaffInput[],
 ): Promise<void> {
-  if (!isAdmin(actor)) {
+  const teacherOnly = !isAdmin(actor) && isTeacher(actor);
+  if (!isAdmin(actor) && !teacherOnly) {
     throw new AppError('FORBIDDEN', 'assigning event staff requires admin (TD-2, R71.4)');
   }
 
@@ -451,10 +452,48 @@ export async function setEventStaff(
     });
   }
 
+  /**
+   * **A مؤطرة may staff HER OWN event, and may not hand it to anybody else.**
+   *
+   * R71.4 kept this Admin-and-above on the reasoning that *being answerable for
+   * an event is not authority to decide who else answers for it* — which is
+   * right about the **responsible** position and wrong about assistants: a
+   * مؤطرة who may create a celebration in her own scope could not name the two
+   * people helping her run it, so she had to ask an Admin to do it for her.
+   *
+   * The narrow grant: she may set the assistants, and **the responsible person
+   * must be herself**. Not by hiding a control — a forged body naming somebody
+   * else is refused here, which is the only place it can be. Admins keep their
+   * existing reach untouched, so this widens nothing for them.
+   */
+  if (teacherOnly) {
+    const named = staff.find((p) => p.position === 'responsible');
+    if (named && named.userId !== actor.userId) {
+      throw new AppError('FORBIDDEN', 'a مؤطرة answers for her own event', {
+        reason: 'RESPONSIBLE_MUST_BE_SELF',
+      });
+    }
+  }
+
   await prisma.$transaction(async (tx) => {
     const event = await tx.event.findFirst({ where: { id: eventId, deletedAt: null } });
     if (!event) throw new AppError('NOT_FOUND', 'no such event');
     await assertMayEdit(tx, actor, eventId);
+
+    if (teacherOnly) {
+      // **And she must already answer for it.** `assertMayEdit` grants a مؤطرة
+      // edit rights on events inside her teaching scope, which is wider than
+      // *hers*: without this she could restaff a colleague's celebration.
+      const mine = await tx.eventStaff.findFirst({
+        where: { eventId, userId: actor.userId, position: 'responsible', deletedAt: null },
+        select: { id: true },
+      });
+      if (!mine) {
+        throw new AppError('FORBIDDEN', 'staffing an event requires answering for it', {
+          reason: 'NOT_RESPONSIBLE_FOR_EVENT',
+        });
+      }
+    }
 
     const existing = await tx.eventStaff.findMany({ where: { eventId } });
     const wanted = new Map(staff.map((p) => [p.userId, p.position]));
@@ -736,4 +775,44 @@ export async function listEvents(
     prisma.event.count({ where }),
   ]);
   return page(rows, window, total);
+}
+
+/**
+ * **Who this caller may name on an event she answers for** (2026-08-20).
+ *
+ * A مؤطرة may staff her own celebration now, and she could not: listing people
+ * is `GET /admin/users`, which answers **403** for her — so the assistants
+ * control was empty and the capability was complete and unreachable, rule P's
+ * defect once more.
+ *
+ * **The fix is a narrower question, never a wider permission** (rule O). This
+ * does not let her list users: it answers *whom may I name here*, which is
+ * active teaching staff and nothing else — no email, no phone, no status, no
+ * roles, no branch scope. `GET /admin/users` is untouched and still refuses her.
+ *
+ * **There is no id in the request.** The subject is the authenticated actor, the
+ * same property that makes `GET /students/me` untamperable (TD-12, R63.3).
+ */
+export async function listEventStaffOptions(
+  prisma: PrismaClient,
+  actor: Actor,
+): Promise<{ id: string; name: string }[]> {
+  if (!isAdmin(actor) && !isTeacher(actor)) {
+    throw new AppError('FORBIDDEN', 'staffing an event requires teaching staff or admin');
+  }
+
+  const rows = await prisma.user.findMany({
+    where: {
+      deletedAt: null,
+      accountStatus: 'active',
+      // The مؤطِّرة role, asked of the database — the same authoritative
+      // condition `إدارة المؤطِّرات` uses (rule AQ), never `is_beneficiary`.
+      branchRoles: { some: { deletedAt: null, role: { name: 'teacher' } } },
+    },
+    // **Name and id only.** Anything more would make this a user directory by
+    // another door, which is the thing the 403 on `/admin/users` protects.
+    select: { id: true, nameArabic: true },
+    orderBy: { nameArabic: 'asc' },
+  });
+  return rows.map((r) => ({ id: r.id, name: r.nameArabic }));
 }

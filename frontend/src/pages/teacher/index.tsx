@@ -2,8 +2,6 @@ import type { ReactNode } from 'react';
 
 import { ModulePending } from '../../components/portal/nav-item.js';
 import { TeacherLayout } from '../../components/teacher/teacher-layout.js';
-import { PersonalCalendar } from '../../components/calendar/personal-calendar.js';
-import { useSession } from '../../contexts/session.js';
 import { ButtonLink } from '../../components/ui/button.js';
 import { t } from '../../i18n/index.js';
 import { teacherModuleForPath } from '../../lib/teacher-modules.js';
@@ -36,8 +34,16 @@ export function TeacherRouter(): ReactNode {
     switch (module.path) {
       case '/teacher':
         return <TeacherHome />;
+      /**
+       * **One surface, two paths** (merged 2026-08-20).
+       *
+       * `تقويمي` and `الجدولة` were two menu entries onto the same operational
+       * question, so a مؤطرة had to know which of the two held what she wanted.
+       * The menu now offers **الجدولة** alone; the old path still renders the
+       * merged page rather than 404ing, because links and bookmarks to it exist
+       * and breaking them would be a second, quieter defect.
+       */
       case '/teacher/calendar':
-        return <TeacherCalendar />;
       case '/teacher/schedules':
         return <TeacherSchedulesPage />;
       case '/teacher/quran':
@@ -92,34 +98,13 @@ function TeacherHome(): ReactNode {
 }
 
 /**
- * **The مؤطرة's own calendar** (R83.4, R83.5).
+ * **`TeacherCalendar` was retired by the merge** (2026-08-20).
  *
- * Its own node now, rather than the dashboard's content: the landing page stays
- * minimal until it is designed, and the **same** calendar components the
- * beneficiary's page renders are used here, so neither can drift from the other.
- *
- * **Notifications are not here any more** — they moved to the top bar's bell,
- * reachable from every screen rather than only from the one she happened to
- * land on.
+ * It rendered `PersonalCalendar` on its own node; that calendar now sits at the
+ * top of `TeacherSchedulesPage`, so this component would have been a second way
+ * to reach one surface — which is the thing the merge removed. The projection it
+ * read (`/me/calendar`, R82.8) is untouched and is what the merged page renders.
  */
-function TeacherCalendar(): ReactNode {
-  const { accessToken } = useSession();
-  return (
-    <TeacherLayout title={t('teacher.nav.calendar')}>
-      {/* **R84's مؤطرة matrix**: everything the back office offers, because she
-          works across branches and levels — and every option is restricted to
-          her legitimate scope by the server, so the dropdown itself never
-          becomes a way to enumerate branches she does not teach at (rule O). */}
-      <PersonalCalendar
-        token={accessToken}
-        fields={['branchId', 'categoryId', 'levelId', 'type', 'subjectId', 'groupId', 'circleId']}
-        columns={['kind', 'title', 'date', 'time', 'level', 'subject', 'audience', 'branch', 'room']}
-        heading={t('teacher.myCalendar')}
-      />
-    </TeacherLayout>
-  );
-}
-
 function TeacherNotFound(): ReactNode {
   return (
     <TeacherLayout title={t('admin.notFound')}>

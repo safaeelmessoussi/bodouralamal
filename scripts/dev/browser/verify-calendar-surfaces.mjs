@@ -244,7 +244,9 @@ check(
 /* ── the مؤطرة ──────────────────────────────────────────────────────────── */
 
 await as(process.env.TEACHER_COOKIE);
-await open('/teacher/calendar', '.cal-header');
+// The merged surface (2026-08-20): her calendar is the top of الجدولة, and the
+// filter matrix asserted below is unchanged by the move.
+await open('/teacher/schedules', '.cal-header');
 const teacher = await chrome();
 check(
   `16 · the مؤطرة IS offered الفرع and الفئة (${teacher.filters.join(' · ')})`,

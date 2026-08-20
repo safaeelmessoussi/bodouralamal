@@ -5,7 +5,11 @@ import ADMIN from '../pages/admin/scheduling.tsx?raw';
 import PUBLIC_PAGE from '../pages/calendar.tsx?raw';
 import PERSONAL from '../components/calendar/personal-calendar.tsx?raw';
 import STUDENT from '../pages/dashboard/student.tsx?raw';
-import TEACHER from '../pages/teacher/index.tsx?raw';
+// **Her calendar moved into الجدولة** (merged 2026-08-20): `تقويمي` and
+// `الجدولة` were two menu entries onto one operational question. The filter
+// matrix below is unchanged — only the file that renders it is, so the import
+// is restated rather than the property weakened.
+import TEACHER from '../pages/teacher/schedules.tsx?raw';
 
 /** Comments cite the rules; scanning them would find the explanation. */
 const code = (s: string): string =>
