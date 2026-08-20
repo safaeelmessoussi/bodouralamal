@@ -196,6 +196,7 @@ export function ActivitySection({
   assistantIds,
   onAssistants,
   canAssignStaff,
+  disabled,
   scopeKinds = ALL_SCOPE_KINDS,
 }: {
   visibility: string;
@@ -216,6 +217,9 @@ export function ActivitySection({
   onAssistants: (ids: string[]) => void;
   /** R71.4 — assigning staff is Admin and above. */
   canAssignStaff: boolean;
+  /** Read-only for a caller who may not staff this event at all. Distinct from
+   *  `responsibleLocked`, which fixes only the lead. */
+  disabled?: boolean;
   /**
    * **Who may be named responsible**, which is not always everyone staffable.
    * A مؤطرة is offered exactly herself: she may staff her own event and may not
@@ -287,7 +291,21 @@ export function ActivitySection({
         }
         assistantIds={assistantIds}
         onAssistants={onAssistants}
-        disabled={!canAssignStaff}
+        /**
+         * **Not disabled for a مؤطرة any more** (2026-08-20).
+         *
+         * R71.4 kept all event staffing with Admins, so this control was
+         * read-only for her — and when she was granted her own event's
+         * assistants, the grant was unreachable: the `＋` registered nothing and
+         * the event saved with no assistants at all, looking exactly like a
+         * click that had not landed.
+         *
+         * **The lead is locked separately** (`leadLocked`), which is the part
+         * that must not move; the assistants are the part this grant is for.
+         * The server refuses anything else regardless — it is the authority,
+         * and this control is not.
+         */
+        disabled={disabled ?? false}
       />
     </>
   );

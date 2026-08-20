@@ -147,3 +147,19 @@ export async function listEventStaffOptions(
   });
   return res.data;
 }
+
+/**
+ * **The scopes this caller may address an event to** (R93).
+ *
+ * For a مؤطرة, the Administrative Groups she teaches — resolved server-side
+ * through §4.4c. `GET /admin/levels` answers 403 for her, which is why the
+ * form's own scope chain could never produce them.
+ */
+export async function listEventScopeOptions(
+  token: string | null,
+): Promise<{ id: string; name: string }[]> {
+  const res = await api<{ data: { id: string; name: string }[] }>('/me/event-scope-options', {
+    token,
+  });
+  return res.data;
+}

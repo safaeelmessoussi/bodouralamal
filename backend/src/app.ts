@@ -318,6 +318,7 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
   // its own capability (TD-2) and its own audit action, not an attribute edit.
   // **Before** the parameterised route, or `staff-options` is read as an id.
   guarded.get('/me/event-staff-options', events.staffOptions(prisma));
+  guarded.get('/me/event-scope-options', events.scopeOptions(prisma));
   guarded.put('/events/:id/staff', events.setStaff(prisma));
   guarded.delete('/events/:id', events.remove(prisma));
   guarded.get('/admin/branches/:id/event-backfill', events.listBackfill(prisma));

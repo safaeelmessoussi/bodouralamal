@@ -27,8 +27,31 @@ async function beIdentity(cookie) {
   });
 }
 
+/** Records request bodies AND response bodies, so a refusal is evidence. */
+const RECORDER = `
+  (() => {
+    if (window.__calls) return true;
+    window.__calls = [];
+    const real = window.fetch;
+    window.fetch = async (input, init) => {
+      const url = typeof input === 'string' ? input : (input && input.url) || '';
+      const method = (init && init.method) || 'GET';
+      const body = init && init.body ? String(init.body).slice(0, 900) : null;
+      const res = await real(input, init);
+      let text = null;
+      try { text = await res.clone().text(); } catch (e) { void e; }
+      try {
+        window.__calls.push({ url, method, status: res.status, body, response: (text || '').slice(0, 700) });
+      } catch (e) { void e; }
+      return res;
+    };
+    return true;
+  })()
+`;
+
 async function open(path, ready = 'main') {
   await send('Page.navigate', { url: `${BASE}${path}` });
+  await evaluate(RECORDER).catch(() => null);
   for (let i = 0; i < 140; i += 1) {
     const ok = await evaluate(
       `(() => document.querySelector(${JSON.stringify(ready)}) !== null)()`,
@@ -36,8 +59,14 @@ async function open(path, ready = 'main') {
     if (ok) break;
     await new Promise((r) => setTimeout(r, 250));
   }
+  await evaluate(RECORDER).catch(() => null);
   await new Promise((r) => setTimeout(r, 1500));
 }
+
+const callsMatching = (fragment) =>
+  evaluate(
+    `(() => (window.__calls || []).filter((c) => c.url.includes(${JSON.stringify(fragment)})))()`,
+  );
 
 async function tokenFor(cookie) {
   await beIdentity(cookie);
@@ -141,8 +170,11 @@ const created = await evaluate(`(async () => {
   // and nothing wider, so an activity without one is a save the server refuses
   // — and the first run reported «تعذّر الحفظ» for exactly that reason.
   dialog = document.querySelector('dialog[open]');
+  // The scope selector is the one offering her own groups, labelled
+  // {Level} — {Group}. Matching on the word المجموعة tied the probe to a label
+  // and found nothing when the list was empty for an unrelated reason.
   const scopeSelect = [...dialog.querySelectorAll('select')].find((sel) =>
-    (sel.closest('.field') || {}).textContent?.includes('المجموعة'),
+    [...sel.options].some((o) => o.textContent.includes('المجموعة 1')),
   );
   const scopeOptions = scopeSelect ? [...scopeSelect.options].map((o) => o.textContent.trim()) : [];
   if (scopeSelect && scopeSelect.options.length > 1) {
@@ -150,13 +182,26 @@ const created = await evaluate(`(async () => {
     await new Promise((r) => setTimeout(r, 800));
   }
 
-  // One assistant, chosen from the shared multi-select.
+  // One assistant, chosen from the shared multi-select. The options arrive from
+  // /me/event-scope-options' sibling read, so the list may still be loading when
+  // the scope is set — wait for her to appear rather than clicking into a gap.
   dialog = document.querySelector('dialog[open]');
-  const assistant = [...dialog.querySelectorAll('button')].find(
-    (b) => b.textContent.includes('[notify] أمينة') && b.textContent.trim().startsWith('＋'),
-  );
+  let assistant;
+  for (let i = 0; i < 20; i += 1) {
+    dialog = document.querySelector('dialog[open]');
+    assistant = [...dialog.querySelectorAll('button')].find(
+      (b) => b.textContent.includes('[notify] أمينة') && b.textContent.trim().startsWith('＋'),
+    );
+    if (assistant) break;
+    await new Promise((r) => setTimeout(r, 400));
+  }
   if (assistant) assistant.click();
-  await new Promise((r) => setTimeout(r, 600));
+  await new Promise((r) => setTimeout(r, 900));
+  // Did the choice register in the form? A chosen person shows as a ✕ chip.
+  dialog = document.querySelector('dialog[open]');
+  const chips = [...dialog.querySelectorAll('button')]
+    .filter((b) => b.textContent.trim().endsWith('✕'))
+    .map((b) => b.textContent.replace('✕', '').trim());
 
   dialog = document.querySelector('dialog[open]');
   const save = [...dialog.querySelectorAll('button')].find((b) => b.textContent.trim() === 'حفظ');
@@ -169,6 +214,7 @@ const created = await evaluate(`(async () => {
     locked,
     scopeOptions,
     choseAssistant: assistant !== undefined,
+    chips,
     saved: after === null || after.textContent.includes('إشعار'),
     says: after ? after.textContent.slice(0, 200) : null,
   };
@@ -179,10 +225,20 @@ check(
   (created.options ?? []).length === 1 && (created.options ?? [])[0]?.includes('صفاء'),
   JSON.stringify({ options: created.options, locked: created.locked }),
 );
+const saveCalls = await callsMatching('/events');
+const scopeCalls = await callsMatching('scope');
+console.error('SAVE-CALLS', JSON.stringify(saveCalls));
+console.error('SCOPE-CALLS', JSON.stringify((await callsMatching('/admin/')).slice(0, 8)));
+void scopeCalls;
+
+const staffPut = (await callsMatching('/staff')).at(-1);
 check(
-  '5 · she can still choose an assistant, and the event saves',
-  created.choseAssistant === true && created.saved === true,
-  JSON.stringify(created),
+  '5 · she chooses an assistant, and BOTH she and the assistant are stored',
+  created.choseAssistant === true &&
+    created.saved === true &&
+    (staffPut?.status === 200 || staffPut?.status === 204) &&
+    (staffPut?.body ?? '').includes('assistant'),
+  JSON.stringify({ created, staffPut }),
 );
 
 /* ── 6 · a forged body naming somebody else is refused ───────────────────── */

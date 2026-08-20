@@ -8,7 +8,11 @@ import {
   type Occurrence,
 } from '../../adapters/calendar.js';
 import { listRooms } from '../../adapters/branches-admin.js';
-import { listEventStaffOptions, notifyEventChange } from '../../adapters/events.js';
+import {
+  listEventScopeOptions,
+  listEventStaffOptions,
+  notifyEventChange,
+} from '../../adapters/events.js';
 import { AVAILABLE_TYPES, specOfType } from '../../adapters/scheduling-types.js';
 import {
   deleteSchedulingItem,
@@ -761,6 +765,11 @@ export function SchedulingDialog({
   // regardless (`RESPONSIBLE_MUST_BE_SELF`) — this is the honest payload, not
   // the enforcement.
   const { me } = useSession();
+  /** R93 — her own groups, because the admin scope chain answers 403 for her. */
+  const [teacherScopes, setTeacherScopes] = useState<{ id: string; name: string }[]>([]);
+  /** Whether she has ANY scope to choose — *nothing to choose* is a different
+   *  answer from *choose one*, and the form says which. */
+  const scopeOptionsEmpty = !canAssignStaff && teacherScopes.length === 0;
 
   const [responsibleId, setResponsibleId] = useState(
     item?.ids.staff.find((x) => x.position === 'responsible')?.user_id ?? '',
@@ -895,6 +904,9 @@ export function SchedulingDialog({
         .catch(() => setTeachers([]));
       return;
     }
+    void listEventScopeOptions(token)
+      .then(setTeacherScopes)
+      .catch(() => setTeacherScopes([]));
     void listEventStaffOptions(token)
       .then((rows) =>
         setTeachers(
@@ -980,6 +992,23 @@ export function SchedulingDialog({
       if (supervisorId === '') return t('scheduling.invalid.supervisor');
       return null;
     }
+    if (type === 'activity') {
+      /**
+       * **The activity's own scope was never checked** (2026-08-20).
+       *
+       * Every other kind states what it still needs; this one submitted an
+       * empty id and let the server answer `VALIDATION_FAILED` with no field
+       * named — so the reader saw «تعذّر الحفظ» about a choice nobody had asked
+       * her to make. A مؤطرة with no group of her own is told that too, because
+       * *there is nothing to choose* is a different answer from *choose one*.
+       */
+      if (scopeKind !== 'global' && scopeId === '') {
+        return scopeOptionsEmpty
+          ? t('scheduling.invalid.noScopeForYou')
+          : t('scheduling.invalid.scope');
+      }
+      return null;
+    }
     if (type === 'class') {
       if (scope.value.branchId === '') return t('scheduling.invalid.branch');
       if (scope.value.levelId === '') return t('scheduling.invalid.level');
@@ -1029,16 +1058,27 @@ export function SchedulingDialog({
           weekdays: recurrence.weekdays,
           repeatUntil: recurrence.endDate || null,
           visibility,
+          /**
+           * **An unchosen scope is not an empty id** (2026-08-20).
+           *
+           * This sent `group_ids: ['']` when nothing was selected, and the
+           * server answered `VALIDATION_FAILED` with **no field named** — so
+           * the screen could only say «تعذّر الحفظ» about a scope the reader
+           * had never been offered. `undefined` omits the key, and the form's
+           * own completeness rule below names the missing choice instead.
+           */
           scope:
             scopeKind === 'global'
               ? { global: true }
-              : scopeKind === 'branch'
-                ? { branchIds: [scopeId] }
-                : scopeKind === 'category'
-                  ? { categoryIds: [scopeId] }
-                  : scopeKind === 'group'
-                    ? { groupIds: [scopeId] }
-                    : { levelIds: [scopeId] },
+              : scopeId === ''
+                ? undefined
+                : scopeKind === 'branch'
+                  ? { branchIds: [scopeId] }
+                  : scopeKind === 'category'
+                    ? { categoryIds: [scopeId] }
+                    : scopeKind === 'group'
+                      ? { groupIds: [scopeId] }
+                      : { levelIds: [scopeId] },
           subjectId: scope.value.subjectId,
           levelId: scope.value.levelId,
           // `null` is the whole Level sitting together (R58), not a gap.
@@ -1229,14 +1269,24 @@ export function SchedulingDialog({
             onAssistants={setAssistantIds}
             canAssignStaff={canAssignStaff}
             scopeKinds={canAssignStaff ? undefined : TEACHER_SCOPE_KINDS}
+            /**
+             * **Her own groups, from the read that answers her** (R93).
+             *
+             * The Admin chain builds these from `/admin/levels` and
+             * `/admin/academic-years`, both **403** for a مؤطرة — so her group
+             * selector was empty and the form let her fill everything in before
+             * failing on save. An Admin's options are unchanged.
+             */
             scopeOptions={
-              scopeKind === 'branch'
-                ? scope.options.branchId.map((o) => ({ id: o.value, name: o.label }))
-                : scopeKind === 'category'
-                  ? scope.options.categoryId.map((o) => ({ id: o.value, name: o.label }))
-                  : scopeKind === 'group'
-                    ? scope.options.groupId.map((o) => ({ id: o.value, name: o.label }))
-                    : scope.options.levelId.map((o) => ({ id: o.value, name: o.label }))
+              !canAssignStaff
+                ? teacherScopes
+                : scopeKind === 'branch'
+                  ? scope.options.branchId.map((o) => ({ id: o.value, name: o.label }))
+                  : scopeKind === 'category'
+                    ? scope.options.categoryId.map((o) => ({ id: o.value, name: o.label }))
+                    : scopeKind === 'group'
+                      ? scope.options.groupId.map((o) => ({ id: o.value, name: o.label }))
+                      : scope.options.levelId.map((o) => ({ id: o.value, name: o.label }))
             }
             locked={editing}
           />

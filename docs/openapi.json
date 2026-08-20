@@ -7125,6 +7125,47 @@
         }
       }
     },
+    "/me/event-scope-options": {
+      "get": {
+        "summary": "The scopes the caller may address an event to",
+        "description": "§4.4, TD-2, R93. A مؤطرة's event scope is **the Administrative Groups she teaches** and nothing wider. The form built that list from `GET /admin/levels` and `GET /admin/academic-years`, which answer **403** for her — so the chain that produces groups never resolved, the selector was empty, and she could fill the whole form and only discover on save that it could not work. **Rule O: a narrower question, never a wider permission.** This returns the groups themselves, ids and names, derived through §4.4c from the schedules she staffs — and **effective staffing decides it** (R91), so a group she taught last term is not one she may address today. `/admin/levels` is untouched and still refuses her. Labelled `{Level} — {Group}`, because a group name is not unique across Levels.",
+        "responses": {
+          "200": {
+            "description": "The Administrative Groups the caller may scope an event to."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN for a caller who is neither teaching staff nor an administrator.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/me/event-staff-options": {
       "get": {
         "summary": "Whom the caller may name on an event",

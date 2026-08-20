@@ -191,7 +191,9 @@ check(
 
 // **As a مؤطرة**, not as the administrator: her dashboard is gated on the
 // teacher role, and asking as somebody who lacks it measures the gate.
-await visit(process.env.TEACHER_UI_COOKIE, '/teacher/calendar');
+// The merged surface (2026-08-20): her calendar is the top of الجدولة, and the
+// property asserted below — that she has one and it is hers — is unchanged.
+await visit(process.env.TEACHER_UI_COOKIE, '/teacher/schedules');
 await settled('.cal-header');
 const teacherScreen = await screen();
 check(

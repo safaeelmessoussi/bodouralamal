@@ -10,6 +10,7 @@ import {
   backfillCandidates,
   createEvent,
   deleteEvent,
+  listEventScopeOptions,
   listEventStaffOptions,
   listEvents,
   setEventStaff,
@@ -269,5 +270,12 @@ export function setStaff(prisma: PrismaClient) {
 export function staffOptions(prisma: PrismaClient) {
   return async (req: Request, res: Response): Promise<void> => {
     res.json({ data: await listEventStaffOptions(prisma, requireActor(req)) });
+  };
+}
+
+/** The scopes the caller may address an event to (2026-08-20). */
+export function scopeOptions(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    res.json({ data: await listEventScopeOptions(prisma, requireActor(req)) });
   };
 }

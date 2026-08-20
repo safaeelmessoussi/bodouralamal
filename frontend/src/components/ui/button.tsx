@@ -44,10 +44,25 @@ export function Button({
   icon,
   block = false,
   className = '',
+  /**
+   * **`button`, not the HTML default** (2026-08-20).
+   *
+   * A `<button>` with no `type` inside a `<form>` is `type="submit"`. Every
+   * shared Button rendered inside `FormDialog` therefore submitted it — so the
+   * `＋` that adds an assistant, and the `✕` that removes one, saved the form
+   * instead. The event was created with no assistants at all, and the screen
+   * looked as though the choice simply had not registered.
+   *
+   * This project had already recorded the trap on the harness side — *a button
+   * with no explicit type reports submit* — and never fixed the component it
+   * describes. A Button is an action; the one place that means *submit* passes
+   * `type="submit"` explicitly, and this default gets out of its way.
+   */
+  type = 'button',
   ...rest
 }: CommonProps & ButtonHTMLAttributes<HTMLButtonElement>): ReactNode {
   return (
-    <button className={classes(variant, block, className)} {...rest}>
+    <button type={type} className={classes(variant, block, className)} {...rest}>
       {icon ? <Icon name={icon} /> : null}
       {label(variant, children)}
     </button>

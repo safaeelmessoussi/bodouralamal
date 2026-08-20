@@ -98,7 +98,7 @@ under the table.
 | `verify-library-recorder.sh` | 19 | The second recorder entry point, and the sort indicator | 16/16 |
 | `verify-grading.sh` | 14d, 16 | R81 — the exam's own maximum, empty ≠ zero, publish notifies and a draft is silent | 16/16 |
 | `verify-teaching-profile.sh` | 15, 15b | **AQ/X** — ownership of «الملف التدريسي», the population, Arabic weekdays, a range that survives a reload | 13/13 |
-| `verify-teacher-scheduling.sh` | 22 | **The merged مؤطرة surface** — one node, the calendar+table page, and a responsible selector offering only her. **4/6: the activity save is unproven and stays red** | 4/6 |
+| `verify-teacher-scheduling.sh` | 22 | **The merged مؤطرة surface** — one node, the calendar+table page, a responsible selector offering only her, and an activity she creates end to end with an assistant, asserted from the network layer | 6/6 |
 | `verify-notify-ui.sh` | 21 | **The notification pipeline as a person uses it** — clicks «إرسال الإشعار», logs in as the recipient, reads the notice from her own bell; R91/R92 recipients, **and the grade-republish reactivation** | 32/32 |
 | `verify-cross-branch.sh` | 15g, 20 | **R91 × R92** — six identities on one combined occurrence: audience, venue, calendars, notifications and staffing, each asked of the person it concerns | 16/16 |
 | `verify-effective-staffing.sh` | 15e, 15f | **R91** — the replacement as four identities: dated rows, Safa twice, per-date occurrences, and a handover that leaves the past alone | 13/13 |

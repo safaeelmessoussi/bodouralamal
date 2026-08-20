@@ -597,8 +597,8 @@
 - [x] **`GET /me/event-staff-options`** — the narrow read that makes it reachable; `/admin/users` still refuses her (rule O)
 - [x] Four guards restated with their reasons: registry list · R84 filter matrix source · two portal checks
 - [x] 643 frontend · 222 backend unit · 1403 integration · TD-3 + OpenAPI current
-- [ ] **UNPROVEN: the teacher's activity SAVE.** `verify-teacher-scheduling` is 4/6 — the merged page, the single node and the self-only responsible selector are proven; the save is refused («تعذّر الحفظ») and the group scope selector reads no options in the harness. **Cause not established.** Checks 5–6 stay red rather than being weakened
-- [ ] **NOT STARTED**: assistant-assignment notification (§6–§8) · one shared occurrence-details dialog (§9–§10) · direct Session recordings/materials (§11–§15) · beneficiary QR (§16–§25)
+- [x] **The activity SAVE is proven — `verify-teacher-scheduling` 6/6** (2026-08-20). Three causes, all captured from the wire: an unset scope submitted as an empty id · her scope selector fed by `/admin/levels` (403 for her) · the assistants control disabled for her. Plus a platform-wide defect: the shared `Button` had no `type`, so every one inside a form submitted it
+- [ ] **NEXT**: assistant-assignment notification (§6–§8) · one shared occurrence-details dialog (§9–§10) · direct Session recordings/materials (§11–§15) · beneficiary QR (§16–§25)
 
 ### Notification root causes + landing pages (2026-08-20)
 - [x] **Level cancellation root cause**: the resolver was right. The only beneficiary in that Level+Branch was the Owner's own account, excluded as the actor (R78.3) — so the send reached nobody and said «أُرسل الإشعار إلى 0» which reads as success. **Zero now answers explicitly.**

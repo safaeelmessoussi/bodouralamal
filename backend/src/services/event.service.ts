@@ -778,6 +778,44 @@ export async function listEvents(
 }
 
 /**
+ * **The scopes this caller may address an event to** (2026-08-20).
+ *
+ * A مؤطرة's event scope is TD-2's: **the Administrative Groups she teaches**,
+ * and nothing wider. The form built that list from `GET /admin/levels` and
+ * `GET /admin/academic-years`, which answer **403** for her — so the chain that
+ * produces groups never resolved and the selector was empty. She could open the
+ * form, fill it in, and only discover on save that it could not work.
+ *
+ * **Rule O again: a narrower question, never a wider permission.** This returns
+ * the groups themselves — ids and names — derived from the schedules she staffs
+ * through §4.4c, which is the same resolution every other teacher-scope answer
+ * uses. `/admin/levels` is untouched and still refuses her.
+ *
+ * **Effective staffing decides it** (R91): a group she taught last term is not
+ * one she may address an event to today.
+ */
+export async function listEventScopeOptions(
+  prisma: PrismaClient,
+  actor: Actor,
+): Promise<{ id: string; name: string }[]> {
+  if (!isAdmin(actor) && !isTeacher(actor)) {
+    throw new AppError('FORBIDDEN', 'scoping an event requires teaching staff or admin');
+  }
+
+  const mine = await teacherEventScope(prisma, actor.userId);
+  if (mine.administrativeGroupIds.length === 0) return [];
+
+  const rows = await prisma.administrativeGroup.findMany({
+    where: { id: { in: mine.administrativeGroupIds }, deletedAt: null },
+    select: { id: true, name: true, level: { select: { name: true } } },
+    orderBy: { name: 'asc' },
+  });
+  // **`{Level} — {Group}`** (rule D): a group's name is not unique across
+  // Levels, so a bare one does not identify it.
+  return rows.map((r) => ({ id: r.id, name: `${r.level.name} — ${r.name}` }));
+}
+
+/**
  * **Who this caller may name on an event she answers for** (2026-08-20).
  *
  * A مؤطرة may staff her own celebration now, and she could not: listing people

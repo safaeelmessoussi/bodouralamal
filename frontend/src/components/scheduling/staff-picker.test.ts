@@ -64,11 +64,22 @@ describe('the picker never offers a refusal', () => {
   });
 
   it('supports a read-only rendering for a caller who may not assign', () => {
-    // R71.4 keeps event staffing with Admins. The control renders disabled
-    // rather than vanishing (§14.4), and the server refuses regardless —
-    // hiding is not the enforcement mechanism.
+    /**
+     * **Restated 2026-08-20 — the rule narrowed, so the check did.**
+     *
+     * R71.4 kept ALL event staffing with Admins, so the whole control rendered
+     * disabled for a مؤطرة. She may now set the assistants on the event she
+     * answers for, and disabling the control made that grant unreachable: the
+     * `＋` registered nothing and the event saved with no assistants, looking
+     * exactly like a click that had not landed.
+     *
+     * What survives: the control can still render read-only (§14.4 — disabled
+     * rather than vanishing), and **the lead is locked separately**, which is
+     * the part that must not move.
+     */
     expect(code(PICKER)).toContain('disabled');
-    expect(code(ACTIVITY)).toContain('disabled={!canAssignStaff}');
+    expect(code(ACTIVITY)).toContain('disabled={disabled ?? false}');
+    expect(code(ACTIVITY)).toContain('leadLocked={responsibleLocked}');
   });
 });
 

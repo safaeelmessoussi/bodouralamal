@@ -354,6 +354,42 @@ describe("TD-2 — who may schedule", () => {
     ).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
+  it("a Teacher cannot scope an event to a group she does not teach", async () => {
+    // **The colleague's group.** The two refusals above cover scopes that are
+    // structurally wider; this one is the same shape she IS allowed — one
+    // Administrative Group — belonging to somebody else. It is refused because
+    // §4.4c resolves her scope from the schedules she staffs, and she staffs
+    // none of that group's.
+    const branchId = await makeBranch("أكادير");
+    const mine = await makeGroup(branchId);
+    const hers = await makeGroup(branchId);
+    const t = await teacherUser("معلمة بمجموعة");
+    await staffSchedule(prisma, contexts.get(mine)!, t);
+
+    const actor: Actor = {
+      userId: t,
+      roles: ["teacher"],
+      roleScopes: [{ role: "teacher", branches: null }],
+    };
+    // **`NOT_FOUND`, and it is the stricter answer.** A group outside her scope
+    // is one she may not know exists (§20 rule 17), so the refusal does not
+    // confirm it — the same reasoning `assertMayEdit` uses for a colleague's
+    // event. Either code is the same property: she may not reach it.
+    await expect(
+      createEvent(prisma, actor, eventInput({ groupIds: [hers] }), TODAY),
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+
+    // And her own still works, so the refusal is about the group and not about
+    // her.
+    const ok = await createEvent(
+      prisma,
+      actor,
+      eventInput({ groupIds: [mine] }),
+      TODAY,
+    );
+    expect(ok.event.id).toBeTruthy();
+  });
+
   it("a Teacher cannot widen scope by pairing their own group with a branch", async () => {
     // The escalation path: naming a legitimate group satisfies the "must name a
     // group" rule, so the wider scope has to be refused on its own. Without
