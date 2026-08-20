@@ -225,6 +225,23 @@ afterAll(async () => {
 
 /* ── §4 · migration compatibility ────────────────────────────────────────── */
 
+/**
+ * **`/quran-students` answers `{ students, levels }` since Section C.**
+ *
+ * The endpoint used to answer a bare array. It now carries the Levels the
+ * roster reaches and each Level's `LevelSurah` syllabus too, because the entry
+ * form's three selectors — whom, which Level, which Surah — are one question,
+ * and a مؤطِّرة is refused by the admin reference endpoints that would otherwise
+ * answer the last two (rule O).
+ *
+ * **The property these cases pin is unchanged**, so they are restated rather
+ * than deleted: which beneficiaries the caller reaches, on which date.
+ */
+const rosterOf = (res: { body: { data?: unknown } }): string[] =>
+  ((res.body.data as { students?: { id: string }[] } | undefined)?.students ?? []).map(
+    (s) => s.id,
+  );
+
 describe("§4 — an assignment with no dates behaves exactly as it did", () => {
   it("is accepted, stored with two NULLs, and is effective on every date", async () => {
     const res = await putStaff([{ user_id: safa, position: "teacher" }]);
@@ -242,7 +259,7 @@ describe("§4 — an assignment with no dates behaves exactly as it did", () => 
   it("and reaches her students, exactly as before the revision", async () => {
     const list = await call("GET", "/quran-students", teacherToken(safa));
     expect(list.status).toBe(200);
-    expect((list.body.data as { id: string }[]).map((s) => s.id)).toContain(studentId);
+    expect(rosterOf(list)).toContain(studentId);
   });
 });
 
@@ -375,12 +392,12 @@ describe("§24 — the temporary replacement", () => {
   it("§14 — studentsTaughtBy answers about the DATE it is asked about", async () => {
     // Today Safa is effective and Amina is not.
     const safaNow = await call("GET", "/quran-students", teacherToken(safa));
-    expect((safaNow.body.data as { id: string }[]).map((s) => s.id)).toContain(studentId);
+    expect(rosterOf(safaNow)).toContain(studentId);
 
     const aminaNow = await call("GET", "/quran-students", teacherToken(amina));
     // Her period has not begun. A time-blind resolver handed her the roster the
     // moment the row existed, which is the defect R91 exists to close.
-    expect((aminaNow.body.data as { id: string }[]).map((s) => s.id)).not.toContain(studentId);
+    expect(rosterOf(aminaNow)).not.toContain(studentId);
   });
 
   it("§15 — teaches_quran follows the effective assignment, not its existence", async () => {
@@ -421,7 +438,7 @@ describe("§24 — the temporary replacement", () => {
     const forSafa = await call("GET", "/quran-students", teacherToken(safa));
     expect(forSafa.status).toBe(200);
     const forAmina = await call("GET", "/quran-students", teacherToken(amina));
-    expect((forAmina.body.data as unknown[]).length).toBe(0);
+    expect(rosterOf(forAmina)).toHaveLength(0);
   });
 });
 
@@ -527,7 +544,7 @@ describe("§22 — planning data still grants nothing", () => {
     });
     const list = await call("GET", "/quran-students", teacherToken(helper1));
     expect(list.status).toBe(200);
-    expect((list.body.data as unknown[]).length).toBe(0);
+    expect(rosterOf(list)).toHaveLength(0);
 
     const me = await call("GET", "/me", teacherToken(helper1));
     expect((me.body as unknown as { teaches_quran: boolean }).teaches_quran).toBe(false);
@@ -549,10 +566,8 @@ describe("§23 — an assistant is the main teacher for operational authority", 
   it("§26 — an effective assistant reaches the same students as the lead", async () => {
     const lead = await call("GET", "/quran-students", teacherToken(amina));
     const assistant = await call("GET", "/quran-students", teacherToken(helper1));
-    expect((assistant.body.data as { id: string }[]).map((s) => s.id)).toEqual(
-      (lead.body.data as { id: string }[]).map((s) => s.id),
-    );
-    expect((assistant.body.data as { id: string }[]).map((s) => s.id)).toContain(studentId);
+    expect(rosterOf(assistant)).toEqual(rosterOf(lead));
+    expect(rosterOf(assistant)).toContain(studentId);
   });
 
   it("and answers teaches_quran identically", async () => {
@@ -562,7 +577,7 @@ describe("§23 — an assistant is the main teacher for operational authority", 
 
   it("but an assistant whose period has not begun reaches nobody", async () => {
     const notYet = await call("GET", "/quran-students", teacherToken(helper2));
-    expect((notYet.body.data as unknown[]).length).toBe(0);
+    expect(rosterOf(notYet)).toHaveLength(0);
     const me = await call("GET", "/me", teacherToken(helper2));
     expect((me.body as unknown as { teaches_quran: boolean }).teaches_quran).toBe(false);
   });
@@ -571,7 +586,7 @@ describe("§23 — an assistant is the main teacher for operational authority", 
     // The audience rule is unchanged by R91 — this pins that it did not drift
     // while every date predicate around it moved.
     const lead = await call("GET", "/quran-students", teacherToken(amina));
-    expect((lead.body.data as { id: string }[]).map((s) => s.id)).not.toContain(outsiderStudent);
+    expect(rosterOf(lead)).not.toContain(outsiderStudent);
   });
 });
 

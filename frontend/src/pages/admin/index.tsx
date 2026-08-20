@@ -17,6 +17,7 @@ import { TeachersPage } from './teachers.js';
 import { ExamGradesPage } from './exam-grades.js';
 import { LevelSubjectsPage } from './level-subjects.js';
 import { LevelSurahsPage } from './level-surahs.js';
+import { AdminQuranPage } from './quran.js';
 import { LevelsPage } from './levels.js';
 import { ScheduleSessionsPage } from './schedule-sessions.js';
 import { SchedulingPage } from './scheduling.js';
@@ -58,6 +59,7 @@ export const IMPLEMENTED_ADMIN_PATHS: readonly string[] = [
   '/admin/exam-grades',
   '/admin/level-subjects',
   '/admin/level-surahs',
+  '/admin/quran',
   '/admin/teaching-groups',
   '/admin/categories',
   '/admin/subjects',
@@ -133,6 +135,11 @@ export function AdminRouter(): ReactNode {
   // the teacher portal renders too — one implementation, two ways in.
   if (path === '/admin/exam-grades') {
     return <ExamGradesPage examId={params.get('exam')} />;
+  }
+  if (path === '/admin/quran') {
+    // §C4 — `?student=` is the deep link, the same one `/teacher/quran` uses and
+    // the `/resources?level=` precedent §14.1 sets. It opens; it never gates.
+    return <AdminQuranPage studentId={params.get('student')} />;
   }
   if (path === '/admin/level-surahs') {
     // M4c — `?level=` opens that Level, as everywhere else; it never gates.

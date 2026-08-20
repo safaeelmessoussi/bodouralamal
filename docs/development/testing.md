@@ -659,6 +659,56 @@ the product exactly as documentation does — and it decays *silently*. The curr
 inventory, with the count each one actually produced, is in
 [qa-inventory](qa-inventory.md#browser-harnesses-that-exist-today).
 
+### `?raw` on a `.css` file yields an empty string
+
+A CSS invariant written as a vitest assertion — `import css from './x.css?raw'`
+— reads `''` under this setup, so the guard passes while checking nothing. It
+has happened twice now; the second time (2026-08-20, the shared `ProgressBar`)
+it was caught only because the assertion checked `length > 0` first.
+
+**CSS invariants belong in `scripts/ci/`**, as shell guards over the file
+itself. And whichever layer a new guard lives in, **prove it against the defect
+it exists for before counting it as protection** — the tell is a guard that has
+never failed, not even while being written.
+
+**Grep guards must strip comments first.** `check-progress-css.sh` initially
+failed on the component's own docstring, which *explains* why `transform:
+scaleX()` was rejected. A guard that cannot tell prose from code fails on the
+documentation recording its own reason.
+
+
+### Only ONE fixture may hold the Quran marker at a time
+
+`Subject.tracks_quran_progress` has a **partial unique index** — at most one live
+Subject may carry it (R73.4), because two would make *which* teaching authorises
+a log ambiguous. `seed-quran-scenario.ts` and `seed-r91-scenario.ts` both create
+one, so:
+
+* they can never run **concurrently**;
+* and a fixture leaked by an **interrupted** run blocks the other harness with a
+  raw `duplicate key value violates unique constraint` stack trace rather than a
+  legible message.
+
+That is exactly what happened on 2026-08-20: a batch loop was SIGTERM'd while
+`verify-quran-entry` was running, its `trap cleanup EXIT` never completed, and
+`verify-effective-staffing` then failed to seed at all. **The recovery is
+`npx tsx scripts/seed-quran-scenario.ts --clean`**, which every harness also runs
+on exit.
+
+**A harness killed mid-run leaves its fixture behind.** When one fails to seed,
+check for another scenario's residue before suspecting the product.
+
+### A contract change reaches the harnesses too
+
+`/quran-students` began answering `{ students, levels }` instead of a bare array.
+The integration tests failed loudly; `verify-effective-staffing.mjs` failed with
+`(roster.data ?? []).map is not a function`, and had it been written slightly
+more defensively it would have read `undefined` and **passed while asserting
+nothing**. When a response shape changes, grep the harnesses as well as `src` —
+`grep -rln '<route>' scripts/dev/browser/` — and restate the assertion rather
+than loosening it.
+
+
 ## Acceptance checklists
 
 A module is Done only when its checklist is fully ticked, its test gates pass, and its

@@ -352,7 +352,11 @@ describe("BR-21 — exactly one Administrative Group per enrolled Level", () => 
     // The composite FK makes these provably equal; the withdrawn StudentLevel
     // entity is what would have made them able to disagree.
     expect(row.levelId).toBe(levelId);
-    expect(row.administrativeGroup.levelId).toBe(levelId);
+    // R66 made the group optional, so the relation is nullable now — the
+    // fixture always has one, and asserting that first is what makes the
+    // composite-FK claim below meaningful rather than vacuous.
+    expect(row.administrativeGroup).not.toBeNull();
+    expect(row.administrativeGroup!.levelId).toBe(levelId);
   });
 
   it("re-enrolment after leaving is allowed — the unique index spans live rows only", async () => {
@@ -1300,8 +1304,24 @@ describe("R74 follow-up — an enrolment can be changed and ended", () => {
       }),
     ).toBe(1);
 
-    // A pure BRANCH change moves nobody between subdivisions, so the seat stays.
+    /**
+     * **Restated 2026-08-20 — the property changed shape, so the assertion did.**
+     *
+     * This used to pass `{ branchId: amerchich }` and assert that a pure branch
+     * change moved nobody between subdivisions. `updateEnrollmentPlacement` no
+     * longer accepts `branchId` **at all**: an enrolment IS
+     * `beneficiary + Level + Branch`, so changing the branch is a different
+     * enrolment — end this one and create the other. The input type is what
+     * makes that a compile-time fact rather than a validator's promise.
+     *
+     * The property worth pinning is therefore the stronger one: the route
+     * cannot express a branch move, and a placement call that changes nothing
+     * leaves the seat alone. Deleting the case would have lost both.
+     */
     await updateEnrollmentPlacement(prisma, superAdmin(), row.id, {
+      // @ts-expect-error — `branchId` is deliberately absent from the input
+      // type, and this directive IS the assertion: if somebody re-adds the
+      // field, `@ts-expect-error` becomes unused and the build fails here.
       branchId: amerchich,
     });
     expect(

@@ -31,6 +31,10 @@ const category = z.enum(['new_memorization', 'revision']);
 const createSchema = z
   .object({
     student_id: z.string().uuid(),
+    // §C10 — the curriculum context. Validated against the مستفيدة's enrolments
+    // and the Level's `LevelSurah` syllabus in the service, which is the
+    // authority; the form's narrowing is convenience.
+    level_id: z.string().uuid(),
     surah_id: z.number().int().min(1).max(114),
     start_ayah: ayah,
     end_ayah: ayah,
@@ -59,6 +63,7 @@ export function create(prisma: PrismaClient) {
     const b = parse(createSchema, req.body ?? {});
     const data = await logProgress(prisma, requireActor(req), {
       studentId: b.student_id,
+      levelId: b.level_id,
       surahId: b.surah_id,
       startAyah: b.start_ayah,
       endAyah: b.end_ayah,

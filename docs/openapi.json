@@ -6227,11 +6227,11 @@
     },
     "/quran-students": {
       "get": {
-        "summary": "The students whose Quran progress the caller may log",
-        "description": "§4.5 (R73.1) — the selector's source, resolved **server-side from the caller's own teaching**, never from a parameter. R73 added the structural marker naming which Subject authorises a log: §4.4c's *own students* is subject-blind, so a مؤطرة teaching only Fiqh could otherwise log memorization. Matching on the Subject NAME is prohibited (R27 made Subjects editable; §4.4b requires rules checked generically), which is why the marker is a column and this read consults it.",
+        "summary": "What the caller may enter, and for whom",
+        "description": "§4.5 (R73.1), extended 2026-08-20. The selector's source, resolved **server-side from the caller's own teaching**, never from a parameter. R73 added the structural marker naming which Subject authorises a log: §4.4c's *own students* is subject-blind, so a مؤطرة teaching only Fiqh could otherwise log memorization. Matching on the Subject NAME is prohibited (R27 made Subjects editable; §4.4b requires rules checked generically), which is why the marker is a column and this read consults it. **Answers `{ students, levels }`**: each student carries every Quran-relevant `level_id` she is enrolled in (never truncated to the first), and each level carries its `LevelSurah` syllabus. That second half exists because `GET /admin/levels/{id}/surahs` answers 403 for a مؤطرة, so a curriculum-driven Surah list was unreachable for the role that needs it — **a smaller question, never a wider permission** (rule O): only the Levels this caller's own roster reaches appear. An Admin sees their branches' beneficiaries and a Super Admin every beneficiary — **beneficiaries, resolved through a live enrolment and R79's marker, never arbitrary Users**.",
         "responses": {
           "200": {
-            "description": "The students the caller may log progress for."
+            "description": "The beneficiaries the caller may log for, the Levels they reach, and each Level's configured surahs."
           },
           "401": {
             "description": "Error envelope (TD-3.8).",
@@ -6371,13 +6371,13 @@
     "/quran-logs": {
       "post": {
         "summary": "Log memorization or revision",
-        "description": "§4.5, TD-3.6 (R73). Body is { student_id, surah_id, start_ayah, end_ayah, category }, .strict(). **The ayah bounds are checked in three places on purpose**: a schema CHECK for start <= end, a database **trigger** for end <= total_ayahs (TD-6 — it crosses tables), and the service, which turns both into a coded refusal rather than a driver error. Authority is the R73 marker: only a مؤطرة teaching the Quran-tracking Subject to that student, an Admin in scope, or a Super Admin.",
+        "description": "§4.5, TD-3.6 (R73). Body is { student_id, level_id, surah_id, start_ayah, end_ayah, category }, .strict(). **`level_id` is the curriculum context** (2026-08-20): it is validated — the beneficiary is enrolled in that Level, and the Surah is in that Level's `LevelSurah` syllabus — and audited, but **deliberately not stored on the log**, because memorization is a fact about (student, surah) and a level column would make a second, forkable answer to how much of a Surah she knows (R73 §0 refused a subject_id for the same reason). **The ayah bounds are checked in three places on purpose**: a schema CHECK for start <= end, a database **trigger** for end <= total_ayahs (TD-6 — it crosses tables), and the service, which turns both into a coded refusal rather than a driver error. Authority is the R73 marker: only a مؤطرة teaching the Quran-tracking Subject to that student, an Admin in scope, or a Super Admin. **category `revision` records history and never raises the memorization percentage.**",
         "responses": {
           "201": {
-            "description": "Logged."
+            "description": "Logged, with the recalculated coverage."
           },
           "400": {
-            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — an inverted range, an ayah past the surah’s end, or an unknown category.",
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — an inverted range, an ayah past the surah’s end, an unknown category, or SURAH_NOT_IN_LEVEL when the surah is outside the named Level’s syllabus.",
             "content": {
               "application/json": {
                 "schema": {
@@ -6407,7 +6407,7 @@
             }
           },
           "404": {
-            "description": "Error envelope (TD-3.8). NOT_FOUND for a student outside the caller’s scope.",
+            "description": "Error envelope (TD-3.8). NOT_FOUND for a student outside the caller’s scope, or LEVEL_NOT_ENROLLED when she is not enrolled in the Level named.",
             "content": {
               "application/json": {
                 "schema": {

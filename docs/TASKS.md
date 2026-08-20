@@ -609,6 +609,15 @@
 - [x] **التسجيلات** and **المواد المرفقة** are separate sections with separate empty states, and neither claims anything before a 200
 - [x] «فتح صفحة الحصة وموادها» removed from the dialog; the combined sentence deleted from the catalogue
 - [x] `verify-occurrence-details` **13/13** across public/Admin/مؤطرة/beneficiary · 655 frontend
+### Section C — Quran progress entry (2026-08-20)
+- [x] **إدخال الحفظ in the back office** — `/admin/quran`, the same workspace the teaching portal renders. Rule P, seventh instance
+- [x] **مراجعة no longer inflates memorisation** — the canonical engine, not the UI. ⚠ needs an SRS revision to become normative wording
+- [x] **R92's Quran occurrence arm actually connected** — it was named in a docstring and never wired
+- [x] `LevelSurah` normative for entry; `level_id` validated and audited, deliberately not stored
+- [x] Shared `ProgressBar`; حفظي shows the whole syllabus, grouped by Level
+- [x] **Backend CI typecheck was red on `develop`** — 12 pre-existing errors fixed
+- [x] 26 new integration cases · 16 frontend guards + 1 CI shell guard (the CSS invariant cannot live in vitest) · `verify-quran-entry` **24/24** · 19 CI guards · 25 browser harnesses / 556 checks
+- [ ] **Document Owner decision needed**: ratify the memorisation-vs-revision semantics in §4.5/BR-13
 - [ ] **NEXT**: one shared occurrence-details dialog (§9–§10) · direct Session recordings/materials (§11–§15) · beneficiary QR (§16–§25)
 
 ### Notification root causes + landing pages (2026-08-20)

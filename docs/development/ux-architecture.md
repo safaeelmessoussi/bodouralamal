@@ -1196,6 +1196,56 @@ is the same rule the notification panel follows.
 a navigation away from the calendar being read. The materials are in the popup;
 the Session page keeps its other uses and is no longer the route to that answer.
 
+## AU · A dependent form asks in the order the domain depends
+
+`إدخال الحفظ` asks *whom* → *which Level* → *which Surah*, and the dependency is
+real: `LevelSurah` decides which Surahs a Level teaches, so a Surah list means
+nothing until a Level is known. Rule **AE** says a dependency between selectors
+belongs to **forms**, not filters — this is the form half of that rule, and the
+same `mode` caution applies: the caller states a fact, the component derives the
+behaviour.
+
+**One relevant option opens directly; several ask.** A مستفيدة enrolled in two
+Levels must be asked which curriculum an entry belongs to — picking
+`level_ids[0]` chooses a syllabus by insertion order, which is a silent wrong
+answer rather than a visible question. One Level is not a choice and must not be
+rendered as one.
+
+**The narrowing is convenience; the server is the authority.** Removing an
+option from a `<select>` leaves the route accepting it, so both refusals are
+coded server-side (`LEVEL_NOT_ENROLLED`, `SURAH_NOT_IN_LEVEL`) and proved with a
+forged request — rule **AF**'s test, applied to a curriculum rather than to
+identity.
+
+**And a reference list is not a curriculum.** The old form offered all 114
+Surahs from `Array.from({ length: 114 })`. The seeded lookup is the source for
+*names*; `LevelSurah` is the source for *which of them this Level teaches*, and
+conflating the two offered a مؤطِّرة 114 options where the syllabus named two.
+
+## AV · One meter for every proportion, and the figure is never the colour alone
+
+`ProgressBar` is generic by construction — a value, a total, a label, and
+nothing about Surahs or ayahs. A Quran-specific visual primitive would become
+the second implementation the moment anything else showed a proportion, and
+level completion and exam coverage are both already shaped like one.
+
+* **The percentage is always text**, beside the strip. A coloured bar is
+  invisible to a screen reader and ambiguous to a colour-blind reader, so the
+  full ARIA contract — `role="progressbar"`, `aria-valuemin`, `aria-valuemax`,
+  `aria-valuenow`, `aria-valuetext` — is part of the component, not an option.
+* **RTL comes from the document.** The fill is sized with `inline-size` and sits
+  at the track's inline start. `transform: scaleX()` was rejected because it
+  would have to know which way *forward* is.
+* **Zero is a value, not an absence.** A Surah at 0% renders an empty track,
+  because *not started* is the answer for most of a syllabus and is different
+  from *not in the curriculum*, which does not appear at all.
+
+**Its CSS invariant is guarded in `scripts/ci/`, not in vitest** — `?raw` on a
+`.css` file yields `''` under this setup, so the guard would have passed while
+reading nothing. It was written as a vitest assertion first and caught only by
+its own non-empty check, which is the tell CLAUDE.md names: **a guard that has
+never failed.**
+
 ## AR · Planning data advises the chooser; it never narrows the choice
 
 A screen that knows something about the people in a list may **annotate** them.
@@ -1526,6 +1576,8 @@ system's internals, break on every restyle, and catch nothing.
 | `teaching-group.http.integration.test.ts` | the flat read grants nothing, every filter narrows, TD-10 pagination, Admin-only |
 | [`pages/admin/teachers.test.tsx`](../../frontend/src/pages/admin/teachers.test.tsx) | **AQ** — the action left `المستخدمون` (label *and* component) · the node exists, is routed and sits beside `التسجيلات` · the population is asked by role and never excludes beneficiaries · **one** teaching-profile editor · **X** — the weekday keys resolve, `calendar.weekday` stays absent |
 | `user-management.http.integration.test.ts` | **AQ** — `role=teacher` and `beneficiaries_only` are complements: a مؤطِّرة who also studies is in both lists, and a revoked role leaves the teaching list |
+| [`components/quran/quran-entry.test.ts`](../../frontend/src/components/quran/quran-entry.test.ts) | **AU, AV** — one workspace and one writer · the curriculum drives the Surah list, never 114 · never `level_ids[0]` · a failed read is not an empty roster · the full ARIA meter contract · no second progress meter anywhere |
+| [`scripts/ci/check-progress-css.sh`](../../scripts/ci/check-progress-css.sh) | **AV** — logical sizing, a clipped track and `prefers-reduced-motion`, proved against the defect it exists for |
 | [`components/calendar/shared-details.test.ts`](../../frontend/src/components/calendar/shared-details.test.ts) | **AT** — all four calendars render the shared dialog **and** none discards the click · two content sections with two empty states · nothing claimed before a 200 · no Session-page step · the focused read carries the caller's token |
 | [`scripts/dev/browser/verify-occurrence-details.mjs`](../../scripts/dev/browser/verify-occurrence-details.mjs) | **AT** — the dialog opened from public, back-office, مؤطرة and beneficiary calendars on a real Session, with both sections present and every focused read a 200 |
 | [`components/scheduling/staffing-periods.test.ts`](../../frontend/src/components/scheduling/staffing-periods.test.ts) | **AS** — a blank date is open-ended and converted once at the wire · many assistants and one person on several rows · a new row defaults to assistant · each interval refusal has its own Arabic sentence |

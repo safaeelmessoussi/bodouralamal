@@ -287,7 +287,11 @@ describe("capability grants NOTHING operationally (R88.3)", () => {
   it("does not put a single beneficiary in her Quran roster", async () => {
     const res = await call("GET", "/quran-students", teacherToken);
     expect(res.status).toBe(200);
-    expect(res.body.data as unknown as unknown[]).toHaveLength(0);
+    // `/quran-students` answers `{ students, levels }` since Section C — the
+    // property is unchanged: a DECLARED capability reaches nobody.
+    expect(
+      (res.body.data as unknown as { students: unknown[] }).students,
+    ).toHaveLength(0);
   });
 
   it("does not make her a Quran teacher in the platform's own answer", async () => {

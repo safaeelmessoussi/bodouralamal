@@ -330,30 +330,67 @@ export async function studentsTaughtBy(
    * opened «إدخال الحفظ» for a one-off cover while this resolver, which knew
    * only about schedules, handed her an empty list. Rule **P** inverted.
    */
-  const covering = await prisma.session.findMany({
+  const subject =
+    filter.subjectId === undefined ? {} : { subjectId: filter.subjectId };
+
+  /**
+   * **The OCCURRENCE arm** (R91 §11/§27, corrected for R92 on 2026-08-20).
+   *
+   * Two things happen on a given day that the schedule alone cannot express,
+   * and both are answered here because both are facts about *one occurrence*:
+   *
+   * 1. **A one-off cover.** A مؤطِّرة may be assigned to ONE Session and to no
+   *    schedule at all — R43.4's snapshot. She must reach that occurrence's
+   *    students on its day, and reach nobody through it on any other. Without
+   *    this the platform had a menu with no roster behind it: R87 §J opened
+   *    «إدخال الحفظ» for a cover while this resolver, which knew only about
+   *    schedules, handed her an empty list — rule **P** inverted.
+   *
+   * 2. **A combined audience.** When two branches' classes meet together for
+   *    one occurrence (R92), whoever teaches it must reach everybody actually
+   *    expected at it — including the visiting branch.
+   *
+   * **This arm previously read `audienceWhere(session.schedule)`**, which is the
+   * schedule's *inherited* audience and therefore silently ignored the
+   * occurrence's own `SessionAudienceBranch` rows. `audienceForSession`'s own
+   * docstring already named "the Quran occurrence arm" among its consumers — the
+   * consumer had simply never been connected, so a مؤطِّرة teaching a combined
+   * Quran lesson could not log the visiting branch's memorisation. It composes
+   * the canonical resolver now; **no second cross-branch `OR` is written here**.
+   *
+   * **And it does not widen anything permanently.** The query is bound to `on`,
+   * so the next ordinary occurrence — which carries no override — resolves to
+   * the schedule's own branch again and the visitors disappear. That is the
+   * property R92 §B9 requires, and it follows from the date rather than from a
+   * rule anybody has to remember.
+   */
+  const occurrences = await prisma.session.findMany({
     where: {
       deletedAt: null,
       date: calendarDay(on),
-      staff: { some: { userId: teacherId, deletedAt: null } },
-      schedule: {
-        deletedAt: null,
-        ...(filter.subjectId ? { subjectId: filter.subjectId } : {}),
-      },
+      schedule: { deletedAt: null, ...subject },
+      OR: [
+        // She took this one specifically — a cover, or the snapshot
+        // materialization wrote for her.
+        { staff: { some: { userId: teacherId, deletedAt: null } } },
+        // Or she staffs the schedule it came from, effective on that day. This
+        // half is what carries R92 to a teacher who is NOT a cover: without it
+        // the combined audience would reach a substitute and not the regular
+        // مؤطِّرة.
+        { schedule: { staff: staffed } },
+      ],
     },
-    select: {
-      schedule: {
-        select: {
-          teachingMode: true,
-          levelId: true,
-          administrativeGroupId: true,
-          teachingGroupId: true,
-          branchId: true,
-        },
-      },
-    },
+    select: { id: true },
   });
-  const subject =
-    filter.subjectId === undefined ? {} : { subjectId: filter.subjectId };
+
+  const occurrenceArms: Prisma.UserWhereInput[] = [];
+  for (const occurrence of occurrences) {
+    // The ONE resolver (R92 §B7): the schedule's audience, unless this
+    // occurrence states its own branches.
+    const spec = await audienceForSession(prisma, occurrence.id);
+    if (spec !== null) occurrenceArms.push(audienceWhere(spec));
+  }
+
 
   const entireLevel = await prisma.recurringCourseSchedule.findMany({
     where: {
@@ -417,10 +454,10 @@ export async function studentsTaughtBy(
           some: { deletedAt: null, levelId: s.levelId, branchId: s.branchId },
         },
       })),
-    // The covered occurrences' own audiences, resolved through the SAME
-    // `audienceWhere` every other reader uses (§4.4c) — never a fourth arm
-    // written by hand here.
-    ...covering.map((c) => audienceWhere(c.schedule)),
+    // Each occurrence's own audience, resolved through the SAME canonical
+    // `audienceForSession` every other reader uses (R92 §B7) — never a fourth
+    // arm written by hand here.
+    ...occurrenceArms,
   ];
 
   return { deletedAt: null, OR: arms };

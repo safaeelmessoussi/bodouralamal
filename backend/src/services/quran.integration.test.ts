@@ -208,6 +208,11 @@ beforeEach(async () => {
     },
   });
 
+  // §C11 — `LevelSurah` is normative for entry, so the Level must configure
+  // the Surah every `range()` below writes against. Surah 1 (الفاتحة, 7 ayahs)
+  // is the fixture's syllabus.
+  await prisma.levelSurah.create({ data: { levelId, surahId: 1 } });
+
   quranTeacher = await person("مؤطرة القرآن");
   fiqhTeacher = await person("مؤطرة الفقه");
   assistant = await person("مؤطرة مساعدة");
@@ -223,6 +228,7 @@ afterAll(async () => {
 
 const range = (start: number, end: number) => ({
   studentId: student,
+  levelId,
   surahId: 1,
   startAyah: start,
   endAyah: end,
@@ -457,7 +463,24 @@ describe("M4b — the student reads her own, and only her own", () => {
  * Completion is read from the **existing** engine — configured Surahs × the
  * coverage §4.5 already derives — and no second percentage is computed.
  */
+/**
+ * **These two blocks own the curriculum themselves.**
+ *
+ * The shared `beforeEach` seeds one `LevelSurah` row (surah 1) because §C11
+ * makes the syllabus normative for *entry* — every `range()` above writes
+ * against it. The blocks below are about the syllabus as a **subject** rather
+ * than a precondition: one adds and removes rows, the other needs a Level that
+ * configures **none**. So they clear the seeded row first and build their own
+ * state, which is what they were always doing before entry required a syllabus.
+ */
+const withOwnCurriculum = (): void => {
+  beforeEach(async () => {
+    await prisma.levelSurah.deleteMany({ where: { levelId } });
+  });
+};
+
 describe("M4c — LevelSurah is Super Admin curriculum", () => {
+  withOwnCurriculum();
   it("a Super Admin adds and removes a Surah", async () => {
     await assignSurahToLevel(prisma, superAdmin(), levelId, 1);
     expect(
@@ -513,6 +536,7 @@ describe("M4c — LevelSurah is Super Admin curriculum", () => {
 });
 
 describe("M4c — BR-11 level completion", () => {
+  withOwnCurriculum();
   it("is NOT COMPUTABLE when the Level configures no Surahs", async () => {
     // Vacuous 100% would let an unconfigured Level mark everybody finished, so
     // the third state is the honest answer rather than a convenient one.

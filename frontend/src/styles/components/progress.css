@@ -1,0 +1,78 @@
+/**
+ * The shared progress meter (rule C).
+ *
+ * The fill is sized with `inline-size` and sits at the track's inline start, so
+ * an RTL document fills from the right with no direction test in the component.
+ * Its invariants are guarded by `scripts/ci/check-progress-css.sh` — not by a
+ * vitest glob, because `?raw` on a `.css` file yields an empty string here and
+ * such a guard passes while reading nothing.
+ */
+.progress {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.progress__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.progress__label {
+  font-weight: 600;
+}
+
+.progress__value {
+  /* Digits line up when several bars stack — the figures are read as a column. */
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-muted);
+}
+
+.progress__detail {
+  color: var(--color-text-muted);
+}
+
+.progress__track {
+  block-size: 0.75rem;
+  inline-size: 100%;
+  border-radius: var(--radius-lg);
+  background: var(--color-primary-soft);
+  /* Clips the fill, so a full bar keeps the track's rounded ends. */
+  overflow: hidden;
+}
+
+.progress__fill {
+  block-size: 100%;
+  background: var(--color-primary);
+  border-radius: inherit;
+  transition: inline-size 200ms ease;
+}
+
+/* Done reads differently from merely far along, without relying on colour
+   alone: the percentage beside it says 100% either way. */
+.progress__track--complete .progress__fill {
+  background: var(--color-primary-emphasis);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .progress__fill {
+    transition: none;
+  }
+}
+
+/**
+ * A stack of meters — Surahs on حفظي, and the coverage block on إدخال الحفظ.
+ * Plain list semantics, spaced by the layout rather than by margins on the
+ * items.
+ */
+.progress-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}

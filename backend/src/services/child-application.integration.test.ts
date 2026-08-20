@@ -176,6 +176,8 @@ describe("one request, many children", () => {
             {
               firstNameArabic: "م",
               lastNameArabic: "ع",
+              // R80 — required on every person this creates.
+              sex: "female" as const,
               consentMediaRelease: false,
             },
           ],

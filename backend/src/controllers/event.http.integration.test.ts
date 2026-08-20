@@ -246,7 +246,9 @@ describe("GET /events carries who answers for each one (R71)", () => {
     const eventId = (created.body as { id: string }).id;
 
     let list = await call("GET", "/events", superToken);
-    let row = (list.body.data ?? []).find((e) => e["id"] === eventId)!;
+    let row: Record<string, unknown> = (list.body.data ?? []).find(
+      (e) => e["id"] === eventId,
+    )!;
     // Empty is a real state: every event created before R71 has nobody
     // assigned, and so does one an Admin has not staffed yet.
     expect(row["staff"]).toEqual([]);
@@ -259,6 +261,7 @@ describe("GET /events carries who answers for each one (R71)", () => {
 
     list = await call("GET", "/events", superToken);
     row = (list.body.data ?? []).find((e) => e["id"] === eventId)!;
+
     expect(row["staff"]).toEqual([
       { user_id: person, position: "responsible" },
     ]);

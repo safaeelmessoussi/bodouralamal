@@ -495,10 +495,11 @@ describe("GET /admin/levels?eligible_for_student= (R27 + BR-21)", () => {
   ): Promise<string> => {
     const u = await prisma.user.create({
       data: {
-        // R80 — every person carries a recorded sex; the column is NOT NULL.
-        sex: "female",
         nameArabic: `${TAG} ${label}`,
         accountStatus: "active",
+        // R80 — every person carries a recorded sex; the column is NOT NULL.
+        // This was written twice: a `"female"` literal the parameter had
+        // superseded, left above it. TypeScript refuses the duplicate key.
         sex,
       },
     });

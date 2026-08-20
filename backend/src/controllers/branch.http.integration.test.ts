@@ -45,7 +45,9 @@ const ROOM_KEYS = ["branch_id", "id", "name", "version"];
 interface Res {
   status: number;
   body: Record<string, unknown> & {
-    error?: { code?: string };
+    // TD-3.8 — a refusal carries a `details` bag beside its code, and these
+    // tests read it. Omitting it here made `npm run typecheck` red.
+    error?: { code?: string; details?: Record<string, unknown> };
     data?: Record<string, unknown>[];
   };
 }

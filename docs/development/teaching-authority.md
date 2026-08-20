@@ -120,10 +120,19 @@ Enrollments at read time. No Enrollment is mutated, no Session duplicated, no
 per-student row created — each asserted rather than trusted.
 
 **One resolver, or none of it works.** `audienceForSession` is composed by the
-personal calendar, the roster, the notification recipients and the audit count.
-A cross-branch `OR` written independently in one service is the failure the
-revision exists to prevent: honoured by notifications and not by the calendar
-leaves a beneficiary told about a class she cannot see.
+personal calendar, the roster, the notification recipients, the audit count and
+the Quran occurrence arm. A cross-branch `OR` written independently in one
+service is the failure the revision exists to prevent: honoured by notifications
+and not by the calendar leaves a beneficiary told about a class she cannot see.
+
+> **The Quran arm was the proof of that, by being missing** (fixed 2026-08-20).
+> This list already named it while `studentsTaughtBy` still read
+> `audienceWhere(session.schedule)` — the schedule's *inherited* audience — so a
+> مؤطِّرة teaching a combined Quran lesson could not log the visiting branch's
+> memorisation. **A consumer named in a docstring is not a consumer.** The arm
+> now covers the regular مؤطِّرة as well as the one-off cover, and stays bound to
+> the date, so the next ordinary occurrence narrows again on its own. See
+> [Quran progress](quran-progress.md).
 
 **Whole-Level only, and the rest is refused rather than invented.** In the other
 two modes the branch is carried by the target itself, so a branch list has no
@@ -202,4 +211,6 @@ and then sees the first's rows.
 | [`components/scheduling/staffing-periods.test.ts`](../../frontend/src/components/scheduling/staffing-periods.test.ts) | blank date = open-ended, converted once at the wire · many assistants · one person on several rows · each refusal in Arabic |
 | [`controllers/session-audience.http.integration.test.ts`](../../backend/src/controllers/session-audience.http.integration.test.ts) | **R92** — inherited audience unchanged · both branches included · unrelated excluded · venue unmoved · next occurrence untouched · clearing restores · notifications follow the actual audience · staffing × audience independent · no Enrollment mutated, no Session duplicated · refusals and version conflict |
 | [`components/scheduling/session-audience.test.ts`](../../frontend/src/components/scheduling/session-audience.test.ts) | **R92** — seeded with the inherited branch (replacement said unambiguously) · venue as text, never a control · action offered only where the server accepts it · roster shown, not inferred · `dirty` passed |
+| [`services/quran-entry.integration.test.ts`](../../backend/src/services/quran-entry.integration.test.ts) | **R91 × R92 × R73** — whole-Level, Group and Circle rosters · assistant parity · an unrelated Subject and an R88 declaration granting nothing · dated authority both ways · the one-off cover · a combined occurrence reached and then NOT permanently widened |
+| [`scripts/dev/browser/verify-quran-entry.mjs`](../../scripts/dev/browser/verify-quran-entry.mjs) | the same matrix driven through real screens as ten identities, ending at the beneficiary's own حفظي |
 | [`scripts/dev/browser/verify-cross-branch.mjs`](../../scripts/dev/browser/verify-cross-branch.mjs) | **R91 × R92** — six identities: the Admin combines it, both beneficiaries share it, the unrelated one does not, the covering مؤطِّرة has it and the schedule's does not, cancelling tells exactly the right people, and next week is normal on both dimensions |

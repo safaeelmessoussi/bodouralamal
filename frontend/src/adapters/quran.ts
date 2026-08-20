@@ -19,8 +19,39 @@ export interface SurahCoverage {
   name_arabic: string;
   total_ayahs: number;
   merged_ayah_count: number;
+  /** **Memorisation only.** مراجعة is counted below, never folded in here — see
+   *  `recalculateFor` for why, and for the SRS wording that needs ratifying. */
   coverage_percent: number;
   merged_intervals: AyahInterval[];
+  revision_log_count: number;
+  last_revised_at: string | null;
+}
+
+/** A Level's Quran syllabus with this مستفيدة's coverage of it (§C15/§C17). */
+export interface LevelCoverage {
+  level_id: string;
+  level_name: string;
+  category_name: string;
+  surahs: SurahCoverage[];
+}
+
+export interface QuranProgressRead {
+  surahs: SurahCoverage[];
+  levels: LevelCoverage[];
+  logs: QuranLogRow[];
+}
+
+/** A Level the caller may enter progress against, with its configured Surahs. */
+export interface QuranScopeLevel {
+  level_id: string;
+  level_name: string;
+  category_name: string;
+  surahs: { surah_id: number; name_arabic: string; total_ayahs: number }[];
+}
+
+export interface QuranScope {
+  students: QuranStudent[];
+  levels: QuranScopeLevel[];
 }
 
 export interface QuranLogRow {
@@ -36,12 +67,25 @@ export interface QuranLogRow {
 export interface QuranStudent {
   id: string;
   name_arabic: string;
+  /** Every Quran-relevant Level she is enrolled in — **never truncated to the
+   *  first** (§C10). One means the form opens it directly; several mean it asks. */
+  level_ids: string[];
 }
 
-/** The مستفيدات this caller may log for — the selector's source (R73.1), so the
- *  screen cannot offer somebody the server would refuse. */
-export async function listQuranStudents(token: string | null): Promise<QuranStudent[]> {
-  return (await api<{ data: QuranStudent[] }>('/quran-students', { token })).data;
+/**
+ * **What this caller may enter, and for whom** (R73.1, extended 2026-08-20).
+ *
+ * The selector's source, so the screen cannot offer somebody — or a Surah — the
+ * server would refuse. One request rather than three: the roster, the Levels it
+ * reaches and each Level's `LevelSurah` syllabus are one question, and splitting
+ * them would let the answers disagree.
+ *
+ * **Rule O.** A مؤطِّرة is refused by `/admin/levels/{id}/surahs`, so this narrow
+ * read is what makes a curriculum-driven Surah list reachable for her without
+ * widening anything: it exposes only the Levels her own roster is enrolled in.
+ */
+export async function fetchQuranScope(token: string | null): Promise<QuranScope> {
+  return (await api<{ data: QuranScope }>('/quran-students', { token })).data;
 }
 
 /**
@@ -67,9 +111,9 @@ export async function listQuranStudents(token: string | null): Promise<QuranStud
 export async function fetchMyCoverage(
   token: string | null,
   activeChildId: string | null,
-): Promise<{ surahs: SurahCoverage[]; logs: QuranLogRow[] }> {
+): Promise<QuranProgressRead> {
   return (
-    await api<{ data: { surahs: SurahCoverage[]; logs: QuranLogRow[] } }>('/students/me/quran', {
+    await api<{ data: QuranProgressRead }>('/students/me/quran', {
       token,
       activeChildId,
     })
@@ -79,18 +123,18 @@ export async function fetchMyCoverage(
 export async function fetchCoverage(
   studentId: string,
   token: string | null,
-): Promise<{ surahs: SurahCoverage[]; logs: QuranLogRow[] }> {
+): Promise<QuranProgressRead> {
   return (
-    await api<{ data: { surahs: SurahCoverage[]; logs: QuranLogRow[] } }>(
-      `/students/${studentId}/quran`,
-      { token },
-    )
+    await api<{ data: QuranProgressRead }>(`/students/${studentId}/quran`, { token })
   ).data;
 }
 
 export async function logProgress(
   input: {
     student_id: string;
+    /** §C10 — the curriculum context. The server validates it against her
+     *  enrolments and the Level's syllabus; this is not a display hint. */
+    level_id: string;
     surah_id: number;
     start_ayah: number;
     end_ayah: number;

@@ -197,7 +197,19 @@ for (const [name, cookie, pageCookie] of [
   );
   asks[name] = {
     teachesQuran: me.teaches_quran,
-    students: (roster.data ?? []).map((s) => s.id),
+    /**
+     * **`/quran-students` answers `{ students, levels }` since Section C**
+     * (restated 2026-08-20). It used to answer a bare array; it now carries the
+     * Levels the roster reaches and each Level's `LevelSurah` syllabus, because
+     * the entry form's three selectors are one question and a مؤطِّرة is refused
+     * by the admin reference endpoints that would otherwise answer the last two.
+     *
+     * **The property these checks pin is unchanged** — which beneficiaries she
+     * reaches on which date — so this is restated, not weakened: reading
+     * `.data` as an array silently produced `undefined` and every roster
+     * assertion below would have compared against nothing.
+     */
+    students: (roster.data?.students ?? []).map((s) => s.id),
     quranMenu: (menu ?? []).some((label) => label.includes('إدخال الحفظ')),
   };
 }

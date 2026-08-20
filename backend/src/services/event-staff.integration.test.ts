@@ -43,12 +43,12 @@ const teacher = (id: string): Actor =>
 
 async function failure(
   run: () => Promise<unknown>,
-): Promise<{ code?: string }> {
+): Promise<{ code?: string; details?: Record<string, unknown> }> {
   try {
     await run();
     return {};
   } catch (e) {
-    return e as { code?: string };
+    return e as { code?: string; details?: Record<string, unknown> };
   }
 }
 
@@ -342,7 +342,9 @@ describe("R71.4 as narrowed 2026-08-20 — she staffs her OWN event, and only th
       ]),
     );
     expect(denied.code).toBe("FORBIDDEN");
-    expect(denied.details?.["reason"]).toBe("RESPONSIBLE_MUST_BE_SELF");
+    expect((denied.details as Record<string, unknown>)["reason"]).toBe(
+      "RESPONSIBLE_MUST_BE_SELF",
+    );
 
     // And nothing moved.
     const still = await prisma.eventStaff.findFirst({

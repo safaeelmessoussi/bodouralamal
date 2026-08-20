@@ -386,7 +386,9 @@ describe("R77 — cancelling one occurrence notifies its enrolled students", () 
     // idempotency actually lives, since the send is what writes.
     const second = await announce();
     expect(second.status).toBe(200);
-    expect((second.body.data as { notified: number }).notified).toBe(0);
+    // `data` is declared as a row array on this local type; the announce
+    // endpoint answers a single object, so the cast goes through `unknown`.
+    expect((second.body.data as unknown as { notified: number }).notified).toBe(0);
 
     const count = await prisma.notification.count({
       where: { sessionId, type: "session_cancelled" },
@@ -396,7 +398,10 @@ describe("R77 — cancelling one occurrence notifies its enrolled students", () 
   });
 
   it("refuses an anonymous read and never leaks another caller’s notice", async () => {
-    expect((await inbox(undefined)).status).toBe(401);
+    // An anonymous read — no token at all, which is what the empty string
+    // expresses to `call`. `undefined` was not assignable and made
+    // `npm run typecheck` red without ever changing what is exercised.
+    expect((await inbox("")).status).toBe(401);
     const mine = (await inbox(enrolledToken)).body.data![0]!;
     // §20 rule 17 — for a caller who is not the recipient this is NOT_FOUND, not
     // FORBIDDEN, which would confirm the notice exists.

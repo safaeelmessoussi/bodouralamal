@@ -42,6 +42,23 @@ describe('the registry matches §14.1', () => {
         '/admin/level-subjects',
         // M4c — the Quran-side curriculum join (§4.5, §7, BR-11).
         '/admin/level-surahs',
+        /**
+         * **Recorded, like `/admin/level-surahs` before it: `/admin/quran` is
+         * not in §14.1** (2026-08-20).
+         *
+         * The CAPABILITY is normative and long-standing — TD-2 as qualified by
+         * R73 grants an Admin their branches' beneficiaries and a Super Admin
+         * everyone, and `POST /quran-logs` has enforced exactly that since M4a.
+         * What §14.1 never gained was a **node**, so the back office could not
+         * reach a write it was already authorised for: rule P.
+         *
+         * Adding the node is therefore not a new permission and not a new
+         * requirement, which is why it ships without an SRS revision. **The gap
+         * is reported to the Document Owner rather than papered over**, and
+         * §20 rule 16 is respected in the direction that matters: nothing here
+         * invents a section or reshuffles one.
+         */
+        '/admin/quran',
         '/admin/content',
         '/admin/groups',
         '/admin/levels',

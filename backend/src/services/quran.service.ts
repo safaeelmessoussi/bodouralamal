@@ -1,4 +1,4 @@
-import type { PrismaClient } from '../generated/prisma/client.js';
+import type { Prisma, PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
 import type { Actor } from '../policies/actor.js';
 import * as scope from '../policies/branch-scope.js';
@@ -57,10 +57,86 @@ import * as trash from '../repositories/trash.repository.js';
 
 export interface QuranLogInput {
   studentId: string;
+  /**
+   * **The curriculum context the entry was made in** (§C10, required
+   * 2026-08-20).
+   *
+   * Not stored on the log, and deliberately: memorisation is a fact about
+   * `(student, surah)` — BR-13's union — and a `level_id` column would make a
+   * second, forkable answer to *how much of this Surah does she know*. R73 §0
+   * refused a `subject_id` here for the same reason.
+   *
+   * It is **validated** (the مستفيدة is enrolled in it; the Surah is in its
+   * `LevelSurah` syllabus) and **audited** (TD-8 `quranlog.create` carries it),
+   * so the context is retained where context belongs — in the record of who did
+   * what — without becoming a second source of truth for the percentage.
+   */
+  levelId: string;
   surahId: number;
   startAyah: number;
   endAyah: number;
   category: 'new_memorization' | 'revision';
+}
+
+/**
+ * **`LevelSurah` is normative for ENTRY** (§C11/§C24).
+ *
+ * Two refusals, both `NOT_FOUND` rather than `FORBIDDEN` (§20 rule 17 — a
+ * response must never be usable to discover that a minor's record exists):
+ *
+ * * the مستفيدة is not enrolled in the Level named, so the request describes a
+ *   curriculum context she is not in;
+ * * the Surah is not in that Level's syllabus, so the entry is against a
+ *   curriculum nobody configured.
+ *
+ * **The form narrowing the options is convenience; this is the authority.** A
+ * forged request naming another Level, or a Surah outside it, is refused here
+ * and cannot reach the log.
+ */
+async function assertLevelCurriculum(
+  prisma: PrismaClient,
+  studentId: string,
+  levelId: string,
+  surahId: number,
+): Promise<void> {
+  /**
+   * **`undefined` in a Prisma `where` means NO FILTER, not "matches nothing".**
+   *
+   * This is not defensive noise — it was proved: the integration suite called
+   * `logProgress` without a `levelId` and **all 27 tests passed**, because
+   * `{ levelId: undefined }` silently dropped the clause and both lookups then
+   * matched any enrolment and any syllabus row. The type says `string`, so only
+   * a caller bypassing the compiler (an untyped test, a JS consumer, a `as any`)
+   * can reach it — and that is exactly the caller a guard exists for.
+   *
+   * `VALIDATION_FAILED` rather than `NOT_FOUND`: this one is a malformed
+   * request, not a scope refusal, and nothing about a مستفيدة is disclosed.
+   */
+  if (typeof levelId !== 'string' || levelId === '') {
+    throw new AppError('VALIDATION_FAILED', 'a level is required for a quran entry', {
+      reason: 'LEVEL_REQUIRED',
+    });
+  }
+
+  const enrolled = await prisma.enrollment.findFirst({
+    where: { studentId, levelId, deletedAt: null, level: { deletedAt: null } },
+    select: { id: true },
+  });
+  if (!enrolled) {
+    throw new AppError('NOT_FOUND', 'that مستفيدة is not enrolled in that level', {
+      reason: 'LEVEL_NOT_ENROLLED',
+    });
+  }
+
+  const configured = await prisma.levelSurah.findFirst({
+    where: { levelId, surahId, deletedAt: null },
+    select: { id: true },
+  });
+  if (!configured) {
+    throw new AppError('VALIDATION_FAILED', 'that surah is not in this level curriculum', {
+      reason: 'SURAH_NOT_IN_LEVEL',
+    });
+  }
 }
 
 export interface SurahCoverage {
@@ -70,6 +146,43 @@ export interface SurahCoverage {
   merged_ayah_count: number;
   coverage_percent: number;
   merged_intervals: AyahInterval[];
+  /**
+   * **Revision is reported, never folded into the percentage** (2026-08-20).
+   *
+   * The count and the newest date are what a مؤطِّرة and a مستفيدة actually ask
+   * of revision — *has this been revised, and when last* — and neither is a
+   * second coverage figure. See `recalculateFor` for why the percentage above
+   * counts memorisation alone.
+   */
+  revision_log_count: number;
+  last_revised_at: string | null;
+}
+
+/**
+ * **A Level's Quran syllabus, with this مستفيدة's coverage of it** (§C15/§C17).
+ *
+ * The unit the beneficiary's screen groups by, because `LevelSurah` is what
+ * decides *which Surahs are hers to memorise* — a percentage against a syllabus
+ * nobody assigned her is a number with no question behind it.
+ *
+ * **A Surah in two Levels' syllabuses appears under both, with the same
+ * figure**, and that is correct rather than ambiguous: memorisation is a fact
+ * about (student, surah) and does not fork per Level. The Level names the
+ * context; it does not own the progress.
+ */
+export interface LevelCoverage {
+  level_id: string;
+  level_name: string;
+  category_name: string;
+  surahs: SurahCoverage[];
+}
+
+export interface QuranProgressRead {
+  /** Every Surah this student has logs for — the مؤطِّرة's working view. */
+  surahs: SurahCoverage[];
+  /** Her syllabus, grouped by Level, INCLUDING Surahs still at zero (§C15). */
+  levels: LevelCoverage[];
+  logs: QuranLogRow[];
 }
 
 export interface QuranLogRow {
@@ -99,20 +212,57 @@ export async function recalculateFor(
     prisma.quranSurah.findUnique({ where: { surahId } }),
     prisma.quranProgressLog.findMany({
       where: { studentId, surahId, deletedAt: null },
-      select: { id: true, startAyah: true, endAyah: true, loggedAt: true },
+      select: { id: true, startAyah: true, endAyah: true, loggedAt: true, category: true },
       orderBy: [{ loggedAt: 'desc' }, { id: 'desc' }],
     }),
   ]);
   if (!surah) throw new AppError('NOT_FOUND', 'no such surah');
 
+  /**
+   * **Memorisation is the union of the MEMORISATION logs** (Document Owner,
+   * 2026-08-20).
+   *
+   * BR-13's arithmetic is unchanged — it is still the union of merged,
+   * non-overlapping closed intervals, computed by the one routine in
+   * `policies/quran-coverage.ts`. What changed is **which logs go into it**.
+   *
+   * Every log used to count, so مراجعة raised the memorisation percentage. Two
+   * consequences, the second worse than the first:
+   *
+   * * revising ayahs 1–4 that were **never memorised** created 4 ayahs of
+   *   memorisation out of nothing;
+   * * and because BR-11 reads this same percentage, a Level could be reported
+   *   **complete** on revision alone.
+   *
+   * `category` exists precisely to tell the two apart, and this section is
+   * titled *Quran **Memorization** Tracking*. Counting a revision as new
+   * memorisation is the defect §14 of the Owner's brief describes.
+   *
+   * **Recorded tension, for the Document Owner.** §4.5/BR-13 says *"the union
+   * of **all** merged, non-overlapping logged intervals per Surah"*, and *all*
+   * read literally includes revision. The SRS is immutable to an implementing
+   * agent, so **this is implemented and reported rather than written into
+   * §4.5** — it needs a Document Owner revision to become normative wording.
+   * BR-13's stated worked example is unaffected either way: its three ranges
+   * carry no category, and the union still merges them to `[10–123]` = 114.
+   */
+  const memorization = logs.filter((l) => l.category === 'new_memorization');
+  const revisions = logs.filter((l) => l.category === 'revision');
+
   const { merged, mergedAyahCount, coveragePercent } = computeCoverage(
-    logs.map((l) => ({ start: l.startAyah, end: l.endAyah })),
+    memorization.map((l) => ({ start: l.startAyah, end: l.endAyah })),
     surah.totalAyahs,
   );
 
   // The newest governing log — the stamp the read-side guard compares against.
   // `null` when every log has been deleted, which is a real state and must be
   // stored as one: a leftover stamp would make an empty coverage look fresh.
+  //
+  // **Every log, not just the memorisation ones.** The stamp answers *has
+  // anything changed since this row was written*, and a revision logged after
+  // the cache was built changes `revision_log_count`. Stamping only
+  // memorisation would leave a new revision looking like a fresh cache and the
+  // count permanently one behind.
   const newest = logs[0] ?? null;
 
   const data = {
@@ -135,6 +285,8 @@ export async function recalculateFor(
     merged_ayah_count: mergedAyahCount,
     coverage_percent: coveragePercent,
     merged_intervals: merged,
+    revision_log_count: revisions.length,
+    last_revised_at: revisions[0]?.loggedAt.toISOString() ?? null,
   };
 }
 
@@ -151,7 +303,7 @@ export async function readStudentCoverage(
   prisma: PrismaClient,
   actor: Actor,
   studentId: string,
-): Promise<{ surahs: SurahCoverage[]; logs: QuranLogRow[] }> {
+): Promise<QuranProgressRead> {
   await assertCanManageQuranProgress(prisma, actor, studentId);
   return coverageFor(prisma, studentId);
 }
@@ -180,14 +332,14 @@ export async function readStudentCoverage(
 export async function readOwnCoverage(
   prisma: PrismaClient,
   studentId: string,
-): Promise<{ surahs: SurahCoverage[]; logs: QuranLogRow[] }> {
+): Promise<QuranProgressRead> {
   return coverageFor(prisma, studentId);
 }
 
 async function coverageFor(
   prisma: PrismaClient,
   studentId: string,
-): Promise<{ surahs: SurahCoverage[]; logs: QuranLogRow[] }> {
+): Promise<QuranProgressRead> {
   const logs = await prisma.quranProgressLog.findMany({
     where: { studentId, deletedAt: null },
     select: {
@@ -206,6 +358,51 @@ async function coverageFor(
   const cached = await prisma.studentSurahProgress.findMany({ where: { studentId } });
   const byId = new Map(cached.map((c) => [c.surahId, c]));
 
+  /**
+   * **Her syllabus** (§C15/§C17) — the Levels she is enrolled in that actually
+   * configure a Quran curriculum.
+   *
+   * *Quran-relevant* is **structural**, never a name test: a Level is relevant
+   * exactly when `LevelSurah` gives it Surahs. R27 made Subjects and Levels
+   * editable reference data and §4.4b requires rules *"checked generically …
+   * rather than hardcoded against a level name"*, so matching on Arabic text
+   * would stop working the day somebody renames a Level.
+   *
+   * **Every enrolment, never `enrollments[0]`** (§C10). A مستفيدة may be
+   * enrolled in several Levels at once; picking the first would silently hide
+   * one syllabus, and which one it hid would depend on insertion order.
+   */
+  const enrolments = await prisma.enrollment.findMany({
+    where: {
+      studentId,
+      deletedAt: null,
+      level: { deletedAt: null, surahs: { some: { deletedAt: null } } },
+    },
+    select: {
+      level: {
+        select: {
+          id: true,
+          name: true,
+          category: { select: { name: true } },
+          surahs: {
+            where: { deletedAt: null },
+            select: {
+              surah: { select: { surahId: true, nameArabic: true, totalAyahs: true } },
+            },
+            // The mushaf's own order, which is the order anybody reciting
+            // expects — the same ordering `listLevelSurahs` uses.
+            orderBy: { surahId: 'asc' },
+          },
+        },
+      },
+    },
+  });
+
+  // One entry per Level even when she holds two enrolments in it (different
+  // years or branches): the syllabus is the Level's, not the enrolment's.
+  const levelById = new Map<string, (typeof enrolments)[number]['level']>();
+  for (const e of enrolments) levelById.set(e.level.id, e.level);
+
   // The newest live log per surah, from the rows already fetched — the guard's
   // comparison, computed here rather than in a query per surah.
   const newestBySurah = new Map<number, { id: string; loggedAt: Date }>();
@@ -215,28 +412,78 @@ async function coverageFor(
     }
   }
 
-  const surahs: SurahCoverage[] = [];
-  for (const [surahId, newest] of [...newestBySurah.entries()].sort((a, b) => a[0] - b[0])) {
+  /**
+   * Coverage for one Surah, from data already in hand where the cache agrees.
+   *
+   * **The self-heal guard still runs** (§4.5): a stamp that disagrees with the
+   * logs means the cache lost a write, so the row is recomputed and repaired in
+   * place before its value is used.
+   */
+  const coverageOf = async (
+    surahId: number,
+    meta: { nameArabic: string; totalAyahs: number },
+  ): Promise<SurahCoverage> => {
+    const own = logs.filter((l) => l.surahId === surahId);
+    const revisions = own.filter((l) => String(l.category) === 'revision');
+    const revisionFacts = {
+      revision_log_count: revisions.length,
+      last_revised_at: revisions[0]?.loggedAt.toISOString() ?? null,
+    };
+
+    const newest = newestBySurah.get(surahId);
+    if (!newest) {
+      // No logs at all — a real and ordinary state for a syllabus Surah she has
+      // not started. Zero, computed here rather than written to the cache: an
+      // untouched Surah has nothing to cache and nothing to heal.
+      return {
+        surah_id: surahId,
+        name_arabic: meta.nameArabic,
+        total_ayahs: meta.totalAyahs,
+        merged_ayah_count: 0,
+        coverage_percent: 0,
+        merged_intervals: [],
+        ...revisionFacts,
+      };
+    }
+
     const row = byId.get(surahId);
     if (!row || row.lastLogId !== newest.id) {
-      // **Self-heal.** The stamp disagrees with the logs, so the cache lost a
-      // write; recompute and repair in place before the value is used.
-      surahs.push(await recalculateFor(prisma, studentId, surahId));
-      continue;
+      return recalculateFor(prisma, studentId, surahId);
     }
-    const meta = logs.find((l) => l.surahId === surahId)!.surah;
-    surahs.push({
+    return {
       surah_id: surahId,
       name_arabic: meta.nameArabic,
       total_ayahs: meta.totalAyahs,
       merged_ayah_count: row.mergedAyahCount,
       coverage_percent: Number(row.coveragePercent),
       merged_intervals: row.mergedIntervals as unknown as AyahInterval[],
+      ...revisionFacts,
+    };
+  };
+
+  const surahs: SurahCoverage[] = [];
+  for (const surahId of [...newestBySurah.keys()].sort((a, b) => a - b)) {
+    const meta = logs.find((l) => l.surahId === surahId)!.surah;
+    surahs.push(await coverageOf(surahId, meta));
+  }
+
+  const levels: LevelCoverage[] = [];
+  for (const level of [...levelById.values()].sort((a, b) => a.name.localeCompare(b.name, 'ar'))) {
+    const rows: SurahCoverage[] = [];
+    for (const entry of level.surahs) {
+      rows.push(await coverageOf(entry.surah.surahId, entry.surah));
+    }
+    levels.push({
+      level_id: level.id,
+      level_name: level.name,
+      category_name: level.category.name,
+      surahs: rows,
     });
   }
 
   return {
     surahs,
+    levels,
     logs: logs.map((l) => ({
       id: l.id,
       surah_id: l.surahId,
@@ -250,45 +497,128 @@ async function coverageFor(
 }
 
 /**
- * `GET /quran-students` — **the مستفيدات this caller may log Quran for**.
+ * `GET /quran-students` — **whom this caller may log Quran for, and what she
+ * may log for them** (R73.1, extended 2026-08-20).
  *
  * The selector's source, so the screen cannot offer somebody the server would
- * refuse (R73.1). It is the *same* predicate the write path asserts, read as a
- * list instead of a yes/no — never a second definition of scope.
+ * refuse. It is the *same* predicate the write path asserts, read as a list
+ * instead of a yes/no — never a second definition of scope.
  *
- * An Admin gets their branches' students; a Super Admin everyone; a مؤطرة the
- * students whose Quran she teaches, which is **empty when no Subject is marked**
- * — the same fail-closed answer the write path gives.
+ * An Admin gets their branches' beneficiaries; a Super Admin every beneficiary;
+ * a مؤطِّرة the beneficiaries whose Quran she teaches, which is **empty when no
+ * Subject is marked** — the same fail-closed answer the write path gives.
+ *
+ * ## Why the syllabus comes back with the roster
+ *
+ * The entry form needs three dependent things — *whom*, *which Level*, *which
+ * Surah* — and the last is `LevelSurah`, which lives behind
+ * `GET /admin/levels/{id}/surahs`. **That endpoint answers 403 for a مؤطِّرة**
+ * (`assertCanReadReferenceData`), so a curriculum-driven Surah list was
+ * unreachable for the one role that needs it most.
+ *
+ * **Rule O — the fix is a smaller question, never a wider permission.** The
+ * admin reference endpoints still refuse her. This one answers *what may I
+ * enter, and for whom*, and returns nothing beyond that: the Levels are only
+ * those her own roster is enrolled in, and each carries only its own configured
+ * Surahs. Nothing here can enumerate Levels she does not teach.
+ *
+ * **One request, because the three questions are one question.** A separate
+ * `/quran-levels/{id}/surahs` would be a second round trip that could disagree
+ * with the roster it was derived from.
  */
+export interface QuranScopeLevel {
+  level_id: string;
+  level_name: string;
+  category_name: string;
+  surahs: { surah_id: number; name_arabic: string; total_ayahs: number }[];
+}
+
+export interface QuranScopeStudent {
+  id: string;
+  name_arabic: string;
+  /** The Levels from `levels` this مستفيدة is enrolled in (§C10) — several when
+   *  she holds several enrolments, and **never truncated to the first**. */
+  level_ids: string[];
+}
+
 export async function listQuranStudents(
   prisma: PrismaClient,
   actor: Actor,
-): Promise<{ id: string; name_arabic: string }[]> {
+): Promise<{ students: QuranScopeStudent[]; levels: QuranScopeLevel[] }> {
   const isSuper = actor.roles.includes('super_admin');
   const isAdmin = actor.roles.includes('admin');
 
-  let where;
+  let where: Prisma.UserWhereInput;
   if (isSuper) {
-    where = { deletedAt: null };
+    // **A beneficiary, not a User** (§C4/§C25). This read was `{ deletedAt:
+    // null }` — every account on the platform, so a Super Admin's Quran
+    // selector offered parents, مؤطِّرات and administrators as candidates for
+    // memorisation entry. The educational context is the enrolment, and R79's
+    // durable marker is what says somebody is a مستفيدة at all.
+    where = { deletedAt: null, isBeneficiary: true, levelEnrollments: { some: { deletedAt: null } } };
   } else if (isAdmin) {
     const branches = actor.roleScopes.find((r) => r.role === 'admin')?.branches ?? null;
-    where =
-      branches === null
-        ? { deletedAt: null }
-        : { deletedAt: null, levelEnrollments: { some: { deletedAt: null, branchId: { in: branches } } } };
+    where = {
+      deletedAt: null,
+      isBeneficiary: true,
+      levelEnrollments: {
+        some: { deletedAt: null, ...(branches === null ? {} : { branchId: { in: branches } }) },
+      },
+    };
   } else {
     const subjectId = await quranSubjectId(prisma);
-    if (subjectId === null) return [];
+    if (subjectId === null) return { students: [], levels: [] };
     where = await studentsTaughtBy(prisma, actor.userId, { subjectId });
   }
 
   const rows = await prisma.user.findMany({
     where,
-    select: { id: true, nameArabic: true },
+    select: {
+      id: true,
+      nameArabic: true,
+      levelEnrollments: {
+        where: { deletedAt: null, level: { deletedAt: null, surahs: { some: { deletedAt: null } } } },
+        select: { levelId: true },
+      },
+    },
     orderBy: { nameArabic: 'asc' },
     take: 500,
   });
-  return rows.map((r) => ({ id: r.id, name_arabic: r.nameArabic }));
+
+  // Only the Levels this roster actually reaches — the narrowness is the point.
+  const levelIds = [...new Set(rows.flatMap((r) => r.levelEnrollments.map((e) => e.levelId)))];
+  const levels = await prisma.level.findMany({
+    where: { id: { in: levelIds }, deletedAt: null },
+    select: {
+      id: true,
+      name: true,
+      category: { select: { name: true } },
+      surahs: {
+        where: { deletedAt: null },
+        select: { surah: { select: { surahId: true, nameArabic: true, totalAyahs: true } } },
+        orderBy: { surahId: 'asc' },
+      },
+    },
+    orderBy: { name: 'asc' },
+  });
+
+  return {
+    students: rows.map((r) => ({
+      id: r.id,
+      name_arabic: r.nameArabic,
+      level_ids: [...new Set(r.levelEnrollments.map((e) => e.levelId))],
+    })),
+    levels: levels.map((l) => ({
+      level_id: l.id,
+      level_name: l.name,
+      category_name: l.category.name,
+      surahs: l.surahs.map((x) => ({
+        surah_id: x.surah.surahId,
+        name_arabic: x.surah.nameArabic,
+        total_ayahs: x.surah.totalAyahs,
+      })),
+    })),
+  };
 }
 
 /** `POST /quran-logs` — TD-8 `quranlog.create` (R73.2). */
@@ -298,6 +628,7 @@ export async function logProgress(
   input: QuranLogInput,
 ): Promise<SurahCoverage> {
   await assertCanManageQuranProgress(prisma, actor, input.studentId);
+  await assertLevelCurriculum(prisma, input.studentId, input.levelId, input.surahId);
 
   // The upper bound against `total_ayahs` is enforced by the database trigger
   // (TD-6, since it crosses tables) — asserted here too so the caller receives a
@@ -333,6 +664,10 @@ export async function logProgress(
       targetId: row.id,
       detail: {
         student_id: input.studentId,
+        // §C10/§C26 — the curriculum context the entry was made in, retained
+        // where context belongs. Recalculation never rewrites an audit row, so
+        // this stays true of the moment it was recorded.
+        level_id: input.levelId,
         surah_id: input.surahId,
         range: [input.startAyah, input.endAyah],
         category: input.category,

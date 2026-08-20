@@ -238,6 +238,31 @@ export const ADMIN_MODULES: readonly AdminModule[] = [
   },
   {
     /**
+     * **§C4 — إدخال الحفظ had no back-office node at all** (2026-08-20).
+     *
+     * `assertCanManageQuranProgress` has granted an Admin their branches'
+     * beneficiaries and a Super Admin everyone **since R73**, and
+     * `POST /quran-logs` has enforced it — but §14.1 listed the capability
+     * nowhere in the back office, so nobody could use it. Rule **P**, and the
+     * seventh instance of it on this project.
+     *
+     * **`academic`, not `administration`.** It is an operational act on a
+     * beneficiary's record — the same kind of thing as grade entry, which sits
+     * beside it — not the configuration of a curriculum. `مقرّر الحفظ`
+     * (`/admin/level-surahs`) is the configuration half and stays in الإدارة;
+     * this consumes it.
+     *
+     * `STAFF` because both Admin and Super Admin enter progress, each within
+     * the reach TD-2 gives them. The server decides which; the node does not.
+     */
+    path: '/admin/quran',
+    labelKey: 'admin.nav.quran',
+    section: 'academic',
+    roles: STAFF,
+    status: 'ready',
+  },
+  {
+    /**
      * **R69 — operational, and its own node.** Subdividing a Subject inside a
      * Level and placing students into the circles. Structure is Super Admin and
      * membership is Admin, branch-scoped (R43.3) — the screen gates its own

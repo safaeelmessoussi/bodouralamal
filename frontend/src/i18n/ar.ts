@@ -129,10 +129,17 @@ export const ar = {
     },
     quran: {
       title: 'حفظي',
-      lede: 'ما سُجّل لك من حفظ ومراجعة. النسبة تُحتسب باتحاد المقاطع، فلا يرفعها تكرار المقطع نفسه.',
+      // §C14 — المراجعة تُسجَّل في السجل ولا ترفع نسبة الحفظ.
+      lede: 'سور مقرّرك ونسبة حفظك من كلٍّ منها. المراجعة تُسجَّل في السجل ولا ترفع النسبة.',
       empty: 'لا يوجد حفظ مسجّل بعد. تُسجّله المؤطِّرة بعد السماع.',
+      // A Level whose syllabus is configured but empty — nameable, and not the
+      // same as having no Level at all.
+      emptyLevel: 'لا توجد سور في مقرّر هذا المستوى بعد.',
+      // Surahs she has logged that her current syllabus does not list.
+      beyondSyllabus: 'سور خارج المقرّر',
       history: 'السجل',
       noLogs: 'لا توجد سجلات.',
+      date: 'التاريخ',
       surah: 'السورة',
       range: 'المقطع',
       category: 'النوع',
@@ -681,6 +688,54 @@ export const ar = {
       exams: 'بناء الامتحانات عن بُعد غير متوفر بعد؛ إدخال النقاط متاح.',
     },
   },
+  /**
+   * **إدخال الحفظ — the shared vocabulary** (§20 rule 22, 2026-08-20).
+   *
+   * The back office and the teaching portal render ONE workspace
+   * (`QuranWorkspace`), so its words live at the top level rather than under
+   * `teacher.*`. A copy under each portal is how «حفظ جديد» comes to mean two
+   * slightly different things on two screens — and the caller's own portal
+   * supplies the chrome, not the vocabulary.
+   */
+  quran: {
+    level: 'المستوى',
+    chooseLevel: 'اختاري المستوى',
+    surah: 'السورة',
+    chooseSurah: 'اختاري السورة',
+    startAyah: 'من الآية',
+    endAyah: 'إلى الآية',
+    ofTotal: 'عدد آيات السورة:',
+    category: 'النوع',
+    newMemorization: 'حفظ جديد',
+    revision: 'مراجعة',
+    log: 'تسجيل المقطع',
+    savedMemorization: 'سُجّل الحفظ وحُدّثت النسبة.',
+    savedRevision: 'سُجّلت المراجعة. نسبة الحفظ لا تتغيّر بالمراجعة.',
+    deleted: 'حُذف السجل وأُعيد احتساب النسبة.',
+    coverage: 'نسبة الحفظ',
+    noProgress: 'لا يوجد حفظ مسجّل بعد.',
+    history: 'السجل',
+    range: 'المقطع',
+    loggedBy: 'سجّلته',
+    deleteTitle: 'حذف السجل',
+    deleteBody: 'سيُعاد احتساب نسبة الحفظ بعد الحذف.',
+    rosterCaption: 'المستفيدات اللواتي يمكنك تسجيل حفظهنّ',
+    colStudent: 'المستفيدة',
+    searchPlaceholder: 'ابحثي باسم المستفيدة…',
+    openStudent: 'الحفظ',
+    backToStudents: 'كل المستفيدات',
+    workingOn: 'المستفيدة:',
+    outOfScope: 'هذه المستفيدة خارج نطاقك.',
+    // A real, nameable state: her مستويات لا تُقرَّر لها سور بعد — different
+    // from an empty roster and from a failed read.
+    noCurriculum: 'لا يوجد مقرّر حفظ مُعدّ لمستويات هذه المستفيدة.',
+    errFrom: 'رقم الآية الأولى يبدأ من 1.',
+    errTo: 'أدخلي رقم آية صحيحًا.',
+    errReversed: 'الآية الأخيرة قبل الأولى.',
+    errPastEnd: 'رقم الآية يتجاوز عدد آيات السورة.',
+    errSurahNotInLevel: 'هذه السورة ليست في مقرّر هذا المستوى.',
+    errLevelNotEnrolled: 'المستفيدة غير مسجّلة في هذا المستوى.',
+  },
   session: {
     notFound: 'لا توجد حصة بهذا العنوان.',
     backToCalendar: 'العودة إلى الجدول',
@@ -867,6 +922,8 @@ export const ar = {
       examGrades: 'نقاط الامتحانات',
       levelSubjects: 'مواد المستوى',
       levelSurahs: 'مقرر الحفظ',
+      // §C4 — الإدخال العملي، مقابل «مقرر الحفظ» الذي يُعِدّ المقرّر نفسه.
+      quran: 'إدخال الحفظ',
       teachingGroups: 'حلقات المواد',
       scheduling: 'الجدولة',
       levels: 'المستويات',
@@ -1387,6 +1444,9 @@ export const ar = {
       notInAudience: 'إحدى المستفيدات ليست ضمن نطاق هذا الامتحان.',
       versionConflict: 'عُدّلت النقاط من جهة أخرى. أعيدي تحميل الصفحة.',
       outOfScope: 'هذا الامتحان خارج نطاق تدريسك.',
+    },
+    quran: {
+      lede: 'تسجيل ما حفظته المستفيدة ومراجعتها. السور المعروضة هي سور مقرّر مستواها.',
     },
     levelSurahs: {
       lede: 'السور المقرّرة على كل مستوى، وما أتمّته المستفيدات منها. إتمام المستوى يعني تغطية كل سورة مقرّرة بنسبة 100%.',
