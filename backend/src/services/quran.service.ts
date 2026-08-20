@@ -238,13 +238,13 @@ export async function recalculateFor(
    * titled *Quran **Memorization** Tracking*. Counting a revision as new
    * memorisation is the defect §14 of the Owner's brief describes.
    *
-   * **Recorded tension, for the Document Owner.** §4.5/BR-13 says *"the union
-   * of **all** merged, non-overlapping logged intervals per Surah"*, and *all*
-   * read literally includes revision. The SRS is immutable to an implementing
-   * agent, so **this is implemented and reported rather than written into
-   * §4.5** — it needs a Document Owner revision to become normative wording.
-   * BR-13's stated worked example is unaffected either way: its three ranges
-   * carry no category, and the union still merges them to `[10–123]` = 114.
+   * **Normative since SRS Revision 95** (Document Owner, 2026-08-20). §4.5 and
+   * BR-13 define coverage as the union of *"all"* logged intervals; R95
+   * qualifies *all* to mean **all `new_memorization` intervals**, leaving the
+   * earlier wording in place so the correction stays legible beside it. BR-13's
+   * worked example is unaffected: its three ranges carry no category, and the
+   * union still merges them to `[10–123]` = 114. **BR-11 follows** — level
+   * completion reads this figure, so revision cannot complete a Level.
    */
   const memorization = logs.filter((l) => l.category === 'new_memorization');
   const revisions = logs.filter((l) => l.category === 'revision');

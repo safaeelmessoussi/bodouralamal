@@ -52,13 +52,15 @@ second worse:
 `category` exists precisely to tell the two apart, and §4.5 is titled *Quran
 **Memorization** Tracking*.
 
-> **⚠ Recorded tension, for the Document Owner.** §4.5/BR-13 says *"the union of
-> **all** merged, non-overlapping logged intervals per Surah"*, and *all* read
-> literally includes revision. The SRS is immutable to an implementing agent, so
-> this is **implemented and reported, not written into §4.5** — it needs an
-> explicit revision to become normative wording. BR-13's worked example is
-> unaffected either way: its three ranges carry no category, and the union still
-> merges them to `[10–123]` = 114.
+> **Ratified by SRS Revision 95** (Document Owner, 2026-08-20). §4.5 and BR-13
+> define coverage as the union of *"all"* logged intervals, and *all* read
+> literally included revision — which is how the engine behaved. R95 qualifies
+> the word rather than rewriting it in place, so the original wording and the
+> correction stay legible side by side: **`new_memorization` intervals are the
+> only inputs to memorization coverage; `revision` intervals never are.** BR-13's
+> merge is untouched, and its worked example still holds exactly — those three
+> ranges carry no category. **BR-11 follows automatically**: level completion
+> reads memorization coverage only and cannot be raised by revision activity.
 
 Revision is not discarded. `revision_log_count` and `last_revised_at` come back
 with every coverage row, and the log itself is preserved and displayed — *has

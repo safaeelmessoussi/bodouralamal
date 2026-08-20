@@ -617,7 +617,7 @@
 - [x] Shared `ProgressBar`; حفظي shows the whole syllabus, grouped by Level
 - [x] **Backend CI typecheck was red on `develop`** — 12 pre-existing errors fixed
 - [x] 26 new integration cases · 16 frontend guards + 1 CI shell guard (the CSS invariant cannot live in vitest) · `verify-quran-entry` **24/24** · 19 CI guards · 25 browser harnesses / 556 checks
-- [ ] **Document Owner decision needed**: ratify the memorisation-vs-revision semantics in §4.5/BR-13
+- [x] **SRS Revision 95** ratifies the memorisation-vs-revision semantics — `new_memorization` alone feeds coverage, `revision` is recorded and never inflates it, BR-13's merge and BR-11 unchanged in substance
 - [ ] **NEXT**: one shared occurrence-details dialog (§9–§10) · direct Session recordings/materials (§11–§15) · beneficiary QR (§16–§25)
 
 ### Notification root causes + landing pages (2026-08-20)

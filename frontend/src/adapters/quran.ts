@@ -19,8 +19,8 @@ export interface SurahCoverage {
   name_arabic: string;
   total_ayahs: number;
   merged_ayah_count: number;
-  /** **Memorisation only.** مراجعة is counted below, never folded in here — see
-   *  `recalculateFor` for why, and for the SRS wording that needs ratifying. */
+  /** **Memorisation only** (SRS R95). مراجعة is counted below, never folded in
+   *  here: `revision` intervals are recorded but are never inputs to coverage. */
   coverage_percent: number;
   merged_intervals: AyahInterval[];
   revision_log_count: number;
