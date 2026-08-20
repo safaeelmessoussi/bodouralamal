@@ -56,15 +56,65 @@ export interface PortalModule {
    */
   requiresCapability?: 'teachesQuran';
   /**
+   * **This module's subject is the ACTING person, not the account holder**
+   * (R96.1, §4.3).
+   *
+   * The beneficiary portal is read by two kinds of caller: the مستفيدة herself,
+   * and a **guardian acting for a linked child**. Every page in it already
+   * resolves its subject through the active-child mechanism and sends
+   * `X-Active-Child-ID`, so what it renders is *the acting student's* record —
+   * hers when she reads it, her child's when a guardian does.
+   *
+   * **This admits a guardian; it does not give her a student role**, and it
+   * broadens nothing for anybody else. The authority is the approved
+   * `FamilyLink` the server verifies on every request (§4.3); a `parent` who
+   * has selected no child, or who forges an unrelated id, is refused there —
+   * exactly as before, because none of that changed.
+   *
+   * **Required on beneficiary modules rather than optional**, so a new one
+   * cannot be added without answering *whose record does this show*. A module
+   * that reads the account holder must say `false` and stay closed to a
+   * guardian — otherwise it would quietly show her **her own** data while a
+   * banner named her child, which is the failure this flag exists to prevent.
+   */
+  childContext?: boolean;
+  /**
    * For a blocked module: what is missing, as an i18n key. Shown on the page so
    * the reader learns the reason rather than meeting an apology.
    */
   blockedReasonKey?: string;
 }
 
-/** Whether the session holds any of the roles a module requires (TD-2). */
-export function canAccess(module: PortalModule, roles: readonly string[]): boolean {
-  return module.roles.some((role) => roles.includes(role));
+/**
+ * Whether the session may open this module (TD-2).
+ *
+ * Two ways in, and the second is not a widening of the first:
+ *
+ * 1. the session holds one of the module's roles; or
+ * 2. the module's subject is the acting person and the session **is actively
+ *    acting for a linked child** — a guardian, who holds no student role and
+ *    gains none.
+ *
+ * `actingForChild` defaults to `false`, so every existing caller keeps exactly
+ * today's behaviour and nothing is broadened by omission.
+ */
+export function canAccess(
+  module: PortalModule,
+  roles: readonly string[],
+  context: { actingForChild?: boolean } = {},
+): boolean {
+  if (module.roles.some((role) => roles.includes(role))) return true;
+  /**
+   * **The guardian arm names the role it depends on**, rather than trusting
+   * every caller to have computed `actingForChild` correctly. A predicate that
+   * is only safe because one call site is careful is a predicate that becomes
+   * unsafe at the second call site — the lesson rule AE records.
+   */
+  return (
+    module.childContext === true &&
+    context.actingForChild === true &&
+    roles.includes('parent')
+  );
 }
 
 /** The modules of one portal a given session may see, in the list's own order. */
@@ -78,10 +128,10 @@ export function visibleIn<T extends PortalModule>(
    * caller that has not asked the server sees less rather than a menu entry the
    * server would then refuse.
    */
-  capabilities: { teachesQuran?: boolean } = {},
+  capabilities: { teachesQuran?: boolean; actingForChild?: boolean } = {},
 ): T[] {
   return modules.filter((module) => {
-    if (!canAccess(module, roles)) return false;
+    if (!canAccess(module, roles, capabilities)) return false;
     if (module.requiresCapability === 'teachesQuran') return capabilities.teachesQuran === true;
     return true;
   });

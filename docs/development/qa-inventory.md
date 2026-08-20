@@ -98,6 +98,7 @@ under the table.
 | `verify-library-recorder.sh` | 19 | The second recorder entry point, and the sort indicator | 16/16 |
 | `verify-grading.sh` | 14d, 16 | R81 — the exam's own maximum, empty ≠ zero, publish notifies and a draft is silent | 16/16 |
 | `verify-teaching-profile.sh` | 15, 15b | **AQ/X** — ownership of «الملف التدريسي», the population, Arabic weekdays, a range that survives a reload | 13/13 |
+| `verify-guardian-child.sh` | 26 | **R96.1** — a parent-only account driven through the account switcher: her own QR, two linked children in turn each showing that child's own `user_qr_ref`, back to her own, plus a forged unrelated child and a revoked FamilyLink both refused | 12/12 |
 | `verify-user-qr.sh` | 25 | **R96** — four identities each seeing their own square, four distinct payloads, no PII or role, child context serving the child, and the reference refused as a credential with cookies cleared | 11/11 |
 | `verify-quran-entry.sh` | 24 | **Section C** — إدخال الحفظ driven as ten identities: Admin and مؤطِّرة and assistant entry, حفظي's bars and history, reload persistence, whole-Level/Group/Circle rosters, R88 granting nothing, R91 both ways, R92 reached then narrowed, مراجعة not inflating, two-Level grouping, a forged Surah refused | 24/24 |
 | `verify-occurrence-details.sh` | 23 | **AT** — the one details dialog opened from all four calendars on a real Session; two content sections; no page step; every focused read a 200 | 13/13 |

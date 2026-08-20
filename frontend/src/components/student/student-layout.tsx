@@ -10,6 +10,7 @@ import {
 } from '../../lib/student-modules.js';
 import { NavItem } from '../portal/nav-item.js';
 import { PortalShell } from '../portal/portal-shell.js';
+import { useActiveChild } from '../../contexts/active-child.js';
 
 /**
  * The beneficiary's frame — **the same one** the back office and the teaching
@@ -36,9 +37,31 @@ export function StudentLayout({
 }): ReactNode {
   // **The ACTIVE role, not the account's roles** (R60) — a person working as a
   // beneficiary sees a beneficiary's menu even if she also teaches.
-  const { activeRoles: roles } = useActiveRole();
+  const { activeRoles: roles, activeRole } = useActiveRole();
+
+  /**
+   * **A guardian acting for a linked child reaches this portal** (R96.1, §4.3).
+   *
+   * Both halves are required, and each rules out a different mistake:
+   *
+   * * `activeRole === 'parent'` — a person who is *also* a beneficiary and is
+   *   working as one sees **her own** record, not her child's. The capacity
+   *   decides, exactly as `role-home.ts` says it does.
+   * * `activeChildId !== null` — a parent who has selected nobody has no
+   *   subject, so there is nothing for this portal to show and she is not
+   *   admitted. `ActiveChildProvider` reconciles the stored id against the
+   *   approved links `/me` returns, so a revoked link leaves this `null` on the
+   *   next load and access ends with it.
+   *
+   * **She gains no role and nothing is broadened.** The authority is the
+   * approved `FamilyLink` the server verifies on every request; this only stops
+   * the interface refusing a person the server would serve.
+   */
+  const { activeChildId } = useActiveChild();
+  const actingForChild = activeRole === 'parent' && activeChildId !== null;
+
   const current = studentModuleForPath(window.location.pathname);
-  const permitted = current ? canAccess(current, roles) : false;
+  const permitted = current ? canAccess(current, roles, { actingForChild }) : false;
 
   return (
     <PortalShell
@@ -46,7 +69,7 @@ export function StudentLayout({
       lede={lede}
       actions={actions}
       permitted={permitted}
-      sidebar={<StudentSidebar roles={roles} current={current} />}
+      sidebar={<StudentSidebar roles={roles} current={current} actingForChild={actingForChild} />}
     >
       {children}
     </PortalShell>
@@ -61,11 +84,13 @@ export function StudentLayout({
 function StudentSidebar({
   roles,
   current,
+  actingForChild,
 }: {
   roles: readonly string[];
   current: StudentModule | null;
+  actingForChild: boolean;
 }): ReactNode {
-  const modules = visibleStudentModules(roles);
+  const modules = visibleStudentModules(roles, { actingForChild });
   return (
     <nav className="admin-nav" aria-label={t('student.nav.label')}>
       <ul className="admin-nav__list">

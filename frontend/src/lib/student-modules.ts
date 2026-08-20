@@ -26,7 +26,23 @@ import {
  */
 const STUDENT = ['student'] as const;
 
-export type StudentModule = PortalModule;
+/**
+ * **`childContext` is REQUIRED here**, unlike on the shared type (R96.1).
+ *
+ * This portal is read by two kinds of caller — the مستفيدة herself and a
+ * **guardian acting for a linked child** — so every entry must answer *whose
+ * record does this show*. Making it required means a new beneficiary module
+ * cannot be added without answering it: the alternative is a screen that shows
+ * a guardian **her own** data while the banner names her child.
+ *
+ * This is what `role-home.ts` has always assumed. It sends a parent to
+ * `/dashboard/student` and records that *"the active role decides whether it
+ * renders their own record or their child's"* — while `canAccess` refused her
+ * on arrival, so a parent-only account selecting a child was navigated straight
+ * into «ليست لديك صلاحية لعرض هذه الصفحة». The intent was written down; only
+ * the gate disagreed.
+ */
+export type StudentModule = PortalModule & { childContext: boolean };
 
 export const STUDENT_MODULES: readonly StudentModule[] = [
   {
@@ -40,11 +56,15 @@ export const STUDENT_MODULES: readonly StudentModule[] = [
     path: '/dashboard/student',
     labelKey: 'student.nav.dashboard',
     roles: STUDENT,
+    // Reads `activeChildId` and names the child in a banner (R62.10).
+    childContext: true,
     status: 'ready',
   },
   {
     /** Her own week, from `/me/calendar` (R82.8) — never the public timetable. */
     path: '/dashboard/student/calendar',
+    // `/me/calendar` resolved for the acting student (R85).
+    childContext: true,
     labelKey: 'student.nav.calendar',
     roles: STUDENT,
     status: 'ready',
@@ -56,6 +76,8 @@ export const STUDENT_MODULES: readonly StudentModule[] = [
      * and she landed on the whole curriculum to hunt for her own Level.
      */
     path: '/dashboard/student/library',
+    // Scoped to the acting student's own enrolments (R86).
+    childContext: true,
     labelKey: 'student.nav.content',
     roles: STUDENT,
     status: 'ready',
@@ -63,6 +85,8 @@ export const STUDENT_MODULES: readonly StudentModule[] = [
   {
     /** §4.5 — what she has memorised, as her مؤطرة recorded it. */
     path: '/dashboard/student/quran',
+    // `/students/me/quran` under child context (§4.5, M4b).
+    childContext: true,
     labelKey: 'student.nav.quran',
     roles: STUDENT,
     status: 'ready',
@@ -70,6 +94,8 @@ export const STUDENT_MODULES: readonly StudentModule[] = [
   {
     /** §5.3 — published grades only, `score / max_grade` (R81). */
     path: '/dashboard/student/grades',
+    // `/students/me/grades` under child context (BR-8).
+    childContext: true,
     labelKey: 'student.nav.grades',
     roles: STUDENT,
     status: 'ready',
@@ -84,6 +110,8 @@ export const STUDENT_MODULES: readonly StudentModule[] = [
      * Category/Level/Branch the Owner moved off the landing page (R86).
      */
     path: '/dashboard/student/account',
+    // `/students/me` under child context — and R96's QR.
+    childContext: true,
     labelKey: 'student.nav.account',
     roles: STUDENT,
     status: 'ready',
@@ -91,8 +119,13 @@ export const STUDENT_MODULES: readonly StudentModule[] = [
 ];
 
 /** The modules this session may see — the shared predicate, not a local copy. */
-export function visibleStudentModules(roles: readonly string[]): StudentModule[] {
-  return visibleIn(STUDENT_MODULES, roles);
+export function visibleStudentModules(
+  roles: readonly string[],
+  /** A guardian acting for a linked child reaches this portal's modules
+   *  without holding — or gaining — the student role (R96.1). */
+  context: { actingForChild?: boolean } = {},
+): StudentModule[] {
+  return visibleIn(STUDENT_MODULES, roles, context);
 }
 
 /** The module a path belongs to, or `null` — the shared resolver. */
@@ -101,6 +134,10 @@ export function studentModuleForPath(pathname: string): StudentModule | null {
 }
 
 /** Whether this session may open the module (UX layer; the server decides). */
-export function canAccess(module: StudentModule, roles: readonly string[]): boolean {
-  return canAccessModule(module, roles);
+export function canAccess(
+  module: StudentModule,
+  roles: readonly string[],
+  context: { actingForChild?: boolean } = {},
+): boolean {
+  return canAccessModule(module, roles, context);
 }

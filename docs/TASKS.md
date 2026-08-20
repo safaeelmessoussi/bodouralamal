@@ -627,7 +627,7 @@
 - [x] One shared `UserQr`; `/profile` = account holder, beneficiary view = acting student
 - [x] 7 unit · 15 integration · `verify-user-qr` **11/11** · 19 CI guards
 - [ ] **Owner decision**: should every beneficiary carry a spoken `referenceCode`? (R62 gap)
-- [ ] **Owner decision**: a `parent`-only account can open no beneficiary-portal screen
+- [x] **Fixed (R96.1)** — a `parent`-only account acting for a linked child now reaches every beneficiary screen through the shared gate; no role widened, new rule **AW**, `verify-guardian-child` **12/12**
 - [ ] **NEXT**: one shared occurrence-details dialog (§9–§10) · direct Session recordings/materials (§11–§15) · beneficiary QR (§16–§25)
 
 ### Notification root causes + landing pages (2026-08-20)

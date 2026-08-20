@@ -76,13 +76,48 @@ a reference.
 no card, so each square is captioned with whose it is — in a family of three
 children, three unlabelled squares are indistinguishable.
 
-> **Recorded defect, not fixed here.** A `parent`-only account **cannot open any
-> beneficiary-portal screen**: `student-modules.ts` admits `['student']`, so
-> `/dashboard/student/account` answers *«ليست لديك صلاحية لعرض هذه الصفحة»* for a
-> guardian. The child-context QR is served correctly by the server — proved
-> through the guardian's own token and the `X-Active-Child-ID` header — but she
-> has no page to read it on. **The permission was not widened to make a check
-> pass** (rule O); the gate is reported for an Owner decision.
+### A guardian reaches her child's screens (fixed 2026-08-20)
+
+R96 shipped with this recorded as a defect: a `parent`-only account **could not
+open any beneficiary-portal screen**, so the child's QR was served correctly and
+had nowhere to be read. **The gap was never about the QR.**
+
+`role-home.ts` sends a parent to `/dashboard/student` and has always recorded
+why — *"a parent therefore lands where their child's data is … and the active
+role decides whether it renders their own record or their child's"*. Meanwhile
+`canAccess` gated every beneficiary module on `roles: ['student']`, so a
+guardian selecting a child was navigated **straight into** «ليست لديك صلاحية
+لعرض هذه الصفحة». The intent was written down; only the gate disagreed — and
+every beneficiary page already resolved its subject through the active-child
+mechanism, so the screens themselves were ready.
+
+**The fix is in the shared gate, not in a QR route.** `PortalModule` gains
+`childContext`, and `canAccess` admits a caller when *either* she holds one of
+the module's roles *or* the module's subject is the acting person **and** she is
+a `parent` actively acting for a linked child:
+
+```
+canAccess(module, roles, { actingForChild })
+  → module.roles ∩ roles ≠ ∅
+  → OR (module.childContext && actingForChild && roles includes 'parent')
+```
+
+* **She gains no student role**, and every module's `roles` array is untouched.
+* **`actingForChild` defaults to `false`**, so every existing caller keeps
+  exactly today's behaviour; nothing is broadened by omission.
+* **The predicate names the `parent` role itself** rather than trusting each
+  caller to compute the flag correctly — rule AE's lesson, applied here.
+* **`childContext` is REQUIRED on `StudentModule`**, so a new beneficiary module
+  cannot be added without answering *whose record does this show*. A screen that
+  read the account holder would otherwise silently show a guardian **her own**
+  data while the banner named her child.
+
+**Authorization did not move.** The authority is still the approved `FamilyLink`
+the server verifies against `X-Active-Child-ID` on every request (§4.3). A
+forged unrelated child and a revoked link are both refused **404** by the rules
+that already existed, and `ActiveChildProvider` reconciles the stored id against
+the links `/me` returns — so a revoked link leaves the context `null` on the
+next load and access ends with it.
 
 ## It identifies; it never authenticates
 
@@ -111,4 +146,6 @@ itself.
 |---|---|
 | [`lib/qr-identity.test.ts`](../../backend/src/lib/qr-identity.test.ts) | the versioned `user:` scheme · no PII and no role in the payload · round-trip and refusal of foreign payloads · parsing yields a reference, never a user · deterministic and per-person matrices |
 | [`services/qr-identity.integration.test.ts`](../../backend/src/services/qr-identity.integration.test.ts) | ten populations each get one · not the primary key · **a raw SQL INSERT still gets one** · the table-wide invariant · stability across role add/remove, several roles at once, enrolment, beneficiary status, FamilyLink, soft delete and restore · which surface serves whom · no credential derivable |
+| [`lib/guardian-portal.test.ts`](../../frontend/src/lib/guardian-portal.test.ts) | the gate matches `role-home`'s intent · a parent with no child selected is refused · no student role granted and no module's `roles` widened · a teacher or admin acting for a child is still refused · omitting the context is today's behaviour · every beneficiary module declares `childContext` |
+| [`scripts/dev/browser/verify-guardian-child.mjs`](../../scripts/dev/browser/verify-guardian-child.mjs) | a parent-only account driven through the switcher: her own QR, then **two** children in turn, each showing that child's own `user_qr_ref` and caption, then back to her own — plus a forged unrelated child and a revoked link, both refused |
 | [`scripts/dev/browser/verify-user-qr.mjs`](../../scripts/dev/browser/verify-user-qr.mjs) | four identities each seeing their own square on a real screen · four distinct payloads · the "identifies only" wording · child context serving the child · the child seeing the same identity herself · the reference refused as a credential with cookies cleared |

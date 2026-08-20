@@ -1246,6 +1246,43 @@ reading nothing. It was written as a vitest assertion first and caught only by
 its own non-empty check, which is the tell CLAUDE.md names: **a guard that has
 never failed.**
 
+## AW · A portal module must say whose record it shows
+
+The beneficiary portal is read by two kinds of caller — the مستفيدة herself, and
+a **guardian acting for a linked child** — so every module in it declares
+`childContext`, and the type makes it **required** rather than optional. A new
+screen cannot be added without answering the question.
+
+**The failure this prevents is silent and specific**: a screen that reads the
+account holder, admitted to a guardian, shows her **her own** data while the
+banner names her child. Nothing errors, nothing looks wrong, and the reader
+draws a conclusion about the wrong person.
+
+### Reachability is not authorization, and this is the difference
+
+`canAccess` admits a guardian to those modules; it grants her nothing. The
+authority is the approved `FamilyLink` the server verifies against
+`X-Active-Child-ID` on **every** request (§4.3) — a forged child and a revoked
+link are both refused there, exactly as before. **The permission was not widened
+to make a screen work** (rule O): no module's `roles` array changed, the
+guardian holds no student role, and `actingForChild` defaults to `false` so
+nothing is broadened by omission.
+
+**The predicate names the role it depends on.** `canAccess` checks
+`roles.includes('parent')` itself instead of trusting each caller to have
+computed the flag correctly — the same lesson rule **AE** records, applied to a
+gate rather than a selector.
+
+### The tell was a documented intent the code contradicted
+
+`role-home.ts` sends a parent to `/dashboard/student` and says *"the active role
+decides whether it renders their own record or their child's"*. The gate refused
+her on arrival, so selecting a child navigated a parent **into a permission
+error** — and every beneficiary screen, all of which already resolved their
+subject through the active-child mechanism, was unreachable to her. **When a
+comment states an intent the code does not implement, the comment is evidence,
+not decoration.**
+
 ## AR · Planning data advises the chooser; it never narrows the choice
 
 A screen that knows something about the people in a list may **annotate** them.
@@ -1576,6 +1613,7 @@ system's internals, break on every restyle, and catch nothing.
 | `teaching-group.http.integration.test.ts` | the flat read grants nothing, every filter narrows, TD-10 pagination, Admin-only |
 | [`pages/admin/teachers.test.tsx`](../../frontend/src/pages/admin/teachers.test.tsx) | **AQ** — the action left `المستخدمون` (label *and* component) · the node exists, is routed and sits beside `التسجيلات` · the population is asked by role and never excludes beneficiaries · **one** teaching-profile editor · **X** — the weekday keys resolve, `calendar.weekday` stays absent |
 | `user-management.http.integration.test.ts` | **AQ** — `role=teacher` and `beneficiaries_only` are complements: a مؤطِّرة who also studies is in both lists, and a revoked role leaves the teaching list |
+| [`lib/guardian-portal.test.ts`](../../frontend/src/lib/guardian-portal.test.ts) | **AW** — the gate matches `role-home`'s stated intent · a parent with no child is refused · no role widened · a teacher or admin acting for a child is still refused · every beneficiary module declares `childContext` |
 | [`components/quran/quran-entry.test.ts`](../../frontend/src/components/quran/quran-entry.test.ts) | **AU, AV** — one workspace and one writer · the curriculum drives the Surah list, never 114 · never `level_ids[0]` · a failed read is not an empty roster · the full ARIA meter contract · no second progress meter anywhere |
 | [`scripts/ci/check-progress-css.sh`](../../scripts/ci/check-progress-css.sh) | **AV** — logical sizing, a clipped track and `prefers-reduced-motion`, proved against the defect it exists for |
 | [`components/calendar/shared-details.test.ts`](../../frontend/src/components/calendar/shared-details.test.ts) | **AT** — all four calendars render the shared dialog **and** none discards the click · two content sections with two empty states · nothing claimed before a 200 · no Session-page step · the focused read carries the caller's token |

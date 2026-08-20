@@ -77,16 +77,62 @@ const teacher = await person('نادية المؤطرة', teacherRole.id);
 const adult = await person('سعاد المستفيدة', studentRole.id, true);
 const guardian = await person('أمينة ولية الأمر', parentRole?.id ?? null);
 const child = await person('لينا الطفلة', studentRole.id, true);
+/** A SECOND linked child, so switching context can be proved to switch person. */
+const child2 = await person('سارة الطفلة الثانية', studentRole.id, true);
+/**
+ * **An unrelated child**, linked to nobody in this fixture. She exists so the
+ * forgery case has a REAL id to forge — refusing a random UUID would only prove
+ * the row does not exist, not that the link is what is checked.
+ */
+const outsider = await person('هند طفلة غير مرتبطة', studentRole.id, true);
+/**
+ * A link that was approved and then **revoked**. Revocation is a **soft
+ * delete**, not a status: §7 records that `status` is a *decided* value (TD-1)
+ * and that overloading it would make *is this link live* unanswerable. So the
+ * fixture revokes the way the platform does.
+ */
+const revokedChild = await person('نور طفلة برابط ملغى', studentRole.id, true);
 
 await prisma.enrollment.create({
   data: { studentId: adult, levelId: level.id, branchId: branch.id },
 });
-await prisma.enrollment.create({
-  data: { studentId: child, levelId: level.id, branchId: branch.id },
-});
+for (const s of [child, child2, outsider, revokedChild]) {
+  await prisma.enrollment.create({
+    data: { studentId: s, levelId: level.id, branchId: branch.id },
+  });
+}
+for (const s of [child, child2]) {
+  await prisma.familyLink.create({
+    data: { parentId: guardian, studentId: s, status: 'approved' },
+  });
+}
+// Revoked, not absent: `/me` must stop listing her and the server must refuse
+// the header — the existing FamilyLink rules, unchanged by R96.
 await prisma.familyLink.create({
-  data: { parentId: guardian, studentId: child, status: 'approved' },
+  data: {
+    parentId: guardian,
+    studentId: revokedChild,
+    status: 'approved',
+    deletedAt: new Date(),
+  },
 });
 
-console.log(JSON.stringify({ teacher, adult, guardian, child, level: level.id, branch: branch.id }));
+/**
+ * The children's own `user_qr_ref` values, so the harness can assert that what
+ * is on screen encodes **that child's** identity rather than merely differing
+ * from the parent's. Read back rather than generated here: the column is
+ * database-defaulted (R96.6), so this is the only place the value exists.
+ */
+const qrOf = async (id: string): Promise<string> =>
+  (await prisma.user.findUniqueOrThrow({ where: { id }, select: { qrRef: true } })).qrRef;
+
+console.log(
+  JSON.stringify({
+    teacher, adult, guardian, child, child2, outsider, revokedChild,
+    childQr: await qrOf(child),
+    child2Qr: await qrOf(child2),
+    guardianQr: await qrOf(guardian),
+    level: level.id, branch: branch.id,
+  }),
+);
 await prisma.$disconnect();
