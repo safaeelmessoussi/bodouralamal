@@ -98,7 +98,7 @@ under the table.
 | `verify-library-recorder.sh` | 19 | The second recorder entry point, and the sort indicator | 16/16 |
 | `verify-grading.sh` | 14d, 16 | R81 — the exam's own maximum, empty ≠ zero, publish notifies and a draft is silent | 16/16 |
 | `verify-teaching-profile.sh` | 15, 15b | **AQ/X** — ownership of «الملف التدريسي», the population, Arabic weekdays, a range that survives a reload | 13/13 |
-| `verify-notify-ui.sh` | 21 | **The notification pipeline as a person uses it** — clicks «إرسال الإشعار», logs in as the recipient, reads the notice from her own bell; R91 and R92 recipients included | 27/27 |
+| `verify-notify-ui.sh` | 21 | **The notification pipeline as a person uses it** — clicks «إرسال الإشعار», logs in as the recipient, reads the notice from her own bell; R91/R92 recipients, **and the grade-republish reactivation** | 32/32 |
 | `verify-cross-branch.sh` | 15g, 20 | **R91 × R92** — six identities on one combined occurrence: audience, venue, calendars, notifications and staffing, each asked of the person it concerns | 16/16 |
 | `verify-effective-staffing.sh` | 15e, 15f | **R91** — the replacement as four identities: dated rows, Safa twice, per-date occurrences, and a handover that leaves the past alone | 13/13 |
 | `verify-staff-picker.sh` | 15c, 10 | **AR** — five مؤطِّرات an administrator must tell apart; all offered, each marked **before** the choice and named after it, nothing disabled, the one with no profile assigned anyway | 13/13 |
@@ -108,10 +108,12 @@ under the table.
 | `verify-circles-reorder.sh` | 9 | R78.1 — ordering حلقات المواد within a `(level, subject)` pairing | 9/9 |
 | `measure-page-header.sh` | shared UI | Header layout measured in a browser at nine widths | 9/9 widths |
 
-**503 checks across 22 harnesses, all green** (2026-08-20), plus
+**508 checks across 22 harnesses, all green** (2026-08-20), plus
 `measure-page-header`'s nine width measurements — 23 scripts in
 `scripts/dev/browser/` and 23 rows here. Every row was run in one pass; none is
-carried forward.
+carried forward. `verify-circles-reorder` failed once on keyboard-reorder timing
+and passed 9/9 on re-run — recorded because a transient that is not written down
+is one somebody re-investigates.
 
 ### Why `verify-notifications` was green while the feature was not
 

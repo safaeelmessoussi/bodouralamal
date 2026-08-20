@@ -194,7 +194,12 @@ async function makeEvent(
 }
 
 const notificationsOf = (userId: string) =>
-  prisma.notification.findMany({ where: { userId }, select: { type: true, eventId: true, examId: true } });
+  prisma.notification.findMany({
+    where: { userId },
+    // `id` and `readAt` too: the republish rule is about a row becoming UNREAD
+    // again, which cannot be observed from the type alone.
+    select: { id: true, type: true, eventId: true, examId: true, readAt: true },
+  });
 
 /* ── the target constraint ──────────────────────────────────────────────── */
 
@@ -403,14 +408,57 @@ describe("a published grade notifies the student it is about (R82.4)", () => {
     expect((await notificationsOf(studentB)).filter((n) => n.examId === examId)).toHaveLength(0);
   });
 
-  it("re-publishing adds nothing — idempotent by the unique index", async () => {
+  /**
+   * **Restated 2026-08-20 — the RULE changed, so the test did.**
+   *
+   * This asserted `notified: 0` after a republish that changed the score,
+   * pinning R82.4's *re-publication writes nothing*. The Owner reported the
+   * consequence from real use: a student who read the notice, saw one mark and
+   * was later given another had nothing anywhere telling her to look again.
+   *
+   * The row is still one per (student, exam) — a list repeating *your grade was
+   * published* is noise, and the fact announced is the same fact. What changed
+   * is that a **real change reactivates it**.
+   */
+  it("re-publishing after the score CHANGED makes the notice unread again", async () => {
+    // Read it first, so "unread again" is an observation rather than an
+    // assumption about a row that was never read.
+    const before = (await notificationsOf(studentA)).filter((n) => n.examId === examId);
+    expect(before).toHaveLength(1);
+    await prisma.notification.update({
+      where: { id: before[0]!.id },
+      data: { readAt: new Date() },
+    });
+
     await call("PUT", `/exams/${examId}/grades`, adminToken, {
       entries: [{ student_id: studentA, score: 17, absent: false }],
     });
     const res = await call("POST", `/exams/${examId}/grades/publish`, adminToken);
     expect(res.status).toBe(200);
+    expect((res.body.data as { notified: number }).notified).toBe(1);
+
+    const after = (await notificationsOf(studentA)).filter((n) => n.examId === examId);
+    // **Still ONE row**, and unread again.
+    expect(after).toHaveLength(1);
+    expect(after[0]!.readAt).toBeNull();
+  });
+
+  it("and re-publishing with NOTHING changed makes no noise", async () => {
+    const before = (await notificationsOf(studentA)).filter((n) => n.examId === examId);
+    await prisma.notification.update({
+      where: { id: before[0]!.id },
+      data: { readAt: new Date() },
+    });
+
+    // No `PUT` — the sheet is republished exactly as it stands.
+    const res = await call("POST", `/exams/${examId}/grades/publish`, adminToken);
+    expect(res.status).toBe(200);
     expect((res.body.data as { notified: number }).notified).toBe(0);
-    expect((await notificationsOf(studentA)).filter((n) => n.examId === examId)).toHaveLength(1);
+
+    const after = (await notificationsOf(studentA)).filter((n) => n.examId === examId);
+    expect(after).toHaveLength(1);
+    // Left read: nothing happened, so nothing is announced.
+    expect(after[0]!.readAt).not.toBeNull();
   });
 });
 

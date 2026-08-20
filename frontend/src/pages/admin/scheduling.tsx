@@ -461,8 +461,20 @@ export function SchedulingPage(): ReactNode {
                 notifying.created ? 'created' : 'rescheduled',
                 accessToken,
               );
+              /**
+               * **Zero is an ANSWER, not a quiet success.**
+               *
+               * «أُرسل الإشعار إلى 0 من المعنيين» reads as *done*, and the case
+               * that showed it is ordinary: the only beneficiary enrolled in
+               * that Level at that branch was the administrator's own account,
+               * and nobody is ever notified of their own act (R78.3). She sent,
+               * saw a success message, logged in as herself and found nothing —
+               * with the platform never saying that nobody was concerned.
+               */
               setNotice(
-                t('scheduling.notify.sent').replace('{n}', String(result.notified)),
+                result.notified === 0
+                  ? t('scheduling.notify.sentNone')
+                  : t('scheduling.notify.sent').replace('{n}', String(result.notified)),
               );
               setNotifying(null);
             } catch {

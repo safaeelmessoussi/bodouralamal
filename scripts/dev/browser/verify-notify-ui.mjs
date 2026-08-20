@@ -673,5 +673,119 @@ check(
 );
 console.error('OBSERVED-A-EVENT', JSON.stringify(aEvent.slice(0, 260)));
 
+/* ── 28–32 · a REPUBLISH after the score changes must reach her ──────────── */
+
+/** Marks every notice read, so "unread again" is a real observation. */
+const markAllRead = async (cookie) => {
+  await beIdentity(cookie);
+  await open('/dashboard/student', 'main');
+  await new Promise((r) => setTimeout(r, 1800));
+  return evaluate(`(async () => {
+    const trigger = document.querySelector('.bell__trigger');
+    if (!trigger) return { noBell: true };
+    trigger.click();
+    await new Promise((r) => setTimeout(r, 2000));
+    let guard = 0;
+    while (guard < 12) {
+      const button = [...document.querySelectorAll('.bell__panel button')].find(
+        (b) => b.textContent.trim() === 'تم الاطّلاع',
+      );
+      if (!button) break;
+      button.click();
+      await new Promise((r) => setTimeout(r, 1200));
+      guard += 1;
+    }
+    const count = document.querySelector('.bell__count');
+    return { unread: count ? count.textContent.trim() : '0' };
+  })()`);
+};
+
+const cleared = await markAllRead(process.env.A10_COOKIE);
+check('28 · she reads everything, so the bell is quiet', cleared.unread === '0', JSON.stringify(cleared));
+
+/** Changes the score on the sheet and publishes again. */
+const republish = (score) =>
+  evaluate(`(async () => {
+    const input = [...document.querySelectorAll('.admin-table input')].find(
+      (i) => i.type === 'text' || i.type === 'number',
+    );
+    if (!input) return { noInput: true };
+    const before = input.value;
+    const proto = Object.getPrototypeOf(input);
+    Object.getOwnPropertyDescriptor(proto, 'value').set.call(input, ${JSON.stringify(String())} + ${JSON.stringify('')} + '${'${score}'}');
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+    await new Promise((r) => setTimeout(r, 700));
+    // **Save the change before republishing.** Publishing flips status; it does
+    // not persist an unsaved edit, so republishing straight after typing left
+    // the score untouched — and the platform stayed silent, correctly, because
+    // nothing had changed. The manual flow is type, save, republish.
+    const draftSave = [...document.querySelectorAll('button')].find((b) => b.textContent.includes('حفظ كمسودة'));
+    if (draftSave) {
+      draftSave.click();
+      await new Promise((r) => setTimeout(r, 3000));
+    }
+    // Once anything is published the control reads إعادة النشر, not نشر النقاط.
+    // Matching only the first label reported a missing button on a sheet that
+    // simply had the other one.
+    const publish = [...document.querySelectorAll('button')].find(
+      (b) => b.textContent.includes('نشر النقاط') || b.textContent.includes('إعادة النشر'),
+    );
+    if (!publish) return { noPublish: true, labels: [...document.querySelectorAll('button')].map((b) => b.textContent.trim()).slice(0, 12) };
+    publish.click();
+    await new Promise((r) => setTimeout(r, 2000));
+    const dialog = document.querySelector('dialog[open]');
+    if (dialog) {
+      const confirm = [...dialog.querySelectorAll('button')].find(
+        (b) => b.textContent.trim() === 'تأكيد' || b.textContent.includes('نشر'),
+      );
+      if (confirm) confirm.click();
+      await new Promise((r) => setTimeout(r, 3000));
+    }
+    return { before, republished: true };
+  })()`.replace('${score}', String(score)));
+
+await beIdentity(process.env.ADMIN_REPUB_COOKIE);
+await open(`/admin/exam-grades?exam=${S.exam}`, '.admin-table, .state');
+const changed = await republish(11);
+check('29 · the score is changed and the sheet republished', changed.republished === true, JSON.stringify(changed));
+
+const afterRepublish = await readBell(process.env.A11_COOKIE);
+check(
+  '30 · her bell is UNREAD again — the corrected mark reached her',
+  afterRepublish.badge !== null && afterRepublish.badge !== '0',
+  JSON.stringify({ badge: afterRepublish.badge, text: (afterRepublish.text ?? '').slice(0, 200) }),
+);
+console.error('OBSERVED-A-REPUBLISH', JSON.stringify((afterRepublish.text ?? '').slice(0, 260)));
+
+const clearedAgain = await markAllRead(process.env.A12_COOKIE);
+check('31 · she reads it again', clearedAgain.unread === '0', JSON.stringify(clearedAgain));
+
+await beIdentity(process.env.ADMIN_REPUB2_COOKIE);
+await open(`/admin/exam-grades?exam=${S.exam}`, '.admin-table, .state');
+const unchanged = await evaluate(`(async () => {
+  const publish = [...document.querySelectorAll('button')].find(
+    (b) => b.textContent.includes('نشر النقاط') || b.textContent.includes('إعادة النشر'),
+  );
+  if (!publish) return { noPublish: true, labels: [...document.querySelectorAll('button')].map((b) => b.textContent.trim()).slice(0, 12) };
+  publish.click();
+  await new Promise((r) => setTimeout(r, 2000));
+  const dialog = document.querySelector('dialog[open]');
+  if (dialog) {
+    const confirm = [...dialog.querySelectorAll('button')].find(
+      (b) => b.textContent.trim() === 'تأكيد' || b.textContent.includes('نشر'),
+    );
+    if (confirm) confirm.click();
+    await new Promise((r) => setTimeout(r, 3000));
+  }
+  return { republished: true };
+})()`);
+
+const afterNoChange = await readBell(process.env.A6_COOKIE);
+check(
+  '32 · republishing with NOTHING changed makes no noise',
+  unchanged.republished === true && (afterNoChange.badge === null || afterNoChange.badge === '0'),
+  JSON.stringify({ unchanged, badge: afterNoChange.badge }),
+);
+
 close();
 process.exit(finish());

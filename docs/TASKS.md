@@ -591,6 +591,13 @@
 - [x] 222 backend unit · 1373 integration · 613 frontend · 13/13 new browser checks · 18 CI guards · OpenAPI current
 - [x] **`verify-staff-picker` closed 2026-08-20 — 13/13.** Harness defect (`===` against the shared add-Button's `＋` prefix) on top of R91's intentional control change. Fixing it exposed a **real regression**: the periods editor rendered bare names, dropping R90's *marked before the choice* half. `markedLabel`/`Warnings` now shared and guarded
 - [x] **All 20 harnesses green in one pass — 460 checks** (plus `measure-page-header`'s 9 widths)
+### Notification root causes + landing pages (2026-08-20)
+- [x] **Level cancellation root cause**: the resolver was right. The only beneficiary in that Level+Branch was the Owner's own account, excluded as the actor (R78.3) — so the send reached nobody and said «أُرسل الإشعار إلى 0» which reads as success. **Zero now answers explicitly.**
+- [x] **Grade republish root cause**: two blockers — only newly-drafted rows were offered to the notifier, and `skipDuplicates` absorbed the rest. New semantics: one row per (student, exam), **unread again when the score changed**, silent when it did not
+- [x] Student landing = title + lede only; مؤطرة landing loses «ستُضاف لوحة مختصرة هنا لاحقاً», from the page and the catalogue
+- [x] `verify-notify-ui` **32/32**; 643 frontend · 222 backend unit · 1399 integration; all 23 browser scripts green (508 checks)
+- [ ] **NOT STARTED — the rest of this brief**: merged Teacher calendar/scheduling (§8), Teacher event creation with responsible=self (§9, §21), assistant assignment notification (§10, §11), one shared occurrence-details dialog across all four calendars (§12, §22), direct Session content in that dialog (§13, §14), beneficiary QR identity (§15–§19). Each is its own slice with its own migration/UI/tests
+
 ### Notifications — verified through the UI (2026-08-20)
 - [x] **`verify-notify-ui` — 27/27.** Real dialog, real button, recipient's own bell. Cancel (with and without reason) · decline · reschedule · Event · grade draft/publish · R91 replacement recipients · R92 cross-branch · mark-read · reload
 - [x] **Defect fixed:** a failed notice could not be retried — the copy said «يمكنك المحاولة لاحقاً» while `finally` closed the dialog. Both notice dialogs now stay open on failure

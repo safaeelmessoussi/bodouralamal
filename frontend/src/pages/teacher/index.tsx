@@ -79,10 +79,14 @@ export function TeacherRouter(): ReactNode {
  */
 function TeacherHome(): ReactNode {
   return (
+    // **Nothing but the title and the lede** (2026-08-20). The placeholder
+    // «ستُضاف لوحة مختصرة هنا لاحقاً» promised a screen nobody had designed and
+    // occupied the page telling the reader to use the menu beside it — which
+    // the lede already says. Future-placeholder copy is removed rather than
+    // restyled; the string is gone from the catalogue too, so nothing can pick
+    // it up again.
     <TeacherLayout title={t('teacher.nav.dashboard')} lede={t('teacher.homeLede')}>
-      <div className="state" role="status">
-        <p>{t('teacher.homeBody')}</p>
-      </div>
+      {null}
     </TeacherLayout>
   );
 }

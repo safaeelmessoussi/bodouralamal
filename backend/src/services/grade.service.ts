@@ -586,16 +586,26 @@ export async function publishGrades(
      * apart, on retry, from one already announced. A draft save writes nothing
      * at all, because a draft sheet is a مؤطرة's working document (BR-8).
      *
-     * **Re-publication adds nothing**, absorbed by the `(user, exam, type)`
-     * unique index — a student who has been told her grade is available is not
-     * told again because the number changed, and her screen shows the current
-     * one. The notice is written for the rows published *now*, so a student
-     * added to a later sheet gets hers when it is published.
+     * **Re-publication after a real change makes the notice UNREAD again**
+     * (2026-08-20). R82.4 made it write nothing, reasoning that her screen
+     * shows the current mark — which holds only if she looks again, and a
+     * student given 17 after reading a notice about 12 had nothing telling her
+     * to. One row per (student, exam), reactivated on a change and silent
+     * without one; the rule lives in `notifyGradePublished`.
+     */
+    /**
+     * **Every published row is a candidate, not only the ones drafted now.**
+     *
+     * This passed `rows.filter(r => draft.some(...))`, so a republish after a
+     * correction offered the notifier nobody at all — the second of the two
+     * reasons a corrected mark reached no one. Whether anything is actually
+     * announced is `notifyGradePublished`'s decision, and it makes it from the
+     * grade's own timestamp.
      */
     const notified = await notifyGradePublished(
       tx,
       examId,
-      rows.filter((r) => draft.some((d) => d.id === r.id)).map((r) => r.studentId),
+      rows.map((r) => r.studentId),
       actor.userId,
     );
 

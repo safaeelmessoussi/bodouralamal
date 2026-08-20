@@ -419,20 +419,44 @@ export async function notifySessionChange(
 /* ── Grades (R82.4) ───────────────────────────────────────────────────────── */
 
 /**
- * **Written at publication, and only there** (BR-8).
+ * **Written at publication — and RE-ACTIVATED when a published grade changes.**
  *
- * A draft sheet is a مؤطرة's working document, so a draft save writes nothing —
- * the caller is `publishGrades`, inside its transaction, because publication and
- * the notice that it happened are one fact.
+ * A draft sheet is a مؤطرة's working document, so a draft save writes nothing
+ * (BR-8); the caller is `publishGrades`, inside its transaction, because
+ * publication and the notice that it happened are one fact.
  *
- * **Re-publication writes nothing new.** The unique index on
- * `(user, exam, type)` absorbs it, and that is the coherent behaviour rather
- * than a limitation: the row points at the exam, so a student who has been told
- * her grade is available is not told a second time because the number changed —
- * her screen already shows the current one.
+ * ## Why the original rule was not enough
  *
- * The actor is excluded like everywhere else, which in practice matters for a
- * مؤطرة who is also enrolled somewhere (R79 makes that expressible).
+ * R82.4 made re-publication write nothing, absorbed by the
+ * `(user, exam, type)` unique index, on the reasoning that *the row points at
+ * the exam, so a student already told her grade is available is not told again
+ * because the number changed — her screen shows the current one.*
+ *
+ * **That reasoning holds only if she looks again.** A student who read the
+ * notice, saw 12, and was later given 17 has nothing anywhere telling her to
+ * look — the platform knows her mark changed and says nothing. Reported from
+ * real use, and it is the whole point of the notice.
+ *
+ * ## The semantics, chosen and stated
+ *
+ * **One row per (student, exam), reactivated on a real change.** Not a second
+ * row: a list of *your grade was published* repeated four times is noise, and
+ * the fact being announced is the same fact each time.
+ *
+ * | | |
+ * |---|---|
+ * | first publish | the row is created, unread |
+ * | republish after the score changed | the row becomes **unread again**, and moves to the top |
+ * | republish with nothing changed | **nothing happens** |
+ *
+ * *Changed* is `grade.updated_at > notification.created_at` — the row was
+ * written after she was last told. It needs no new column and cannot drift from
+ * the grade, because it IS the grade's own timestamp; and since publication
+ * only writes rows that were draft, an unchanged republish touches nothing and
+ * so moves no timestamp.
+ *
+ * The actor is excluded like everywhere else, which matters for a مؤطرة who is
+ * also enrolled somewhere (R79 makes that expressible).
  */
 export async function notifyGradePublished(
   tx: Prisma.TransactionClient,
@@ -442,6 +466,7 @@ export async function notifyGradePublished(
 ): Promise<number> {
   const recipients = studentIds.filter((id) => id !== actorUserId);
   if (recipients.length === 0) return 0;
+
   const created = await tx.notification.createMany({
     data: recipients.map((userId) => ({
       userId,
@@ -450,7 +475,45 @@ export async function notifyGradePublished(
     })),
     skipDuplicates: true,
   });
-  return created.count;
+
+  /**
+   * The ones that already had a notice. Each is reactivated only if her grade
+   * has been written since — so an unchanged republish is silent, and a
+   * corrected mark surfaces as unread at the top of her bell.
+   */
+  const existing = await tx.notification.findMany({
+    where: {
+      examId,
+      type: "grade_published",
+      userId: { in: [...recipients] },
+      deletedAt: null,
+    },
+    select: { id: true, userId: true, createdAt: true },
+  });
+  const grades = await tx.grade.findMany({
+    where: { examId, studentId: { in: existing.map((n) => n.userId) } },
+    select: { studentId: true, updatedAt: true },
+  });
+  const changedFor = new Map(grades.map((g) => [g.studentId, g.updatedAt]));
+
+  let reactivated = 0;
+  for (const notice of existing) {
+    const written = changedFor.get(notice.userId);
+    if (!written || written <= notice.createdAt) continue;
+    await tx.notification.update({
+      where: { id: notice.id },
+      data: {
+        // Unread again — the only thing that makes a bell say *look*.
+        readAt: null,
+        // And newest, so it is not buried under notices she has already seen.
+        createdAt: new Date(),
+      },
+    });
+    reactivated += 1;
+  }
+
+  // Both count as *people newly told*, which is what the caller reports.
+  return created.count + reactivated;
 }
 
 /**

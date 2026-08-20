@@ -637,6 +637,17 @@ and both worth recognising by shape:
   is `.bell__count`; the harness looked for `.bell__badge`, found nothing, and
   called the count missing while the panel plainly showed one.
 
+**Reproduce against the reporter's own rows before building a fixture.** Both
+notification failures the Owner reported were invisible to a tagged scenario. The
+Level cancellation resolved *correctly to nobody*, because the only beneficiary
+enrolled in that Level at that branch was the administrator's own account and
+R78.3 excludes the actor — a fact only the real ids showed. A fresh fixture would
+have passed and taught nothing.
+
+**And a zero-result success message hides a whole class of failure.**
+«أُرسل الإشعار إلى 0 من المعنيين» reads as *done*. When an action resolves to
+nobody, say so — the count is the answer, not a detail of it.
+
 ### Running them is what makes them coverage
 
 On 2026-08-19 all nineteen harnesses were run for the first time in one pass.
