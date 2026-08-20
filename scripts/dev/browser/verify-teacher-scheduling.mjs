@@ -319,5 +319,93 @@ check(
   JSON.stringify({ text: (safaBell.text ?? '').slice(0, 200) }),
 );
 
+/* ── 10–12 · every type she is allowed to create (R94) ───────────────────── */
+
+await beIdentity(process.env.SAFA4_COOKIE);
+await open('/teacher/schedules', '.admin-table, .state');
+
+const types = await evaluate(`(async () => {
+  const add = [...document.querySelectorAll('button')].find((b) => b.textContent.includes('إضافة عنصر'));
+  if (!add) return { noAdd: true };
+  add.click();
+  await new Promise((r) => setTimeout(r, 2500));
+  const dialog = document.querySelector('dialog[open]');
+  if (!dialog) return { noDialog: true };
+  const label = [...dialog.querySelectorAll('label')].find((l) => l.textContent.trim() === 'نوع العنصر');
+  const select = label ? dialog.querySelector('#' + CSS.escape(label.getAttribute('for') || '')) : null;
+  return {
+    options: select ? [...select.options].map((o) => o.textContent.trim()) : [],
+    values: select ? [...select.options].map((o) => o.value) : [],
+    id: select ? select.id : null,
+  };
+})()`);
+
+check(
+  '10 · her type selector offers BOTH نشاط and امتحان',
+  (types.values ?? []).includes('activity') && (types.values ?? []).includes('exam'),
+  JSON.stringify(types),
+);
+check(
+  '11 · and NOT حصة — §4.4c derives her scope from the classes she staffs',
+  !(types.values ?? []).includes('class'),
+  JSON.stringify(types.values),
+);
+
+const examSaved = await evaluate(`(async () => {
+  const dialog = document.querySelector('dialog[open]');
+  const set = (el, value) => {
+    const proto = Object.getPrototypeOf(el);
+    Object.getOwnPropertyDescriptor(proto, 'value').set.call(el, value);
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  };
+  const labelled = (text) => {
+    const l = [...document.querySelectorAll('dialog[open] label')].find((x) => x.textContent.trim() === text);
+    return l ? document.querySelector('dialog[open] #' + CSS.escape(l.getAttribute('for') || '')) : null;
+  };
+
+  const typeSel = labelled('نوع العنصر');
+  set(typeSel, 'exam');
+  await new Promise((r) => setTimeout(r, 1800));
+
+  // She names one of her OWN classes; its Level, Subject, Branch and Year come
+  // with it, because the chain that would offer them answers 403 for her.
+  const forClass = labelled('الحصة المعنية*');
+  if (!forClass) {
+    return { noForClass: true, labels: [...document.querySelectorAll('dialog[open] label')].map((l) => l.textContent.trim()) };
+  }
+  const option = [...forClass.options].find((o) => o.value !== '');
+  if (!option) return { noClassOption: true };
+  set(forClass, option.value);
+  await new Promise((r) => setTimeout(r, 1500));
+
+  const title = [...document.querySelectorAll('dialog[open] input')].find(
+    (i) => (i.closest('.field') || {}).textContent?.includes('العنوان'),
+  );
+  if (title) set(title, '[notify] امتحان المؤطرة');
+  const maxGrade = labelled('النقطة القصوى*') || labelled('النقطة القصوى');
+  if (maxGrade) set(maxGrade, '20');
+  for (const d of [...document.querySelectorAll('dialog[open] input[type=date]')]) {
+    set(d, ${JSON.stringify(S.spareDate)});
+  }
+  const room = labelled('القاعة');
+  if (room && room.options.length > 1) set(room, room.options[1].value);
+  await new Promise((r) => setTimeout(r, 800));
+
+  const save = [...document.querySelectorAll('dialog[open] button')].find((b) => b.textContent.trim() === 'حفظ');
+  if (!save) return { noSave: true };
+  save.click();
+  await new Promise((r) => setTimeout(r, 5000));
+  const still = document.querySelector('dialog[open]');
+  return { closed: still === null, says: still ? still.textContent.slice(0, 260) : null };
+})()`);
+
+const examCalls = (await callsMatching('/exams')).filter((c) => c.method === 'POST');
+check(
+  '12 · she creates an EXAM for a class she teaches, and it is accepted',
+  examSaved.closed === true && examCalls.length === 1 && examCalls[0]?.status === 201,
+  JSON.stringify({ examSaved, examCalls }),
+);
+
 close();
 process.exit(finish());

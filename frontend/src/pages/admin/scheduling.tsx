@@ -55,6 +55,7 @@ import { useSession } from '../../contexts/session.js';
 import { useActiveRole } from '../../contexts/active-role.js';
 import { isDirty } from '../../lib/form-dirty.js';
 import type { StaffingPeriod } from '../../components/scheduling/staffing-periods.js';
+import { SelectField } from '../../components/ui/field.js';
 import { useTeachingCandidates } from '../../hooks/use-teaching-candidates.js';
 import { t } from '../../i18n/index.js';
 import { ApiError } from '../../lib/api.js';
@@ -663,6 +664,7 @@ export function SchedulingDialog({
   onCancel,
   onSaved,
   types = AVAILABLE_TYPES,
+  teachingContexts,
   initialType,
 }: {
   item: SchedulingItem | null;
@@ -671,6 +673,25 @@ export function SchedulingDialog({
   onSaved: (saved: SavedSchedulingItem) => void;
   /** R72 — the kinds this caller may create. One kind locks the field. */
   types?: readonly SchedulingType[];
+  /**
+   * **Her own classes, when the caller cannot read the curriculum** (R94).
+   *
+   * `useScopeOptions` builds the Branch → Level → Subject → Year chain from
+   * `/admin/levels` and `/admin/academic-years`, which answer **403** for a
+   * مؤطرة. An exam belongs to a Level, Subject, Branch and Year she teaches —
+   * which is exactly what one of her own schedules already states — so she
+   * picks the class instead of rebuilding its scope from reads she may not
+   * make. Absent for an Admin, whose chain works.
+   */
+  teachingContexts?: {
+    id: string;
+    title: string;
+    branchId: string;
+    levelId: string;
+    subjectId: string;
+    academicYearId: string;
+    groupId: string | null;
+  }[];
   /**
    * The kind a *creating* caller arrived intending, from `?kind=`.
    *
@@ -751,6 +772,8 @@ export function SchedulingDialog({
   /** R81 — the exam's own maximum grade. A string while it is being typed; the
    *  form has no default to offer, because there is no platform scale left. */
   const [examMaxGrade, setExamMaxGrade] = useState('');
+  /** R94 — which of her classes this sitting belongs to. */
+  const [examContextId, setExamContextId] = useState('');
   const [supervisorId, setSupervisorId] = useState(
     item?.ids.staff.find((x) => x.position === 'supervisor')?.user_id ?? '',
   );
@@ -982,14 +1005,33 @@ export function SchedulingDialog({
       // The mode is refused by the server too; saying so here is the courtesy,
       // not the guarantee.
       if (examMode === 'online') return t('scheduling.exam.onlineSoon');
-      if (scope.value.branchId === '') return t('scheduling.invalid.branch');
-      if (scope.value.levelId === '') return t('scheduling.invalid.level');
-      if (scope.levelTeachesNothing) return t('scope.assignSubjectsHint');
-      if (scope.value.subjectId === '') return t('scheduling.invalid.subject');
-      if (scope.value.academicYearId === '') return t('scheduling.invalid.year');
+      // **R94 — she names a class, not a chain.** Without this the four
+      // messages below would ask her for selectors she was never shown.
+      if (!canAssignStaff && teachingContexts && examContextId === '') {
+        return teachingContexts.length === 0
+          ? t('scheduling.exam.noClassOfYours')
+          : t('scheduling.invalid.forClass');
+      }
+      /**
+       * **These four are the Admin's chain, and only hers** (R94).
+       *
+       * A مؤطرة named one of her own classes above, which states all four — and
+       * `levelTeachesNothing` is computed from `listLevelSubjects`, another read
+       * that answers 403 for her. Asking her to fix a Level that "teaches
+       * nothing" would be the platform reporting its own blindness as her
+       * mistake.
+       */
+      const suppliedByClass = !canAssignStaff && teachingContexts !== undefined;
+      if (!suppliedByClass) {
+        if (scope.value.branchId === '') return t('scheduling.invalid.branch');
+        if (scope.value.levelId === '') return t('scheduling.invalid.level');
+        if (scope.levelTeachesNothing) return t('scope.assignSubjectsHint');
+        if (scope.value.subjectId === '') return t('scheduling.invalid.subject');
+        if (scope.value.academicYearId === '') return t('scheduling.invalid.year');
+      }
       if (roomId === '') return t('scheduling.invalid.room');
       if (startTime === '' || endTime === '') return t('scheduling.invalid.times');
-      if (supervisorId === '') return t('scheduling.invalid.supervisor');
+      if (canAssignStaff && supervisorId === '') return t('scheduling.invalid.supervisor');
       return null;
     }
     if (type === 'activity') {
@@ -1083,7 +1125,13 @@ export function SchedulingDialog({
           levelId: scope.value.levelId,
           // `null` is the whole Level sitting together (R58), not a gap.
           examGroupId: scope.value.groupId || null,
-          examStaff: examStaffOf(supervisorId, assistantIds),
+          // **Her own sitting** (R94): a مؤطرة supervises what she organises,
+          // and the server refuses any other name through
+          // `assertExamInTeacherScope` regardless of what the form sends.
+          examStaff: examStaffOf(
+            canAssignStaff ? supervisorId : (me?.id ?? supervisorId),
+            assistantIds,
+          ),
           // R81 — required by the server on create; sent as a number so the
           // contract carries a grade maximum, not a form string.
           examMaxGrade: examMaxGrade.trim() === '' ? null : Number(examMaxGrade),
@@ -1222,7 +1270,38 @@ export function SchedulingDialog({
             appraisal={appraisal}
           />
         ) : type === 'exam' ? (
-          <ExamSection
+          <>
+            {/**
+              * **«الحصة المعنية» — one choice that sets the whole scope** (R94).
+              *
+              * An exam belongs to a Level, Subject, Branch and Year, and the
+              * chain that offers those reads `/admin/levels`, which answers 403
+              * for a مؤطرة. One of her own classes already states all four, so
+              * she names the class and the form fills them in. An Admin keeps
+              * the full chain, which is what her wider authority needs.
+              */}
+            {!canAssignStaff && teachingContexts ? (
+              <SelectField
+                label={t('scheduling.exam.forClass')}
+                value={examContextId}
+                onChange={(id: string) => {
+                  setExamContextId(id);
+                  const chosen = teachingContexts.find((c) => c.id === id);
+                  if (!chosen) return;
+                  scope.set('branchId', chosen.branchId);
+                  scope.set('levelId', chosen.levelId);
+                  scope.set('subjectId', chosen.subjectId);
+                  scope.set('academicYearId', chosen.academicYearId);
+                  scope.set('groupId', chosen.groupId ?? '');
+                }}
+                hint={t('scheduling.exam.forClassHint')}
+                options={[
+                  { value: '', label: t('common.choose') },
+                  ...teachingContexts.map((c) => ({ value: c.id, label: c.title })),
+                ]}
+              />
+            ) : null}
+            <ExamSection
             mode={examMode}
             onMode={setExamMode}
             scope={scope}
@@ -1237,7 +1316,15 @@ export function SchedulingDialog({
             onAssistants={setAssistantIds}
             maxGrade={examMaxGrade}
             onMaxGrade={setExamMaxGrade}
-          />
+            // Her scope came from the class she named; showing the chain she
+            // cannot populate would be four empty selectors.
+            hideScope={!canAssignStaff && teachingContexts !== undefined}
+            leadStaff={
+              canAssignStaff ? teachers : teachers.filter((x) => x.id === me?.id)
+            }
+            leadLocked={!canAssignStaff}
+            />
+          </>
         ) : (
           <ActivitySection
             visibility={visibility}

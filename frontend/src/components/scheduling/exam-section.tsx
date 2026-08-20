@@ -43,6 +43,12 @@ export interface ExamSectionProps {
    *  change *what is examined, for whom, or where* while keeping the grades
    *  already recorded against the old answer (§4.4's reasoning). */
   locked: boolean;
+  /** True when the scope came from elsewhere — a مؤطرة names one of her own
+   *  classes, which already states the Level, Subject, Branch and Year. */
+  hideScope?: boolean;
+  /** Narrower than `staff` when the caller may only supervise her own sitting. */
+  leadStaff?: UserSummary[];
+  leadLocked?: boolean;
   rooms: { id: string; name: string }[];
   roomId: string;
   onRoom: (v: string) => void;
@@ -70,6 +76,9 @@ export function ExamSection({
   onMode,
   scope,
   locked,
+  hideScope = false,
+  leadStaff,
+  leadLocked = false,
   rooms,
   roomId,
   onRoom,
@@ -106,12 +115,17 @@ export function ExamSection({
         </Feedback>
       ) : (
         <>
-          <ScopeSelectors
-            scope={scope}
-            fields={['branchId', 'levelId', 'subjectId', 'academicYearId']}
-            mode="form"
-            locked={locked ? ['branchId', 'levelId', 'subjectId', 'academicYearId'] : []}
-          />
+          {/* **Hidden when the caller named a class instead** (R94): the chain
+              below reads `/admin/levels`, which answers 403 for a مؤطرة, so
+              rendering it for her would be four selectors that cannot fill. */}
+          {hideScope ? null : (
+            <ScopeSelectors
+              scope={scope}
+              fields={['branchId', 'levelId', 'subjectId', 'academicYearId']}
+              mode="form"
+              locked={locked ? ['branchId', 'levelId', 'subjectId', 'academicYearId'] : []}
+            />
+          )}
 
           {/* **R81 — every exam states what its marks are out of.** Required,
               because a sitting whose maximum is unknown cannot be marked at
@@ -159,6 +173,14 @@ export function ExamSection({
               control (R71's extraction). */}
           <StaffPicker
             staff={staff}
+            /**
+             * **A مؤطرة supervises her own sitting** (R94), for the same reason
+             * she answers for her own event: the list she is offered is the
+             * list the server accepts, and `assertExamInTeacherScope` refuses
+             * anything else regardless.
+             */
+            {...(leadStaff ? { leadStaff } : {})}
+            leadLocked={leadLocked}
             leadLabel={t('scheduling.exam.supervisor')}
             leadId={supervisorId}
             onLead={onSupervisor}

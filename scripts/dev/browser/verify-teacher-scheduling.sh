@@ -22,6 +22,7 @@ export AMINA_COOKIE="$(bash scripts/dev/issue-dev-session.sh "$(id amina)")"
 export AMINA2_COOKIE="$(bash scripts/dev/issue-dev-session.sh "$(id amina)")"
 export AMINA3_COOKIE="$(bash scripts/dev/issue-dev-session.sh "$(id amina)")"
 export SAFA3_COOKIE="$(bash scripts/dev/issue-dev-session.sh "$(id safa)")"
+export SAFA4_COOKIE="$(bash scripts/dev/issue-dev-session.sh "$(id safa)")"
 export NADIA_COOKIE="$(bash scripts/dev/issue-dev-session.sh "$(id nadia)")"
 
 WORK="$(mktemp -d)"

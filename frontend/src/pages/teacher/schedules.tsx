@@ -184,9 +184,25 @@ export function TeacherSchedulesPage(): ReactNode {
         <SchedulingDialog
           item={null}
           token={accessToken}
+          /**
+           * **Her own classes**, so an exam's Level, Subject, Branch and Year
+           * come from a class she teaches rather than from `/admin/levels`,
+           * which answers 403 for her. The rows are already on this page.
+           */
+          teachingContexts={rows
+            .filter((r) => r.subject_id !== null && r.academic_year_id !== null)
+            .map((r) => ({
+              id: r.id,
+              title: r.title,
+              branchId: r.branch_id,
+              levelId: r.level_id ?? '',
+              subjectId: r.subject_id ?? '',
+              academicYearId: r.academic_year_id ?? '',
+              groupId: r.teaching_mode === 'administrative_group' ? r.target_id : null,
+            }))}
           // R72 — the one kind a Teacher may author. The form locks the field
           // rather than offering a selector with a single option.
-          types={ACTIVITY_ONLY}
+          types={TEACHER_TYPES}
           onCancel={() => setComposing(false)}
           onSaved={() => {
             setComposing(false);
@@ -200,4 +216,17 @@ export function TeacherSchedulesPage(): ReactNode {
 }
 
 /** R72 — TD-2 grants a Teacher exactly this one kind on this screen. */
-const ACTIVITY_ONLY = ['activity'] as const;
+/**
+ * **What a مؤطرة may create** (R94), and why `class` is not on it.
+ *
+ * `activity` is TD-2's grant, live since R72. `exam` is TD-2's too — the
+ * service has accepted a teacher-authored sitting in her §4.4c scope since R70
+ * — and no screen offered it, which is rule P's defect for the ninth time.
+ *
+ * **`class` is deliberately absent, and the reason is security rather than
+ * caution.** R71.0 and R72.1 both record it: §4.4c derives a مؤطرة's entire
+ * scope *from the schedules she staffs*, so creating one would let her widen her
+ * own reach. It stays with the administration until an SRS revision says
+ * otherwise.
+ */
+const TEACHER_TYPES = ['activity', 'exam'] as const;
