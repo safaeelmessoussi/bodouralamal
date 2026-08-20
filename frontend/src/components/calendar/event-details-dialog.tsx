@@ -9,6 +9,7 @@ import {
 import { SessionContext } from '../../contexts/session.js';
 import { t, tList } from '../../i18n/index.js';
 import { Dialog } from '../ui/dialog.js';
+import { deliveryLabel, mediaLabel } from '../scheduling/delivery.js';
 
 /**
  * Event details.
@@ -128,6 +129,34 @@ export function EventDetailsDialog({
               </>
             ) : null}
 
+            {/**
+              * **R97 — طريقة الحضور**, and only for the kinds that have one.
+              *
+              * `deliveryLabel` returns `null` for an Event and an Exam, which
+              * carry no delivery model at all — so the row is absent for them
+              * rather than asserting «حضوري» about something the row does not
+              * say. Same discipline as every other field here.
+              *
+              * There is deliberately **no «دخول الحصة» button**: joining an
+              * online class needs room and token infrastructure that does not
+              * exist yet, and a control that cannot work is worse than none.
+              */}
+            {deliveryLabel(occurrence) ? (
+              <>
+                <dt>{t('delivery.label')}</dt>
+                <dd>{deliveryLabel(occurrence)}</dd>
+              </>
+            ) : null}
+
+            {mediaLabel(occurrence) ? (
+              <>
+                <dt>{t('delivery.mediaLabel')}</dt>
+                <dd>{mediaLabel(occurrence)}</dd>
+              </>
+            ) : null}
+
+            {/* An online occurrence holds no room at all (R97), so this is
+                absent by construction rather than by a check here. */}
             {occurrence.room_name ? (
               <>
                 <dt>{t('calendar.detailsRoom')}</dt>

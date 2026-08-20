@@ -39,6 +39,9 @@ const WIRE: CourseSchedule = {
   target_id: '00000000-0000-4000-8000-000000000003',
   branch_id: '00000000-0000-4000-8000-000000000004',
   room_id: null,
+  // R97 — the schedule's DEFAULT delivery for the Sessions it materializes.
+  delivery_mode: 'in_person',
+  online_media_mode: null,
   start_time: '15:00',
   end_time: '16:30',
   recurrence: 'weekly',
@@ -60,6 +63,9 @@ describe('the adapter type matches the wire contract', () => {
       'branch_id',
       'branch_name',
       'day_of_month',
+      // R97 — طريقة الحضور joins the schedule contract. The pair is listed
+      // together because the server refuses one without the other.
+      'delivery_mode',
       'description',
       'effective_until',
       'end_time',
@@ -68,6 +74,7 @@ describe('the adapter type matches the wire contract', () => {
       // server key set exactly, which is what this test exists to keep true.
       'level_id',
       'month_of_year',
+      'online_media_mode',
       'recurrence',
       'room_id',
       'room_name',

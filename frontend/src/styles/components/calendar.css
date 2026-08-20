@@ -492,6 +492,26 @@ tr:last-child .cal-cell {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* **R97 — the عن بُعد marker on a month chip.**
+
+   `flex: none` beside a `flex: 1 1 auto` title, so the marker keeps its width
+   and the TITLE is what ellipses when the cell is narrow — a truncated «عن
+   بـ…» would be worse than a truncated class name, because the reader can
+   still identify a class from its first words and cannot identify a delivery
+   mode from half a word.
+
+   Marked only when the class is online (the component renders nothing
+   otherwise): the exception carries the ink, the norm stays silent. */
+.event-chip__delivery {
+  flex: none;
+  font-size: 0.85em;
+  font-weight: 500;
+  padding-inline: 0.35em;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, currentcolor 12%, transparent);
+  color: color-mix(in srgb, currentcolor 85%, transparent);
+  white-space: nowrap;
+}
 .event-chip__time {
   flex: none;
   font-size: 0.92em;
@@ -626,6 +646,9 @@ tr:last-child .cal-cell {
   .event-chip__time {
     display: none;
   }
+  /* The marker STAYS on a phone while the clock goes: *is this class online*
+     changes whether the reader has to travel, and the time is on the details
+     dialog one tap away. */
   .cal-day__gregorian {
     font-size: var(--font-size-sm);
   }

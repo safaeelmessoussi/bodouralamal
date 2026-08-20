@@ -93,6 +93,81 @@ const staff = z
   )
   .max(20);
 
+/**
+ * **R97 — delivery, validated as ONE fact rather than three loose fields.**
+ *
+ * `delivery_mode` decides which of the other two are meaningful, so the three
+ * are refused or accepted together:
+ *
+ * | delivery | `online_media_mode` | `room_id` |
+ * |---|---|---|
+ * | `in_person` | **must be absent** | optional (§4.4c: a class may have no room) |
+ * | `online`    | **required**       | **must be absent** |
+ *
+ * **Both directions are refused, not just the missing one.** An in-person class
+ * carrying `audio_only` is a client that believes something false about the row
+ * it is writing, and silently dropping the key would leave that belief intact
+ * (§20 rule 12). The same equivalence is a database CHECK
+ * (`course_schedule_delivery_check`) — the boundary exists to name the field,
+ * not to be the only guard.
+ *
+ * **Shared by every write path** — schedule create, schedule update and
+ * `session.override` — because it is one rule about one concept, and three
+ * copies would drift the way every duplicated rule on this project has.
+ */
+export const deliveryMode = z.enum(["in_person", "online"]);
+export const onlineMediaMode = z.enum(["audio_video", "audio_only"]);
+
+export interface DeliveryFields {
+  delivery_mode?: "in_person" | "online" | undefined;
+  online_media_mode?: "audio_video" | "audio_only" | null | undefined;
+  room_id?: string | null | undefined;
+}
+
+/**
+ * Applies the table above to any schema carrying the three keys.
+ *
+ * **A partial edit that mentions delivery must state it whole.** `PATCH`ing
+ * `delivery_mode: 'online'` alone cannot be validated against the stored row
+ * here, and half-applying it would leave a class online with no media mode —
+ * a state the CHECK would then refuse with a constraint name instead of a
+ * field-level message. So naming the mode means naming what goes with it, and
+ * naming a media mode without the mode is refused outright.
+ */
+export function checkDelivery(
+  v: DeliveryFields,
+  ctx: z.RefinementCtx,
+): void {
+  if (v.delivery_mode === undefined && v.online_media_mode != null) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["online_media_mode"],
+      message: "online_media_mode requires delivery_mode (R97)",
+    });
+  }
+  if (v.delivery_mode === "online" && v.online_media_mode == null) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["online_media_mode"],
+      message: "an online class must say audio_video or audio_only (R97)",
+    });
+  }
+  if (v.delivery_mode === "in_person" && v.online_media_mode != null) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["online_media_mode"],
+      message: "an in-person class has no online media mode (R97)",
+    });
+  }
+  if (v.delivery_mode === "online" && v.room_id != null) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["room_id"],
+      message: "an online class occupies no room (R97)",
+    });
+  }
+}
+
 /** R57 — TD-9's bounds for a class's own name. The same limits `Event` takes,
  *  because they are the same kind of field. */
 const scheduleTitle = z.string().trim().min(1).max(120);
@@ -107,6 +182,11 @@ export const createCourseScheduleSchema = z
     target_id: uuid,
     branch_id: uuid,
     room_id: uuid.nullable().optional(),
+    /** R97 — the DEFAULT delivery for the Sessions this schedule materializes.
+     *  Optional and `in_person` when absent, which is the column's default and
+     *  what every class the association has ever scheduled actually was. */
+    delivery_mode: deliveryMode.optional(),
+    online_media_mode: onlineMediaMode.nullable().optional(),
     start_time: wallClock,
     end_time: wallClock,
     recurrence,
@@ -127,7 +207,8 @@ export const createCourseScheduleSchema = z
     academic_year_id: uuid,
     staff: staff.optional(),
   })
-  .strict();
+  .strict()
+  .superRefine(checkDelivery);
 
 /**
  * **Subject, target, branch and academic year are not editable**, and `.strict()`
@@ -149,6 +230,10 @@ export const updateCourseScheduleSchema = z
     title: scheduleTitle.optional(),
     description: scheduleDescription,
     room_id: uuid.nullable().optional(),
+    /** R97 — editable, and it rewrites the FUTURE un-protected occurrences
+     *  through the ordinary resync. The past keeps what it was delivered as. */
+    delivery_mode: deliveryMode.optional(),
+    online_media_mode: onlineMediaMode.nullable().optional(),
     start_time: wallClock.optional(),
     end_time: wallClock.optional(),
     recurrence: recurrence.optional(),
@@ -195,7 +280,8 @@ export const updateCourseScheduleSchema = z
   .refine((v) => v.from_date === undefined || v.scope === "this_and_future", {
     path: ["from_date"],
     message: "from_date is only meaningful with scope this_and_future",
-  });
+  })
+  .superRefine(checkDelivery);
 
 /** Not `.strict()`: TD-10's `page`/`page_size` share the query object. */
 export const listCourseSchedulesQuerySchema = z.object({

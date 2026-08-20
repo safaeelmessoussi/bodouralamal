@@ -54,6 +54,14 @@ export interface CourseSchedule {
   level_id: string | null;
   branch_id: string;
   room_id: string | null;
+  /**
+   * **R97 — طريقة الحضور.** `'in_person'` | `'online'`, with
+   * `online_media_mode` non-null exactly when it is `'online'`. Rendered
+   * through `deliveryLabel` in `components/scheduling/delivery.tsx` and never
+   * hand-written per screen.
+   */
+  delivery_mode: string;
+  online_media_mode: string | null;
   /** TD-11 **wall-clock** `HH:MM`, never an instant — a class starts at 15:00
    *  at its branch, and an instant would invite a timezone shift here. */
   start_time: string;
@@ -172,6 +180,11 @@ export interface CourseScheduleInput {
   target_id: string;
   branch_id: string;
   room_id?: string | null;
+  /** **R97 — the DEFAULT delivery** for the Sessions this schedule
+   *  materializes. Absent is `in_person`, which is what every class scheduled
+   *  before this revision was. */
+  delivery_mode?: 'in_person' | 'online';
+  online_media_mode?: 'audio_video' | 'audio_only' | null;
   /** TD-11 wall-clock `HH:MM` — an ISO instant is refused by the server. */
   start_time: string;
   end_time: string;
@@ -237,6 +250,9 @@ export async function updateCourseSchedule(
       | 'title'
       | 'description'
       | 'room_id'
+      // R97 — editable, and it resyncs the FUTURE un-protected occurrences.
+      | 'delivery_mode'
+      | 'online_media_mode'
       | 'start_time'
       | 'end_time'
       | 'recurrence'

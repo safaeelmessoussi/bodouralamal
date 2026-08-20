@@ -47,6 +47,16 @@ export interface MaterializableSchedule extends ScheduleRecurrence {
   startTime: Date;
   endTime: Date;
   roomId: string | null;
+  /**
+   * **R97 — the schedule's DEFAULT delivery**, snapshotted onto every
+   * occurrence this run creates or resyncs, on exactly the same footing as
+   * `roomId` above (R43.4).
+   *
+   * A default is not history: a class moved online in November leaves October's
+   * occurrences saying what October actually was.
+   */
+  deliveryMode: "in_person" | "online";
+  onlineMediaMode: "audio_video" | "audio_only" | null;
   academicYearId: string;
   /**
    * Snapshot onto every future session this run touches (Revision 43.4).
@@ -178,6 +188,8 @@ export async function materializeSchedule(
         // occurrence, not re-derived from the schedule at read time, so a held
         // session stays historically correct when the schedule later changes.
         roomId: schedule.roomId,
+        deliveryMode: schedule.deliveryMode,
+        onlineMediaMode: schedule.onlineMediaMode,
         status: "scheduled",
         overridden: false,
       },
@@ -203,6 +215,12 @@ export async function materializeSchedule(
         startTime: schedule.startTime,
         endTime: schedule.endTime,
         roomId: schedule.roomId,
+        // **R97 — future, un-protected occurrences follow the new default.**
+        // The `overridden` occurrence never reaches this line: it is in
+        // `protectedIds` and was skipped above, which is precisely how *«this
+        // one Thursday is in person»* survives an edit to the schedule.
+        deliveryMode: schedule.deliveryMode,
+        onlineMediaMode: schedule.onlineMediaMode,
       },
     });
     // **The occurrence's own date decides, not the edit's** (R91). Resyncing
@@ -319,6 +337,10 @@ export async function loadSchedule(
       startTime: true,
       endTime: true,
       roomId: true,
+      // R97 — without these the snapshot would fall back to the column default
+      // and every occurrence of an online class would materialize in-person.
+      deliveryMode: true,
+      onlineMediaMode: true,
       academicYearId: true,
       recurrence: true,
       weekdays: true,

@@ -1,6 +1,11 @@
 import type { ReactNode } from 'react';
 
 import { ScopeSelectors } from '../scope/scope-selectors.js';
+import {
+  DeliverySection,
+  type DeliveryMode,
+  type OnlineMediaMode,
+} from './delivery.js';
 import { SelectField } from '../ui/field.js';
 import { StaffPicker } from './staff-picker.js';
 import { StaffingPeriods, type StaffingPeriod } from './staffing-periods.js';
@@ -34,6 +39,16 @@ export interface ClassSectionProps {
   rooms: { id: string; name: string; capacity: number | null }[];
   roomId: string;
   onRoom: (v: string) => void;
+  /**
+   * **R97 — طريقة الحضور.** The room control moved INTO `DeliverySection` with
+   * these, because a room is only meaningful for an in-person class and the
+   * three fields are one decision (`policies/delivery.ts` states the same rule
+   * server-side).
+   */
+  delivery: DeliveryMode;
+  onDelivery: (v: DeliveryMode) => void;
+  mediaMode: OnlineMediaMode;
+  onMediaMode: (v: OnlineMediaMode) => void;
   teachers: UserSummary[];
   /** R91 — one row per assignment, each with its own effective period. */
   staffing: StaffingPeriod[];
@@ -53,13 +68,15 @@ export function ClassSection({
   rooms,
   roomId,
   onRoom,
+  delivery,
+  onDelivery,
+  mediaMode,
+  onMediaMode,
   teachers,
   staffing,
   onStaffing,
   appraisal,
 }: ClassSectionProps): ReactNode {
-  const chosenRoom = rooms.find((r) => r.id === roomId);
-
   return (
     <>
       <ScopeSelectors
@@ -98,26 +115,18 @@ export function ClassSection({
         locked={locked ? ['subjectId', 'academicYearId'] : []}
       />
 
-      <SelectField
-        label={t('admin.schedules.room')}
-        value={roomId}
-        onChange={onRoom}
-        // BR-23 and §20 rule 22: capacity **informs and refuses nothing**. It is
-        // shown as a hint beside the choice rather than enforced as a limit —
-        // the Owner asked for a capacity field, and this is the honest form of
-        // it, because the platform must never refuse a booking on this number.
-        hint={
-          chosenRoom?.capacity != null
-            ? t('admin.schedules.roomCapacityHint').replace(
-                '{n}',
-                String(chosenRoom.capacity),
-              )
-            : undefined
-        }
-        options={[
-          { value: '', label: t('admin.schedules.noRoom') },
-          ...rooms.map((r) => ({ value: r.id, label: r.name })),
-        ]}
+      {/* **R97 — delivery, and the room that only an in-person class has.**
+          One section, shared with the occurrence editor: a class scheduled
+          عن بُعد and an occurrence moved عن بُعد must offer the same choices and
+          call them the same things. */}
+      <DeliverySection
+        mode={delivery}
+        onMode={onDelivery}
+        mediaMode={mediaMode}
+        onMediaMode={onMediaMode}
+        rooms={rooms}
+        roomId={roomId}
+        onRoom={onRoom}
       />
 
       {/* **§4.4c staffing, with its EFFECTIVE PERIODS** (R91).

@@ -10,13 +10,20 @@ import {
   type EditScope,
   type ScheduleSession,
 } from '../../adapters/sessions.js';
-import { listBranches } from '../../adapters/branches-admin.js';
+import { listBranches, listRooms } from '../../adapters/branches-admin.js';
 import { searchUsers, type UserSummary } from '../../adapters/users.js';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
 import { SessionMaterialsDialog } from '../../components/content/session-materials-dialog.js';
 import { Button } from '../../components/ui/button.js';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
 import { SessionAudienceDialog } from '../../components/scheduling/session-audience-dialog.js';
+import {
+  DeliverySection,
+  deliveryLabel,
+  mediaLabel,
+  type DeliveryMode,
+  type OnlineMediaMode,
+} from '../../components/scheduling/delivery.js';
 import { StaffPicker } from '../../components/scheduling/staff-picker.js';
 import { DataTable, type Column, type RowAction, type TableStatus } from '../../components/ui/data-table.js';
 import { FormDialog } from '../../components/ui/form-dialog.js';
@@ -109,6 +116,10 @@ export function ScheduleSessionsPage({ scheduleId }: { scheduleId: string }): Re
     teachingMode: string;
   } | null>(null);
 
+  /** R97 — the branch's rooms, so an occurrence moved back to حضوري can name
+   *  the one it meets in. Loaded once the schedule's branch is known. */
+  const [rooms, setRooms] = useState<{ id: string; name: string; capacity: number | null }[]>([]);
+
   const load = useCallback(async () => {
     setStatus('loading');
     try {
@@ -175,6 +186,21 @@ export function ScheduleSessionsPage({ scheduleId }: { scheduleId: string }): Re
       cell: (r) => t(`admin.sessions.status.${r.status}`),
     },
     {
+      // **R97 — what this occurrence actually is**, which after an override is
+      // not what its schedule says. Rendered through the one shared label
+      // (rule C), and the media mode rides in the same cell rather than in a
+      // column of its own — it is meaningful for online rows only, so a column
+      // would be empty for most of the table.
+      key: 'delivery',
+      header: t('delivery.label'),
+      cell: (r) => {
+        const media = mediaLabel(r);
+        return media
+          ? `${deliveryLabel(r) ?? '—'} · ${media}`
+          : (deliveryLabel(r) ?? '—');
+      },
+    },
+    {
       key: 'protection',
       header: t('admin.sessions.colProtection'),
       secondary: true,
@@ -200,6 +226,17 @@ export function ScheduleSessionsPage({ scheduleId }: { scheduleId: string }): Re
       .then((p) => setBranches(p.data.map((b) => ({ id: b.id, name: b.name }))))
       .catch(() => setBranches([]));
   }, [accessToken]);
+
+  useEffect(() => {
+    // A room belongs to a branch, so the list follows the schedule's branch —
+    // the same rule the scheduling form applies (§4.4). The server refuses a
+    // room at another branch regardless (`ROOM_BRANCH_MISMATCH`).
+    const branchId = scope?.branchId;
+    if (!branchId) return;
+    void listRooms(branchId, accessToken)
+      .then((p) => setRooms(p.data.map((r) => ({ id: r.id, name: r.name, capacity: null }))))
+      .catch(() => setRooms([]));
+  }, [scope?.branchId, accessToken]);
 
   const actions: RowAction<ScheduleSession>[] = [
     { label: t('common.edit'), onSelect: (r) => setEditing(r) },
@@ -286,7 +323,14 @@ export function ScheduleSessionsPage({ scheduleId }: { scheduleId: string }): Re
   async function applyEdit(
     session: ScheduleSession,
     scope: EditScope,
-    edit: { date: string; start_time: string; end_time: string },
+    edit: {
+      date: string;
+      start_time: string;
+      end_time: string;
+      room_id: string | null;
+      delivery_mode: DeliveryMode;
+      online_media_mode: OnlineMediaMode | null;
+    },
   ): Promise<void> {
     if (scope === 'this_session') {
       // **Only THIS scope announces** (R83.3): the two wider ones edit the RULE
@@ -308,7 +352,18 @@ export function ScheduleSessionsPage({ scheduleId }: { scheduleId: string }): Re
     // Both wider scopes edit the RULE, so they carry only what a rule has —
     // times, never a date. Moving one occurrence to another day is exactly what
     // "this session only" is for.
-    const scheduleEdit = { start_time: edit.start_time, end_time: edit.end_time };
+    //
+    // **Delivery IS a rule-level fact** (R97), so it travels with them: taking
+    // a class عن بُعد from next week onward is a change to how the class is
+    // delivered, and the server resyncs the future un-protected occurrences
+    // while leaving the past exactly as it happened.
+    const scheduleEdit = {
+      start_time: edit.start_time,
+      end_time: edit.end_time,
+      room_id: edit.room_id,
+      delivery_mode: edit.delivery_mode,
+      online_media_mode: edit.online_media_mode,
+    };
     await run(
       () =>
         updateCourseSchedule(
@@ -355,6 +410,7 @@ export function ScheduleSessionsPage({ scheduleId }: { scheduleId: string }): Re
         <ScopeDialog
           session={editing}
           total={rows.length}
+          rooms={rooms}
           busy={busy}
           onCancel={() => setEditing(null)}
           onConfirm={(scope, edit) => void applyEdit(editing, scope, edit)}
@@ -509,16 +565,27 @@ export function ScheduleSessionsPage({ scheduleId }: { scheduleId: string }): Re
 function ScopeDialog({
   session,
   total,
+  rooms,
   busy,
   onConfirm,
   onCancel,
 }: {
   session: ScheduleSession;
   total: number;
+  /** R97 — the branch's rooms; empty until the schedule's scope has loaded,
+   *  which only affects the in-person branch of the section below. */
+  rooms: { id: string; name: string; capacity: number | null }[];
   busy: boolean;
   onConfirm: (
     scope: EditScope,
-    edit: { date: string; start_time: string; end_time: string },
+    edit: {
+      date: string;
+      start_time: string;
+      end_time: string;
+      room_id: string | null;
+      delivery_mode: DeliveryMode;
+      online_media_mode: OnlineMediaMode | null;
+    },
   ) => void;
   onCancel: () => void;
 }): ReactNode {
@@ -526,6 +593,18 @@ function ScopeDialog({
   const [date, setDate] = useState(session.date);
   const [startTime, setStartTime] = useState(session.start_time);
   const [endTime, setEndTime] = useState(session.end_time);
+  /**
+   * **R97 — opened on what this occurrence IS**, not on the schedule's default.
+   * After an override the two differ, and seeding from the schedule would let a
+   * reader re-save an unrelated field and silently undo the override.
+   */
+  const [delivery, setDelivery] = useState<DeliveryMode>(
+    session.delivery_mode === 'online' ? 'online' : 'in_person',
+  );
+  const [mediaMode, setMediaMode] = useState<OnlineMediaMode>(
+    session.online_media_mode === 'audio_only' ? 'audio_only' : 'audio_video',
+  );
+  const [roomId, setRoomId] = useState(session.room_id ?? '');
 
   return (
     <Dialog open onClose={onCancel} title={t('admin.sessions.editTitle')} wide>
@@ -584,6 +663,20 @@ function ScopeDialog({
           />
         </div>
 
+        {/* **R97 — the SAME section the scheduling form uses** (rule C). One
+            occurrence moved عن بُعد and a whole class scheduled عن بُعد must
+            offer the same choices under the same words; a dialog-local copy is
+            how one of them ends up missing «صوت فقط». */}
+        <DeliverySection
+          mode={delivery}
+          onMode={setDelivery}
+          mediaMode={mediaMode}
+          onMediaMode={setMediaMode}
+          rooms={rooms}
+          roomId={roomId}
+          onRoom={setRoomId}
+        />
+
         <div className="form__actions">
           <Button variant="secondary" onClick={onCancel}>
             {t('common.cancel')}
@@ -596,6 +689,12 @@ function ScopeDialog({
                 date: scope === 'this_session' ? date : session.date,
                 start_time: startTime,
                 end_time: endTime,
+                // Hidden means CLEARED (§13): an online occurrence submits no
+                // room whatever was selected before the switch, and an
+                // in-person one submits no media mode.
+                room_id: delivery === 'online' ? null : roomId || null,
+                delivery_mode: delivery,
+                online_media_mode: delivery === 'online' ? mediaMode : null,
               })
             }
           >

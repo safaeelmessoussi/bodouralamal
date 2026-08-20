@@ -709,6 +709,47 @@ nothing**. When a response shape changes, grep the harnesses as well as `src` �
 than loosening it.
 
 
+### A fixture must be wiped by what it OWNS, not by what it is called
+
+`seed-notify-scenario.ts` wiped by tag: users named `[notify] …`, schedules
+titled `[notify] …`. But the harnesses that use it **create a class through the
+real scheduling form**, so that schedule's title is whatever the harness typed —
+`تفسير الفاتحة 777777777777` — and the tag-keyed wipe never saw it. The
+`course_schedule_staff` row survived, `user` RESTRICTs against it, and the
+**next** run of the seed died at `user.deleteMany` with a foreign-key error
+naming neither the schedule nor the harness that made it.
+
+The tell is the shape of the failure: a seed that has worked for weeks failing
+in its *wipe* rather than in its *setup*. Driving the real UI is the whole point
+of a browser harness, so **anything the UI creates is fixture residue the seed
+must own** — key the teardown on the entity the fixture actually created (here,
+the user) and follow the foreign keys out from it.
+
+Two related habits, both already paid for above: give every harness a `trap`
+that cleans on exit, and **batch long harness runs**, because the tool cap
+SIGTERMs the loop and a `trap` in the *outer* shell does not fire for the child
+that was killed.
+
+### One cookie, ONE consumer — and the symptom is not a 401
+
+TD-4.13 refresh-token reuse detection revokes a session whose cookie is
+presented twice. `verify-delivery` minted its API bearer from the Admin's
+browser cookie and then handed that same cookie back to the browser; the first
+navigation worked and the **second** rendered «ليست لديك صلاحية».
+
+That reads as an authorization bug in the feature under test, which is why it
+cost a debugging cycle. Two rules follow:
+
+* mint a **separate dev session per consumer** — `ADMIN_COOKIE` for the browser,
+  `ADMIN_API_COOKIE` for the harness's own `fetch`;
+* mint **every** bearer up front, before the browser holds any identity, and
+  then set the browser's cookie once and never touch it again — re-setting an
+  identity's original cookie after a page load presents an already-rotated
+  token.
+
+`verify-delivery.mjs` now **throws** on «ليست لديك صلاحية» rather than reporting
+it as a delivery failure, so the next person meets the real cause immediately.
+
 ## Acceptance checklists
 
 A module is Done only when its checklist is fully ticked, its test gates pass, and its

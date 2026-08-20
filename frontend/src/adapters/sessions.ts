@@ -37,6 +37,14 @@ export interface ScheduleSession {
    *  schedule*. What a "this session only" edit leaves behind. */
   overridden: boolean;
   room_id: string | null;
+  /**
+   * **R97 — طريقة الحضور.** `'in_person'` | `'online'`, with
+   * `online_media_mode` non-null exactly when it is `'online'`. Rendered
+   * through `deliveryLabel` in `components/scheduling/delivery.tsx` and never
+   * hand-written per screen.
+   */
+  delivery_mode: string;
+  online_media_mode: string | null;
   /** TD-15: sent back on a single-occurrence edit. */
   version: number;
   staff: { user_id: string; position: string }[];
@@ -71,6 +79,13 @@ export interface SessionEdit {
   start_time?: string;
   end_time?: string;
   room_id?: string | null;
+  /**
+   * **R97 — this occurrence's own delivery.** Sent as a unit: naming the mode
+   * means naming the media mode that goes with it, and the server refuses a
+   * combination that cannot be stored rather than dropping the odd field.
+   */
+  delivery_mode?: 'in_person' | 'online';
+  online_media_mode?: 'audio_video' | 'audio_only' | null;
   /**
    * **This occurrence's own staffing** (R43.4, surfaced by R91 §11).
    *

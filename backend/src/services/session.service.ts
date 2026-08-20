@@ -8,6 +8,7 @@ import { notifyRestored } from "./notification.service.js";
 import { AppError } from "../lib/errors.js";
 import { atMidnightUtc } from "../lib/recurrence.js";
 import * as scope from "../policies/branch-scope.js";
+import { resolveDelivery } from "../policies/delivery.js";
 import {
   audienceForSession,
   audienceSize,
@@ -150,6 +151,17 @@ export interface SessionOverride {
   startTime?: Date;
   endTime?: Date;
   roomId?: string | null;
+  /**
+   * **R97 — this occurrence's own delivery.**
+   *
+   * Exactly the footing `roomId` has: it changes THIS date and nothing else,
+   * and the `overridden` flag this function always sets is what keeps the next
+   * schedule edit from resyncing it away. No separate endpoint, no second
+   * override marker — `PATCH /sessions/{id}` already means *decide about one
+   * occurrence*, and delivery is one of the things there is to decide.
+   */
+  deliveryMode?: "in_person" | "online" | undefined;
+  onlineMediaMode?: "audio_video" | "audio_only" | null | undefined;
   /** The occurrence's own staffing (Revision 43.4). Supplying it REPLACES the
    *  snapshot for this session; omitting it leaves the snapshot untouched. */
   staff?: { userId: string; position: "teacher" | "assistant" }[];
@@ -184,9 +196,30 @@ export async function overrideSession(
     );
   }
 
-  if (data.roomId) {
+  /**
+   * **R97 — resolved against what this occurrence currently IS.**
+   *
+   * `session.override` is a partial edit, so *«make this one online»* must not
+   * be readable as *«and clear the media mode»*. `policies/delivery.ts` is the
+   * single place that answers it, and it returns all three columns — including
+   * the `room_id: null` that makes an online occurrence occupy nothing.
+   */
+  const delivery = resolveDelivery(session, {
+    ...(data.deliveryMode === undefined
+      ? {}
+      : { deliveryMode: data.deliveryMode }),
+    ...(data.onlineMediaMode === undefined
+      ? {}
+      : { onlineMediaMode: data.onlineMediaMode }),
+    ...(data.roomId === undefined ? {} : { roomId: data.roomId }),
+  });
+
+  // A room is validated only when the occurrence will actually have one: an
+  // online override carries no venue, so there is nothing to check against the
+  // branch.
+  if (delivery.roomId) {
     const room = await prisma.room.findFirst({
-      where: { id: data.roomId, deletedAt: null },
+      where: { id: delivery.roomId, deletedAt: null },
       select: { branchId: true },
     });
     if (!room) throw new AppError("NOT_FOUND", "no such room");
@@ -220,7 +253,15 @@ export async function overrideSession(
     data.startTime?.toISOString(),
   );
   track("end_time", session.endTime.toISOString(), data.endTime?.toISOString());
-  track("room_id", session.roomId, data.roomId);
+  track("room_id", session.roomId, delivery.roomId);
+  // R97 — recorded in the audit row, because *when did this class stop meeting
+  // in the building* is a question the record has to be able to answer.
+  track("delivery_mode", session.deliveryMode, delivery.deliveryMode);
+  track(
+    "online_media_mode",
+    session.onlineMediaMode,
+    delivery.onlineMediaMode,
+  );
 
   return prisma.$transaction(async (tx) => {
     const updated = await updateWithVersion<Session>({
@@ -232,7 +273,10 @@ export async function overrideSession(
         ...(data.date === undefined ? {} : { date: atMidnightUtc(data.date) }),
         ...(data.startTime === undefined ? {} : { startTime: data.startTime }),
         ...(data.endTime === undefined ? {} : { endTime: data.endTime }),
-        ...(data.roomId === undefined ? {} : { roomId: data.roomId }),
+        // All three together (R97) — see `policies/delivery.ts`.
+        roomId: delivery.roomId,
+        deliveryMode: delivery.deliveryMode,
+        onlineMediaMode: delivery.onlineMediaMode,
         overridden: true,
       },
     });

@@ -34,6 +34,10 @@ import {
   ClassSection,
   TEACHER_SCOPE_KINDS,
 } from '../../components/scheduling/class-section.js';
+import type {
+  DeliveryMode,
+  OnlineMediaMode,
+} from '../../components/scheduling/delivery.js';
 import { ExamSection, examStaffOf } from '../../components/scheduling/exam-section.js';
 import { SchedulingForm } from '../../components/scheduling/scheduling-form.js';
 import { patternOf, type RecurrenceValue } from '../../components/scheduling/recurrence-editor.js';
@@ -752,6 +756,17 @@ export function SchedulingDialog({
    */
   const [mode, setMode] = useState<string>(item?.ids.teachingMode ?? 'administrative_group');
   const [roomId, setRoomId] = useState(item?.ids.roomId ?? '');
+  /**
+   * **R97 — طريقة الحضور**, defaulting to حضوري: that is the column's default,
+   * what every class scheduled before this revision was, and what an
+   * administrator opening the form is most often about to schedule.
+   */
+  const [delivery, setDelivery] = useState<DeliveryMode>(
+    item?.ids.deliveryMode === 'online' ? 'online' : 'in_person',
+  );
+  const [mediaMode, setMediaMode] = useState<OnlineMediaMode>(
+    item?.ids.onlineMediaMode === 'audio_only' ? 'audio_only' : 'audio_video',
+  );
   const [rooms, setRooms] = useState<{ id: string; name: string; capacity: number | null }[]>([]);
   // `RoomDto` publishes no `capacity` — BR-23 makes it informational and it is
   // enforced nowhere, so putting it on this wire is a further contract change
@@ -856,6 +871,10 @@ export function SchedulingDialog({
     // would report every edited class as changed before it was touched.
     mode: item?.ids.teachingMode ?? 'administrative_group',
     roomId: item?.ids.roomId ?? '',
+    // R97 — delivery joins the dirty check (rule U): a form holding an unsaved
+    // switch to عن بُعد must not close on a stray backdrop click.
+    delivery: item?.ids.deliveryMode === 'online' ? 'online' : 'in_person',
+    mediaMode: item?.ids.onlineMediaMode === 'audio_only' ? 'audio_only' : 'audio_video',
     teacherId: item?.ids.staff.find((x) => x.position === 'teacher')?.user_id ?? '',
     // **R91 — the dated assignments join the dirty check** (rule U). A form
     // holding an unsaved replacement must not close on a stray click, and
@@ -889,6 +908,8 @@ export function SchedulingDialog({
       recurrence,
       mode,
       roomId,
+      delivery,
+      mediaMode,
       teacherId,
       staffing,
       assistantIds: [...assistantIds].sort(),
@@ -1178,7 +1199,13 @@ export function SchedulingDialog({
           teachingMode: mode,
           targetId,
           branchId: scope.value.branchId,
-          roomId: roomId || null,
+          // **R97 — hidden means CLEARED, not merely unsubmitted** (§13). An
+          // online class sends no room whatever was chosen before the switch,
+          // and an in-person one sends no media mode; the server refuses either
+          // combination anyway, and this keeps the payload honest about it.
+          roomId: delivery === 'online' ? null : roomId || null,
+          deliveryMode: delivery,
+          onlineMediaMode: delivery === 'online' ? mediaMode : null,
           academicYearId: scope.value.academicYearId,
           /**
            * **R91 — the dated assignments, as typed.**
@@ -1281,6 +1308,10 @@ export function SchedulingDialog({
             rooms={rooms}
             roomId={roomId}
             onRoom={setRoomId}
+            delivery={delivery}
+            onDelivery={setDelivery}
+            mediaMode={mediaMode}
+            onMediaMode={setMediaMode}
             teachers={teachers}
             staffing={staffing}
             onStaffing={setStaffing}

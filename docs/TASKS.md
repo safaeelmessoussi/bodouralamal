@@ -618,6 +618,21 @@
 - [x] **Backend CI typecheck was red on `develop`** — 12 pre-existing errors fixed
 - [x] 26 new integration cases · 16 frontend guards + 1 CI shell guard (the CSS invariant cannot live in vitest) · `verify-quran-entry` **24/24** · 19 CI guards · 25 browser harnesses / 556 checks
 - [x] **SRS Revision 95** ratifies the memorisation-vs-revision semantics — `new_memorization` alone feeds coverage, `revision` is recorded and never inflates it, BR-13's merge and BR-11 unchanged in substance
+### R97 — a class is delivered حضوري or عن بُعد (2026-08-20)
+
+- [x] **Delivery domain, provider-independent** — `delivery_mode` + `online_media_mode` on schedule and occurrence, migration `20260820180000_r97_delivery_mode`, 14 schedules / 773 sessions backfilled to `in_person`
+- [x] **One inheritance mechanism reused** — schedule default → materialize snapshot → `Session.overridden`; no `delivery_overridden` column
+- [x] **An online occurrence holds no room**, by CHECK — so room-collision detection needs no special case; staff-time conflicts unchanged
+- [x] **R91 staffing and R92 audience proved untouched**; Branch remains administrative scope
+- [x] **One shared `DeliverySection`** for the class form and the occurrence editor; hidden means cleared
+- [x] **Defect: the calendar wire DTO dropped the new fields** — found in the browser, fixed, and now guarded by an exact key-set assertion
+- [x] Tests: 32 backend integration · 21 frontend · 2 new wire-contract cases · 4 exact-key guards restated
+- [x] Browser: `verify-delivery` **24/24**; all 29 harnesses green (**612 checks**)
+- [x] **Provider decision recorded, not implemented** — LiveKit for MVP (`online-class-provider.md`), with the Egress/Redis and MinIO-reachability findings
+- [x] `qrcode`/`@types/qrcode` re-pinned exact, per repository dependency policy
+
+**Deliberately NOT built (next section):** rooms, tokens, joining, recording, egress, import of recordings as `EducationalContent`.
+
 ### R96 — one QR identity per platform person (2026-08-20)
 - [x] **Beneficiary-only QR rejected before implementation** — the unit of identity is the person
 - [x] Audit cleared the STOP condition: children and teens are already full `User` rows

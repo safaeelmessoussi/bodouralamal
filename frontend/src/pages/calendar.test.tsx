@@ -30,6 +30,9 @@ const occurrence = (over: Partial<Occurrence> = {}): Occurrence => ({
   date: '2026-06-15',
   start_time: '09:00',
   end_time: '10:30',
+  // R97 — a session carries a delivery; an Event and an Exam send null.
+  delivery_mode: 'in_person',
+  online_media_mode: null,
   visibility: null,
   branch_id: null,
   description: null,

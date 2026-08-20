@@ -25,6 +25,9 @@ interface Row {
   visibility: string | null;
   hijri_date: string | null;
   hijri_month_ar: string | null;
+  /** R97 — `null` for an Event and an Exam, which have no delivery model. */
+  delivery_mode: string | null;
+  online_media_mode: string | null;
 }
 interface Body {
   error?: { code?: string };
@@ -341,5 +344,72 @@ describe("prefilled_filters changes where the dropdowns start, nothing else", ()
     expect(res.status).toBe(200);
     expect(res.body.prefilled_filters!["academic_year_id"]).not.toBeUndefined();
     expect(mine(res.body).some((r) => r.kind === "event")).toBe(true);
+  });
+});
+
+/**
+ * **The occurrence's WIRE key set** (§16.2, R97).
+ *
+ * ## Why this guard exists
+ *
+ * `occurrenceDto` lists its keys explicitly — which is correct — and returns
+ * `Record<string, unknown>`, which means **no typecheck can see a field the
+ * service carries and the wire drops**. R97 added `delivery_mode` to the
+ * `Occurrence` interface, every calendar surface rendered nothing, the backend
+ * and frontend both typechecked, and the gap was found only by driving a real
+ * browser. That is rule P — a complete capability with no reach — and it is the
+ * defect this project has shipped most often.
+ *
+ * Pinning the whole set rather than the two new keys is deliberate: the next
+ * field added to the interface fails here, whatever it is called.
+ */
+const OCCURRENCE_KEYS = [
+  "audience_label",
+  "branch_id",
+  "branch_name",
+  "category_id",
+  "category_name",
+  "date",
+  "delivery_mode",
+  "description",
+  "end_time",
+  "hijri_date",
+  "hijri_month_ar",
+  "id",
+  "instructors",
+  "kind",
+  "level_id",
+  "level_name",
+  "online_media_mode",
+  "recurrence",
+  "room_name",
+  "start_time",
+  "status",
+  "subject_id",
+  "subject_name",
+  "teaching_mode",
+  "title",
+  "visibility",
+];
+
+describe("the occurrence projection reaches the wire (§16.2, R97)", () => {
+  it("publishes exactly the documented key set", async () => {
+    const res = await call(`/calendar?${RANGE}`);
+    expect(res.status).toBe(200);
+    const row = mine(res.body)[0]!;
+    expect(Object.keys(row).sort()).toEqual(OCCURRENCE_KEYS);
+  });
+
+  it("sends null delivery for an Event — never an invented حضوري (R97.10)", async () => {
+    const res = await call(`/calendar?${RANGE}`);
+    const events = mine(res.body).filter((r) => r.kind === "event");
+    expect(events.length).toBeGreaterThan(0);
+    // An Event is R43's non-teaching activity layer and has no delivery model.
+    // The key is PRESENT and null, which is a different statement from absent.
+    for (const e of events) {
+      expect(e).toHaveProperty("delivery_mode");
+      expect(e.delivery_mode).toBeNull();
+      expect(e.online_media_mode).toBeNull();
+    }
   });
 });

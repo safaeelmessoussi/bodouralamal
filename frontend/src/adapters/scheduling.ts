@@ -105,6 +105,10 @@ export interface SchedulingItem {
 export interface SchedulingIds {
   branchId: string | null;
   roomId: string | null;
+  /** **R97 — طريقة الحضور**, so an edit form opens on what the class IS. `null`
+   *  for kinds that have no delivery model (an Event, an Exam sitting). */
+  deliveryMode: string | null;
+  onlineMediaMode: string | null;
   /**
    * **The Level the item is for**, not merely the Level where it is the target.
    *
@@ -165,6 +169,8 @@ interface EventDefinitionWire {
 const EMPTY_IDS: SchedulingIds = {
   branchId: null,
   roomId: null,
+  deliveryMode: null,
+  onlineMediaMode: null,
   levelId: null,
   groupId: null,
   teachingMode: null,
@@ -201,6 +207,8 @@ export function fromSchedule(row: CourseSchedule): SchedulingItem {
     ids: {
       branchId: row.branch_id,
       roomId: row.room_id,
+      deliveryMode: row.delivery_mode,
+      onlineMediaMode: row.online_media_mode,
       // The Level comes from the server's resolved field, never from
       // `target_id`: in every mode but `entire_level` the target is not a Level.
       levelId: row.level_id,
@@ -285,6 +293,10 @@ function fromExam(row: Exam): SchedulingItem {
     ids: {
       branchId: row.branch_id,
       roomId: row.room_id,
+      // R97 — an Exam sitting is physical by §4.6 and carries no delivery
+      // model; `null` says so rather than defaulting it to in-person.
+      deliveryMode: null,
+      onlineMediaMode: null,
       levelId: row.level_id,
       groupId: row.administrative_group_id,
       // An exam is not a course schedule: §4.4c's teaching mode is a property
@@ -428,6 +440,10 @@ export interface SchedulingInput {
   targetId?: string;
   branchId?: string;
   roomId?: string | null;
+  /** R97 — sent as a unit with `onlineMediaMode`; the server refuses a
+   *  combination it cannot store rather than dropping the odd field. */
+  deliveryMode?: 'in_person' | 'online';
+  onlineMediaMode?: 'audio_video' | 'audio_only' | null;
   academicYearId?: string;
   staff?: {
     user_id: string;
@@ -504,6 +520,15 @@ export async function saveSchedulingItem(
           anchor_date: input.startDate || null,
           effective_until: input.repeatUntil,
           ...(input.roomId !== undefined ? { room_id: input.roomId } : {}),
+          // **R97 — delivery travels whole.** Sending the mode without the
+          // media mode is exactly what the server refuses, and sending neither
+          // leaves the class delivered as it was.
+          ...(input.deliveryMode !== undefined
+            ? {
+                delivery_mode: input.deliveryMode,
+                online_media_mode: input.onlineMediaMode ?? null,
+              }
+            : {}),
           // **Staffing, which was silently absent here** (R90). The form has
           // always rendered the مؤطِّرة and her assistants on edit; the payload
           // omitted them and the server refused the key, so reassigning an
@@ -532,6 +557,12 @@ export async function saveSchedulingItem(
         anchor_date: input.startDate || null,
         effective_until: input.repeatUntil,
         ...(input.roomId ? { room_id: input.roomId } : {}),
+        ...(input.deliveryMode !== undefined
+          ? {
+              delivery_mode: input.deliveryMode,
+              online_media_mode: input.onlineMediaMode ?? null,
+            }
+          : {}),
         ...(input.staff ? { staff: input.staff } : {}),
       },
       token,

@@ -47,6 +47,15 @@ export function override(prisma: PrismaClient) {
           : {}),
         ...(body.end_time !== undefined ? { endTime: body.end_time } : {}),
         ...(body.room_id !== undefined ? { roomId: body.room_id } : {}),
+        // R97 — passed through as sent; `policies/delivery.ts` resolves the
+        // three columns together in the service, which is the only place that
+        // knows what this occurrence currently is.
+        ...(body.delivery_mode !== undefined
+          ? { deliveryMode: body.delivery_mode }
+          : {}),
+        ...(body.online_media_mode !== undefined
+          ? { onlineMediaMode: body.online_media_mode }
+          : {}),
         // Absent leaves the snapshot untouched; an empty array is a real
         // instruction — *this session has no staff* — so the two must not
         // collapse into one another here.

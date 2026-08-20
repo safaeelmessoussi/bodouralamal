@@ -28,13 +28,13 @@
     "express": "5.2.1",
     "pg-boss": "12.26.2",
     "prisma": "7.9.0",
-    "qrcode": "^1.5.4",
+    "qrcode": "1.5.4",
     "zod": "4.4.3"
   },
   "devDependencies": {
     "@types/express": "5.0.6",
     "@types/node": "24.13.3",
-    "@types/qrcode": "^1.5.6",
+    "@types/qrcode": "1.5.6",
     "eslint": "10.7.0",
     "tsx": "4.23.1",
     "typescript": "6.0.3",

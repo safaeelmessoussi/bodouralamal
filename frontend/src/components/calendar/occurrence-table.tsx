@@ -5,6 +5,7 @@ import { t } from '../../i18n/index.js';
 import { Badge } from '../ui/badge.js';
 import { DataTable, type TableStatus } from '../ui/data-table.js';
 import { levelLabel } from '../scope/level-select.js';
+import { deliveryLabel, venueLabel } from '../scheduling/delivery.js';
 
 /**
  * **قائمة, as a table, on every surface that lists occurrences** (rule AO).
@@ -34,7 +35,11 @@ export type OccurrenceColumn =
   | 'subject'
   | 'audience'
   | 'branch'
-  | 'room';
+  | 'room'
+  /** R97 — حضوري / عن بُعد. Its own column because it is its own concept: the
+   *  Branch says the administrative scope and the room says the venue, and an
+   *  online class has the first without the second. */
+  | 'delivery';
 
 const KIND_TONE: Record<string, 'neutral' | 'ok' | 'warn'> = {
   session: 'ok',
@@ -115,7 +120,18 @@ export function OccurrenceTable({
       header: t('calendar.table.branch'),
       cell: (o) => o.branch_name ?? t('calendar.table.noBranch'),
     },
-    room: { key: 'room', header: t('calendar.table.room'), cell: (o) => o.room_name ?? '—' },
+    // **Answers *where does this happen*** (rule C, `venueLabel`): the room for
+    // an in-person class, «عن بُعد» for an online one. A cell that said only
+    // «—» for every online class would read as missing data rather than as a
+    // class with no venue.
+    room: { key: 'room', header: t('calendar.table.room'), cell: (o) => venueLabel(o) ?? '—' },
+    delivery: {
+      key: 'delivery',
+      header: t('delivery.label'),
+      // `—` for an Event and an Exam, which have no delivery model — never an
+      // invented «حضوري».
+      cell: (o) => deliveryLabel(o) ?? '—',
+    },
   };
 
   return (

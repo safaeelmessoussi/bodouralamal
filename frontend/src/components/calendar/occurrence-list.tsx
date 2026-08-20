@@ -2,6 +2,7 @@ import { type ReactNode } from 'react';
 
 import type { Occurrence } from '../../adapters/calendar.js';
 import { t } from '../../i18n/index.js';
+import { venueLabel } from '../scheduling/delivery.js';
 
 /**
  * **The قائمة view of a set of occurrences.**
@@ -73,8 +74,14 @@ export function OccurrenceList({
 
           {/* Only what the projection already carries at this reader's tier.
               Nothing is fetched and nothing is resolved here. */}
+          {/* **The Branch stays for an online class** (R97): it is the
+              administrative and educational scope, not the venue — a class
+              delivered عن بُعد is still a Targa class. What changes is the
+              second half, which `venueLabel` answers. */}
           <p className="occurrence-list__where muted">
-            {[occurrence.branch_name, occurrence.room_name].filter(Boolean).join(' · ')}
+            {[occurrence.branch_name, venueLabel(occurrence, { withMedia: true })]
+              .filter(Boolean)
+              .join(' · ')}
           </p>
         </li>
       ))}

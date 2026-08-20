@@ -56,6 +56,13 @@ export interface Occurrence {
   recurrence: string | null;
   branch_name: string | null;
   room_name: string | null;
+  /**
+   * **R97 — how the occurrence is delivered.** `'in_person' | 'online'` for a
+   * class; **`null` for an Event and an Exam**, which have no delivery model —
+   * `deliveryLabel` returns `null` for them rather than inventing a default.
+   */
+  delivery_mode: string | null;
+  online_media_mode: string | null;
   category_id: string | null;
   category_name: string | null;
   level_id: string | null;

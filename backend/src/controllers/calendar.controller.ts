@@ -129,6 +129,20 @@ function occurrenceDto(o: Occurrence): Record<string, unknown> {
     recurrence: o.recurrence,
     branch_name: o.branchName,
     room_name: o.roomName,
+    /**
+     * **R97 — how the occurrence is delivered.**
+     *
+     * This projection lists its keys explicitly (§16.2), which is right — and
+     * is exactly why adding a field to the `Occurrence` interface is only half
+     * the change. The first run of `verify-delivery` found the other half: the
+     * service carried delivery, every calendar rendered nothing, and no
+     * typecheck could see it because this function returns
+     * `Record<string, unknown>`.
+     *
+     * `null` for an Event and an Exam, which have no delivery model (R97.10).
+     */
+    delivery_mode: o.deliveryMode,
+    online_media_mode: o.onlineMediaMode,
     category_id: o.categoryId,
     category_name: o.categoryName,
     level_id: o.levelId,

@@ -92,6 +92,20 @@ export interface Occurrence {
   recurrence: string | null;
   branchName: string | null;
   roomName: string | null;
+  /**
+   * **R97 — how the occurrence is delivered.** `'in_person' | 'online'` for a
+   * Session; **`null` for an Event and an Exam**, which have no delivery model
+   * at all and must not be given an invented one — the same discipline every
+   * other kind-specific field on this interface follows.
+   *
+   * `onlineMediaMode` is non-null exactly when `deliveryMode` is `'online'`.
+   *
+   * **Provider-independent** (R97, §17 of the delivery slice): no room name,
+   * URL, token or vendor identifier belongs here. Joining a class is a later
+   * revision's concern and will not reach the calendar through this field.
+   */
+  deliveryMode: string | null;
+  onlineMediaMode: string | null;
   categoryId: string | null;
   categoryName: string | null;
   levelId: string | null;
@@ -412,7 +426,12 @@ function sessionOccurrence(
     status: session.status,
     recurrence: null,
     branchName: sch.branch.name,
+    // R97 — an online occurrence holds no room at all (CHECK
+    // `session_online_no_room_check`), so this is `null` by construction rather
+    // than by a filter here.
     roomName: session.room?.name ?? null,
+    deliveryMode: session.deliveryMode,
+    onlineMediaMode: session.onlineMediaMode,
     categoryId: level?.category.id ?? null,
     categoryName: level?.category.name ?? null,
     levelId: level?.id ?? null,
@@ -732,6 +751,10 @@ export async function readCalendar(
         // An Event is the exception layer (§4.4); it has no room and no
         // instructor of its own.
         roomName: null,
+        // R97 — an Event has no delivery model. `null` rather than a default,
+        // exactly as `subjectId` and `status` are null for it.
+        deliveryMode: null,
+        onlineMediaMode: null,
         categoryId: event.categoryScopes[0]?.category.id ?? null,
         categoryName: event.categoryScopes[0]?.category.name ?? null,
         levelId: event.levelScopes[0]?.level.id ?? null,
@@ -813,6 +836,11 @@ export async function readCalendar(
       recurrence: null,
       branchName: exam.branch?.name ?? null,
       roomName: exam.room?.name ?? null,
+      // R97 — an Exam sitting is physical by §4.6 and has no delivery model of
+      // its own. Inventing `in_person` here would state a fact the row does not
+      // hold.
+      deliveryMode: null,
+      onlineMediaMode: null,
       categoryId: exam.level.category.id,
       categoryName: exam.level.category.name,
       levelId: exam.levelId,

@@ -1,7 +1,13 @@
 import { z } from "zod";
 
 import { uuid, version } from "./common.js";
-import { calendarDate, wallClock } from "./course-schedule.validators.js";
+import {
+  calendarDate,
+  checkDelivery,
+  deliveryMode,
+  onlineMediaMode,
+  wallClock,
+} from "./course-schedule.validators.js";
 
 /**
  * Zod schemas for the Session boundary (TD-3.12, §4.4, TD-1).
@@ -30,6 +36,19 @@ export const overrideSessionSchema = z
     end_time: wallClock.optional(),
     room_id: uuid.nullable().optional(),
     /**
+     * **R97 — this occurrence's own delivery**, on exactly the footing
+     * `room_id` has: supplying it overrides the schedule's default for this
+     * date and nothing else, and the `overridden` flag `session.override`
+     * already sets is what protects it from the next resync. There is no
+     * separate "online override" endpoint, because this one represents it.
+     *
+     * The same `checkDelivery` the schedule boundary uses — one rule, one
+     * copy, so an occurrence can never reach a combination a schedule could
+     * not.
+     */
+    delivery_mode: deliveryMode.optional(),
+    online_media_mode: onlineMediaMode.nullable().optional(),
+    /**
      * Supplying this **replaces** this occurrence's staffing snapshot; omitting
      * it leaves the snapshot untouched. An empty array is therefore a real
      * instruction — *this session has no staff* — and is deliberately not the
@@ -44,7 +63,8 @@ export const overrideSessionSchema = z
       .max(20)
       .optional(),
   })
-  .strict();
+  .strict()
+  .superRefine(checkDelivery);
 
 /**
  * **The reason is mandatory and cannot be whitespace** (§4.4). A cancellation

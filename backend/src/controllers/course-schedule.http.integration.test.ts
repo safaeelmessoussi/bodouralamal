@@ -32,6 +32,10 @@ const SCHEDULE_KEYS = [
   // further requests. Labels only; the ids above stay the identifiers.
   "branch_name",
   "day_of_month",
+  // **R97 — طريقة الحضور.** The pair is listed together because the server
+  // refuses one without the other: `online_media_mode` is non-null exactly when
+  // `delivery_mode` is `online`.
+  "delivery_mode",
   // R57 — the class's own name and note. Labels, never identifiers.
   "description",
   // R55 — R50's bound reaches the contract; `null` is open-ended.
@@ -43,6 +47,7 @@ const SCHEDULE_KEYS = [
   // target — the fact the edit form had no way to reach.
   "level_id",
   "month_of_year",
+  "online_media_mode",
   "recurrence",
   "room_id",
   "room_name",

@@ -15,6 +15,9 @@ const WIRE: ScheduleSession = {
   status: 'scheduled',
   overridden: false,
   room_id: null,
+  // R97 — the occurrence's own delivery, snapshotted from its schedule.
+  delivery_mode: 'in_person',
+  online_media_mode: null,
   version: 0,
   staff: [{ user_id: '00000000-0000-4000-8000-000000000002', position: 'teacher' }],
   protected_reasons: [],
@@ -24,8 +27,12 @@ describe('the adapter type matches the wire contract', () => {
   it('carries exactly the keys the endpoint publishes', () => {
     expect(Object.keys(WIRE).sort()).toEqual([
       'date',
+      // R97 — the occurrence's OWN delivery, which after an override is not
+      // its schedule's. The list renders it and the editor opens on it.
+      'delivery_mode',
       'end_time',
       'id',
+      'online_media_mode',
       'overridden',
       'protected_reasons',
       'room_id',

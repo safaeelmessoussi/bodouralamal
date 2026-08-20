@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import type { Occurrence } from '../../adapters/calendar.js';
 import { OCCURRENCE_KIND_LABEL } from '../../adapters/calendar.js';
 import { t } from '../../i18n/index.js';
+import { deliveryLabel } from '../scheduling/delivery.js';
 
 /**
  * One occurrence, at its smallest — used inside a day cell and in the day panel.
@@ -28,9 +29,23 @@ export function EventChip({
   // Title first, time second — the priority order that matters when a cell is
   // scanned. Both live on ONE line: a two-line chip halves how many activities
   // a cell can show, and the time is short enough to sit beside the title.
+  /**
+   * **R97 — online is marked; in-person is not** (§18).
+   *
+   * A month cell is the most crowded surface in the platform, so the calendar
+   * stays discreet: the *exception* is marked and the norm is silent, which is
+   * the same choice the chip already makes about recurrence. Marking both would
+   * put six characters on every class in every cell for no information.
+   *
+   * It is a **word**, not a colour or an icon (rule AV): «عن بُعد» reads to a
+   * screen reader and to a reader who cannot distinguish the tint.
+   */
+  const online = occurrence.delivery_mode === 'online' ? deliveryLabel(occurrence) : null;
+
   const inner = (
     <>
       <span className="event-chip__title">{occurrence.title}</span>
+      {online ? <span className="event-chip__delivery">{online}</span> : null}
       {occurrence.start_time ? (
         // `dir="ltr"` so a clock value is not reordered by the RTL context.
         <time className="event-chip__time" dir="ltr">

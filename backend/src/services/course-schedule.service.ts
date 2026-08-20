@@ -24,6 +24,10 @@ import {
 } from "../lib/recurrence.js";
 import * as scope from "../policies/branch-scope.js";
 import { assertSubjectTaughtAtLevel } from "../policies/curriculum.js";
+import {
+  resolveDelivery,
+  type Delivery,
+} from "../policies/delivery.js";
 import { resolveAudience } from "../policies/roster-resolution.js";
 import * as audit from "../repositories/audit.repository.js";
 import * as trash from "../repositories/trash.repository.js";
@@ -256,6 +260,11 @@ export interface CourseScheduleInput {
   targetId: string;
   branchId: string;
   roomId?: string | null;
+  /** R97 — the DEFAULT delivery for every Session this schedule materializes.
+   *  Absent is `in_person`, which is the column's default and what every class
+   *  scheduled before this revision actually was. */
+  deliveryMode?: Delivery["deliveryMode"] | undefined;
+  onlineMediaMode?: Delivery["onlineMediaMode"] | undefined;
   startTime: Date;
   endTime: Date;
   recurrence: string;
@@ -586,12 +595,31 @@ export async function createCourseSchedule(
       // whose removal justified dropping the roster lock.
     }
 
+    /**
+     * **R97 — the three delivery columns are resolved together** (one home:
+     * `policies/delivery.ts`). An online class is written with `room_id = NULL`
+     * whatever the caller sent, so the CHECK is never the thing that reports it
+     * and no stale venue reaches a reader.
+     */
+    const delivery = resolveDelivery(
+      { deliveryMode: "in_person", onlineMediaMode: null, roomId: null },
+      {
+        ...(input.deliveryMode === undefined
+          ? {}
+          : { deliveryMode: input.deliveryMode }),
+        ...(input.onlineMediaMode === undefined
+          ? {}
+          : { onlineMediaMode: input.onlineMediaMode }),
+        roomId: input.roomId ?? null,
+      },
+    );
+
     const staff = input.staff ?? [];
     const conflicts = await findConflicts(
       tx,
       {
         branchId: input.branchId,
-        roomId: input.roomId ?? null,
+        roomId: delivery.roomId,
         startTime: input.startTime,
         endTime: input.endTime,
         recurrence: input.recurrence,
@@ -615,7 +643,9 @@ export async function createCourseSchedule(
         teachingMode: input.teachingMode,
         ...targetColumns,
         branchId: input.branchId,
-        roomId: input.roomId ?? null,
+        roomId: delivery.roomId,
+        deliveryMode: delivery.deliveryMode,
+        onlineMediaMode: delivery.onlineMediaMode,
         startTime: input.startTime,
         endTime: input.endTime,
         recurrence: input.recurrence as never,
@@ -681,7 +711,9 @@ export async function createCourseSchedule(
         teaching_mode: input.teachingMode,
         target_id: input.targetId,
         branch_id: input.branchId,
-        room_id: input.roomId ?? null,
+        room_id: delivery.roomId,
+        delivery_mode: delivery.deliveryMode,
+        online_media_mode: delivery.onlineMediaMode,
         recurrence: input.recurrence,
         staff: staff.map((s) => ({ user_id: s.userId, position: s.position })),
         sessions_created: materialized.created,
@@ -738,6 +770,9 @@ export async function updateCourseSchedule(
      * stays recorded against it.
      */
     staff?: ScheduleStaffInput[];
+    /** R97 — delivery moves as a unit; `policies/delivery.ts` resolves it. */
+    deliveryMode?: Delivery["deliveryMode"] | undefined;
+    onlineMediaMode?: Delivery["onlineMediaMode"] | undefined;
     /** Required by `this_and_future` — the occurrence the split begins at. */
     fromDate?: Date;
   },
@@ -767,6 +802,11 @@ export async function updateCourseSchedule(
     select: {
       branchId: true,
       roomId: true,
+      // R97 — read so a partial edit resolves against what the class IS, not
+      // against a default. Patching only `online_media_mode` on a class that is
+      // already online must not silently make it in-person.
+      deliveryMode: true,
+      onlineMediaMode: true,
       startTime: true,
       endTime: true,
       recurrence: true,
@@ -828,8 +868,26 @@ export async function updateCourseSchedule(
         })),
     };
 
+    // R97 — resolved BEFORE the conflict check, so an edit that takes a class
+    // online stops competing for the room it is leaving.
+    const delivery = resolveDelivery(existing, {
+      ...(data.deliveryMode === undefined
+        ? {}
+        : { deliveryMode: data.deliveryMode }),
+      ...(data.onlineMediaMode === undefined
+        ? {}
+        : { onlineMediaMode: data.onlineMediaMode }),
+      ...(data.roomId === undefined ? {} : { roomId: data.roomId }),
+    });
+
     // Its own sessions are excluded, or the schedule would conflict with itself.
-    const conflicts = await findConflicts(tx, merged, now, horizon, id);
+    const conflicts = await findConflicts(
+      tx,
+      { ...merged, roomId: delivery.roomId },
+      now,
+      horizon,
+      id,
+    );
     assertNoConflicts(conflicts);
 
     await updateWithVersion({
@@ -847,7 +905,13 @@ export async function updateCourseSchedule(
         ...(data.description === undefined
           ? {}
           : { description: data.description }),
-        ...(data.roomId === undefined ? {} : { roomId: data.roomId }),
+        // **R97 — all three, unconditionally.** Writing one of them alone is
+        // exactly what produces a row the CHECK refuses, and `resolveDelivery`
+        // has already returned the state that is consistent whether or not this
+        // edit mentioned delivery at all.
+        roomId: delivery.roomId,
+        deliveryMode: delivery.deliveryMode,
+        onlineMediaMode: delivery.onlineMediaMode,
         ...(data.startTime === undefined ? {} : { startTime: data.startTime }),
         ...(data.endTime === undefined ? {} : { endTime: data.endTime }),
         ...(data.recurrence === undefined
@@ -940,6 +1004,12 @@ export async function updateCourseSchedule(
         protected_reasons: materialized.protectedSessions.flatMap(
           (p) => p.reasons,
         ),
+        // R97 — how it is delivered from now on. The past occurrences keep what
+        // they were delivered as, and this row is the record of when that
+        // changed.
+        delivery_mode: delivery.deliveryMode,
+        online_media_mode: delivery.onlineMediaMode,
+        room_id: delivery.roomId,
       },
     });
 
@@ -995,6 +1065,8 @@ async function splitCourseSchedule(
     monthOfYear?: number | null;
     anchorDate?: Date | null;
     effectiveUntil?: Date | null;
+    deliveryMode?: Delivery["deliveryMode"] | undefined;
+    onlineMediaMode?: Delivery["onlineMediaMode"] | undefined;
     version: number;
   },
   now: Date,
@@ -1015,6 +1087,10 @@ async function splitCourseSchedule(
       teachingGroupId: true,
       branchId: true,
       roomId: true,
+      // R97 — the successor IS the same class, so it inherits how the class is
+      // delivered unless this edit says otherwise.
+      deliveryMode: true,
+      onlineMediaMode: true,
       startTime: true,
       endTime: true,
       recurrence: true,
@@ -1062,6 +1138,16 @@ async function splitCourseSchedule(
   const closeAt = addDays(splitOn, -1);
   const horizon = await horizonFor(prisma, now);
 
+  const successorDelivery = resolveDelivery(existing, {
+    ...(data.deliveryMode === undefined
+      ? {}
+      : { deliveryMode: data.deliveryMode }),
+    ...(data.onlineMediaMode === undefined
+      ? {}
+      : { onlineMediaMode: data.onlineMediaMode }),
+    ...(data.roomId === undefined ? {} : { roomId: data.roomId }),
+  });
+
   return prisma.$transaction(async (tx) => {
     const successorValues = {
       // **The successor IS the same class**, split at a date (R50) — so it keeps
@@ -1078,7 +1164,11 @@ async function splitCourseSchedule(
       teachingGroupId: existing.teachingGroupId,
       branchId: existing.branchId,
       academicYearId: existing.academicYearId,
-      roomId: data.roomId === undefined ? existing.roomId : data.roomId,
+      // R97 — all three from one resolution, so a split that takes the tail
+      // online leaves the successor with no room rather than a stale one.
+      roomId: successorDelivery.roomId,
+      deliveryMode: successorDelivery.deliveryMode,
+      onlineMediaMode: successorDelivery.onlineMediaMode,
       startTime: data.startTime ?? existing.startTime,
       endTime: data.endTime ?? existing.endTime,
       // Cast to the Prisma enums: the caller's values are already validated by
@@ -1355,6 +1445,8 @@ export async function listScheduleSessions(
         status: true,
         overridden: true,
         roomId: true,
+        deliveryMode: true,
+        onlineMediaMode: true,
         version: true,
         // **`SessionStaff` carries NO period** (R91). The snapshot IS the
         // occurrence's own truth — who took this class — so a date on it would
@@ -1390,6 +1482,10 @@ export interface ScheduleSessionRow {
   date: Date;
   startTime: Date;
   endTime: Date;
+  /** R97 — what this occurrence actually is, which the list renders and the
+   *  occurrence editor opens on. */
+  deliveryMode: string;
+  onlineMediaMode: string | null;
   status: string;
   /** R43.4 — *a human decided about this occurrence*, not *differs from the
    *  schedule*. What "this session only" leaves behind. */
@@ -1416,6 +1512,11 @@ export async function previewConflicts(
     select: {
       branchId: true,
       roomId: true,
+      // R97 — read so a partial edit resolves against what the class IS, not
+      // against a default. Patching only `online_media_mode` on a class that is
+      // already online must not silently make it in-person.
+      deliveryMode: true,
+      onlineMediaMode: true,
       startTime: true,
       endTime: true,
       recurrence: true,

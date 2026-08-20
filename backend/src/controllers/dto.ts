@@ -515,6 +515,16 @@ export interface CourseScheduleDto {
   level_id: string | null;
   branch_id: string;
   room_id: string | null;
+  /**
+   * **R97 — how the class is delivered.** `in_person` | `online`, with
+   * `online_media_mode` non-null exactly when it is `online`.
+   *
+   * Provider-independent by design: no room name, URL, token or vendor
+   * identifier belongs on this contract. A client renders *«حضوري»* or *«عن
+   * بُعد»* from these two fields alone.
+   */
+  delivery_mode: string;
+  online_media_mode: string | null;
   /** TD-11 wall-clock, `HH:MM`. */
   start_time: string;
   end_time: string;
@@ -574,6 +584,9 @@ export function courseScheduleDto(row: {
   teachingGroupId: string | null;
   branchId: string;
   roomId: string | null;
+  /** R97 — the schedule's DEFAULT delivery for the Sessions it materializes. */
+  deliveryMode: string;
+  onlineMediaMode: string | null;
   startTime: Date;
   endTime: Date;
   recurrence: string;
@@ -631,6 +644,8 @@ export function courseScheduleDto(row: {
     branch_name: row.branch?.name ?? null,
     room_id: row.roomId,
     room_name: row.room?.name ?? null,
+    delivery_mode: row.deliveryMode,
+    online_media_mode: row.onlineMediaMode,
     start_time: timeOnly(row.startTime),
     end_time: timeOnly(row.endTime),
     recurrence: row.recurrence,
@@ -783,6 +798,14 @@ export interface SessionDto {
   start_time: string;
   end_time: string;
   room_id: string | null;
+  /**
+   * **R97 — this occurrence's OWN delivery**, snapshotted at materialization
+   * and overridable for one date. `online_media_mode` is non-null exactly when
+   * `delivery_mode` is `'online'`, and an online occurrence carries no
+   * `room_id` at all.
+   */
+  delivery_mode: string;
+  online_media_mode: string | null;
   /** TD-1 lifecycle. Moved only by `/cancel` and `/restore`, never by `PATCH`. */
   status: string;
   /**
@@ -815,6 +838,9 @@ export function sessionDto(row: {
   startTime: Date;
   endTime: Date;
   roomId: string | null;
+  /** R97 — this occurrence's OWN delivery, snapshotted at materialization. */
+  deliveryMode: string;
+  onlineMediaMode: string | null;
   status: string;
   overridden: boolean;
   cancellationReason: string | null;
@@ -827,6 +853,8 @@ export function sessionDto(row: {
     start_time: timeOnly(row.startTime),
     end_time: timeOnly(row.endTime),
     room_id: row.roomId,
+    delivery_mode: row.deliveryMode,
+    online_media_mode: row.onlineMediaMode,
     status: row.status,
     overridden: row.overridden,
     cancellation_reason: row.cancellationReason,
@@ -1445,6 +1473,16 @@ export interface ScheduleSessionDto {
   /** R43.4 — *a human decided about this occurrence*. */
   overridden: boolean;
   room_id: string | null;
+  /**
+   * **R97 — how the class is delivered.** `in_person` | `online`, with
+   * `online_media_mode` non-null exactly when it is `online`.
+   *
+   * Provider-independent by design: no room name, URL, token or vendor
+   * identifier belongs on this contract. A client renders *«حضوري»* or *«عن
+   * بُعد»* from these two fields alone.
+   */
+  delivery_mode: string;
+  online_media_mode: string | null;
   /** TD-15: sent back on a "this session only" edit. */
   version: number;
   staff: { user_id: string; position: string }[];
@@ -1459,6 +1497,8 @@ export function scheduleSessionDto(row: {
   status: string;
   overridden: boolean;
   roomId: string | null;
+  deliveryMode: string;
+  onlineMediaMode: string | null;
   version: number;
   staff: { userId: string; position: string }[];
   protectedReasons: string[];
@@ -1471,6 +1511,8 @@ export function scheduleSessionDto(row: {
     status: row.status,
     overridden: row.overridden,
     room_id: row.roomId,
+    delivery_mode: row.deliveryMode,
+    online_media_mode: row.onlineMediaMode,
     version: row.version,
     staff: row.staff.map((s) => ({ user_id: s.userId, position: s.position })),
     protected_reasons: row.protectedReasons,

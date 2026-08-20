@@ -69,6 +69,43 @@ async function wipe(): Promise<void> {
     select: { id: true },
   });
   const uids = users.map((u) => u.id);
+  /**
+   * **Schedules these people STAFF, whatever they are called.**
+   *
+   * The harnesses that use this fixture create a class through the real
+   * scheduling form, so the title is whatever was typed — not this file's TAG.
+   * Wiping by title therefore left `course_schedule_staff` rows behind, and the
+   * RESTRICT on `user` then made the NEXT run of the seed fail at
+   * `user.deleteMany` with a foreign-key error that names neither the schedule
+   * nor the harness that made it.
+   *
+   * Keyed on the USER, which is the thing this fixture actually owns.
+   */
+  const staffedScheduleIds = (
+    await prisma.courseScheduleStaff.findMany({
+      where: { userId: { in: uids } },
+      select: { scheduleId: true },
+    })
+  ).map((r) => r.scheduleId);
+  if (staffedScheduleIds.length > 0) {
+    const staffedSessions = await prisma.session.findMany({
+      where: { scheduleId: { in: staffedScheduleIds } },
+      select: { id: true },
+    });
+    const ssids = staffedSessions.map((r) => r.id);
+    await prisma.sessionAudienceBranch.deleteMany({ where: { sessionId: { in: ssids } } });
+    await prisma.sessionContent.deleteMany({ where: { sessionId: { in: ssids } } });
+    await prisma.notification.deleteMany({ where: { sessionId: { in: ssids } } });
+    await prisma.sessionStaff.deleteMany({ where: { sessionId: { in: ssids } } });
+    await prisma.session.deleteMany({ where: { id: { in: ssids } } });
+    await prisma.courseScheduleStaff.deleteMany({
+      where: { scheduleId: { in: staffedScheduleIds } },
+    });
+    await prisma.recurringCourseSchedule.deleteMany({
+      where: { id: { in: staffedScheduleIds } },
+    });
+  }
+
   await prisma.notification.deleteMany({ where: { userId: { in: uids } } });
   await prisma.enrollment.deleteMany({ where: { studentId: { in: uids } } });
   await prisma.auditLog.deleteMany({ where: { actorUserId: { in: uids } } });

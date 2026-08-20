@@ -227,6 +227,35 @@ enum SessionStatus {
   @@map("session_status")
 }
 
+/// **SRS Revision 97 — how a teaching occurrence is delivered.**
+///
+/// `in_person` is the association's historical and default mode: people come to
+/// a Branch and sit in a Room. `online` is delivered over the network with no
+/// physical venue at all.
+///
+/// **Provider-independent, deliberately.** This says *how the class reaches its
+/// students*, never *which media platform carries it*. The provider decision is
+/// recorded separately (`docs/development/online-class-provider.md`) and no
+/// provider identifier belongs on a schedule or an occurrence — a domain that
+/// names its vendor cannot survive replacing the vendor.
+enum DeliveryMode {
+  in_person
+  online
+
+  @@map("delivery_mode")
+}
+
+/// **R97 — what an online occurrence carries.** Meaningful only when
+/// `delivery_mode = 'online'`, and refused otherwise by CHECK: an in-person
+/// class has no media mode, and a nullable column that is sometimes set for one
+/// would make *«is this class online?»* answerable two ways.
+enum OnlineMediaMode {
+  audio_video
+  audio_only
+
+  @@map("online_media_mode")
+}
+
 enum QuranLogCategory {
   new_memorization
   revision
@@ -1076,6 +1105,17 @@ model RecurringCourseSchedule {
   roomId   String? @map("room_id") @db.Uuid
   room     Room?   @relation(fields: [roomId], references: [id], onDelete: Restrict)
 
+  /// **R97 — the DEFAULT delivery for every Session this schedule materializes.**
+  ///
+  /// A default, not historical truth: `session.materialize` snapshots it onto
+  /// each occurrence exactly as it snapshots `room_id` (R43.4), and changing it
+  /// later rewrites only the future, un-protected occurrences. October stays
+  /// what October was.
+  deliveryMode    DeliveryMode     @default(in_person) @map("delivery_mode")
+  /// Non-null **iff** `deliveryMode` is `online` (CHECK
+  /// `course_schedule_delivery_check`).
+  onlineMediaMode OnlineMediaMode? @map("online_media_mode")
+
   /// Local Moroccan wall-clock, never UTC instants — Ramadan DST suspension
   /// would silently shift every class by an hour, twice a year (TD-11,
   /// §20 rule 14).
@@ -1239,6 +1279,21 @@ model Session {
   /// schedule: a held session must stay historically correct.
   roomId String? @map("room_id") @db.Uuid
   room   Room?   @relation(fields: [roomId], references: [id], onDelete: Restrict)
+
+  /// **R97 — how THIS occurrence was actually delivered.**
+  ///
+  /// Snapshot at materialization, on the same footing as `room_id` above and
+  /// for the same reason: a class held online in October must still read as
+  /// online after the schedule moves back into a room in November. An
+  /// occurrence-only change is an ordinary `session.override`, so it sets
+  /// `overridden` and is thereafter protected from resync — there is **no
+  /// second override marker**, because the platform already has one.
+  deliveryMode    DeliveryMode     @default(in_person) @map("delivery_mode")
+  /// Non-null **iff** `deliveryMode` is `online` (CHECK
+  /// `session_delivery_check`). An online occurrence additionally holds **no**
+  /// `room_id` at all (CHECK `session_online_no_room_check`), which is what
+  /// makes room-collision detection ignore it without a special case.
+  onlineMediaMode OnlineMediaMode? @map("online_media_mode")
 
   status SessionStatus @default(scheduled)
 

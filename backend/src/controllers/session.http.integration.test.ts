@@ -28,8 +28,12 @@ const YEAR_LABEL = "2098-2099";
 const SESSION_KEYS = [
   "cancellation_reason",
   "date",
+  // **R97 — this occurrence's OWN delivery**, snapshotted at materialization
+  // and overridable for one date. After an override it is not the schedule's.
+  "delivery_mode",
   "end_time",
   "id",
+  "online_media_mode",
   "overridden",
   "room_id",
   "schedule_id",

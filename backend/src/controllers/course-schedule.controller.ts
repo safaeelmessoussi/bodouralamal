@@ -74,6 +74,14 @@ export function create(prisma: PrismaClient) {
         recurrence: body.recurrence,
         academicYearId: body.academic_year_id,
         ...(body.room_id !== undefined ? { roomId: body.room_id } : {}),
+        // R97 — delivery travels as sent; the service resolves the three
+        // columns through `policies/delivery.ts`.
+        ...(body.delivery_mode !== undefined
+          ? { deliveryMode: body.delivery_mode }
+          : {}),
+        ...(body.online_media_mode !== undefined
+          ? { onlineMediaMode: body.online_media_mode }
+          : {}),
         ...(body.weekdays !== undefined ? { weekdays: body.weekdays } : {}),
         ...(body.day_of_month !== undefined
           ? { dayOfMonth: body.day_of_month }
@@ -115,6 +123,14 @@ export function update(prisma: PrismaClient) {
       {
         version: body.version,
         ...(body.room_id !== undefined ? { roomId: body.room_id } : {}),
+        // R97 — delivery travels as sent; the service resolves the three
+        // columns through `policies/delivery.ts`.
+        ...(body.delivery_mode !== undefined
+          ? { deliveryMode: body.delivery_mode }
+          : {}),
+        ...(body.online_media_mode !== undefined
+          ? { onlineMediaMode: body.online_media_mode }
+          : {}),
         ...(body.start_time !== undefined
           ? { startTime: body.start_time }
           : {}),
