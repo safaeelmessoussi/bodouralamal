@@ -92,6 +92,50 @@ no schedule assignment at all reaches that occurrence's audience on its day. It
 was added because R87 §J opened «إدخال الحفظ» for a cover while the resolver, which
 knew only about schedules, handed her an empty list — rule **P** inverted.
 
+## Who ATTENDS is a different question from who teaches (R92)
+
+Two occurrence-specific dimensions, resolved independently:
+
+| Question | Answered by |
+|---|---|
+| **who teaches this occurrence** | R91's effective assignment, then the occurrence's own `SessionStaff` |
+| **who attends this occurrence** | `audienceForSession` — the schedule's audience, unless the occurrence states its own branches |
+
+`SessionAudienceBranch` exists for one real case: the association occasionally
+delivers a lesson **once instead of twice**, so two branches' classes meet
+together, physically at one of them, for that occurrence only.
+
+**Replacement, not addition.** No rows → the audience is inherited. Rows → they
+*are* the audience's branches. An additive reading leaves nobody able to say
+whether the schedule's own branch still counts; the dialog seeds the override
+with it already selected, so *combine* is expressed by adding the second.
+
+**Physical location is not audience.** `Session.branch_id` is not overloaded and
+is not written: the class stays at its venue while people come to it from
+elsewhere. `GET /sessions/{id}/roster` reports both, side by side, so nobody
+infers one from the other.
+
+**Scope, never a roster** (§20 rule 22): branch populations resolved against live
+Enrollments at read time. No Enrollment is mutated, no Session duplicated, no
+per-student row created — each asserted rather than trusted.
+
+**One resolver, or none of it works.** `audienceForSession` is composed by the
+personal calendar, the roster, the notification recipients and the audit count.
+A cross-branch `OR` written independently in one service is the failure the
+revision exists to prevent: honoured by notifications and not by the calendar
+leaves a beneficiary told about a class she cannot see.
+
+**Whole-Level only, and the rest is refused rather than invented.** In the other
+two modes the branch is carried by the target itself, so a branch list has no
+meaning; the write refuses it and the action is not offered. Whether combining
+Groups or Circles across branches means anything is an **open Owner question**.
+
+**The counterpart is never guessed.** Two branches' schedules are structurally
+independent — nothing identifies *the corresponding lesson* — so the platform
+does not cancel the other branch's occurrence. The administrator combines the
+audience and then cancels the counterpart explicitly, through the flow that
+already asks whether to tell people.
+
 ## Where the invariants are enforced, and why not in SQL
 
 `assertStaffIntervals` in
@@ -117,3 +161,6 @@ and then sees the first's rows.
 | [`controllers/effective-staffing.http.integration.test.ts`](../../backend/src/controllers/effective-staffing.http.integration.test.ts) | migration compatibility · all three interval refusals · **two rows for one person** · per-occurrence materialization · roster/marker/calendar boundaries · assistant parity · the occurrence override · R90 conflict clean-up · R88 untouched · concurrency |
 | [`scripts/dev/browser/verify-effective-staffing.mjs`](../../scripts/dev/browser/verify-effective-staffing.mjs) | the replacement driven as Admin, Safa, Amina and an assistant: dated rows on the form, Safa twice, per-date occurrences, four different answers on one class at one moment, and a handover that leaves the past alone |
 | [`components/scheduling/staffing-periods.test.ts`](../../frontend/src/components/scheduling/staffing-periods.test.ts) | blank date = open-ended, converted once at the wire · many assistants · one person on several rows · each refusal in Arabic |
+| [`controllers/session-audience.http.integration.test.ts`](../../backend/src/controllers/session-audience.http.integration.test.ts) | **R92** — inherited audience unchanged · both branches included · unrelated excluded · venue unmoved · next occurrence untouched · clearing restores · notifications follow the actual audience · staffing × audience independent · no Enrollment mutated, no Session duplicated · refusals and version conflict |
+| [`components/scheduling/session-audience.test.ts`](../../frontend/src/components/scheduling/session-audience.test.ts) | **R92** — seeded with the inherited branch (replacement said unambiguously) · venue as text, never a control · action offered only where the server accepts it · roster shown, not inferred · `dirty` passed |
+| [`scripts/dev/browser/verify-cross-branch.mjs`](../../scripts/dev/browser/verify-cross-branch.mjs) | **R91 × R92** — six identities: the Admin combines it, both beneficiaries share it, the unrelated one does not, the covering مؤطِّرة has it and the schedule's does not, cancelling tells exactly the right people, and next week is normal on both dimensions |

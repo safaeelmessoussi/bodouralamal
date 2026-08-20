@@ -180,3 +180,42 @@ export async function notifySessionChange(
   });
   return body.data;
 }
+
+/** R92 — this occurrence's audience branches, and where it physically happens. */
+export interface SessionRoster {
+  session_id: string;
+  /** **Where the class meets.** A different fact from the audience, and the
+   *  reason the two are separate fields rather than one branch. */
+  venue: { branch_id: string; branch_name: string; room_name: string | null };
+  /** The branch populations expected there — the schedule's own unless this
+   *  occurrence states otherwise. */
+  audience_branches: { id: string; name: string }[];
+  overridden: boolean;
+  students: { id: string; name: string; branch_id: string | null }[];
+}
+
+export async function fetchSessionRoster(
+  id: string,
+  token: string | null,
+): Promise<SessionRoster> {
+  const res = await api<{ data: SessionRoster }>(`/sessions/${id}/roster`, { token });
+  return res.data;
+}
+
+/**
+ * **Replacement, never addition**: the list submitted IS this occurrence's
+ * audience, and an empty list clears the override so the audience returns to the
+ * schedule's.
+ */
+export async function setSessionAudienceBranches(
+  id: string,
+  version: number,
+  branchIds: string[],
+  token: string | null,
+): Promise<{ branch_ids: string[]; overridden: boolean }> {
+  const res = await api<{ data: { branch_ids: string[]; overridden: boolean } }>(
+    `/sessions/${id}/audience-branches`,
+    { method: 'PUT', token, body: { version, branch_ids: branchIds } },
+  );
+  return res.data;
+}

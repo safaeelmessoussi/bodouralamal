@@ -1,16 +1,17 @@
-import type { Request, Response } from 'express';
+import type { Request, Response } from "express";
 
-import type { PrismaClient } from '../generated/prisma/client.js';
-import { requireActor } from '../middleware/authenticate.js';
-import * as sessions from '../services/session.service.js';
-import { sessionContentLinkDto, sessionDto } from './dto.js';
-import { idParam, parse } from './parse.js';
+import type { PrismaClient } from "../generated/prisma/client.js";
+import { requireActor } from "../middleware/authenticate.js";
+import * as sessions from "../services/session.service.js";
+import { sessionContentLinkDto, sessionDto, sessionRosterDto } from "./dto.js";
+import { idParam, parse } from "./parse.js";
 import {
   cancelSessionSchema,
   linkContentSchema,
   overrideSessionSchema,
   restoreSessionSchema,
-} from '../validators/session.validators.js';
+  sessionAudienceSchema,
+} from "../validators/session.validators.js";
 
 /**
  * Sessions over HTTP (TD-3.12, §4.4, TD-1).
@@ -37,18 +38,25 @@ export function override(prisma: PrismaClient) {
     const session = await sessions.overrideSession(
       prisma,
       requireActor(req),
-      idParam(req, 'id'),
+      idParam(req, "id"),
       {
         version: body.version,
         ...(body.date !== undefined ? { date: body.date } : {}),
-        ...(body.start_time !== undefined ? { startTime: body.start_time } : {}),
+        ...(body.start_time !== undefined
+          ? { startTime: body.start_time }
+          : {}),
         ...(body.end_time !== undefined ? { endTime: body.end_time } : {}),
         ...(body.room_id !== undefined ? { roomId: body.room_id } : {}),
         // Absent leaves the snapshot untouched; an empty array is a real
         // instruction — *this session has no staff* — so the two must not
         // collapse into one another here.
         ...(body.staff !== undefined
-          ? { staff: body.staff.map((s) => ({ userId: s.user_id, position: s.position })) }
+          ? {
+              staff: body.staff.map((s) => ({
+                userId: s.user_id,
+                position: s.position,
+              })),
+            }
           : {}),
       },
     );
@@ -62,7 +70,7 @@ export function cancel(prisma: PrismaClient) {
     const session = await sessions.cancelSession(
       prisma,
       requireActor(req),
-      idParam(req, 'id'),
+      idParam(req, "id"),
       body.reason,
       body.version,
     );
@@ -76,7 +84,7 @@ export function restore(prisma: PrismaClient) {
     const session = await sessions.restoreSession(
       prisma,
       requireActor(req),
-      idParam(req, 'id'),
+      idParam(req, "id"),
       body.version,
     );
     res.json(sessionDto(session));
@@ -86,7 +94,7 @@ export function restore(prisma: PrismaClient) {
 export function linkContent(prisma: PrismaClient) {
   return async (req: Request, res: Response): Promise<void> => {
     const body = parse(linkContentSchema, req.body ?? {});
-    const sessionId = idParam(req, 'id');
+    const sessionId = idParam(req, "id");
     const link = await sessions.linkContent(
       prisma,
       requireActor(req),
@@ -95,7 +103,13 @@ export function linkContent(prisma: PrismaClient) {
     );
     res
       .status(201)
-      .json(sessionContentLinkDto({ id: link.id, sessionId, contentId: body.educational_content_id }));
+      .json(
+        sessionContentLinkDto({
+          id: link.id,
+          sessionId,
+          contentId: body.educational_content_id,
+        }),
+      );
   };
 }
 
@@ -105,9 +119,46 @@ export function unlinkContent(prisma: PrismaClient) {
     await sessions.unlinkContent(
       prisma,
       requireActor(req),
-      idParam(req, 'id'),
-      idParam(req, 'contentId'),
+      idParam(req, "id"),
+      idParam(req, "contentId"),
     );
     res.status(204).end();
+  };
+}
+
+/**
+ * **Who is expected at this occurrence, and where it happens** (R92).
+ *
+ * Two facts on one response and never one field: `venue` is the branch and room
+ * the class meets in, `audience_branches` are the populations expected there.
+ * They coincide for every occurrence but the rare combined one, and reporting
+ * them together is what stops a reader inferring the override from calendar
+ * behaviour.
+ */
+export function roster(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const data = await sessions.readSessionRoster(
+      prisma,
+      requireActor(req),
+      idParam(req, "id"),
+    );
+    res.json({ data: sessionRosterDto(data) });
+  };
+}
+
+/** R92 — set this occurrence's audience branches, or clear the override. */
+export function setAudience(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const body = parse(sessionAudienceSchema, req.body ?? {});
+    const result = await sessions.setSessionAudienceBranches(
+      prisma,
+      requireActor(req),
+      idParam(req, "id"),
+      body.version,
+      body.branch_ids,
+    );
+    res.json({
+      data: { branch_ids: result.branchIds, overridden: result.overridden },
+    });
   };
 }

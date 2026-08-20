@@ -485,6 +485,11 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
   guarded.patch('/sessions/:id', sessionsCtl.override(prisma));
   guarded.post('/sessions/:id/cancel', sessionsCtl.cancel(prisma));
   guarded.post('/sessions/:id/restore', sessionsCtl.restore(prisma));
+  // R92 — one occurrence's audience, when two branches meet together. The
+  // roster reports the venue and the audience as SEPARATE facts, because they
+  // coincide for every occurrence but the combined one.
+  guarded.get('/sessions/:id/roster', sessionsCtl.roster(prisma));
+  guarded.put('/sessions/:id/audience-branches', sessionsCtl.setAudience(prisma));
   guarded.post('/sessions/:id/content', sessionsCtl.linkContent(prisma));
   guarded.delete('/sessions/:id/content/:contentId', sessionsCtl.unlinkContent(prisma));
 

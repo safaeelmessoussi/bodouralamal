@@ -10,11 +10,13 @@ import {
   type EditScope,
   type ScheduleSession,
 } from '../../adapters/sessions.js';
+import { listBranches } from '../../adapters/branches-admin.js';
 import { searchUsers, type UserSummary } from '../../adapters/users.js';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
 import { SessionMaterialsDialog } from '../../components/content/session-materials-dialog.js';
 import { Button } from '../../components/ui/button.js';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
+import { SessionAudienceDialog } from '../../components/scheduling/session-audience-dialog.js';
 import { StaffPicker } from '../../components/scheduling/staff-picker.js';
 import { DataTable, type Column, type RowAction, type TableStatus } from '../../components/ui/data-table.js';
 import { FormDialog } from '../../components/ui/form-dialog.js';
@@ -77,6 +79,9 @@ export function ScheduleSessionsPage({ scheduleId }: { scheduleId: string }): Re
   /** R91 §11 — the occurrence whose own staffing is being set. */
   const [staffingFor, setStaffingFor] = useState<ScheduleSession | null>(null);
   const [teachers, setTeachers] = useState<UserSummary[]>([]);
+  /** R92 — the occurrence whose audience branches are being set. */
+  const [audienceFor, setAudienceFor] = useState<ScheduleSession | null>(null);
+  const [branches, setBranches] = useState<{ id: string; name: string }[]>([]);
   /** The saved change awaiting the tell-or-not decision (R83.3). */
   const [notifying, setNotifying] = useState<{
     id: string;
@@ -96,7 +101,13 @@ export function ScheduleSessionsPage({ scheduleId }: { scheduleId: string }): Re
   } | null>(null);
   /** R75.6 — the class's own name and note, which a recording is named from.
    *  They belong to the schedule, not to the occurrence. */
-  const [klass, setKlass] = useState<{ title: string; description: string | null } | null>(null);
+  const [klass, setKlass] = useState<{
+    title: string;
+    description: string | null;
+    /** R92 — the audience override is whole-Level only, so the row action is
+     *  offered only where the server would accept it (§14.4). */
+    teachingMode: string;
+  } | null>(null);
 
   const load = useCallback(async () => {
     setStatus('loading');
@@ -135,7 +146,11 @@ export function ScheduleSessionsPage({ scheduleId }: { scheduleId: string }): Re
           academicYearId: mine.academic_year_id,
           branchId: mine.branch_id,
         });
-        setKlass({ title: mine.title, description: mine.description });
+        setKlass({
+          title: mine.title,
+          description: mine.description,
+          teachingMode: mine.teaching_mode,
+        });
       }
     })();
   }, [scheduleId, accessToken]);
@@ -179,6 +194,11 @@ export function ScheduleSessionsPage({ scheduleId }: { scheduleId: string }): Re
     void searchUsers(accessToken, { role: 'teacher' })
       .then((p) => setTeachers(p.data))
       .catch(() => setTeachers([]));
+    // Every branch, because a combined occurrence may draw from any of them —
+    // and the server refuses one that does not exist rather than dropping it.
+    void listBranches(accessToken)
+      .then((p) => setBranches(p.data.map((b) => ({ id: b.id, name: b.name }))))
+      .catch(() => setBranches([]));
   }, [accessToken]);
 
   const actions: RowAction<ScheduleSession>[] = [
@@ -196,6 +216,15 @@ export function ScheduleSessionsPage({ scheduleId }: { scheduleId: string }): Re
       // Without the schedule's scope an upload has nowhere to land, so the
       // action waits rather than opening a dialog that cannot finish.
       available: () => scope !== null,
+    },
+    {
+      // **R92 — who attends this one, which is not who teaches it.** Only for a
+      // whole-Level class: in the other modes the branch is carried by the
+      // target itself, so a branch list has no meaning and the server refuses
+      // it. An action that can only be refused is not offered (§14.4).
+      label: t('admin.sessions.audienceAction'),
+      onSelect: (r) => setAudienceFor(r),
+      available: () => klass?.teachingMode === 'entire_level',
     },
     {
       label: t('admin.sessions.cancel'),
@@ -386,6 +415,23 @@ export function ScheduleSessionsPage({ scheduleId }: { scheduleId: string }): Re
           }
         />
       ) : null}
+      {audienceFor ? (
+        <SessionAudienceDialog
+          key={audienceFor.id}
+          sessionId={audienceFor.id}
+          version={audienceFor.version}
+          date={formatDate(audienceFor.date)}
+          branches={branches}
+          token={accessToken}
+          onClose={() => setAudienceFor(null)}
+          onSaved={(message) => {
+            setAudienceFor(null);
+            setNotice(message);
+            void load();
+          }}
+        />
+      ) : null}
+
       {staffingFor ? (
         // **The flat picker is exactly right here** (R91 §11): an occurrence IS
         // a date, so a staffing period on it would be a field with one possible

@@ -1714,3 +1714,40 @@ export function examDto(row: {
     version: row.version,
   };
 }
+
+/**
+ * **R92 — the occurrence's roster, with venue and audience kept apart.**
+ *
+ * `venue` says *where*; `audience_branches` says *who from where*. A single
+ * `branch` would make the combined case unsayable, which is the whole reason the
+ * revision exists.
+ */
+export function sessionRosterDto(row: {
+  sessionId: string;
+  venue: { branchId: string; branchName: string; roomName: string | null };
+  audienceBranches: { id: string; name: string }[];
+  overridden: boolean;
+  students: { id: string; name: string; branchId: string | null }[];
+}): {
+  session_id: string;
+  venue: { branch_id: string; branch_name: string; room_name: string | null };
+  audience_branches: { id: string; name: string }[];
+  overridden: boolean;
+  students: { id: string; name: string; branch_id: string | null }[];
+} {
+  return {
+    session_id: row.sessionId,
+    venue: {
+      branch_id: row.venue.branchId,
+      branch_name: row.venue.branchName,
+      room_name: row.venue.roomName,
+    },
+    audience_branches: row.audienceBranches,
+    overridden: row.overridden,
+    students: row.students.map((s) => ({
+      id: s.id,
+      name: s.name,
+      branch_id: s.branchId,
+    })),
+  };
+}

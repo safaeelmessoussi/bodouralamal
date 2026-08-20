@@ -48,6 +48,21 @@ export interface AudienceSpec {
   administrativeGroupId: string | null;
   teachingGroupId: string | null;
   branchId: string;
+  /**
+   * **R92 — one occurrence's own audience branches**, when it has them.
+   *
+   * `undefined`/`null` is the ordinary case: the audience is the schedule's, at
+   * `branchId`. A non-empty list **replaces** that branch for this occurrence,
+   * so *Targa + the second branch* is two entries — the semantics are
+   * replacement rather than addition, because an additive reading leaves nobody
+   * able to say whether the schedule's own branch is still included.
+   *
+   * **`entire_level` only.** In the other two modes the branch is carried by the
+   * target itself (§7: a group IS at one branch), so a branch list has no
+   * meaning there and is ignored rather than half-applied — see the note in
+   * `audienceWhere`.
+   */
+  audienceBranchIds?: string[] | null;
 }
 
 /**
@@ -70,6 +85,21 @@ export function audienceWhere(spec: AudienceSpec): Prisma.UserWhereInput {
     case "entire_level": {
       if (spec.levelId === null)
         throw new Error(unreachable("entire_level", "levelId"));
+      /**
+       * **R92 — the branches this audience is drawn from.**
+       *
+       * Ordinarily the one branch the schedule meets at. For a combined
+       * occurrence it is the list that occurrence carries, which **replaces**
+       * the schedule's branch rather than adding to it.
+       *
+       * The `Level` is unchanged either way: two branches running the same
+       * Level is exactly the case, and combining them is a statement about
+       * *where the people come from*, never about what is being taught.
+       */
+      const branches =
+        spec.audienceBranchIds && spec.audienceBranchIds.length > 0
+          ? spec.audienceBranchIds
+          : [spec.branchId];
       return {
         deletedAt: null,
         levelEnrollments: {
@@ -81,7 +111,7 @@ export function audienceWhere(spec: AudienceSpec): Prisma.UserWhereInput {
             // (*that Level's students at this schedule's branch*), and it now
             // includes students in a Level nobody has subdivided instead of
             // silently omitting them.
-            branchId: spec.branchId,
+            branchId: { in: branches },
           },
         },
       };
@@ -104,6 +134,15 @@ export function audienceWhere(spec: AudienceSpec): Prisma.UserWhereInput {
       };
       // No branch filter here, and none is wanted: the group IS at one branch
       // (§7), so the constraint is already carried by the target itself.
+      //
+      // **R92's override is therefore not applied in this mode**, deliberately.
+      // Combining two Administrative Groups across branches is a different
+      // business question — whether the *other* group's members attend, not
+      // whether another branch's Level population does — and R92 §B6 says to
+      // implement the whole-Level case and report the rest rather than invent
+      // semantics nobody asked for. `audienceForSession` refuses to write an
+      // override on a non-`entire_level` schedule, so this arm can never be
+      // reached with one stored.
     }
     case "teaching_group": {
       if (spec.teachingGroupId === null) {
@@ -132,6 +171,70 @@ export function audienceWhere(spec: AudienceSpec): Prisma.UserWhereInput {
  */
 function unreachable(mode: string, field: string): string {
   return `Schedule has teaching_mode '${mode}' with a null ${field}. The database CHECK constraint course_schedule_mode_target_check should have made this impossible; the schema has been altered or bypassed.`;
+}
+
+/**
+ * **`audienceForSession` — the ONE answer to *who is expected at this
+ * occurrence*** (R92 §B7).
+ *
+ * Every consumer composes this: the beneficiary's calendar, the session roster,
+ * cancellation and reschedule notifications, the audit row's `audience_size`,
+ * and the Quran occurrence arm. **Nobody adds a cross-branch `OR` of their
+ * own** — the failure R92 exists to avoid is notifications honouring an
+ * override while the calendar quietly does not, which would leave a beneficiary
+ * told about a class she cannot see.
+ *
+ * `null` when the session or its schedule is gone, so a caller decides what a
+ * missing occurrence means rather than being handed an empty audience that
+ * looks like *nobody is expected*.
+ */
+export async function audienceForSession(
+  prisma: Prisma.TransactionClient | PrismaClient,
+  sessionId: string,
+): Promise<AudienceSpec | null> {
+  const session = await prisma.session.findFirst({
+    where: { id: sessionId, deletedAt: null },
+    select: {
+      audienceBranches: { select: { branchId: true } },
+      schedule: {
+        select: {
+          teachingMode: true,
+          levelId: true,
+          administrativeGroupId: true,
+          teachingGroupId: true,
+          branchId: true,
+        },
+      },
+    },
+  });
+  if (!session?.schedule) return null;
+
+  const override = session.audienceBranches.map((b) => b.branchId);
+  return {
+    ...session.schedule,
+    // Empty means INHERIT — the ordinary case, and every occurrence but the
+    // rare combined one.
+    audienceBranchIds: override.length > 0 ? override : null,
+  };
+}
+
+/**
+ * **The branches an occurrence draws its audience from, for display.**
+ *
+ * Returns the inherited single branch when there is no override, so a roster or
+ * a dialog can say *who is expected* without knowing whether an override exists
+ * — and can say *where it happens* separately, which is a different fact
+ * (R92 §B2).
+ */
+export async function audienceBranchesForSession(
+  prisma: PrismaClient,
+  sessionId: string,
+): Promise<{ branchIds: string[]; overridden: boolean } | null> {
+  const spec = await audienceForSession(prisma, sessionId);
+  if (spec === null) return null;
+  return spec.audienceBranchIds && spec.audienceBranchIds.length > 0
+    ? { branchIds: spec.audienceBranchIds, overridden: true }
+    : { branchIds: [spec.branchId], overridden: false };
 }
 
 /** Resolve a schedule's audience to actual student rows. */

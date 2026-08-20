@@ -7003,6 +7003,128 @@
         }
       }
     },
+    "/sessions/{id}/roster": {
+      "get": {
+        "summary": "Who is expected at this occurrence",
+        "description": "§4.4c, R92. **Venue and audience are separate facts and are reported separately.** `venue` is the branch and room the class meets in; `audience_branches` are the branch populations expected there, with `overridden` saying whether this occurrence states its own. They coincide for every occurrence but the rare combined one — a lesson the association delivers once instead of twice — and reporting them together is what stops a reader inferring the override from calendar behaviour. **Resolved through the single `audienceForSession`**, so the roster cannot disagree with the calendar or the notification list. Each student carries the branch she comes from, which is what makes a combined roster readable rather than a list of names from nowhere. **Scope, never a stored roster** (§20 rule 22): the people are resolved against live Enrollments at read time.",
+        "responses": {
+          "200": {
+            "description": "The occurrence's venue, audience branches and expected students."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an occurrence outside the caller’s scope or nonexistent.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sessions/{id}/audience-branches": {
+      "put": {
+        "summary": "Set this occurrence’s audience branches",
+        "description": "§4.4c, R92. **Replacement, never addition**: the submitted list IS this occurrence's audience, and an **empty list clears the override** so the audience returns to the schedule's. An additive reading would leave nobody able to say whether the schedule's own branch is still included; the interface seeds the override with the inherited branch already chosen, so *combine* is expressed by adding the second one. **This occurrence only** — future occurrences of the same recurring class are untouched and return to normal branch-separated audiences. **`entire_level` only**: in the other two modes the branch is carried by the target itself (§7 — a group IS at one branch), so a branch list has no meaning and is refused rather than half-applied. **Nothing about staffing changes** — who teaches is R91's effective assignment and the occurrence's own `SessionStaff`, resolved independently. **No Enrollment is mutated, no Session duplicated, and no per-student row created.** Concurrency is the Session's own `version` (TD-15), not a second mechanism. Audited as `session.audience`.",
+        "responses": {
+          "200": {
+            "description": "The stored branch list, and whether an override now exists."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — an unknown branch, an unknown key, or reason AUDIENCE_OVERRIDE_MODE_UNSUPPORTED for a schedule that is not whole-Level.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). VERSION_CONFLICT — another administrator changed this occurrence first.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/me/calendar": {
       "get": {
         "summary": "The caller’s own calendar",

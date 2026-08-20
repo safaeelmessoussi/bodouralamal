@@ -1,10 +1,10 @@
-import type { Prisma, PrismaClient } from '../generated/prisma/client.js';
-import { AppError } from '../lib/errors.js';
-import { publicDisplayName } from '../lib/display-name.js';
-import { baseHijri, sortMonthStarts, type MonthStart } from '../lib/hijri.js';
-import * as scope from '../policies/branch-scope.js';
-import { visibleContentIds } from './library.service.js';
-import { expandEvent } from '../lib/recurrence.js';
+import type { Prisma, PrismaClient } from "../generated/prisma/client.js";
+import { AppError } from "../lib/errors.js";
+import { publicDisplayName } from "../lib/display-name.js";
+import { baseHijri, sortMonthStarts, type MonthStart } from "../lib/hijri.js";
+import * as scope from "../policies/branch-scope.js";
+import { visibleContentIds } from "./library.service.js";
+import { expandEvent } from "../lib/recurrence.js";
 
 /**
  * Recurrence expansion moved to `lib/recurrence.ts` (Revision 43): §4.4 makes
@@ -13,8 +13,11 @@ import { expandEvent } from '../lib/recurrence.js';
  * service. Re-exported here so existing callers and their tests are unaffected.
  */
 export { expandEvent };
-import type { RoleScope } from '../policies/branch-scope.js';
-import { eventsStaffedBy, teacherEventScope } from '../policies/roster-resolution.js';
+import type { RoleScope } from "../policies/branch-scope.js";
+import {
+  eventsStaffedBy,
+  teacherEventScope,
+} from "../policies/roster-resolution.js";
 
 /**
  * Calendar read (SRS §4.4, TD-3.4, TD-11, §19.2).
@@ -62,7 +65,7 @@ export interface CalendarQuery {
    */
   teachingGroupId?: string;
   /** R84 — `session`, `event` or `exam`: the platform's own taxonomy. */
-  kind?: 'session' | 'event' | 'exam';
+  kind?: "session" | "event" | "exam";
 }
 
 export interface Occurrence {
@@ -72,7 +75,7 @@ export interface Occurrence {
    * out: it is the one item on a timetable somebody must not mistake for an
    * ordinary class.
    */
-  kind: 'session' | 'event' | 'exam';
+  kind: "session" | "event" | "exam";
   id: string;
   title: string;
   /** Local calendar date, `YYYY-MM-DD` (TD-11) — never an instant. */
@@ -141,7 +144,7 @@ export interface Occurrence {
  * what bounds the last month's length.
  */
 async function publishedMonthStarts(
-  prisma: Pick<PrismaClient, 'hijriMonthStart'>,
+  prisma: Pick<PrismaClient, "hijriMonthStart">,
   from: Date,
   to: Date,
 ): Promise<MonthStart[]> {
@@ -150,7 +153,7 @@ async function publishedMonthStarts(
   const rows = await prisma.hijriMonthStart.findMany({
     where: {
       deletedAt: null,
-      status: 'published',
+      status: "published",
       gregorianStartDate: {
         gte: new Date(from.getTime() - margin),
         lte: new Date(to.getTime() + margin),
@@ -162,7 +165,10 @@ async function publishedMonthStarts(
 }
 
 /** The overlay fields for one occurrence, resolved from official data. */
-function hijri(date: Date, starts: readonly MonthStart[]): Pick<Occurrence, 'hijriDate' | 'hijriMonthArabic'> {
+function hijri(
+  date: Date,
+  starts: readonly MonthStart[],
+): Pick<Occurrence, "hijriDate" | "hijriMonthArabic"> {
   const h = baseHijri(date, starts);
   if (!h) return { hijriDate: null, hijriMonthArabic: null };
   return { hijriDate: h.iso, hijriMonthArabic: h.monthNameArabic };
@@ -175,16 +181,18 @@ const iso = (d: Date): string => d.toISOString().slice(0, 10);
 const hhmm = (d: Date | null): string | null =>
   d === null
     ? null
-    : `${String(d.getUTCHours()).padStart(2, '0')}:${String(d.getUTCMinutes()).padStart(2, '0')}`;
+    : `${String(d.getUTCHours()).padStart(2, "0")}:${String(d.getUTCMinutes()).padStart(2, "0")}`;
 
 /** Whole days between two calendar dates — pure date arithmetic, no timezone. */
 const daysBetween = (a: Date, b: Date): number =>
   Math.round((b.getTime() - a.getTime()) / 86_400_000);
 
-const isSuperAdmin = (a: CalendarActor | null) => a !== null && scope.isSuperAdmin(a.roleScopes);
+const isSuperAdmin = (a: CalendarActor | null) =>
+  a !== null && scope.isSuperAdmin(a.roleScopes);
 const isAdmin = (a: CalendarActor | null) =>
-  a !== null && (scope.hasRole(a.roleScopes, 'admin') || isSuperAdmin(a));
-const isTeacher = (a: CalendarActor | null) => a !== null && scope.hasRole(a.roleScopes, 'teacher');
+  a !== null && (scope.hasRole(a.roleScopes, "admin") || isSuperAdmin(a));
+const isTeacher = (a: CalendarActor | null) =>
+  a !== null && scope.hasRole(a.roleScopes, "teacher");
 
 /**
  * Builds the §4.4 visibility filter for Events.
@@ -204,24 +212,24 @@ async function visibilityFilter(
   actor: CalendarActor | null,
 ): Promise<Record<string, unknown>> {
   // Anonymous, or an account that is not yet approved.
-  if (actor === null || actor.accountStatus !== 'active') {
-    return { visibility: 'public' };
+  if (actor === null || actor.accountStatus !== "active") {
+    return { visibility: "public" };
   }
 
   if (isSuperAdmin(actor)) return {};
 
   if (isAdmin(actor)) {
-    const reachable = scope.reachableBranches(actor.roleScopes, ['admin']);
+    const reachable = scope.reachableBranches(actor.roleScopes, ["admin"]);
     if (reachable === null) return {};
     return {
       OR: [
-        { visibility: 'public' },
+        { visibility: "public" },
         // Hidden: all Admins, regardless of branch scope (§4.4, accepted).
-        { visibility: 'hidden' },
+        { visibility: "hidden" },
         // Private: staff within their branch scope. A global event (no branch
         // rows at all) is in scope for everyone by construction.
         {
-          visibility: 'private',
+          visibility: "private",
           OR: [
             { branchScopes: { some: { branchId: { in: reachable } } } },
             { branchScopes: { none: {} } },
@@ -237,8 +245,12 @@ async function visibilityFilter(
     // `GroupTeacher` and then read `Group` for its level and branch; a schedule
     // states its branch directly, and the derivation lives with the rest of the
     // rule rather than here.
-    const { branchIds, levelIds, categoryIds, administrativeGroupIds: groupIds } =
-      await teacherEventScope(prisma, actor.userId);
+    const {
+      branchIds,
+      levelIds,
+      categoryIds,
+      administrativeGroupIds: groupIds,
+    } = await teacherEventScope(prisma, actor.userId);
 
     // §4.4: a Teacher sees Hidden events whose scope intersects their teaching
     // scope — one of their Administrative Groups, or the level, category or
@@ -253,7 +265,11 @@ async function visibilityFilter(
     const intersects = {
       OR: [
         { id: { in: staffed } },
-        { administrativeGroupScopes: { some: { administrativeGroupId: { in: groupIds } } } },
+        {
+          administrativeGroupScopes: {
+            some: { administrativeGroupId: { in: groupIds } },
+          },
+        },
         { levelScopes: { some: { levelId: { in: levelIds } } } },
         { categoryScopes: { some: { categoryId: { in: categoryIds } } } },
         { branchScopes: { some: { branchId: { in: branchIds } } } },
@@ -271,16 +287,16 @@ async function visibilityFilter(
 
     return {
       OR: [
-        { visibility: 'public' },
-        { visibility: 'private', ...intersects },
-        { visibility: 'hidden', ...intersects },
+        { visibility: "public" },
+        { visibility: "private", ...intersects },
+        { visibility: "hidden", ...intersects },
       ],
     };
   }
 
   // Approved Student or Parent: public and private, never hidden. Private is
   // deliberately unfiltered by branch or group (§4.4, Risk R-6).
-  return { OR: [{ visibility: 'public' }, { visibility: 'private' }] };
+  return { OR: [{ visibility: "public" }, { visibility: "private" }] };
 }
 
 /**
@@ -313,7 +329,9 @@ const SESSION_OCCURRENCE_INCLUDE = {
   room: { select: { name: true } },
   staff: {
     where: { deletedAt: null },
-    select: { user: { select: { id: true, nameArabic: true, publicDisplayName: true } } },
+    select: {
+      user: { select: { id: true, nameArabic: true, publicDisplayName: true } },
+    },
   },
   schedule: {
     select: {
@@ -321,17 +339,35 @@ const SESSION_OCCURRENCE_INCLUDE = {
       branch: { select: { name: true } },
       subject: { select: { id: true, name: true } },
       teachingMode: true,
-      level: { select: { id: true, name: true, category: { select: { id: true, name: true } } } },
+      level: {
+        select: {
+          id: true,
+          name: true,
+          category: { select: { id: true, name: true } },
+        },
+      },
       administrativeGroup: {
         select: {
           name: true,
-          level: { select: { id: true, name: true, category: { select: { id: true, name: true } } } },
+          level: {
+            select: {
+              id: true,
+              name: true,
+              category: { select: { id: true, name: true } },
+            },
+          },
         },
       },
       teachingGroup: {
         select: {
           name: true,
-          level: { select: { id: true, name: true, category: { select: { id: true, name: true } } } },
+          level: {
+            select: {
+              id: true,
+              name: true,
+              category: { select: { id: true, name: true } },
+            },
+          },
         },
       },
     },
@@ -348,9 +384,13 @@ function sessionOccurrence(
   monthStarts: readonly MonthStart[],
 ): Occurrence {
   const sch = session.schedule;
-  const level = sch.level ?? sch.administrativeGroup?.level ?? sch.teachingGroup?.level ?? null;
+  const level =
+    sch.level ??
+    sch.administrativeGroup?.level ??
+    sch.teachingGroup?.level ??
+    null;
   return {
-    kind: 'session',
+    kind: "session",
     id: session.id,
     title: sch.subject.name,
     date: iso(session.date),
@@ -365,7 +405,10 @@ function sessionOccurrence(
     subjectName: sch.subject.name,
     teachingMode: sch.teachingMode,
     audienceLabel:
-      sch.administrativeGroup?.name ?? sch.teachingGroup?.name ?? level?.name ?? null,
+      sch.administrativeGroup?.name ??
+      sch.teachingGroup?.name ??
+      level?.name ??
+      null,
     status: session.status,
     recurrence: null,
     branchName: sch.branch.name,
@@ -411,7 +454,10 @@ function sessionOccurrence(
 async function personalFilters(
   prisma: PrismaClient,
   userId: string,
-): Promise<{ event: Prisma.EventWhereInput; session: Prisma.SessionWhereInput }> {
+): Promise<{
+  event: Prisma.EventWhereInput;
+  session: Prisma.SessionWhereInput;
+}> {
   const enrolments = await prisma.enrollment.findMany({
     where: { studentId: userId, deletedAt: null },
     select: {
@@ -422,7 +468,11 @@ async function personalFilters(
     },
   });
   const seats = await prisma.studentTeachingGroup.findMany({
-    where: { studentId: userId, deletedAt: null, teachingGroup: { deletedAt: null } },
+    where: {
+      studentId: userId,
+      deletedAt: null,
+      teachingGroup: { deletedAt: null },
+    },
     select: { teachingGroupId: true },
   });
 
@@ -446,12 +496,31 @@ async function personalFilters(
    */
   const event: Prisma.EventWhereInput = {
     OR: [
-      { AND: [{ branchScopes: { none: {} } }, { categoryScopes: { none: {} } }, { levelScopes: { none: {} } }, { administrativeGroupScopes: { none: {} } }] },
-      ...(branchIds.length ? [{ branchScopes: { some: { branchId: { in: branchIds } } } }] : []),
-      ...(categoryIds.length ? [{ categoryScopes: { some: { categoryId: { in: categoryIds } } } }] : []),
-      ...(levelIds.length ? [{ levelScopes: { some: { levelId: { in: levelIds } } } }] : []),
+      {
+        AND: [
+          { branchScopes: { none: {} } },
+          { categoryScopes: { none: {} } },
+          { levelScopes: { none: {} } },
+          { administrativeGroupScopes: { none: {} } },
+        ],
+      },
+      ...(branchIds.length
+        ? [{ branchScopes: { some: { branchId: { in: branchIds } } } }]
+        : []),
+      ...(categoryIds.length
+        ? [{ categoryScopes: { some: { categoryId: { in: categoryIds } } } }]
+        : []),
+      ...(levelIds.length
+        ? [{ levelScopes: { some: { levelId: { in: levelIds } } } }]
+        : []),
       ...(groupIds.length
-        ? [{ administrativeGroupScopes: { some: { administrativeGroupId: { in: groupIds } } } }]
+        ? [
+            {
+              administrativeGroupScopes: {
+                some: { administrativeGroupId: { in: groupIds } },
+              },
+            },
+          ]
         : []),
       // Her own assignments, whatever the scope says.
       { staff: { some: { userId, deletedAt: null } } },
@@ -467,6 +536,17 @@ async function personalFilters(
       ...(levelIds.length || groupIds.length || circleIds.length
         ? [
             {
+              /**
+               * **The inherited audience** — and only where the occurrence has
+               * not overridden it (R92).
+               *
+               * `audienceBranches: { none: {} }` is the whole of *inherit*: an
+               * occurrence that states its own branches is answered by the arm
+               * below instead, so a combined class does not appear twice and,
+               * more importantly, does not still appear for somebody the
+               * override removed.
+               */
+              audienceBranches: { none: {} },
               schedule: {
                 OR: [
                   // *That Level at that branch* — the R66 pairing, not the Level
@@ -478,10 +558,37 @@ async function personalFilters(
                   ...(groupIds.length
                     ? [{ administrativeGroupId: { in: groupIds } }]
                     : []),
-                  ...(circleIds.length ? [{ teachingGroupId: { in: circleIds } }] : []),
+                  ...(circleIds.length
+                    ? [{ teachingGroupId: { in: circleIds } }]
+                    : []),
                 ],
               },
             },
+            /**
+             * **R92 — the combined occurrence.**
+             *
+             * One lesson delivered once instead of twice: the second branch's
+             * beneficiaries see the SAME Session, held at the first branch. The
+             * Level still has to match — combining branches is a statement about
+             * where the people come from, never about what is being taught — and
+             * the branch is matched against the OCCURRENCE's own list rather
+             * than the schedule's.
+             *
+             * Without this arm the override would be honoured by notifications
+             * and invisible on the calendar: told about a class she cannot see,
+             * which is the single failure R92's shared resolver exists to
+             * prevent.
+             */
+            ...(enrolments.length
+              ? [
+                  {
+                    OR: enrolments.map((e) => ({
+                      audienceBranches: { some: { branchId: e.branchId } },
+                      schedule: { levelId: e.levelId },
+                    })),
+                  },
+                ]
+              : []),
           ]
         : []),
     ],
@@ -496,10 +603,13 @@ export async function readCalendar(
   query: CalendarQuery & { mine?: boolean; includeCancelled?: boolean },
 ): Promise<Occurrence[]> {
   if (query.to < query.from) {
-    throw new AppError('VALIDATION_FAILED', 'to must not precede from');
+    throw new AppError("VALIDATION_FAILED", "to must not precede from");
   }
   if (daysBetween(query.from, query.to) > MAX_RANGE_DAYS) {
-    throw new AppError('VALIDATION_FAILED', `range must not exceed ${MAX_RANGE_DAYS} days`);
+    throw new AppError(
+      "VALIDATION_FAILED",
+      `range must not exceed ${MAX_RANGE_DAYS} days`,
+    );
   }
 
   /**
@@ -513,7 +623,9 @@ export async function readCalendar(
    * caller to have chosen (the TD-12 property `GET /students/me` relies on).
    */
   const personal =
-    query.mine === true && actor !== null ? await personalFilters(prisma, actor.userId) : null;
+    query.mine === true && actor !== null
+      ? await personalFilters(prisma, actor.userId)
+      : null;
 
   const floor = await operationalFloor(prisma, query.branchId);
   const from = floor && floor > query.from ? floor : query.from;
@@ -523,12 +635,18 @@ export async function readCalendar(
   const scopeFilters: Record<string, unknown>[] = [];
   if (query.branchId) {
     scopeFilters.push({
-      OR: [{ branchScopes: { some: { branchId: query.branchId } } }, { branchScopes: { none: {} } }],
+      OR: [
+        { branchScopes: { some: { branchId: query.branchId } } },
+        { branchScopes: { none: {} } },
+      ],
     });
   }
-  if (query.levelId) scopeFilters.push({ levelScopes: { some: { levelId: query.levelId } } });
+  if (query.levelId)
+    scopeFilters.push({ levelScopes: { some: { levelId: query.levelId } } });
   if (query.categoryId) {
-    scopeFilters.push({ categoryScopes: { some: { categoryId: query.categoryId } } });
+    scopeFilters.push({
+      categoryScopes: { some: { categoryId: query.categoryId } },
+    });
   }
   if (query.administrativeGroupId) {
     scopeFilters.push({
@@ -557,27 +675,36 @@ export async function readCalendar(
     query.teacherId !== undefined ||
     // R84 — a circle is a teaching concept an Event does not carry.
     query.teachingGroupId !== undefined ||
-    query.kind === 'session';
+    query.kind === "session";
 
   const events =
-    sessionOnlyFilter || (query.kind !== undefined && query.kind !== 'event')
+    sessionOnlyFilter || (query.kind !== undefined && query.kind !== "event")
       ? []
       : await prisma.event.findMany({
-    where: {
-      deletedAt: null,
-      startDate: { lte: query.to },
-      // The tier still applies on a personal calendar: being concerned by an
-      // event does not widen what she may see of it.
-      ...(await visibilityFilter(prisma, actor)),
-      ...(scopeFilters.length ? { AND: scopeFilters } : {}),
-      ...(personal ? { AND: [...scopeFilters, personal.event] } : {}),
-    },
-    include: {
-      branchScopes: { select: { branch: { select: { id: true, name: true } } }, take: 1 },
-      categoryScopes: { select: { category: { select: { id: true, name: true } } }, take: 1 },
-      levelScopes: { select: { level: { select: { id: true, name: true } } }, take: 1 },
-    },
-  });
+          where: {
+            deletedAt: null,
+            startDate: { lte: query.to },
+            // The tier still applies on a personal calendar: being concerned by an
+            // event does not widen what she may see of it.
+            ...(await visibilityFilter(prisma, actor)),
+            ...(scopeFilters.length ? { AND: scopeFilters } : {}),
+            ...(personal ? { AND: [...scopeFilters, personal.event] } : {}),
+          },
+          include: {
+            branchScopes: {
+              select: { branch: { select: { id: true, name: true } } },
+              take: 1,
+            },
+            categoryScopes: {
+              select: { category: { select: { id: true, name: true } } },
+              take: 1,
+            },
+            levelScopes: {
+              select: { level: { select: { id: true, name: true } } },
+              take: 1,
+            },
+          },
+        });
 
   // One read per request, applied to every occurrence below.
   const monthStarts = await publishedMonthStarts(prisma, from, query.to);
@@ -586,7 +713,7 @@ export async function readCalendar(
   for (const event of events) {
     for (const date of expandEvent(event, from, query.to)) {
       out.push({
-        kind: 'event',
+        kind: "event",
         subjectId: null,
         subjectName: null,
         teachingMode: null,
@@ -631,36 +758,46 @@ export async function readCalendar(
   const exams =
     query.teacherId !== undefined ||
     query.teachingGroupId !== undefined ||
-    (query.kind !== undefined && query.kind !== 'exam')
+    (query.kind !== undefined && query.kind !== "exam")
       ? []
       : await prisma.exam.findMany({
-    where: {
-      deletedAt: null,
-      mode: 'physical',
-      date: { gte: from, lte: query.to },
-      ...(query.branchId ? { branchId: query.branchId } : {}),
-      ...(query.levelId ? { levelId: query.levelId } : {}),
-      ...(query.subjectId ? { subjectId: query.subjectId } : {}),
-      ...(query.academicYearId ? { academicYearId: query.academicYearId } : {}),
-      // A Category narrows an exam through its Level — the same question the
-      // grid asks of a session, answered rather than ignored.
-      ...(query.categoryId ? { level: { categoryId: query.categoryId } } : {}),
-    },
-    include: {
-      // The category NAME travels with its id, as it does for a session: an id
-      // with no name is unreadable on a grid, and the filter chip beside the
-      // calendar is drawn from exactly this pair (R55.1).
-      level: { select: { id: true, name: true, category: { select: { id: true, name: true } } } },
-      subject: { select: { id: true, name: true } },
-      branch: { select: { id: true, name: true } },
-      room: { select: { name: true } },
-      administrativeGroup: { select: { name: true } },
-    },
-  });
+          where: {
+            deletedAt: null,
+            mode: "physical",
+            date: { gte: from, lte: query.to },
+            ...(query.branchId ? { branchId: query.branchId } : {}),
+            ...(query.levelId ? { levelId: query.levelId } : {}),
+            ...(query.subjectId ? { subjectId: query.subjectId } : {}),
+            ...(query.academicYearId
+              ? { academicYearId: query.academicYearId }
+              : {}),
+            // A Category narrows an exam through its Level — the same question the
+            // grid asks of a session, answered rather than ignored.
+            ...(query.categoryId
+              ? { level: { categoryId: query.categoryId } }
+              : {}),
+          },
+          include: {
+            // The category NAME travels with its id, as it does for a session: an id
+            // with no name is unreadable on a grid, and the filter chip beside the
+            // calendar is drawn from exactly this pair (R55.1).
+            level: {
+              select: {
+                id: true,
+                name: true,
+                category: { select: { id: true, name: true } },
+              },
+            },
+            subject: { select: { id: true, name: true } },
+            branch: { select: { id: true, name: true } },
+            room: { select: { name: true } },
+            administrativeGroup: { select: { name: true } },
+          },
+        });
 
   for (const exam of exams) {
     out.push({
-      kind: 'exam',
+      kind: "exam",
       id: exam.id,
       title: exam.title,
       date: iso(exam.date),
@@ -715,14 +852,16 @@ export async function readCalendar(
   // R84 — asking for activities alone means no class occurrence belongs in the
   // answer. Skipping the query beats filtering its result: the rows are never
   // read at all.
-  if (query.kind === undefined || query.kind === 'session') {
+  if (query.kind === undefined || query.kind === "session") {
     const sessions = await prisma.session.findMany({
       where: {
         deletedAt: null,
         date: { gte: from, lte: query.to },
         // **R83.1** — the ordinary projection is what is ON. A history screen
         // passes `include_cancelled` and gets them back; nothing else does.
-        ...(query.includeCancelled === true ? {} : { status: { not: 'cancelled' } }),
+        ...(query.includeCancelled === true
+          ? {}
+          : { status: { not: "cancelled" } }),
         ...(personal ? { AND: [personal.session] } : {}),
         schedule: {
           deletedAt: null,
@@ -739,8 +878,12 @@ export async function readCalendar(
           ...(query.administrativeGroupId
             ? { administrativeGroupId: query.administrativeGroupId }
             : {}),
-          ...(query.teachingGroupId ? { teachingGroupId: query.teachingGroupId } : {}),
-          ...(query.academicYearId ? { academicYearId: query.academicYearId } : {}),
+          ...(query.teachingGroupId
+            ? { teachingGroupId: query.teachingGroupId }
+            : {}),
+          ...(query.academicYearId
+            ? { academicYearId: query.academicYearId }
+            : {}),
           ...(query.subjectId ? { subjectId: query.subjectId } : {}),
         },
         // The session's OWN staffing snapshot, not the schedule's (R43.4): a
@@ -755,7 +898,11 @@ export async function readCalendar(
 
     for (const session of sessions) {
       const sch = session.schedule;
-      const level = sch.level ?? sch.administrativeGroup?.level ?? sch.teachingGroup?.level ?? null;
+      const level =
+        sch.level ??
+        sch.administrativeGroup?.level ??
+        sch.teachingGroup?.level ??
+        null;
       // The category filter is applied here rather than in the query: a
       // schedule reaches its level through one of three different relations
       // depending on its teaching mode, and Prisma cannot express "whichever of
@@ -770,7 +917,7 @@ export async function readCalendar(
   return out.sort(
     (a, b) =>
       a.date.localeCompare(b.date) ||
-      (a.startTime ?? '').localeCompare(b.startTime ?? '') ||
+      (a.startTime ?? "").localeCompare(b.startTime ?? "") ||
       a.id.localeCompare(b.id),
   );
 }
@@ -812,7 +959,7 @@ export async function prefilledFilters(
   // Anonymous, or an account that grants nothing yet (TD-1): no profile to
   // derive from. `null` rather than an object of nulls — *there is nothing to
   // prefill* and *nothing was unambiguous* are different answers.
-  if (actor === null || actor.accountStatus !== 'active') return null;
+  if (actor === null || actor.accountStatus !== "active") return null;
 
   const currentYear = await prisma.academicYear.findFirst({
     where: { isCurrent: true },
@@ -822,14 +969,18 @@ export async function prefilledFilters(
   // A teacher's own subjects and branches come from the schedules they staff
   // (§4.4c — CourseScheduleStaff is the resolution, stated directly).
   const staffed = await prisma.courseScheduleStaff.findMany({
-    where: { userId: actor.userId, deletedAt: null, schedule: { deletedAt: null } },
+    where: {
+      userId: actor.userId,
+      deletedAt: null,
+      schedule: { deletedAt: null },
+    },
     select: { schedule: { select: { branchId: true, subjectId: true } } },
   });
 
   // A parent has no enrolments of their own; §5.2 prefills from their children,
   // reached through approved links only (§4.3).
   const links = await prisma.familyLink.findMany({
-    where: { parentId: actor.userId, status: 'approved', deletedAt: null },
+    where: { parentId: actor.userId, status: "approved", deletedAt: null },
     select: { studentId: true },
   });
 
@@ -842,7 +993,10 @@ export async function prefilledFilters(
       // dropped every beneficiary enrolled directly in an unsubdivided Level —
       // she got no scope prefill on her own calendar, with no error to notice.
       // The null arm is the platform's predicate (`enrollment.service.ts`).
-      OR: [{ administrativeGroupId: null }, { administrativeGroup: { deletedAt: null } }],
+      OR: [
+        { administrativeGroupId: null },
+        { administrativeGroup: { deletedAt: null } },
+      ],
     },
     select: {
       levelId: true,
@@ -853,7 +1007,8 @@ export async function prefilledFilters(
 
   // An administrator's scope is their branches; a single-branch admin gets that
   // branch, an all-branches one gets nothing to prefill, which is correct.
-  const scopedBranches = scope.reachableBranches(actor.roleScopes, ['admin', 'teacher']) ?? [];
+  const scopedBranches =
+    scope.reachableBranches(actor.roleScopes, ["admin", "teacher"]) ?? [];
 
   return {
     academicYearId: currentYear?.id ?? null,
@@ -970,7 +1125,8 @@ export async function listSessionsForContent(
   // The content itself must be visible before its references are named. A caller
   // who may not see it gets the same 404 a nonexistent id gets.
   const visible = await visibleContentIds(prisma, actor, [contentId]);
-  if (!visible.has(contentId)) throw new AppError('NOT_FOUND', 'no such content');
+  if (!visible.has(contentId))
+    throw new AppError("NOT_FOUND", "no such content");
 
   const links = await prisma.sessionContent.findMany({
     where: {
@@ -981,7 +1137,7 @@ export async function listSessionsForContent(
     select: { session: { include: SESSION_OCCURRENCE_INCLUDE } },
     // Most recent first: a reader asking *where was this used* is usually asking
     // about the last time before the first.
-    orderBy: { session: { date: 'desc' } },
+    orderBy: { session: { date: "desc" } },
   });
   if (links.length === 0) return [];
 
@@ -1004,15 +1160,25 @@ export async function readSessionPage(
     where: { id: sessionId, deletedAt: null, schedule: { deletedAt: null } },
     include: SESSION_OCCURRENCE_INCLUDE,
   });
-  if (!session) throw new AppError('NOT_FOUND', 'no such session');
+  if (!session) throw new AppError("NOT_FOUND", "no such session");
 
-  const monthStarts = await publishedMonthStarts(prisma, session.date, session.date);
+  const monthStarts = await publishedMonthStarts(
+    prisma,
+    session.date,
+    session.date,
+  );
 
   const links = await prisma.sessionContent.findMany({
     where: { sessionId, deletedAt: null, content: { deletedAt: null } },
     select: {
       content: {
-        select: { id: true, title: true, subjectId: true, levelId: true, mimeType: true },
+        select: {
+          id: true,
+          title: true,
+          subjectId: true,
+          levelId: true,
+          mimeType: true,
+        },
       },
     },
   });
@@ -1038,7 +1204,7 @@ export async function readSessionPage(
     notes: null,
     // §4.9: teachers upload phone recordings, and video is excluded entirely, so
     // "is this a recording" is exactly "is this audio".
-    recordings: items.filter((c) => c.mimeType.startsWith('audio/')),
-    linkedContent: items.filter((c) => !c.mimeType.startsWith('audio/')),
+    recordings: items.filter((c) => c.mimeType.startsWith("audio/")),
+    linkedContent: items.filter((c) => !c.mimeType.startsWith("audio/")),
   };
 }

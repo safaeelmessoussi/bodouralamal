@@ -1,16 +1,27 @@
-import type { Prisma, PrismaClient, Session, SessionStatus } from '../generated/prisma/client.js';
+import type {
+  Prisma,
+  PrismaClient,
+  Session,
+  SessionStatus,
+} from "../generated/prisma/client.js";
+import { notifyRestored } from "./notification.service.js";
+import { AppError } from "../lib/errors.js";
+import { atMidnightUtc } from "../lib/recurrence.js";
+import * as scope from "../policies/branch-scope.js";
 import {
-  notifyRestored,
-} from './notification.service.js';
-import { AppError } from '../lib/errors.js';
-import { atMidnightUtc } from '../lib/recurrence.js';
-import * as scope from '../policies/branch-scope.js';
-import { audienceSize, staffsSession } from '../policies/roster-resolution.js';
-import * as audit from '../repositories/audit.repository.js';
-import * as trash from '../repositories/trash.repository.js';
-import { updateWithVersion } from '../repositories/optimistic-lock.js';
-import { protectionReasonsFor, SELECT_PROTECTABLE } from '../policies/session-protection.js';
-import type { Actor } from '../policies/actor.js';
+  audienceForSession,
+  audienceSize,
+  audienceWhere,
+  staffsSession,
+} from "../policies/roster-resolution.js";
+import * as audit from "../repositories/audit.repository.js";
+import * as trash from "../repositories/trash.repository.js";
+import { updateWithVersion } from "../repositories/optimistic-lock.js";
+import {
+  protectionReasonsFor,
+  SELECT_PROTECTABLE,
+} from "../policies/session-protection.js";
+import type { Actor } from "../policies/actor.js";
 
 /**
  * Sessions — the materialized dated occurrence (SRS §4.4, TD-1, TD-8,
@@ -30,12 +41,14 @@ import type { Actor } from '../policies/actor.js';
  * they staff** (§4.4c resolves that, and this file does not restate it).
  */
 
-const MANAGING_ROLE = 'admin';
+const MANAGING_ROLE = "admin";
 
-const isSuperAdmin = (actor: Actor): boolean => scope.isSuperAdmin(actor.roleScopes);
+const isSuperAdmin = (actor: Actor): boolean =>
+  scope.isSuperAdmin(actor.roleScopes);
 const isAdmin = (actor: Actor): boolean =>
   scope.hasRole(actor.roleScopes, MANAGING_ROLE) || isSuperAdmin(actor);
-const isTeacher = (actor: Actor): boolean => scope.hasRole(actor.roleScopes, 'teacher');
+const isTeacher = (actor: Actor): boolean =>
+  scope.hasRole(actor.roleScopes, "teacher");
 
 /**
  * TD-1's exhaustive transition table. **Anything absent is prohibited and
@@ -43,19 +56,23 @@ const isTeacher = (actor: Actor): boolean => scope.hasRole(actor.roleScopes, 'te
  * it is written out rather than inferred from a chain of `if`s.
  */
 const TRANSITIONS: Record<SessionStatus, SessionStatus[]> = {
-  scheduled: ['cancelled', 'held'],
-  cancelled: ['scheduled'],
+  scheduled: ["cancelled", "held"],
+  cancelled: ["scheduled"],
   held: [],
 };
 
 function assertTransition(from: SessionStatus, to: SessionStatus): void {
   if (!TRANSITIONS[from].includes(to)) {
-    throw new AppError('STATE_CONFLICT', `a ${from} session cannot become ${to}`, {
-      reason: 'INVALID_TRANSITION',
-      from,
-      to,
-      allowed: TRANSITIONS[from],
-    });
+    throw new AppError(
+      "STATE_CONFLICT",
+      `a ${from} session cannot become ${to}`,
+      {
+        reason: "INVALID_TRANSITION",
+        from,
+        to,
+        allowed: TRANSITIONS[from],
+      },
+    );
   }
 }
 
@@ -76,7 +93,17 @@ export async function loadForWrite(
   prisma: PrismaClient,
   actor: Actor,
   sessionId: string,
-): Promise<Session & { schedule: { branchId: string; teachingMode: string; levelId: string | null; administrativeGroupId: string | null; teachingGroupId: string | null } }> {
+): Promise<
+  Session & {
+    schedule: {
+      branchId: string;
+      teachingMode: string;
+      levelId: string | null;
+      administrativeGroupId: string | null;
+      teachingGroupId: string | null;
+    };
+  }
+> {
   const session = await prisma.session.findFirst({
     where: { id: sessionId, deletedAt: null },
     include: {
@@ -91,14 +118,14 @@ export async function loadForWrite(
       },
     },
   });
-  if (!session) throw new AppError('NOT_FOUND', 'no such session');
+  if (!session) throw new AppError("NOT_FOUND", "no such session");
 
   if (isAdmin(actor)) {
     scope.assertCanActOnBranch(
       actor.roleScopes,
       MANAGING_ROLE,
       session.schedule.branchId,
-      'no such session',
+      "no such session",
     );
     return session;
   }
@@ -107,12 +134,15 @@ export async function loadForWrite(
     // TD-2: "only sessions they staff". Co-teachers and assistants both count —
     // §4.4c gives them one table and one rule.
     if (!(await staffsSession(prisma, actor.userId, sessionId))) {
-      throw new AppError('NOT_FOUND', 'no such session');
+      throw new AppError("NOT_FOUND", "no such session");
     }
     return session;
   }
 
-  throw new AppError('FORBIDDEN', 'session management requires admin or the teaching staff');
+  throw new AppError(
+    "FORBIDDEN",
+    "session management requires admin or the teaching staff",
+  );
 }
 
 export interface SessionOverride {
@@ -122,7 +152,7 @@ export interface SessionOverride {
   roomId?: string | null;
   /** The occurrence's own staffing (Revision 43.4). Supplying it REPLACES the
    *  snapshot for this session; omitting it leaves the snapshot untouched. */
-  staff?: { userId: string; position: 'teacher' | 'assistant' }[];
+  staff?: { userId: string; position: "teacher" | "assistant" }[];
   version: number;
 }
 
@@ -144,10 +174,14 @@ export async function overrideSession(
 ): Promise<Session> {
   const session = await loadForWrite(prisma, actor, sessionId);
 
-  if (session.status === 'held') {
-    throw new AppError('STATE_CONFLICT', 'a held session cannot be rescheduled', {
-      reason: 'ALREADY_HELD',
-    });
+  if (session.status === "held") {
+    throw new AppError(
+      "STATE_CONFLICT",
+      "a held session cannot be rescheduled",
+      {
+        reason: "ALREADY_HELD",
+      },
+    );
   }
 
   if (data.roomId) {
@@ -155,10 +189,10 @@ export async function overrideSession(
       where: { id: data.roomId, deletedAt: null },
       select: { branchId: true },
     });
-    if (!room) throw new AppError('NOT_FOUND', 'no such room');
+    if (!room) throw new AppError("NOT_FOUND", "no such room");
     if (room.branchId !== session.schedule.branchId) {
-      throw new AppError('VALIDATION_FAILED', 'room is at a different branch', {
-        reason: 'ROOM_BRANCH_MISMATCH',
+      throw new AppError("VALIDATION_FAILED", "room is at a different branch", {
+        reason: "ROOM_BRANCH_MISMATCH",
       });
     }
     // BR-23: capacity is not consulted here either.
@@ -166,14 +200,27 @@ export async function overrideSession(
 
   // Plain strings so the payload is a valid JSON value for the audit column,
   // and so a reviewer reading the row sees exactly what an operator saw.
-  const changed: Record<string, { from: string | null; to: string | null }> = {};
-  const track = (key: string, from: string | null, to: string | null | undefined): void => {
+  const changed: Record<string, { from: string | null; to: string | null }> =
+    {};
+  const track = (
+    key: string,
+    from: string | null,
+    to: string | null | undefined,
+  ): void => {
     if (to !== undefined && from !== to) changed[key] = { from, to };
   };
-  track('date', session.date.toISOString().slice(0, 10), data.date?.toISOString().slice(0, 10));
-  track('start_time', session.startTime.toISOString(), data.startTime?.toISOString());
-  track('end_time', session.endTime.toISOString(), data.endTime?.toISOString());
-  track('room_id', session.roomId, data.roomId);
+  track(
+    "date",
+    session.date.toISOString().slice(0, 10),
+    data.date?.toISOString().slice(0, 10),
+  );
+  track(
+    "start_time",
+    session.startTime.toISOString(),
+    data.startTime?.toISOString(),
+  );
+  track("end_time", session.endTime.toISOString(), data.endTime?.toISOString());
+  track("room_id", session.roomId, data.roomId);
 
   return prisma.$transaction(async (tx) => {
     const updated = await updateWithVersion<Session>({
@@ -196,9 +243,17 @@ export async function overrideSession(
         select: { userId: true, position: true },
       });
       await replaceSessionStaff(tx, sessionId, data.staff);
-      changed['staff'] = {
-        from: before.map((b) => `${b.position}:${b.userId}`).sort().join(',') || null,
-        to: data.staff.map((b) => `${b.position}:${b.userId}`).sort().join(',') || null,
+      changed["staff"] = {
+        from:
+          before
+            .map((b) => `${b.position}:${b.userId}`)
+            .sort()
+            .join(",") || null,
+        to:
+          data.staff
+            .map((b) => `${b.position}:${b.userId}`)
+            .sort()
+            .join(",") || null,
       };
     }
 
@@ -220,13 +275,15 @@ export async function overrideSession(
      * uses it to decide whether to offer the notice at all — retiming nothing
      * is not news.
      */
-    const movedInTime = ['date', 'start_time', 'end_time'].some((k) => k in changed);
+    const movedInTime = ["date", "start_time", "end_time"].some(
+      (k) => k in changed,
+    );
 
     await audit.write(tx, {
       actorUserId: actor.userId,
       activeRole: actor.activeRole,
-      actionType: 'session.override',
-      targetEntity: 'Session',
+      actionType: "session.override",
+      targetEntity: "Session",
       targetId: sessionId,
       // TD-8: the fields old→new, which is exactly the distinction that
       // protects this row from the next materialization.
@@ -259,7 +316,7 @@ export async function cancelSession(
   version: number,
 ): Promise<Session> {
   const session = await loadForWrite(prisma, actor, sessionId);
-  assertTransition(session.status, 'cancelled');
+  assertTransition(session.status, "cancelled");
 
   /**
    * **Normalised HERE, not at the boundary** (R83.2).
@@ -270,14 +327,18 @@ export async function cancelSession(
    * state, or a notice renders an empty reason line for a cancellation that
    * gave none.
    */
-  const stated = reason === null || reason.trim() === '' ? null : reason.trim();
-
-
+  const stated = reason === null || reason.trim() === "" ? null : reason.trim();
 
   // ONE spec, used by both the audit count and the notification write (R77.3):
   // two resolutions that agree today are two that drift, and a notification list
   // disagreeing with the audit's `audience_size` would make both unusable.
-  const spec = {
+  // **R92 — the OCCURRENCE's audience, not its schedule's.** A combined
+  // occurrence draws from two branches, and the count written into the audit row
+  // is *how many people this cancellation affected* — which is the people who
+  // were expected at THIS class, not the ones the recurring rule usually gathers.
+  // Built through `audienceForSession` so it cannot disagree with the
+  // notification list resolved from the same function moments later.
+  const spec = (await audienceForSession(prisma, sessionId)) ?? {
     teachingMode: session.schedule.teachingMode as never,
     levelId: session.schedule.levelId,
     administrativeGroupId: session.schedule.administrativeGroupId,
@@ -292,7 +353,7 @@ export async function cancelSession(
       id: sessionId,
       expectedVersion: version,
       requireNotDeleted: true,
-      data: { status: 'cancelled', cancellationReason: stated },
+      data: { status: "cancelled", cancellationReason: stated },
     });
     /**
      * **The notice is no longer written here (R83.3).**
@@ -310,8 +371,8 @@ export async function cancelSession(
     await audit.write(tx, {
       actorUserId: actor.userId,
       activeRole: actor.activeRole,
-      actionType: 'session.cancel',
-      targetEntity: 'Session',
+      actionType: "session.cancel",
+      targetEntity: "Session",
       targetId: sessionId,
       detail: {
         reason: stated,
@@ -340,11 +401,11 @@ export async function restoreSession(
   now: Date = new Date(),
 ): Promise<Session> {
   const session = await loadForWrite(prisma, actor, sessionId);
-  assertTransition(session.status, 'scheduled');
+  assertTransition(session.status, "scheduled");
 
   if (atMidnightUtc(session.date) < atMidnightUtc(now)) {
-    throw new AppError('STATE_CONFLICT', 'a past session cannot be restored', {
-      reason: 'SESSION_IN_PAST',
+    throw new AppError("STATE_CONFLICT", "a past session cannot be restored", {
+      reason: "SESSION_IN_PAST",
       date: session.date.toISOString().slice(0, 10),
     });
   }
@@ -355,7 +416,7 @@ export async function restoreSession(
       id: sessionId,
       expectedVersion: version,
       requireNotDeleted: true,
-      data: { status: 'scheduled' },
+      data: { status: "scheduled" },
     });
     // R77.5 — an unread notice of something no longer true is withdrawn; one
     // already read is CORRECTED instead, because silently removing it would
@@ -365,8 +426,8 @@ export async function restoreSession(
     await audit.write(tx, {
       actorUserId: actor.userId,
       activeRole: actor.activeRole,
-      actionType: 'session.restore',
-      targetEntity: 'Session',
+      actionType: "session.restore",
+      targetEntity: "Session",
       targetId: sessionId,
       detail: { date: session.date.toISOString().slice(0, 10), ...reconciled },
     });
@@ -383,7 +444,7 @@ export async function markHeld(
   version: number,
 ): Promise<Session> {
   const session = await loadForWrite(prisma, actor, sessionId);
-  assertTransition(session.status, 'held');
+  assertTransition(session.status, "held");
 
   return prisma.$transaction(async (tx) => {
     const updated = await updateWithVersion<Session>({
@@ -391,13 +452,13 @@ export async function markHeld(
       id: sessionId,
       expectedVersion: version,
       requireNotDeleted: true,
-      data: { status: 'held' },
+      data: { status: "held" },
     });
     await audit.write(tx, {
       actorUserId: actor.userId,
       activeRole: actor.activeRole,
-      actionType: 'session.held',
-      targetEntity: 'Session',
+      actionType: "session.held",
+      targetEntity: "Session",
       targetId: sessionId,
       detail: { date: session.date.toISOString().slice(0, 10) },
     });
@@ -424,7 +485,7 @@ export async function linkContent(
     where: { id: contentId, deletedAt: null },
     select: { id: true },
   });
-  if (!content) throw new AppError('NOT_FOUND', 'no such content');
+  if (!content) throw new AppError("NOT_FOUND", "no such content");
 
   return prisma.$transaction(async (tx) => {
     const existing = await tx.sessionContent.findFirst({
@@ -432,7 +493,10 @@ export async function linkContent(
       select: { id: true, deletedAt: true },
     });
     if (existing && existing.deletedAt === null) {
-      throw new AppError('DUPLICATE', 'content is already linked to this session');
+      throw new AppError(
+        "DUPLICATE",
+        "content is already linked to this session",
+      );
     }
 
     const row = existing
@@ -441,13 +505,16 @@ export async function linkContent(
           data: { deletedAt: null, deletedById: null },
           select: { id: true },
         })
-      : await tx.sessionContent.create({ data: { sessionId, contentId }, select: { id: true } });
+      : await tx.sessionContent.create({
+          data: { sessionId, contentId },
+          select: { id: true },
+        });
 
     await audit.write(tx, {
       actorUserId: actor.userId,
       activeRole: actor.activeRole,
-      actionType: 'session.content_link',
-      targetEntity: 'Session',
+      actionType: "session.content_link",
+      targetEntity: "Session",
       targetId: sessionId,
       detail: { educational_content_id: contentId },
     });
@@ -468,7 +535,8 @@ export async function unlinkContent(
     const row = await tx.sessionContent.findFirst({
       where: { sessionId, contentId, deletedAt: null },
     });
-    if (!row) throw new AppError('NOT_FOUND', 'content is not linked to this session');
+    if (!row)
+      throw new AppError("NOT_FOUND", "content is not linked to this session");
 
     await tx.sessionContent.update({
       where: { id: row.id },
@@ -478,16 +546,18 @@ export async function unlinkContent(
     // deletion. The content itself is untouched; what was removed is the link,
     // and the link is what the entry describes.
     await trash.snapshot(tx, {
-      targetEntity: 'SessionContent',
+      targetEntity: "SessionContent",
       targetId: row.id,
       snapshot: JSON.parse(
         JSON.stringify({
           ...row,
           label:
-            (await tx.educationalContent.findUnique({
-              where: { id: contentId },
-              select: { title: true },
-            }))?.title ?? null,
+            (
+              await tx.educationalContent.findUnique({
+                where: { id: contentId },
+                select: { title: true },
+              })
+            )?.title ?? null,
         }),
       ) as object,
       deletedById: actor.userId,
@@ -495,8 +565,8 @@ export async function unlinkContent(
     await audit.write(tx, {
       actorUserId: actor.userId,
       activeRole: actor.activeRole,
-      actionType: 'session.content_unlink',
-      targetEntity: 'Session',
+      actionType: "session.content_unlink",
+      targetEntity: "Session",
       targetId: sessionId,
       detail: { educational_content_id: contentId },
     });
@@ -513,7 +583,7 @@ export async function unlinkContent(
 async function replaceSessionStaff(
   tx: Prisma.TransactionClient,
   sessionId: string,
-  staff: { userId: string; position: 'teacher' | 'assistant' }[],
+  staff: { userId: string; position: "teacher" | "assistant" }[],
 ): Promise<void> {
   const keep = new Set(staff.map((s) => s.userId));
   const existing = await tx.sessionStaff.findMany({
@@ -523,7 +593,10 @@ async function replaceSessionStaff(
 
   for (const row of existing) {
     if (!keep.has(row.userId) && row.deletedAt === null) {
-      await tx.sessionStaff.update({ where: { id: row.id }, data: { deletedAt: new Date() } });
+      await tx.sessionStaff.update({
+        where: { id: row.id },
+        data: { deletedAt: new Date() },
+      });
     }
   }
   for (const s of staff) {
@@ -534,7 +607,9 @@ async function replaceSessionStaff(
         data: { position: s.position, deletedAt: null, deletedById: null },
       });
     } else {
-      await tx.sessionStaff.create({ data: { sessionId, userId: s.userId, position: s.position } });
+      await tx.sessionStaff.create({
+        data: { sessionId, userId: s.userId, position: s.position },
+      });
     }
   }
 }
@@ -569,11 +644,14 @@ export async function regenerateSessions(
   sessionIds: string[],
 ): Promise<{ regenerated: string[] }> {
   if (!isAdmin(actor)) {
-    throw new AppError('FORBIDDEN', 'regenerating a protected session is an Admin action');
+    throw new AppError(
+      "FORBIDDEN",
+      "regenerating a protected session is an Admin action",
+    );
   }
   if (sessionIds.length === 0) {
-    throw new AppError('VALIDATION_FAILED', 'name the sessions to regenerate', {
-      reason: 'NO_SESSIONS_NAMED',
+    throw new AppError("VALIDATION_FAILED", "name the sessions to regenerate", {
+      reason: "NO_SESSIONS_NAMED",
     });
   }
 
@@ -601,10 +679,14 @@ async function regenerateOne(
       startTime: true,
       endTime: true,
       roomId: true,
-      staff: { where: { deletedAt: null }, select: { userId: true, position: true } },
+      staff: {
+        where: { deletedAt: null },
+        select: { userId: true, position: true },
+      },
     },
   });
-  if (!schedule) throw new AppError('NOT_FOUND', 'the schedule no longer exists');
+  if (!schedule)
+    throw new AppError("NOT_FOUND", "the schedule no longer exists");
 
   const before = await prisma.sessionStaff.findMany({
     where: { sessionId, deletedAt: null },
@@ -642,8 +724,8 @@ async function regenerateOne(
     await audit.write(tx, {
       actorUserId: actor.userId,
       activeRole: actor.activeRole,
-      actionType: 'session.regenerate',
-      targetEntity: 'Session',
+      actionType: "session.regenerate",
+      targetEntity: "Session",
       targetId: sessionId,
       detail: {
         date: session.date.toISOString().slice(0, 10),
@@ -662,5 +744,177 @@ async function regenerateOne(
       },
     });
     return updated;
+  });
+}
+
+/**
+ * **Who is expected at this occurrence, and where it happens** (R92).
+ *
+ * Two facts, deliberately reported separately: the **venue** is the schedule's
+ * branch and the occurrence's room; the **audience** is the branch populations
+ * expected there. They were one field for as long as an occurrence had one
+ * branch, and a combined lesson is exactly the case that separates them.
+ */
+export async function readSessionRoster(
+  prisma: PrismaClient,
+  actor: Actor,
+  sessionId: string,
+): Promise<{
+  sessionId: string;
+  venue: { branchId: string; branchName: string; roomName: string | null };
+  audienceBranches: { id: string; name: string }[];
+  overridden: boolean;
+  students: { id: string; name: string; branchId: string | null }[];
+}> {
+  // **Called for its authorization, not its value**: out of scope answers 404
+  // through the same guard every other occurrence read uses (§20 rule 17).
+  await loadForWrite(prisma, actor, sessionId);
+
+  const spec = await audienceForSession(prisma, sessionId);
+  if (spec === null) throw new AppError("NOT_FOUND", "no such session");
+
+  const branchIds =
+    spec.audienceBranchIds && spec.audienceBranchIds.length > 0
+      ? spec.audienceBranchIds
+      : [spec.branchId];
+
+  const [branches, venueRow, students] = await Promise.all([
+    prisma.branch.findMany({
+      // **`deletedAt` constrained, like every other read** — the trash-coverage
+      // guard caught this one, and it is right to: a soft-deleted row must not
+      // reappear through a new screen. Safe here rather than merely consistent,
+      // because `session_audience_branch` holds a RESTRICT foreign key, so a
+      // branch named by an override cannot be deleted at all.
+      where: { id: { in: branchIds }, deletedAt: null },
+      select: { id: true, name: true },
+      orderBy: { name: "asc" },
+    }),
+    prisma.session.findUniqueOrThrow({
+      where: { id: sessionId },
+      select: {
+        room: { select: { name: true } },
+        schedule: {
+          select: { branchId: true, branch: { select: { name: true } } },
+        },
+      },
+    }),
+    // **Through the shared resolver**, so the roster cannot disagree with the
+    // calendar or the notification list (R92 §B7).
+    prisma.user.findMany({
+      where: audienceWhere(spec),
+      select: {
+        id: true,
+        nameArabic: true,
+        levelEnrollments: {
+          where: { deletedAt: null, branchId: { in: branchIds } },
+          select: { branchId: true },
+          take: 1,
+        },
+      },
+      orderBy: { nameArabic: "asc" },
+    }),
+  ]);
+
+  return {
+    sessionId,
+    venue: {
+      branchId: venueRow.schedule.branchId,
+      branchName: venueRow.schedule.branch.name,
+      roomName: venueRow.room?.name ?? null,
+    },
+    audienceBranches: branches,
+    overridden:
+      spec.audienceBranchIds !== null && spec.audienceBranchIds !== undefined,
+    students: students.map((s) => ({
+      id: s.id,
+      name: s.nameArabic,
+      // Which branch she comes to it from — the fact that makes a combined
+      // roster readable rather than a list of names from nowhere.
+      branchId: s.levelEnrollments[0]?.branchId ?? null,
+    })),
+  };
+}
+
+/**
+ * **Set this occurrence's audience branches** (R92) — or clear the override.
+ *
+ * **Replacement semantics, stated in one place**: the submitted list *is* the
+ * occurrence's audience. An empty list removes the override and the audience
+ * returns to the schedule's, which is what «العودة إلى الوضع المعتاد» does.
+ *
+ * **Only `entire_level`.** In the other two modes the branch is carried by the
+ * target itself (§7 — a group IS at one branch), so a branch list has no
+ * meaning; R92 §B6 implements the whole-Level case and refuses the rest rather
+ * than inventing semantics nobody asked for.
+ *
+ * **Concurrency is the Session's own `version`** (TD-15) — no second mechanism.
+ * The row is bumped inside the same transaction that rewrites the override, so
+ * two administrators cannot silently lose one another's change.
+ */
+export async function setSessionAudienceBranches(
+  prisma: PrismaClient,
+  actor: Actor,
+  sessionId: string,
+  version: number,
+  branchIds: string[],
+): Promise<{ branchIds: string[]; overridden: boolean }> {
+  const session = await loadForWrite(prisma, actor, sessionId);
+
+  if (session.schedule.teachingMode !== "entire_level") {
+    throw new AppError(
+      "VALIDATION_FAILED",
+      "audience override applies to whole-Level classes",
+      {
+        reason: "AUDIENCE_OVERRIDE_MODE_UNSUPPORTED",
+        teaching_mode: session.schedule.teachingMode,
+      },
+    );
+  }
+
+  const wanted = [...new Set(branchIds)];
+  if (wanted.length > 0) {
+    const found = await prisma.branch.count({
+      where: { id: { in: wanted }, deletedAt: null },
+    });
+    // Refused rather than silently dropped: an administrator must never plan
+    // against a branch the platform did not record.
+    if (found !== wanted.length) {
+      throw new AppError("VALIDATION_FAILED", "unknown branch", {
+        reason: "UNKNOWN_BRANCH",
+      });
+    }
+  }
+
+  return prisma.$transaction(async (tx) => {
+    await updateWithVersion<Session>({
+      delegate: tx.session,
+      id: sessionId,
+      expectedVersion: version,
+      requireNotDeleted: true,
+      // No field changes — the version bump IS the concurrency control, and it
+      // is what makes a second administrator's stale write fail rather than
+      // overwrite.
+      data: {},
+    });
+
+    await tx.sessionAudienceBranch.deleteMany({ where: { sessionId } });
+    if (wanted.length > 0) {
+      await tx.sessionAudienceBranch.createMany({
+        data: wanted.map((branchId) => ({ sessionId, branchId })),
+      });
+    }
+
+    await audit.write(tx, {
+      actorUserId: actor.userId,
+      activeRole: actor.activeRole,
+      actionType: "session.audience",
+      targetEntity: "Session",
+      targetId: sessionId,
+      // *Who decided that both branches attend this lesson* is a question
+      // somebody asks later, and the override table itself keeps no history.
+      detail: { branch_ids: wanted, cleared: wanted.length === 0 },
+    });
+
+    return { branchIds: wanted, overridden: wanted.length > 0 };
   });
 }

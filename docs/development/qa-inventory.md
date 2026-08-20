@@ -52,6 +52,7 @@ rather than summarised.
 | 15d | Class staffing on EDIT | `PATCH /admin/course-schedules/{id}` | ✓ | ✓ within the 23 | ✓ within 13/13 | **fixed 2026-08-19** — the form offered the controls and the server refused the key |
 | 15e | Effective-dated staffing | `CourseScheduleStaff.effective_from/until` (R91) | ✓ `effective-staffing.test.ts` (14) | ✓ `effective-staffing` (24) | ✓ 13/13 `verify-effective-staffing` | **history is never rewritten**; one main per date; many assistants |
 | 15f | One-off Session cover | «مؤطّرة هذه الحصة» on `/admin/schedules/{id}/sessions` | ✓ | ✓ within the 24 | ✓ within 13/13 | occurrence staffing **overrides** the schedule, and reaches nothing beyond it |
+| 15g | Cross-branch occurrence audience | «الحضور من الفروع» on `/admin/schedules/{id}/sessions` (R92) | ✓ `session-audience.test.ts` (10) | ✓ `session-audience` (20) | ✓ 16/16 `verify-cross-branch` | override **replaces**; venue never moves; next occurrence normal |
 | 15a | Capability ≠ authorization | declared-everything teacher (R88.3) | ✓ | ✓ within the 15 | — | no roster, no Quran marker, no class in her calendar |
 | 15 | Content library | `/admin/content`, `/teacher/content` | ✓ | ✓ `library`, `content`, `upload` | ✓ 16/16 recorder | |
 | 16 | Session materials | materials dialog | ✓ | ✓ `session-page` | ✓ 22/22 | |
@@ -96,6 +97,7 @@ under the table.
 | `verify-library-recorder.sh` | 19 | The second recorder entry point, and the sort indicator | 16/16 |
 | `verify-grading.sh` | 14d, 16 | R81 — the exam's own maximum, empty ≠ zero, publish notifies and a draft is silent | 16/16 |
 | `verify-teaching-profile.sh` | 15, 15b | **AQ/X** — ownership of «الملف التدريسي», the population, Arabic weekdays, a range that survives a reload | 13/13 |
+| `verify-cross-branch.sh` | 15g, 20 | **R91 × R92** — six identities on one combined occurrence: audience, venue, calendars, notifications and staffing, each asked of the person it concerns | 16/16 |
 | `verify-effective-staffing.sh` | 15e, 15f | **R91** — the replacement as four identities: dated rows, Safa twice, per-date occurrences, and a handover that leaves the past alone | 13/13 |
 | `verify-staff-picker.sh` | 15c, 10 | **AR** — five مؤطِّرات an administrator must tell apart; all offered, each marked **before** the choice and named after it, nothing disabled, the one with no profile assigned anyway | 13/13 |
 | `verify-schedule-edit.sh` | 10, 11 | «تعديل العنصر» — R50's scopes through the real dialog | 12/12 |
@@ -104,9 +106,9 @@ under the table.
 | `verify-circles-reorder.sh` | 9 | R78.1 — ordering حلقات المواد within a `(level, subject)` pairing | 9/9 |
 | `measure-page-header.sh` | shared UI | Header layout measured in a browser at nine widths | 9/9 widths |
 
-**460 checks across 20 harnesses, all green** (2026-08-20), plus
-`measure-page-header`'s nine width measurements — 21 scripts in
-`scripts/dev/browser/` and 21 rows here. Every row was run in one pass; none is
+**476 checks across 21 harnesses, all green** (2026-08-20), plus
+`measure-page-header`'s nine width measurements — 22 scripts in
+`scripts/dev/browser/` and 22 rows here. Every row was run in one pass; none is
 carried forward.
 
 ### `verify-staff-picker` — closed (2026-08-20), and it was hiding a regression

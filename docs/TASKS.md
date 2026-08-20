@@ -591,7 +591,16 @@
 - [x] 222 backend unit · 1373 integration · 613 frontend · 13/13 new browser checks · 18 CI guards · OpenAPI current
 - [x] **`verify-staff-picker` closed 2026-08-20 — 13/13.** Harness defect (`===` against the shared add-Button's `＋` prefix) on top of R91's intentional control change. Fixing it exposed a **real regression**: the periods editor rendered bare names, dropping R90's *marked before the choice* half. `markedLabel`/`Warnings` now shared and guarded
 - [x] **All 20 harnesses green in one pass — 460 checks** (plus `measure-page-header`'s 9 widths)
-- [ ] **NEXT — cross-branch occurrence audience (§D).** Deliberately NOT started: the Owner's brief instructs re-checking capacity before D and stopping after C with a clean tree if D cannot be completed whole. It needs its own migration (a `Session` audience override), one shared audience resolver, the counterpart-Session decision, UI, tests, browser verification and docs
+### R92 — cross-branch occurrence audiences (2026-08-20)
+- [x] **SRS Revision 92** + migration `20260820010000_r92_session_audience_branch`. `SessionAudienceBranch (session, branch)`, **replacement** semantics
+- [x] **Physical location and audience are separate facts** — `Session.branch_id` untouched; the roster reports venue and audience side by side
+- [x] **One resolver** `audienceForSession`, composed by calendar · roster · notifications · audit count. No independent cross-branch `OR` anywhere
+- [x] Whole-Level only; the other modes are **refused**, and the Group/Circle variant is an open Owner question rather than an invention
+- [x] **The counterpart Session is never guessed** — two schedules are structurally independent, so the administrator cancels it explicitly
+- [x] Admin UI «الحضور من الفروع» on the occurrence, seeded with the inherited branch; roster shown, not inferred
+- [x] 20 API tests · 10 frontend guards · **16/16** `verify-cross-branch` across six identities · concurrency on the Session's own version
+- [x] 1395 integration · 222 backend unit · 623 frontend · 18 CI guards · OpenAPI current, TD-3 +2 routes
+- [ ] ~~NEXT — cross-branch occurrence audience (§D)~~ **DONE.** Deliberately NOT started: the Owner's brief instructs re-checking capacity before D and stopping after C with a clean tree if D cannot be completed whole. It needs its own migration (a `Session` audience override), one shared audience resolver, the counterpart-Session decision, UI, tests, browser verification and docs
 
 ### R90 — staff-picker planning warnings (2026-08-19)
 - [x] **SRS Revision 89** closes the §14.1 gap: `/admin/teachers` is in the sitemap, with the three ownerships stated

@@ -1,14 +1,20 @@
-import type { Prisma, PrismaClient } from '../generated/prisma/client.js';
-import type { Actor } from '../policies/actor.js';
-import { assertMayEdit } from './event.service.js';
-import { loadForWrite } from './session.service.js';
-import { AppError } from '../lib/errors.js';
-import { page, pageWindow, type Page, type PageParams } from '../lib/pagination.js';
+import type { Prisma, PrismaClient } from "../generated/prisma/client.js";
+import type { Actor } from "../policies/actor.js";
+import { assertMayEdit } from "./event.service.js";
+import { loadForWrite } from "./session.service.js";
+import { AppError } from "../lib/errors.js";
+import {
+  page,
+  pageWindow,
+  type Page,
+  type PageParams,
+} from "../lib/pagination.js";
 import {
   eventAudienceWhere,
   resolveAudience,
   type AudienceSpec,
-} from '../policies/roster-resolution.js';
+  audienceForSession,
+} from "../policies/roster-resolution.js";
 
 /**
  * **The one MVP notification event** (§4.8 as narrowed by Revision 77).
@@ -73,21 +79,24 @@ async function recipientsFor(
       select: { userId: true },
     }),
   ]);
-  const everyone = new Set([...students.map((s) => s.id), ...staff.map((s) => s.userId)]);
+  const everyone = new Set([
+    ...students.map((s) => s.id),
+    ...staff.map((s) => s.userId),
+  ]);
   // **Never notified of your own act** — the whole of R78.3's narrowing.
   everyone.delete(actorUserId);
   return [...everyone];
 }
 
 export type NotificationKind =
-  | 'session_cancelled'
-  | 'session_restored'
-  | 'session_assigned'
-  | 'session_rescheduled'
-  | 'event_created'
-  | 'event_rescheduled'
-  | 'event_cancelled'
-  | 'grade_published';
+  | "session_cancelled"
+  | "session_restored"
+  | "session_assigned"
+  | "session_rescheduled"
+  | "event_created"
+  | "event_rescheduled"
+  | "event_cancelled"
+  | "grade_published";
 
 /**
  * One row, **exactly one of whose targets is present** (R82.1). The reader
@@ -106,7 +115,10 @@ export interface NotificationRow {
     date: Date;
     startTime: Date;
     cancellationReason: string | null;
-    schedule: { subject: { name: string } | null; level: { name: string } | null };
+    schedule: {
+      subject: { name: string } | null;
+      level: { name: string } | null;
+    };
   } | null;
   event: {
     title: string;
@@ -135,7 +147,10 @@ const LIST_INCLUDE = {
       startTime: true,
       cancellationReason: true,
       schedule: {
-        select: { subject: { select: { name: true } }, level: { select: { name: true } } },
+        select: {
+          subject: { select: { name: true } },
+          level: { select: { name: true } },
+        },
       },
     },
   },
@@ -175,7 +190,12 @@ export async function notifyCancelled(
   spec: AudienceSpec,
   actorUserId: string,
 ): Promise<number> {
-  return writeFor(tx, sessionId, 'session_cancelled', await recipientsFor(tx, sessionId, spec, actorUserId));
+  return writeFor(
+    tx,
+    sessionId,
+    "session_cancelled",
+    await recipientsFor(tx, sessionId, spec, actorUserId),
+  );
 }
 
 /**
@@ -197,7 +217,12 @@ export async function notifyRescheduled(
   spec: AudienceSpec,
   actorUserId: string,
 ): Promise<number> {
-  return writeFor(tx, sessionId, 'session_rescheduled', await recipientsFor(tx, sessionId, spec, actorUserId));
+  return writeFor(
+    tx,
+    sessionId,
+    "session_rescheduled",
+    await recipientsFor(tx, sessionId, spec, actorUserId),
+  );
 }
 
 /**
@@ -216,7 +241,7 @@ export async function notifyAssigned(
   return writeFor(
     tx,
     sessionId,
-    'session_assigned',
+    "session_assigned",
     addedUserIds.filter((id) => id !== actorUserId),
   );
 }
@@ -229,7 +254,7 @@ export async function notifyAssigned(
 async function writeFor(
   tx: Prisma.TransactionClient,
   sessionId: string,
-  type: 'session_cancelled' | 'session_rescheduled' | 'session_assigned',
+  type: "session_cancelled" | "session_rescheduled" | "session_assigned",
   userIds: readonly string[],
 ): Promise<number> {
   if (userIds.length === 0) return 0;
@@ -269,20 +294,28 @@ export async function eventRecipients(
       staff: { where: { deletedAt: null }, select: { userId: true } },
     },
   });
-  if (!event) throw new AppError('NOT_FOUND', 'no such event');
+  if (!event) throw new AppError("NOT_FOUND", "no such event");
 
   const where = eventAudienceWhere({
     branchIds: event.branchScopes.map((r) => r.branchId),
     categoryIds: event.categoryScopes.map((r) => r.categoryId),
     levelIds: event.levelScopes.map((r) => r.levelId),
-    administrativeGroupIds: event.administrativeGroupScopes.map((r) => r.administrativeGroupId),
+    administrativeGroupIds: event.administrativeGroupScopes.map(
+      (r) => r.administrativeGroupId,
+    ),
   });
 
   // A GLOBAL event resolves to no audience at all (R82.7) — but its own staff
   // are still concerned by it, which is a different question from its scope.
-  const audience = where === null ? [] : await prisma.user.findMany({ where, select: { id: true } });
+  const audience =
+    where === null
+      ? []
+      : await prisma.user.findMany({ where, select: { id: true } });
 
-  const everyone = new Set([...audience.map((u) => u.id), ...event.staff.map((s) => s.userId)]);
+  const everyone = new Set([
+    ...audience.map((u) => u.id),
+    ...event.staff.map((s) => s.userId),
+  ]);
   everyone.delete(actorUserId);
   return [...everyone];
 }
@@ -303,15 +336,23 @@ export async function notifyEventChange(
   prisma: PrismaClient,
   actor: Actor,
   eventId: string,
-  change: 'created' | 'rescheduled' | 'cancelled',
+  change: "created" | "rescheduled" | "cancelled",
 ): Promise<{ notified: number }> {
   // **Authorization is the event's own**: whoever may edit it may announce it,
   // asked through the SAME assertion the write used rather than a second answer
   // to the same question.
-  await assertMayEdit(prisma as unknown as Prisma.TransactionClient, actor, eventId);
+  await assertMayEdit(
+    prisma as unknown as Prisma.TransactionClient,
+    actor,
+    eventId,
+  );
 
   const type = (
-    { created: 'event_created', rescheduled: 'event_rescheduled', cancelled: 'event_cancelled' } as const
+    {
+      created: "event_created",
+      rescheduled: "event_rescheduled",
+      cancelled: "event_cancelled",
+    } as const
   )[change];
   const userIds = await eventRecipients(prisma, eventId, actor.userId);
   if (userIds.length === 0) return { notified: 0 };
@@ -341,13 +382,21 @@ export async function notifySessionChange(
   prisma: PrismaClient,
   actor: Actor,
   sessionId: string,
-  change: 'cancelled' | 'rescheduled',
+  change: "cancelled" | "rescheduled",
 ): Promise<{ notified: number }> {
   // **Authorization is the occurrence's own**: whoever may change it may
   // announce the change, asked through the same guard the write used.
   const session = await loadForWrite(prisma, actor, sessionId);
 
-  const spec = {
+  /**
+   * **R92 — the recipients are the OCCURRENCE's audience.**
+   *
+   * Falling back to the schedule's single branch after an override exists is the
+   * precise failure R92's shared resolver exists to prevent: the second branch's
+   * beneficiaries would see the combined class on their calendars and be told
+   * nothing when it was cancelled.
+   */
+  const spec = (await audienceForSession(prisma, sessionId)) ?? {
     teachingMode: session.schedule.teachingMode as never,
     levelId: session.schedule.levelId,
     administrativeGroupId: session.schedule.administrativeGroupId,
@@ -360,7 +409,7 @@ export async function notifySessionChange(
     const notified = await writeFor(
       tx,
       sessionId,
-      change === 'cancelled' ? 'session_cancelled' : 'session_rescheduled',
+      change === "cancelled" ? "session_cancelled" : "session_rescheduled",
       userIds,
     );
     return { notified };
@@ -394,7 +443,11 @@ export async function notifyGradePublished(
   const recipients = studentIds.filter((id) => id !== actorUserId);
   if (recipients.length === 0) return 0;
   const created = await tx.notification.createMany({
-    data: recipients.map((userId) => ({ userId, examId, type: 'grade_published' as const })),
+    data: recipients.map((userId) => ({
+      userId,
+      examId,
+      type: "grade_published" as const,
+    })),
     skipDuplicates: true,
   });
   return created.count;
@@ -418,7 +471,7 @@ export async function notifyRestored(
   sessionId: string,
 ): Promise<{ withdrawn: number; corrected: number }> {
   const cancelled = await tx.notification.findMany({
-    where: { sessionId, type: 'session_cancelled', deletedAt: null },
+    where: { sessionId, type: "session_cancelled", deletedAt: null },
     select: { id: true, userId: true, readAt: true },
   });
   const read = cancelled.filter((n) => n.readAt !== null);
@@ -428,20 +481,24 @@ export async function notifyRestored(
     // A hard delete, deliberately: the audit log already holds both the cancel
     // and the restore, so nothing historical is lost, and a soft-deleted notice
     // would keep the list read filtering rows nobody may ever see again.
-    await tx.notification.deleteMany({ where: { id: { in: unread.map((n) => n.id) } } });
+    await tx.notification.deleteMany({
+      where: { id: { in: unread.map((n) => n.id) } },
+    });
   }
   if (read.length > 0) {
     await tx.notification.createMany({
       data: read.map((n) => ({
         userId: n.userId,
         sessionId,
-        type: 'session_restored' as const,
+        type: "session_restored" as const,
       })),
       skipDuplicates: true,
     });
     // The corrected notice replaces the one it corrects; leaving both would put
     // two contradictory statements about one class in the same list.
-    await tx.notification.deleteMany({ where: { id: { in: read.map((n) => n.id) } } });
+    await tx.notification.deleteMany({
+      where: { id: { in: read.map((n) => n.id) } },
+    });
   }
   return { withdrawn: unread.length, corrected: read.length };
 }
@@ -471,7 +528,7 @@ export async function listNotifications(
       // Newest first, with R76.3's deterministic tiebreaker — without it two
       // notices written in the same transaction share a `created_at` and can
       // land on two pages or on neither.
-      orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
+      orderBy: [{ createdAt: "desc" }, { id: "asc" }],
       skip: window.skip,
       take: window.take,
     }),
@@ -481,7 +538,10 @@ export async function listNotifications(
 }
 
 /** How many the caller has not read — the count the screen shows. */
-export async function unreadCount(prisma: PrismaClient, actor: Actor): Promise<number> {
+export async function unreadCount(
+  prisma: PrismaClient,
+  actor: Actor,
+): Promise<number> {
   return prisma.notification.count({
     where: { userId: actor.userId, deletedAt: null, readAt: null },
   });
@@ -505,7 +565,7 @@ export async function markRead(
     select: { id: true, readAt: true },
   });
   if (existing === null) {
-    throw new AppError('NOT_FOUND', 'no such notification');
+    throw new AppError("NOT_FOUND", "no such notification");
   }
   // Already read: return it unchanged rather than moving the timestamp, so a
   // retried request does not rewrite when the person actually read it.

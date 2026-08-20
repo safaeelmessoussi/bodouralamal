@@ -632,6 +632,8 @@ model Branch {
 
   @@index([displayOrder])
   @@map("branch")
+  /// R92 — occurrences whose audience explicitly includes this branch.
+  sessionAudiences SessionAudienceBranch[]
 }
 
 model Room {
@@ -1095,6 +1097,46 @@ model RecurringCourseSchedule {
   @@map("recurring_course_schedule")
 }
 
+/// **SRS Revision 92 — one occurrence's audience, when it is not its schedule's.**
+///
+/// The association occasionally delivers a lesson once instead of twice: two
+/// branches' classes meet together, physically at one of them, for that
+/// occurrence only.
+///
+/// **Semantics are REPLACEMENT, not addition:**
+///
+/// * no rows for a Session → its audience is inherited from its CourseSchedule;
+/// * rows exist → they **are** that Session's audience branches.
+///
+/// An additive reading would leave nobody able to say whether the schedule's own
+/// branch is still included. The interface seeds an override with the inherited
+/// branch already chosen, so *combine* is expressed by adding the second — the
+/// same thing, said unambiguously.
+///
+/// **Scope, not a roster** (§20 rule 22): the branch populations are resolved
+/// against live Enrollments at read time, exactly as every other audience is. A
+/// stored roster would diverge from the group it came from the moment anybody
+/// enrolled or moved.
+///
+/// **The physical venue is a different fact** and is untouched: a Session
+/// happens where its schedule's branch and its own room say. This says who is
+/// expected there.
+model SessionAudienceBranch {
+  sessionId String  @map("session_id") @db.Uuid
+  session   Session @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+  branchId  String  @map("branch_id") @db.Uuid
+  branch    Branch  @relation(fields: [branchId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  /// The pair IS the fact: naming one branch twice for one occurrence is not two
+  /// statements. No soft delete — removing a branch is a correction to a plan,
+  /// not an event with a history, and the audit row records who made it.
+  @@id([sessionId, branchId])
+  @@index([branchId])
+  @@map("session_audience_branch")
+}
+
 /// §4.4c — **the resolution table for ALL teacher scoping.** Replaces
 /// `GroupTeacher`.
 ///
@@ -1192,6 +1234,10 @@ model Session {
   linkedContent SessionContent[]
   staff         SessionStaff[]
   notifications Notification[]
+  /// R92 — this occurrence's own audience branches, when it has them. Empty
+  /// means *inherit from the schedule*, which is every occurrence but the rare
+  /// combined one.
+  audienceBranches SessionAudienceBranch[]
 
   // What makes `session.materialize` idempotent: a second run over the same
   // horizon creates no duplicate occurrence.

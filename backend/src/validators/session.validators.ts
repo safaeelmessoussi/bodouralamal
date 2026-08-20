@@ -1,7 +1,7 @@
-import { z } from 'zod';
+import { z } from "zod";
 
-import { uuid, version } from './common.js';
-import { calendarDate, wallClock } from './course-schedule.validators.js';
+import { uuid, version } from "./common.js";
+import { calendarDate, wallClock } from "./course-schedule.validators.js";
 
 /**
  * Zod schemas for the Session boundary (TD-3.12, §4.4, TD-1).
@@ -36,7 +36,11 @@ export const overrideSessionSchema = z
      * same as omission.
      */
     staff: z
-      .array(z.object({ user_id: uuid, position: z.enum(['teacher', 'assistant']) }).strict())
+      .array(
+        z
+          .object({ user_id: uuid, position: z.enum(["teacher", "assistant"]) })
+          .strict(),
+      )
       .max(20)
       .optional(),
   })
@@ -62,7 +66,7 @@ export const cancelSessionSchema = z
       .trim()
       .max(500)
       .optional()
-      .transform((v) => (v === undefined || v === '' ? null : v)),
+      .transform((v) => (v === undefined || v === "" ? null : v)),
   })
   .strict();
 
@@ -74,4 +78,23 @@ export const restoreSessionSchema = z.object({ version }).strict();
  * the boundary refuse anything else, so a client following the specification
  * would have received a `400` from an endpoint that claimed to implement it.
  */
-export const linkContentSchema = z.object({ educational_content_id: uuid }).strict();
+export const linkContentSchema = z
+  .object({ educational_content_id: uuid })
+  .strict();
+
+/**
+ * **R92 — this occurrence's audience branches.**
+ *
+ * `.strict()`, and the version is required: the concurrency control is the
+ * Session's own (TD-15), never a second mechanism.
+ *
+ * **An empty list is meaningful and is accepted**: it clears the override and
+ * returns the audience to the schedule's, which is what «العودة إلى الوضع
+ * المعتاد» does. That is why there is no `.min(1)`.
+ */
+export const sessionAudienceSchema = z
+  .object({
+    version: z.number().int().min(0),
+    branch_ids: z.array(uuid).max(20),
+  })
+  .strict();
