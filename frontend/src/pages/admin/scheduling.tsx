@@ -464,14 +464,22 @@ export function SchedulingPage(): ReactNode {
               setNotice(
                 t('scheduling.notify.sent').replace('{n}', String(result.notified)),
               );
+              setNotifying(null);
             } catch {
-              // The change is already saved; only the notice failed. Saying so
-              // precisely matters — a generic failure here would read as though
-              // the event had not been created.
+              /**
+               * The change is already saved; only the notice failed, and saying
+               * so precisely matters — a generic failure here would read as
+               * though the event had not been created.
+               *
+               * **The dialog stays open** (2026-08-20), for the same reason as
+               * the occurrence's: «يمكنك المحاولة لاحقاً» named a retry that did
+               * not exist, and the only way back was to edit the event again.
+               * Pressing «إرسال الإشعار» again is safe — the
+               * `(user, event, type)` unique index makes a repeat the same rows.
+               */
               setNotice(t('scheduling.notify.failed'));
             } finally {
               setBusy(false);
-              setNotifying(null);
             }
           })();
         }}

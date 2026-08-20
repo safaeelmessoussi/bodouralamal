@@ -10,6 +10,21 @@
  * nothing is what makes the positive halves mean anything, and it is the half a
  * source reading can never establish.
  */
+/**
+ * **SCOPE, restated 2026-08-20: this harness proves the AUDIENCE, not the flow.**
+ *
+ * It drives `/notify` through the API rather than through the button a person
+ * presses, so a passing run here says *the server resolves the right recipients
+ * and writes the right rows* — and says **nothing** about whether the
+ * confirmation dialog reaches that endpoint at all. That gap is exactly what
+ * the Owner reported: green here while manual use did not behave.
+ *
+ * **`verify-notify-ui.mjs` is the proof of the feature.** It clicks
+ * «إرسال الإشعار» in the real dialog, logs in as the recipient, and reads the
+ * notice out of her own bell. Neither file replaces the other: this one covers
+ * audience shapes that would be laborious to drive through screens, and that one
+ * covers the pipeline a person actually uses.
+ */
 import { connect, results } from './cdp.mjs';
 
 const BASE = process.env.APP_BASE ?? 'http://localhost';

@@ -53,6 +53,7 @@ rather than summarised.
 | 15e | Effective-dated staffing | `CourseScheduleStaff.effective_from/until` (R91) | ✓ `effective-staffing.test.ts` (14) | ✓ `effective-staffing` (24) | ✓ 13/13 `verify-effective-staffing` | **history is never rewritten**; one main per date; many assistants |
 | 15f | One-off Session cover | «مؤطّرة هذه الحصة» on `/admin/schedules/{id}/sessions` | ✓ | ✓ within the 24 | ✓ within 13/13 | occurrence staffing **overrides** the schedule, and reaches nothing beyond it |
 | 15g | Cross-branch occurrence audience | «الحضور من الفروع» on `/admin/schedules/{id}/sessions` (R92) | ✓ `session-audience.test.ts` (10) | ✓ `session-audience` (20) | ✓ 16/16 `verify-cross-branch` | override **replaces**; venue never moves; next occurrence normal |
+| 21 | **Notifications, end to end through the UI** | cancel · reschedule · event · grade publish → the recipient's own bell | ✓ `notification-types` (6) · `notify-confirmation` (7) | ✓ `notification-targets`, `session-audience` (23) | ✓ 27/27 `verify-notify-ui` | the button a person presses, and the notice she reads |
 | 15a | Capability ≠ authorization | declared-everything teacher (R88.3) | ✓ | ✓ within the 15 | — | no roster, no Quran marker, no class in her calendar |
 | 15 | Content library | `/admin/content`, `/teacher/content` | ✓ | ✓ `library`, `content`, `upload` | ✓ 16/16 recorder | |
 | 16 | Session materials | materials dialog | ✓ | ✓ `session-page` | ✓ 22/22 | |
@@ -90,13 +91,14 @@ under the table.
 | `verify-calendar-surfaces.sh` | 14c, 20 | **AO** — the five calendar surfaces against one contract matrix | 23/23 |
 | `verify-recorder.sh` | 19 | R75 through a real `MediaRecorder`: pause/resume produce one file, the beforeunload guard holds | 22/22 |
 | `verify-ux-slice.sh` | shared UI | **AG/AI/W** as rendered boxes — scroll ownership at two viewports, control geometry, sidebar `scrollTop` across a navigation | 22/22 |
-| `verify-notifications.sh` | 12, 13, 14a–14c | **AM/AN** — asked as three different people: who sees what, who is told, and that declining tells nobody | 22/22 |
+| `verify-notifications.sh` | 12, 13, 14a–14c | **AM/AN — AUDIENCE only.** Drives `/notify` through the API, so it proves who the server resolves and **nothing** about whether the dialog reaches that endpoint. `verify-notify-ui` is the proof of the feature | 22/22 |
 | `verify-public-calendar.sh` | 20 | قائمة / تقويم driven anonymously; **R83** — a cancelled occurrence leaves the ordinary projection and `include_cancelled=true` still carries it; the reason never leaks | 18/18 |
 | `verify-enrolment-gender.sh` | 3 | R79 beneficiary identity across six person-shapes + R27/BR-21 Level narrowing | 17/17 |
 | `verify-calendar-header.sh` | 20 | **AJ/AK** — region geometry at 1440px and 390px on both calendars, title drift, the table note against its table | 17/17 |
 | `verify-library-recorder.sh` | 19 | The second recorder entry point, and the sort indicator | 16/16 |
 | `verify-grading.sh` | 14d, 16 | R81 — the exam's own maximum, empty ≠ zero, publish notifies and a draft is silent | 16/16 |
 | `verify-teaching-profile.sh` | 15, 15b | **AQ/X** — ownership of «الملف التدريسي», the population, Arabic weekdays, a range that survives a reload | 13/13 |
+| `verify-notify-ui.sh` | 21 | **The notification pipeline as a person uses it** — clicks «إرسال الإشعار», logs in as the recipient, reads the notice from her own bell; R91 and R92 recipients included | 27/27 |
 | `verify-cross-branch.sh` | 15g, 20 | **R91 × R92** — six identities on one combined occurrence: audience, venue, calendars, notifications and staffing, each asked of the person it concerns | 16/16 |
 | `verify-effective-staffing.sh` | 15e, 15f | **R91** — the replacement as four identities: dated rows, Safa twice, per-date occurrences, and a handover that leaves the past alone | 13/13 |
 | `verify-staff-picker.sh` | 15c, 10 | **AR** — five مؤطِّرات an administrator must tell apart; all offered, each marked **before** the choice and named after it, nothing disabled, the one with no profile assigned anyway | 13/13 |
@@ -106,10 +108,24 @@ under the table.
 | `verify-circles-reorder.sh` | 9 | R78.1 — ordering حلقات المواد within a `(level, subject)` pairing | 9/9 |
 | `measure-page-header.sh` | shared UI | Header layout measured in a browser at nine widths | 9/9 widths |
 
-**476 checks across 21 harnesses, all green** (2026-08-20), plus
-`measure-page-header`'s nine width measurements — 22 scripts in
-`scripts/dev/browser/` and 22 rows here. Every row was run in one pass; none is
+**503 checks across 22 harnesses, all green** (2026-08-20), plus
+`measure-page-header`'s nine width measurements — 23 scripts in
+`scripts/dev/browser/` and 23 rows here. Every row was run in one pass; none is
 carried forward.
+
+### Why `verify-notifications` was green while the feature was not
+
+It POSTs to `/notify` itself. That proves the **audience resolver** and the rows
+it writes, and says nothing about whether pressing «إرسال الإشعار» reaches the
+endpoint at all — which is the half a person experiences. A harness that
+substitutes an API call for the user action under test can only ever confirm the
+layer beneath it.
+
+`verify-notify-ui` closes that gap: it clicks the real button, logs in as the
+recipient, opens her own bell, and asserts the Arabic sentence she reads. **No
+`prisma.notification.create`, and no direct notify POST.** Both files stay —
+the older one covers audience shapes that would be laborious to drive through
+screens.
 
 ### `verify-staff-picker` — closed (2026-08-20), and it was hiding a regression
 

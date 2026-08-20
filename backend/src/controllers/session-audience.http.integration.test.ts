@@ -598,3 +598,77 @@ describe("what the write refuses", () => {
     expect(res.status).toBe(400);
   });
 });
+
+/**
+ * **The notification pipeline's server half** (2026-08-20).
+ *
+ * The user-visible proof is `verify-notify-ui`, which clicks the real button and
+ * reads the notice out of the recipient's own bell. These pin the properties
+ * underneath it that a browser run would be a clumsy way to assert — and one the
+ * old harness never asserted at all, because it POSTed to `/notify` directly and
+ * so could not tell a wired dialog from an unwired one.
+ */
+describe("notification recipients, resolved for the occurrence", () => {
+  // **Its own occurrence.** `combined` is cancelled by an earlier block, and a
+  // second cancellation answers 409 — a test that borrows another's row fails
+  // for reasons that have nothing to do with what it asserts.
+  it("a repeated send is idempotent and reports that nothing new was written", async () => {
+    expect((await setAudience(nextWeek, [targa, branch2])).status).toBe(200);
+    const version = (
+      await prisma.session.findUniqueOrThrow({
+        where: { id: nextWeek },
+        select: { version: true },
+      })
+    ).version;
+    // **The key is OMITTED, which is how the form expresses *no reason*.**
+    // `null` is refused by the schema; R83.2 made the reason optional, and
+    // optional here means absent rather than explicitly null.
+    const cancelled = await call("POST", `/sessions/${nextWeek}/cancel`, adminToken, {
+      version,
+    });
+    expect(cancelled.status, JSON.stringify(cancelled.body)).toBe(200);
+
+    const first = await call("POST", `/sessions/${nextWeek}/notify`, adminToken, {
+      change: "cancelled",
+    });
+    expect(first.status).toBe(200);
+    const firstCount = (first.body.data as { notified: number }).notified;
+    expect(firstCount).toBeGreaterThan(0);
+
+    const again = await call("POST", `/sessions/${nextWeek}/notify`, adminToken, {
+      change: "cancelled",
+    });
+    expect(again.status).toBe(200);
+    // **The second send creates nothing**, through the `(user, session, type)`
+    // unique index — and says so, rather than reporting the same number twice
+    // and implying people were newly told.
+    expect((again.body.data as { notified: number }).notified).toBe(0);
+
+    const rows = await prisma.notification.count({
+      where: { sessionId: nextWeek, type: "session_cancelled", deletedAt: null },
+    });
+    expect(rows).toBe(firstCount);
+  });
+
+  it("cancelling with NO reason still notifies, and stores no reason", async () => {
+    const stored = await prisma.session.findUniqueOrThrow({
+      where: { id: nextWeek },
+      select: { cancellationReason: true },
+    });
+    // R83.2 — a class is sometimes simply not held, and demanding a sentence
+    // before the platform will record that is a gate with no purpose.
+    expect(stored.cancellationReason).toBeNull();
+    const told = await prisma.notification.count({
+      where: { sessionId: nextWeek, deletedAt: null },
+    });
+    expect(told).toBeGreaterThan(0);
+  });
+
+  it("the actor is never among the recipients", async () => {
+    const told = await prisma.notification.findMany({
+      where: { sessionId: nextWeek, deletedAt: null },
+      select: { userId: true },
+    });
+    expect(told.map((t) => t.userId)).not.toContain(adminId);
+  });
+});

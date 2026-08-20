@@ -591,6 +591,13 @@
 - [x] 222 backend unit · 1373 integration · 613 frontend · 13/13 new browser checks · 18 CI guards · OpenAPI current
 - [x] **`verify-staff-picker` closed 2026-08-20 — 13/13.** Harness defect (`===` against the shared add-Button's `＋` prefix) on top of R91's intentional control change. Fixing it exposed a **real regression**: the periods editor rendered bare names, dropping R90's *marked before the choice* half. `markedLabel`/`Warnings` now shared and guarded
 - [x] **All 20 harnesses green in one pass — 460 checks** (plus `measure-page-header`'s 9 widths)
+### Notifications — verified through the UI (2026-08-20)
+- [x] **`verify-notify-ui` — 27/27.** Real dialog, real button, recipient's own bell. Cancel (with and without reason) · decline · reschedule · Event · grade draft/publish · R91 replacement recipients · R92 cross-branch · mark-read · reload
+- [x] **Defect fixed:** a failed notice could not be retried — the copy said «يمكنك المحاولة لاحقاً» while `finally` closed the dialog. Both notice dialogs now stay open on failure
+- [x] **Guard added:** the Prisma enum, the frontend union and the Arabic headlines must agree — proved against the defect
+- [x] **`verify-notifications`'s real scope stated**: it POSTs to `/notify`, so it proves the audience and not the flow. That gap is why it was green while manual use was not
+- [x] All 23 browser scripts green — **503 checks**
+
 ### R92 — cross-branch occurrence audiences (2026-08-20)
 - [x] **SRS Revision 92** + migration `20260820010000_r92_session_audience_branch`. `SessionAudienceBranch (session, branch)`, **replacement** semantics
 - [x] **Physical location and audience are separate facts** — `Session.branch_id` untouched; the roster reports venue and audience side by side

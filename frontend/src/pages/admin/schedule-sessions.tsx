@@ -383,14 +383,23 @@ export function ScheduleSessionsPage({ scheduleId }: { scheduleId: string }): Re
                 accessToken,
               );
               setNotice(t('scheduling.notify.sent').replace('{n}', String(result.notified)));
+              setNotifying(null);
             } catch {
-              // The change is saved; only the notice failed, and saying so
-              // precisely matters — a generic failure would read as though the
-              // cancellation had not happened.
+              /**
+               * **The change is saved; only the notice failed** — and saying so
+               * precisely matters, because a generic failure would read as
+               * though the cancellation had not happened.
+               *
+               * **The dialog stays open** (2026-08-20). It used to close, so
+               * «يمكنك المحاولة لاحقاً» named a retry that did not exist: the
+               * only way back was to cancel the occurrence again, which is not
+               * a thing anybody should do to re-send a notice. Pressing
+               * «إرسال الإشعار» again is safe — the `(user, session, type)`
+               * unique index makes a repeat the same rows.
+               */
               setNotice(t('scheduling.notify.failed'));
             } finally {
               setBusy(false);
-              setNotifying(null);
             }
           })();
         }}

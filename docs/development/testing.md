@@ -613,6 +613,30 @@ menu. **Check what the page actually rendered before believing an absence.**
 **`.admin-nav a`, not `nav a`.** All three portals render the same `PortalShell`
 (rule AP), and its menu carries that class.
 
+**A harness must not substitute an API call for the action under test.**
+`verify-notifications` POSTed to `/notify` itself and was green for weeks while
+manual use did not behave: it proved the audience resolver and never touched the
+button a person presses. The rule is narrow and worth stating plainly — *if the
+requirement is that the UI sends the request, the harness must make the UI send
+it*, and nothing below that layer is evidence about it.
+
+**And a notification is proved by reading it as the recipient.** Not a row in
+the table, not a 200 from the endpoint, not a string in the bundle:
+`verify-notify-ui` logs in as the student and asserts the Arabic sentence in her
+own bell.
+
+**Two ambiguities that made a working feature look broken**, both fixture-side
+and both worth recognising by shape:
+
+* **A label matched loosely picked development data.** The event scope was
+  attached by matching «وميض الأمل», and the dev database already holds a Level
+  by that name — so the activity was scoped to a Level the fixture's student is
+  not enrolled in, the send correctly reached nobody, and the harness reported
+  the feature broken. Match the **tagged** name.
+* **A selector that named nothing reported a missing control.** The unread count
+  is `.bell__count`; the harness looked for `.bell__badge`, found nothing, and
+  called the count missing while the panel plainly showed one.
+
 ### Running them is what makes them coverage
 
 On 2026-08-19 all nineteen harnesses were run for the first time in one pass.
