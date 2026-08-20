@@ -618,6 +618,16 @@
 - [x] **Backend CI typecheck was red on `develop`** — 12 pre-existing errors fixed
 - [x] 26 new integration cases · 16 frontend guards + 1 CI shell guard (the CSS invariant cannot live in vitest) · `verify-quran-entry` **24/24** · 19 CI guards · 25 browser harnesses / 556 checks
 - [x] **SRS Revision 95** ratifies the memorisation-vs-revision semantics — `new_memorization` alone feeds coverage, `revision` is recorded and never inflates it, BR-13's merge and BR-11 unchanged in substance
+### R96 — one QR identity per platform person (2026-08-20)
+- [x] **Beneficiary-only QR rejected before implementation** — the unit of identity is the person
+- [x] Audit cleared the STOP condition: children and teens are already full `User` rows
+- [x] `user_qr_ref` `NOT NULL UNIQUE` on every User, DB-defaulted so no creation path can forget
+- [x] Backfill: 15 users · 15 with QR · 0 NULL · 0 duplicate
+- [x] Role-, enrolment- and family-link-independent; stable across soft delete and restore
+- [x] One shared `UserQr`; `/profile` = account holder, beneficiary view = acting student
+- [x] 7 unit · 15 integration · `verify-user-qr` **11/11** · 19 CI guards
+- [ ] **Owner decision**: should every beneficiary carry a spoken `referenceCode`? (R62 gap)
+- [ ] **Owner decision**: a `parent`-only account can open no beneficiary-portal screen
 - [ ] **NEXT**: one shared occurrence-details dialog (§9–§10) · direct Session recordings/materials (§11–§15) · beneficiary QR (§16–§25)
 
 ### Notification root causes + landing pages (2026-08-20)

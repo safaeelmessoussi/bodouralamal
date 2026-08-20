@@ -312,6 +312,32 @@ model User {
   examStaff     ExamStaff[]
   eventStaff    EventStaff[]   @relation("EventStaffUser")
   id            String         @id @default(uuid()) @db.Uuid
+
+  /// **R96 — this person's stable, opaque QR identity.**
+  ///
+  /// One per person, for every person: beneficiary, child, teenager, guardian,
+  /// مؤطِّرة, assistant, Admin, Super Admin, and anybody holding several of those
+  /// at once. **Independent of all of them** — and of `isBeneficiary`,
+  /// `Enrollment`, `FamilyLink`, academic year, Branch and Level. Roles change
+  /// and placements change; neither reissues an identity.
+  ///
+  /// **It identifies; it never authenticates.** Not secret, not a bearer token,
+  /// grants nothing: resolving it yields a person, and whatever follows runs the
+  /// caller's own authorization exactly as a lookup by `id` would. R62.5's rule
+  /// for `referenceCode`, restated because a second opaque identifier must not
+  /// quietly acquire different powers.
+  ///
+  /// **Distinct from `id`** so a lost card can be reissued without rewriting
+  /// every foreign key, and so the printed artifact and the row's identity can
+  /// diverge (§20 rule 22). **Distinct from `referenceCode`** because that one
+  /// is SPOKEN — a five-character human alphabet read down a telephone — and
+  /// this one is SCANNED.
+  ///
+  /// **The default is the DATABASE's** (`gen_random_uuid()`), so every creation
+  /// path has one whether or not it goes through Prisma, including paths nobody
+  /// has written yet.
+  qrRef         String         @unique @default(uuid()) @map("user_qr_ref") @db.Uuid
+
   accountStatus AccountStatus  @default(pending) @map("account_status")
 
   // Person names. `nameArabic` is collated ar-x-icu by hand-written SQL

@@ -1,0 +1,45 @@
+/**
+ * The shared person QR (R96, rule C).
+ *
+ * Always rendered on white with black modules regardless of theme: a scanner
+ * needs the contrast the symbol specifies, and a themed QR is a QR that stops
+ * working in dark mode.
+ */
+.user-qr {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-3);
+  margin: 0;
+}
+
+.user-qr__code {
+  inline-size: 12rem;
+  block-size: 12rem;
+  max-inline-size: 100%;
+  background: var(--color-qr-light);
+  padding: var(--space-2);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+
+.user-qr__caption {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.user-qr__payload {
+  /* The payload is Latin and must not be reordered by the RTL paragraph
+     direction — an opaque reference read backwards is a different reference. */
+  direction: ltr;
+  unicode-bidi: isolate;
+  font-size: 0.85em;
+  color: var(--color-text-muted);
+  word-break: break-all;
+}
+
+.user-qr__note {
+  font-size: 0.85em;
+  color: var(--color-text-muted);
+}

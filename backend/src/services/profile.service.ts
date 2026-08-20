@@ -1,5 +1,6 @@
 import type { PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
+import { qrMatrixFor, type QrMatrix } from '../lib/qr-identity.js';
 import * as audit from '../repositories/audit.repository.js';
 
 /**
@@ -28,6 +29,15 @@ export interface OwnProfile {
   accountStatus: string;
   /** R62.6 — present for an account created through a child application. */
   referenceCode: string | null;
+  /**
+   * **R96 — this ACCOUNT HOLDER's QR identity**, never a child's.
+   *
+   * The subject here is the JWT `sub` (§5.2, R65), so a parent reading her own
+   * profile gets **her own**. The child's is served under child context by
+   * `getStudentIdentity`, and the two are deliberately never interchangeable:
+   * silently swapping one for the other would print the wrong person's card.
+   */
+  qr: QrMatrix;
   /** TD-15: sent back on edit; a stale one is a `409`. */
   version: number;
 }
@@ -47,6 +57,7 @@ export async function getOwnProfile(
       sex: true,
       accountStatus: true,
       referenceCode: true,
+      qrRef: true,
       version: true,
       preProvisionedEmail: true,
       identities: { where: { isActive: true }, select: { email: true }, take: 1 },
@@ -69,6 +80,7 @@ export async function getOwnProfile(
     sex: user.sex,
     accountStatus: user.accountStatus,
     referenceCode: user.referenceCode,
+    qr: await qrMatrixFor(user.qrRef),
     version: user.version,
   };
 }

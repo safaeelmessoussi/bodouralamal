@@ -1,4 +1,5 @@
 import { api } from '../lib/api.js';
+import type { QrMatrix } from '../components/ui/user-qr.js';
 
 /**
  * `GET /students/me` — the Student Dashboard's identity block (R62.10, R63).
@@ -24,6 +25,8 @@ export interface StudentIdentity {
   name_arabic: string;
   /** `null` for an adult student and for accounts predating R62 (R62.6). */
   reference_code: string | null;
+  /** R96 — this person's stable QR identity. Identifies; never authenticates. */
+  qr: QrMatrix;
   /** A list because a student may hold one enrolment per Level; the screen
    *  renders the first and stays honest when there are two. */
   enrollments: StudentEnrollment[];

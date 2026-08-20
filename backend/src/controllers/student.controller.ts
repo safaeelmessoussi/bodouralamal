@@ -27,6 +27,9 @@ export function me(prisma: PrismaClient) {
       id: identity.id,
       name_arabic: identity.nameArabic,
       reference_code: identity.referenceCode,
+      // R96 — the ACTING student's QR identity, so a parent acting for a child
+      // sees the child's and never her own.
+      qr: identity.qr,
       enrollments: identity.enrollments.map((enrollment) => ({
         category: enrollment.category,
         level: enrollment.level,

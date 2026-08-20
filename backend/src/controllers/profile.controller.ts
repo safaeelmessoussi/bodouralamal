@@ -48,6 +48,9 @@ function dto(profile: Awaited<ReturnType<typeof getOwnProfile>>) {
     sex: profile.sex,
     account_status: profile.accountStatus,
     reference_code: profile.referenceCode,
+    // R96 — the account holder's own QR identity. Opaque: the payload carries a
+    // version and one reference, and no name, contact detail or role.
+    qr: profile.qr,
     version: profile.version,
   };
 }

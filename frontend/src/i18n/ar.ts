@@ -127,7 +127,7 @@ export const ar = {
       absent: 'غائبة',
       empty: 'لا توجد نقاط منشورة بعد. تظهر النقطة هنا بعد أن تنشرها المؤطِّرة.',
     },
-    quran: {
+  quran: {
       title: 'حفظي',
       // §C14 — المراجعة تُسجَّل في السجل ولا ترفع نسبة الحفظ.
       lede: 'سور مقرّرك ونسبة حفظك من كلٍّ منها. المراجعة تُسجَّل في السجل ولا ترفع النسبة.',
@@ -697,6 +697,23 @@ export const ar = {
    * slightly different things on two screens — and the caller's own portal
    * supplies the chrome, not the vocabulary.
    */
+  /**
+   * **R96 — the person's QR identity.** ONE vocabulary at the top level,
+   * because one component serves every portal — a copy per portal is how one
+   * rule comes to be worded four different ways.
+   *
+   * It nested under `student` on the first attempt, which made every key
+   * `student.qr.*` and rendered the raw key on screen. `t()` returns its own
+   * argument on a miss, so nothing but `resolves.test.ts` could see it (rule X).
+   */
+  qr: {
+    title: 'رمز التعريف',
+    mine: 'رمز التعريف الخاص بي',
+    // Says what it is FOR, and what it is not. A reader who assumes a QR is a
+    // key will treat a photograph of it as one.
+    identifiesOnly: 'هذا الرمز للتعريف فقط؛ لا يمنح الدخول ولا أي صلاحية.',
+    lede: 'رمز ثابت يعرّف بك داخل المؤسسة. لا يتغيّر بتغيّر أدوارك أو تسجيلاتك.',
+  },
   quran: {
     level: 'المستوى',
     chooseLevel: 'اختاري المستوى',

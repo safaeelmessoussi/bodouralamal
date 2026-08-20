@@ -1,0 +1,114 @@
+[Documentation](../README.md) › [Development](README.md) › **Person identity**
+
+# Person identity — the QR, and what it is not
+
+**One page for the identifiers that name a human being.** It cites
+[`docs/SRS.md`](../SRS.md) §4.3, BR-5 and Revisions 62, 79 and 96 rather than
+restating them; where a rule below has an SRS home, the SRS wins.
+
+---
+
+## Three identifiers, three jobs
+
+| Value | Shape | Who has one | What it is for |
+|---|---|---|---|
+| `User.id` | random UUIDv4 | everyone | **the row**. Referenced by every FK; never printed |
+| `User.referenceCode` (R62) | `BA-7K4M2` | children via child-application only | **spoken** — said down a telephone, written on paper |
+| `User.qrRef` (R96) | random UUID | **everyone**, `NOT NULL UNIQUE` | **scanned** — the QR payload |
+
+**None of the three authorises anything.** R62.5 established the rule for the
+second and R96 restates it for the third rather than cross-referencing it,
+because a second opaque identifier is exactly the thing that quietly acquires
+different powers.
+
+## Why the QR is not `User.id`
+
+`User.id` is already random and would have needed no migration. Two reasons it
+is still the wrong value to print:
+
+* **Rotation.** A card that must be reissued — lost, copied, compromised —
+  cannot be, because the id is referenced by every foreign key. Rotating
+  `qr_ref` is one `UPDATE`.
+* **Two concepts, one name** (§20 rule 22). *The row's identity* and *the value
+  on a physical card* must be able to diverge.
+
+## Why the QR is not `referenceCode`
+
+Right doctrine, wrong value. `referenceCode` is five characters from a
+31-symbol alphabet with `0/O` and `1/I/L` removed, because it is **read aloud
+and hand-copied** — 31⁵ ≈ 28.6 million, ample for that and small as a scannable
+payload. It is also, by R62, a students' code.
+
+> **Recorded defect, not fixed here.** `referenceCode` is documented as
+> *"Students only"* and is in fact narrower still: `allocateReferenceCode` has
+> exactly **one** call site, `child-application.service.ts`. Self-registered
+> adult beneficiaries, admin-created accounts, staff pre-provisioning, the Super
+> Admin bootstrap and every seed set none. R96 leaves R62 untouched; whether
+> every beneficiary should carry a spoken code is a separate Owner decision.
+
+## Every person, and the invariant that needs no thinking
+
+`user_qr_ref` is `NOT NULL UNIQUE` with **no conditional and no partial index**.
+The population is *every `User`* — and that is simpler to hold than
+"beneficiaries, plus children, plus anybody who later becomes staff".
+
+**Children and teenagers already are `User` rows.** §4.3/BR-5: *"Minor students
+are User rows with NO UserIdentity records — they are login-less and reached only
+through an approved FamilyLink."* Login capability lives in a separate table, so
+being unable to log in never made somebody less of a person here. **No dependent
+exists without a `User`**, which is what made one-QR-per-person possible without
+inventing an identity for anything.
+
+**The default is the database's** (`gen_random_uuid()`), not Prisma's. Every
+creation path gets one whether or not it goes through the ORM — including a raw
+`INSERT` and every path nobody has written yet. That is asserted directly: the
+integration suite inserts a row in SQL *without naming the column* and reads back
+a reference.
+
+## Whose identity a surface shows
+
+| Surface | Subject | Serves |
+|---|---|---|
+| `/profile` | JWT `sub` | the **account holder** — a parent gets her own |
+| beneficiary account view | `childContext` (§4.3) | the **acting student** — under child context, the **child** |
+
+**Never silently exchanged.** A card printed for the wrong person is worse than
+no card, so each square is captioned with whose it is — in a family of three
+children, three unlabelled squares are indistinguishable.
+
+> **Recorded defect, not fixed here.** A `parent`-only account **cannot open any
+> beneficiary-portal screen**: `student-modules.ts` admits `['student']`, so
+> `/dashboard/student/account` answers *«ليست لديك صلاحية لعرض هذه الصفحة»* for a
+> guardian. The child-context QR is served correctly by the server — proved
+> through the guardian's own token and the `X-Active-Child-ID` header — but she
+> has no page to read it on. **The permission was not widened to make a check
+> pass** (rule O); the gate is reported for an Owner decision.
+
+## It identifies; it never authenticates
+
+The payload is `bodour:user:v1:<uuid>` and carries **no name, email, phone, sex,
+Branch, Level, enrolment — and no role**. Roles change while the identity does
+not, so a role in the payload would be a disclosure now and a lie later.
+
+Proved rather than asserted: the harness offers the reference as a bearer token
+and as a refresh token **with every cookie cleared**, and both are refused.
+
+> The first version of that check ran with the child's session cookie still set,
+> so `/auth/refresh` answered `200` — from the cookie, not the reference. It read
+> as *the QR authenticates*. **A credential test that leaves a credential lying
+> around proves nothing in either direction.**
+
+## Anticipated, and deliberately absent
+
+Reception lookup · attendance and check-in · quick beneficiary search · staff
+identification · linking physical documents to a person. **None is implemented**,
+and none of them changes the rule above: whatever is built on a scan authorises
+itself.
+
+## The guards
+
+| Guard | What it pins |
+|---|---|
+| [`lib/qr-identity.test.ts`](../../backend/src/lib/qr-identity.test.ts) | the versioned `user:` scheme · no PII and no role in the payload · round-trip and refusal of foreign payloads · parsing yields a reference, never a user · deterministic and per-person matrices |
+| [`services/qr-identity.integration.test.ts`](../../backend/src/services/qr-identity.integration.test.ts) | ten populations each get one · not the primary key · **a raw SQL INSERT still gets one** · the table-wide invariant · stability across role add/remove, several roles at once, enrolment, beneficiary status, FamilyLink, soft delete and restore · which surface serves whom · no credential derivable |
+| [`scripts/dev/browser/verify-user-qr.mjs`](../../scripts/dev/browser/verify-user-qr.mjs) | four identities each seeing their own square on a real screen · four distinct payloads · the "identifies only" wording · child context serving the child · the child seeing the same identity herself · the reference refused as a credential with cookies cleared |

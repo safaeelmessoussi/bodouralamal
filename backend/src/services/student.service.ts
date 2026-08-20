@@ -1,5 +1,6 @@
 import type { PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
+import { qrMatrixFor, type QrMatrix } from '../lib/qr-identity.js';
 
 /**
  * The acting student's identity block (SRS §5.3, R62.10, Revision 63).
@@ -24,6 +25,18 @@ export interface StudentIdentity {
   /** R62.6 — `null` for adult students and for accounts predating R62, which is
    *  a real answer rather than a missing one. */
   referenceCode: string | null;
+  /**
+   * **R96 — the ACTING student's QR identity.**
+   *
+   * The subject is whoever `childContext` resolved (§4.3): a beneficiary
+   * reading her own dashboard gets hers; a parent acting for a child gets **the
+   * child's**, which is the point — a guardian looking at her child's account
+   * must see the child's card, not her own. Her own lives on `/profile`.
+   *
+   * It is the SAME identity the child would see logging in herself, because it
+   * belongs to the person and not to the surface it is read from.
+   */
+  qr: QrMatrix;
   enrollments: {
     category: { id: string; name: string };
     level: { id: string; name: string };
@@ -41,6 +54,7 @@ export async function getStudentIdentity(
       id: true,
       nameArabic: true,
       referenceCode: true,
+      qrRef: true,
       // The relation is `levelEnrollments` on `User` (R43) — one row per
       // Level, not per group.
       levelEnrollments: {
@@ -74,6 +88,7 @@ export async function getStudentIdentity(
     id: student.id,
     nameArabic: student.nameArabic,
     referenceCode: student.referenceCode,
+    qr: await qrMatrixFor(student.qrRef),
     enrollments: student.levelEnrollments.map((enrollment) => ({
       category: enrollment.level.category,
       level: { id: enrollment.level.id, name: enrollment.level.name },

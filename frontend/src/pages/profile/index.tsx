@@ -12,6 +12,7 @@ import { TextField } from '../../components/ui/field.js';
 import { useSession } from '../../contexts/session.js';
 import { t } from '../../i18n/index.js';
 import { ApiError } from '../../lib/api.js';
+import { UserQr } from '../../components/ui/user-qr.js';
 
 /**
  * `/profile` — **the personal section** (§5.2 *Shared / Cross-Role*, R65).
@@ -169,6 +170,23 @@ function ProfileDetails({
       {/* Said rather than left to be discovered: a person who cannot find a way
           to correct their own name should learn why, and where it is done. */}
       <p className="muted">{t('profile.identityReadOnly')}</p>
+
+      {/**
+        * **R96 — the account holder's own QR identity.**
+        *
+        * `/profile` is the person-level surface R65 deliberately placed OUTSIDE
+        * the portals, reachable whatever role you are working as — which makes
+        * it the one home a مؤطِّرة, an Admin, a Super Admin, a guardian and an
+        * adult beneficiary already share. So every one of them reaches their
+        * identity here, through the same component, without a portal-shaped copy.
+        *
+        * **A parent gets HER OWN here, always.** The child's lives on the
+        * child's account view under child context; the two are never swapped,
+        * because a card printed for the wrong person is worse than no card.
+        */}
+      <h3>{t('qr.mine')}</h3>
+      <p className="muted">{t('qr.lede')}</p>
+      <UserQr qr={profile.qr} caption={profile.name_arabic} />
 
       <TextField label={t('register.phone')} type="tel" value={phone} onChange={setPhone} hint={t('register.phoneHint')} />
       <TextField label={t('register.nickname')} value={nickname} onChange={setNickname} hint={t('register.nicknameHint')} />

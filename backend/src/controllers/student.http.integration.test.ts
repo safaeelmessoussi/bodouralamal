@@ -33,6 +33,8 @@ interface Body {
   id?: string;
   name_arabic?: string;
   reference_code?: string | null;
+  /** R96 — the acting student's QR identity. Opaque: a payload and a matrix. */
+  qr?: { payload: string; size: number; modules: string[] };
   enrollments?: {
     category: { id: string; name: string };
     level: { id: string; name: string };
@@ -198,12 +200,32 @@ describe("§4.3 case 1 — a parent acts for an approved child", () => {
     // Stated as an exact key set rather than a list of absences: a field added
     // by reflex to a screen a parent looks at is personal data published to one
     // more surface, and this is where that is caught.
+    //
+    // **`qr` was added by R96 and is restated here rather than waved through.**
+    // This guard did its job — it fired the moment a sixth key appeared. It is
+    // admitted because the QR identity is, by R96 §4, deliberately NOT personal
+    // data: the payload carries no name, contact detail, sex, Branch, Level,
+    // enrolment or role. That claim is not taken on trust here either — the
+    // shape is pinned below, and `qr-identity.test.ts` asserts the payload's
+    // contents directly.
     expect(Object.keys(res.body as object).sort()).toEqual([
       "enrollments",
       "id",
       "name_arabic",
+      "qr",
       "reference_code",
     ]);
+    // The QR object carries a payload and a matrix and NOTHING else — the same
+    // exact-key discipline, applied one level down so the sixth key cannot
+    // become a place to smuggle a seventh.
+    expect(Object.keys(res.body.qr as object).sort()).toEqual([
+      "modules",
+      "payload",
+      "size",
+    ]);
+    expect((res.body.qr as { payload: string }).payload).toMatch(
+      /^bodour:user:v1:[0-9a-f-]{36}$/,
+    );
     expect(Object.keys(res.body.enrollments![0]!).sort()).toEqual([
       "branch",
       "category",

@@ -54,6 +54,20 @@
 
   /* Inverse surfaces (the hero band): fixed light values, because they sit on
      the brand ground rather than on a themed surface. */
+  /**
+   * **R96 — the QR symbol's own two colours, deliberately theme-independent.**
+   *
+   * A QR is read by a camera, not by a person, and the specification assumes
+   * dark modules on a light ground with real contrast. Theming it would make it
+   * stop scanning in dark mode — a failure nobody would attribute to the
+   * palette. These are named rather than written raw at the call site so the
+   * exception is visible and reviewable instead of looking like an oversight.
+   *
+   * They are NOT general-purpose black and white: nothing else may use them.
+   */
+  --color-qr-light: #ffffff;
+  --color-qr-dark: #000000;
+
   --color-on-primary: #f4f7f4;
   --color-on-primary-secondary: #d5e2da;
   --color-on-primary-muted: #b9ccc0;

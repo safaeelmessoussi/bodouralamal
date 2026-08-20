@@ -97,3 +97,5 @@
 /* The shared meter (rule C). Standalone — it extends nothing, so its position
  * in this list carries no dependency. */
 @import './styles/components/progress.css';
+/* The shared person QR (R96). Standalone — extends nothing. */
+@import './styles/components/user-qr.css';

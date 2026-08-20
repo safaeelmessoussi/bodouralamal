@@ -1,4 +1,5 @@
 import { api } from '../lib/api.js';
+import type { QrMatrix } from '../components/ui/user-qr.js';
 
 /**
  * `GET`/`PATCH /profile` — the personal section's data (§5.2, R65).
@@ -22,6 +23,8 @@ export interface OwnProfile {
   account_status: string;
   /** R62.6 — present for an account created through a child application. */
   reference_code: string | null;
+  /** R96 — this person's stable QR identity. Identifies; never authenticates. */
+  qr: QrMatrix;
   /** TD-15: loaded with the row, sent back on edit. A stale one is a `409`. */
   version: number;
 }

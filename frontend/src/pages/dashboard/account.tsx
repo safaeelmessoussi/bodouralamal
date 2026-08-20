@@ -7,6 +7,7 @@ import { useActiveChild } from '../../contexts/active-child.js';
 import { useSession } from '../../contexts/session.js';
 import { levelLabel } from '../../components/scope/level-select.js';
 import { t } from '../../i18n/index.js';
+import { UserQr } from '../../components/ui/user-qr.js';
 
 /**
  * **حسابي — inside her portal, and where her enrolments now live** (R86).
@@ -69,6 +70,27 @@ export function StudentAccountPage(): ReactNode {
             </>
           ) : null}
         </dl>
+
+        {/**
+          * **R96 — the ACTING student's QR identity, which under child context
+          * is the CHILD's.**
+          *
+          * `fetchStudentIdentity` is called with `activeChildId`, so a parent
+          * viewing her daughter's account sees her daughter's card and a
+          * beneficiary viewing her own sees hers. **Her own** — the parent's —
+          * is on `/profile`, and the two are never silently exchanged: a card
+          * printed for the wrong person is worse than no card at all.
+          *
+          * The caption names whose it is for exactly that reason. In a family
+          * with three children, three unlabelled squares are indistinguishable.
+          */}
+        {identity ? (
+          <>
+            <h3>{t('qr.title')}</h3>
+            <p className="muted">{t('qr.lede')}</p>
+            <UserQr qr={identity.qr} caption={identity.name_arabic} />
+          </>
+        ) : null}
       </section>
 
       <section className="card" aria-labelledby="account-enrolments">
