@@ -820,6 +820,27 @@ are recorded here rather than papered over. A sweep reporting them must be
 followed by running them individually; if they pass there, the feature is fine
 and this note is the reason. **Do not "fix" it by removing them from the sweep.**
 
+**2026-08-21 (C2): the flake did NOT recur.** A full 30-harness sweep reported
+**zero** NO RESULT — `verify-recorder` 22/22 and `verify-reorder` 30/30 both
+inside the sweep. That is one clean run and **not** evidence the cause is gone:
+the `auth-refresh` flake below passed sometimes for four runs before its cause
+was found, which is exactly what made *passing sometimes* worthless as a signal.
+The note stays open.
+
+### Never run the integration sweep and a browser sweep at the same time
+
+They share one database, and the browser harnesses **wipe and reseed** their
+fixtures — users, Levels, schedules, enrolments. Running both at once produced
+**53 failures across three suites** (`quran`, `quran-entry`,
+`effective-staffing`), none of them related to anything being changed, and one
+harness check reporting `404` where it expected `400`.
+
+Every one of them passed on a serial re-run. The lesson is not "retry a flake":
+it is that **a shared-fixture failure looks exactly like a regression in
+whatever you last touched**, which is the most expensive way to lose an hour.
+Run the suites in sequence, and when something unrelated to the change fails,
+check what else was writing to the database before reading the diff again.
+
 ### A harness teardown leaks its profile directory
 
 `kill "$CHROME_PID"` reaps the launcher and leaves Chrome renderer and GPU
