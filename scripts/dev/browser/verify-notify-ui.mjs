@@ -673,7 +673,85 @@ check(
 );
 console.error('OBSERVED-A-EVENT', JSON.stringify(aEvent.slice(0, 260)));
 
-/* ── 28–32 · a REPUBLISH after the score changes must reach her ──────────── */
+/* ── 28–32 · deleting that Event, then choosing to notify ───────────────── */
+
+await beIdentity(process.env.ADMIN_EVENT_DELETE_COOKIE);
+await open('/admin/schedules', '.admin-table, .state');
+await clearCalls();
+
+const eventDeleted = await evaluate(`(async () => {
+  const rows = [...document.querySelectorAll('.admin-table tbody tr')];
+  const row = rows.find((r) => r.textContent.includes('[notify] نشاط للمستوى'));
+  if (!row) return { noRow: true, rows: rows.map((r) => r.textContent.trim()).slice(0, 8) };
+  const remove = [...row.querySelectorAll('button')].find((b) => b.textContent.trim() === 'حذف');
+  if (!remove) return { noDelete: true, labels: [...row.querySelectorAll('button')].map((b) => b.textContent.trim()) };
+  remove.click();
+  await new Promise((r) => setTimeout(r, 1500));
+
+  let dialog = document.querySelector('dialog[open]');
+  if (!dialog) return { noDeleteDialog: true };
+  const confirm = [...dialog.querySelectorAll('button')].find((b) => b.textContent.trim() === 'حذف');
+  if (!confirm) return { noConfirm: true, labels: [...dialog.querySelectorAll('button')].map((b) => b.textContent.trim()) };
+  confirm.click();
+  await new Promise((r) => setTimeout(r, 5000));
+
+  dialog = document.querySelector('dialog[open]');
+  if (!dialog) return { noNotifyDialog: true, body: document.body.textContent.slice(0, 260) };
+  const send = [...dialog.querySelectorAll('button')].find((b) => b.textContent.trim() === 'إرسال الإشعار');
+  if (!send) return { noSend: true, labels: [...dialog.querySelectorAll('button')].map((b) => b.textContent.trim()) };
+  send.click();
+  await new Promise((r) => setTimeout(r, 4000));
+
+  return {
+    sent: true,
+    stillListed: [...document.querySelectorAll('.admin-table tbody tr')].some(
+      (r) => r.textContent.includes('[notify] نشاط للمستوى'),
+    ),
+  };
+})()`);
+
+check(
+  '28 · deleting a scoped activity asks about notification AFTER deletion',
+  eventDeleted.sent === true,
+  JSON.stringify(eventDeleted),
+);
+
+const eventDeleteCalls = await evaluate(`(() => (window.__calls || []).filter(
+  (c) => c.url.includes('/events/') && (c.method === 'DELETE' || c.url.includes('/notify')),
+))()`);
+check(
+  '29 · the page sends DELETE first, then exactly one successful notify request',
+  eventDeleteCalls.length === 2 &&
+    eventDeleteCalls[0]?.method === 'DELETE' && eventDeleteCalls[0]?.status === 204 &&
+    eventDeleteCalls[1]?.url.includes('/notify') && eventDeleteCalls[1]?.status === 200,
+  JSON.stringify(eventDeleteCalls),
+);
+
+const definitionsAfterDelete = await json(adminToken, '/events?page=1&page_size=200');
+check(
+  '30 · the deleted activity is gone from both the rendered and API definition lists',
+  eventDeleted.stillListed === false &&
+    !(definitionsAfterDelete.data ?? []).some((event) => event.id === mine?.id),
+  JSON.stringify({ eventDeleted, eventId: mine?.id, status: definitionsAfterDelete.status }),
+);
+
+const aCancelledEvent = await readBell(process.env.A_EVENT_DELETE_COOKIE, '/dashboard/student');
+check(
+  '31 · the concerned beneficiary sees the cancelled activity by name',
+  (aCancelledEvent.requests ?? []).every((request) => request.status === 200) &&
+    (aCancelledEvent.text ?? '').includes('أُلغي نشاط «[notify] نشاط للمستوى»'),
+  JSON.stringify({ requests: aCancelledEvent.requests, text: (aCancelledEvent.text ?? '').slice(0, 320) }),
+);
+
+const cCancelledEvent = await readBell(process.env.C_EVENT_DELETE_COOKIE, '/dashboard/student');
+check(
+  '32 · the unrelated beneficiary receives no cancellation for that activity',
+  (cCancelledEvent.requests ?? []).every((request) => request.status === 200) &&
+    !(cCancelledEvent.text ?? '').includes('أُلغي نشاط «[notify] نشاط للمستوى»'),
+  JSON.stringify({ requests: cCancelledEvent.requests, text: (cCancelledEvent.text ?? '').slice(0, 260) }),
+);
+
+/* ── 33–37 · a REPUBLISH after the score changes must reach her ──────────── */
 
 /** Marks every notice read, so "unread again" is a real observation. */
 const markAllRead = async (cookie) => {
@@ -701,7 +779,7 @@ const markAllRead = async (cookie) => {
 };
 
 const cleared = await markAllRead(process.env.A10_COOKIE);
-check('28 · she reads everything, so the bell is quiet', cleared.unread === '0', JSON.stringify(cleared));
+check('33 · she reads everything, so the bell is quiet', cleared.unread === '0', JSON.stringify(cleared));
 
 /** Changes the score on the sheet and publishes again. */
 const republish = (score) =>
@@ -747,18 +825,18 @@ const republish = (score) =>
 await beIdentity(process.env.ADMIN_REPUB_COOKIE);
 await open(`/admin/exam-grades?exam=${S.exam}`, '.admin-table, .state');
 const changed = await republish(11);
-check('29 · the score is changed and the sheet republished', changed.republished === true, JSON.stringify(changed));
+check('34 · the score is changed and the sheet republished', changed.republished === true, JSON.stringify(changed));
 
 const afterRepublish = await readBell(process.env.A11_COOKIE);
 check(
-  '30 · her bell is UNREAD again — the corrected mark reached her',
+  '35 · her bell is UNREAD again — the corrected mark reached her',
   afterRepublish.badge !== null && afterRepublish.badge !== '0',
   JSON.stringify({ badge: afterRepublish.badge, text: (afterRepublish.text ?? '').slice(0, 200) }),
 );
 console.error('OBSERVED-A-REPUBLISH', JSON.stringify((afterRepublish.text ?? '').slice(0, 260)));
 
 const clearedAgain = await markAllRead(process.env.A12_COOKIE);
-check('31 · she reads it again', clearedAgain.unread === '0', JSON.stringify(clearedAgain));
+check('36 · she reads it again', clearedAgain.unread === '0', JSON.stringify(clearedAgain));
 
 await beIdentity(process.env.ADMIN_REPUB2_COOKIE);
 await open(`/admin/exam-grades?exam=${S.exam}`, '.admin-table, .state');
@@ -782,7 +860,7 @@ const unchanged = await evaluate(`(async () => {
 
 const afterNoChange = await readBell(process.env.A6_COOKIE);
 check(
-  '32 · republishing with NOTHING changed makes no noise',
+  '37 · republishing with NOTHING changed makes no noise',
   unchanged.republished === true && (afterNoChange.badge === null || afterNoChange.badge === '0'),
   JSON.stringify({ unchanged, badge: afterNoChange.badge }),
 );

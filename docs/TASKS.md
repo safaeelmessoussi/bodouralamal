@@ -720,6 +720,12 @@
 - [x] **`verify-notifications`'s real scope stated**: it POSTs to `/notify`, so it proves the audience and not the flow. That gap is why it was green while manual use was not
 - [x] All 23 browser scripts green — **503 checks**
 
+### C-01 — Event cancellation notification (2026-08-21)
+- [x] The ordinary Event delete commits first; only an activity then offers the optional R82.5 notification decision. Decline sends no request. Classes/exams and Session R77/R83 behavior are unchanged
+- [x] `event_cancelled` reuses the existing route, adapter and Event audience resolver. The deleted Event's authoritative Trash scope and live Event staff freeze the audience without a schema, migration or second Event copy
+- [x] Only the recorded deleter can send after deletion; an unrelated valid administrator gets `404`. Repeat sends are idempotent and unrelated recipients receive nothing
+- [x] Focused verification: 27 backend HTTP integration tests · 8 frontend decision-flow tests · `verify-notify-ui` **37/37**, including the real DELETE-before-notify request order and the recipient's own bell
+
 ### R92 — cross-branch occurrence audiences (2026-08-20)
 - [x] **SRS Revision 92** + migration `20260820010000_r92_session_audience_branch`. `SessionAudienceBranch (session, branch)`, **replacement** semantics
 - [x] **Physical location and audience are separate facts** — `Session.branch_id` untouched; the roster reports venue and audience side by side

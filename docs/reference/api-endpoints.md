@@ -34,24 +34,31 @@ service, not by the URL prefix).
 
 ## Notifications
 
-**One event, and it is the only one in the MVP** (§4.8 as narrowed by Revision 77).
-Revision 6 removed in-app notifications entirely; R77 narrows that to the
-*framework* — the five-event catalogue, the tiers and `NotificationPreference`
-stay in §10.1 — and admits a class session's cancellation, which is the one thing
-a beneficiary genuinely cannot learn any other way inside the platform.
+The MVP carries the bounded notification types admitted by R77, R78, R82, R83
+and R93. The postponed framework remains postponed: there is no tier,
+`NotificationPreference`, delivery channel, or per-child preference.
 
 | | Path | Notes |
 |---|---|---|
 | `GET` | `/notifications` | 🔒 **The caller's own, and nobody else's.** No id names a user, so there is nothing to tamper with and no role widens it. Paginated (TD-10), newest first with the `id` tiebreaker. `?unread_only=true` narrows. `meta.unread` travels with the list rather than as a second endpoint that would disagree with it |
 | `POST` | `/notifications/{id}/read` | 🔒 Idempotent, and it does **not** move the timestamp on a retry. Another user's row answers **`404`, never `403`** (§20 rule 17) |
+| `POST` | `/events/{id}/notify` | 🔒 Optional Event announcement after the saved create, reschedule, or cancellation. Body `{ change }`; recipient ids are refused |
+| `POST` | `/sessions/{id}/notify` | 🔒 R83's independent occurrence decision after a cancellation or reschedule. Body `{ change }` |
 
-**Written in the same transaction as the cancellation**, because a committed
-cancellation with no notifications is a class nobody was told about and a retry
-cannot tell that state apart from one already notified. The audience is the
-Session's resolved audience (§4.4c) through **the same predicate** that produces
-the `session.cancel` audit row's `audience_size` — two that agree today are two
-that drift. **Students only**: not staff, who take the decision, and not parents,
-whose access is §4.3's child context rather than a mailbox of their own.
+**An optional send is a separate request after the change commits** (R82.5,
+R83.3). Declining is the absence of that request; a notification failure never
+rolls back the saved change. Session changes retain their own R77/R83 audience
+resolver and lifecycle. Event creation and rescheduling resolve the live Event
+scope. Event cancellation is the Event's soft deletion: because deletion
+hard-removes its four scope joins, the send reads those same ids from the
+authoritative Trash snapshot and requires the current actor to be its recorded
+deleter. It creates no second Event copy and does not change `purge_after`; the
+existing Notification foreign key and Trash lifecycle remain unchanged.
+
+All recipient sets are server-resolved; the actor is excluded, and the partial
+unique indexes make repeat sends idempotent. An Event recipient is the union of
+its scoped enrolments and live Event staff. A global Event has no notification
+audience (R82.7).
 
 **Restoring reconciles rather than deleting.** An *unread* notice of something no
 longer true is withdrawn; one already *read* becomes `session_restored`, because
@@ -669,6 +676,7 @@ rejection so a client handles one thing.
 |---|---|---|
 | `POST` | `/events` | Writes the four-way scope joins **explicitly at creation** |
 | `PATCH` `DELETE` | `/events/{id}` | |
+| `POST` | `/events/{id}/notify` | Optional post-change announcement; see [Notifications](#notifications) |
 | `GET` `POST` | `/admin/branches/{id}/event-backfill` | Manual backfill on branch activation. Stays an **Admin** capability — it is operational work |
 
 ## Hijri calendar

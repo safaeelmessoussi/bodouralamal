@@ -29,8 +29,24 @@ describe('«إرسال الإشعار» calls the adapter; «بدون إشعار
   it('the scheduling form sends only from onConfirm', () => {
     const body = code(SCHEDULING);
     expect(body).toContain('notifyEventChange(');
-    const cancelHandler = body.slice(body.lastIndexOf('onCancel={() => {'));
+    const notifyDialog = body.slice(body.indexOf("cancelLabel={t('scheduling.notify.skip')}"));
+    const cancelHandler = notifyDialog.slice(notifyDialog.indexOf('onCancel={() => {'));
     expect(cancelHandler.slice(0, 400)).not.toContain('notifyEventChange');
+  });
+
+  it('an Event deletion offers the decision only after the delete succeeded', () => {
+    const body = code(SCHEDULING);
+    const handler = body.slice(
+      body.indexOf('async function confirmDelete'),
+      body.indexOf('return (', body.indexOf('async function confirmDelete')),
+    );
+    const deleted = handler.indexOf('await deleteSchedulingItem(');
+    const offered = handler.indexOf("change: 'cancelled'");
+
+    expect(handler).toContain("deleted.type === 'activity'");
+    expect(deleted).toBeGreaterThanOrEqual(0);
+    expect(offered).toBeGreaterThan(deleted);
+    expect(body).toContain('notifying.change');
   });
 });
 

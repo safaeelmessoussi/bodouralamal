@@ -1,6 +1,6 @@
 import type { Prisma, PrismaClient } from "../generated/prisma/client.js";
 import type { Actor } from "../policies/actor.js";
-import { assertMayEdit } from "./event.service.js";
+import { assertMayDeleteEvent, assertMayEdit } from "./event.service.js";
 import { loadForWrite } from "./session.service.js";
 import { AppError } from "../lib/errors.js";
 import {
@@ -13,18 +13,19 @@ import {
   eventAudienceWhere,
   resolveAudience,
   type AudienceSpec,
+  type EventScopeRows,
   audienceForSession,
 } from "../policies/roster-resolution.js";
 
 /**
- * **The one MVP notification event** (§4.8 as narrowed by Revision 77).
+ * **The minimum MVP notification surface** (§4.8, R77/R78/R82/R83/R93).
  *
  * ## What this is not
  *
  * It is not §10.1's framework arriving early. There is no tier, no
  * `NotificationPreference`, no channel and no catalogue — R6 postponed all of
- * that and R77 left it postponed. What returned is one event and the smallest
- * entity that can carry it.
+ * that and the later notification revisions left it postponed. What returned is
+ * a bounded set of domain events and the smallest entity that can carry them.
  *
  * ## Why a row rather than a derived read
  *
@@ -297,14 +298,33 @@ export async function eventRecipients(
   });
   if (!event) throw new AppError("NOT_FOUND", "no such event");
 
-  const where = eventAudienceWhere({
-    branchIds: event.branchScopes.map((r) => r.branchId),
-    categoryIds: event.categoryScopes.map((r) => r.categoryId),
-    levelIds: event.levelScopes.map((r) => r.levelId),
-    administrativeGroupIds: event.administrativeGroupScopes.map(
-      (r) => r.administrativeGroupId,
-    ),
-  });
+  return recipientsFromEventScope(
+    prisma,
+    {
+      branchIds: event.branchScopes.map((r) => r.branchId),
+      categoryIds: event.categoryScopes.map((r) => r.categoryId),
+      levelIds: event.levelScopes.map((r) => r.levelId),
+      administrativeGroupIds: event.administrativeGroupScopes.map(
+        (r) => r.administrativeGroupId,
+      ),
+    },
+    event.staff.map((s) => s.userId),
+    actorUserId,
+  );
+}
+
+/**
+ * The one recipient calculation for both live Events and a deleted Event whose
+ * scope is being read from Trash. Deletion changes where the scope rows live;
+ * it must not create a second interpretation of what those rows mean (R82.7).
+ */
+async function recipientsFromEventScope(
+  prisma: PrismaClient,
+  scopes: EventScopeRows,
+  staffUserIds: readonly string[],
+  actorUserId: string,
+): Promise<string[]> {
+  const where = eventAudienceWhere(scopes);
 
   // A GLOBAL event resolves to no audience at all (R82.7) — but its own staff
   // are still concerned by it, which is a different question from its scope.
@@ -315,10 +335,92 @@ export async function eventRecipients(
 
   const everyone = new Set([
     ...audience.map((u) => u.id),
-    ...event.staff.map((s) => s.userId),
+    ...staffUserIds,
   ]);
   everyone.delete(actorUserId);
   return [...everyone];
+}
+
+/**
+ * Reads the scope shape written by `deleteEvent` before it hard-removes the
+ * four join tables. A malformed or historical snapshot fails closed: treating
+ * a missing array as empty could turn a scoped Event into a global one and
+ * quietly report that nobody was notified.
+ */
+function eventScopeFromTrash(snapshot: Prisma.JsonValue): EventScopeRows {
+  if (snapshot === null || Array.isArray(snapshot) || typeof snapshot !== "object") {
+    throw new Error("Event Trash snapshot is not an object");
+  }
+  const scope = (snapshot as Prisma.JsonObject)["scope"];
+  if (scope === null || Array.isArray(scope) || typeof scope !== "object") {
+    throw new Error("Event Trash snapshot has no scope");
+  }
+
+  const ids = (key: string): string[] => {
+    const value = (scope as Prisma.JsonObject)[key];
+    if (!Array.isArray(value)) {
+      throw new Error(`Event Trash snapshot has invalid ${key}`);
+    }
+    return value.map((id) => {
+      if (typeof id !== "string") {
+        throw new Error(`Event Trash snapshot has invalid ${key}`);
+      }
+      return id;
+    });
+  };
+
+  return {
+    branchIds: ids("branch_ids"),
+    categoryIds: ids("category_ids"),
+    levelIds: ids("level_ids"),
+    administrativeGroupIds: ids("administrative_group_ids"),
+  };
+}
+
+/**
+ * The post-delete half of R82.5.
+ *
+ * The Event row remains soft-deleted for its existing Trash lifecycle, and its
+ * staff rows remain frozen. The four audience joins do not: their authoritative
+ * post-delete representation is the Trash snapshot. Requiring BOTH the Event
+ * tombstone and that snapshot to name the current actor as deleter is the
+ * authorization check for the separate request — only the person who made this
+ * saved change can decide to announce it.
+ */
+async function deletedEventRecipients(
+  prisma: PrismaClient,
+  eventId: string,
+  actorUserId: string,
+): Promise<string[]> {
+  const [event, entry] = await Promise.all([
+    prisma.event.findFirst({
+      where: {
+        id: eventId,
+        deletedAt: { not: null },
+        deletedById: actorUserId,
+      },
+      select: {
+        staff: { where: { deletedAt: null }, select: { userId: true } },
+      },
+    }),
+    prisma.trash.findFirst({
+      where: {
+        targetEntity: "Event",
+        targetId: eventId,
+        deletedById: actorUserId,
+      },
+      orderBy: [{ deletedAt: "desc" }, { id: "desc" }],
+      select: { snapshot: true },
+    }),
+  ]);
+  if (!event || !entry) throw new AppError("NOT_FOUND", "no such deleted event");
+
+  return recipientsFromEventScope(
+    prisma,
+    eventScopeFromTrash(entry.snapshot),
+    event.staff.map((s) => s.userId),
+    actorUserId,
+  );
 }
 
 /**
@@ -339,14 +441,22 @@ export async function notifyEventChange(
   eventId: string,
   change: "created" | "rescheduled" | "cancelled",
 ): Promise<{ notified: number }> {
-  // **Authorization is the event's own**: whoever may edit it may announce it,
-  // asked through the SAME assertion the write used rather than a second answer
-  // to the same question.
-  await assertMayEdit(
-    prisma as unknown as Prisma.TransactionClient,
-    actor,
-    eventId,
-  );
+  let userIds: string[];
+  if (change === "cancelled") {
+    // The delete already committed and removed the live scope joins. The Trash
+    // entry proves both who made that change and which audience it addressed.
+    assertMayDeleteEvent(actor);
+    userIds = await deletedEventRecipients(prisma, eventId, actor.userId);
+  } else {
+    // Creation/rescheduling are unchanged: authorization and audience come
+    // from the live Event through the same guard as the write itself.
+    await assertMayEdit(
+      prisma as unknown as Prisma.TransactionClient,
+      actor,
+      eventId,
+    );
+    userIds = await eventRecipients(prisma, eventId, actor.userId);
+  }
 
   const type = (
     {
@@ -355,7 +465,6 @@ export async function notifyEventChange(
       cancelled: "event_cancelled",
     } as const
   )[change];
-  const userIds = await eventRecipients(prisma, eventId, actor.userId);
   if (userIds.length === 0) return { notified: 0 };
 
   const created = await prisma.notification.createMany({

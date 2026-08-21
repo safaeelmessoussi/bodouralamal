@@ -127,9 +127,10 @@ export function read(prisma: PrismaClient) {
  * which is what makes *"do not invent recipient lists in the frontend"* a
  * property of the contract rather than a convention.
  *
- * Authorization is the event's own: whoever may edit it may announce it. That is
- * asserted by the service through the same path the write used, so a caller who
- * could not have made the change cannot announce one either.
+ * Creation and rescheduling use the Event's live edit authorization. A
+ * cancellation is requested after the Event was soft-deleted, so the service
+ * requires the tombstone and authoritative Trash snapshot to name this actor as
+ * the deleter. A caller who did not make the saved change cannot announce it.
  */
 export function notifyEventHandler(prisma: PrismaClient) {
   return async (req: Request, res: Response): Promise<void> => {

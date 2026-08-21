@@ -677,6 +677,22 @@ and *expanded occurrences* respectively — not two styles of one screen but two
 different questions, which is why no amount of restyling made them feel alike.
 The view is a query parameter, not a second navigation node (§20 rule 16).
 
+### Event cancellation is a saved change, then a delivery decision
+
+Deleting an activity first uses the ordinary destructive `ConfirmDialog` and
+soft-deletes the Event. Only after that request succeeds does the same R82
+notification confirmation used by create and reschedule appear. Choosing
+`بدون إشعار` sends no second request; choosing `إرسال الإشعار` calls the existing
+Event notify adapter with `cancelled`. Classes and exams do not enter this arm:
+Session occurrence changes keep their separate R83 flow, and an exam announces
+grade publication.
+
+The ordering is deliberate. Asking before deletion would either announce a
+change that could still fail or require coupling delivery back into the delete
+request, which R82.5 explicitly separates. The dialog remains open on a failed
+send, and retry is safe because the notification uniqueness constraint absorbs
+duplicates.
+
 ### The form is a shell, and that is what makes Exams cheap
 
 `SchedulingForm` owns **only what every schedulable item has** — a name, an

@@ -273,11 +273,12 @@ when its ordering means something, not when the data happens to permit one.**
 
 ## AG · A notification is a delivered fact, and the screen must not pretend otherwise
 
-One event exists in the MVP — a class session was cancelled (§4.8 as narrowed by
-Revision 77) — so the surface is a **section on the student's own dashboard**,
-not §10.1's bell-and-dropdown. Chrome implying a stream of notice types would
-promise a postponed feature; whatever §10.1 later specifies **replaces** this
-rather than extending it.
+The bounded MVP types admitted by R77, R78, R82, R83 and R93 are delivered
+facts, not projections of current calendar state. Their one surface is the
+shared portal bell described in [AP](#ap--three-portals-one-frame--and-a-registry-is-what-makes-a-screen-exist);
+the postponed preference/tier/channel framework remains absent. How a sender
+chooses delivery lives in [AN](#an--telling-people-is-a-decision-and-it-is-asked-after-the-fact),
+not here.
 
 **Nothing is marked read by being rendered.** R77.5 turns on the distinction: an
 unread notice is *withdrawn* when a class is reinstated, a read one is
@@ -288,17 +289,13 @@ restore into a correction nobody needed. The reader presses «تم الاطّل�
 cancelled — and hiding it would make the section answer *what is new* while
 looking like it answers *what has happened*. This is not an inbox that empties.
 
-**With nothing to say it renders nothing**, rather than an empty panel on every
-student's most-used screen.
-
-**It sits above the timetable**, because a cancellation is news *about* the list
-below it and a reader who saw the sessions first has already drawn the wrong
-conclusion.
+**With nothing to say the opened bell states that there is nothing**, while no
+empty notification card is mounted into a portal's main content.
 
 The unread marker is an inline-start border — **a shape, not only a colour**
 (§14.4) — which reads correctly in RTL with no second rule.
 
-> [`SRS R77`] · [API contracts](../reference/api-endpoints.md#notifications)
+> [`SRS R77/R82/R83`] · [API contracts](../reference/api-endpoints.md#notifications)
 
 ## AH · Recording is a second WAY to make a library item, never a second model
 
