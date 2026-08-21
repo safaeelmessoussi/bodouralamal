@@ -882,6 +882,44 @@ and then lists the staging bucket and checks the **extensions and the byte
 counts** — because a zero-length file is a passing lifecycle and a failed
 recording, which is exactly the pair that check exists to tell apart.
 
+### And only a real browser proves that a recording can be HEARD
+
+A recording pipeline can be green end to end and still deliver a file nobody can
+play. `verify-livekit-ingest.sh` (R99 C2) drives the whole chain — a مؤطِّرة
+presses «بدء التسجيل» on the real screen, a real Egress worker writes a real
+file, the platform imports it, a مستفيدة opens the library — and then asserts on
+the **media element itself**:
+
+```
+readyState >= 2  and  duration > 0
+```
+
+Every cheaper check passes on an empty file. A `200` does; a non-zero byte count
+does for a truncated one; a `<video>` element rendering does. Only the browser
+decoding it says the lesson survived, and it is the last link in a chain where
+every earlier one was already green.
+
+Two further things only this harness can say:
+
+- **The URL is Bodour's.** A library item pointing at the provider's staging
+  bucket plays perfectly today and rots when the provider expires it (R99.13),
+  so the minted URL is asserted to be `/storage/` and **not**
+  `recordings-staging`.
+- **The starter never comes back.** Her tab is closed *while the recording
+  runs*, and the callback, the queued job, the server-side copy and the content
+  row all happen with nobody watching.
+
+### A negative that uses the wrong axis asserts the opposite of the rule
+
+§4.9's content visibility is **Level**-based. So *the same Level at another
+branch* is a **positive** — she is legitimately elsewhere, not excluded — and a
+refusal test written against her would have asserted the opposite of the rule
+while looking like a refusal test that passed.
+
+The R98 fixture had exactly two beneficiaries and both were in the same Level,
+so C2's negative needed a **new** one in a different Level. **Check which axis
+the rule actually turns on before choosing the person who must be refused.**
+
 ### A fixture's "today" must be the association's clock, not UTC's
 
 `verify-livekit-join` needs **today's** occurrence, because the join window is

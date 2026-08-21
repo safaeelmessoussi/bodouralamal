@@ -649,7 +649,11 @@
   - [x] **Worker** — verify actual bytes (incl. media family) → durable copy → `EducationalContent` + `SessionContent` → link → sweep staging last
   - [x] **Idempotent under duplicate callback, retry and concurrency** — one object, one content row, one link, no false suffix increment
   - [x] **Defect found by C2's tests:** the transition table conflated *already there* with *just moved*, so a re-delivered completion enqueued a second job
-  - [ ] Real-media browser proof (OGG + MP4), beneficiary visibility ladder, tab-close, failure/retry — `verify-livekit-ingest`
+  - [x] **`verify-livekit-ingest` 27/27** — the real «بدء التسجيل» button; a **27 s / 338 KB OGG** and an **11.4 s MP4** genuinely decoded by a real media element (`readyState`/`duration`), not merely fetched
+  - [x] **Tab closed WHILE recording, and she never returns** — capture continues and the whole import happens with nobody watching
+  - [x] **The URL is Bodour's, never `recordings-staging`**; a reload mints a fresh one and it still plays
+  - [x] **The negative is a DIFFERENT Level** — same-Level-other-branch is a positive under §4.9, so the scenario gained مستفيدة ج. 404, never 403
+  - [x] **R99.8 from both sides in one run** — the imported MP4 plays; an uploaded MP4 is refused, `origin` marker or not
 
 ### R98 — entering a class عن بُعد (2026-08-20)
 

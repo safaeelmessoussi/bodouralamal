@@ -5,6 +5,7 @@ import { loadConfig } from "../lib/config.js";
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from "../lib/prisma.js";
 import {
   createStorageClients,
+  deleteObject,
   statObject,
   type StorageClients,
 } from "../lib/storage.js";
@@ -175,6 +176,48 @@ async function cleanup(): Promise<void> {
   const tagged = { name: { startsWith: TAG } };
   const taggedPerson = { nameArabic: { startsWith: TAG } };
   const scheduleWhere = { schedule: { subject: tagged } };
+
+  /**
+   * **The staging objects this suite deliberately leaves behind.**
+   *
+   * A refused ingestion keeps its staging object on purpose (R99.14 — a
+   * corrected one must be retryable), which is right for the platform and wrong
+   * for a test bucket: without this the dev store grows by a handful of objects
+   * every run, and the ONE measurement that tells a real sweep failure from
+   * accumulated fixtures — *is the staging bucket empty after a successful
+   * import?* — stops meaning anything.
+   */
+  const staged = await prisma.sessionRecording.findMany({
+    where: { session: scheduleWhere },
+    select: { outputBucket: true, outputKey: true },
+  });
+  if (staged.length > 0) {
+    const s3 = createStorageClients(config);
+    for (const row of staged) {
+      if (!row.outputBucket || !row.outputKey) continue;
+      try {
+        await deleteObject(s3, row.outputBucket, row.outputKey);
+      } catch {
+        /* already swept by a successful ingestion */
+      }
+    }
+  }
+
+  // Durable content objects too — an ingested recording left a real file.
+  const durable = await prisma.educationalContent.findMany({
+    where: { subject: tagged },
+    select: { storageBucket: true, storageKey: true },
+  });
+  if (durable.length > 0) {
+    const s3 = createStorageClients(config);
+    for (const row of durable) {
+      try {
+        await deleteObject(s3, row.storageBucket, row.storageKey);
+      } catch {
+        /* never written, or already gone */
+      }
+    }
+  }
 
   await prisma.sessionRecording.updateMany({
     where: { session: scheduleWhere },
@@ -402,7 +445,6 @@ describe("the ACTUAL staging bytes are verified (R99.8)", () => {
   it("refuses an object that is simply not there", async () => {
     const sessionId = await onlineClass("audio_only", subjectAudio, "tuesday");
     const rec = await completedRecording(sessionId, "audio/ogg", oggBytes());
-    const { deleteObject } = await import("../lib/storage.js");
     await deleteObject(clients, STAGING, rec.key);
 
     const reason = await failure(() => ingestRecording(prisma, clients, rec.id));

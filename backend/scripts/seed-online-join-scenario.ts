@@ -26,6 +26,7 @@
  */
 import { loadConfig } from '../src/lib/config.js';
 import { createPrismaClient } from '../src/lib/prisma.js';
+import { createStorageClients, deleteObject } from '../src/lib/storage.js';
 import { createCourseSchedule } from '../src/services/course-schedule.service.js';
 import { overrideSession } from '../src/services/session.service.js';
 
@@ -142,6 +143,36 @@ async function wipe(): Promise<void> {
   await prisma.userBranchRole.deleteMany({ where: { userId: { in: uids } } });
   await prisma.user.deleteMany({ where: { id: { in: uids } } });
 
+  /**
+   * **The library items C2's ingestion created, and their objects with them.**
+   *
+   * A recording that reached «متاح» left an ordinary `EducationalContent` and a
+   * real object in the content bucket. Leaving the rows behind breaks the NEXT
+   * run — `session_content` → `educational_content` is `RESTRICT` — and leaving
+   * the objects behind grows the dev bucket by a lesson every run. Rows first,
+   * then bytes: an orphaned object is reapable, an orphaned row is a blocker.
+   */
+  const ingested = await prisma.educationalContent.findMany({
+    where: { subject: { name: { startsWith: TAG } } },
+    select: { id: true, storageBucket: true, storageKey: true },
+  });
+  await prisma.sessionContent.deleteMany({
+    where: { contentId: { in: ingested.map((c) => c.id) } },
+  });
+  await prisma.educationalContent.deleteMany({
+    where: { id: { in: ingested.map((c) => c.id) } },
+  });
+  if (ingested.length > 0) {
+    const clients = createStorageClients(config);
+    for (const c of ingested) {
+      try {
+        await deleteObject(clients, c.storageBucket, c.storageKey);
+      } catch {
+        /* already gone, or MinIO is down — the row is what mattered */
+      }
+    }
+  }
+
   await prisma.levelSubject.deleteMany({ where: { subject: { name: { startsWith: TAG } } } });
   await prisma.subject.deleteMany({ where: { name: { startsWith: TAG } } });
   await prisma.room.deleteMany({ where: { name: { startsWith: TAG } } });
@@ -224,6 +255,24 @@ await prisma.enrollment.create({
 const studentB = await person('مستفيدة ب', studentRole.id, masira.id, true);
 await prisma.enrollment.create({
   data: { studentId: studentB, levelId: level.id, branchId: masira.id },
+});
+
+/**
+ * **R92's negative, and it has to be a DIFFERENT LEVEL** (R99 C2).
+ *
+ * `studentB` above is the same Level at the other branch, which is a *positive*
+ * under §4.9's Level-based visibility — she is legitimately elsewhere, not
+ * excluded. Proving that a recording is not universally readable therefore needs
+ * somebody the Level rule genuinely excludes, and only a different Level does
+ * that. Using `studentB` as the negative would have asserted the opposite of the
+ * rule while looking like a refusal test.
+ */
+const otherLevel = await prisma.level.create({
+  data: { name: `${TAG} المستوى 2`, categoryId: category.id, genderRestriction: 'any' },
+});
+const studentC = await person('مستفيدة ج', studentRole.id, targa.id, true);
+await prisma.enrollment.create({
+  data: { studentId: studentC, levelId: otherLevel.id, branchId: targa.id },
 });
 
 /** A guardian and her daughter — the daughter has no login of her own. */
@@ -393,6 +442,9 @@ console.log(
     rim,
     studentA,
     studentB,
+    /** A DIFFERENT Level — §4.9's Level visibility genuinely excludes her. */
+    studentC,
+    otherLevel: otherLevel.id,
     parent,
     child: child.id,
   }),
