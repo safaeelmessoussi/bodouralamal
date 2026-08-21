@@ -239,9 +239,19 @@ You will find the user id, never their name — [that is deliberate](observabili
 ## Checking whether a job is stuck
 
 ```bash
-curl -s https://<domain>/healthz | jq        # is the queue heartbeat alive?
+curl -s https://<domain>/healthz \
+  | jq '{status, components, jobs: .details.jobs}'
 docker compose logs api | grep -i 'job'
 ```
+
+Interpret the two job-related components separately:
+
+- `queue != "ok"` — PostgreSQL or pg-boss infrastructure is unavailable/not installed.
+- `queue == "ok"` and `jobs == "down"` — durable enqueue storage exists, but this API
+  process's runner never started, failed registration, stopped, or became stale. Use
+  `details.jobs.reason`; restart the API only after recording the startup error from its log.
+- `jobs == "ok"` — every implemented worker registered and remains active/fresh. This does
+  not certify that every TD-7 release requirement has been implemented.
 
 Jobs retry five times with exponential backoff, then dead-letter with an Admin-visible
 failure. **Enqueues keep succeeding even when workers are down** — jobs are delayed, never

@@ -14,10 +14,16 @@ Four layers, each testing something the others structurally cannot.
 **Coverage: ≥ 80 % on services and policies.** No coverage gate on generated or boilerplate
 code — a coverage number that counts generated clients measures nothing.
 
-Current default CI totals: **241 backend tests across 23 files · 724 frontend tests across 56
+Current default CI totals: **259 backend tests across 26 files · 724 frontend tests across 56
 files**. The repository also contains **77 backend integration files**, but the workflow does
 not run them: they require an isolated real stack and database lifecycle that this CI slice
 does not yet provide.
+
+The backend total includes deterministic worker-readiness regression tests. They inject the
+clock and pg-boss live-worker view, so startup failure, incomplete registration, lost/stale
+workers, and the long-running-handler exception are covered without sleeps. Controller tests
+separately prove that a healthy database plus a present `pgboss` schema cannot make
+`/healthz` green when the runner never started.
 
 ## Running them
 

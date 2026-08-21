@@ -66,6 +66,136 @@
             }
           }
         }
+      },
+      "HealthResponse": {
+        "type": "object",
+        "required": [
+          "status",
+          "components",
+          "details"
+        ],
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "degraded"
+            ]
+          },
+          "components": {
+            "type": "object",
+            "required": [
+              "database",
+              "storage",
+              "jobs",
+              "queue"
+            ],
+            "properties": {
+              "database": {
+                "type": "string",
+                "enum": [
+                  "ok",
+                  "down"
+                ]
+              },
+              "storage": {
+                "type": "string",
+                "enum": [
+                  "ok",
+                  "down"
+                ]
+              },
+              "jobs": {
+                "type": "string",
+                "enum": [
+                  "ok",
+                  "down"
+                ]
+              },
+              "queue": {
+                "type": "string",
+                "enum": [
+                  "ok",
+                  "down",
+                  "not_configured"
+                ]
+              }
+            }
+          },
+          "details": {
+            "type": "object",
+            "required": [
+              "jobs"
+            ],
+            "properties": {
+              "jobs": {
+                "type": "object",
+                "required": [
+                  "state",
+                  "reason",
+                  "expected_workers",
+                  "registered_workers",
+                  "active_workers"
+                ],
+                "properties": {
+                  "state": {
+                    "type": "string",
+                    "enum": [
+                      "ok",
+                      "down"
+                    ]
+                  },
+                  "reason": {
+                    "type": "string",
+                    "enum": [
+                      "ready",
+                      "not_started",
+                      "starting",
+                      "startup_failed",
+                      "worker_registration_incomplete",
+                      "worker_registry_unavailable",
+                      "worker_missing",
+                      "worker_not_active",
+                      "worker_stale",
+                      "stopping",
+                      "stopped"
+                    ]
+                  },
+                  "expected_workers": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "registered_workers": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "active_workers": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "missing_workers": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "inactive_workers": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "stale_workers": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
       }
     }
   },
@@ -8351,10 +8481,17 @@
       ],
       "get": {
         "summary": "Health check",
-        "description": "Public. Checks database, storage and job-queue components (TD-14); §19.1 step 8 asserts a 200 here on deployment.",
+        "description": "Public. Checks database, storage, pg-boss queue infrastructure and this API process's registered worker readiness (TD-14); §19.1 step 8 asserts a 200 here on deployment. The existing `components.database`, `components.storage`, and `components.jobs` fields remain; `components.queue` and `details.jobs` add stable worker lifecycle detail.",
         "responses": {
           "200": {
-            "description": "All components healthy."
+            "description": "All components healthy.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
           },
           "500": {
             "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
@@ -8367,11 +8504,11 @@
             }
           },
           "503": {
-            "description": "At least one component is down.",
+            "description": "At least one component is unavailable or unready.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorEnvelope"
+                  "$ref": "#/components/schemas/HealthResponse"
                 }
               }
             }

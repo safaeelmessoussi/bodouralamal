@@ -67,6 +67,27 @@ Admin-visible failure. Singleton keys prevent duplicate concurrent runs.
 Post-MVP additions (`import.csv`, `export.csv`, `grade.recalculate`) join with their
 features.
 
+## Runtime worker health
+
+`GET /healthz` keeps **queue infrastructure** and **application workers** as two
+different components. The `pgboss` schema proves that durable enqueue storage exists; it
+does not prove that this API process started a runner. The worker component is ready only
+after runner initialization completed and every handler in the implementation's worker
+catalog registered successfully.
+
+The readiness expectation is derived from the same catalog the runner loops over — there is
+no second list of queue names in the health controller. pg-boss's live worker registry then
+provides the ongoing signal: every expected handler must remain active and must either have
+polled within 15 seconds or be processing a job. The bounded startup grace uses the same
+window, so an initial empty fetch does not make an ordinary deployment flap; a long recording
+ingestion is not called stale merely because its handler is busy.
+
+This runtime catalog is deliberately not the same thing as TD-7 release completeness. A
+queue registered only so a transactional enqueue can persist — currently
+`consent.reevaluate` — is not reported as a worker until its handler exists. TD-7 jobs whose
+implementations have not landed remain release-readiness gaps; health neither implements
+them nor invents running handlers for them.
+
 > **`session-recording-ingest` was implemented before it was specified, and that sequence is
 > worth keeping visible.** R99 authorised the ingestion pipeline in terms (R99.13, R99.14) and
 > specified the TD-2, TD-3, TD-8 and TD-13 additions it needed, but **named no queue** — while
