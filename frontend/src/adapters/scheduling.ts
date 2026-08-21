@@ -490,10 +490,9 @@ export interface SavedSchedulingItem {
 
 /**
  * **Only an EVENT save reports an id here**, and that is the domain speaking
- * rather than an omission: R82.5's optional notice is about Events. A class's
- * occurrences already notify through R77/R78 when they are cancelled or moved,
- * inside the transaction that changes them, and an exam sitting notifies at
- * publication (R82.4) — neither asks the person to decide.
+ * rather than an omission: R82.5's optional notice is about Events. Session
+ * occurrence changes use their separate R83 confirmation flow, and an exam
+ * sitting notifies at publication (R82.4).
  */
 const NOT_AN_EVENT: SavedSchedulingItem = { id: null, created: false };
 

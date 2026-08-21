@@ -208,8 +208,11 @@ export function SchedulingPage(): ReactNode {
       : null;
   });
   const [deleting, setDeleting] = useState<SchedulingItem | null>(null);
-  /** The saved event awaiting the send-or-not decision (R82.5). */
-  const [notifying, setNotifying] = useState<SavedSchedulingItem | null>(null);
+  /** The saved Event change awaiting the send-or-not decision (R82.5). */
+  const [notifying, setNotifying] = useState<{
+    id: string;
+    change: 'created' | 'rescheduled' | 'cancelled';
+  } | null>(null);
 
   /**
    * **A FILTER, and it must say so** (2026-08-18).
@@ -354,12 +357,19 @@ export function SchedulingPage(): ReactNode {
 
   async function confirmDelete(): Promise<void> {
     if (!deleting) return;
+    const deleted = deleting;
     setBusy(true);
     try {
-      await deleteSchedulingItem(deleting, accessToken);
+      await deleteSchedulingItem(deleted, accessToken);
       setDeleting(null);
       await load();
       setNotice(t('common.deleted'));
+      // An Event cancellation is its soft deletion (R82). The delete is already
+      // committed; this second dialog decides delivery only. Classes and exams
+      // keep their own, separate lifecycle paths unchanged.
+      if (deleted.type === 'activity') {
+        setNotifying({ id: deleted.id, change: 'cancelled' });
+      }
     } catch {
       setNotice(t('common.deleteFailed'));
     } finally {
@@ -437,12 +447,16 @@ export function SchedulingPage(): ReactNode {
             void load();
             /**
              * **R82.5 — the change is already saved; this only decides who is
-             * told.** Offered for an EVENT only: a class's occurrences notify
-             * through R77/R78 when they are cancelled or moved, inside the
-             * transaction that changes them, and an exam notifies at
-             * publication — neither asks the person to decide.
+             * told.** Offered for an EVENT only: a class occurrence uses its
+             * separate R83 confirmation flow, and an exam notifies at
+             * publication.
              */
-            if (saved.id !== null) setNotifying(saved);
+            if (saved.id !== null) {
+              setNotifying({
+                id: saved.id,
+                change: saved.created ? 'created' : 'rescheduled',
+              });
+            }
           }}
         />
       ) : null}
@@ -468,7 +482,7 @@ export function SchedulingPage(): ReactNode {
             try {
               const result = await notifyEventChange(
                 notifying.id,
-                notifying.created ? 'created' : 'rescheduled',
+                notifying.change,
                 accessToken,
               );
               /**

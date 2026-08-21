@@ -45,11 +45,15 @@ const bearer = (userId: string, roles: { role: string; branches: string[] | null
 
 let adminId: string;
 let adminToken: string;
+let otherAdminToken: string;
 /** Enrolled in levelA at branchA — the person a Level event concerns. */
 let studentA: string;
 let studentAToken: string;
 /** Enrolled in levelB at branchB — the control, concerned by nothing here. */
 let studentB: string;
+/** Assigned to an Event directly — the staff half of R82.7's union. */
+let eventStaffRecipient: string;
+let eventStaffToken: string;
 let levelA: string;
 let levelB: string;
 let branchA: string;
@@ -77,6 +81,16 @@ async function clear(): Promise<void> {
   await prisma.eventAdministrativeGroup.deleteMany({ where: { eventId: { in: eventIds } } });
   await prisma.eventStaff.deleteMany({ where: { eventId: { in: eventIds } } });
   await prisma.event.deleteMany({ where: { id: { in: eventIds } } });
+  // Event deletion records the scope in Trash before removing its joins. The
+  // entry references the deleting actor, so it must go before tagged users.
+  await prisma.trash.deleteMany({
+    where: {
+      OR: [
+        { targetEntity: "Event", targetId: { in: eventIds } },
+        { deletedById: { in: ids } },
+      ],
+    },
+  });
 
   // Exams, their grades and their notices go before the Levels they hang off —
   // every one of these references is RESTRICT, so teardown order IS the test's
@@ -147,6 +161,13 @@ beforeAll(async () => {
   await prisma.userBranchRole.create({
     data: { userId: admin.id, roleId: role.id, branchId: null },
   });
+  const otherAdmin = await prisma.user.create({
+    data: { nameArabic: `${TAG} مديرة أخرى`, sex: "female", accountStatus: "active" },
+  });
+  otherAdminToken = bearer(otherAdmin.id, [{ role: "super_admin", branches: null }]);
+  await prisma.userBranchRole.create({
+    data: { userId: otherAdmin.id, roleId: role.id, branchId: null },
+  });
 
   const a = await prisma.user.create({
     data: { nameArabic: `${TAG} مستفيدة أ`, sex: "female", accountStatus: "active", isBeneficiary: true },
@@ -160,6 +181,12 @@ beforeAll(async () => {
   });
   studentB = b.id;
   await prisma.enrollment.create({ data: { studentId: b.id, levelId: levelB, branchId: branchB } });
+
+  const staff = await prisma.user.create({
+    data: { nameArabic: `${TAG} مؤطرة النشاط`, sex: "female", accountStatus: "active" },
+  });
+  eventStaffRecipient = staff.id;
+  eventStaffToken = bearer(staff.id, [{ role: "teacher", branches: null }]);
 });
 
 afterAll(async () => {
@@ -171,12 +198,14 @@ afterAll(async () => {
 async function makeEvent(
   title: string,
   scopes: { branchIds?: string[]; categoryIds?: string[]; levelIds?: string[] },
+  details: { startTime?: Date } = {},
 ): Promise<string> {
   const event = await prisma.event.create({
     data: {
       title: `${TAG} ${title}`,
       visibility: "public",
       startDate: new Date("2099-05-05T00:00:00Z"),
+      startTime: details.startTime ?? null,
       recurrenceType: "none",
     },
     select: { id: true },
@@ -322,6 +351,89 @@ describe("sending is a decision, and repeating it is harmless (R82.5)", () => {
     expect(second.status).toBe(200);
     expect((second.body.data as { notified: number }).notified).toBe(0);
     expect((await notificationsOf(studentA)).filter((n) => n.eventId === eventId)).toHaveLength(1);
+  });
+
+  it("deleting without the separate send leaves the Event deleted and tells nobody", async () => {
+    const eventId = await makeEvent("إلغاء بلا إشعار", { levelIds: [levelA] });
+
+    const removed = await call("DELETE", `/events/${eventId}`, adminToken);
+    expect(removed.status).toBe(204);
+    expect(
+      await prisma.event.findFirst({ where: { id: eventId, deletedAt: { not: null } } }),
+    ).not.toBeNull();
+    expect((await notificationsOf(studentA)).filter((n) => n.eventId === eventId)).toHaveLength(0);
+  });
+
+  it("announces a deleted Event from its Trash scope, with staff, identity, and no duplicates", async () => {
+    const eventId = await makeEvent(
+      "نشاط ملغى",
+      { levelIds: [levelA] },
+      { startTime: new Date("1970-01-01T09:30:00Z") },
+    );
+    await prisma.eventStaff.create({
+      data: {
+        eventId,
+        userId: eventStaffRecipient,
+        position: "responsible",
+      },
+    });
+
+    const removed = await call("DELETE", `/events/${eventId}`, adminToken);
+    expect(removed.status).toBe(204);
+    expect(await prisma.eventLevel.count({ where: { eventId } })).toBe(0);
+    expect(
+      await prisma.trash.findFirst({
+        where: { targetEntity: "Event", targetId: eventId, deletedById: adminId },
+      }),
+    ).not.toBeNull();
+
+    // The delete commits alone. Only this second request delivers anything.
+    expect((await notificationsOf(studentA)).filter((n) => n.eventId === eventId)).toHaveLength(0);
+    const first = await call("POST", `/events/${eventId}/notify`, adminToken, {
+      change: "cancelled",
+    });
+    expect(first.status).toBe(200);
+    expect((first.body.data as { notified: number }).notified).toBe(2);
+
+    // The same actor may retry safely; somebody else cannot announce a deletion
+    // merely by learning its id.
+    const retry = await call("POST", `/events/${eventId}/notify`, adminToken, {
+      change: "cancelled",
+    });
+    expect(retry.status).toBe(200);
+    expect((retry.body.data as { notified: number }).notified).toBe(0);
+    const unrelatedSend = await call("POST", `/events/${eventId}/notify`, otherAdminToken, {
+      change: "cancelled",
+    });
+    expect(unrelatedSend.status).toBe(404);
+
+    const beneficiaryRows = (await notificationsOf(studentA)).filter(
+      (n) => n.eventId === eventId,
+    );
+    const staffRows = (await notificationsOf(eventStaffRecipient)).filter(
+      (n) => n.eventId === eventId,
+    );
+    expect(beneficiaryRows).toHaveLength(1);
+    expect(beneficiaryRows[0]!.type).toBe("event_cancelled");
+    expect(staffRows).toHaveLength(1);
+    expect(staffRows[0]!.type).toBe("event_cancelled");
+    expect((await notificationsOf(studentB)).filter((n) => n.eventId === eventId)).toHaveLength(0);
+
+    // Rendering joins the soft-deleted Event, so the notice remains actionable
+    // and names the exact activity, day, and wall-clock time.
+    for (const token of [studentAToken, eventStaffToken]) {
+      const list = await call("GET", "/notifications", token);
+      expect(list.status).toBe(200);
+      const notice = (list.body.data as unknown as Record<string, unknown>[]).find(
+        (row) => row["event_id"] === eventId,
+      );
+      expect(notice).toMatchObject({
+        type: "event_cancelled",
+        title: `${TAG} نشاط ملغى`,
+        date: "2099-05-05",
+        start_time: "09:30",
+      });
+    }
   });
 
   it("a reschedule is its own kind, not a cancellation followed by a creation", async () => {

@@ -412,6 +412,16 @@ export interface EventStaffInput {
 }
 
 /**
+ * The existing Event-deletion authority, exported so R82's separate
+ * post-delete notification request can require the same capability before it
+ * consults the deletion record. The same-actor Trash check then narrows it
+ * further; it never substitutes for this role check.
+ */
+export function assertMayDeleteEvent(actor: Actor): void {
+  if (!isAdmin(actor)) throw new AppError('FORBIDDEN', 'deleting events requires admin');
+}
+
+/**
  * `PUT /events/{id}/staff` — **who answers for this event** (§4.4, R71).
  *
  * **Admin and above (R71.4).** Being answerable for an event is not authority to
@@ -571,7 +581,7 @@ export async function deleteEvent(
   actor: Actor,
   id: string,
 ): Promise<void> {
-  if (!isAdmin(actor)) throw new AppError('FORBIDDEN', 'deleting events requires admin');
+  assertMayDeleteEvent(actor);
 
   await prisma.$transaction(async (tx) => {
     const event = await tx.event.findFirst({ where: { id, deletedAt: null } });
