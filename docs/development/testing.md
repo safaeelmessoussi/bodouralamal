@@ -6,24 +6,28 @@ Four layers, each testing something the others structurally cannot.
 
 | Layer | Scope | Tooling | Gate |
 |---|---|---|---|
-| **Unit** | Services: interval merge, state machines, consent evaluation, time and DST logic, Arabic normalization | Vitest | Per PR |
-| **Integration** | Repositories against **real PostgreSQL**: constraints actually reject bad writes, partial indexes, native collation ordering, soft-delete filtering | Vitest + a real stack | Per PR |
-| **API** | Every endpoint against the contract; **permission-matrix tests generated from the matrix**; child-context tests; envelope conformance | Supertest | Per PR |
-| **E2E** | Every journey, RTL rendering, mandatory UI states, upload retry | Playwright | Pre-merge to `main` |
+| **Unit/default** | Services: interval merge, state machines, consent evaluation, time and DST logic, Arabic normalization | Vitest | CI on every push/PR |
+| **Integration** | Repositories against **real PostgreSQL**: constraints actually reject bad writes, partial indexes, native collation ordering, soft-delete filtering | Vitest + a real stack | Local only — CI infrastructure gap |
+| **API** | HTTP integration tests against the contract; child-context tests; envelope conformance | Vitest + a real stack | Local only — CI infrastructure gap |
+| **Browser/E2E** | Journeys, RTL rendering, mandatory UI states, upload retry | Chrome over CDP | Manual — CI infrastructure gap |
 
 **Coverage: ≥ 80 % on services and policies.** No coverage gate on generated or boilerplate
 code — a coverage number that counts generated clients measures nothing.
 
-Current totals: **893 backend across 49 files · 345 frontend across 27**. The backend figure
-is the integration sweep, which is what `scripts/dev/test-integration.sh` runs and what CI
-gates on; the unit suite is a subset of it rather than a separate number.
+Current default CI totals: **241 backend tests across 23 files · 724 frontend tests across 56
+files**. The repository also contains **77 backend integration files**, but the workflow does
+not run them: they require an isolated real stack and database lifecycle that this CI slice
+does not yet provide.
 
 ## Running them
 
 ```bash
 # Unit — no stack required
-cd backend && npm test
-cd frontend && npm test
+cd backend && npm run lint && npm run typecheck && npm test && npm run build
+cd frontend && npm run lint && npm run typecheck && npm test && npm run build
+
+# Repository and contract guards — all twenty are represented in CI
+for g in scripts/ci/check-*.sh; do bash "$g"; done
 
 # Integration — needs the stack up
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
@@ -31,6 +35,11 @@ bash scripts/dev/test-integration.sh
 ```
 
 Integration tests run **serially**, because the suites share one database.
+
+The two production-build commands intentionally repeat part of typechecking: both package
+build scripts include a compiler pass, while CI also keeps the named exact-typecheck step.
+The separate step gives type failures their own gate; the build then verifies emission and
+bundling, which typecheck alone cannot observe.
 
 ## Why integration tests use a real database
 
