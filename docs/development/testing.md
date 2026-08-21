@@ -153,6 +153,22 @@ result is reported in the slice that ran them.
 | `scripts/dev/browser/verify-notifications.sh` | **Audience/API harness** for R77/R82/R83: cancellation and restoration reconciliation, Event scope recipients, personal calendars, and send/decline/repeat. It calls `/notify` directly, so it proves the server resolver and not the UI button. **Last run: 22/22.** |
 | `scripts/dev/browser/verify-notify-ui.sh` | The real sender-to-recipient flow: clicks the UI decision, records the page's request, then opens the recipient's own bell. Covers Session cancel/reschedule, Event create and delete/cancel, unrelated recipients, grade publication, R91 staffing and R92 cross-branch audience. |
 
+### Testing the Google identity boundary without trusting a fixture token
+
+OAuth verifier tests do not call live Google services and do not replace cryptographic
+validation with payload decoding. They generate an ephemeral RSA keypair, sign deterministic
+ID tokens locally, inject only the corresponding provider-certificate response, and run the
+real Google Auth Library verifier. The matrix includes a valid token, invalid signature,
+expiry, wrong issuer, wrong audience, malformed/unsupported headers, unknown key, missing
+identity claims, unverified email and signing-certificate retrieval failure.
+
+The code exchange has a separate narrow verifier seam, and the callback exposes that same
+dependency only to tests. A callback test carries a valid signed flow-state cookie and PKCE
+verifier through the production handler, rejects a decodable forged token, and proves that
+account resolution is never reached. Identity binding and pre-provisioned-account resolution
+remain covered by the database integration suite; no test seam grants a role or bypasses
+those services.
+
 ### Getting past the login wall without bypassing it
 
 Every `/admin/*` screen needs a session, and the only issuer is Google OAuth

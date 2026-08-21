@@ -17,6 +17,7 @@ import {
   FLOW_STATE_COOKIE,
   FLOW_STATE_TTL_SECONDS,
   openFlowState,
+  type OAuthExchangeDependencies,
   sealFlowState,
 } from '../lib/oauth.js';
 import { issueOnboardingToken } from '../lib/onboarding-token.js';
@@ -95,7 +96,11 @@ export function startOAuth(config: AppConfig) {
  * Every failure is a redirect with one of the four defined keys; no partial
  * state is ever persisted on a failure path.
  */
-export function oauthCallback(prisma: PrismaClient, config: AppConfig) {
+export function oauthCallback(
+  prisma: PrismaClient,
+  config: AppConfig,
+  exchangeDependencies: OAuthExchangeDependencies = {},
+) {
   return async (req: Request, res: Response): Promise<void> => {
     // The flow cookie is single-use whatever happens next.
     res.append('Set-Cookie', clearCookie(FLOW_STATE_COOKIE, FLOW_COOKIE_PATH));
@@ -134,6 +139,7 @@ export function oauthCallback(prisma: PrismaClient, config: AppConfig) {
       clientId: config.GOOGLE_CLIENT_ID,
       clientSecret: config.GOOGLE_CLIENT_SECRET,
       redirectUri: redirectUri(config),
+      ...exchangeDependencies,
     });
     if (!exchange.ok) {
       res.redirect(302, loginError(config, exchange.reason));
