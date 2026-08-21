@@ -14,7 +14,7 @@ Four layers, each testing something the others structurally cannot.
 **Coverage: ≥ 80 % on services and policies.** No coverage gate on generated or boilerplate
 code — a coverage number that counts generated clients measures nothing.
 
-Current default CI totals: **259 backend tests across 26 files · 724 frontend tests across 56
+Current default CI totals: **259 backend tests across 26 files · 725 frontend tests across 56
 files**. The repository also contains **77 backend integration files**, but the workflow does
 not run them: they require an isolated real stack and database lifecycle that this CI slice
 does not yet provide.
@@ -931,8 +931,9 @@ The same suite runs the service behind a real temporary pg-boss queue. It observ
 durable `retry` row, stops that worker completely, starts a new worker and proves eventual
 cleanup. A bounded test-only retry budget also reaches terminal `failed` state and asserts
 that the cleanup error remains in job output. Every temporary queue and fixture object is
-removed by the suite; the production queue name, five-retry policy and worker catalog are
-unchanged.
+removed by the suite. The terminal-failure case uses the production retry limit against real
+pg-boss and proves five executions total; only its delay is removed so the assertion finishes
+promptly. The production queue name and worker catalog are unchanged.
 
 ### And only a real browser proves that a recording can be HEARD
 

@@ -33,11 +33,12 @@ async function goto(path) {
   for (let i = 0; i < 80; i += 1) {
     const state = await evaluate(`(() => {
       if (document.location.pathname.startsWith('/login')) return 'login';
-      if (document.querySelector('.admin-table tbody tr')) return 'ready';
-      if (document.querySelector('.state')) return 'state';
+      const seededRow = [...document.querySelectorAll('.admin-table tbody tr')]
+        .find((tr) => tr.textContent.includes('[dev-scenario]'));
+      if (seededRow) return 'ready';
       return 'waiting';
     })()`).catch(() => null);
-    if (state === 'ready' || state === 'login' || state === 'state') return state;
+    if (state === 'ready' || state === 'login') return state;
     await new Promise((r) => setTimeout(r, 250));
   }
   return 'timeout';
@@ -45,6 +46,10 @@ async function goto(path) {
 
 const state = await goto('/admin/schedules');
 check('the scheduling screen loads with rows', state === 'ready', `state=${state}`);
+if (state !== 'ready') {
+  close();
+  process.exit(finish());
+}
 
 /** Opens «تعديل» on the seeded class and reports what the form was seeded with. */
 const opened = await evaluate(`(async () => {

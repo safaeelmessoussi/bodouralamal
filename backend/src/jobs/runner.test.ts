@@ -87,7 +87,7 @@ describe('job runner startup readiness', () => {
     );
     expect(boss.createQueue).toHaveBeenCalledWith(
       QUEUES.sessionRecordingIngest,
-      { retryLimit: 5, retryBackoff: true },
+      { retryLimit: 4, retryBackoff: true },
     );
     expect(registered).not.toContain(QUEUES.consentReevaluate);
   });
