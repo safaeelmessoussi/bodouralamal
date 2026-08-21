@@ -67,12 +67,17 @@ Admin-visible failure. Singleton keys prevent duplicate concurrent runs.
 Post-MVP additions (`import.csv`, `export.csv`, `grade.recalculate`) join with their
 features.
 
-> **`session-recording-ingest` is not in the SRS's TD-7 table.** R99 authorises the
-> ingestion pipeline (R99.13, R99.14) and specifies the TD-2, TD-3, TD-8 and TD-13 additions
-> it needs, but names no queue — and §20 rule 1 leaves no compliant alternative to pg-boss for
-> durable, retryable work. **Reported to the Document Owner as a TD-7 catalogue gap**; this
-> table carries it in the meantime, exactly as the handbook carries every other thing the
-> specification is silent about until it is not.
+> **`session-recording-ingest` was implemented before it was specified, and that sequence is
+> worth keeping visible.** R99 authorised the ingestion pipeline in terms (R99.13, R99.14) and
+> specified the TD-2, TD-3, TD-8 and TD-13 additions it needed, but **named no queue** — while
+> §20 rule 1 forbids every in-memory substitute for durable work, so there was no compliant way
+> to build R99.13 *without* one. C2 built it and **reported the omission instead of inventing a
+> normative row for itself**; the Document Owner ratified it as **SRS Revision 100**
+> (2026-08-21), which adds the row and nothing else.
+>
+> It is therefore normative now, and this page **cites** TD-7 rather than standing in for it.
+> The reason the history is recorded rather than tidied away: a specification that appears never
+> to have been incomplete teaches the next implementer to guess instead of to report.
 
 ### `session-recording-ingest` — provider `completed` is not Bodour «متاح»
 

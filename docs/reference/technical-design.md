@@ -102,10 +102,18 @@ direct renames** — Prisma renders them as DROP + ADD.
 
 ## <a id="td-7"></a>TD-7 — Background job catalog
 
-Eight jobs, with triggers, payloads, and idempotency strategy. Exponential backoff, five
+Ten jobs, with triggers, payloads, and idempotency strategy. Exponential backoff, five
 attempts, then dead-letter with an Admin-visible failure.
 
 **Quran coverage recalculation is deliberately not a job** — it is synchronous by rule.
+
+**`session-recording-ingest` is the newest and the only event-driven one that moves bytes**
+(Revision 100): the verified provider callback persists and **enqueues**, never ingests, and
+the job's order is normative — verify the staging object → server-side copy → content → link →
+relation → **staging swept last**.
+
+*(The count read "Eight" until Revision 100; it was already one behind the catalogue, which is
+the ordinary fate of a number restated away from the thing it counts.)*
 
 *Code:* `jobs/` · *Explained:*
 [Background jobs](../architecture/background-jobs.md#the-catalog)

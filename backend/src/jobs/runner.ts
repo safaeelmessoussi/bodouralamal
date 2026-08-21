@@ -70,11 +70,12 @@ export const QUEUES = {
    * thing read, so a duplicate delivery, a retried job and a worker killed after
    * committing all converge on one `EducationalContent`.
    *
-   * **Not in the SRS's TD-7 table.** R99 authorises the ingestion pipeline
-   * (R99.13/14) and specifies TD-2, TD-3, TD-8 and TD-13 additions, but names no
-   * queue; §20 rule 1 leaves no compliant alternative to pg-boss for durable,
-   * retryable work. Reported to the Document Owner as a TD-7 catalogue gap; the
-   * handbook's catalogue carries it meanwhile.
+   * **Normative since SRS Revision 100** (2026-08-21), which added the TD-7 row
+   * and nothing else. R99 authorised the pipeline (R99.13/14) without naming a
+   * queue, and §20 rule 1 forbids every in-memory substitute — so C2 built this
+   * and reported the omission rather than inventing a specification for itself.
+   * R100 states the order below as normative: verify → server-side copy →
+   * content → link → relation → **staging swept last**.
    */
   sessionRecordingIngest: 'session-recording-ingest',
 } as const;

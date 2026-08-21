@@ -654,6 +654,7 @@
   - [x] **The URL is Bodour's, never `recordings-staging`**; a reload mints a fresh one and it still plays
   - [x] **The negative is a DIFFERENT Level** — same-Level-other-branch is a positive under §4.9, so the scenario gained مستفيدة ج. 404, never 403
   - [x] **R99.8 from both sides in one run** — the imported MP4 plays; an uploaded MP4 is refused, `origin` marker or not
+  - [x] **SRS Revision 100 (2026-08-21) — the TD-7 gap C2 reported is CLOSED.** R99 authorised the pipeline without naming a queue and §20 rule 1 forbids every in-memory substitute, so C2 built `session-recording-ingest` and **reported the omission instead of inventing a normative row**. R100 adds that row and nothing else, and makes normative what C2 already did: the callback **persists and enqueues, never ingests**; the order **verify → server-side copy → content → link → relation → staging swept last**; retries idempotent on the nullable UNIQUE `educational_content_id`. **Documentation-only — the implementation already conformed, and was not touched to manufacture a diff**
 
 ### R98 — entering a class عن بُعد (2026-08-20)
 
