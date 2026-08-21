@@ -1758,6 +1758,7 @@ enum RefreshRevokedReason {
   suspension
   user_deleted
   reuse_detected
+  cookie_path_migration
 
   @@map("refresh_revoked_reason")
 }

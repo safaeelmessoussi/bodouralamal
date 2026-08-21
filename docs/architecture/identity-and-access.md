@@ -144,17 +144,18 @@ cannot create a case variant that slips past the unique index.
 | Token | Lifetime | Transport |
 |---|---|---|
 | **Access** | 1 hour | `Authorization: Bearer` header — **never a cookie** |
-| **Refresh** | 30 days | `HttpOnly; Secure; SameSite=Lax` cookie |
+| **Refresh** | 30 days | `HttpOnly; Secure; SameSite=Lax; Path=/api/v1/auth` cookie |
 
 ### The CSRF posture
 
 Because the access token lives in a header and never in a cookie, **ordinary API mutations
 are structurally immune to CSRF** — a cross-site attacker cannot set the header.
 
-`POST /auth/refresh` is **the only cookie-authenticated route** in the system. It
-additionally requires a custom header (`X-Requested-With`) and validates the `Origin`
-against the configured public base URL. Combined with `SameSite=Lax`, that closes the
-remaining surface without a double-submit token system.
+Exactly two routes consume the refresh cookie: `POST /auth/refresh` and
+`POST /auth/logout`. Both require a custom header (`X-Requested-With`) and validate the
+`Origin` against the configured public base URL **before reading the cookie**. Combined with
+`SameSite=Lax`, that closes the remaining surface without a double-submit token system.
+The browser manages the credential throughout; frontend JavaScript never receives it.
 
 > **Same-origin routing is a delivery mechanism, not a security shield.** Never treat it as
 > CSRF protection by itself.
@@ -193,6 +194,24 @@ The distinction is recorded in the audit log, not in the response.
 Revoke-all exists as an internal capability — suspension and deletion use it — but **there
 is no user-facing "log out everywhere" control**, no such route, and no such navigation
 node. The capability exists because safeguarding requires it, not because a user invokes it.
+
+### Logout: browser cleanup and server revocation are separate
+
+`POST /auth/logout` identifies the current rotation chain from the HttpOnly refresh cookie,
+revokes every live token carrying that `session_id`, writes `auth.logout` in the same
+transaction, and only then returns the cookie expiry. A cookie disappearing from a browser is
+not proof that its retained value is dead; the persisted revocation is the security property.
+Another browser has another `session_id` and remains signed in.
+
+The endpoint stays idempotent: with a valid CSRF request context, an absent, unknown or
+already-cleared cookie is `204`. A repeated browser logout therefore remains safe. Missing or
+foreign CSRF context is `401` before the cookie is inspected.
+
+Revision 101 changes the Path from `/api/v1/auth/refresh` to `/api/v1/auth`. The deployment
+that introduces it stops the old API, atomically invalidates all live pre-cutover refresh
+rows with `cookie_path_migration` plus system audit, applies the new code, and asks users to
+authenticate again. Stopping the old issuer first is load-bearing: otherwise it could mint a
+legacy narrow-path cookie after the one-time sweep.
 
 ### Freshness: where statelessness ends
 

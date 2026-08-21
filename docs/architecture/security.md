@@ -51,7 +51,9 @@ against users on unreliable connections.
 
 ### Cookie attributes never vary by environment
 
-`HttpOnly; Secure; SameSite=Lax` in development, staging, and production alike.
+`HttpOnly; Secure; SameSite=Lax; Path=/api/v1/auth` in development, staging, and production
+alike. The Path admits exactly the two refresh-cookie consumers, `/auth/refresh` and
+`/auth/logout`; both enforce the same custom-header and Origin checks before reading it.
 Environment-conditional downgrades — `SameSite=None`, dropping `Secure`, wildcard CORS with
 credentials — are **prohibited**.
 

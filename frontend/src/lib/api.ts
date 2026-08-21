@@ -19,12 +19,25 @@ export interface ApiOptions {
   activeChildId?: string | null;
   /** §4.1b — the single-use registration credential, header-only. */
   onboardingToken?: string | null;
+  /**
+   * R101 — mark one of the two requests that authenticates with the HttpOnly
+   * refresh cookie. The raw credential remains browser-managed and invisible
+   * here; this adds only the custom-header leg of the CSRF defence.
+   */
+  refreshCookieAuth?: boolean;
   method?: string;
   body?: unknown;
 }
 
 export async function api<T>(path: string, options: ApiOptions = {}): Promise<T> {
-  const { token, activeChildId, onboardingToken, method = 'GET', body } = options;
+  const {
+    token,
+    activeChildId,
+    onboardingToken,
+    refreshCookieAuth = false,
+    method = 'GET',
+    body,
+  } = options;
 
   const response = await fetch(`/api/v1${path}`, {
     method,
@@ -32,6 +45,7 @@ export async function api<T>(path: string, options: ApiOptions = {}): Promise<T>
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
       ...(activeChildId ? { 'X-Active-Child-ID': activeChildId } : {}),
       ...(onboardingToken ? { 'X-Onboarding-Token': onboardingToken } : {}),
+      ...(refreshCookieAuth ? { 'X-Requested-With': 'XMLHttpRequest' } : {}),
       ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
     },
     ...(body !== undefined ? { body: JSON.stringify(body) } : {}),

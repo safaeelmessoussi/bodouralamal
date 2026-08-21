@@ -43,13 +43,14 @@
   - ✓ Tests — 8 unit tests
   - ✓ Security — a substituted-email token fails signature verification (§20 rule 9)
   - △ Later milestone (M2) — `POST /registrations` and the Zod schema that must not even accept those fields
-- [x] Access token via Authorization header only; refresh = sole cookie route with custom header + Origin check (TD-12)
+- [x] Access token via Authorization header only; refresh and logout are the only refresh-cookie consumers, both with the same custom-header + Origin checks; cookie Path `/api/v1/auth` (TD-12, R101)
 - [~] High-risk endpoint fresh DB status assertions (presigned mint, social profile, approvals, overrides) (TD-12)
   - ✓ Covered on every surface that exists — approvals (5 assertions), consent overrides (3), social profile, user management, family links: a mid-session suspension or a revoked role assignment loses the capability on the **next call**, on the caller's still-valid token
   - △ *presigned mint* arrives with **M6 (Storage)**; the `/uploads/*` endpoints are not built, so this cannot be green before then
 - [x] `RefreshToken` entity + unique `token_hash` + `session_id` chain (§7/TD-6, Revision 16) — forward-only migration
-- [x] Session layer: 1 h access JWT, 30 d rotating refresh cookie (HttpOnly/Secure/SameSite=Lax), hashed-never-raw storage, revocation list (TD-12)
+- [x] Session layer: 1 h access JWT, 30 d rotating refresh cookie (HttpOnly/Secure/SameSite=Lax/Path `/api/v1/auth`), hashed-never-raw storage, revocation list (TD-12, R101)
 - [x] Rotation / logout / revoke-on-suspension transactions (TD-4.13/14/15); 10 s grace window is idempotent (no chain fork); reuse outside grace revokes the whole session
+- [x] R101 rollout: old API stops first; migration audits and invalidates every live legacy narrow-Path session as `cookie_path_migration`; users reauthenticate
 - [x] Token-lifecycle acceptance criteria T1–T12 green (§18, Revision 16)
 - [x] Pending hard-redirect; zero data access except `GET /me` + logout (TD-1); client-side global Pending route guard (§14.4)
   - ✓ Backend · ✓ Tests · ✓ Security · ✓ Frontend — `PendingGuard` renders the §2.1 status screen before any authenticated route mounts, so no skeleton leaks

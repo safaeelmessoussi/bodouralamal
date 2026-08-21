@@ -6,6 +6,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { issueAccessToken } from "../lib/access-token.js";
 import { loadConfig } from "../lib/config.js";
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from "../lib/prisma.js";
+import { issueNewSession } from "../services/refresh-token.service.js";
 import { httpCall } from "../test-support/http-client.js";
 
 /**
@@ -58,6 +59,7 @@ const bearer = (
   ).token;
 
 let pendingToken: string;
+let pendingUserId: string;
 let suspendedToken: string;
 let rejectedToken: string;
 let activeToken: string;
@@ -96,11 +98,8 @@ beforeEach(async () => {
   await clear();
   // A Pending account that also carries roles: the denial must rest on status,
   // never on the caller happening to lack a role.
-  pendingToken = bearer(
-    await person("قيد الموافقة", "pending"),
-    ["super_admin"],
-    "pending",
-  );
+  pendingUserId = await person("قيد الموافقة", "pending");
+  pendingToken = bearer(pendingUserId, ["super_admin"], "pending");
   suspendedToken = bearer(
     await person("موقوفة", "suspended"),
     ["super_admin"],
@@ -289,8 +288,20 @@ describe("TD-1 — the two exceptions a Pending session DOES reach", () => {
   });
 
   it("logout is reachable, because a pending user must be able to leave", async () => {
-    const res = await call("POST", "/auth/logout", pendingToken);
+    const session = await issueNewSession(prisma, pendingUserId);
+    const res = await httpCall<Body>(BASE, "POST", "/auth/logout", {
+      headers: {
+        cookie: `bodour_refresh=${session.rawToken}`,
+        origin: config.PUBLIC_BASE_URL,
+        "x-requested-with": "XMLHttpRequest",
+      },
+    });
     expect(res.status).toBe(204);
+    expect(
+      await prisma.refreshToken.count({
+        where: { sessionId: session.sessionId, revokedAt: null },
+      }),
+    ).toBe(0);
   });
 });
 

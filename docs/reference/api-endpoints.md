@@ -28,8 +28,8 @@ service, not by the URL prefix).
 |---|---|---|---|
 | `GET` | `/auth/google` | 🌐 | Redirect to Google with state + PKCE |
 | `GET` | `/auth/google/callback` | 🌐 | Routes by identity resolution. **Failures redirect, never JSON** |
-| `POST` | `/auth/refresh` | 🍪 | **The only cookie-authenticated route.** Requires a custom header and an `Origin` match |
-| `POST` | `/auth/logout` | 🔒 | Revokes **the current session only** — other devices keep working |
+| `POST` | `/auth/refresh` | 🍪 | One of exactly two refresh-cookie consumers. Requires a custom header and an `Origin` match; rotates the session |
+| `POST` | `/auth/logout` | 🍪 | The other refresh-cookie consumer, with the same CSRF checks. Revokes **the current server-side session only**, expires the cookie, and leaves other devices working; idempotent `204` |
 | `GET` | `/me` | 🔒 | Identity, roles, scopes, status, approved child links. **One of only two endpoints a Pending session may call** |
 
 ## Notifications
@@ -282,8 +282,9 @@ promoting one that already exists and has been approved. Drafted in
 
 **A role change deliberately does not revoke sessions** — Revision 10 accepts the ≤1-hour
 stateless window for everything that is not safeguarding-sensitive, and those operations
-re-assert live assignments per request. §7 also fixes `RefreshRevokedReason` at four values,
-none of which honestly describes a demotion.
+re-assert live assignments per request. §7's `RefreshRevokedReason` values describe logout,
+safeguarding action, replay, and R101's one-time cookie-Path rollout; none honestly describes
+a demotion.
 
 **There is no user-delete endpoint.** §5.6 lists *deactivate*; a person's soft delete reaches
 grades, submissions, Quran logs and consent records, which is its own decision.

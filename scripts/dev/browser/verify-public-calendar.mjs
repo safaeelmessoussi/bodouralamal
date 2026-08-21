@@ -28,7 +28,7 @@ async function asAdmin() {
     name: 'bodour_refresh',
     value: COOKIE,
     domain: 'localhost',
-    path: '/api/v1/auth/refresh',
+    path: '/api/v1/auth',
     httpOnly: true,
   });
 }

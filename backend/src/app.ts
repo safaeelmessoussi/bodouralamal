@@ -216,7 +216,7 @@ export function createApp(
     '/integrations/online-class/callback',
     recordingCtl.callback(prisma, onlineClass),
   );
-  api.post('/auth/logout', auth.logout(prisma));
+  api.post('/auth/logout', auth.logout(prisma, config));
   api.get('/me', meController(prisma, config));
   // Public, gated by the signed onboarding token — no session exists yet
   // (§4.1b step 4c, TD-3.2).
