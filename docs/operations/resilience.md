@@ -48,7 +48,7 @@ data loss.
 
 | Dependency down | Blast radius | Behaviour |
 |---|---|---|
-| **Google OAuth** | New logins and registrations only | **Active sessions are unaffected** — token refresh is local and never calls Google. `/login` shows a friendly "temporarily unavailable" state with retry. No queuing of registrations |
+| **Google OAuth** | New logins and registrations only | **Active sessions are unaffected** — token refresh is local and never calls Google. Code exchange, ID-token verification, or signing-certificate retrieval failure all fail closed; `/login` shows a friendly "temporarily unavailable" state with retry. Provider certificates are cached according to Google's response. No queuing of registrations |
 | **MinIO** | Uploads, downloads, previews, bucket migrations | Those return `503`; content pages render their error state with retry. **Everything else — scheduling, grading, Quran, approvals — continues fully.** Migration jobs retry; the database row remains the source of truth, so **no window of wrong exposure opens** |
 | **PostgreSQL** | Everything | Total API outage. Health returns `503`; Nginx serves the static client shell and maps API failures to a friendly maintenance interstitial — **never a raw 502 page.** There is no read-only or cached mode |
 | **Job workers** (database up, workers down) | Background latency only | Health returns `503` with `queue: ok`, `jobs: down`, and a stable runner reason. **Enqueues keep succeeding** — they are database inserts inside application transactions. Jobs are **delayed, never lost**, and drain on restart. Queue-lag alarm past 10 minutes |

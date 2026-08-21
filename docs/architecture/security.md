@@ -64,6 +64,17 @@ same-origin stack and the production rehearsal, never through the staging origin
 Local development terminates at HTTP on `localhost`, which browsers treat as a secure
 context — so the `Secure` cookie is delivered normally without weakening a single attribute.
 
+### The external identity assertion is verified, not decoded
+
+Google's token endpoint is a transport boundary, not proof that a JWT payload is authentic.
+The callback consumes identity only after the supported Google verifier has checked the
+RS256 signature against the provider's cached signing keys, exact issuer, configured
+audience and token lifetime; the application then requires a non-empty subject and a
+verified email. See [the complete boundary](identity-and-access.md#the-google-identity-trust-boundary).
+Any verification or signing-key retrieval failure stops before account lookup and returns
+the existing generic OAuth-unavailable redirect. Raw ID tokens, emails and provider errors
+never enter logs.
+
 ## No existence leaks
 
 **`404` for both "does not exist" and "outside your scope". Never `403`, never a

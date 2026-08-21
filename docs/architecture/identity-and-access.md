@@ -45,7 +45,8 @@ sequenceDiagram
     G-->>A: GET /auth/google/callback?code&state
     A->>A: validate state + PKCE
     A->>G: exchange code
-    G-->>A: verified email + subject id
+    G-->>A: signed ID token
+    A->>A: verify signature + provider claims<br/>then extract verified email + subject id
 
     Note over A: Resolution order — always against the LOWERCASED email
     A->>A: 1. UserIdentity(google, subject_id)?
@@ -60,6 +61,29 @@ Then routing:
 | **Identity exists** | Establish the session and route on the **complete** condition (below) |
 | **Pre-provisioned match** | **Create and bind** the identity transactionally, then route by status. From here every later login resolves at step 1 |
 | **Nobody we know** | Issue a short-lived onboarding token, redirect to the registration form |
+
+### The Google identity trust boundary
+
+The authorization-code exchange and ID-token validation are **two different security
+steps**. TLS protects the server-to-server code exchange; it does not make an unverified
+JWT payload an identity. The callback passes Google's `id_token` to the supported Google
+Auth Library before it reads `sub` or `email`. The verifier requires an `RS256` protected
+header with a non-empty provider key id, verifies the signature against Google's fetched
+and cached signing certificates, and checks the token lifetime, the two documented Google
+issuers, and this deployment's configured client id as the audience. Only then does the
+application require a non-empty subject and email plus `email_verified = true`.
+
+Malformed tokens, bad signatures, expired tokens, wrong issuer or audience, unknown keys,
+and provider-certificate retrieval failures all fail closed as `oauth_unavailable` without
+touching an account. A false or missing `email_verified` claim uses the SRS-specific
+`email_unverified` redirect. Neither the token nor provider error details are logged.
+
+This is a pure authorization-code flow (`response_type=code`), so the browser receives no
+ID token in the authorization response. A nonce is therefore not added: the signed,
+short-lived flow state binds the browser callback and PKCE binds the exchanged code, while
+Google defines `nonce` as optional for this response type. If the flow ever changes to a
+hybrid or implicit response that returns an ID token through the browser, that decision
+must be revisited rather than copied forward.
 
 ### The routing condition, in full
 
