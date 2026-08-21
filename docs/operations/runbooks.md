@@ -257,6 +257,14 @@ Jobs retry five times with exponential backoff, then dead-letter with an Admin-v
 failure. **Enqueues keep succeeding even when workers are down** — jobs are delayed, never
 lost, and drain on restart.
 
+For a failed `session-recording-ingest` job, distinguish the phase before intervening. If the
+recording has no `educational_content_id`, it is an import failure and staging is deliberately
+kept for a corrected retry. If the relation is already populated and the job output names
+`RecordingStagingCleanupFailure`, the library item is valid and available; the remaining
+obligation is only deletion of that row's recorded staging bucket/key. Redrive the existing
+job after restoring MinIO. Do not delete the canonical content key, do not enqueue a general
+bucket sweep, and do not use `upload.gc` for this recording-specific obligation.
+
 If backup replication has failed twice consecutively, escalate to the owner.
 
 ---

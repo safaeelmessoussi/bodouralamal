@@ -651,6 +651,7 @@
   - [x] **Server-side storage primitives** — stat · ranged head · `CopyObject` **inside MinIO** · delete. No 500 MB through Node
   - [x] **`session-recording-ingest`** — same-transaction enqueue from the verified callback, singleton per recording; the webhook persists and returns
   - [x] **Worker** — verify actual bytes (incl. media family) → durable copy → `EducationalContent` + `SessionContent` → link → sweep staging last
+  - [x] **R99 staging-cleanup recovery** — a post-commit delete failure now keeps the existing ingest job retryable; relation-first retries perform only the exact idempotent staging delete, survive worker restart, and never target canonical or unrelated objects
   - [x] **Idempotent under duplicate callback, retry and concurrency** — one object, one content row, one link, no false suffix increment
   - [x] **Defect found by C2's tests:** the transition table conflated *already there* with *just moved*, so a re-delivered completion enqueued a second job
   - [x] **`verify-livekit-ingest` 27/27** — the real «بدء التسجيل» button; a **27 s / 338 KB OGG** and an **11.4 s MP4** genuinely decoded by a real media element (`readyState`/`duration`), not merely fetched

@@ -303,6 +303,14 @@ is not the association's to control, and a library item pointing at it would rot
 verifies the object, copies it **server-side** into the ordinary content bucket under an
 ordinary TD-9 key, and only then is there anything for a reader to find.
 
+Staging deletion is attempted only after the canonical object and relation commit. A
+transient delete failure leaves the content available and fails the existing ingest job so
+pg-boss retains a durable retry. That retry reads `educational_content_id` first, skips every
+ingest write and deletes only the staging bucket/key stored on the same recording. Missing
+objects are success under S3 delete semantics; canonical and unrelated staging keys are never
+cleanup targets. This exact post-commit obligation is separate from the age-based
+`upload.gc` collector for abandoned browser uploads.
+
 After that copy an ingested recording is **indistinguishable from any other library object** —
 same key structure, same presigned mint, same quarantine path, same consent gate. That is the
 point: R99 admits a *provenance*, and provenance is recorded in `EducationalContent.origin`,

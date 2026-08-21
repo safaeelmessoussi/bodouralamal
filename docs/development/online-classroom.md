@@ -341,6 +341,11 @@ the ordering and what each step protects against are in
 [background jobs](../architecture/background-jobs.md#session-recording-ingest--provider-completed-is-not-bodour-متاح);
 the storage side is in [storage](../architecture/storage.md#the-third-bucket-recordings-staging-r99).
 
+If that last delete fails, the recording is still «متاح»: its canonical object and relation
+already committed. The existing pg-boss job remains failed/retryable, and its next attempt
+reads the relation first and performs only the exact staging cleanup. No second cleanup queue
+and no general bucket sweep are involved.
+
 **What a مؤطِّرة is told follows from that, and never from the provider.** The
 `GET` route carries two different answers: `status` is the **provider's**, and
 `availability` is the **association's**.

@@ -919,6 +919,21 @@ and then lists the staging bucket and checks the **extensions and the byte
 counts** — because a zero-length file is a passing lifecycle and a failed
 recording, which is exactly the pair that check exists to tell apart.
 
+### The staging-cleanup failure is after success, so test both truths
+
+`session-recording-ingest.integration.test.ts` drives real MinIO and injects a fault only at
+the selected `DeleteObject` call. The intermediate assertion is load-bearing: the canonical
+object, content row and relation exist while the staging object remains, and
+`ingestion_failure_reason` stays null. A retry must then delete the selected staging key while
+the canonical object and an unrelated staging object remain byte-addressable.
+
+The same suite runs the service behind a real temporary pg-boss queue. It observes the
+durable `retry` row, stops that worker completely, starts a new worker and proves eventual
+cleanup. A bounded test-only retry budget also reaches terminal `failed` state and asserts
+that the cleanup error remains in job output. Every temporary queue and fixture object is
+removed by the suite; the production queue name, five-retry policy and worker catalog are
+unchanged.
+
 ### And only a real browser proves that a recording can be HEARD
 
 A recording pipeline can be green end to end and still deliver a file nobody can

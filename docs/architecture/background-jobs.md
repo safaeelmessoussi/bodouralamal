@@ -116,8 +116,10 @@ and inserts one job.
 **The order is the design.** Each step protects against a specific way of producing a broken
 library item:
 
-1. **Already ingested?** → return what is there. `session_recording.educational_content_id` is
-   `UNIQUE`, and it is the durable idempotency anchor for the whole pipeline.
+1. **Already ingested?** → skip verification, copying and database writes, then finish the
+   exact staging cleanup recorded on that `SessionRecording`.
+   `session_recording.educational_content_id` is `UNIQUE`, and it is the durable idempotency
+   anchor for both the ingest and a post-commit cleanup retry.
 2. **Verify the actual bytes**, never the provider's metadata — exists, non-empty, within
    TD-9's cap, magic bytes matching, **and the media family the class asked for**. An OGG
    delivered for a صوت وصورة class is a perfectly valid OGG and is refused anyway, because
@@ -127,8 +129,17 @@ library item:
 4. **One transaction**: allocate the R75.6 name under `SELECT … FOR UPDATE` on the occurrence,
    create the `EducationalContent` (`origin = session_recording`), create the `SessionContent`
    link, set `educational_content_id`, write the audit row.
-5. **Then sweep staging.** A cleanup failure must never undo valid content — what is left
-   behind is one object in a bucket the platform owns and does not serve.
+5. **Then sweep staging.** A cleanup failure never undoes valid content: the relation is
+   already committed, so «متاح» remains true. The worker throws the cleanup failure to
+   pg-boss instead of swallowing it; the same durable job retries, lands on step 1, and
+   addresses only that recording's stored staging bucket/key. S3 `DeleteObject` treats an
+   already-missing key as success, so a worker killed after the delete but before job
+   completion converges safely on the next attempt.
+
+This is **not `upload.gc`**. The ingest job first attempts immediate cleanup and retains its
+own durable obligation only when that exact post-commit delete fails. `upload.gc` is the
+separate age-based collector for initiated browser uploads that never completed; neither is
+a general scan of the recording bucket.
 
 **Availability is derived, never stored.** *«متاح»* is exactly
 `educational_content_id IS NOT NULL`. An `available` status value would be a second fact that
@@ -145,6 +156,11 @@ so a corrected one can be retried — and no content row is created.
 than random, so a job that copied the object and then died finds *its own* object on retry
 instead of minting a second key and orphaning the first. The object is copied only if it is not
 already there, so the key is still written exactly once (§20 rule 15).
+
+**A cleanup failure is not an ingestion failure.** It does not populate
+`ingestion_failure_reason`, because the canonical object, content row and relation already
+exist. Repeated storage failure remains on the existing pg-boss job under TD-7's retry budget
+and terminal failed-job observability; it never creates a second worker or an in-memory retry.
 
 ### `session.materialize` — eager, and the reason is correctness
 
