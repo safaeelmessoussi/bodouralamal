@@ -3,6 +3,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { createApp } from '../src/app.js';
 import { createPrismaClient } from '../src/lib/prisma.js';
 import type { AppConfig } from '../src/lib/config.js';
+import { JobRunnerReadiness } from '../src/jobs/readiness.js';
 
 /**
  * Placeholder values used only to build the router for introspection. Generation
@@ -139,6 +140,76 @@ const document = {
               request_id: {
                 type: 'string',
                 description: 'Correlates the response with the server log line.',
+              },
+            },
+          },
+        },
+      },
+      HealthResponse: {
+        type: 'object',
+        required: ['status', 'components', 'details'],
+        properties: {
+          status: { type: 'string', enum: ['ok', 'degraded'] },
+          components: {
+            type: 'object',
+            required: ['database', 'storage', 'jobs', 'queue'],
+            properties: {
+              database: { type: 'string', enum: ['ok', 'down'] },
+              storage: { type: 'string', enum: ['ok', 'down'] },
+              jobs: { type: 'string', enum: ['ok', 'down'] },
+              queue: {
+                type: 'string',
+                enum: ['ok', 'down', 'not_configured'],
+              },
+            },
+          },
+          details: {
+            type: 'object',
+            required: ['jobs'],
+            properties: {
+              jobs: {
+                type: 'object',
+                required: [
+                  'state',
+                  'reason',
+                  'expected_workers',
+                  'registered_workers',
+                  'active_workers',
+                ],
+                properties: {
+                  state: { type: 'string', enum: ['ok', 'down'] },
+                  reason: {
+                    type: 'string',
+                    enum: [
+                      'ready',
+                      'not_started',
+                      'starting',
+                      'startup_failed',
+                      'worker_registration_incomplete',
+                      'worker_registry_unavailable',
+                      'worker_missing',
+                      'worker_not_active',
+                      'worker_stale',
+                      'stopping',
+                      'stopped',
+                    ],
+                  },
+                  expected_workers: { type: 'integer', minimum: 0 },
+                  registered_workers: { type: 'integer', minimum: 0 },
+                  active_workers: { type: 'integer', minimum: 0 },
+                  missing_workers: {
+                    type: 'array',
+                    items: { type: 'string' },
+                  },
+                  inactive_workers: {
+                    type: 'array',
+                    items: { type: 'string' },
+                  },
+                  stale_workers: {
+                    type: 'array',
+                    items: { type: 'string' },
+                  },
+                },
               },
             },
           },
@@ -676,12 +747,40 @@ const document = {
       // answers 401 — a consumer following the document would call the wrong URL
       // and conclude the service was unhealthy.
       servers: [{ url: '/', description: 'Served at the origin root (TD-14)' }],
-      get: op(
-        'Health check',
-        'Public. Checks database, storage and job-queue components (TD-14); §19.1 step 8 ' +
-          'asserts a 200 here on deployment.',
-        { '200': 'All components healthy.', '503': 'At least one component is down.' },
-      ),
+      get: {
+        summary: 'Health check',
+        description:
+          'Public. Checks database, storage, pg-boss queue infrastructure and this API process\'s ' +
+          'registered worker readiness (TD-14); §19.1 step 8 asserts a 200 here on deployment. ' +
+          'The existing `components.database`, `components.storage`, and `components.jobs` fields ' +
+          'remain; `components.queue` and `details.jobs` add stable worker lifecycle detail.',
+        responses: {
+          '200': {
+            description: 'All components healthy.',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/HealthResponse' },
+              },
+            },
+          },
+          '503': {
+            description: 'At least one component is unavailable or unready.',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/HealthResponse' },
+              },
+            },
+          },
+          '500': {
+            description: `${ENVELOPE} INTERNAL — unexpected server fault; details are never leaked to the client.`,
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorEnvelope' },
+              },
+            },
+          },
+        },
+      },
     },
   },
 };
@@ -700,7 +799,11 @@ const document = {
 // client as parameters, so this needs no environment and no database connection —
 // constructing a PrismaClient does not connect.
 function mountedOperations(): Set<string> {
-  const app = createApp(createPrismaClient(SYNTHETIC_CONFIG.DATABASE_URL), SYNTHETIC_CONFIG);
+  const app = createApp(
+    createPrismaClient(SYNTHETIC_CONFIG.DATABASE_URL),
+    SYNTHETIC_CONFIG,
+    new JobRunnerReadiness({ getWipData: () => [] }),
+  );
 
   const found = new Set<string>();
   const walk = (stack: unknown[], prefix: string): void => {

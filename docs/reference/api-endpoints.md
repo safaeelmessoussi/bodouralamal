@@ -20,7 +20,7 @@ service, not by the URL prefix).
 
 | | Path | Audience |
 |---|---|---|
-| `GET` | `/healthz` | 🌐 Component health for database, storage, and job queue. Served at the **origin root**, not under the API prefix |
+| `GET` | `/healthz` | 🌐 Readiness for database, storage, pg-boss infrastructure (`queue`), and this process's registered workers (`jobs`). Stable worker reasons/counts live under `details.jobs`; schema presence alone is insufficient. Served at the **origin root**, not under the API prefix |
 
 ## Authentication
 

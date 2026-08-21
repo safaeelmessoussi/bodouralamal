@@ -64,7 +64,11 @@
   - ✓ Security — upstream failures leak no detail; they surface as the canonical envelope
   - △ Later milestone (M6) — the full TD-16 matrix needs the storage endpoints that must 503 while MinIO is down
 - [x] request_id propagation, JSON logs, no-PII log policy (TD-14)
-- [x] `GET /healthz` with component checks (TD-14)
+- [x] `GET /healthz` with truthful dependency and worker-readiness checks (TD-14)
+  - ✓ Queue infrastructure is independent from process-local runner readiness; a surviving
+    `pgboss` schema cannot make stopped/failed/unregistered workers healthy
+  - ✓ Expected workers derive from the actual registration catalog; live pg-boss activity
+    detects missing, inactive, and stale workers with an injected-clock test seam
 - [~] pg-boss bootstrap + job runner; JobsRepository same-transaction job inserts (§16.2, TD-4); token.purge + ratelimit.purge + audit.purge crons (TD-7)
   - ✓ Backend — runner in the API container; all three crons scheduled in Postgres with the TD-7 retry policy
   - ✓ Tests — all three purges run against the live worker and their effects verified

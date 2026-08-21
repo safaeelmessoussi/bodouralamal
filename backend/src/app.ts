@@ -36,6 +36,7 @@ import * as profile from './controllers/profile.controller.js';
 import { createRegistration } from './controllers/registration.controller.js';
 import { healthController } from './controllers/health.controller.js';
 import type { PrismaClient } from './generated/prisma/client.js';
+import type { JobRunnerReadiness } from './jobs/readiness.js';
 import { verifyAccessToken } from './lib/access-token.js';
 import type { AppConfig } from './lib/config.js';
 import { AppError } from './lib/errors.js';
@@ -159,7 +160,11 @@ function meController(prisma: PrismaClient, config: AppConfig) {
   };
 }
 
-export function createApp(prisma: PrismaClient, config: AppConfig): Express {
+export function createApp(
+  prisma: PrismaClient,
+  config: AppConfig,
+  jobReadiness: Pick<JobRunnerReadiness, 'snapshot'>,
+): Express {
   const app = express();
 
   // Nginx terminates TLS and is the only thing in front of us (§3.1).
@@ -185,7 +190,7 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
   app.use(express.json({ limit: '2mb' }));
 
   // TD-14: public and unauthenticated, served at the origin root (§19.1 step 8).
-  app.get('/healthz', healthController(prisma, config));
+  app.get('/healthz', healthController(prisma, config, jobReadiness));
 
   // R98 — `null` when the association runs no online classes, which is a
   // complete configuration; the join route then answers `503` naming the

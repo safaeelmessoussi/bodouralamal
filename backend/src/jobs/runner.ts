@@ -1,4 +1,4 @@
-import { PgBoss } from 'pg-boss';
+import { PgBoss, type WorkHandler } from 'pg-boss';
 
 import type { PrismaClient } from '../generated/prisma/client.js';
 import type { AppConfig } from '../lib/config.js';
@@ -7,6 +7,7 @@ import { deleteExpired as deleteExpiredRefreshTokens } from '../repositories/ref
 import { createStorageClients } from '../lib/storage.js';
 import { runMaterialization } from '../services/session-materialize.service.js';
 import { ingestRecording } from '../services/session-recording-ingest.service.js';
+import { JobRunnerReadiness } from './readiness.js';
 
 /**
  * pg-boss bootstrap and job runner (SRS TD-7, §3.1, §20 rule 1).
@@ -17,9 +18,9 @@ import { ingestRecording } from '../services/session-recording-ingest.service.js
  * Quran coverage recalculation must never be moved *into* a job, because §4.5
  * makes it synchronous by rule.
  *
- * Cron jobs implemented here are the three daily purges. The event-driven jobs
- * (`consent.reevaluate`, `content.bucket-migrate`) arrive with M6, and
- * `backup.replicate` with M7.
+ * This runner registers only handlers that exist below. Queues required by the
+ * SRS but not implemented yet remain release-readiness gaps; runtime health
+ * must not pretend that a missing implementation was started.
  */
 
 /** TD-7 job names. Registering a queue not in the catalog is a defect. */
@@ -96,11 +97,104 @@ const PG_BOSS_MAX_CONNECTIONS = 5;
  */
 const TD7_RETRY_POLICY = { retryLimit: 5, retryBackoff: true } as const;
 
+interface WorkerDefinition {
+  readonly name: string;
+  readonly handler: WorkHandler<object, void>;
+}
+
 export function createBoss(config: AppConfig): PgBoss {
   return new PgBoss({
     connectionString: config.DATABASE_URL,
     max: PG_BOSS_MAX_CONNECTIONS,
   });
+}
+
+/**
+ * The single catalog of workers this implementation actually starts.
+ * `startJobRunner` registers this list and readiness derives its expectations
+ * from the same list, so health cannot drift onto a second set of queue names.
+ */
+function createWorkerCatalog(
+  prisma: PrismaClient,
+  storage: ReturnType<typeof createStorageClients>,
+  log: (queue: string, detail: Record<string, unknown>) => void,
+): readonly WorkerDefinition[] {
+  return [
+    {
+      // token.purge (TD-7): ConsumedToken past its TTL horizon, and
+      // RefreshToken past expires_at (Revision 16). Fail-closed: a presented
+      // token with no row is rejected exactly as an expired one is.
+      name: QUEUES.tokenPurge,
+      handler: async () => {
+        const consumed = await prisma.consumedToken.deleteMany({
+          where: { expiresAt: { lte: new Date() } },
+        });
+        const refresh = await deleteExpiredRefreshTokens(prisma, new Date());
+        log(QUEUES.tokenPurge, {
+          consumed_tokens: consumed.count,
+          refresh_tokens: refresh,
+        });
+      },
+    },
+    {
+      // ratelimit.purge (TD-7, Revision 14): elapsed quota windows.
+      // Housekeeping only; the synchronous quota decision never depends on it.
+      name: QUEUES.rateLimitPurge,
+      handler: async () => {
+        const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+        const deleted = await prisma.rateLimitCounter.deleteMany({
+          where: { windowStart: { lt: cutoff } },
+        });
+        log(QUEUES.rateLimitPurge, { counters: deleted.count });
+      },
+    },
+    {
+      // audit.purge (TD-7, Revision 19): both the authentication-action
+      // allowlist and the age horizon are enforced by the repository.
+      name: QUEUES.auditPurge,
+      handler: async () => {
+        const deleted = await purgeExpiredAuthRows(prisma, new Date());
+        log(QUEUES.auditPurge, { audit_rows: deleted });
+      },
+    },
+    {
+      // Nightly rolling-horizon extension. An empty payload sweeps every active
+      // schedule; per-schedule reconciliation uses the same handler.
+      name: QUEUES.sessionMaterialize,
+      handler: async ([job]) => {
+        const payload = (job?.data ?? {}) as { schedule_id?: string };
+        const results = await runMaterialization(prisma, payload);
+        log(QUEUES.sessionMaterialize, {
+          schedules: results.length,
+          created: results.reduce((n, result) => n + result.created, 0),
+          left_alone: results.reduce(
+            (n, result) => n + result.protectedSessions.length,
+            0,
+          ),
+        });
+      },
+    },
+    {
+      // Event-driven R100 ingestion. Failure is re-thrown by the service path
+      // so pg-boss applies TD-7 retry/backoff instead of losing the recording.
+      name: QUEUES.sessionRecordingIngest,
+      handler: async ([job]) => {
+        const payload = (job?.data ?? {}) as { recording_id?: string };
+        if (!payload.recording_id) return;
+        const outcome = await ingestRecording(
+          prisma,
+          storage,
+          payload.recording_id,
+        );
+        log(QUEUES.sessionRecordingIngest, {
+          recording_id: outcome.recordingId,
+          educational_content_id: outcome.contentId,
+          already_ingested: outcome.alreadyIngested,
+          staging_cleaned: outcome.stagingCleaned ?? null,
+        });
+      },
+    },
+  ];
 }
 
 /**
@@ -112,104 +206,51 @@ export async function startJobRunner(
   boss: PgBoss,
   prisma: PrismaClient,
   config: AppConfig,
+  readiness: JobRunnerReadiness,
 ): Promise<void> {
-  await boss.start();
+  try {
+    // R100's worker needs object storage. It owns its clients rather than
+    // coupling the HTTP app and worker boot sequences to share an idle client.
+    const storage = createStorageClients(config);
+    const log = (queue: string, detail: Record<string, unknown>): void => {
+      process.stdout.write(
+        `${JSON.stringify({ time: new Date().toISOString(), level: 'info', job: queue, ...detail })}\n`,
+      );
+    };
+    const workers = createWorkerCatalog(prisma, storage, log);
 
-  // R99 C2's worker needs object storage. Its own clients rather than the app's:
-  // `createApp` builds them for the request path, and threading one instance
-  // through two unrelated boot sequences to save an idle HTTP client would
-  // couple them for nothing.
-  const storage = createStorageClients(config);
+    readiness.starting(workers.map((worker) => worker.name));
+    await boss.start();
 
-  const log = (queue: string, detail: Record<string, unknown>): void => {
-    process.stdout.write(
-      `${JSON.stringify({ time: new Date().toISOString(), level: 'info', job: queue, ...detail })}\n`,
-    );
-  };
+    for (const queue of Object.values(QUEUES)) {
+      await boss.createQueue(queue, TD7_RETRY_POLICY);
+    }
 
-  for (const queue of Object.values(QUEUES)) {
-    await boss.createQueue(queue, TD7_RETRY_POLICY);
+    for (const worker of workers) {
+      await boss.work(worker.name, worker.handler);
+      readiness.workerRegistered(worker.name);
+    }
+
+    await boss.schedule(QUEUES.sessionMaterialize, DAILY_AT_0330);
+    await boss.schedule(QUEUES.tokenPurge, DAILY_AT_0330);
+    await boss.schedule(QUEUES.rateLimitPurge, DAILY_AT_0330);
+    await boss.schedule(QUEUES.auditPurge, DAILY_AT_0330);
+    readiness.ready();
+  } catch (error) {
+    readiness.failed();
+    throw error;
   }
-
-  // ── token.purge (TD-7): ConsumedToken past its TTL horizon, and RefreshToken
-  // past expires_at (Revision 16). Fail-closed: a presented token with no row
-  // is rejected exactly as an expired one is, so collecting rows can never
-  // widen access.
-  await boss.work(QUEUES.tokenPurge, async () => {
-    const consumed = await prisma.consumedToken.deleteMany({
-      where: { expiresAt: { lte: new Date() } },
-    });
-    const refresh = await deleteExpiredRefreshTokens(prisma, new Date());
-    log(QUEUES.tokenPurge, { consumed_tokens: consumed.count, refresh_tokens: refresh });
-  });
-
-  // ── ratelimit.purge (TD-7, Revision 14): elapsed quota windows. Housekeeping
-  // only — the quota decision itself is synchronous and never depends on this.
-  await boss.work(QUEUES.rateLimitPurge, async () => {
-    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const deleted = await prisma.rateLimitCounter.deleteMany({
-      where: { windowStart: { lt: cutoff } },
-    });
-    log(QUEUES.rateLimitPurge, { counters: deleted.count });
-  });
-
-  // ── audit.purge (TD-7, Revision 19): authentication-lifecycle rows past the
-  // 12-month horizon, selected by an ENUMERATED allowlist AND the age horizon.
-  // Never age alone, never an `auth.` prefix — every other action type,
-  // including the indefinitely-retained security events, must survive.
-  await boss.work(QUEUES.auditPurge, async () => {
-    const deleted = await purgeExpiredAuthRows(prisma, new Date());
-    log(QUEUES.auditPurge, { audit_rows: deleted });
-  });
-
-  // TD-7: the nightly horizon extension. No payload — an empty `schedule_id`
-  // sweeps every active schedule, which is what "rolling horizon" means.
-  await boss.work(QUEUES.sessionMaterialize, async ([job]) => {
-    const payload = (job?.data ?? {}) as { schedule_id?: string };
-    const results = await runMaterialization(prisma, payload);
-    log(QUEUES.sessionMaterialize, {
-      schedules: results.length,
-      created: results.reduce((n, r) => n + r.created, 0),
-      // Reported, never silent: §4.4 makes "what did this leave alone" part of
-      // the behaviour rather than a detail.
-      left_alone: results.reduce((n, r) => n + r.protectedSessions.length, 0),
-    });
-  });
-
-  /**
-   * **R99 C2 — `session-recording-ingest`** (see the catalogue above).
-   *
-   * Event-driven, never scheduled: it runs because a provider reported a
-   * completion, and there is nothing to sweep on a cron.
-   *
-   * The failure is deliberately **re-thrown**. `ingestRecording` has already
-   * written why on the row — which is what a مؤطِّرة's «تعذّرت التهيئة» reads —
-   * and throwing is what makes pg-boss apply TD-7's exponential backoff, so a
-   * transient MinIO failure is retried and a genuinely bad staging object
-   * eventually dead-letters with an Admin-visible failure rather than being
-   * silently dropped.
-   */
-  await boss.work(QUEUES.sessionRecordingIngest, async ([job]) => {
-    const payload = (job?.data ?? {}) as { recording_id?: string };
-    if (!payload.recording_id) return;
-    const outcome = await ingestRecording(prisma, storage, payload.recording_id);
-    log(QUEUES.sessionRecordingIngest, {
-      recording_id: outcome.recordingId,
-      educational_content_id: outcome.contentId,
-      already_ingested: outcome.alreadyIngested,
-      // Reported rather than silent: a staging object that outlived a
-      // successful import is a sweep to retry, not a failed ingestion.
-      staging_cleaned: outcome.stagingCleaned ?? null,
-    });
-  });
-
-  await boss.schedule(QUEUES.sessionMaterialize, DAILY_AT_0330);
-  await boss.schedule(QUEUES.tokenPurge, DAILY_AT_0330);
-  await boss.schedule(QUEUES.rateLimitPurge, DAILY_AT_0330);
-  await boss.schedule(QUEUES.auditPurge, DAILY_AT_0330);
 }
 
-export async function stopJobRunner(boss: PgBoss): Promise<void> {
+export async function stopJobRunner(
+  boss: PgBoss,
+  readiness: JobRunnerReadiness,
+): Promise<void> {
   // Let in-flight handlers finish rather than severing them mid-transaction.
-  await boss.stop({ graceful: true });
+  readiness.stopping();
+  try {
+    await boss.stop({ graceful: true });
+  } finally {
+    readiness.stopped();
+  }
 }
