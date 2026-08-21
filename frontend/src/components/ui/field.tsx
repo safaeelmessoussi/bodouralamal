@@ -106,6 +106,61 @@ export function TextField({
   );
 }
 
+/**
+ * **A single boolean the person states about what they are entering** — the
+ * checkbox as an atomic field (rule C), so a screen that needs one stops
+ * hand-writing `<label className="field field--choice"><input type="checkbox">`.
+ * That markup existed in three places before this component and is exactly what
+ * the rule is about; the class it uses is the platform's own and is unchanged.
+ *
+ * The label WRAPS the control rather than pointing at it with `htmlFor`, which
+ * is why this does not reuse `FieldShell`: a checkbox's label sits beside the box
+ * and reads as one target, where every other field's label sits above its
+ * control. Forcing it through the shell would produce a label on its own line
+ * above a lone box — the same markup, worse to use.
+ *
+ * The hint is `aria-describedby`-linked for the same reason `FieldShell` links
+ * its own: a hint a screen reader never reaches is decoration.
+ */
+export function CheckboxField({
+  label,
+  checked,
+  onChange,
+  hint = null,
+  disabled = false,
+}: {
+  label: string;
+  checked: boolean;
+  onChange: (checked: boolean) => void;
+  hint?: string | null;
+  disabled?: boolean;
+}): ReactNode {
+  const id = useId();
+  const hintId = `${id}-hint`;
+  return (
+    <>
+      <label className="field field--choice" htmlFor={id}>
+        <input
+          id={id}
+          type="checkbox"
+          checked={checked}
+          disabled={disabled}
+          aria-describedby={hint ? hintId : undefined}
+          onChange={(e) => {
+            onChange(e.target.checked);
+          }}
+        />
+        <span>{label}</span>
+      </label>
+      {hint ? (
+        <p className="field__hint" id={hintId}>
+          {hint}
+        </p>
+      ) : null}
+    </>
+  );
+}
+
 /** Multiline free text. Used for anything **displayed verbatim and never
  *  parsed** — opening hours being the platform's example (§7). */
 export function TextArea({ rows = 4, ...props }: BaseProps & { rows?: number }): ReactNode {

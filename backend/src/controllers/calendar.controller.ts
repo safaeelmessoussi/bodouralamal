@@ -206,6 +206,9 @@ export function readSession(prisma: PrismaClient) {
       notes: page.notes,
       recordings: page.recordings.map(contentDto),
       linked_content: page.linkedContent.map(contentDto),
+      /** R75.6, server-owned since R99 — the browser recorder shows it,
+       *  editable, and composes nothing itself. */
+      suggested_recording_name: page.suggestedRecordingName,
     });
   };
 }

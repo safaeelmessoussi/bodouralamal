@@ -290,10 +290,18 @@ export interface SessionPage {
    * gap stays visible rather than silent.
    */
   notes: string | null;
-  /** §4.9 recording resources — the audio items among the linked content. */
+  /**
+   * **«التسجيلات» — decided by the item's ORIGIN, not by its MIME type**
+   * (R99.10). An ordinary uploaded audio file is a material; an OGG or MP4
+   * produced by recording a class is a recording, and the MIME type decides only
+   * how it plays.
+   */
   recordings: SessionContentRef[];
   /** The materials — disjoint from `recordings`. */
   linked_content: SessionContentRef[];
+  /** R75.6, server-owned since R99 — what to call the next recording of this
+   *  occurrence. A suggestion, editable, and nothing reads it back. */
+  suggested_recording_name: string;
 }
 
 /**

@@ -1,5 +1,6 @@
 import { Prisma, type PrismaClient } from '../generated/prisma/client.js';
 import { page, pageWindow, type Page, type PageParams } from '../lib/pagination.js';
+import { localDateIso, nextRecordingName } from '../lib/recording-name.js';
 import * as scope from '../policies/branch-scope.js';
 
 /**
@@ -250,7 +251,7 @@ export async function listLibrary(
   prisma: PrismaClient,
   actor: LibraryActor | null,
   filters: LibraryFilters,
-): Promise<Page<LibraryItem>> {
+): Promise<Page<LibraryItem> & { suggestedRecordingName: string | null }> {
   const privateLevels =
     actor !== null && actor.accountStatus === 'active' && !isStaff(actor)
       ? await privateLevelIds(prisma, actor)
@@ -330,7 +331,53 @@ export async function listLibrary(
       SELECT COUNT(*)::bigint AS "total" FROM "educational_content" c ${where}`,
   ]);
 
-  return page(rows, window, Number(counted[0]?.total ?? 0));
+  return {
+    ...page(rows, window, Number(counted[0]?.total ?? 0)),
+    suggestedRecordingName: await suggestLibraryRecordingName(prisma, filters, rows),
+  };
+}
+
+/**
+ * **What to call a recording made from the library screen** (R75.6, server-owned
+ * since R99).
+ *
+ * There is no occurrence here, so R75.6's *title · description · date* does not
+ * apply — that rule is about a class, and this screen has none. What it does
+ * have is the scope the recording lands in, so the **Subject in view and the
+ * association's own date** are the two facts that identify it a year later.
+ *
+ * **The suffix rule is the shared one**, from `lib/recording-name.ts`, and that
+ * is the whole reason this lives on the server at all: it was a second copy of
+ * the numbering algorithm in the browser, and a rule with two implementations is
+ * a rule that will drift the first time either side changes.
+ *
+ * `null` when no Subject is in view — a name of nothing but a date identifies
+ * nothing, and the field is editable anyway.
+ */
+async function suggestLibraryRecordingName(
+  prisma: PrismaClient,
+  filters: LibraryFilters,
+  rows: readonly LibraryItem[],
+): Promise<string | null> {
+  if (!filters.subjectId) return null;
+  // Usually free — the page's own rows already carry the name. The lookup is
+  // for the case that matters most: an empty shelf, where the first recording
+  // is the one about to be made.
+  const subjectName =
+    rows.find((r) => r.subjectId === filters.subjectId)?.subjectName ??
+    (
+      await prisma.subject.findFirst({
+        where: { id: filters.subjectId, deletedAt: null },
+        select: { name: true },
+      })
+    )?.name;
+  if (!subjectName) return null;
+
+  const base = [subjectName, localDateIso()].join(' — ');
+  // Numbered against what this page shows, which is what the browser numbered
+  // against before the rule moved: the library namespace is a shelf a person is
+  // looking at, not a Session's link set.
+  return nextRecordingName(base, rows.map((r) => r.title));
 }
 
 /**

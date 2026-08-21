@@ -27,6 +27,15 @@ export interface UploadMeta {
    *  may choose, never a stand-in for "not set". */
   branch_id: string | null;
   visibility?: 'public' | 'private' | 'hidden';
+  /**
+   * **R99.12 — *this is a class recording*, stated at the boundary.**
+   *
+   * «التسجيلات» is decided by `origin` and no longer by the MIME type (R99.10),
+   * so a مؤطِّرة's phone recording has to be able to say what it is or it would
+   * arrive as a *material*. It states what the thing is and grants nothing:
+   * `video/*` is refused here whatever this says.
+   */
+  origin?: 'uploaded' | 'session_recording';
   /** R53: replaces the file on this record — a new key, the old object
    *  quarantined, the record and every link to it kept. */
   replaces_content_id?: string;

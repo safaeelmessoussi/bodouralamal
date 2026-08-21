@@ -109,6 +109,30 @@ describe('the uploader before anything is chosen', () => {
     );
     expect(html).toContain(t('content.upload.chooseScope'));
   });
+
+  /**
+   * **R99.12 — the boundary can say *this is a class recording*.**
+   *
+   * R99.10 makes «التسجيلات» a function of `origin` rather than of the MIME
+   * type, and §4.9's MVP flow is a مؤطِّرة recording on her phone and uploading
+   * the file. Without this control every phone recording uploaded after that
+   * revision would arrive as a *material*.
+   */
+  it('offers the class-recording marker, unchecked, beside the phone guidance', () => {
+    const html = renderToStaticMarkup(<FileUploader {...props} />);
+    expect(html).toContain(t('content.upload.isRecording'));
+    expect(html).toContain(t('content.upload.isRecordingHint'));
+    expect(html).toContain('type="checkbox"');
+    // Off by default: most uploads are materials, and defaulting it on would
+    // misclassify the common case instead of the rare one.
+    expect(html).not.toContain('checked=""');
+  });
+
+  it('uses the shared checkbox atom, not hand-written markup (rule C)', () => {
+    const html = renderToStaticMarkup(<FileUploader {...props} />);
+    // `CheckboxField` renders the platform's own `field field--choice` shape.
+    expect(html).toContain('field field--choice');
+  });
 });
 
 describe('the navigation registries agree with the routers', () => {

@@ -41,6 +41,15 @@ export function list(prisma: PrismaClient) {
       ...(filters.subject_id !== undefined ? { subjectId: filters.subject_id } : {}),
       ...pageParamsFrom(req.query),
     });
-    res.json(pageOf(result, libraryItemDto));
+    res.json({
+      ...pageOf(result, libraryItemDto),
+      /**
+       * **R75.6, server-owned since R99.** The browser recorder shows this,
+       * editable, instead of composing a name itself — the numbering rule now
+       * has exactly one implementation and both producers of a recording use
+       * it. `null` when no Subject is in view: there is nothing to name after.
+       */
+      suggested_recording_name: result.suggestedRecordingName,
+    });
   };
 }

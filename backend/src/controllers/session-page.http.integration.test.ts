@@ -32,7 +32,15 @@ const BASE = `${config.PUBLIC_BASE_URL}/api/v1`;
 const TAG = "[http-session-page-test]";
 const YEAR_LABEL = "2096-2097";
 
-const PAGE_KEYS = ["linked_content", "notes", "occurrence", "recordings"];
+const PAGE_KEYS = [
+  "linked_content",
+  "notes",
+  "occurrence",
+  "recordings",
+  // R99 — R75.6's default recording name, composed by the server so the browser
+  // recorder and the ingestion worker cannot number into two namespaces.
+  "suggested_recording_name",
+];
 const ITEM_KEYS = ["id", "level_id", "subject_id", "title"];
 
 interface Res {
@@ -84,12 +92,22 @@ const content = {
   privateAudio: "",
   publicAudio: "",
   hiddenPdf: "",
+  /** R99.10 — audio that is NOT a recording, and a recording that is NOT audio.
+   *  The two cases the superseded MIME rule got wrong. */
+  publicAudioMaterial: "",
+  publicVideoRecording: "",
 };
 
 async function makeContent(
   label: string,
   visibility: "public" | "private" | "hidden",
   mimeType: string,
+  /**
+   * **R99.10 — what the item IS.** «التسجيلات» is decided here and no longer by
+   * the MIME type: an ordinary uploaded audio file is a material, and an OGG or
+   * MP4 produced by recording a class is a recording.
+   */
+  origin: "uploaded" | "session_recording" = "uploaded",
 ): Promise<string> {
   const row = await prisma.educationalContent.create({
     data: {
@@ -104,6 +122,7 @@ async function makeContent(
       originalFilename: `${label}`,
       mimeType,
       sizeBytes: BigInt(512),
+      origin: origin as never,
     },
     select: { id: true },
   });
@@ -259,9 +278,35 @@ beforeAll(async () => {
     "تسجيل-خاص",
     "private",
     "audio/mpeg",
+    "session_recording",
   );
-  content.publicAudio = await makeContent("تسجيل-عام", "public", "audio/mpeg");
+  content.publicAudio = await makeContent(
+    "تسجيل-عام",
+    "public",
+    "audio/mpeg",
+    "session_recording",
+  );
   content.hiddenPdf = await makeContent("مخفي", "hidden", "application/pdf");
+  /**
+   * **The two rows that make R99.10 provable rather than asserted.**
+   *
+   * The old rule was *audio ⇒ recording*, so it could not tell these apart: an
+   * audio file somebody attached as listening material was called a recording,
+   * and a video recording of a class was unrepresentable. Both now sit on this
+   * session and each must land on the opposite side of the split from where the
+   * MIME type would have put it.
+   */
+  content.publicAudioMaterial = await makeContent(
+    "مادة-صوتية",
+    "public",
+    "audio/mpeg",
+  );
+  content.publicVideoRecording = await makeContent(
+    "تسجيل-مرئي",
+    "public",
+    "video/mp4",
+    "session_recording",
+  );
   for (const id of Object.values(content)) {
     await prisma.sessionContent.create({ data: { sessionId, contentId: id } });
   }
@@ -340,10 +385,16 @@ describe("the page is public, at the caller’s tier (§5.2)", () => {
 });
 
 describe("recordings and linked_content are disjoint", () => {
-  it("splits on the file being audio, and never lists an item twice", async () => {
-    // §4.9: teachers upload phone recordings and video is excluded entirely, so
-    // "is this a recording" is a fact about the file rather than a second
-    // column that has to be kept in step with reality.
+  /**
+   * **The property is the split, and it survives R99 — the INPUT changed.**
+   *
+   * This assertion used to read *splits on the file being audio*. R99.10
+   * supersedes that: «التسجيلات» is a Session's linked contents with
+   * `origin = session_recording`, and the MIME type decides only which player
+   * the reader gets. The guard is restated on the new input rather than deleted,
+   * because disjointness was never the thing that changed.
+   */
+  it("splits on the item's ORIGIN, and never lists an item twice", async () => {
     const res = await call(`/calendar/sessions/${sessionId}`, studentToken);
     const rec = ids(res.body.recordings);
     const linked = ids(res.body.linked_content);
@@ -352,6 +403,44 @@ describe("recordings and linked_content are disjoint", () => {
     expect(linked.length).toBeGreaterThan(0);
     expect(rec.filter((id) => linked.includes(id))).toEqual([]);
     expect(linked).not.toContain(content.publicAudio);
+  });
+
+  it("an ordinary uploaded AUDIO file is a material, not a recording", async () => {
+    // The half of the old rule that was wrong in one direction: it called every
+    // attached audio file a recording whether or not it was one.
+    const res = await call(`/calendar/sessions/${sessionId}`, studentToken);
+    expect(ids(res.body.linked_content)).toContain(content.publicAudioMaterial);
+    expect(ids(res.body.recordings)).not.toContain(content.publicAudioMaterial);
+  });
+
+  it("a VIDEO session recording is a recording, which the old rule could not represent", async () => {
+    // The other half: `video/mp4` begins with neither `audio/` nor anything the
+    // superseded rule could classify, so a recorded صوت وصورة class would have
+    // appeared under «المواد المرفقة» — as material.
+    const res = await call(`/calendar/sessions/${sessionId}`, studentToken);
+    expect(ids(res.body.recordings)).toContain(content.publicVideoRecording);
+    expect(ids(res.body.linked_content)).not.toContain(
+      content.publicVideoRecording,
+    );
+  });
+
+  it("suggests R75.6's default recording name, numbered in ONE namespace", async () => {
+    // The rule moved from the browser to the server (R99): the name is composed
+    // from the occurrence and numbered against everything already linked to it,
+    // whatever produced those items.
+    const res = await call(`/calendar/sessions/${sessionId}`, studentToken);
+    const suggested = res.body["suggested_recording_name"];
+    expect(typeof suggested).toBe("string");
+    const titles = [
+      ...res.body.recordings!,
+      ...res.body.linked_content!,
+    ].map((c) => c["title"]);
+    expect(titles).not.toContain(suggested);
+    // Composed from the occurrence, not invented: the class's own name and the
+    // date of this occurrence are both in it.
+    expect(String(suggested)).toContain(
+      String(res.body.occurrence!["date"]),
+    );
   });
 
   it("each item carries exactly the four fields TD-3.4 names", async () => {

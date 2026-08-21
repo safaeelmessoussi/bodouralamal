@@ -3,7 +3,6 @@ import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import { uploadFile, type UploadMeta } from '../../adapters/uploads.js';
 import { t } from '../../i18n/index.js';
 import {
-  defaultRecordingName,
   elapsedSeconds,
   extensionFor,
   formatElapsed,
@@ -57,19 +56,19 @@ export interface AudioRecorderProps {
   meta: UploadMeta;
   token: string | null;
   /**
-   * **The name to suggest, already composed by the caller.**
+   * **The name to suggest, already decided by the SERVER** (R75.6, R99).
    *
    * The recorder is reachable from two places with different notions of what a
    * recording is *of* — a class occurrence on الجدولة, a Subject-and-year scope
-   * in مكتبة المحتوى — so composing the name here would mean teaching this
-   * component about both. R75.6's session rule lives in `recordingBaseName`,
-   * beside the screen that has a session; the library composes its own. The
-   * suffix rule below is shared, because *that* part is the same everywhere.
+   * in مكتبة المحتوى — and since R99 there is a **third** producer that is not a
+   * browser at all. So neither this component nor its callers compose a name:
+   * each surface receives `suggested_recording_name` from the endpoint it
+   * already loads, and the numbering rule has one implementation.
+   *
+   * It remains a **suggestion**: it fills the field, the person may replace it,
+   * and nothing reads it back.
    */
-  baseName: string;
-  /** The titles already linked to this session — the suffix is chosen from
-   *  these, so two concurrent saves cannot land on the same name (R75.6). */
-  existingTitles: readonly string[];
+  suggestedName: string;
   onSaved: (contentId: string) => void;
   onCancel: () => void;
 }
@@ -79,8 +78,7 @@ type RecorderState = 'idle' | 'recording' | 'paused' | 'saving';
 export function AudioRecorder({
   meta,
   token,
-  baseName,
-  existingTitles,
+  suggestedName,
   onSaved,
   onCancel,
 }: AudioRecorderProps): ReactNode {
@@ -200,8 +198,11 @@ export function AudioRecorder({
     if (blob === null) return;
     setState('saving');
     setError(null);
-    const name =
-      title.trim() === '' ? defaultRecordingName(baseName, existingTitles) : title.trim();
+    // The typed name wins; the server's suggestion fills an untouched field.
+    // Neither can be empty in practice — a screen that cannot name a recording
+    // does not offer the recorder — and an empty one would be refused by the
+    // upload schema anyway, which is the right place for that rule.
+    const name = title.trim() === '' ? suggestedName.trim() : title.trim();
     // The extension follows the MIME the browser agreed to: the server checks
     // the declared type AND the magic bytes (TD-9), so a mismatched name is
     // rejected at `complete`, after the whole upload has been spent.
@@ -211,7 +212,11 @@ export function AudioRecorder({
     try {
       const contentId = await uploadFile(
         file,
-        meta,
+        // **R99.12 — what this IS.** Every path through this component is a
+        // recording of a class (R75.1); the screen it was opened from decides
+        // only which class, never whether it is one. Leaving it to the caller
+        // would make the classification a prop two screens could disagree about.
+        { ...meta, origin: 'session_recording' },
         { title: name, description: null },
         token,
         setPercent,
@@ -320,7 +325,7 @@ export function AudioRecorder({
             label={t('recorder.name')}
             value={title}
             onChange={setTitle}
-            placeholder={defaultRecordingName(baseName, existingTitles)}
+            placeholder={suggestedName}
             hint={t('recorder.nameHint')}
           />
           {state === 'saving' ? (

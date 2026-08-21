@@ -1,5 +1,13 @@
-import type { Prisma, PrismaClient } from "../generated/prisma/client.js";
+import type {
+  ContentOrigin,
+  Prisma,
+  PrismaClient,
+} from "../generated/prisma/client.js";
 import { AppError } from "../lib/errors.js";
+import {
+  nextRecordingName,
+  recordingBaseName,
+} from "../lib/recording-name.js";
 import { publicDisplayName } from "../lib/display-name.js";
 import { baseHijri, sortMonthStarts, type MonthStart } from "../lib/hijri.js";
 import * as scope from "../policies/branch-scope.js";
@@ -1068,6 +1076,9 @@ export interface SessionPageContent {
   subjectId: string;
   levelId: string;
   mimeType: string;
+  /** R99.10 — what this item IS. «التسجيلات» is decided here; the MIME type
+   *  decides only how it plays. */
+  origin: ContentOrigin;
 }
 
 export interface SessionPage {
@@ -1094,6 +1105,19 @@ export interface SessionPage {
   /** The linked materials — the linked content that is not a recording, so the
    *  two lists are disjoint and each answers a different question. */
   linkedContent: SessionPageContent[];
+  /**
+   * **What to call the next recording of this occurrence** (R75.6, server-owned
+   * since R99).
+   *
+   * The browser recorder shows it, editable, before saving; the ingestion worker
+   * allocates the same rule under a row lock. It is a **suggestion and never an
+   * invariant** — nothing reads it back — which is why it is computed from the
+   * titles this caller can actually see rather than from the whole namespace: a
+   * number derived from an item the caller may not see would report that the
+   * item exists (§20 rule 17), and the worker's own allocation is what makes the
+   * unattended path collision-free.
+   */
+  suggestedRecordingName: string;
 }
 
 /**
@@ -1206,6 +1230,7 @@ export async function readSessionPage(
           subjectId: true,
           levelId: true,
           mimeType: true,
+          origin: true,
         },
       },
     },
@@ -1225,14 +1250,35 @@ export async function readSessionPage(
       subjectId: c.subjectId,
       levelId: c.levelId,
       mimeType: c.mimeType,
+      origin: c.origin,
     }));
 
+  const occurrence = sessionOccurrence(session, monthStarts);
+
   return {
-    occurrence: sessionOccurrence(session, monthStarts),
+    occurrence,
     notes: null,
-    // §4.9: teachers upload phone recordings, and video is excluded entirely, so
-    // "is this a recording" is exactly "is this audio".
-    recordings: items.filter((c) => c.mimeType.startsWith("audio/")),
-    linkedContent: items.filter((c) => !c.mimeType.startsWith("audio/")),
+    /**
+     * **«التسجيلات» is decided by the ORIGIN MARKER, never by the MIME type**
+     * (R99.10).
+     *
+     * The rule this replaces — *linked content whose MIME begins `audio/` is a
+     * recording* — called every attached audio file a recording whether or not
+     * it was one, and made a video recording unrepresentable. `origin` is a fact
+     * about the association's own world: an ordinary uploaded audio file is a
+     * material, an OGG or MP4 produced by recording a class is a recording, and
+     * the MIME type now decides only which player and which download the reader
+     * gets.
+     */
+    recordings: items.filter((c) => c.origin === "session_recording"),
+    linkedContent: items.filter((c) => c.origin !== "session_recording"),
+    suggestedRecordingName: nextRecordingName(
+      recordingBaseName({
+        title: occurrence.title,
+        description: occurrence.description,
+        date: occurrence.date,
+      }),
+      items.map((c) => c.title),
+    ),
   };
 }

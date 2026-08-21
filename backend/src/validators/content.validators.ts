@@ -37,6 +37,22 @@ export const initiateUploadSchema = z
         academic_year_id: uuid,
         branch_id: uuid.nullable(),
         visibility: z.enum(['public', 'private', 'hidden']).optional(),
+        /**
+         * **R99.12 — the upload boundary must be able to say *this is a class
+         * recording*.**
+         *
+         * R99.10 makes «التسجيلات» a function of `origin` rather than of the
+         * MIME type. §4.9's MVP flow is a مؤطِّرة recording on her phone and
+         * uploading the file, so without this field every such recording would
+         * become a *material* the day origin-based classification shipped — a
+         * regression dressed as a refinement.
+         *
+         * It states what the thing IS; it grants nothing. **`video/*` is still
+         * refused here whatever this says** — TD-9's video row is reachable only
+         * by the platform's own ingestion pipeline (R99.8), and the whitelist
+         * check does not consult this field.
+         */
+        origin: z.enum(['uploaded', 'session_recording']).optional(),
         /** TD-9 replacement: a new key for an existing record, never an overwrite. */
         replaces_content_id: uuid.optional(),
       })

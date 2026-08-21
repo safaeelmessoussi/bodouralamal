@@ -4,7 +4,7 @@ import { uploadFile, type UploadMeta, type UploadStage } from '../../adapters/up
 import { t } from '../../i18n/index.js';
 import { ApiError } from '../../lib/api.js';
 import { Button } from '../ui/button.js';
-import { TextArea, TextField } from '../ui/field.js';
+import { CheckboxField, TextArea, TextField } from '../ui/field.js';
 import { Feedback } from '../ui/feedback.js';
 
 /**
@@ -70,6 +70,19 @@ export function FileUploader({
   const [file, setFile] = useState<File | null>(null);
   const [title, setTitle] = useState(initialTitle);
   const [description, setDescription] = useState(initialDescription);
+  /**
+   * **R99.12 — the upload boundary must be able to say *this is a class
+   * recording*.**
+   *
+   * §4.9's MVP flow is a مؤطِّرة recording on her phone and uploading the file,
+   * and since R99.10 «التسجيلات» is decided by `origin` rather than by the MIME
+   * type. Without this control every phone recording uploaded after that
+   * revision would arrive as a *material* — a regression dressed as a
+   * refinement. It defaults to off: most uploads are materials, and a marker
+   * that defaults to on would misclassify the common case instead of the rare
+   * one.
+   */
+  const [isRecording, setIsRecording] = useState(false);
   const [stage, setStage] = useState<UploadStage>('idle');
   const [percent, setPercent] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -95,7 +108,7 @@ export function FileUploader({
     try {
       const id = await uploadFile(
         file,
-        meta,
+        { ...meta, ...(isRecording ? { origin: 'session_recording' as const } : {}) },
         { title: title.trim(), description: description.trim() || null },
         token,
         setPercent,
@@ -135,6 +148,17 @@ export function FileUploader({
       {/* §4.9: teachers record on their phone and upload the file — the in-app
           recorder is post-MVP, so the guidance is part of the screen. */}
       <p className="muted">{t('content.upload.recordingGuidance')}</p>
+
+      {/* R99.12 — beside that guidance on purpose: the sentence tells a مؤطِّرة
+          to upload what she recorded on her phone, and this is where she says
+          that is what it is. */}
+      <CheckboxField
+        label={t('content.upload.isRecording')}
+        checked={isRecording}
+        onChange={setIsRecording}
+        hint={t('content.upload.isRecordingHint')}
+        disabled={busy}
+      />
 
       <TextField
         label={t('content.upload.title')}

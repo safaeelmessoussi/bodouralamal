@@ -61,6 +61,16 @@ export interface UploadTicketClaims {
   /** `null` is the Global scope (§4.9), which is a value, not an absence. */
   branch_id: string | null;
   visibility: string;
+  /**
+   * **R99.12 — what the uploaded thing IS**, `uploaded` or `session_recording`.
+   *
+   * Bound here rather than accepted at `/complete` for the same reason the scope
+   * fields are: «التسجيلات» is decided by this value (R99.10), so a client that
+   * could restate it at phase two would be classifying content after the
+   * authorization decision was taken. Optional in the type only so a ticket
+   * minted before this revision still verifies; absent means `uploaded`.
+   */
+  origin?: 'uploaded' | 'session_recording';
   /** Set when this upload replaces the file on an existing content record
    *  (TD-9: a new key, the old object quarantined, never an overwrite). */
   replaces?: string;

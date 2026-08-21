@@ -293,6 +293,36 @@ async function uploadPdf(
   return { ...created, initiated, bytes };
 }
 
+/**
+ * **R99.12 — the marker travels in the TICKET, not in the completion body.**
+ *
+ * «التسجيلات» is decided by `origin` (R99.10), so it is an authorization-shaped
+ * decision taken at `/initiate` and bound into the signed ticket — exactly like
+ * the scope fields, and for the same reason: a client that could restate it at
+ * `/complete` would classify content after the check that authorised it.
+ */
+describe("R99.12 — the origin marker", () => {
+  it("persists `session_recording` from initiate through to the row", async () => {
+    const { id } = await uploadPdf(admin(), "تسجيل مرفوع", {
+      origin: "session_recording",
+    });
+    const row = await prisma.educationalContent.findUniqueOrThrow({
+      where: { id },
+      select: { origin: true },
+    });
+    expect(row.origin).toBe("session_recording");
+  });
+
+  it("defaults to `uploaded`, which is what every pre-R99 row is", async () => {
+    const { id } = await uploadPdf(admin(), "مادة عادية");
+    const row = await prisma.educationalContent.findUniqueOrThrow({
+      where: { id },
+      select: { origin: true },
+    });
+    expect(row.origin).toBe("uploaded");
+  });
+});
+
 describe("the two-phase upload (TD-3.5)", () => {
   it("round-trips a real file through the presigned PUT and creates the content row", async () => {
     const { id, initiated, bytes } = await uploadPdf(admin(), "ملف");

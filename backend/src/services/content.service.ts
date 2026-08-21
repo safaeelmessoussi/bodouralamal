@@ -7,7 +7,7 @@ import {
   HeadObjectCommand,
 } from '@aws-sdk/client-s3';
 
-import type { Prisma, PrismaClient } from '../generated/prisma/client.js';
+import type { ContentOrigin, Prisma, PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
 import {
   buildStorageKey,
@@ -199,6 +199,9 @@ export interface InitiateInput {
     academicYearId: string;
     branchId: string | null;
     visibility?: string;
+    /** R99.12 — *this is a class recording*, stated at the boundary. Defaults to
+     *  `uploaded`, and never widens what may be uploaded. */
+    origin?: ContentOrigin;
     /** TD-9: replacing a file mints a NEW key and quarantines the old object. */
     replacesContentId?: string;
   };
@@ -306,6 +309,7 @@ export async function initiateUpload(
       academic_year_id: input.meta.academicYearId,
       branch_id: input.meta.branchId,
       visibility,
+      origin: input.meta.origin ?? 'uploaded',
       ...(input.meta.replacesContentId ? { replaces: input.meta.replacesContentId } : {}),
     },
     signingKey,
@@ -424,6 +428,14 @@ export async function completeUpload(
         originalFilename: claims.filename,
         mimeType: claims.mime,
         sizeBytes: BigInt(size),
+        /**
+         * **Bound into the ticket at `/initiate`, never re-stated at
+         * `/complete`** — the same rule the scope fields follow. `origin` is
+         * what «التسجيلات» is decided by (R99.10), so letting the completion
+         * body set it would make the classification a client's choice taken
+         * after the upload was authorised.
+         */
+        origin: claims.origin ?? 'uploaded',
       },
     });
     await audit.write(tx, {

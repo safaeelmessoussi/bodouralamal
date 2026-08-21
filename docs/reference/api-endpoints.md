@@ -65,7 +65,7 @@ Three anonymous endpoints, each a deliberate decision about what may be public.
 | | Path | Returns |
 |---|---|---|
 | `GET` | `/calendar` | Occurrences at the caller's visibility tier. **Self-sufficient** — opening an event costs no further request. **Uncached** |
-| `GET` | `/calendar/sessions/{id}` | The §5.2 **Session page**: `{ occurrence, notes, recordings, linked_content }`. Public at the caller's tier — a public session's details, never its private recordings |
+| `GET` | `/calendar/sessions/{id}` | The §5.2 **Session page**: `{ occurrence, notes, recordings, linked_content, suggested_recording_name }`. Public at the caller's tier — a public session's details, never its private recordings |
 | `GET` | `/calendar/bootstrap` | The calendar screen's reference data in one read. **Cached 5 min + strong ETag.** Reference data only — never operational data. `?category_id=` narrows **only** the Level list, server-side (§4.4); an unknown id yields an empty list rather than falling back to all |
 | `GET` | `/branches` | The landing-page branch directory: id, name, address, phone, email, opening hours, map link, display order. **Never** version, operational start date, or timestamps |
 
@@ -106,16 +106,35 @@ their own timetable while looking like it showed all of it. **Plural yields `nul
 
 ### The Session page
 
-`GET /calendar/sessions/{id}` returns `{ occurrence, notes, recordings, linked_content }`.
+`GET /calendar/sessions/{id}` returns
+`{ occurrence, notes, recordings, linked_content, suggested_recording_name }`.
 
 **The `occurrence` is byte-identical to the grid's.** TD-3.4 says *the occurrence above,
 plus …*, so one `include` and one mapper serve both — two that agree today are two that drift,
 and a test asserts they match field for field.
 
-**`recordings` and `linked_content` are disjoint, and the split is a fact about the file.**
-§4.9's recording resources are exactly the **audio** items among the linked content, since
-teachers upload phone recordings and video is excluded from the MVP entirely. Deriving it
-avoids a second column that would have to be kept in step with reality.
+**`recordings` and `linked_content` are disjoint, and the split is the item's `origin`**
+(R99.10). «التسجيلات» are the linked contents with `origin = session_recording`; everything
+else is a material, and **the MIME type decides only which player and which download the
+reader gets**.
+
+The rule this replaced — *linked content whose MIME begins `audio/` is a recording* — was
+wrong in both directions, and the two directions are why it had to go rather than be patched:
+it called **every attached audio file a recording** whether or not it was one, and it made a
+**video recording of a صوت وصورة class unrepresentable**. `origin` is a fact about the
+association's own world (§7, R99.9), so it survives replacing the media platform.
+
+**`suggested_recording_name` is R75.6's default name for the NEXT recording of this
+occurrence.** It is composed by the server from the class and this occurrence's date and
+numbered ` 2`, ` 3` against what is already linked — **whatever produced it**. That is the
+point: a مؤطِّرة's browser recording and the platform's own server-side capture of the same
+lesson are two recordings of one class, and numbering them in separate sequences would produce
+two files called the same thing.
+
+It is numbered against **the titles this caller can see**, not the whole namespace: a suffix
+derived from an item the caller may not see would report that the item exists (§20 rule 17).
+The unattended path does not depend on it — the ingestion worker allocates its own name under
+a row lock. This is a **suggestion and never an invariant**; nothing reads it back.
 
 **Both lists pass the same §4.9 tier rule the library applies** — literally the same predicate,
 exported rather than restated, so a change to the tiers cannot reach one surface without the
@@ -500,7 +519,7 @@ forbids inventing one.
 
 | | Path | Notes |
 |---|---|---|
-| `GET` | `/library` | 🌐 **Public and anonymous.** `?category_id=` `?level_id=` `?academic_year_id=` `?subject_id=` `?page=`. Paginated (TD-10) |
+| `GET` | `/library` | 🌐 **Public and anonymous.** `?category_id=` `?level_id=` `?academic_year_id=` `?subject_id=` `?page=`. Paginated (TD-10). Carries `suggested_recording_name` beside `data`/`meta` (R75.6, server-owned since R99) — `null` with no Subject in view |
 
 **Each item carries the §5.2 headings resolved server-side** — `category_id`/`category_name`,
 `level_name`, `subject_name`, `academic_year_label`, `branch_name`. That view groups
@@ -555,7 +574,7 @@ is a race, not a constraint.
 
 | | Path | Notes |
 |---|---|---|
-| `POST` | `/uploads/initiate` | Phase one. Returns `{ upload_id, key, put_url, expires_in }` |
+| `POST` | `/uploads/initiate` | Phase one. Returns `{ upload_id, key, put_url, expires_in }`. `content_meta.origin` (R99.12) states `uploaded` or `session_recording` — a description, never a permission |
 | `POST` | `/uploads/{upload_id}/complete` | Phase two. Body `{ title, description? }` only |
 | `POST` | `/uploads/{upload_id}/abort` | Best-effort; deletes the object |
 | `DELETE` | `/content/{id}` | R53. Soft delete + Trash snapshot + quarantine |

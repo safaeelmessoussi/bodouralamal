@@ -123,10 +123,14 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
     if (subjectId) params.set('subject_id', subjectId);
     if (academicYearId) params.set('academic_year_id', academicYearId);
     try {
-      const body = await api<{ data: LibraryRow[]; meta: { total: number } }>(
-        `/library?${params.toString()}`,
-        { token: accessToken },
-      );
+      const body = await api<{
+        data: LibraryRow[];
+        meta: { total: number };
+        /** R75.6, server-owned since R99 — what to call a recording made here.
+         *  `null` when no Subject is in view, which is also when the recorder is
+         *  not offered. */
+        suggested_recording_name: string | null;
+      }>(`/library?${params.toString()}`, { token: accessToken });
       // **Branch is filtered here and the rest server-side, because TD-3.13
       // publishes no `branch_id` filter.** Adding one to a public endpoint for a
       // back-office convenience would widen a public contract for an internal
@@ -140,6 +144,7 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
             );
       setRows(filtered);
       setTotal(body.meta.total);
+      setSuggestedName(body.suggested_recording_name ?? '');
       setStatus('ready');
     } catch {
       setStatus('error');
@@ -165,18 +170,18 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
   const [recordingOpen, setRecordingOpen] = useState(false);
 
   /**
-   * **What a library recording is named after.**
+   * **What a library recording is named after — decided by the server** (R75.6,
+   * moved there by R99).
    *
-   * There is no session here, so R75.6's *title · description · date* does not
-   * apply — that rule is about an occurrence, and this screen has none. What it
-   * does have is the scope the recording lands in, so the Subject in view and
-   * today's date are the two facts that identify it later. The ` 2` / ` 3`
-   * suffix rule is the shared one either way.
+   * There is no occurrence here, so R75.6's *title · description · date* does
+   * not apply — that rule is about a class, and this screen has none. What it
+   * does have is the scope the list is showing, so the server names it after the
+   * Subject in view and the association's own date, and numbers it with the same
+   * shared rule. It used to be composed here, which made the numbering algorithm
+   * exist twice; R99 added a producer that is not a browser at all, and a rule
+   * one producer cannot reach is a rule that drifts.
    */
-  const libraryRecordingName = useMemo(() => {
-    const subject = scope.options.subjectId.find((o) => o.value === scope.value.subjectId)?.label;
-    return [subject, new Date().toISOString().slice(0, 10)].filter(Boolean).join(' — ');
-  }, [scope.options.subjectId, scope.value.subjectId]);
+  const [suggestedName, setSuggestedName] = useState('');
 
   const meta = useMemo(
     () => ({
@@ -336,13 +341,7 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
           <AudioRecorder
             meta={meta}
             token={accessToken}
-            // Named from what the library actually knows: the Subject in scope
-            // and today's date. There is no session here, which is the point —
-            // R75.6's session rule belongs to the screen that has one.
-            baseName={libraryRecordingName}
-            // Numbered against what is on screen, so a second recording in the
-            // same scope cannot land on the first one's name.
-            existingTitles={rows.map((r) => r.title)}
+            suggestedName={suggestedName}
             onSaved={() => {
               setRecordingOpen(false);
               setNotice(t('content.uploaded'));

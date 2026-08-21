@@ -55,57 +55,21 @@ export function extensionFor(mimeType: string): string {
 }
 
 /**
- * **The base name a recording is derived from** (R75.6).
+ * **The recording's name is the SERVER's** (R75.6, moved by R99).
  *
- * The specification names three sources — *its title, its description and its
- * date* — and all three earn their place: the title says which class, the date
- * says which occurrence, and the description is where a teacher writes what
- * made this session different. A file called *تسجيل 4* answers none of those a
- * year later.
+ * `recordingBaseName` and `defaultRecordingName` used to live here. R99 gives
+ * the platform a **second** producer of recordings — its own server-side
+ * capture of an online class, ingested by a worker with no browser involved —
+ * and the two must number into **one namespace**, or a مؤطِّرة's browser
+ * recording and the platform's capture of the same lesson end up with the same
+ * name. A rule one of its producers cannot reach is a rule implemented twice.
  *
- * Absent parts are **omitted rather than left as empty separators**, and the
- * description is reduced to its first line and bounded: it is free multiline
- * text (§7), and a paragraph would produce a name no list can render.
+ * The algorithm is now `backend/src/lib/recording-name.ts`, and both surfaces
+ * receive a ready `suggested_recording_name` — the Session page for a class, the
+ * library list for a shelf. **The visible convention is unchanged**: the first is
+ * the bare base name, then ` 2`, ` 3`; it is still only a suggestion, still
+ * editable before saving, and still nothing reads it back.
  */
-export function recordingBaseName(session: {
-  title: string;
-  description: string | null;
-  date: string;
-}): string {
-  const firstLine = (session.description ?? '').split('\n')[0]?.trim() ?? '';
-  const note = firstLine.length > DESCRIPTION_LIMIT
-    ? `${firstLine.slice(0, DESCRIPTION_LIMIT).trimEnd()}…`
-    : firstLine;
-  return [session.title.trim(), note, session.date].filter((part) => part !== '').join(' — ');
-}
-
-/** Long enough to identify a session, short enough to read in a list. */
-const DESCRIPTION_LIMIT = 40;
-
-/**
- * **The default name for a recording** (R75.6).
- *
- * The first carries no number; the second and subsequent are suffixed ` 2`,
- * ` 3`, … — and the suffix is chosen from the recordings **already linked to
- * that session**, so two people saving at once cannot both land on the same
- * name.
- *
- * It is a **default and never an invariant**: nothing reads it back, and it is
- * edited through the ordinary content-edit flow. That is why this returns a
- * string rather than enforcing anything.
- */
-export function defaultRecordingName(base: string, existingTitles: readonly string[]): string {
-  const trimmed = base.trim() === '' ? 'تسجيل' : base.trim();
-  const taken = new Set(existingTitles.map((title) => title.trim()));
-  if (!taken.has(trimmed)) return trimmed;
-  // Starts at 2, because the unnumbered one IS the first. Bounded rather than
-  // unbounded: a session with a thousand recordings is a different problem.
-  for (let n = 2; n <= 999; n += 1) {
-    const candidate = `${trimmed} ${n}`;
-    if (!taken.has(candidate)) return candidate;
-  }
-  return `${trimmed} ${Date.now()}`;
-}
 
 /**
  * **How long has been recorded, from timestamps rather than from ticks.**

@@ -445,6 +445,32 @@ describe("the filter set is identical for everyone (§5.2)", () => {
     );
   });
 
+  /**
+   * **R75.6's naming rule is the SERVER's now** (R99).
+   *
+   * It was implemented in the browser, which was correct while a browser was the
+   * only thing that could produce a recording. R99 adds the platform's own
+   * server-side capture, ingested by a worker with no browser near it, so the
+   * rule moved to one place both producers can reach. The library screen has no
+   * occurrence — R75.6's *title · description · date* is about a class — so it is
+   * named after the Subject in view and the association's own date, numbered by
+   * the same shared rule.
+   */
+  it("suggests a recording name for the Subject in view, and null without one", async () => {
+    const withSubject = await call(
+      `${scoped}${academicYearId}&subject_id=${subjectId}`,
+    );
+    expect(typeof withSubject.body["suggested_recording_name"]).toBe("string");
+    expect(String(withSubject.body["suggested_recording_name"])).toContain(
+      `${TAG} مادة`,
+    );
+
+    // No Subject in view: a name of nothing but a date identifies nothing, and
+    // `null` says *there is nothing to suggest* rather than suggesting badly.
+    const withoutSubject = await call(`${scoped}${academicYearId}`);
+    expect(withoutSubject.body["suggested_recording_name"]).toBeNull();
+  });
+
   it("a malformed filter is a 400, not an empty list", async () => {
     const res = await call("/library?level_id=not-a-uuid");
     expect(res.status).toBe(400);

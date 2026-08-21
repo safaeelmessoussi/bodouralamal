@@ -41,6 +41,7 @@ export function initiate(prisma: PrismaClient, clients: StorageClients, config: 
           academicYearId: body.content_meta.academic_year_id,
           branchId: body.content_meta.branch_id,
           ...(body.content_meta.visibility ? { visibility: body.content_meta.visibility } : {}),
+          ...(body.content_meta.origin ? { origin: body.content_meta.origin } : {}),
           ...(body.content_meta.replaces_content_id
             ? { replacesContentId: body.content_meta.replaces_content_id }
             : {}),

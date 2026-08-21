@@ -3,7 +3,6 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { fetchSessionPage, type SessionContentRef } from '../../adapters/calendar.js';
 import { linkSessionContent, unlinkSessionContent } from '../../adapters/sessions.js';
 import { t } from '../../i18n/index.js';
-import { recordingBaseName } from '../../lib/recorder.js';
 import { api } from '../../lib/api.js';
 import { Button } from '../ui/button.js';
 import { Dialog } from '../ui/dialog.js';
@@ -32,11 +31,6 @@ import { FileUploader } from './file-uploader.js';
  */
 export interface SessionMaterialsProps {
   sessionId: string | null;
-  /** R75.6's three sources for a recording's default name — the class's own
-   *  title and note, and the date of this occurrence. The calling screen holds
-   *  them; the session row itself carries none of them (it references a
-   *  schedule). */
-  session?: { title: string; description: string | null; date: string };
   /**
    * **Whether to offer the recorder at all** (R75.3).
    *
@@ -59,7 +53,6 @@ interface LibraryOption {
 
 export function SessionMaterialsDialog({
   sessionId,
-  session = { title: '', description: null, date: '' },
   canRecord = false,
   scope,
   token,
@@ -71,6 +64,16 @@ export function SessionMaterialsDialog({
   const [choice, setChoice] = useState('');
   const [uploading, setUploading] = useState(false);
   const [recording, setRecording] = useState(false);
+  /**
+   * **R75.6's default name, composed by the SERVER** (R99).
+   *
+   * It arrives on the Session page beside the lists it is numbered against, so
+   * the dialog never holds the rule and never needs the occurrence's title,
+   * note and date to be threaded in from the calling screen — which is what the
+   * removed `session` prop was for, and which four callers each had to get
+   * right.
+   */
+  const [suggestedName, setSuggestedName] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -83,6 +86,7 @@ export function SessionMaterialsDialog({
     const page = await fetchSessionPage(sessionId, token);
     setLinked(page.linked_content);
     setRecordings(page.recordings);
+    setSuggestedName(page.suggested_recording_name);
     // The candidates are the library items in this session's own Level and
     // Subject — the ones a teacher would plausibly attach. A full library list
     // would make the picker a search problem the dialog is not.
@@ -225,10 +229,11 @@ export function SessionMaterialsDialog({
             branch_id: scope.branchId,
           }}
           token={token}
-          baseName={recordingBaseName(session)}
-          // R75.6 — the suffix is chosen from what is ALREADY LINKED, so two
-          // people saving at once cannot land on the same name.
-          existingTitles={[...linked, ...recordings].map((c) => c.title)}
+          // R75.6 — composed by the server from this occurrence and numbered
+          // against what is ALREADY LINKED, whatever produced it: a browser
+          // recording and the platform's own capture of the same class share one
+          // namespace, so they cannot land on the same name.
+          suggestedName={suggestedName}
           onSaved={(contentId) =>
             void run(async () => {
               // Upload then link, in that order and for the same reason the

@@ -533,14 +533,6 @@ export function ScheduleSessionsPage({ scheduleId }: { scheduleId: string }): Re
       {scope ? (
         <SessionMaterialsDialog
           sessionId={materialsFor}
-          // R75.6 — the default recording name is derived from the session it
-          // belongs to: the class and the day it was held. A recording called
-          // "تسجيل 4" tells a reader nothing a year later.
-          session={{
-            title: klass?.title ?? '',
-            description: klass?.description ?? null,
-            date: rows.find((r) => r.id === materialsFor)?.date ?? '',
-          }}
           canRecord={canWrite}
           scope={scope}
           token={accessToken}

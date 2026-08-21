@@ -329,6 +329,21 @@ object into an `EducationalContent` with `origin = session_recording` and a
 library item to find (R99.14 — an item whose object is absent is worse than an
 honest failure).
 
+### What a recording is called, and who decides
+
+**The server.** R75.6's naming rule — base name from the class and the date,
+then ` 2`, ` 3` — used to live in the browser recorder, and R99 gives the
+platform a producer of recordings that is not a browser at all. Both now consume
+[`backend/src/lib/recording-name.ts`](../../backend/src/lib/recording-name.ts),
+and **both number into one namespace: the titles already linked to that
+occurrence.** Two recordings of one lesson, one made in a tab and one captured by
+the provider, must not be able to land on the same name.
+
+The browser still shows the name, editable, before saving — only the canonical
+default and collision rule moved. The
+[UX rule](ux-architecture.md#the-recordings-name-belongs-to-the-server-r756-moved-by-r99)
+is the authoritative statement.
+
 ### Local infrastructure
 
 `livekit-server --dev` records nothing: **Egress is a separate service and needs

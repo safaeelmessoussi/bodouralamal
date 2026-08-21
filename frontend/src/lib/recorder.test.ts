@@ -2,12 +2,10 @@ import { describe, expect, it } from 'vitest';
 
 import {
   CONTAINERS,
-  defaultRecordingName,
   elapsedSeconds,
   extensionFor,
   formatElapsed,
   pickContainer,
-  recordingBaseName,
   RECORDER_OPTIONS,
   shouldGuardUnload,
 } from './recorder.js';
@@ -50,33 +48,6 @@ describe('R75.4 — the container is feature-detected, never assumed', () => {
   });
 });
 
-describe('R75.6 — the default name, and its ` 2` / ` 3` suffix', () => {
-  it('leaves the FIRST recording unnumbered', () => {
-    expect(defaultRecordingName('تفسير — 2026-08-24', [])).toBe('تفسير — 2026-08-24');
-  });
-
-  it('numbers from 2, because the unnumbered one is the first', () => {
-    const base = 'تفسير — 2026-08-24';
-    expect(defaultRecordingName(base, [base])).toBe(`${base} 2`);
-    expect(defaultRecordingName(base, [base, `${base} 2`])).toBe(`${base} 3`);
-  });
-
-  it('chooses from what is ALREADY LINKED, so concurrent saves cannot collide', () => {
-    // The suffix is computed against the session's existing recordings rather
-    // than a local counter — two people saving at once would otherwise both
-    // pick the same name.
-    const base = 'حصة';
-    expect(defaultRecordingName(base, [base, `${base} 3`])).toBe(`${base} 2`);
-  });
-
-  it('ignores surrounding whitespace on both sides of the comparison', () => {
-    expect(defaultRecordingName('  حصة  ', ['حصة'])).toBe('حصة 2');
-  });
-
-  it('falls back to a word rather than producing an empty title', () => {
-    expect(defaultRecordingName('   ', [])).not.toBe('');
-  });
-});
 
 describe('R75.5 — elapsed time is UI only', () => {
   it('formats as m:ss', () => {
@@ -145,43 +116,15 @@ describe('R75 — the copy keeps the phone-upload path visible', () => {
   });
 });
 
-describe('R75.6 — the base name is derived from all three sources', () => {
-  const session = {
-    title: 'حلقة التفسير',
-    description: 'مراجعة سورة البقرة',
-    date: '2026-08-24',
-  };
-
-  it('joins title, description and date, in that order', () => {
-    // The specification names three sources and each earns its place: which
-    // class, what made this occurrence different, and which occurrence.
-    expect(recordingBaseName(session)).toBe('حلقة التفسير — مراجعة سورة البقرة — 2026-08-24');
-  });
-
-  it('omits an absent description rather than leaving an empty separator', () => {
-    expect(recordingBaseName({ ...session, description: null })).toBe('حلقة التفسير — 2026-08-24');
-    expect(recordingBaseName({ ...session, description: '   ' })).toBe('حلقة التفسير — 2026-08-24');
-  });
-
-  it('takes only the first line, because a description is free multiline text (§7)', () => {
-    const multi = { ...session, description: 'السطر الأول\nالسطر الثاني' };
-    expect(recordingBaseName(multi)).toContain('السطر الأول');
-    expect(recordingBaseName(multi)).not.toContain('السطر الثاني');
-  });
-
-  it('bounds a long description, so the name stays readable in a list', () => {
-    const long = { ...session, description: 'ا'.repeat(200) };
-    const name = recordingBaseName(long);
-    expect(name).toContain('…');
-    expect(name.length).toBeLessThan(90);
-  });
-
-  it('feeds the suffix rule, so the second recording of a session is numbered', () => {
-    const base = recordingBaseName(session);
-    expect(defaultRecordingName(base, [])).toBe(base);
-    expect(defaultRecordingName(base, [base])).toBe(`${base} 2`);
-  });
-});
+/**
+ * **R75.6's naming assertions moved with the rule** to
+ * `backend/src/lib/recording-name.test.ts` (R99). They are not restated here:
+ * a copy of an assertion left behind on the side that no longer implements the
+ * rule is the copy that passes while the rule drifts.
+ *
+ * What this file still guards is what the browser still decides — the
+ * container, the elapsed clock, the unload guard and the copy.
+ */
 
 describe('R75.5 — elapsed time is measured, not counted', () => {
   it('sums the closed spans and the open one', () => {

@@ -99,7 +99,7 @@ The constitution's §2 law, with the platform's register:
 | A Level, chosen or displayed | [`scope/level-select.tsx`](../../frontend/src/components/scope/level-select.tsx) — `LevelSelect`, `levelLabel`, `withCategoryNames` |
 | One choice from many | [`ui/searchable-select.tsx`](../../frontend/src/components/ui/searchable-select.tsx) — `SearchableSelect` |
 | Several choices from many | [`ui/multi-select.tsx`](../../frontend/src/components/ui/multi-select.tsx) — `MultiSelectField` |
-| Any form field | [`ui/field.tsx`](../../frontend/src/components/ui/field.tsx) — `TextField`, `SelectField`, `DateField`, `NumberField`, `TextArea`, `SearchInput` |
+| Any form field | [`ui/field.tsx`](../../frontend/src/components/ui/field.tsx) — `TextField`, `SelectField`, `DateField`, `NumberField`, `TextArea`, `CheckboxField`, `SearchInput` |
 | A form in a dialog | [`ui/form-dialog.tsx`](../../frontend/src/components/ui/form-dialog.tsx) |
 | Any destructive confirmation | [`ui/confirm-dialog.tsx`](../../frontend/src/components/ui/confirm-dialog.tsx) |
 | A status or kind marker | [`ui/badge.tsx`](../../frontend/src/components/ui/badge.tsx) |
@@ -1189,6 +1189,57 @@ state.
 **And neither says anything until the read succeeded.** A 401, 403 or 500 must
 never render as «لا توجد مواد»: empty is a valid answer only after a 200, which
 is the same rule the notification panel follows.
+
+### Which section an item lands in is a SEMANTIC FACT, never a MIME inference (R99.10)
+
+The split was *linked content whose MIME begins `audio/` is a recording*. It is
+now **`origin = session_recording`**, and the MIME type decides only **which
+player and which download** the reader gets.
+
+The old rule was wrong in both directions, which is why it was replaced rather
+than patched:
+
+* an audio file attached as **listening material** was shown as a recording of
+  the class;
+* a **video recording** of a صوت وصورة class was unrepresentable, and would have
+  appeared under «المواد المرفقة» — as material.
+
+**The consequence for any screen that uploads:** because the classification is a
+stored fact, the upload boundary has to be able to state it (R99.12). §4.9's MVP
+flow is a مؤطِّرة recording on her phone and uploading the file, so `FileUploader`
+carries **«هذا تسجيل حصة»** — off by default, because most uploads are materials
+and a marker that defaults to on misclassifies the common case instead of the
+rare one. `AudioRecorder` sets it unconditionally: every path through that
+component is a recording of a class, and leaving it to the caller would make the
+classification a prop two screens could disagree about.
+
+**The marker describes; it never permits.** `video/*` is still refused at
+`/uploads/*` whatever it says — TD-9's video row is reachable only by the
+platform's own ingestion pipeline (R99.8), and the whitelist check does not
+consult the field.
+
+### The recording's NAME belongs to the server (R75.6, moved by R99)
+
+`recordingBaseName` and `defaultRecordingName` lived in
+`frontend/src/lib/recorder.ts`, which was correct while a browser was the only
+thing that could produce a recording. R99 adds a **second producer** — the
+platform's own server-side capture, ingested by a worker with no browser
+anywhere near it — and **a rule one of its producers cannot reach is a rule that
+will be implemented twice.**
+
+The algorithm is now [`backend/src/lib/recording-name.ts`](../../backend/src/lib/recording-name.ts),
+and every surface receives a ready `suggested_recording_name` from an endpoint it
+already loads: the Session page for a class, the library list for a shelf.
+**Neither the recorder nor its callers compose a name any more.**
+
+* **One namespace per Session.** The suffix is chosen from the titles already
+  linked to that occurrence, whatever produced them — otherwise a مؤطِّرة's
+  browser recording and the platform's capture of the same lesson number
+  separately and collide.
+* **The visible convention is unchanged**: the first is the bare base name, then
+  ` 2`, ` 3`.
+* **It is still a suggestion.** It fills an editable field, the person may
+  replace it, and nothing reads it back.
 
 ### The extra page step is gone
 

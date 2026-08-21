@@ -282,3 +282,67 @@ describe("the payload contract (TD-3.5)", () => {
     expect(res.status).toBe(401);
   });
 });
+
+/**
+ * **R99.12 — the boundary can say *this is a class recording*, and that is all
+ * it can say.**
+ *
+ * R99.10 made «التسجيلات» a function of `origin`, so §4.9's phone-record-and-
+ * upload flow needed a way to state what it is or every مؤطِّرة's recording
+ * would have become a *material* the day origin-based classification shipped.
+ *
+ * The field states a fact and **grants nothing**: R99.8 keeps `video/*` refused
+ * at `/uploads/*` whatever it says, because TD-9's video row is reachable only
+ * by the platform's own ingestion pipeline.
+ */
+describe("R99.12 — the origin marker at the upload boundary", () => {
+  it("accepts `session_recording` on an audio upload", async () => {
+    const res = await initiate({
+      filename: "الحصة.mp3",
+      size: 2048,
+      mime: "audio/mpeg",
+      content_meta: {
+        level_id: levelId,
+        subject_id: taughtSubjectId,
+        academic_year_id: academicYearId,
+        branch_id: branchId,
+        origin: "session_recording",
+      },
+    });
+    expect(res.status).toBe(201);
+  });
+
+  it("STILL refuses video, marker or no marker — R99.8", async () => {
+    // The trap this test exists for: reading `origin` as permission rather than
+    // as a description. The whitelist check does not consult it.
+    for (const origin of ["uploaded", "session_recording"]) {
+      const res = await initiate({
+        filename: "الحصة.mp4",
+        size: 2048,
+        mime: "video/mp4",
+        content_meta: {
+          level_id: levelId,
+          subject_id: taughtSubjectId,
+          academic_year_id: academicYearId,
+          branch_id: branchId,
+          origin,
+        },
+      });
+      expect(res.status).toBe(400);
+      expect(res.body.error?.code).toBe("VALIDATION_FAILED");
+    }
+  });
+
+  it("refuses an origin that is not one of the two", async () => {
+    const res = await initiate(payload({ origin: "livekit" }));
+    expect(res.status).toBe(400);
+  });
+
+  it("defaults to `uploaded` when the field is absent", async () => {
+    const res = await initiate(payload());
+    expect(res.status).toBe(201);
+    // Proven at `/complete`, which is where the row is written; here the
+    // contract is only that omitting the field is legal.
+    expect(res.body).toHaveProperty("upload_id");
+  });
+});
