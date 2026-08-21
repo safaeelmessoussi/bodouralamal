@@ -483,6 +483,209 @@ let safaTab = null;
   t.close();
 }
 
-for (const t of rooms) t.close();
+/* ── 8. R99 — a REAL recording, of a real class, with real media ─────────── */
+
+{
+  /**
+   * **The whole point of this block: nothing above created a recording.**
+   *
+   * Three people have been in a live room for several checks now, and a class
+   * that nobody chose to record must have left no trace. Asserted BEFORE
+   * anything is started, because "recording is optional" is only true if it is
+   * true by default (R99.2).
+   */
+  const before = await join(API.safa, S.tafseerToday);
+  const stateBefore = await main.evaluate(`(async () => {
+    const res = await fetch('/api/v1/sessions/' + ${JSON.stringify(S.tafseerToday)} + '/recording', {
+      headers: { Authorization: 'Bearer ' + ${JSON.stringify(API.safa)} },
+    });
+    return JSON.stringify({ status: res.status, body: await res.text() });
+  })()`);
+  const parsedBefore = JSON.parse(stateBefore);
+  check(
+    'a class ran with three people in it and NOBODY recorded it',
+    before.status === 200 &&
+      parsedBefore.status === 200 &&
+      JSON.parse(parsedBefore.body).data === null,
+    parsedBefore.body,
+  );
+
+  /** The recording endpoints, exactly as the classroom calls them. */
+  const recording = async (token, method, path = '') => {
+    const raw = await main.evaluate(`(async () => {
+      const res = await fetch('/api/v1/sessions/' + ${JSON.stringify(S.tafseerToday)} + '/recording' + ${JSON.stringify(path)}, {
+        method: ${JSON.stringify(method)},
+        headers: { Authorization: 'Bearer ' + ${JSON.stringify(token)}, 'Content-Type': 'application/json' },
+        ${method === 'POST' ? "body: '{}'," : ''}
+      });
+      return JSON.stringify({ status: res.status, body: await res.text() });
+    })()`);
+    const parsed = JSON.parse(raw);
+    return { status: parsed.status, body: JSON.parse(parsed.body || '{}') };
+  };
+
+  // A beneficiary may never record — refused by the SERVER, not by a hidden
+  // button (R99.3).
+  const studentTries = await recording(API.studentA, 'POST');
+  check(
+    'a beneficiary cannot start a recording — 403, and told why',
+    studentTries.status === 403 &&
+      studentTries.body.error?.details?.reason === 'RECORDING_NOT_PERMITTED',
+    `status ${studentTries.status}`,
+  );
+
+  // An unrelated مؤطِّرة cannot either — she cannot even reach the occurrence.
+  const strangerTries = await recording(API.rim, 'POST');
+  check('a مؤطِّرة who does not staff it cannot record — 404', strangerTries.status === 404);
+
+  // صفاء records. This is a REAL egress job against the real worker.
+  const started = await recording(API.safa, 'POST');
+  check(
+    'the مؤطِّرة starts a REAL recording',
+    started.status === 202 && started.body.data?.live === true,
+    `status ${started.status} ${JSON.stringify(started.body.data ?? started.body.error ?? {})}`,
+  );
+
+  // The provider needs a moment to accept the job and mark the room.
+  await wait(9000);
+
+  /**
+   * **«جاري التسجيل» reaches EVERY participant, from the room itself** — this
+   * is R99.5, and the tab that proves it is مستفيدة أ, who did not start the
+   * recording and never called the recording endpoint at all.
+   */
+  const seenByStudent = await rooms[2].evaluate(
+    `(() => document.body.innerText.includes('جاري التسجيل'))()`,
+  );
+  const seenByTeacher = await rooms[0].evaluate(
+    `(() => document.body.innerText.includes('جاري التسجيل'))()`,
+  );
+  check('the مؤطِّرة who started it sees «جاري التسجيل»', seenByTeacher === true);
+  check(
+    'and so does a BENEFICIARY who never touched the control — nobody is recorded silently',
+    seenByStudent === true,
+  );
+
+  /**
+   * **Somebody arriving mid-recording sees it immediately** (R99.5 second
+   * half, and the one a naive implementation forgets).
+   */
+  const latecomer = await tab();
+  await latecomer.beIdentity(process.env.AMINA_LATE_COOKIE);
+  await latecomer.open(`/classroom/${S.tafseerToday}`, 'main');
+  const lateState = await latecomer.awaitConnected();
+  await wait(3000);
+  const seenOnArrival = await latecomer.evaluate(
+    `(() => document.body.innerText.includes('جاري التسجيل'))()`,
+  );
+  check(
+    'somebody who joins AFTER recording began sees it on arrival',
+    lateState === 'in' && seenOnArrival === true,
+    `${lateState}, banner=${seenOnArrival}`,
+  );
+  latecomer.close();
+
+  /**
+   * **Capture is SERVER-SIDE, so it survives the مؤطِّرة losing her classroom.**
+   *
+   * The tab that started the recording is closed outright — not left open and
+   * ignored, closed — and the recording must still be running afterwards. This
+   * is the failure a browser recorder makes routine: a laptop that sleeps or a
+   * tab that closes silently loses the lesson.
+   */
+  await wait(4000);
+  rooms[0].close();
+  await wait(6000);
+
+  const survived = await recording(API.amina, 'GET');
+  check(
+    'the recording survives the مؤطِّرة closing her classroom entirely',
+    survived.body.data?.live === true,
+    JSON.stringify(survived.body.data),
+  );
+
+  const stillSeen = await rooms[2].evaluate(
+    `(() => document.body.innerText.includes('جاري التسجيل'))()`,
+  );
+  check('and a beneficiary still in the room still sees «جاري التسجيل»', stillSeen === true);
+
+  // Let real media accumulate before stopping — this is what makes the file
+  // real rather than a zero-length artefact.
+  await wait(6000);
+
+  const stopped = await recording(API.amina, 'POST', '/stop');
+  check(
+    'the ASSISTANT stops what the مؤطِّرة started — parity at the controls (R87 §G)',
+    stopped.status === 202,
+    `status ${stopped.status} ${JSON.stringify(stopped.body.data ?? {})}`,
+  );
+
+  /**
+   * **The provider own callback drives the rest**, verified by signature and
+   * applied idempotently. Nothing here tells the platform the recording
+   * finished — the platform is told, and it believes only what verifies.
+   */
+  let final = null;
+  for (let i = 0; i < 40; i += 1) {
+    await wait(2000);
+    const now = await recording(API.safa, 'GET');
+    final = now.body.data;
+    if (final && ['completed', 'failed', 'aborted'].includes(final.status)) break;
+  }
+  check(
+    'the authenticated provider callback drives it to completion',
+    final?.status === 'completed',
+    JSON.stringify(final),
+  );
+  check('and it is no longer live', final?.live === false);
+
+  const all = await recording(API.safa, 'GET');
+  check('one recording, not several', all.body.data?.id === final?.id);
+}
+
+/* ── 9. R99.7 — a صوت فقط class records AUDIO, for real ──────────────────── */
+
+{
+  const audioRecording = async (token, method, path = '') => {
+    const raw = await main.evaluate(`(async () => {
+      const res = await fetch('/api/v1/sessions/' + ${JSON.stringify(S.seerahToday)} + '/recording' + ${JSON.stringify(path)}, {
+        method: ${JSON.stringify(method)},
+        headers: { Authorization: 'Bearer ' + ${JSON.stringify(token)}, 'Content-Type': 'application/json' },
+        ${method === 'POST' ? "body: '{}'," : ''}
+      });
+      return JSON.stringify({ status: res.status, body: await res.text() });
+    })()`);
+    const parsed = JSON.parse(raw);
+    return { status: parsed.status, body: JSON.parse(parsed.body || '{}') };
+  };
+
+  // هند is the one-off cover on this occurrence — she staffs no schedule at
+  // all, so this also proves R91 cover may record what she is delivering.
+  const started = await audioRecording(API.hind, 'POST');
+  check(
+    'the one-off cover starts a REAL recording of the صوت فقط class',
+    started.status === 202 && started.body.data?.live === true,
+    `status ${started.status}`,
+  );
+
+  await wait(12000);
+  await audioRecording(API.hind, 'POST', '/stop');
+
+  let final = null;
+  for (let i = 0; i < 40; i += 1) {
+    await wait(2000);
+    const now = await audioRecording(API.hind, 'GET');
+    final = now.body.data;
+    if (final && ['completed', 'failed', 'aborted'].includes(final.status)) break;
+  }
+  check(
+    'and it completes through the authenticated callback',
+    final?.status === 'completed',
+    JSON.stringify(final),
+  );
+}
+
+// rooms[0] was closed above to prove the recording outlives it.
+for (const t of rooms.slice(1)) t.close();
 main.close();
 process.exit(finish());

@@ -1848,3 +1848,37 @@ export function onlineJoinDto(result: {
     closes_at: result.authorization.closesAt.toISOString(),
   };
 }
+
+
+/**
+ * **R99 — the recording state, as every participant sees it.**
+ *
+ * **No provider identifier** (R97.9): the egress job id, the staging bucket and
+ * the staging key are integration state and appear on no projection the
+ * platform hands out. A client needs to know whether the class is being
+ * recorded and how that is going — nothing about who is recording it.
+ *
+ * **`live` is computed server-side** rather than left to the client to infer
+ * from `status`, so «جاري التسجيل» cannot disagree between two screens.
+ */
+export function recordingStateDto(state: {
+  id: string;
+  status: string;
+  startedAt: Date;
+  stoppedAt: Date | null;
+  live: boolean;
+}): {
+  id: string;
+  status: string;
+  started_at: string;
+  stopped_at: string | null;
+  live: boolean;
+} {
+  return {
+    id: state.id,
+    status: state.status,
+    started_at: state.startedAt.toISOString(),
+    stopped_at: state.stoppedAt ? state.stoppedAt.toISOString() : null,
+    live: state.live,
+  };
+}

@@ -89,6 +89,7 @@ async function wipe(): Promise<void> {
     select: { id: true },
   });
   const sids = sessions.map((s) => s.id);
+  await prisma.sessionRecording.deleteMany({ where: { sessionId: { in: sids } } });
   await prisma.sessionAudienceBranch.deleteMany({ where: { sessionId: { in: sids } } });
   await prisma.notification.deleteMany({ where: { sessionId: { in: sids } } });
   await prisma.sessionContent.deleteMany({ where: { sessionId: { in: sids } } });
@@ -118,6 +119,7 @@ async function wipe(): Promise<void> {
     select: { id: true },
   });
   const theirSids = theirSessions.map((s) => s.id);
+  await prisma.sessionRecording.deleteMany({ where: { sessionId: { in: theirSids } } });
   await prisma.sessionAudienceBranch.deleteMany({ where: { sessionId: { in: theirSids } } });
   await prisma.notification.deleteMany({ where: { sessionId: { in: theirSids } } });
   await prisma.sessionContent.deleteMany({ where: { sessionId: { in: theirSids } } });
@@ -127,6 +129,7 @@ async function wipe(): Promise<void> {
   await prisma.courseScheduleStaff.deleteMany({ where: { scheduleId: { in: theirIds } } });
   await prisma.recurringCourseSchedule.deleteMany({ where: { id: { in: theirIds } } });
 
+  await prisma.sessionRecording.deleteMany({ where: { startedById: { in: uids } } });
   await prisma.familyLink.deleteMany({ where: { parentId: { in: uids } } });
   await prisma.familyLink.deleteMany({ where: { studentId: { in: uids } } });
   await prisma.notification.deleteMany({ where: { userId: { in: uids } } });

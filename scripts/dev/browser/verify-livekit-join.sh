@@ -50,6 +50,9 @@ export STUDENT_A_COOKIE="$(bash scripts/dev/issue-dev-session.sh "$(id studentA)
 export STUDENT_B_COOKIE="$(bash scripts/dev/issue-dev-session.sh "$(id studentB)")"
 export HIND_COOKIE="$(bash scripts/dev/issue-dev-session.sh "$(id hind)")"
 export PARENT_COOKIE="$(bash scripts/dev/issue-dev-session.sh "$(id parent)")"
+# R99 — أمينة arrives a SECOND time, after recording has begun, to prove the
+# indicator is visible on arrival and not only to whoever pressed the button.
+export AMINA_LATE_COOKIE="$(bash scripts/dev/issue-dev-session.sh "$(id amina)")"
 
 WORK="$(mktemp -d)"
 cleanup() {
@@ -70,9 +73,52 @@ trap cleanup EXIT
   --user-data-dir="$WORK/profile" about:blank >/dev/null 2>&1 &
 CHROME_PID=$!
 
-for _ in $(seq 1 30); do
-  curl -sf http://127.0.0.1:9252/json/list >/dev/null 2>&1 && break
-  sleep 0.3
+# Wait for Chrome, and fail loudly if it never opens the port.
+#
+# This was 30 x 0.3s = 9 seconds. The dev overlay now also runs an Egress
+# worker with its own headless Chrome, and under that contention a harness
+# could reach connect() before the port existed, throw an unhelpful JSON
+# error, and be recorded by a sweep as NO RESULT — indistinguishable from a
+# harness that genuinely proved nothing.
+CHROME_READY=0
+for _ in $(seq 1 60); do
+  curl -sf http://127.0.0.1:9252/json/list >/dev/null 2>&1 && { CHROME_READY=1; break; }
+  sleep 0.5
 done
+if [[ "$CHROME_READY" != "1" ]]; then
+  echo "FAIL: Chrome never opened its debug port on 9252"
+  exit 1
+fi
 
 PORT=9252 node scripts/dev/browser/verify-livekit-join.mjs
+NODE_STATUS=$?
+
+# ── R99.7 — the ARTEFACTS, by extension, in the platform own store ─────────
+#
+# The harness above proves the lifecycle; this proves what the lifecycle
+# actually produced. A صوت وصورة class must leave an MP4 and a صوت فقط class an
+# OGG — the one thing an API response can never tell you.
+#
+# The staging objects OUTLIVE the fixture teardown on purpose: rows are wiped,
+# bytes are evidence.
+echo
+echo "-- recorded artefacts in the staging bucket --"
+ARTEFACTS="$(docker run --rm --network bodour_default \
+  -e MC_HOST_local="http://${MINIO_ACCESS_KEY}:${MINIO_SECRET_KEY}@minio:9000" \
+  minio/mc:latest ls --recursive local/"${RECORDING_STAGING_BUCKET:-recordings-staging}" 2>/dev/null || true)"
+echo "$ARTEFACTS"
+
+MP4S="$(printf "%s\n" "$ARTEFACTS" | grep -c "[.]mp4$" || true)"
+OGGS="$(printf "%s\n" "$ARTEFACTS" | grep -c "[.]ogg$" || true)"
+# A byte count, because a zero-length file is a passing lifecycle and a failed
+# recording — the exact pair this check exists to tell apart.
+TINY="$(printf "%s\n" "$ARTEFACTS" | grep -E "[.](mp4|ogg)$" | grep -cE " 0B | [0-9]{1,3}B " || true)"
+
+if [[ "$MP4S" -ge 1 && "$OGGS" -ge 1 && "$TINY" -eq 0 ]]; then
+  echo "PASS  a صوت وصورة class produced an MP4 and a صوت فقط class produced an OGG, both non-trivial"
+else
+  echo "FAIL  expected >=1 .mp4 and >=1 .ogg with real bytes; got mp4=$MP4S ogg=$OGGS tiny=$TINY"
+  NODE_STATUS=1
+fi
+
+exit "$NODE_STATUS"

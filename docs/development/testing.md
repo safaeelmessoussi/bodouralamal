@@ -791,6 +791,97 @@ still blocked, and it produces **no `securitypolicyviolation` event** on the
 socket, only «could not establish signal connection: Failed to fetch». Both
 schemes must be listed. See `nginx/snippets/media-origin.conf`.
 
+### "NO RESULT" is a failure — and one of them is still unexplained
+
+A full sweep records a harness as **NO RESULT** when it printed no summary line
+at all. That is **indistinguishable from a harness that proved nothing**, so it
+must never be counted as green.
+
+After C1, full sweeps reported `verify-recorder` and `verify-reorder` as
+NO RESULT while **every one of them passes on its own** (22/22, 30/30) and also
+passes when run back-to-back in the same order the sweep uses. What was ruled
+out, by measurement rather than assumption:
+
+* **not memory** — 6 GB free at the time;
+* **not leaked browsers** — the Chrome processes on the box were the
+  developer's own, not harness leftovers (a first, too-broad `pgrep` suggested
+  otherwise);
+* **not the feature under test** — both pass individually, repeatedly.
+
+**One real problem was found and fixed on the way**: every harness waited only
+`30 x 0.3s = 9 seconds` for Chrome to open its debug port, and the dev overlay
+now also runs an Egress worker with its own headless Chrome. Reaching `connect()`
+before the port exists throws an unhelpful JSON error — exactly the shape of a
+NO RESULT. The wait is now `60 x 0.5s` and a missing port is an explicit `FAIL`
+with a reason. That recovered one of the three affected harnesses.
+
+**The remaining two are an open, environment-level flake in long sweeps**, and
+are recorded here rather than papered over. A sweep reporting them must be
+followed by running them individually; if they pass there, the feature is fine
+and this note is the reason. **Do not "fix" it by removing them from the sweep.**
+
+### A harness teardown leaks its profile directory
+
+`kill "$CHROME_PID"` reaps the launcher and leaves Chrome renderer and GPU
+children alive, holding the `mktemp -d` profile open — so the `rm -rf` that
+follows silently fails. **727 orphaned `/tmp/tmp.*` directories** had
+accumulated before anyone looked. Killing the process *group* (`setsid` at
+launch, negative PID at teardown) is the fix; it is noted here rather than
+applied blind, because a first attempt at it broke the single-quoted `trap`
+blocks in all thirty scripts — the injected comment contained apostrophes.
+
+**And the recovery from that mistake cost more than the mistake:** restoring
+with `git checkout -- scripts/dev/browser/` reverted *every* file in the
+directory, including C1 work that was correct and uncommitted. Restore the files
+you broke, never the directory they live in.
+
+### A guard that fails because the PRODUCT changed is restated, not deleted
+
+R98.18's frontend guard read *«mounts no recording affordance»* — true and
+deliberate then, because recording did not exist. R99 authorised recording, so
+the sentence stopped being the property while the property itself survived:
+recording is **the platform's**, driven by its own control and its own
+server-side capture, never a capability handed to a browser.
+
+The restated check asserts the classroom composes بذور الأمل's own panel, mounts
+**no vendor recording component**, and grants no `roomRecord` to any participant.
+Deleting it would have removed the only thing standing between the product and a
+client-side recorder.
+
+### A new table means every fixture that touches its parent
+
+`session_recording` references `session` with `onDelete: Restrict`, on purpose —
+a recording is part of the record of what happened. The R98 fixture knew nothing
+about it, so the next seed died inside its own wipe with a foreign-key error.
+The rule `testing.md` already recorded — *a fixture must be wiped by what it
+OWNS* — extends to tables added afterwards: adding one means auditing the
+teardowns that unwind its parent.
+
+### A failure path that can itself fail is not a failure path
+
+`startRecording`'s catch marked the row failed with `update`, which **throws when
+the row is gone** — and the row being gone is precisely one of the situations
+that lands there. The throw escaped the catch, so a مؤطِّرة received a raw
+database error instead of her refusal, and the orphan-cancellation the block
+exists for was invisible.
+
+`updateMany` matches zero rows without complaint, which is the correct
+semantics for a clean-up. **Test the error path with the error that makes the
+error path hard**, not with a convenient one.
+
+### A mock proves the rules; only real media proves the recording
+
+`session-recording.integration.test.ts` uses a fake provider deliberately: an
+assertion about *who may record* must fail because authorization is wrong, not
+because a media server was unreachable. But a fake can report any file it likes,
+so it can never show that a صوت وصورة class produced video and a صوت فقط class
+did not.
+
+`verify-livekit-join.sh` therefore records **both**, against real local Egress,
+and then lists the staging bucket and checks the **extensions and the byte
+counts** — because a zero-length file is a passing lifecycle and a failed
+recording, which is exactly the pair that check exists to tell apart.
+
 ### A fixture's "today" must be the association's clock, not UTC's
 
 `verify-livekit-join` needs **today's** occurrence, because the join window is

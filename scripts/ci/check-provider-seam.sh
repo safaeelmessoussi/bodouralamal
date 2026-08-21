@@ -22,10 +22,16 @@
 #   2. **No vendor name reaches a user-facing string.** Rule M forbids
 #      engineering references on any screen a beneficiary, parent or مؤطِّرة
 #      sees, and a product name is one — she enters «حصة», not a platform.
-#   3. **Section C has not leaked into Section B.** No egress client, no
-#      recording grant, no Redis. Each is a capability nobody has reviewed, and
-#      a recording control that predates BR-2's consent gate is precisely the
-#      thing that must not exist.
+#   3. **No recording capability is ever granted to a CLIENT.** Restated for
+#      R99 (2026-08-21), which authorised recording: what this arm forbade was
+#      `EgressClient` and `startRoomCompositeEgress` anywhere, on R98.18's
+#      "recording is Section C". That sentence expired; the property did not.
+#      Recording is now legitimate **inside the seam** — arm 1 already keeps it
+#      there — and what must stay impossible is a `roomRecord` grant on a
+#      participant token. Capture is server-side precisely so a browser cannot
+#      start or stop it, and a token carrying that grant would undo it.
+#      Deleting the arm would have removed the only check standing between the
+#      product and a client-side recorder.
 #
 set -uo pipefail
 cd "$(git rev-parse --show-toplevel)"
@@ -71,9 +77,12 @@ if os.path.exists(AR):
 
 # ── 3. Section C has not arrived early ───────────────────────────────────────
 FORBIDDEN = {
-    "EgressClient": "server-side recording is Section C (R98.18)",
-    "roomRecord": "a recording grant predates BR-2's consent gate (R98.18)",
-    "startRoomCompositeEgress": "recording is Section C (R98.18)",
+    # R99 authorised server-side recording; it did NOT authorise handing the
+    # capability to a browser. Capture is the platform's, driven by Egress from
+    # the API — a participant token that could start or stop it would defeat
+    # the whole reason capture lives on the server (R99.4).
+    "roomRecord": "a participant token must never carry a recording grant (R99.4)",
+    "roomAdmin: true": "moderation is decided by `grantsFor`, never hardcoded",
 }
 for path in sources("backend/src") :
     if ".test." in os.path.basename(path):

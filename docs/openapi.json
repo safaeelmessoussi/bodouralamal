@@ -7074,6 +7074,218 @@
         }
       }
     },
+    "/sessions/{id}/recording": {
+      "post": {
+        "summary": "Start recording this class",
+        "description": "**R99.** Starts a **server-side** recording of one online occurrence. **Recording is OPTIONAL and never automatic** — `POST /sessions/{id}/online-join` starts nothing, and a class that runs from beginning to end with nobody calling this leaves **no recording job, no file and no content**. **Body is empty and `.strict()`**: in particular there is **no `media_mode`**, because the artefact follows the class (R99.7) and a client that could name it could record video of a صوت فقط lesson. **Authority is R98's, plus one question.** The whole join authorization runs first — R91 effective staffing, assistant parity, branch-scoped administration, the online-ness of the occurrence and its join window — and then: may this role record? **A مؤطِّرة and an assistant have IDENTICAL authority** (R87 §G), an administrator in scope may record, and **a beneficiary or a guardian acting for one is refused `403 RECORDING_NOT_PERMITTED`** — not `404`, because she is legitimately in this class and concealing it would be a lie she can disprove. A مؤطِّرة who does not staff the occurrence is `404` as always. **Idempotent**: pressing it twice returns the recording already running rather than starting a second, and a partial unique index makes that true even for two simultaneous requests. **The provider is reached only after the platform has decided**, and the recording is captured **server-side** so a closed tab or a dropped connection does not lose the lesson. **No provider identifier appears on the response** (R97.9): the egress job id and the staging location are integration state.",
+        "responses": {
+          "202": {
+            "description": "Accepted — the recording state, including whether it is live. `202` because the provider confirms asynchronously."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — any body key at all.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN with reason RECORDING_NOT_PERMITTED for a beneficiary or a guardian.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an occurrence the caller cannot reach.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT — the occurrence is not online, is cancelled, or is outside its join window.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Error envelope (TD-3.8). SERVICE_UNAVAILABLE naming the unset settings, or reason RECORDING_START_FAILED when the recorder refused — which leaves a FAILED recording rather than a phantom one.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "Is this class being recorded?",
+        "description": "**R99.5 — nobody is recorded silently.** Deliberately readable by **everybody who may enter the class**, including a beneficiary and including a guardian acting for her child: the persistent «جاري التسجيل» state belongs to the room, not to whoever pressed the button. Starting and stopping need teaching authority; **seeing** does not. **`null` is the ordinary answer and a real one** — recording is optional, so a class nobody recorded has no state, and the interface shows nothing rather than «لم يبدأ التسجيل» on every screen. **Carries no provider identifier** and no staging location.",
+        "responses": {
+          "200": {
+            "description": "The latest recording state, or `null` when the class was never recorded."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an occurrence the caller cannot reach.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sessions/{id}/recording/stop": {
+      "post": {
+        "summary": "Stop recording this class",
+        "description": "**R99.** Same authority as starting, and deliberately **not restricted to whoever started it**: a class covered by an assistant must be stoppable by the person actually delivering it, and a مؤطِّرة whose connection died must not leave a recording nobody can end (R87 §G). **Stopping what is not running is not an error** — the state she wanted is the state there is — and stopping a recording the provider has not yet confirmed is an ordinary act rather than an edge case. The provider is then asked to finish; **what actually happened is settled by its authenticated callback**, never by this response. The recording moves to `stopping` and then, on the provider's report, to `processing` and `completed`. **`completed` is NOT «available»** (R99.14): the asset exists at the provider, not yet in Bodour storage, and the interface must not claim otherwise.",
+        "responses": {
+          "202": {
+            "description": "Accepted — the recording state after the stop was requested."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — any body key at all.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN with reason RECORDING_NOT_PERMITTED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT with reason NOT_RECORDING when nothing was ever started.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/integrations/online-class/callback": {
+      "post": {
+        "summary": "The recording provider reports on a job",
+        "description": "**R99.15 — verified, never trusted.** The provider posts here when a recording starts, progresses, finishes or fails. **Authenticated by the provider's own signature over the RAW request body**, which only a holder of the API secret can produce — the route is mounted before the JSON parser precisely so those bytes survive, since a parsed-and-reserialised body no longer matches the signature. **It cannot manufacture anything.** Three things must all hold before a row changes: the signature verifies; the event names an egress job **this platform started**; and the transition is one the state machine allows. A job id nobody here has seen is ignored, so an arbitrary external request creates no recording and — even in later sections — no educational content. **Duplicate delivery is a no-op**: terminal states accept nothing, so a completion delivered three times yields one recording, and a late `recording` cannot un-finish a completed one. **Always answers `204`**, whatever it decided: a distinguishable refusal would tell a prober its guess was wrong, and a provider retrying forever against a `4xx` it cannot fix is worse than a silent discard. What actually happened is in the log. **Not in the guarded router** — the caller is a machine with no Bodour session — and it is the only route in this area outside it.",
+        "responses": {
+          "204": {
+            "description": "Received. Says nothing about whether anything was applied, deliberately."
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/sessions/{id}/roster": {
       "get": {
         "summary": "Who is expected at this occurrence",

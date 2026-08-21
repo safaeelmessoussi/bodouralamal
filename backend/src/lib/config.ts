@@ -92,8 +92,36 @@ const envSchema = z.object({
    * browser receives a participant token and a URL, never a key (R98.9).
    */
   LIVEKIT_URL: blankAsAbsent(z.string().min(1).optional()),
+  /**
+   * **R99 — the address the SERVER calls the provider on**, which is not
+   * necessarily the address the browser connects to.
+   *
+   * `LIVEKIT_URL` is handed to the client, so in development it is the
+   * host-published `ws://127.0.0.1:7880`. Deriving the server's API URL from it
+   * gives `http://127.0.0.1:7880`, which inside the API container is **the
+   * container's own loopback** — so every recording request failed with
+   * «fetch failed» while the media itself worked perfectly.
+   *
+   * R98 never noticed because it only ever *handed the URL to a browser*; the
+   * conflation became wrong the moment the server had to call the provider
+   * itself. Optional, and defaulted from `LIVEKIT_URL`, because in production
+   * both really are the same public host — this exists for the split-horizon
+   * case, which is every local setup.
+   */
+  LIVEKIT_API_URL: blankAsAbsent(z.string().min(1).optional()),
   LIVEKIT_API_KEY: blankAsAbsent(z.string().min(1).optional()),
   LIVEKIT_API_SECRET: blankAsAbsent(z.string().min(1).optional()),
+  /**
+   * **R99 — where the recording facility leaves its output.**
+   *
+   * A bucket the platform owns but **does not serve**: neither `public` nor
+   * `private`. It is staging, and R99.13 makes the distinction load-bearing —
+   * what the provider produced is temporary integration state, and only after
+   * verification does an object enter the content lifecycle. Defaulted rather
+   * than required, because it is infrastructure with one sensible name and no
+   * secret in it.
+   */
+  RECORDING_STAGING_BUCKET: z.string().min(1).default('recordings-staging'),
   TZ: z.string().min(1).default('Africa/Casablanca'),
   PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   LOG_LEVEL: z.enum(['info', 'debug']).default('info'),
@@ -129,8 +157,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     'LOG_LEVEL',
     'BACKUP_TARGET_SSH',
     'LIVEKIT_URL',
+    'LIVEKIT_API_URL',
     'LIVEKIT_API_KEY',
     'LIVEKIT_API_SECRET',
+    'RECORDING_STAGING_BUCKET',
   ]) {
     if (isBlank(candidate[key])) delete candidate[key];
   }

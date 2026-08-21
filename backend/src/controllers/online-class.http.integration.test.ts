@@ -362,3 +362,137 @@ describe("POST /sessions/{id}/online-join", () => {
     expect(after).toEqual(before);
   });
 });
+
+/**
+ * **R99 — the provider callback, over real HTTP** (R99.15).
+ *
+ * This is the platform's only unauthenticated-by-session route, so what it
+ * *refuses* is the whole of its specification. Every case below is an attempt
+ * to make it do something, and the assertion is that nothing happened.
+ *
+ * It runs against the live container, which is the only place the raw-body
+ * mounting is real: `express.json` would have consumed the stream long before a
+ * service test could notice, and every genuine callback would fail
+ * verification while this suite passed.
+ */
+describe("POST /integrations/online-class/callback", () => {
+  const CALLBACK = "/integrations/online-class/callback";
+
+  async function post(body: string, authHeader?: string): Promise<number> {
+    const res = await fetch(`${BASE}${CALLBACK}`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/webhook+json",
+        ...(authHeader ? { authorization: authHeader } : {}),
+      },
+      body,
+    });
+    return res.status;
+  }
+
+  it("accepts the request and creates NOTHING when unsigned", async () => {
+    const before = await prisma.sessionRecording.count();
+    const status = await post(
+      JSON.stringify({
+        event: "egress_ended",
+        egressInfo: { egressId: "EG_unsigned", status: 3 },
+      }),
+    );
+    // 204 rather than 401: a distinguishable refusal tells a prober its guess
+    // was wrong, and a provider retrying forever against a 4xx it cannot fix is
+    // worse than a silent discard.
+    expect(status).toBe(204);
+    expect(await prisma.sessionRecording.count()).toBe(before);
+  });
+
+  it("refuses a forged signature", async () => {
+    const before = await prisma.sessionRecording.count();
+    const status = await post(
+      JSON.stringify({
+        event: "egress_ended",
+        egressInfo: { egressId: "EG_forged", status: 3 },
+      }),
+      "Bearer not.a.real.signature",
+    );
+    expect(status).toBe(204);
+    expect(await prisma.sessionRecording.count()).toBe(before);
+  });
+
+  it("cannot manufacture a recording out of nothing", async () => {
+    // Even a perfectly-shaped payload names an egress id this platform never
+    // started, so there is nothing to update and nothing to create. An
+    // arbitrary external request must not become educational content — and in
+    // C1 it cannot even become a recording row.
+    const before = await prisma.sessionRecording.count();
+    await post(
+      JSON.stringify({
+        event: "egress_ended",
+        egressInfo: {
+          egressId: "EG_nobody_started_this",
+          status: 3,
+          fileResults: [{ filename: "anything.mp4", size: "999" }],
+        },
+      }),
+      "Bearer forged",
+    );
+    expect(await prisma.sessionRecording.count()).toBe(before);
+  });
+
+  it("never creates educational content, whatever it is sent", async () => {
+    const before = await prisma.educationalContent.count();
+    await post(
+      JSON.stringify({
+        event: "egress_ended",
+        egressInfo: { egressId: "EG_x", status: 3, fileResults: [{ filename: "x.mp4" }] },
+      }),
+      "Bearer forged",
+    );
+    expect(await prisma.educationalContent.count()).toBe(before);
+  });
+});
+
+/**
+ * **R99 — recording authority over real HTTP.**
+ *
+ * The service suite proves the rules; this proves the ROUTES enforce them, and
+ * that the read is deliberately wider than the write.
+ */
+describe("the recording routes", () => {
+  it("refuses a beneficiary's start with 403 and a reason she can be told", async () => {
+    const res = await call(`/sessions/${onlineSessionId}/recording`, studentToken, {});
+    expect(res.status).toBe(403);
+    expect(res.body.error?.details?.["reason"]).toBe("RECORDING_NOT_PERMITTED");
+  });
+
+  it("but LETS her read the state — transparency is not authority (R99.5)", async () => {
+    const res = await httpCall<Res["body"]>(
+      BASE,
+      "GET",
+      `/sessions/${onlineSessionId}/recording`,
+      { token: studentToken },
+    );
+    expect(res.status).toBe(200);
+    // Nothing was ever recorded for this fixture, and `null` is a real answer.
+    expect(res.body.data ?? null).toBeNull();
+  });
+
+  it("refuses an unrelated beneficiary entirely — 404", async () => {
+    const res = await httpCall<Res["body"]>(
+      BASE,
+      "GET",
+      `/sessions/${onlineSessionId}/recording`,
+      { token: strangerToken },
+    );
+    expect(res.status).toBe(404);
+  });
+
+  it("refuses a body that names a format — the class decides (R99.7)", async () => {
+    const res = await call(`/sessions/${onlineSessionId}/recording`, studentToken, {
+      media_mode: "audio_video",
+    });
+    expect({ status: res.status, code: res.body.error?.code }).toEqual({
+      status: 400,
+      code: "VALIDATION_FAILED",
+    });
+  });
+});

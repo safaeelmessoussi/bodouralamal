@@ -20,6 +20,7 @@ import * as teachingGroups from './controllers/teaching-group.controller.js';
 import * as courseSchedules from './controllers/course-schedule.controller.js';
 import * as sessionsCtl from './controllers/session.controller.js';
 import * as onlineClassCtl from './controllers/online-class.controller.js';
+import * as recordingCtl from './controllers/session-recording.controller.js';
 import * as libraryCtl from './controllers/library.controller.js';
 import * as referenceData from './controllers/reference-data.controller.js';
 import * as taxonomy from './controllers/taxonomy.controller.js';
@@ -167,15 +168,49 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
 
   app.use(requestContext);
   app.use(accessLog);
+  /**
+   * **R99 — the provider callback needs its RAW bytes, so it is mounted before
+   * the JSON parser and only for its own path.**
+   *
+   * The signature covers exactly what the provider sent. `express.json` would
+   * consume the stream and hand the handler an object; re-serialising that
+   * object produces different bytes, so every genuine callback would fail
+   * verification. Scoped to the one route — everything else keeps the JSON
+   * parser it has always had.
+   */
+  app.use(
+    '/api/v1/integrations/online-class/callback',
+    express.raw({ type: '*/*', limit: '1mb' }),
+  );
   app.use(express.json({ limit: '2mb' }));
 
   // TD-14: public and unauthenticated, served at the origin root (§19.1 step 8).
   app.get('/healthz', healthController(prisma, config));
 
+  // R98 — `null` when the association runs no online classes, which is a
+  // complete configuration; the join route then answers `503` naming the
+  // settings rather than failing at boot for a capability nobody uses.
+  // Created before the router because R99's provider callback is a PUBLIC route
+  // and is registered further up than the guarded ones.
+  const onlineClass = createOnlineClassProvider(config);
+
   const api = express.Router();
   api.get('/auth/google', auth.startOAuth(config));
   api.get('/auth/google/callback', auth.oauthCallback(prisma, config));
   api.post('/auth/refresh', auth.refresh(prisma, config));
+  /**
+   * **R99 — the recording provider reports completion here.**
+   *
+   * Outside `guarded` because the caller is a machine with no Bodour session,
+   * and **authenticated by the provider's own signature over the raw body** —
+   * which only a holder of the API secret can produce. It can create no
+   * educational content and can touch only a recording this platform started
+   * (R99.15); an unverifiable request is discarded silently with `204`.
+   */
+  api.post(
+    '/integrations/online-class/callback',
+    recordingCtl.callback(prisma, onlineClass),
+  );
   api.post('/auth/logout', auth.logout(prisma));
   api.get('/me', meController(prisma, config));
   // Public, gated by the signed onboarding token — no session exists yet
@@ -233,11 +268,6 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
   // reap its object as well as its row (R59.1) — the upload routes below use the
   // same clients.
   const storage = createStorageClients(config);
-
-  // R98 — `null` when the association runs no online classes, which is a
-  // complete configuration; the join route then answers `503` naming the
-  // settings rather than failing at boot for a capability nobody uses.
-  const onlineClass = createOnlineClassProvider(config);
 
   // §7/TD-5/BR-15 (R52, R59) — soft-deleted records. Super Admin only, asserted
   // in the SERVICE against live role rows: the `/admin/` prefix is a URL, not a
@@ -513,6 +543,18 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
    * inside the service, for exactly the callers it governs.
    */
   guarded.post('/sessions/:id/online-join', onlineClassCtl.join(prisma, onlineClass));
+  /**
+   * **R99 — recording is OPTIONAL and EXPLICIT.**
+   *
+   * Separate routes from the join, deliberately: `دخول الحصة` must never start
+   * a recording, and a flag on the join would be exactly the coupling R99.2
+   * forbids. Starting and stopping require teaching authority; **reading the
+   * state does not**, because every participant must see «جاري التسجيل»
+   * including a beneficiary who arrived after it began (R99.5).
+   */
+  guarded.post('/sessions/:id/recording', recordingCtl.start(prisma, onlineClass));
+  guarded.post('/sessions/:id/recording/stop', recordingCtl.stop(prisma, onlineClass));
+  guarded.get('/sessions/:id/recording', recordingCtl.state(prisma));
   guarded.post('/sessions/:id/content', sessionsCtl.linkContent(prisma));
   guarded.delete('/sessions/:id/content/:contentId', sessionsCtl.unlinkContent(prisma));
 

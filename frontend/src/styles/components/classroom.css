@@ -117,3 +117,67 @@
    * thumb at 360 px — which is why it wraps rather than scrolls. */
   padding-block-start: var(--space-2);
 }
+
+/* ── R99: recording ────────────────────────────────────────────────────────
+ *
+ * «جاري التسجيل» is a **persistent** state, not a toast, and it is shown to
+ * every participant — so it sits above the media where a reader cannot scroll
+ * past it, and it survives every re-render because it is driven by the room.
+ */
+.classroom__recording {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.classroom__recording-live {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-danger) 12%, var(--color-surface));
+  border-inline-start: 3px solid var(--color-danger);
+  color: var(--color-text);
+  font-weight: 600;
+  /* Rule AK — UI, not prose: the global paragraph measure would wrap it. */
+  max-width: none;
+}
+
+/* Reinforcement only. The WORD «جاري التسجيل» carries the meaning (rule AV),
+ * so a reader who cannot see the dot loses nothing. */
+.classroom__recording-dot {
+  inline-size: 0.6rem;
+  block-size: 0.6rem;
+  border-radius: var(--radius-full);
+  background: var(--color-danger);
+  flex: none;
+}
+
+/* A recording is running and cannot be un-run; a pulse that never stops is a
+ * distraction during a lesson, so it is announced and then still. */
+@media (prefers-reduced-motion: no-preference) {
+  .classroom__recording-live .classroom__recording-dot {
+    animation: classroom-recording-pulse 2s ease-in-out 3;
+  }
+}
+
+@keyframes classroom-recording-pulse {
+  50% { opacity: 0.35; }
+}
+
+.classroom__recording-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.classroom__recording-state,
+.classroom__recording-hint {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 0.9rem;
+  max-width: none;
+}

@@ -22,6 +22,7 @@ import type { JoinCredentials } from '../../adapters/online-class.js';
 import { t } from '../../i18n/index.js';
 import { Button } from '../ui/button.js';
 import { Feedback } from '../ui/feedback.js';
+import { RecordingPanel } from './recording.js';
 
 /**
  * **ONE classroom, for every portal** (R98.20, rule C).
@@ -55,9 +56,13 @@ import { Feedback } from '../ui/feedback.js';
  */
 export function OnlineClassroom({
   credentials,
+  accessToken,
   onLeave,
 }: {
   credentials: JoinCredentials;
+  /** R99 — recording is a Bodour operation, authorised by Bodour's own token
+   *  and never by the provider's participant token. */
+  accessToken: string;
   onLeave: () => void;
 }): ReactNode {
   const [deviceIssue, setDeviceIssue] = useState<string | null>(null);
@@ -112,6 +117,18 @@ export function OnlineClassroom({
         audioOnly={audioOnly}
         deviceIssue={deviceIssue}
         onLeave={onLeave}
+        recording={
+          /**
+           * **R99 — inside the room, so «جاري التسجيل» comes from the room.**
+           * Rendered for everybody; the controls inside it are shown only to
+           * the role the server named, and the server refuses the rest.
+           */
+          <RecordingPanel
+            sessionId={credentials.session_id}
+            role={credentials.role}
+            accessToken={accessToken}
+          />
+        }
       />
     </LiveKitRoom>
   );
@@ -126,10 +143,12 @@ function ClassroomStage({
   audioOnly,
   deviceIssue,
   onLeave,
+  recording,
 }: {
   audioOnly: boolean;
   deviceIssue: string | null;
   onLeave: () => void;
+  recording: ReactNode;
 }): ReactNode {
   const state = useConnectionState();
   const { localParticipant, isMicrophoneEnabled, isCameraEnabled } =
@@ -171,6 +190,10 @@ function ClassroomStage({
           `<p role="status">` — a device failure is an outcome of something the
           reader just did, so it belongs beside the controls that did it. */}
       {deviceIssue ? <Feedback tone="warn">{deviceIssue}</Feedback> : null}
+
+      {/* Above the media, where a persistent state belongs — a banner under a
+          video grid is a banner nobody scrolls to. */}
+      {recording}
 
       {audioOnly ? <AudioStage /> : <VideoStage />}
 

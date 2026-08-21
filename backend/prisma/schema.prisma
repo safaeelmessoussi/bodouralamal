@@ -177,6 +177,49 @@ enum Visibility {
   @@map("visibility")
 }
 
+/// **R99 — WHAT a content item IS, not what it is encoded as.**
+///
+/// «التسجيلات» used to be `mimeType.startsWith('audio/')`, which called every
+/// attached audio file a recording and made a video one unrepresentable. This
+/// is the smallest honest replacement: a **semantic** fact, in the
+/// association's own vocabulary, that survives replacing the media platform
+/// (R97.9). MIME still decides how an item plays and downloads — never whether
+/// it is a recording.
+enum ContentOrigin {
+  /// Somebody uploaded it. Every row that existed before R99 is one of these,
+  /// except those the R99.11 backfill reclassifies.
+  uploaded
+  /// A recording OF A CLASS — either the platform's own server-side capture of
+  /// an online occurrence, or §4.9's phone-recorded-and-attached MVP flow.
+  session_recording
+
+  @@map("content_origin")
+}
+
+/// **R99 — where a recording is in its life.** Ordered as it actually
+/// progresses; nothing skips backwards.
+enum RecordingStatus {
+  /// The provider has been asked and has not yet confirmed.
+  starting
+  /// Confirmed running. This is the state «جاري التسجيل» reports.
+  recording
+  /// A stop has been requested and the provider has not yet finished.
+  stopping
+  /// The provider is finalizing the file. **Not available**: the asset does
+  /// not exist in Bodour storage yet (R99.14).
+  processing
+  /// The provider produced an object. **Still not `EducationalContent`** —
+  /// ingestion is C2, and this is the state it consumes.
+  completed
+  /// The provider gave up, or ingestion could not proceed. Recoverable, and
+  /// deliberately NOT a content item (R99.14).
+  failed
+  /// Ended before producing anything — a start that never became a recording.
+  aborted
+
+  @@map("recording_status")
+}
+
 /// §4.4 — ONE shared recurrence vocabulary, used by both `Event` and
 /// `RecurringCourseSchedule` (Revision 43). Deliberately not modelled twice:
 /// the alternating-week arithmetic is exactly the code nobody wants written in
@@ -334,13 +377,13 @@ enum ConsumedTokenPurpose {
 /// (§4.3, BR-5).
 model User {
   /// R88 — the teaching profile: planning data, never authority.
-  subjectCapabilities   TeacherSubjectCapability[]
-  categoryCapabilities  TeacherCategoryCapability[]
-  availability          TeacherAvailability[]
-  notifications Notification[] @relation("NotificationRecipient")
-  examStaff     ExamStaff[]
-  eventStaff    EventStaff[]   @relation("EventStaffUser")
-  id            String         @id @default(uuid()) @db.Uuid
+  subjectCapabilities  TeacherSubjectCapability[]
+  categoryCapabilities TeacherCategoryCapability[]
+  availability         TeacherAvailability[]
+  notifications        Notification[]              @relation("NotificationRecipient")
+  examStaff            ExamStaff[]
+  eventStaff           EventStaff[]                @relation("EventStaffUser")
+  id                   String                      @id @default(uuid()) @db.Uuid
 
   /// **R96 — this person's stable, opaque QR identity.**
   ///
@@ -365,9 +408,9 @@ model User {
   /// **The default is the DATABASE's** (`gen_random_uuid()`), so every creation
   /// path has one whether or not it goes through Prisma, including paths nobody
   /// has written yet.
-  qrRef         String         @unique @default(uuid()) @map("user_qr_ref") @db.Uuid
+  qrRef String @unique @default(uuid()) @map("user_qr_ref") @db.Uuid
 
-  accountStatus AccountStatus  @default(pending) @map("account_status")
+  accountStatus AccountStatus @default(pending) @map("account_status")
 
   // Person names. `nameArabic` is collated ar-x-icu by hand-written SQL
   // (TD-6a) so ordering is correct without per-query COLLATE (BR-19).
@@ -432,7 +475,7 @@ model User {
   /// runtime definition (R79.6): enrolment cannot be the precondition for being
   /// enrollable.
   isBeneficiary Boolean @default(false) @map("is_beneficiary")
-  notes             String? @db.VarChar(2000)
+  notes         String? @db.VarChar(2000)
 
   /// Revision 39 — THE BRANCH THE APPLICANT ASKED FOR at registration.
   ///
@@ -553,6 +596,10 @@ model User {
   trashEntries               Trash[]
   rateLimitCounters          RateLimitCounter[]
   refreshTokens              RefreshToken[]
+  /// R99 — recordings this person started or stopped. Two relations because a
+  /// cover may stop what the main مؤطِّرة began, and both facts are audited.
+  recordingsStarted          SessionRecording[]      @relation("RecordingStartedBy")
+  recordingsStopped          SessionRecording[]      @relation("RecordingStoppedBy")
 
   @@index([accountStatus])
   @@index([deletedAt])
@@ -684,11 +731,11 @@ model Branch {
   childApplications    ChildApplication[]
   /// Revision 66 — where each enrolled student actually is.
   enrollments          Enrollment[]
+  /// R92 — occurrences whose audience explicitly includes this branch.
+  sessionAudiences     SessionAudienceBranch[]
 
   @@index([displayOrder])
   @@map("branch")
-  /// R92 — occurrences whose audience explicitly includes this branch.
-  sessionAudiences SessionAudienceBranch[]
 }
 
 model Room {
@@ -722,9 +769,9 @@ model Room {
 /// The three tracks (§4.4b): المرأة / اليافعات / الطفل.
 model Category {
   teacherCapabilities TeacherCategoryCapability[]
-  id           String @id @default(uuid()) @db.Uuid
-  name         String @db.VarChar(120)
-  displayOrder Int?   @map("display_order")
+  id                  String                      @id @default(uuid()) @db.Uuid
+  name                String                      @db.VarChar(120)
+  displayOrder        Int?                        @map("display_order")
 
   // NOTE: the per-Category default content visibility (§4.9) is NOT a column
   // here — §7 defines Category as carrying only `name` and `display_order`,
@@ -798,10 +845,10 @@ model Level {
 /// engine as Surah + ayah ranges (BR-13, §20 rule 23), and a Quran
 /// `LevelSubject` auto-creates NO grading components (BR-9 carve-out).
 model Subject {
-  id           String @id @default(uuid()) @db.Uuid
+  id                  String                     @id @default(uuid()) @db.Uuid
   teacherCapabilities TeacherSubjectCapability[]
-  name         String @db.VarChar(120)
-  displayOrder Int?   @map("display_order")
+  name                String                     @db.VarChar(120)
+  displayOrder        Int?                       @map("display_order")
 
   /// R73 — **which Subject's teaching authorises Quran progress** (§4.5, TD-2).
   ///
@@ -1312,13 +1359,16 @@ model Session {
   deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
   deletedById String?   @map("deleted_by") @db.Uuid
 
-  linkedContent SessionContent[]
-  staff         SessionStaff[]
-  notifications Notification[]
+  linkedContent    SessionContent[]
+  staff            SessionStaff[]
+  notifications    Notification[]
   /// R92 — this occurrence's own audience branches, when it has them. Empty
   /// means *inherit from the schedule*, which is every occurrence but the rare
   /// combined one.
   audienceBranches SessionAudienceBranch[]
+  /// R99 — attempts to record this occurrence. Usually none: recording is
+  /// optional and explicit, and a class that nobody recorded has no rows here.
+  recordings       SessionRecording[]
 
   // What makes `session.materialize` idempotent: a second run over the same
   // horizon creates no duplicate occurrence.
@@ -1373,6 +1423,81 @@ model SessionStaff {
 /// a session never deletes the file. Replaces the retired single
 /// `EducationalContent.event_id`, which could express only one relationship, in
 /// one direction, to the wrong entity.
+/// **R99 — one attempt to record one online occurrence.**
+///
+/// ## Why this exists when R98 refused a room table
+///
+/// R98.2 refused an `OnlineRoom` table because a room has **no state that is
+/// not derivable**: it opens on first join and closes when the last person
+/// leaves. A recording is the opposite. It is started by a named person at a
+/// named moment, it runs or fails, the provider reports on it asynchronously
+/// and possibly more than once, and *«was this class recorded, by whom, and
+/// what happened to it»* is a question asked long after every participant has
+/// gone. None of that is derivable from anything.
+///
+/// ## What it is NOT
+///
+/// **It is not content.** A finished recording becomes an ordinary
+/// `EducationalContent` with `origin = session_recording` plus a
+/// `SessionContent` link (R99.9), and this row remains the **integration
+/// state** that produced it. Keeping the two apart is what stops a provider's
+/// vocabulary leaking into the content model — and what lets a failed
+/// recording exist as an honest failure rather than as a broken library item
+/// (R99.14).
+///
+/// **It is not on `Session`.** R97.9 forbids a provider identifier there, and
+/// `providerEgressId` below is exactly such an identifier.
+model SessionRecording {
+  id        String  @id @default(uuid()) @db.Uuid
+  sessionId String  @map("session_id") @db.Uuid
+  session   Session @relation(fields: [sessionId], references: [id], onDelete: Restrict)
+
+  status RecordingStatus @default(starting)
+
+  /// **The provider's own job id — integration state, and the idempotency key
+  /// for every callback.** Nullable only in the instant between asking the
+  /// provider and being told what it called the job; unique among live rows so
+  /// a duplicate webhook delivery can never create a second recording (R99.15).
+  providerEgressId String? @unique @map("provider_egress_id")
+
+  /// Where the provider left its output. **Temporary, and never exposed as a
+  /// content asset** (R99.13) — a URL whose lifetime the association does not
+  /// control would rot silently inside the library.
+  outputBucket String? @map("output_bucket") @db.VarChar(63)
+  outputKey    String? @map("output_key")
+  sizeBytes    BigInt? @map("size_bytes")
+  durationMs   Int?    @map("duration_ms")
+  /// What the provider actually produced — `video/mp4` for a صوت وصورة class,
+  /// an audio type for صوت فقط (R99.7).
+  mimeType     String? @map("mime_type") @db.VarChar(120)
+
+  /// **Who chose to record.** R99.3 makes this a مؤطِّرة, an assistant with
+  /// identical authority, or an administrator in scope — never a beneficiary.
+  /// Kept because TD-8's audit answers *who did it* and this answers *whose
+  /// class it was*, and the two are asked separately.
+  startedById String   @map("started_by") @db.Uuid
+  startedBy   User     @relation("RecordingStartedBy", fields: [startedById], references: [id], onDelete: Restrict)
+  startedAt   DateTime @default(now()) @map("started_at") @db.Timestamptz(6)
+
+  stoppedById String?   @map("stopped_by") @db.Uuid
+  stoppedBy   User?     @relation("RecordingStoppedBy", fields: [stoppedById], references: [id], onDelete: Restrict)
+  stoppedAt   DateTime? @map("stopped_at") @db.Timestamptz(6)
+
+  /// Operator-facing, never rendered to a مؤطِّرة (TD-3.8's discipline): she is
+  /// told the recording failed and what to do, not what the provider said.
+  failureReason String? @map("failure_reason") @db.VarChar(500)
+
+  version Int @default(0)
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  // The classroom asks "is this occurrence recording right now" on every read.
+  @@index([sessionId, status])
+  @@map("session_recording")
+}
+
 model SessionContent {
   id        String             @id @default(uuid()) @db.Uuid
   sessionId String             @map("session_id") @db.Uuid
@@ -2066,6 +2191,15 @@ model EducationalContent {
   /// quarantines the old object — keys are never reused or overwritten
   /// (§20 rule 15). Visibility is never encoded in the key; the bucket carries
   /// it.
+  /// **R99 — «التسجيلات» is decided HERE, never by the MIME type.**
+  ///
+  /// Defaults to `uploaded`, which is what every pre-R99 row is by
+  /// construction. The R99.11 backfill reclassifies exactly one set — audio
+  /// carrying a live `SessionContent` link — because §4.9's MVP flow is a
+  /// phone recording uploaded and attached, so those rows genuinely ARE class
+  /// recordings and the screens have always shown them as such.
+  origin ContentOrigin @default(uploaded)
+
   storageBucket    String @map("storage_bucket") @db.VarChar(20)
   storageKey       String @unique @map("storage_key")
   originalFilename String @map("original_filename")

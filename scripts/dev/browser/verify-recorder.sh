@@ -30,9 +30,21 @@ trap cleanup EXIT
   --user-data-dir="$WORK/profile" about:blank >/dev/null 2>&1 &
 CHROME_PID=$!
 
-for _ in $(seq 1 30); do
-  curl -sf http://127.0.0.1:9226/json/list >/dev/null 2>&1 && break
-  sleep 0.3
+# Wait for Chrome, and fail loudly if it never opens the port.
+#
+# This was 30 x 0.3s = 9 seconds. The dev overlay now also runs an Egress
+# worker with its own headless Chrome, and under that contention a harness
+# could reach connect() before the port existed, throw an unhelpful JSON
+# error, and be recorded by a sweep as NO RESULT — indistinguishable from a
+# harness that genuinely proved nothing.
+CHROME_READY=0
+for _ in $(seq 1 60); do
+  curl -sf http://127.0.0.1:9226/json/list >/dev/null 2>&1 && { CHROME_READY=1; break; }
+  sleep 0.5
 done
+if [[ "$CHROME_READY" != "1" ]]; then
+  echo "FAIL: Chrome never opened its debug port on 9226"
+  exit 1
+fi
 
 PORT=9226 node scripts/dev/browser/verify-recorder.mjs

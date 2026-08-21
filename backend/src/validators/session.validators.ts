@@ -137,3 +137,15 @@ export const sessionAudienceSchema = z
  * lose to a concurrent edit (TD-15).
  */
 export const onlineJoinSchema = z.object({}).strict();
+
+
+/**
+ * **R99 — starting and stopping a recording carry nothing either.**
+ *
+ * Same reasoning as `onlineJoinSchema`: the occurrence is in the path and
+ * everything else is resolved server-side. In particular there is **no
+ * `media_mode`** — the format follows the class (R99.7), and letting a client
+ * name it would let a مؤطِّرة record video of a صوت فقط class, which is exactly
+ * the semantics R97 established and R99 preserves.
+ */
+export const recordingCommandSchema = z.object({}).strict();

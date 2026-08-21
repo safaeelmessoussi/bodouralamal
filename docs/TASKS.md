@@ -627,7 +627,17 @@
 - [x] **Backfill rule specified**: audio + live `SessionContent` link → `session_recording`; everything else `uploaded` — reproduces today's screens exactly
 - [x] Recording is **optional and explicit**; `دخول الحصة` never records; `جاري التسجيل` visible to every participant including latecomers
 - [x] Provider output is temporary; **a provider URL is never the content asset**
-- [ ] **C1** — Egress + Redis, recording-job entity + state machine, start/stop authorization with R91 parity, verified idempotent webhook, real local-media proof
+- [x] **C1 — COMPLETE (2026-08-21)**
+  - [x] Migration `20260821090000_r99_recording`; backfill verified **12 uploaded + 1 session_recording**
+  - [x] `SessionRecording` lifecycle entity + written-out state machine; **partial unique index** = one live recording per occurrence
+  - [x] **Redis + real LiveKit Egress** in the dev overlay; LiveKit moved to a config file for Redis + webhooks
+  - [x] Optional and explicit — **a class ran with three people and nobody recorded it: no row, no job, no file**
+  - [x] مؤطِّرة/assistant parity; administrator in scope; **beneficiary 403 but still sees «جاري التسجيل»**
+  - [x] **Server-side capture proven**: the harness closes the starter's tab and the recording keeps running
+  - [x] **Real media both ways**: صوت وصورة → 5.6 MiB MP4 · صوت فقط → 141 KiB OGG, verified by extension and byte count
+  - [x] Signature-verified callback over the raw body; idempotent against duplicate and out-of-order delivery
+  - [x] Defects: browser-vs-server provider URL · simultaneous start · orphaned egress · a failure path that could itself fail · missing `starting → stopping`
+  - [x] 23 backend lifecycle · 17 HTTP wire · 30 frontend · `verify-livekit-join` **61/61**
 - [ ] **C2** — ingestion, storage import, `EducationalContent` + `SessionContent`, «التسجيلات» rendering, beneficiary visibility ladder, failure/retry
 
 ### R98 — entering a class عن بُعد (2026-08-20)

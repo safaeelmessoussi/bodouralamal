@@ -809,6 +809,26 @@ export const ar = {
     unavailable: 'خدمة الحصص عن بُعد غير مهيّأة بعد. أبلغي الإدارة.',
     expired: 'انتهت صلاحية الدخول. أعيدي الدخول للمتابعة.',
     failed: 'تعذّر الدخول إلى الحصة. حاولي مرّة أخرى.',
+    /**
+     * **R99 — التسجيل.**
+     *
+     * `recordingLive` is the transparency requirement and is shown to
+     * **everyone** in the room, not only to whoever started it. The rest are
+     * the state machine in the reader's words — and «متاح» is deliberately
+     * absent from C1: the platform must not claim a recording is available
+     * before the asset exists in its own storage (R99.14), and that is C2.
+     */
+    startRecording: 'بدء التسجيل',
+    stopRecording: 'إيقاف التسجيل',
+    recordingLive: 'جاري التسجيل',
+    recordingStarting: 'جارٍ بدء التسجيل…',
+    recordingStopping: 'جارٍ إيقاف التسجيل…',
+    recordingProcessing: 'تتم معالجة التسجيل. سيظهر بين مواد الحصة بعد جاهزيته.',
+    recordingDone: 'انتهى التسجيل، وتتم تهيئته للنشر.',
+    recordingFailed: 'تعذّر تسجيل هذه الحصة.',
+    recordingNotPermitted: 'تسجيل الحصة من صلاحية الأطر.',
+    recordingUnavailable: 'خدمة التسجيل غير مهيّأة بعد. أبلغي الإدارة.',
+    recordingHint: 'التسجيل اختياري: تُعقد الحصة عاديًا ما لم تختاري تسجيلها.',
   },
   session: {
     notFound: 'لا توجد حصة بهذا العنوان.',

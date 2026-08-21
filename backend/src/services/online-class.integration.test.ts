@@ -115,6 +115,19 @@ class RecordingProvider implements OnlineClassProvider {
       expiresAt: new Date(Date.now() + request.ttlSeconds * 1000),
     });
   }
+
+  // R99's three, unused by this suite and present because the seam is one
+  // interface: a fake that implements half of it would compile only until
+  // somebody in this file called the other half.
+  startRecording(): never {
+    throw new Error("this suite does not record");
+  }
+  stopRecording(): never {
+    throw new Error("this suite does not record");
+  }
+  verifyCallback(): never {
+    throw new Error("this suite does not record");
+  }
 }
 
 /* ── Fixture ─────────────────────────────────────────────────────────────── */
@@ -976,6 +989,14 @@ describe("the issued token, decoded (R98.9)", () => {
    */
   const KEY = "test-api-key";
   const SECRET = "test-secret-test-secret-test-secret-xx";
+  /** Local to this suite and pointing nowhere: token minting never touches it. */
+  const STAGING = {
+    endpoint: "http://minio.invalid:9000",
+    region: "us-east-1",
+    bucket: "recordings-staging",
+    accessKey: "k",
+    secretKey: "s",
+  };
 
   const claimsOf = (token: string): Record<string, unknown> =>
     JSON.parse(
@@ -983,7 +1004,13 @@ describe("the issued token, decoded (R98.9)", () => {
     ) as Record<string, unknown>;
 
   it("names one room, one identity and exactly the permissions granted", async () => {
-    const provider = new LiveKitOnlineClassProvider("wss://example.invalid", KEY, SECRET);
+    const provider = new LiveKitOnlineClassProvider(
+      "wss://example.invalid",
+      "https://example.invalid",
+      KEY,
+      SECRET,
+      STAGING,
+    );
     const room = roomNameForSession("11111111-1111-4111-8111-111111111111");
     const { token, expiresAt } = await provider.issueJoinCredentials({
       room,
@@ -1019,7 +1046,13 @@ describe("the issued token, decoded (R98.9)", () => {
   });
 
   it("gives teaching staff moderation and the camera, and nothing beyond", async () => {
-    const provider = new LiveKitOnlineClassProvider("wss://example.invalid", KEY, SECRET);
+    const provider = new LiveKitOnlineClassProvider(
+      "wss://example.invalid",
+      "https://example.invalid",
+      KEY,
+      SECRET,
+      STAGING,
+    );
     const { token } = await provider.issueJoinCredentials({
       room: "bodour-test",
       identity: "33333333-3333-4333-8333-333333333333",

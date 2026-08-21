@@ -65,6 +65,27 @@ export function roomNameForSession(sessionId: string): string {
   return `bodour-${digest.slice(0, 32)}`;
 }
 
+/**
+ * **Where the recording facility leaves its output** (R99.13).
+ *
+ * A **staging** key, not a content key. TD-9's immutable content key is minted
+ * by the ingestion boundary once the object has been verified — writing a
+ * provider's output straight into the content namespace would make an
+ * unverified file indistinguishable from a library item.
+ *
+ * The recording's own id is in the path, so an object can always be traced back
+ * to the row that produced it without asking the provider anything, and two
+ * recordings of the same occurrence can never collide.
+ */
+export function stagingKeyFor(
+  sessionId: string,
+  recordingId: string,
+  media: OnlineMediaMode,
+): string {
+  const extension = media === "audio_only" ? "ogg" : "mp4";
+  return `session-recordings/${sessionId}/${recordingId}.${extension}`;
+}
+
 /* ─────────────────────────────── join window ─────────────────────────────── */
 
 /**

@@ -181,6 +181,23 @@ const EXEMPT = new Set([
   // TD-1: *"a Pending session reaches no endpoint but `GET /me` and logout"*.
   "/auth/logout",
   "/me",
+  /**
+   * **R99.15 — the recording provider's callback, which has no Bodour session
+   * at all.**
+   *
+   * The caller is a machine authenticated by the **provider's signature over
+   * the raw body**, so a bearer token is not the mechanism and `403` is not the
+   * answer. It always replies `204`, deliberately: a distinguishable refusal
+   * would tell a prober its guess was wrong, and a provider retrying forever
+   * against a `4xx` it cannot fix is worse than a silent discard.
+   *
+   * **The exemption costs nothing, because the route's own security is proved
+   * elsewhere and harder** — `online-class.http.integration.test.ts` sends it
+   * unsigned, forged, and perfectly-shaped-but-unknown payloads and asserts
+   * that no recording and no `EducationalContent` row appears. A Pending
+   * session presenting a bearer here is simply not the threat.
+   */
+  "/integrations/online-class/callback",
 ]);
 
 function concretePath(template: string): string {

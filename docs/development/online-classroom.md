@@ -1,7 +1,8 @@
 # Entering a class عن بُعد — بذور الأمل authorizes, the provider executes
 
-**SRS Revision 98.** How a person gets into an online class, and — far more
-important — how the platform decides she may.
+**SRS Revisions 98 and 99.** How a person gets into an online class and how a
+class gets recorded — and, far more important than either, how the platform
+decides she may.
 
 > **The durable rule, and everything on this page is a consequence of it:**
 >
@@ -14,7 +15,8 @@ important — how the platform decides she may.
 
 Delivery itself — *is this class حضوري or عن بُعد* — is
 [class-delivery.md](class-delivery.md) and R97. The provider choice is
-[online-class-provider.md](online-class-provider.md). This page is the join.
+[online-class-provider.md](online-class-provider.md). This page is the join and
+the recording.
 
 ---
 
@@ -145,9 +147,10 @@ camera into an audio-only class. The client separately never *requests* one —
 see below — so the promise holds at the device, at the client and at the server.
 
 Never issued, at any level: room creation, room listing, ingress, and
-**recording**. Recording is a later revision carrying BR-2's consent gate, and a
-control that could start an unconsented recording must not exist before the gate
-that governs it.
+**recording**. The recording grant stays absent **after** R99, and for a better
+reason than before: capture is **server-side** (see below), so a participant
+token has no business carrying it — a browser that can stop talking must not be
+able to stop the lesson's recording.
 
 ---
 
@@ -202,6 +205,143 @@ at, and it would be **stale by the time she clicked**, since the window opens
 fifteen minutes before the class.
 
 ---
+
+## Recording a class (R99)
+
+**Optional, explicit, and never a side effect.** `دخول الحصة` starts nothing. A
+class runs from beginning to end with no recording unless somebody presses
+**«بدء التسجيل»**, and if nobody does there is **no provider job, no file, no
+row** — asserted directly, because the tempting implementation starts one on
+join and the difference is invisible until somebody audits the table.
+
+### Who, and where the authority comes from
+
+`startRecording` runs **the whole of `authorizeJoin` first** — R91 effective
+staffing, assistant parity, branch-scoped administration, online-ness, the join
+window — and then asks one further question: may this role record? Nothing is
+re-derived.
+
+| | start / stop | see «جاري التسجيل» |
+|---|---|---|
+| مؤطِّرة, assistant | ✅ *identical authority* (R87 §G) | ✅ |
+| administrator in scope | ✅ | ✅ |
+| beneficiary, guardian | **403 `RECORDING_NOT_PERMITTED`** | ✅ |
+
+**`403`, not `404`**, and deliberately: she is legitimately in this class and the
+platform has already told her so by letting her in. Concealment (§20 rule 17) is
+for things outside her reach.
+
+**Stopping is not restricted to whoever started.** A class covered by an
+assistant must be stoppable by the person actually delivering it, and a مؤطِّرة
+whose connection died must not leave a recording nobody can end.
+
+### Nobody is recorded silently
+
+«جاري التسجيل» is driven by **`useIsRecording()`** — the state the media server
+attaches to the **room**. That matters more than it looks:
+
+* it is true for **every participant** the instant recording starts, not only
+  for whoever pressed the button;
+* it is true for somebody who **joins while it is already running**, which is
+  the half a naive implementation forgets;
+* it survives the starter leaving.
+
+A banner driven by the starter's own click would be invisible to everybody else;
+one driven by polling would be late. Neither is acceptable for *«nobody is
+recorded silently»*.
+
+### Capture is server-side, and that is the point
+
+The recording is a **room-composite Egress job**, not a recorder in a مؤطِّرة's
+tab. A laptop that sleeps, a tab that closes, a connection that drops — each of
+those silently loses a lesson when the browser is doing the recording.
+`verify-livekit-join` **closes the starter's tab outright mid-recording** and
+asserts the recording is still running, because that is the failure this design
+exists to prevent.
+
+### The artefact follows the class
+
+| class | output | why |
+|---|---|---|
+| `audio_video` | **MP4 with audio** | it is a صوت وصورة lesson; an audio stub would be the platform deciding it was worth less than it was |
+| `audio_only` | **OGG audio** | no video is captured for a class that has none |
+
+The client cannot name the format — `recordingCommandSchema` is empty and
+`.strict()`, so a body carrying `media_mode` is a `400`. A client that could
+choose would be able to record video of a صوت فقط class.
+
+### The state machine
+
+```
+starting ─┬─→ recording ─→ stopping ─→ processing ─→ completed
+          │        └──────────┴───────────┴────────→ failed / aborted
+          └─→ (stopping, processing, completed, failed, aborted)
+completed · failed · aborted  →  terminal, accept nothing
+```
+
+Written out rather than inferred from a chain of `if`s, and **the guard is in
+the `where`, not read-then-write**: two callbacks delivered simultaneously would
+both pass an in-memory check and both write.
+
+`starting → stopping` is in the table because pressing بدء and immediately
+changing your mind is ordinary, not an edge case. Its absence was a real defect
+the tests caught: the stop silently did nothing and the screen went on saying
+«جارٍ بدء التسجيل».
+
+### The callback verifies, and can manufacture nothing
+
+`POST /integrations/online-class/callback` is the only route here outside the
+guarded router, because the caller is a machine with no Bodour session. Three
+things must all hold before a row changes:
+
+1. **the provider's signature over the RAW body verifies** — which is why the
+   route is mounted before the JSON parser: a parsed-and-reserialised body no
+   longer matches the signature, and every genuine callback would fail while
+   nothing extra was accepted;
+2. the event names an egress job **this platform started** — an id nobody here
+   has seen is ignored, so an arbitrary request creates no recording and no
+   content;
+3. the transition is one the machine allows.
+
+**It always answers `204`.** A distinguishable refusal would tell a prober its
+guess was wrong, and a provider retrying forever against a `4xx` it cannot fix
+is worse than a silent discard.
+
+### Two failure shapes worth knowing about
+
+* **Two staff press بدء at the same instant.** The read-then-create check cannot
+  separate them; the **partial unique index** on the live states decides, and the
+  loser is handed *the recording that won* rather than a five-hundred.
+* **The provider accepts and the database write then fails.** The dangerous one:
+  walking away would leave a recorder running to the end of the lesson, writing
+  a file nobody tracks, whose callback matches no row. The handle is captured
+  before the write is attempted and the **orphan is cancelled**. The clean-up
+  itself uses `updateMany`, because the failure path must not be able to fail —
+  it did, once, and the مؤطِّرة got a raw database error instead of her refusal.
+
+### Provider output is staging, never the asset
+
+Egress writes to **`RECORDING_STAGING_BUCKET`** — a bucket the platform owns and
+does **not** serve. `completed` means *the provider produced an object*, and the
+interface says **«انتهى التسجيل، وتتم تهيئته للنشر»**, never «متاح». Turning that
+object into an `EducationalContent` with `origin = session_recording` and a
+`SessionContent` link is **C2**, and until it happens there is deliberately no
+library item to find (R99.14 — an item whose object is absent is worse than an
+honest failure).
+
+### Local infrastructure
+
+`livekit-server --dev` records nothing: **Egress is a separate service and needs
+Redis**. Both are dev-overlay containers, absent from `docker-compose.yml`:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d redis livekit livekit-egress
+```
+
+LiveKit runs from `infra/livekit/livekit.yaml` rather than `--dev`, because the
+flag cannot express a Redis address or a webhook target. The Egress worker runs
+a headless browser to composite the room, so it needs `shm_size: 1gb` — the
+default 64 MB makes Chrome crash part-way through a long lesson.
 
 ## The provider seam
 
@@ -275,7 +415,9 @@ this container existed.
 | The wire shape, no secret on it, `X-Active-Child-ID` honoured, forged bodies | `backend/src/controllers/online-class.http.integration.test.ts` |
 | Join button placement, one classroom, one route, Arabic for every failure | `frontend/src/components/classroom/classroom.test.tsx` |
 | One backend file knows the vendor · no vendor in user text · no recording | `scripts/ci/check-provider-seam.sh` |
-| **A real three-party room against a real server**, and every refusal on the page a human opens | `scripts/dev/browser/verify-livekit-join.sh` |
+| Recording lifecycle, concurrency, orphan cancellation, out-of-order callbacks | `backend/src/services/session-recording.integration.test.ts` |
+| The callback refuses everything it should, over real HTTP with raw bodies | `backend/src/controllers/online-class.http.integration.test.ts` |
+| **A real three-party room, REAL recorded media in both formats, and capture surviving the starter's tab closing** | `scripts/dev/browser/verify-livekit-join.sh` |
 
 The last one is the only place several people are actually in a room at once,
 and it is what caught the CSP.

@@ -64,12 +64,16 @@ services:
   # that finding before this container existed.
   livekit:
     image: livekit/livekit-server:v1.9.1
-    command: --dev --bind 0.0.0.0
-    environment:
-      # The key pair the API mints tokens with in development. Fixed and
-      # committed ON PURPOSE: it authorises nothing beyond this loopback
-      # container, and a generated one could not be written into .env.example.
-      LIVEKIT_KEYS: "devkey: devsecretdevsecretdevsecretdevsecret"
+    # **A config file, not `--dev`** (R99): the flag cannot express the Redis
+    # address Egress needs to receive jobs, nor the webhook target that tells
+    # the platform a recording finished. The key pair is fixed and committed ON
+    # PURPOSE — it authorises nothing beyond these loopback containers, and a
+    # generated one could not be written into .env.example.
+    command: --config /etc/livekit.yaml
+    volumes:
+      - ./infra/livekit/livekit.yaml:/etc/livekit.yaml:ro
+    depends_on:
+      - redis
     ports:
       # The BROWSER connects to LiveKit directly, so unlike db and minio this
       # one has to be reachable from the host — that is what LIVEKIT_URL points
@@ -78,4 +82,41 @@ services:
       - "127.0.0.1:7880:7880"
       - "127.0.0.1:7881:7881"
       - "127.0.0.1:7882:7882/udp"
+    restart: unless-stopped
+
+  # ── R99: Redis, and a REAL Egress worker ──────────────────────────────────
+  #
+  # `livekit-server --dev` records nothing: Egress is a SEPARATE service and it
+  # needs Redis to receive jobs — the finding `online-class-provider.md` recorded
+  # before either container existed, now paid for rather than rediscovered.
+  #
+  # Both are DEV-OVERLAY services and are deliberately absent from
+  # docker-compose.yml. A production deployment points at LiveKit Cloud (or a
+  # self-hosted stack) and does not run these; the API talks to whatever
+  # LIVEKIT_URL names.
+  redis:
+    image: redis:8.2-alpine
+    # Recording jobs are transient work, not data: an AOF/RDB file here would be
+    # a durability promise nothing depends on.
+    command: redis-server --save "" --appendonly no
+    restart: unless-stopped
+
+  # The Egress worker runs a headless browser to composite the room, which is
+  # why the image is large and why it needs the shared-memory bump: the default
+  # 64 MB /dev/shm makes Chrome crash part-way through a long lesson.
+  livekit-egress:
+    image: livekit/egress:v1.9.1
+    environment:
+      EGRESS_CONFIG_FILE: /etc/egress.yaml
+    volumes:
+      - ./infra/egress/egress.yaml:/etc/egress.yaml:ro
+    shm_size: 1gb
+    # It reaches LiveKit and MinIO by SERVICE NAME on the internal network —
+    # this is the architecture LiveKit Cloud cannot have, and it is why local
+    # verification can write a real object into the platform's own MinIO while
+    # a Cloud deployment must be ingested from the provider's bucket instead.
+    depends_on:
+      - redis
+      - livekit
+      - minio
     restart: unless-stopped

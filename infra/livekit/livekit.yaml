@@ -1,0 +1,25 @@
+# Local LiveKit config (R99). Dev overlay only — never used in production.
+#
+# `--dev` alone cannot express two things C1 needs, which is why this file
+# replaces the flag: a Redis address (Egress receives its jobs through Redis)
+# and a webhook target (the platform is told when a recording finishes).
+port: 7880
+bind_addresses:
+  - "0.0.0.0"
+rtc:
+  tcp_port: 7881
+  port_range_start: 7882
+  port_range_end: 7892
+  use_external_ip: false
+redis:
+  address: redis:6379
+keys:
+  devkey: devsecretdevsecretdevsecretdevsecret
+# The API is reached by SERVICE NAME on the internal network, so a callback
+# never leaves the machine and never passes the edge rate limits.
+webhook:
+  api_key: devkey
+  urls:
+    - http://api:3000/api/v1/integrations/online-class/callback
+logging:
+  level: debug

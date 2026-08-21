@@ -14,6 +14,8 @@ import CLASSROOM_PAGE from '../../pages/classroom.tsx?raw';
 import DIALOG from '../calendar/event-details-dialog.tsx?raw';
 import ADAPTER from '../../adapters/online-class.ts?raw';
 import MAIN from '../../main.tsx?raw';
+import recordingSource from './recording.tsx?raw';
+import { recordingProblem, statusLabel } from './recording.js';
 import type { Occurrence } from '../../adapters/calendar.js';
 
 /**
@@ -192,11 +194,38 @@ describe('the classroom adapts to the credential, and names no vendor (R98.13)',
     expect(source).toMatch(/audioOnly \? null : \(\s*<Button/);
   });
 
-  it('mounts no recording affordance and asks for no recording grant (R98.18)', () => {
+  /**
+   * **RESTATED for R99, not deleted.**
+   *
+   * R98.18 read *«mounts no recording affordance»*, which was that revision's
+   * true and deliberate position: recording did not exist, and a control that
+   * could start an unconsented one must not ship before the gate that governs
+   * it. R99 authorised recording, so the sentence stopped being the property.
+   *
+   * **The property was never "no recording UI".** It is that recording is
+   * **the platform's**, driven by its own control and its own server-side
+   * capture — never a capability handed to a browser. So: the classroom
+   * composes بذور الأمل's own panel, mounts **no vendor recording component**,
+   * and the participant token still carries **no `roomRecord` grant** (asserted
+   * server-side, where the token is minted).
+   */
+  it('recording is the platform’s own, never a vendor affordance or a client grant', () => {
     const source = code(CLASSROOM);
-    for (const forbidden of ['Record', 'record', 'egress', 'Egress']) {
-      expect(source).not.toContain(forbidden);
+    // The platform's panel, composed — one concept, one component (rule C).
+    expect(source).toContain('<RecordingPanel');
+    // No vendor recording component anywhere in the classroom.
+    for (const vendorAffordance of [
+      'StartRecording',
+      'RecordingIndicator',
+      'useIsRecording',
+      'egress',
+      'Egress',
+    ]) {
+      expect(source).not.toContain(vendorAffordance);
     }
+    // And the capability is never granted to the client: capture is
+    // server-side, so a browser that stops talking cannot stop the recording.
+    expect(source).not.toContain('roomRecord');
   });
 
   it('names no media platform in any string a reader sees', () => {
@@ -307,5 +336,71 @@ describe('the dialog is the SHARED one, not a per-portal copy', () => {
     expect(withJoin.map(([path]) => path)).toEqual([
       '../calendar/event-details-dialog.tsx',
     ]);
+  });
+});
+
+/* ── R99: recording ───────────────────────────────────────────────────────── */
+
+describe('recording is optional, explicit, and visible to everyone (R99)', () => {
+  const RECORDING = recordingSource;
+
+  it('the client never starts a recording as a side effect of joining', () => {
+    // R99.2's non-negotiable: `دخول الحصة` must not imply recording. The
+    // classroom mounts the panel; nothing in the join path calls start.
+    const page = code(CLASSROOM_PAGE);
+    const room = code(CLASSROOM);
+    expect(page).not.toContain('startRecording');
+    expect(room).not.toContain('startRecording(');
+    // …and the adapter's start is reached only from the panel's own control.
+    expect(code(RECORDING)).toContain('startRecording(sessionId, accessToken)');
+  });
+
+  it('«جاري التسجيل» comes from the ROOM, not from whoever pressed the button', () => {
+    // A banner driven by the starter's own click is invisible to everybody
+    // else; one driven by polling is late. `useIsRecording` is the room's own
+    // state and reaches latecomers on arrival (R99.5).
+    expect(code(RECORDING)).toContain('useIsRecording()');
+    expect(code(RECORDING)).toMatch(/live \?[\s\S]*classroom\.recordingLive/);
+  });
+
+  it('offers the controls to teaching staff and to nobody else', () => {
+    expect(code(RECORDING)).toContain(
+      "const MAY_RECORD: JoinCredentials['role'][] = ['teacher', 'assistant', 'admin']",
+    );
+    // The role comes from the credential the SERVER issued (rule O).
+    expect(code(RECORDING)).toContain('mayRecord ?');
+  });
+
+  it('never claims a recording is available before the asset exists (R99.14)', () => {
+    // «متاح» must not appear anywhere in C1: the provider having finished is
+    // not the library having the file.
+    expect(JSON.stringify(ar.classroom)).not.toContain('متاح');
+    expect(ar.classroom.recordingDone).toContain('تهيئته');
+  });
+
+  it('states every lifecycle status in Arabic, and never a raw enum', () => {
+    const seen = (
+      ['starting', 'recording', 'stopping', 'processing', 'completed', 'failed', 'aborted'] as const
+    ).map((status) => statusLabel({ status } as never));
+    for (const label of seen) {
+      expect(label).not.toMatch(/^[a-z_]+$/);
+      expect(label.length).toBeGreaterThan(3);
+    }
+  });
+
+  it('maps a refusal to her words, never the operator message', () => {
+    const forbidden = new ApiError(403, {
+      code: 'FORBIDDEN',
+      message_key: 'errors.forbidden',
+      message: 'only teaching staff may record a class',
+      details: { reason: 'RECORDING_NOT_PERMITTED' },
+      request_id: 'r',
+    });
+    expect(recordingProblem(forbidden)).toBe(ar.classroom.recordingNotPermitted);
+    expect(recordingProblem(forbidden)).not.toContain('teaching staff');
+  });
+
+  it('says recording is a CHOICE where the choice is made', () => {
+    expect(ar.classroom.recordingHint).toContain('اختياري');
   });
 });

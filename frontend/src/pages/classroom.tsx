@@ -107,6 +107,7 @@ export function ClassroomPage(): ReactNode {
         {phase.name === 'inside' ? (
           <OnlineClassroom
             credentials={phase.credentials}
+            accessToken={accessToken ?? ''}
             onLeave={() => setPhase({ name: 'left' })}
           />
         ) : null}

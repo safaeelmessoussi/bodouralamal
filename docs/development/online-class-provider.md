@@ -6,11 +6,12 @@ This is an **implementation choice**, recorded separately from the delivery
 domain on purpose. [SRS R97.9](class-delivery.md) makes provider-independence
 normative: the domain must survive replacing what is written here.
 
-> **Status (R98, 2026-08-20): rooms, join authorization and the embedded
-> classroom are IMPLEMENTED** — see [online-classroom.md](online-classroom.md),
-> which is where the join architecture and the durable rule live. **Recording is
-> still not built**: no Egress, no Redis, no recording grant, no import into
-> `EducationalContent`.
+> **Status (R99, 2026-08-21): rooms, join authorization, the embedded classroom
+> and **server-side recording** are IMPLEMENTED** — see
+> [online-classroom.md](online-classroom.md), which is where the architecture
+> and the durable rule live. **Recording capture, its lifecycle and its verified
+> callback are done; INGESTION is not**: a finished recording is a verified
+> staging object, and turning it into `EducationalContent` is the next slice.
 >
 > The decision below is reached through **one narrow application seam**
 > (`backend/src/lib/online-class-provider.ts`, guarded by
@@ -81,6 +82,13 @@ Egress. Real *recording* verification therefore needs an additional egress
 container plus Redis. Budget for it in the recording section rather than
 discovering it there.
 
+> **Confirmed and paid for in R99 (2026-08-21).** Both containers are now in the
+> dev overlay. Two details the finding did not anticipate: `--dev` had to be
+> **replaced by a config file**, because the flag can express neither a Redis
+> address nor a webhook target; and the Egress worker composites the room in a
+> headless browser, so it needs `shm_size: 1gb` — the default 64 MB crashes
+> Chrome part-way through a long lesson.
+
 ### 2. LiveKit Cloud Egress cannot write to this deployment's MinIO
 
 The S3 output `endpoint` **must start with `https://`**, and the egress worker
@@ -113,6 +121,12 @@ invisible to every test that is not a browser.
   backend takes `livekit-server-sdk` only; the client takes
   `livekit-client`, `@livekit/components-react` and `@livekit/components-styles`.
   None introduced a security advisory.
+* **The browser's URL is NOT the server's.** `LIVEKIT_URL` is handed to the
+  client, so locally it is a host-published port — and inside the API container
+  that same address is the container's own loopback. R98 never noticed because
+  it only ever handed the URL to a browser; it broke the moment the server had
+  to call the provider itself, with every recording failing on «fetch failed»
+  while the media worked perfectly. Hence `LIVEKIT_API_URL` (TD-13).
 * **§3.1's CSP blocks the media server**, and must name its origin in **both**
   schemes — `wss:` *and* `https:` — because the client validates over HTTP
   before upgrading. Listing only the socket origin fails with *«could not

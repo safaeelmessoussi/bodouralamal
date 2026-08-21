@@ -122,6 +122,10 @@ GET /admin/teaching-candidates                # R90; the staff picker's planning
 GET /sessions/{id}/roster                     # R92; who is expected at ONE occurrence — venue and audience as separate facts
 PUT /sessions/{id}/audience-branches          # R92; this occurrence's audience branches; empty list clears the override
 POST /sessions/{id}/online-join               # R98; Bodour authorizes, the provider executes; derived room, bounded token
+POST /sessions/{id}/recording                 # R99; OPTIONAL and explicit; teacher/assistant/admin only; server-side capture
+GET /sessions/{id}/recording                  # R99.5; readable by EVERY participant — «جاري التسجيل» is transparency, not authority
+POST /sessions/{id}/recording/stop            # R99; same authority as starting, and not limited to whoever started it
+POST /integrations/online-class/callback      # R99.15; provider-signed, idempotent; can manufacture nothing
 GET /me/event-staff-options                   # R93; whom the CALLER may name on an event she answers for — names only, no directory
 GET /me/event-scope-options                   # R93; the scopes the CALLER may address an event to — her own groups, from §4.4c
 GET /admin/branches/{id}/event-backfill       # §4.4 "listing applicable global/recurring events to attach"

@@ -44,3 +44,65 @@ export async function requestJoin(
   );
   return response.data;
 }
+
+/**
+ * **R99 — the recording of a class, which is OPTIONAL.**
+ *
+ * `null` from `readRecordingState` is the ordinary answer and a real one: a
+ * class nobody recorded has no state, and the classroom shows no recording
+ * banner at all rather than «لم يبدأ التسجيل» on every screen.
+ *
+ * Starting and stopping carry an **empty body** for the same reason joining
+ * does — in particular there is no `media_mode`, because the format follows the
+ * class (R99.7) and a client that could name it could record video of a صوت فقط
+ * lesson.
+ */
+export interface RecordingState {
+  id: string;
+  status:
+    | 'starting'
+    | 'recording'
+    | 'stopping'
+    | 'processing'
+    | 'completed'
+    | 'failed'
+    | 'aborted';
+  started_at: string;
+  stopped_at: string | null;
+  /** Resolved server-side so two screens cannot disagree about «جاري التسجيل». */
+  live: boolean;
+}
+
+export async function readRecordingState(
+  sessionId: string,
+  token: string,
+  activeChildId: string | null,
+): Promise<RecordingState | null> {
+  const response = await api<{ data: RecordingState | null }>(
+    `/sessions/${sessionId}/recording`,
+    { token, activeChildId },
+  );
+  return response.data;
+}
+
+export async function startRecording(
+  sessionId: string,
+  token: string,
+): Promise<RecordingState> {
+  const response = await api<{ data: RecordingState }>(
+    `/sessions/${sessionId}/recording`,
+    { method: 'POST', token, body: {} },
+  );
+  return response.data;
+}
+
+export async function stopRecording(
+  sessionId: string,
+  token: string,
+): Promise<RecordingState> {
+  const response = await api<{ data: RecordingState }>(
+    `/sessions/${sessionId}/recording/stop`,
+    { method: 'POST', token, body: {} },
+  );
+  return response.data;
+}
