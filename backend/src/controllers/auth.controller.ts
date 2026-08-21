@@ -42,8 +42,8 @@ import * as tokens from '../repositories/refresh-token.repository.js';
  */
 
 const REFRESH_COOKIE = 'bodour_refresh';
-/** TD-12: the refresh cookie is confined to the one route that reads it. */
-const REFRESH_COOKIE_PATH = '/api/v1/auth/refresh';
+/** R101: exactly refresh and logout consume this cookie. */
+const REFRESH_COOKIE_PATH = '/api/v1/auth';
 const FLOW_COOKIE_PATH = '/api/v1/auth/google';
 
 function redirectUri(config: AppConfig): string {
@@ -250,18 +250,27 @@ export function resolveActiveRole(
   return fallback ?? null;
 }
 
-/** `POST /auth/refresh` — TD-12's sole cookie-authenticated route. */
+/**
+ * R101's shared CSRF boundary for the only two refresh-cookie consumers.
+ *
+ * This check deliberately runs before the cookie is parsed. A cross-site
+ * caller must not be able to distinguish a browser holding a live session
+ * from one holding nothing by comparing responses.
+ */
+function assertRefreshCookieCsrf(req: Request, config: AppConfig): void {
+  if (req.header('x-requested-with') !== 'XMLHttpRequest') {
+    throw new AppError('AUTH_REQUIRED', 'missing X-Requested-With');
+  }
+  const origin = req.header('origin');
+  if (origin && origin !== config.PUBLIC_BASE_URL) {
+    throw new AppError('AUTH_REQUIRED', 'origin mismatch');
+  }
+}
+
+/** `POST /auth/refresh` — one of R101's two refresh-cookie consumers. */
 export function refresh(prisma: PrismaClient, config: AppConfig) {
   return async (req: Request, res: Response): Promise<void> => {
-    // CSRF posture (TD-12): a custom header a cross-site form cannot set, plus
-    // an Origin that must match our own. SameSite=Lax is the third leg.
-    if (req.header('x-requested-with') !== 'XMLHttpRequest') {
-      throw new AppError('AUTH_REQUIRED', 'missing X-Requested-With');
-    }
-    const origin = req.header('origin');
-    if (origin && origin !== config.PUBLIC_BASE_URL) {
-      throw new AppError('AUTH_REQUIRED', 'origin mismatch');
-    }
+    assertRefreshCookieCsrf(req, config);
 
     const presented = parseCookies(req.header('cookie'))[REFRESH_COOKIE];
     if (!presented) throw new AppError('AUTH_REQUIRED', 'no refresh cookie');
@@ -314,9 +323,10 @@ export function refresh(prisma: PrismaClient, config: AppConfig) {
   };
 }
 
-/** `POST /auth/logout` — revokes the CURRENT session only (TD-4.14). */
-export function logout(prisma: PrismaClient) {
+/** `POST /auth/logout` — revokes the CURRENT session only (TD-4.14, R101). */
+export function logout(prisma: PrismaClient, config: AppConfig) {
   return async (req: Request, res: Response): Promise<void> => {
+    assertRefreshCookieCsrf(req, config);
     const presented = parseCookies(req.header('cookie'))[REFRESH_COOKIE];
     res.append('Set-Cookie', clearCookie(REFRESH_COOKIE, REFRESH_COOKIE_PATH));
 

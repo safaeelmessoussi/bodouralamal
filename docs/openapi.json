@@ -245,7 +245,7 @@
     "/auth/refresh": {
       "post": {
         "summary": "Rotate the refresh token",
-        "description": "The ONLY cookie-authenticated route (TD-12). Requires X-Requested-With and an Origin matching PUBLIC_BASE_URL. Rotation, the 10s predecessor grace window, and reuse detection are per TD-4.13 and §18 T1–T12.",
+        "description": "One of exactly two refresh-cookie authenticated routes (TD-12, R101), with logout. The HttpOnly cookie is scoped to /api/v1/auth. Requires X-Requested-With and an Origin matching PUBLIC_BASE_URL. Rotation, the 10s predecessor grace window, and reuse detection are per TD-4.13 and §18 T1–T12.",
         "responses": {
           "200": {
             "description": "New access token; a rotated refresh cookie unless the grace window applied."
@@ -327,10 +327,20 @@
     "/auth/logout": {
       "post": {
         "summary": "Log out of the current session",
-        "description": "Revokes the current session only; other devices are unaffected (TD-4.14).",
+        "description": "The other permitted refresh-cookie authenticated route (TD-12, R101). Requires the same X-Requested-With and Origin checks as refresh, revokes the cookie's current server-side session only, and expires the HttpOnly cookie at Path=/api/v1/auth. Other devices are unaffected (TD-4.14).",
         "responses": {
           "204": {
-            "description": "Session revoked. Idempotent."
+            "description": "Session revoked, or no current session existed. Idempotent."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8). Missing or invalid CSRF request context.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
           },
           "500": {
             "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
@@ -2543,7 +2553,7 @@
     "/admin/users/{id}/roles": {
       "put": {
         "summary": "Replace a user's role and branch-scope assignments",
-        "description": "§5.6 *\"role/branch-scope assignment\"*, §14.2, TD-2. Body: `{ assignments: [{ role, branch_id }] }` — **the complete set the user should hold afterwards**. A `PUT` of the whole set rather than add/remove verbs: the set is what an administrator reasons about, one call yields one audit row describing one decision, and **there is no window in which the user holds half of an intended change** — which add-then-remove creates every time a role moves between branches. **`branch_id: null` means all branches for that assignment** (§7 R24), never *no branch*; it is a required, explicitly nullable key rather than an optional one, so the unscoped grant is never the easiest thing to type by accident. **Removal is a soft delete** (TD-5) — a revoked assignment is tombstoned, so *\"who was an administrator at this branch in March\"* stays answerable, and re-granting an identical assignment revives that row rather than colliding with the unique index that spans deleted rows. **Only a Super Admin may grant or revoke `admin` or `super_admin`**; an Admin doing either is privilege propagation, the same rule `POST /admin/users` applies to creation. **`super_admin` IS assignable here**, unlike at creation: Revision 22 states that after bootstrap *every subsequent change of administrators happens exclusively through the application*, and refusing the role would leave a VPS shell as the only route to a second Super Admin. **The last active Super Admin cannot lose the role** (`409 STATE_CONFLICT`, `reason: LAST_SUPER_ADMIN`). **Sessions are deliberately NOT revoked** — Revision 10 resolves this trade-off explicitly: every safeguarding-sensitive operation re-asserts live assignments per request, so a revoked role stops mattering immediately where it matters, and §7 fixes `RefreshRevokedReason` at four values, none of which honestly describes a demotion.",
+        "description": "§5.6 *\"role/branch-scope assignment\"*, §14.2, TD-2. Body: `{ assignments: [{ role, branch_id }] }` — **the complete set the user should hold afterwards**. A `PUT` of the whole set rather than add/remove verbs: the set is what an administrator reasons about, one call yields one audit row describing one decision, and **there is no window in which the user holds half of an intended change** — which add-then-remove creates every time a role moves between branches. **`branch_id: null` means all branches for that assignment** (§7 R24), never *no branch*; it is a required, explicitly nullable key rather than an optional one, so the unscoped grant is never the easiest thing to type by accident. **Removal is a soft delete** (TD-5) — a revoked assignment is tombstoned, so *\"who was an administrator at this branch in March\"* stays answerable, and re-granting an identical assignment revives that row rather than colliding with the unique index that spans deleted rows. **Only a Super Admin may grant or revoke `admin` or `super_admin`**; an Admin doing either is privilege propagation, the same rule `POST /admin/users` applies to creation. **`super_admin` IS assignable here**, unlike at creation: Revision 22 states that after bootstrap *every subsequent change of administrators happens exclusively through the application*, and refusing the role would leave a VPS shell as the only route to a second Super Admin. **The last active Super Admin cannot lose the role** (`409 STATE_CONFLICT`, `reason: LAST_SUPER_ADMIN`). **Sessions are deliberately NOT revoked** — Revision 10 resolves this trade-off explicitly: every safeguarding-sensitive operation re-asserts live assignments per request, so a revoked role stops mattering immediately where it matters, and the enumerated RefreshRevokedReason values in §7 cover logout, safeguarding actions, replay and the R101 one-time rollout; none honestly describes a demotion.",
         "responses": {
           "200": {
             "description": "The user with their new assignments."

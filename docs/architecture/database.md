@@ -94,7 +94,7 @@ state that no other entity holds.
 | `token_hash` | **Hashed, never raw** — a stolen database dump must not yield usable 30-day credentials. Unique |
 | `session_id` | The stable id of one rotation chain. Makes "revoke this session" a single indexed `UPDATE` instead of a recursive walk of predecessors |
 | `rotated_from_id` | The immediate predecessor. **This one field decides all three refresh outcomes**: current → rotate, immediate predecessor within grace → accept, anything older → reuse detected |
-| `revoked_at` / `revoked_reason` | The revocation check is `revoked_at IS NULL`. The reason separates a normal logout from a **detected replay**, which is a security event |
+| `revoked_at` / `revoked_reason` | The revocation check is `revoked_at IS NULL`. The reason separates a normal logout, detected replay, safeguarding action, and R101's one-time cookie-Path rollout; NULL remains reserved for ordinary rotation |
 
 The fields **deliberately excluded** are documented in the specification with their reasons,
 so a later implementer does not re-add them by reflex: `created_at` (identical to
@@ -339,10 +339,54 @@ SQL, and flags every `DROP`/`RENAME` for human review with its contract-phase ju
 20260729060000_r36_1_display_name_not_blank
 20260729150624_r36_1_public_display_name
 20260801194116_r39_user_intended_branch
+20260802131723_r40_arabic_name_parts
+20260802135318_r41_french_name_parts
+20260804101500_r43_educational_model_expand
+20260804101600_r43_educational_model_constraints
+20260804180000_r43_4_session_staff_snapshot
+20260804200000_r43_contract_drop_retired_model
+20260805190000_r49_requested_role
+20260805200000_r49_intended_category
+20260805210000_r50_effective_until
+20260809120000_r57_schedule_title
+20260809180000_r58_exam_mode
+20260809190000_r58_exam_branch_date_index
+20260811120000_r62_child_applications
+20260811180000_r64_child_application_branch
+20260811210000_r66_enrollment_branch
+20260812090000_r68_identity_review
+20260812150000_r71_event_staff
+20260812170000_r73_quran_subject_marker
+20260818120000_r77_session_cancellation_notification
+20260818160000_r78_assignment_and_reschedule_events
+20260818200000_r79_beneficiary_fact
+20260818220000_r80_sex_not_null
+20260819000000_r81_exam_max_grade
+20260819120000_r82_notification_targets
+20260819160000_r83_optional_reason
+20260819200000_r88_teaching_profile
+20260819230000_r91_effective_staffing
+20260820010000_r92_session_audience_branch
+20260820120000_r93_event_staff_assigned
+20260820160000_r96_user_qr_identity
+20260820180000_r97_delivery_mode
+20260821090000_r99_recording
+20260821140000_r99_recording_ingestion
+20260821200000_r101_refresh_cookie_path_reason
+20260821200100_r101_invalidate_legacy_refresh_sessions
 ```
 
 Note the pattern: schema changes and their hand-written constraints are **separate
 migrations**, and revision-driven changes carry the revision number in the name.
+
+R101 deliberately uses two adjacent migrations. PostgreSQL cannot safely add an enum value
+and consume it in persisted rows inside the same migration transaction. The first migration
+adds `cookie_path_migration`; after Prisma commits it, the second uses one data-modifying CTE
+to write system audit and revoke every still-live pre-cutover token atomically. Deployment
+stops the old issuer before either migration, so no narrow-Path credential can be minted after
+the sweep. `_prisma_migrations` is the one-time cutover marker: a repeated `migrate deploy`
+does not execute the data migration again and therefore cannot revoke sessions issued by the
+new application. Running migration SQL manually after cutover is prohibited.
 
 ### Filename order is apply order — and it bit us
 

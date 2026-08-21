@@ -852,11 +852,10 @@ export async function setUserRoles(
   // (`assertFreshActive`), so a revoked role stops mattering *immediately*
   // where it matters, and the stateless window is accepted elsewhere.
   //
-  // Revoking would also require a new `RefreshRevokedReason`, and §7 fixes that
-  // enum at four values — `logout`, `suspension`, `user_deleted`,
-  // `reuse_detected`. Reusing `suspension` for a demotion would make the audit
-  // trail say something untrue about why access ended, which is worse than the
-  // hour.
+  // Revoking would also require a new `RefreshRevokedReason`. §7's values
+  // describe logout, safeguarding actions, replay, and R101's one-time rollout;
+  // none describes a demotion. Reusing `suspension` would make the audit trail
+  // say something untrue about why access ended, which is worse than the hour.
   return readOne(prisma, id);
 }
 

@@ -178,8 +178,8 @@ session properly.
 
 `scripts/dev/issue-dev-session.sh` mints one by calling **`issueNewSession`, the
 production code path the OAuth callback itself calls**, and prints the raw token
-to be set as the ordinary `bodour_refresh` cookie — confined to its own route
-(TD-12), exactly as the server sets it. **Nothing about authorisation is
+to be set as the ordinary `bodour_refresh` cookie at `Path=/api/v1/auth`
+(TD-12, R101), exactly as the server sets it. **Nothing about authorisation is
 bypassed**: the user is an ordinary `super_admin` row, and every request it makes
 is checked by the same TD-2 rules as any other. What is replaced is the identity
 *provider*, and only in a development database — the script refuses to run
@@ -191,6 +191,13 @@ It takes an optional user uuid:
 bash scripts/dev/issue-dev-session.sh              # the script's own Super Admin
 bash scripts/dev/issue-dev-session.sh <user-uuid>  # an existing user, as they are
 ```
+
+The authentication integration coverage drives both cookie consumers over HTTP. It proves a
+refresh rotates first, logout receives that successor, the persisted chain is revoked, a
+retained copy is refused, another device still rotates, repeat/missing-session logout is
+idempotent, and the response clears the cookie with the matching Path and security attributes.
+The R101 rollout test executes the committed data-migration SQL inside a rolled-back database
+transaction, so it verifies revocation and system audit without signing out local developers.
 
 **With a uuid it grants nothing.** The Super Admin role is created only for the
 script's own default user; a user named on the command line is minted for exactly
@@ -590,8 +597,9 @@ feature. `verify-notifications.mjs` mints **once per identity** and reuses it.
 **`/auth/refresh` compares `X-Requested-With` literally** — the value must be
 `XMLHttpRequest` (TD-12's CSRF posture). Any other value is `AUTH_REQUIRED`.
 
-**One refresh cookie, one consumer.** A harness that drives the API *and* loads
-the app needs a **separate session per phase**: the page's own refresh rotates
+**One refresh chain, one rotating browser credential.** Refresh and logout are
+the only two consumers (R101), but a harness that drives the API *and* loads the
+app still needs a **separate session per phase**: the page's own refresh rotates
 the cookie, and the other phase's mint then fails. The symptom is a dashboard
 stuck at «جارٍ التحميل…», which reads as a missing feature.
 

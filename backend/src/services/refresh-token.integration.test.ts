@@ -191,6 +191,33 @@ describe("§18 token lifecycle acceptance criteria", () => {
     expect(bAlive.kind).toBe("rotated");
   });
 
+  it("R101 — logout cannot resurrect the session through the predecessor grace window", async () => {
+    const userId = await makeUser();
+    const predecessor = await issueNewSession(prisma, userId);
+    const current = await rotate(prisma, predecessor.rawToken);
+    expect(current.kind).toBe("rotated");
+    if (current.kind !== "rotated") return;
+
+    await logout(prisma, {
+      userId,
+      sessionId: predecessor.sessionId,
+      actorUserId: userId,
+    });
+
+    // This call is deliberately inside the ordinary ten-second predecessor
+    // window. Grace is valid only while the successor remains live.
+    const retainedPredecessor = await rotate(prisma, predecessor.rawToken);
+    expect(retainedPredecessor.kind).toBe("reuse_detected");
+
+    const retainedCurrent = await rotate(prisma, current.rawToken);
+    expect(retainedCurrent.kind).toBe("reuse_detected");
+    expect(
+      await prisma.refreshToken.count({
+        where: { sessionId: predecessor.sessionId, revokedAt: null },
+      }),
+    ).toBe(0);
+  });
+
   it("T7/T8 — revoke-all kills every live session of the user", async () => {
     const userId = await makeUser();
     const adminId = await makeUser();

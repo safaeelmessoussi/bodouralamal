@@ -50,8 +50,8 @@ export async function insert(
 
 /**
  * Marks a token superseded by rotation. `revoked_reason` is deliberately left
- * NULL: §7's four reasons name *deliberate* revocations, so a revoked row with
- * a null reason reads as "rotated" (TD-4.13, Revision 17).
+ * NULL: §7's enumerated reasons name *deliberate* revocations, so a revoked row
+ * with a null reason reads as "rotated" (TD-4.13, Revision 17; R101).
  */
 export async function markRotated(db: Db, tokenId: string, now: Date): Promise<void> {
   await db.refreshToken.update({ where: { id: tokenId }, data: { revokedAt: now } });

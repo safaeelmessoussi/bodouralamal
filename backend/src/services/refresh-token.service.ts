@@ -162,6 +162,12 @@ export async function rotate(
       // At least two generations old: unambiguously a replayed secret.
       if (await tokens.hasSuccessor(tx, successor.id)) return detectReuse();
 
+      // The predecessor grace exists only while its successor is the live
+      // credential for this session. Logout/suspension/deletion revoke that
+      // successor, so accepting the predecessor afterwards would resurrect a
+      // deliberately ended session for up to ten seconds (R101).
+      if (successor.revokedAt !== null) return detectReuse();
+
       // T3 — immediate predecessor inside the window: accept, but do NOT mint a
       // third token; forking the chain would destroy reuse detection (TD-12).
       if (now.getTime() - successor.issuedAt.getTime() <= ROTATION_GRACE_MS) {
