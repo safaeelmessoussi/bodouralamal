@@ -322,12 +322,46 @@ is worse than a silent discard.
 ### Provider output is staging, never the asset
 
 Egress writes to **`RECORDING_STAGING_BUCKET`** — a bucket the platform owns and
-does **not** serve. `completed` means *the provider produced an object*, and the
-interface says **«انتهى التسجيل، وتتم تهيئته للنشر»**, never «متاح». Turning that
-object into an `EducationalContent` with `origin = session_recording` and a
-`SessionContent` link is **C2**, and until it happens there is deliberately no
-library item to find (R99.14 — an item whose object is absent is worse than an
-honest failure).
+does **not** serve. `completed` means *the provider produced an object*, and it
+is **not** availability.
+
+### From staging object to library item (C2)
+
+The verified completion callback does **two things and returns**: it persists the
+provider's report, and it inserts a `session-recording-ingest` job **in the same
+transaction** (§16.2, §20 rule 8). It does not copy the file. A صوت وصورة lesson
+is up to 500 MB, and a provider whose webhook times out **retries** — so importing
+inside the handler turns one slow import into several concurrent ones.
+
+The job then: verifies the **actual bytes** in staging → copies them
+**server-side** into the ordinary content bucket → creates the
+`EducationalContent` (`origin = session_recording`) and its `SessionContent` link
+→ sets `session_recording.educational_content_id` → sweeps staging. The mechanism,
+the ordering and what each step protects against are in
+[background jobs](../architecture/background-jobs.md#session-recording-ingest--provider-completed-is-not-bodour-متاح);
+the storage side is in [storage](../architecture/storage.md#the-third-bucket-recordings-staging-r99).
+
+**What a مؤطِّرة is told follows from that, and never from the provider.** The
+`GET` route carries two different answers: `status` is the **provider's**, and
+`availability` is the **association's**.
+
+| `availability` | what she reads | true when |
+|---|---|---|
+| `capturing` | «جارٍ بدء التسجيل…» · «جاري التسجيل» · «جارٍ إيقاف التسجيل…» | the recording is live |
+| `processing` | «تتم معالجة التسجيل…» | the provider is finalising |
+| `importing` | «انتهى التسجيل، وتتم تهيئته للنشر.» | **provider `completed`, no library item yet** |
+| `available` | «التسجيل متاح الآن…» | `educational_content_id` is set |
+| `import_failed` | «تعذّرت تهيئته للنشر… ستُعاد المحاولة» | the last import attempt was refused |
+| `failed` | «تعذّر تسجيل هذه الحصة.» | the capture itself failed or was aborted |
+
+**«متاح» is derived, never stored** — it is exactly `educational_content_id IS NOT
+NULL`. A status value would be a second fact that can disagree with the object it
+describes, and R99.14 is explicit that a content item whose object is absent is
+worse than an honest failure: it is discoverable, downloadable and empty.
+
+**A failed IMPORT is not a failed RECORDING**, and the interface says so. There
+*is* an artefact; the platform could not accept it. Only that one is retried, and
+`ingestion_failure_reason` is a column of its own for the same reason.
 
 ### What a recording is called, and who decides
 
@@ -433,6 +467,8 @@ this container existed.
 | Recording lifecycle, concurrency, orphan cancellation, out-of-order callbacks | `backend/src/services/session-recording.integration.test.ts` |
 | The callback refuses everything it should, over real HTTP with raw bodies | `backend/src/controllers/online-class.http.integration.test.ts` |
 | **A real three-party room, REAL recorded media in both formats, and capture surviving the starter's tab closing** | `scripts/dev/browser/verify-livekit-join.sh` |
+| Ingestion end to end: the bytes verified, the durable copy, one content row under concurrency, mixed-origin naming, failure and retry | `backend/src/services/session-recording-ingest.integration.test.ts` |
+| **A real recording actually opened and played by an authorised beneficiary**, and refused for a different Level | `scripts/dev/browser/verify-livekit-ingest.sh` |
 
 The last one is the only place several people are actually in a room at once,
 and it is what caught the CSP.

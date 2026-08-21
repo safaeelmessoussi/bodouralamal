@@ -1487,6 +1487,41 @@ model SessionRecording {
   /// told the recording failed and what to do, not what the provider said.
   failureReason String? @map("failure_reason") @db.VarChar(500)
 
+  /// **The library item this recording BECAME — and the durable idempotency
+  /// anchor for the whole ingestion pipeline (R99.13, R99.15).**
+  ///
+  /// `NULL` until ingestion has genuinely succeeded, which is what makes
+  /// R99.14 checkable rather than asserted: *available* is **derived from this
+  /// column being set**, never stored as a second fact that could disagree with
+  /// it. The provider saying `completed` means only that an object exists in
+  /// staging.
+  ///
+  /// **Optional 1:1, and both halves earn their place.** Nullable, because most
+  /// of a recording's life is spent before there is anything to point at.
+  /// **Unique**, because a duplicate callback, a retried job and a redelivered
+  /// webhook must all converge on **one** content row: if the column is already
+  /// populated the worker returns what is there instead of ingesting again, and
+  /// the index is what makes that true under concurrency rather than merely
+  /// likely.
+  ///
+  /// `Restrict` rather than `Cascade`: deleting the library item must not
+  /// silently erase the record that a class was recorded.
+  educationalContentId String?             @unique @map("educational_content_id") @db.Uuid
+  educationalContent   EducationalContent? @relation(fields: [educationalContentId], references: [id], onDelete: Restrict)
+
+  /// **Why the last ingestion attempt failed** — operator-facing, and distinct
+  /// from `failureReason` above, which is the PROVIDER's.
+  ///
+  /// The two are different events with different remedies: the provider failing
+  /// to record means there is no artefact, while ingestion failing means there
+  /// is one and the platform could not accept it. Collapsing them into one
+  /// column would make *the recording failed* the answer to both, and only one
+  /// of them is recoverable by retrying.
+  ///
+  /// Cleared on success, so a populated value always describes the CURRENT
+  /// state rather than a historical attempt that later succeeded.
+  ingestionFailureReason String? @map("ingestion_failure_reason") @db.VarChar(500)
+
   version Int @default(0)
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
@@ -2214,6 +2249,11 @@ model EducationalContent {
   deletedById String?   @map("deleted_by") @db.Uuid
 
   sessionLinks SessionContent[]
+
+  /// R99 — set only on an item the platform produced by recording a class, and
+  /// at most one recording can have produced it (the unique side of the
+  /// relation lives on `SessionRecording`).
+  sessionRecording SessionRecording?
 
   @@index([levelId, academicYearId, branchId])
   @@index([visibility])

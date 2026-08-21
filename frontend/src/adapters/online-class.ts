@@ -71,6 +71,27 @@ export interface RecordingState {
   stopped_at: string | null;
   /** Resolved server-side so two screens cannot disagree about «جاري التسجيل». */
   live: boolean;
+  /**
+   * **Where the recording is from the ASSOCIATION's point of view** (R99.14),
+   * which is not what `status` above answers.
+   *
+   * `status` is the PROVIDER's: `completed` means an object exists in a staging
+   * bucket. This is the platform's, derived server-side from the library item
+   * existing, and it is what «متاح» may be said on. A client that had only the
+   * provider's word would have to invent the distinction R99.14 requires it to
+   * make — and would get it wrong in the direction that sends a مؤطِّرة looking
+   * for a recording that is not there.
+   */
+  availability:
+    | 'capturing'
+    | 'processing'
+    | 'importing'
+    | 'available'
+    | 'import_failed'
+    | 'failed';
+  /** The library item, once there is one. **There is deliberately no provider
+   *  URL on this type** — provider output is never the content asset (R99.13). */
+  educational_content_id: string | null;
 }
 
 export async function readRecordingState(

@@ -31,6 +31,18 @@ export const JOB_QUEUES = {
    *  pending job, which is safe because materialization is a full idempotent
    *  reconcile rather than a delta. */
   sessionMaterialize: 'session.materialize',
+  /**
+   * **R99 C2 — turning a provider's staging object into a library item.**
+   *
+   * Enqueued by the verified provider callback, inside the same transaction as
+   * the status write, **singleton per recording**: a provider delivering the
+   * same completion three times leaves one pending job rather than three
+   * concurrent copies racing for the same key. The handler is idempotent
+   * independently of that — `session_recording.educational_content_id` is
+   * `UNIQUE` and is the first thing it reads — so the singleton is an
+   * efficiency, not the guarantee.
+   */
+  sessionRecordingIngest: 'session-recording-ingest',
 } as const;
 
 /**

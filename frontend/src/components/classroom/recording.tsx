@@ -151,10 +151,11 @@ export function RecordingPanel({
           )}
 
           {/**
-           * **The status, in her words — and «متاح» is deliberately not among
-           * them** (R99.14). The platform does not tell a مؤطِّرة a recording is
-           * available until the asset genuinely exists in Bodour storage, which
-           * this section does not yet build.
+           * **The status, in her words — and «متاح» is said only when it is
+           * true** (R99.14). It is driven by `availability`, which the server
+           * derives from the library item existing, and never by the provider's
+           * `status`: the provider finishing means an object is in a staging
+           * bucket, which is not availability.
            */}
           {state ? <p className="classroom__recording-state">{statusLabel(state)}</p> : null}
 
@@ -168,24 +169,39 @@ export function RecordingPanel({
   );
 }
 
-/** The state machine in Arabic. Unknown states fall back to a sentence rather
- *  than rendering a raw enum, the same discipline every other label here has. */
+/**
+ * **The six states R99.14 requires the interface to distinguish, in Arabic.**
+ *
+ * Keyed on `availability` — the ASSOCIATION's answer — and not on `status`,
+ * which is the provider's. The two genuinely differ and the difference is the
+ * clause: `status = completed` means an object exists in a staging bucket, and
+ * a مؤطِّرة told «متاح» on the strength of that would go looking for a library
+ * item that is not there.
+ *
+ * `capturing` is deliberately narrowed by the live `status` underneath it, so a
+ * مؤطِّرة sees «جارٍ بدء التسجيل…» rather than «جاري التسجيل» in the second
+ * before the provider confirms. Unknown values fall back to a sentence rather
+ * than rendering a raw enum, the same discipline every other label here has.
+ */
 export function statusLabel(state: RecordingState): string {
-  switch (state.status) {
-    case 'starting':
-      return t('classroom.recordingStarting');
-    case 'recording':
+  switch (state.availability) {
+    case 'capturing':
+      if (state.status === 'starting') return t('classroom.recordingStarting');
+      if (state.status === 'stopping') return t('classroom.recordingStopping');
       return t('classroom.recordingLive');
-    case 'stopping':
-      return t('classroom.recordingStopping');
     case 'processing':
       return t('classroom.recordingProcessing');
-    case 'completed':
-      // NOT «متاح». The provider has finished; the library item does not exist
-      // yet (R99.14).
+    case 'importing':
+      // The provider has finished; the library item does not exist yet.
       return t('classroom.recordingDone');
+    case 'available':
+      // Said only here, and only because `educational_content_id` is set.
+      return t('classroom.recordingAvailable');
+    case 'import_failed':
+      // Distinguished from a failed CAPTURE: there IS an artefact, and the
+      // remedy is different — this one is retried.
+      return t('classroom.recordingImportFailed');
     case 'failed':
-    case 'aborted':
       return t('classroom.recordingFailed');
     default:
       return t('classroom.recordingFailed');

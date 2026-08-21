@@ -1867,12 +1867,16 @@ export function recordingStateDto(state: {
   startedAt: Date;
   stoppedAt: Date | null;
   live: boolean;
+  availability: string;
+  educationalContentId: string | null;
 }): {
   id: string;
   status: string;
   started_at: string;
   stopped_at: string | null;
   live: boolean;
+  availability: string;
+  educational_content_id: string | null;
 } {
   return {
     id: state.id,
@@ -1880,5 +1884,21 @@ export function recordingStateDto(state: {
     started_at: state.startedAt.toISOString(),
     stopped_at: state.stoppedAt ? state.stoppedAt.toISOString() : null,
     live: state.live,
+    /**
+     * **R99.14 — where the recording is from the ASSOCIATION's point of view.**
+     *
+     * `status` is the PROVIDER's state and stays exactly what it was; this is
+     * the platform's, and the two genuinely differ: `status = completed` means
+     * an object exists in a staging bucket, which is not «متاح». Both ship,
+     * because a client that had only the provider's word would have to invent
+     * the distinction R99.14 requires it to make.
+     */
+    availability: state.availability,
+    /**
+     * The library item, once there is one. **This is what «متاح» means** — the
+     * client opens the recording through the ordinary content path, and there is
+     * deliberately no provider URL anywhere on this DTO (R99.13).
+     */
+    educational_content_id: state.educationalContentId,
   };
 }

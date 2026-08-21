@@ -642,6 +642,14 @@
   - [x] **R75.6 naming is SERVER-computed** (2026-08-21) — one algorithm, one namespace per Session; the browser composes nothing and shows an editable suggestion. Latent UTC-date defect fixed on the way
   - [x] **«التسجيلات» is `origin`, not MIME** — an uploaded audio file is a material; a `video/mp4` session recording is a recording. Three guards restated
   - [x] **R99.12 upload marker** — `content_meta.origin`, bound into the ticket, describes and never permits: `video/*` still refused for both values
+  - [x] **Migration `20260821140000_r99_recording_ingestion`** — nullable UNIQUE `educational_content_id` + `ingestion_failure_reason`. «متاح» is DERIVED from the relation, never a stored status
+  - [x] **Shared TD-9 validator** — `verifyObject` decoupled from `UploadTicketClaims`; one whitelist behind two doors, `video/*` still refused at `/uploads/*`
+  - [x] **Server-side storage primitives** — stat · ranged head · `CopyObject` **inside MinIO** · delete. No 500 MB through Node
+  - [x] **`session-recording-ingest`** — same-transaction enqueue from the verified callback, singleton per recording; the webhook persists and returns
+  - [x] **Worker** — verify actual bytes (incl. media family) → durable copy → `EducationalContent` + `SessionContent` → link → sweep staging last
+  - [x] **Idempotent under duplicate callback, retry and concurrency** — one object, one content row, one link, no false suffix increment
+  - [x] **Defect found by C2's tests:** the transition table conflated *already there* with *just moved*, so a re-delivered completion enqueued a second job
+  - [ ] Real-media browser proof (OGG + MP4), beneficiary visibility ladder, tab-close, failure/retry — `verify-livekit-ingest`
 
 ### R98 — entering a class عن بُعد (2026-08-20)
 

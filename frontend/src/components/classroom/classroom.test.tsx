@@ -371,21 +371,63 @@ describe('recording is optional, explicit, and visible to everyone (R99)', () =>
     expect(code(RECORDING)).toContain('mayRecord ?');
   });
 
-  it('never claims a recording is available before the asset exists (R99.14)', () => {
-    // «متاح» must not appear anywhere in C1: the provider having finished is
-    // not the library having the file.
-    expect(JSON.stringify(ar.classroom)).not.toContain('متاح');
-    expect(ar.classroom.recordingDone).toContain('تهيئته');
+  /**
+   * **Restated for C2, not deleted.** In C1 the guard was *«متاح» appears
+   * nowhere*, because there was no ingestion and therefore nothing that could
+   * ever be available. C2 builds the ingestion, so the property becomes the one
+   * R99.14 actually states: **«متاح» is said only when the asset exists**, and
+   * the provider having finished is not that.
+   *
+   * Absence was the right assertion while the state was unreachable; keeping it
+   * would now mean deleting the feature to satisfy the test.
+   */
+  it('says «متاح» ONLY for the derived available state (R99.14)', () => {
+    // The provider is finished. The library item does not exist. Not available.
+    expect(
+      statusLabel({ status: 'completed', availability: 'importing' } as never),
+    ).not.toContain('متاح');
+    expect(
+      statusLabel({ status: 'completed', availability: 'importing' } as never),
+    ).toContain('تهيئته');
+
+    // Only this one, and the server sets it only from `educational_content_id`.
+    expect(
+      statusLabel({ status: 'completed', availability: 'available' } as never),
+    ).toContain('متاح');
   });
 
-  it('states every lifecycle status in Arabic, and never a raw enum', () => {
+  it('distinguishes a failed CAPTURE from a failed IMPORT — different remedies', () => {
+    // One means there is no artefact; the other means there is one and the
+    // platform could not accept it yet, and only the second is retried.
+    const capture = statusLabel({ status: 'failed', availability: 'failed' } as never);
+    const importing = statusLabel({
+      status: 'completed',
+      availability: 'import_failed',
+    } as never);
+    expect(capture).not.toBe(importing);
+    expect(importing).toContain('تهيئته');
+  });
+
+  it('states every availability in Arabic, and never a raw enum', () => {
     const seen = (
-      ['starting', 'recording', 'stopping', 'processing', 'completed', 'failed', 'aborted'] as const
-    ).map((status) => statusLabel({ status } as never));
+      [
+        ['capturing', 'starting'],
+        ['capturing', 'recording'],
+        ['capturing', 'stopping'],
+        ['processing', 'processing'],
+        ['importing', 'completed'],
+        ['available', 'completed'],
+        ['import_failed', 'completed'],
+        ['failed', 'failed'],
+      ] as const
+    ).map(([availability, status]) => statusLabel({ availability, status } as never));
     for (const label of seen) {
       expect(label).not.toMatch(/^[a-z_]+$/);
       expect(label.length).toBeGreaterThan(3);
     }
+    // Each state says something different — a label table that collapsed two
+    // states would pass the "not an enum" check while hiding the distinction.
+    expect(new Set(seen).size).toBeGreaterThanOrEqual(6);
   });
 
   it('maps a refusal to her words, never the operator message', () => {

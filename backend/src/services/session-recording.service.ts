@@ -1,4 +1,5 @@
 import type {
+  Prisma,
   PrismaClient,
   RecordingStatus,
 } from "../generated/prisma/client.js";
@@ -11,6 +12,7 @@ import type { Actor } from "../policies/actor.js";
 import { authorizeJoin } from "./online-class.service.js";
 import { roomNameForSession, stagingKeyFor } from "../policies/online-class.js";
 import * as audit from "../repositories/audit.repository.js";
+import { enqueue, JOB_QUEUES } from "../repositories/jobs.repository.js";
 
 /**
  * **Recording an online class (SRS Revision 99).**
@@ -86,6 +88,54 @@ export interface RecordingState {
   mimeType: string | null;
   /** True while the provider is capturing — what «جاري التسجيل» reports. */
   live: boolean;
+  /**
+   * **The library item this recording became, or `null`** (R99.13, C2).
+   *
+   * This single column is what «متاح» means. It is not a second status value
+   * because a second value can disagree with the object it describes, and
+   * R99.14 is explicit that a content item whose object is absent is worse than
+   * an honest failure.
+   */
+  educationalContentId: string | null;
+  /**
+   * **Where the recording is from the ASSOCIATION's point of view**, which is
+   * not the same question as what the provider is doing (R99.14).
+   *
+   * `completed` on the provider's side means only that an object exists in a
+   * staging bucket. A مؤطِّرة is told «تتم تهيئته للنشر» until the asset is
+   * genuinely in Bodour storage, and «متاح» only then.
+   */
+  availability: RecordingAvailability;
+}
+
+/**
+ * The six states R99.14 requires the interface to distinguish, **derived** —
+ * every one of them is a reading of facts already stored, so none can drift
+ * from what is true.
+ */
+export type RecordingAvailability =
+  | "capturing"
+  | "processing"
+  | "importing"
+  | "available"
+  | "import_failed"
+  | "failed";
+
+function availabilityOf(row: {
+  status: RecordingStatus;
+  educationalContentId: string | null;
+  ingestionFailureReason: string | null;
+}): RecordingAvailability {
+  if (row.educationalContentId !== null) return "available";
+  if (row.status === "failed" || row.status === "aborted") return "failed";
+  if (row.status === "completed") {
+    // The provider is done and the platform is not. The distinction between
+    // *in flight* and *the last attempt was refused* is the difference between
+    // waiting and acting, so it is reported rather than collapsed.
+    return row.ingestionFailureReason !== null ? "import_failed" : "importing";
+  }
+  if (row.status === "processing") return "processing";
+  return "capturing";
 }
 
 const toState = (row: {
@@ -96,9 +146,19 @@ const toState = (row: {
   startedAt: Date;
   stoppedAt: Date | null;
   mimeType: string | null;
+  educationalContentId: string | null;
+  ingestionFailureReason: string | null;
 }): RecordingState => ({
-  ...row,
+  id: row.id,
+  sessionId: row.sessionId,
+  status: row.status,
+  startedById: row.startedById,
+  startedAt: row.startedAt,
+  stoppedAt: row.stoppedAt,
+  mimeType: row.mimeType,
   live: LIVE.includes(row.status),
+  educationalContentId: row.educationalContentId,
+  availability: availabilityOf(row),
 });
 
 /* ─────────────────────────────── starting ──────────────────────────────── */
@@ -322,14 +382,14 @@ export async function stopRecording(
     }
   }
 
-  const updated = await applyTransition(prisma, live.id, "stopping", {
+  const transition = await applyTransition(prisma, live.id, "stopping", {
     stoppedById: actor.userId,
     stoppedAt: new Date(),
   });
   // A refused transition means the provider's own report won the race and the
   // recording has already moved on — report where it actually IS rather than
   // where the request wanted it.
-  if (updated === null) {
+  if (transition === null) {
     const current = await prisma.sessionRecording.findUniqueOrThrow({
       where: { id: live.id },
       select: SELECT_STATE,
@@ -346,7 +406,7 @@ export async function stopRecording(
     detail: { recording_id: live.id },
   });
 
-  return updated;
+  return transition.state;
 }
 
 /* ─────────────────────────────── reading ───────────────────────────────── */
@@ -399,25 +459,72 @@ export async function readState(
 export async function applyProviderReport(
   prisma: PrismaClient,
   report: RecordingReport,
-): Promise<{ applied: boolean; recordingId: string | null }> {
+): Promise<{ applied: boolean; recordingId: string | null; enqueued: boolean }> {
   const existing = await prisma.sessionRecording.findFirst({
     where: { providerEgressId: report.providerEgressId, deletedAt: null },
     select: { id: true, status: true },
   });
   // Not ours. Silently ignored — answering differently would tell an unverified
   // caller which job ids exist.
-  if (!existing) return { applied: false, recordingId: null };
+  if (!existing) return { applied: false, recordingId: null, enqueued: false };
 
-  const updated = await applyTransition(prisma, existing.id, report.state, {
+  const data = {
     ...(report.outputKey ? { outputKey: report.outputKey } : {}),
     ...(report.sizeBytes ? { sizeBytes: BigInt(report.sizeBytes) } : {}),
     ...(report.durationMs ? { durationMs: Math.round(report.durationMs) } : {}),
     ...(report.failureReason
       ? { failureReason: report.failureReason.slice(0, 500) }
       : {}),
+  };
+
+  /**
+   * **The handoff: persist the provider's fact, enqueue the import, return**
+   * (R99.13, C2).
+   *
+   * The callback must not do the import. A 500 MB `CopyObject` inside an HTTP
+   * handler holds the request open for as long as the copy takes, and a
+   * provider that times out **retries** — so a slow import becomes several
+   * concurrent ones, which is the failure mode most likely to produce duplicate
+   * content. What happens here is one row update and one row insert.
+   *
+   * **The enqueue is in the SAME transaction as the status write** (§16.2, §20
+   * rule 8, TD-4): if the write rolls back the job must vanish with it, and if
+   * it commits the job must be guaranteed. `boss.send()` on its own connection
+   * can satisfy neither. TD-16's other half follows for free — with workers
+   * down, enqueues keep succeeding and jobs drain on restart.
+   *
+   * **The singleton key is the recording id**, so a provider delivering the same
+   * completion three times leaves **one** pending job. Even without it the
+   * worker is idempotent — `educationalContentId` is unique and is checked
+   * first — but collapsing the duplicates means three deliveries do not become
+   * three concurrent copies racing for the same key.
+   */
+  const outcome = await prisma.$transaction(async (tx) => {
+    const updated = await applyTransition(tx, existing.id, report.state, data);
+    if (updated === null) return { applied: false, enqueued: false };
+
+    // Only a completion has anything to import. A `failed` or `aborted` report
+    // has no object, and enqueuing for one would make the worker's first act be
+    // to discover there is nothing to do.
+    //
+    // **`moved`, not merely `completed`.** A re-delivered completion finds the
+    // row already terminal, which is *success* to the caller and must not be a
+    // second job: enqueuing on the state rather than on the edge would queue one
+    // import per delivery.
+    if (report.state !== "completed" || !updated.moved) {
+      return { applied: true, enqueued: false };
+    }
+
+    await enqueue(
+      tx,
+      JOB_QUEUES.sessionRecordingIngest,
+      { recording_id: existing.id },
+      existing.id,
+    );
+    return { applied: true, enqueued: true };
   });
 
-  return { applied: updated !== null, recordingId: existing.id };
+  return { ...outcome, recordingId: existing.id };
 }
 
 /* ───────────────────────────────── internals ───────────────────────────── */
@@ -430,6 +537,8 @@ const SELECT_STATE = {
   startedAt: true,
   stoppedAt: true,
   mimeType: true,
+  educationalContentId: true,
+  ingestionFailureReason: true,
 } as const;
 
 /**
@@ -441,11 +550,11 @@ const SELECT_STATE = {
  * Matching on the current status makes the second one update zero rows.
  */
 async function applyTransition(
-  prisma: PrismaClient,
+  prisma: PrismaClient | Prisma.TransactionClient,
   id: string,
   next: RecordingStatus,
   data: Record<string, unknown>,
-): Promise<RecordingState | null> {
+): Promise<TransitionResult | null> {
   const current = await prisma.sessionRecording.findUnique({
     where: { id },
     select: { status: true },
@@ -457,7 +566,7 @@ async function applyTransition(
       where: { id },
       select: SELECT_STATE,
     });
-    return toState(row);
+    return { state: toState(row), moved: false };
   }
   if (!TRANSITIONS[current.status].includes(next)) return null;
 
@@ -471,5 +580,22 @@ async function applyTransition(
     where: { id },
     select: SELECT_STATE,
   });
-  return toState(row);
+  return { state: toState(row), moved: true };
+}
+
+/**
+ * **`moved` separates *the row changed* from *it was already there*, and the
+ * distinction is load-bearing** (found by the C2 tests).
+ *
+ * Idempotence made both answers *success*, which is right for the interface —
+ * a مؤطِّرة pressing stop twice should see the same state, not an error. It is
+ * wrong for the ingestion handoff: a provider re-delivering a completion would
+ * enqueue a second import job every time, so a provider that retries ten times
+ * would queue ten. The worker is idempotent and no duplicate content could
+ * result, but *enqueue only on the edge* is the property, and one that holds
+ * only because the thing downstream is forgiving is not a property.
+ */
+interface TransitionResult {
+  state: RecordingState;
+  moved: boolean;
 }

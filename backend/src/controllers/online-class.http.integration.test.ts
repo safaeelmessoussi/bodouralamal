@@ -486,6 +486,67 @@ describe("the recording routes", () => {
     expect(res.status).toBe(404);
   });
 
+  /**
+   * **R99 C2 on the wire, read by the WIDEST reader there is.**
+   *
+   * A beneficiary may read the recording state (R99.5), so asserting the shape
+   * through her token proves two things at once: that the C2 fields ship, and
+   * that nothing about the provider ships with them (R99.13).
+   */
+  it("carries the ASSOCIATION's availability, and never a provider URL", async () => {
+    const started = await prisma.user.findFirstOrThrow({
+      where: { nameArabic: { startsWith: TAG } },
+      select: { id: true },
+    });
+    const recording = await prisma.sessionRecording.create({
+      data: {
+        sessionId: onlineSessionId,
+        startedById: started.id,
+        status: "completed",
+        providerEgressId: `EG_wire_${Math.random().toString(36).slice(2)}`,
+        outputBucket: "recordings-staging",
+        outputKey: `session-recordings/${onlineSessionId}/x.ogg`,
+        mimeType: "audio/ogg",
+        stoppedAt: new Date(),
+      },
+      select: { id: true },
+    });
+
+    const res = await httpCall<Res["body"]>(
+      BASE,
+      "GET",
+      `/sessions/${onlineSessionId}/recording`,
+      { token: studentToken },
+    );
+    expect(res.status).toBe(200);
+    const body = (res.body.data ?? {}) as Record<string, unknown>;
+
+    expect(Object.keys(body).sort()).toEqual([
+      "availability",
+      "educational_content_id",
+      "id",
+      "live",
+      "started_at",
+      "status",
+      "stopped_at",
+    ]);
+    // The provider is finished and the platform is not — R99.14's distinction,
+    // on the wire.
+    expect(body["status"]).toBe("completed");
+    expect(body["availability"]).toBe("importing");
+    expect(body["educational_content_id"]).toBeNull();
+
+    // R99.13 — the staging location is integration state and never leaves the
+    // server. Asserted on the serialised body, because a field added later
+    // would slip past a key list read by eye.
+    const wire = JSON.stringify(res.body);
+    for (const leak of ["recordings-staging", "output_key", "provider", "egress"]) {
+      expect(wire).not.toContain(leak);
+    }
+
+    await prisma.sessionRecording.delete({ where: { id: recording.id } });
+  });
+
   it("refuses a body that names a format — the class decides (R99.7)", async () => {
     const res = await call(`/sessions/${onlineSessionId}/recording`, studentToken, {
       media_mode: "audio_video",

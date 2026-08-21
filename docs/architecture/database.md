@@ -131,6 +131,33 @@ upsert.
 pair's latest log id — never as per-row cache reads plus per-row max lookups, which would be
 an N+1 wearing a cache costume.
 
+### `SessionRecording` → `EducationalContent` — a nullable UNIQUE that is the whole idempotency design (R99)
+
+One column, `session_recording.educational_content_id`: **nullable, unique, FK `RESTRICT`** —
+an optional 1:1. Each half is load-bearing.
+
+**Nullable**, because most of a recording's life is spent before there is anything to point at:
+it is `NULL` while capturing, while the provider finalises, and while the import job runs.
+
+**Unique**, because a provider may deliver the same completion twice, a pg-boss job may be
+retried, and a worker may be killed between the server-side copy and the row write. All three
+must converge on **one** `EducationalContent`. The ingestion job reads this column first and
+returns the existing result when it is set — and the unique index is what makes that check hold
+under concurrency rather than merely usually.
+
+**`RESTRICT`**, because deleting the library item must not silently erase the record that a
+class was recorded. The link is severed deliberately or not at all.
+
+**And it is why there is no `available` status value.** *«متاح»* is exactly
+`educational_content_id IS NOT NULL`. A status enum carrying `available` would be a second fact
+about the same thing, and the two can disagree — the disagreement looking like a working library
+item whose object is absent, which R99.14 calls worse than an honest failure. **Derive the
+state from the row that proves it.**
+
+`ingestion_failure_reason` sits beside it and is deliberately **not** the same column as
+`failure_reason`: the provider failing to record and the platform failing to accept what it
+recorded are different events with different remedies, and only the second is fixed by retrying.
+
 ### `ConsentRecord` and `AuditLog` — append-only by design
 
 Consent is a **state-change history**, never overwritten. Effective status is always

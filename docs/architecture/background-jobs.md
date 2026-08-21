@@ -62,9 +62,63 @@ Admin-visible failure. Singleton keys prevent duplicate concurrent runs.
 | `token.purge` | Daily cron | Removes consumed onboarding tokens past their horizon **and refresh tokens past expiry**, so a table gaining a row per refresh does not grow unbounded |
 | `ratelimit.purge` | Daily cron | Removes counters for elapsed windows. **Housekeeping only** — the quota decision is synchronous and never depends on this job |
 | `audit.purge` | Daily cron | The single sanctioned deletion path for audit rows. See below |
+| `session-recording-ingest` | A **verified** provider completion callback (R99) | Singleton per recording. Turns a provider staging object into an `EducationalContent` + `SessionContent`. See below |
 
 Post-MVP additions (`import.csv`, `export.csv`, `grade.recalculate`) join with their
 features.
+
+> **`session-recording-ingest` is not in the SRS's TD-7 table.** R99 authorises the
+> ingestion pipeline (R99.13, R99.14) and specifies the TD-2, TD-3, TD-8 and TD-13 additions
+> it needs, but names no queue — and §20 rule 1 leaves no compliant alternative to pg-boss for
+> durable, retryable work. **Reported to the Document Owner as a TD-7 catalogue gap**; this
+> table carries it in the meantime, exactly as the handbook carries every other thing the
+> specification is silent about until it is not.
+
+### `session-recording-ingest` — provider `completed` is not Bodour «متاح»
+
+The sentence the whole job exists to make true (R99.13):
+
+> A recording is finished when the object exists in the platform's own storage and an
+> `EducationalContent` row references it — **not when the provider says it has one.**
+
+**Why it is a job and not part of the callback.** A صوت وصورة lesson is up to 500 MB (TD-9).
+Copying that inside the webhook handler holds the request open for as long as the copy takes,
+and **a provider that times out retries** — so one slow import becomes several concurrent ones,
+which is the failure mode most likely to produce duplicate content. The handler writes one row
+and inserts one job.
+
+**The order is the design.** Each step protects against a specific way of producing a broken
+library item:
+
+1. **Already ingested?** → return what is there. `session_recording.educational_content_id` is
+   `UNIQUE`, and it is the durable idempotency anchor for the whole pipeline.
+2. **Verify the actual bytes**, never the provider's metadata — exists, non-empty, within
+   TD-9's cap, magic bytes matching, **and the media family the class asked for**. An OGG
+   delivered for a صوت وصورة class is a perfectly valid OGG and is refused anyway, because
+   R99.7 forbids silently downgrading the lesson.
+3. **Copy server-side into the content bucket.** `CopyObject` runs *inside* MinIO, so half a
+   gigabyte never passes through a container pinned at 768 MB (TD-13).
+4. **One transaction**: allocate the R75.6 name under `SELECT … FOR UPDATE` on the occurrence,
+   create the `EducationalContent` (`origin = session_recording`), create the `SessionContent`
+   link, set `educational_content_id`, write the audit row.
+5. **Then sweep staging.** A cleanup failure must never undo valid content — what is left
+   behind is one object in a bucket the platform owns and does not serve.
+
+**Availability is derived, never stored.** *«متاح»* is exactly
+`educational_content_id IS NOT NULL`. An `available` status value would be a second fact that
+can disagree with the object it describes, and R99.14 is explicit that a content item whose
+object is absent is worse than an honest failure — it is discoverable, downloadable and empty.
+
+**A failed import is recoverable and says so.** `ingestion_failure_reason` is a column of its
+own, separate from the provider's `failure_reason`: *the provider could not record* and *the
+platform could not accept what it recorded* have different remedies, and only the second is
+fixed by trying again. Nothing is deleted on failure — the staging object is deliberately kept
+so a corrected one can be retried — and no content row is created.
+
+**The durable key is deterministic.** Its hash segment is derived from the recording id rather
+than random, so a job that copied the object and then died finds *its own* object on retry
+instead of minting a second key and orphaning the first. The object is copied only if it is not
+already there, so the key is still written exactly once (§20 rule 15).
 
 ### `session.materialize` — eager, and the reason is correctness
 

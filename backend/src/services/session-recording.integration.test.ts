@@ -552,7 +552,7 @@ describe("the lifecycle is idempotent in both directions (R99.15)", () => {
       state: "completed",
       outputKey: "anything.mp4",
     });
-    expect(result).toEqual({ applied: false, recordingId: null });
+    expect(result).toEqual({ applied: false, recordingId: null, enqueued: false });
     expect(await prisma.sessionRecording.count()).toBe(before);
   });
 
@@ -671,7 +671,7 @@ describe("two people, one class, and a provider that half-works", () => {
       providerEgressId: "EG_early",
       state: "recording",
     });
-    expect(early).toEqual({ applied: false, recordingId: null });
+    expect(early).toEqual({ applied: false, recordingId: null, enqueued: false });
 
     await startRecording(
       prisma,

@@ -1,24 +1,19 @@
 import { randomUUID } from 'node:crypto';
 
-import {
-  CopyObjectCommand,
-  DeleteObjectCommand,
-  GetObjectCommand,
-  HeadObjectCommand,
-} from '@aws-sdk/client-s3';
-
 import type { ContentOrigin, Prisma, PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
 import {
   buildStorageKey,
-  isAcceptedMime,
-  magicBytesMatch,
+  isUploadableMime,
   quarantineKeyFor,
   sizeCapFor,
   type AcceptedMime,
 } from '../lib/file-types.js';
+import { discardObject, verifyStoredObject } from '../lib/object-verification.js';
 import {
   BUCKETS,
+  copyObject,
+  deleteObject,
   presignGetUrl,
   presignPutUrl,
   PRESIGN_TTL_SECONDS,
@@ -83,7 +78,7 @@ function isStaff(actor: Actor): boolean {
 }
 
 /** §7: the bucket carries visibility, the key never does (TD-9). */
-function bucketFor(visibility: string): BucketName {
+export function bucketFor(visibility: string): BucketName {
   return visibility === 'public' ? BUCKETS.public : BUCKETS.private;
 }
 
@@ -222,7 +217,10 @@ export interface InitiateResult {
  * category.{id}`, seeded in §15.1). Reading it here rather than defaulting to
  * `private` in code is what makes the Admin-configurable default real.
  */
-async function categoryDefaultVisibility(prisma: PrismaClient, levelId: string): Promise<string> {
+export async function categoryDefaultVisibility(
+  prisma: PrismaClient,
+  levelId: string,
+): Promise<string> {
   const level = await prisma.level.findFirst({
     where: { id: levelId, deletedAt: null },
     select: { categoryId: true },
@@ -244,7 +242,7 @@ export async function initiateUpload(
   actor: Actor,
   input: InitiateInput,
 ): Promise<InitiateResult> {
-  if (!isAcceptedMime(input.mime)) {
+  if (!isUploadableMime(input.mime)) {
     throw new AppError('VALIDATION_FAILED', 'MIME type is not on the TD-9 whitelist', {
       mime: input.mime,
     });
@@ -337,59 +335,55 @@ function claimsOf(uploadId: string, signingKey: string, actor: Actor): UploadTic
   return verified.claims;
 }
 
-async function deleteObject(clients: StorageClients, bucket: string, key: string): Promise<void> {
-  await clients.internal.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }));
-}
-
 /**
- * §4.9 (Revision 8) verification: **ranged GET for the magic bytes, HEAD for the
- * size.** Never a full read.
+ * §4.9 (Revision 8) verification, **through the shared validator**
+ * (`lib/object-verification.ts`).
+ *
+ * The four checks used to be written out here against `UploadTicketClaims`.
+ * R99's ingestion has to make the same assertions about an object no ticket
+ * describes, so the parameter became the *object* and this function is now the
+ * upload boundary's translation of the shared outcome into TD-3.8's envelope —
+ * which is the part that genuinely differs. The ingestion worker's translation
+ * is a retryable job failure, not an HTTP status, and neither should have to
+ * know the other's vocabulary.
+ *
+ * **The delete stays here**, because deleting is the upload's own rule: TD-9
+ * says a mismatched upload is destroyed at once, while a recording's staging
+ * object must survive so the attempt can be retried (R99.14).
  */
 async function verifyObject(
   clients: StorageClients,
   claims: UploadTicketClaims,
 ): Promise<{ size: number }> {
-  let head;
-  try {
-    head = await clients.internal.send(
-      new HeadObjectCommand({ Bucket: claims.bucket, Key: claims.key }),
-    );
-  } catch {
+  const outcome = await verifyStoredObject(clients, {
+    bucket: claims.bucket,
+    key: claims.key,
+    mime: claims.mime,
+    // The browser declared it at `/initiate`; a different number means the
+    // object is not the one that was authorised.
+    declaredSize: claims.size,
+    cap: sizeCapFor(claims.mime as AcceptedMime),
+  });
+  if (outcome.ok) return { size: outcome.sizeBytes };
+
+  if (outcome.reason === 'MISSING') {
     // Nothing was ever PUT, or the PUT failed. This is the state
     // `UPLOAD_INCOMPLETE` exists for (TD-3.8) — not a validation failure.
     throw new AppError('UPLOAD_INCOMPLETE', 'no object at the initiated key');
   }
 
-  const size = Number(head.ContentLength ?? 0);
-  const cap = sizeCapFor(claims.mime as AcceptedMime);
-  if (size !== claims.size || size > cap) {
-    await deleteObject(clients, claims.bucket, claims.key);
-    throw new AppError(
-      'VALIDATION_FAILED',
-      'stored size does not match the declared size',
-      { declared: claims.size, actual: size, cap },
-      // §4.9: a mismatch at completion is a 409, not a 400 — TD-3.8 records this
-      // as the "409 variant on upload complete". The request was well-formed;
-      // the object it refers to is not what it claimed.
-      409,
-    );
-  }
-
-  const ranged = await clients.internal.send(
-    new GetObjectCommand({ Bucket: claims.bucket, Key: claims.key, Range: 'bytes=0-511' }),
+  await discardObject(clients, claims.bucket, claims.key);
+  throw new AppError(
+    'VALIDATION_FAILED',
+    outcome.reason === 'MAGIC'
+      ? 'magic bytes do not match the declared MIME type'
+      : 'stored size does not match the declared size',
+    outcome.detail,
+    // §4.9: a mismatch at completion is a 409, not a 400 — TD-3.8 records this
+    // as the "409 variant on upload complete". The request was well-formed; the
+    // object it refers to is not what it claimed.
+    409,
   );
-  const head512 = Buffer.from(await ranged.Body!.transformToByteArray());
-  if (!magicBytesMatch(claims.mime as AcceptedMime, head512)) {
-    await deleteObject(clients, claims.bucket, claims.key);
-    throw new AppError(
-      'VALIDATION_FAILED',
-      'magic bytes do not match the declared MIME type',
-      { declared: claims.mime },
-      409,
-    );
-  }
-
-  return { size };
 }
 
 export interface CompleteInput {
@@ -562,13 +556,10 @@ async function quarantineObject(
 ): Promise<void> {
   const target = quarantineKeyFor(contentId, key);
   try {
-    await clients.internal.send(
-      new CopyObjectCommand({
-        Bucket: bucket,
-        Key: target,
-        CopySource: `${bucket}/${key}`,
-      }),
-    );
+    // The shared primitive, which URI-encodes the source — this call used to
+    // build `CopySource` by interpolation, and a TD-9 key carries a slug of a
+    // filename a person chose.
+    await copyObject(clients, { bucket, key }, { bucket, key: target });
     await deleteObject(clients, bucket, key);
   } catch {
     // The row is already updated and the audit written; an object left in place

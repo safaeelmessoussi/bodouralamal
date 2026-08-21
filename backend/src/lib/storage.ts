@@ -1,4 +1,11 @@
-import { GetObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import {
+  CopyObjectCommand,
+  DeleteObjectCommand,
+  GetObjectCommand,
+  HeadObjectCommand,
+  PutObjectCommand,
+  S3Client,
+} from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 
 import type { AppConfig } from './config.js';
@@ -114,4 +121,136 @@ export async function presignGetUrl(
     { expiresIn },
   );
   return toProxyUrl(signed, clients.storagePrefix);
+}
+
+/* ── Server-side object operations (R99 C2) ──────────────────────────────── */
+
+/**
+ * **Everything below runs on the INTERNAL client and never moves bytes through
+ * this process.**
+ *
+ * R99's ingestion has to take a recording of up to 500 MB (TD-9) out of the
+ * staging bucket and into the content lifecycle. The obvious implementation —
+ * `GetObject` into a buffer, `PutObject` back out — would put half a gigabyte
+ * through a container pinned at `--max-old-space-size=768` (TD-13) for every
+ * concurrent ingestion, on a 4 GB VPS (§2.4). It is not a tuning problem; it is
+ * the wrong mechanism.
+ *
+ * S3 and MinIO both perform `CopyObject` **inside the storage service**, so the
+ * object never leaves it and this process exchanges two small HTTP messages.
+ * Everything here is deliberately O(1) in the object's size: a HEAD, a 512-byte
+ * ranged GET, a server-side copy, a delete.
+ *
+ * These live in `storage.ts` rather than beside the ingestion worker because
+ * they are storage operations, not recording operations — `content.service.ts`
+ * had already grown private copies of the first two, and a third copy beside a
+ * worker is how a bucket-addressing rule ends up stated three times.
+ */
+
+/** What an object IS, without reading it. */
+export interface ObjectStat {
+  sizeBytes: number;
+  /** What the store believes the type is. **A claim, never a fact** — the magic
+   *  bytes are what turn it into one (TD-9). */
+  contentType: string | null;
+}
+
+/**
+ * `HEAD` — size and declared type, or `null` when there is no object.
+ *
+ * `null` rather than a throw, because *the object is not there* is an ordinary
+ * answer in both callers: an upload that never completed, and a provider that
+ * reported a file it did not write.
+ */
+export async function statObject(
+  clients: StorageClients,
+  bucket: string,
+  key: string,
+): Promise<ObjectStat | null> {
+  try {
+    const head = await clients.internal.send(
+      new HeadObjectCommand({ Bucket: bucket, Key: key }),
+    );
+    return {
+      sizeBytes: Number(head.ContentLength ?? 0),
+      contentType: head.ContentType ?? null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The first `length` bytes, for magic-byte verification (§4.9, Revision 8).
+ *
+ * **A ranged GET, never a full read.** Every TD-9 signature lives in the first
+ * few bytes by construction — a format whose identity is only provable further
+ * in cannot be validated this way and does not belong on the whitelist.
+ */
+export async function readObjectHead(
+  clients: StorageClients,
+  bucket: string,
+  key: string,
+  length = 512,
+): Promise<Buffer> {
+  const ranged = await clients.internal.send(
+    new GetObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      Range: `bytes=0-${String(length - 1)}`,
+    }),
+  );
+  return Buffer.from(await ranged.Body!.transformToByteArray());
+}
+
+/**
+ * **Server-side copy — the object never enters this process.**
+ *
+ * `CopySource` is `/{bucket}/{key}` and **is URI-encoded**, which the private
+ * copy this replaced was not: TD-9 keys carry a transliterated slug of a
+ * filename a person chose, and a key containing anything the router reads as a
+ * delimiter would address a different object or none at all.
+ *
+ * `contentType` **replaces** the destination's type when given, and the
+ * destination inherits the source's when omitted. Ingestion gives it, because by
+ * then the platform has **verified** what the bytes are and the copy is the
+ * moment that verified type becomes the object's own — a provider's guess must
+ * not survive into the content bucket. Quarantine omits it: moving an object out
+ * of reach must not alter what it is.
+ */
+export async function copyObject(
+  clients: StorageClients,
+  source: { bucket: string; key: string },
+  destination: { bucket: string; key: string },
+  contentType?: string,
+): Promise<void> {
+  await clients.internal.send(
+    new CopyObjectCommand({
+      Bucket: destination.bucket,
+      Key: destination.key,
+      CopySource: encodeURI(`/${source.bucket}/${source.key}`),
+      ...(contentType === undefined
+        ? {}
+        : { ContentType: contentType, MetadataDirective: 'REPLACE' as const }),
+    }),
+  );
+}
+
+/**
+ * Deletes an object. **Best-effort by contract** — the caller decides whether a
+ * failure matters.
+ *
+ * It matters differently in the two places it is used: deleting a staging object
+ * after a successful ingestion is a tidy-up whose failure must never undo valid
+ * content (R99.13), while deleting an object whose magic bytes did not match is
+ * TD-9's delete-on-mismatch and is part of the refusal.
+ */
+export async function deleteObject(
+  clients: StorageClients,
+  bucket: string,
+  key: string,
+): Promise<void> {
+  await clients.internal.send(
+    new DeleteObjectCommand({ Bucket: bucket, Key: key }),
+  );
 }

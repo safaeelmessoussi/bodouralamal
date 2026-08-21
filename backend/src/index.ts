@@ -23,7 +23,7 @@ const server = app.listen(config.PORT, () => {
 
 // R-3: pg-boss workers run inside the API container, keeping the VPS container
 // count and memory footprint low (§3.1).
-startJobRunner(boss, prisma)
+startJobRunner(boss, prisma, config)
   .then(() => log('job runner started'))
   .catch((error: unknown) => {
     // TD-16: enqueues keep succeeding even with workers down, because they are

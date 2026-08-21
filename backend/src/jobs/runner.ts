@@ -4,7 +4,9 @@ import type { PrismaClient } from '../generated/prisma/client.js';
 import type { AppConfig } from '../lib/config.js';
 import { purgeExpiredAuthRows } from '../repositories/audit.repository.js';
 import { deleteExpired as deleteExpiredRefreshTokens } from '../repositories/refresh-token.repository.js';
+import { createStorageClients } from '../lib/storage.js';
 import { runMaterialization } from '../services/session-materialize.service.js';
+import { ingestRecording } from '../services/session-recording-ingest.service.js';
 
 /**
  * pg-boss bootstrap and job runner (SRS TD-7, §3.1, §20 rule 1).
@@ -48,6 +50,33 @@ export const QUEUES = {
    * always safe.
    */
   sessionMaterialize: 'session.materialize',
+
+  /**
+   * **R99 C2 — `session-recording-ingest`.**
+   *
+   * Enqueued by the verified provider callback inside the same transaction as
+   * the status write (§16.2, §20 rule 8). Payload `{ recording_id }`, singleton
+   * per recording.
+   *
+   * **It is a job rather than part of the callback for two reasons.** A 500 MB
+   * server-side copy inside an HTTP handler holds the request open long enough
+   * for a provider to time out and retry, which turns one slow import into
+   * several concurrent ones. And a transient storage failure must be a *retry*
+   * under TD-7's backoff rather than a recording that is lost because a webhook
+   * was answered once and never again (§20 rule 1).
+   *
+   * **The handler is idempotent independently of the singleton key**:
+   * `session_recording.educational_content_id` is `UNIQUE` and is the first
+   * thing read, so a duplicate delivery, a retried job and a worker killed after
+   * committing all converge on one `EducationalContent`.
+   *
+   * **Not in the SRS's TD-7 table.** R99 authorises the ingestion pipeline
+   * (R99.13/14) and specifies TD-2, TD-3, TD-8 and TD-13 additions, but names no
+   * queue; §20 rule 1 leaves no compliant alternative to pg-boss for durable,
+   * retryable work. Reported to the Document Owner as a TD-7 catalogue gap; the
+   * handbook's catalogue carries it meanwhile.
+   */
+  sessionRecordingIngest: 'session-recording-ingest',
 } as const;
 
 /** Daily, small hours local time. TZ is pinned to Africa/Casablanca (TD-11). */
@@ -81,8 +110,15 @@ export function createBoss(config: AppConfig): PgBoss {
 export async function startJobRunner(
   boss: PgBoss,
   prisma: PrismaClient,
+  config: AppConfig,
 ): Promise<void> {
   await boss.start();
+
+  // R99 C2's worker needs object storage. Its own clients rather than the app's:
+  // `createApp` builds them for the request path, and threading one instance
+  // through two unrelated boot sequences to save an idle HTTP client would
+  // couple them for nothing.
+  const storage = createStorageClients(config);
 
   const log = (queue: string, detail: Record<string, unknown>): void => {
     process.stdout.write(
@@ -136,6 +172,33 @@ export async function startJobRunner(
       // Reported, never silent: §4.4 makes "what did this leave alone" part of
       // the behaviour rather than a detail.
       left_alone: results.reduce((n, r) => n + r.protectedSessions.length, 0),
+    });
+  });
+
+  /**
+   * **R99 C2 — `session-recording-ingest`** (see the catalogue above).
+   *
+   * Event-driven, never scheduled: it runs because a provider reported a
+   * completion, and there is nothing to sweep on a cron.
+   *
+   * The failure is deliberately **re-thrown**. `ingestRecording` has already
+   * written why on the row — which is what a مؤطِّرة's «تعذّرت التهيئة» reads —
+   * and throwing is what makes pg-boss apply TD-7's exponential backoff, so a
+   * transient MinIO failure is retried and a genuinely bad staging object
+   * eventually dead-letters with an Admin-visible failure rather than being
+   * silently dropped.
+   */
+  await boss.work(QUEUES.sessionRecordingIngest, async ([job]) => {
+    const payload = (job?.data ?? {}) as { recording_id?: string };
+    if (!payload.recording_id) return;
+    const outcome = await ingestRecording(prisma, storage, payload.recording_id);
+    log(QUEUES.sessionRecordingIngest, {
+      recording_id: outcome.recordingId,
+      educational_content_id: outcome.contentId,
+      already_ingested: outcome.alreadyIngested,
+      // Reported rather than silent: a staging object that outlived a
+      // successful import is a sweep to retry, not a failed ingestion.
+      staging_cleaned: outcome.stagingCleaned ?? null,
     });
   });
 

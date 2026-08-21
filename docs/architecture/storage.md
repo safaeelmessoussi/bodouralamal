@@ -132,7 +132,8 @@ survives a renamed file.
 |---|---|---|
 | Audio | **100 MB** | `audio/webm`, `audio/mp4`, `audio/ogg`, `audio/mpeg`, `audio/wav` |
 | Documents, slides, images | **50 MB** | PDF, JPEG, PNG, WebP, docx/pptx/xlsx |
-| Video | — | **Not accepted.** TD-9's whitelist names no video type and §4.9 excludes it entirely |
+| Video | — | **Not accepted at `/uploads/*`.** §4.9's *"Video remains excluded entirely"* remains in force for the route it was written about, and R99.12's `origin` marker does not widen it: the whitelist check does not consult that field |
+| Video, **ingested class recording** | **500 MB** | `video/mp4`, reachable **only** by `session-recording-ingest` (R99.8). What R99 admits is a **provenance** — an object the platform produced by recording a class it authorised — not a file type. The cap is larger because a three-hour صوت وصورة lesson is legitimately bigger than a voice memo, and bounded for the same disk-budget reason Revision 18 gave |
 
 **Video's absence is a rule, not an omission.** The library client maps `video/*` for
 *presentation*, because that list answers a different question — how a stored thing is shown,
@@ -289,12 +290,62 @@ nothing. And a quarantine failure does not fail the request: the row is already 
 audit row already written, so reporting failure would tell the caller their deletion did not
 happen when it did. `content.quarantine-purge` sweeps whatever is left.
 
+## The third bucket: `recordings-staging` (R99)
+
+A bucket the platform **owns and does not serve**. The provider's recording facility writes
+its output there and nothing else ever reads it except the ingestion job. Anonymous access is
+denied exactly as it is on `private`.
+
+**It is integration state, not storage.** R99.13 is explicit that a provider URL is never
+exposed as the content asset, never stored as one and never handed to a client: its lifetime
+is not the association's to control, and a library item pointing at it would rot silently.
+`session-recording-ingest` ([background jobs](background-jobs.md#session-recording-ingest--provider-completed-is-not-bodour-متاح))
+verifies the object, copies it **server-side** into the ordinary content bucket under an
+ordinary TD-9 key, and only then is there anything for a reader to find.
+
+After that copy an ingested recording is **indistinguishable from any other library object** —
+same key structure, same presigned mint, same quarantine path, same consent gate. That is the
+point: R99 admits a *provenance*, and provenance is recorded in `EducationalContent.origin`,
+not in where the bytes live.
+
+### The shared object verifier
+
+`lib/object-verification.ts` makes TD-9's assertions about **an object**, not about an upload
+ticket. It was written inside `content.service.ts` against `UploadTicketClaims`, which was
+correct while a browser was the only way bytes reached a bucket; R99's ingestion has to make
+the same assertions about an object no ticket describes.
+
+The two callers differ in exactly three places, and each difference is deliberate:
+
+| | `/uploads/*` complete | `session-recording-ingest` |
+|---|---|---|
+| **Admissible types** | `isUploadableMime` — **`video/*` refused** (§4.9, R99.8) | `isIngestibleMime` — plus TD-9's `video/mp4` row, 500 MB |
+| **Declared size** | must match exactly — the browser declared it at `/initiate` | `null`; the platform declared none, and failing a good recording over a provider's rounding protects nothing |
+| **On refusal** | the object is **deleted at once** (TD-9 delete-on-mismatch) | the staging object is **kept**, so a corrected one can be retried (R99.14) |
+
+**There is one whitelist, behind two doors.** The signature table, the cap table and the
+sniffer are shared; only the reachability predicates differ. A second list is how `video/mp4`
+would eventually become uploadable by accident.
+
+### Server-side object primitives
+
+`statObject` · `readObjectHead` · `copyObject` · `deleteObject`, all on the internal client and
+all **O(1) in the object's size**. The one that matters is `copyObject`: S3 and MinIO perform
+the copy *inside* the storage service, so a 500 MB recording never enters this process. The
+obvious `GetObject` → buffer → `PutObject` would put half a gigabyte through a container pinned
+at `--max-old-space-size=768` (TD-13) for every concurrent ingestion, on a 4 GB VPS (§2.4).
+That is not a tuning problem; it is the wrong mechanism.
+
+`CopySource` is **URI-encoded**. The private copy this replaced built it by interpolation, and
+a TD-9 key carries a transliterated slug of a filename a person chose.
+
 ## File preview behaviour
 
 | Type | Behaviour |
 |---|---|
 | PDF | Inline browser preview plus download |
 | Audio | Embedded native `<audio>` player plus download |
+| Video | Native `<video controls>` plus download — which is what makes an ingested صوت وصورة recording playable with no new component (R99) |
 | Images | Thumbnail in lists; click opens a lightbox, plus download |
 | Office files | **Download only** — no in-browser rendering in the MVP |
 

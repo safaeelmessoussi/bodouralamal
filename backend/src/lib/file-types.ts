@@ -13,11 +13,12 @@ import { randomBytes } from 'node:crypto';
  */
 
 /**
- * **Video is deliberately absent.** TD-9's whitelist names audio, documents,
- * slides and images and no video type at all, and §4.9 (Revision 12) states
- * *"Video remains excluded entirely."* Accepting `video/*` here would be an
- * agent widening a normative allow-list, which §20 rule 16 forbids — it is a
- * Document Owner decision and an SRS revision, not an implementation detail.
+ * **What a PERSON may upload.** TD-9's whitelist names audio, documents, slides
+ * and images and no video type at all, and §4.9 (Revision 12) states *"Video
+ * remains excluded entirely."* — **which remains in force for this list**
+ * (R99.8). Accepting `video/*` here would be an agent widening a normative
+ * allow-list, which §20 rule 16 forbids.
+ *
  * (`kindOf` in the library client still maps `video/*` for *presentation*,
  * because the two lists answer different questions: what may be stored, versus
  * how a stored thing is shown.)
@@ -40,14 +41,46 @@ export const DOCUMENT_MIME_TYPES = [
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
 ] as const;
 
-export type AcceptedMime = (typeof AUDIO_MIME_TYPES)[number] | (typeof DOCUMENT_MIME_TYPES)[number];
+/**
+ * **TD-9's video row (R99.8) — one entry, reachable by ONE pipeline.**
+ *
+ * R99 admits a **provenance**, not a file type: an object the platform produced
+ * by its own server-side recording of a class it authorised, ingested through a
+ * pipeline it controls end to end. So this is not a second whitelist and must
+ * never become one — it is a **row on the same list behind a different door**,
+ * which is why the signature table, the cap table and the sniffer below are
+ * shared and only the *reachability* predicates differ.
+ *
+ * `isUploadableMime` refuses it; `isIngestibleMime` accepts it. There is
+ * deliberately no predicate that accepts it for `/uploads/*`.
+ */
+export const RECORDING_ONLY_MIME_TYPES = ['video/mp4'] as const;
+
+/** Everything the platform may STORE, by either door. */
+export type AcceptedMime =
+  | (typeof AUDIO_MIME_TYPES)[number]
+  | (typeof DOCUMENT_MIME_TYPES)[number]
+  | (typeof RECORDING_ONLY_MIME_TYPES)[number];
+
+/** What a person may upload — the §4.9 boundary, video absent. */
+export type UploadableMime =
+  | (typeof AUDIO_MIME_TYPES)[number]
+  | (typeof DOCUMENT_MIME_TYPES)[number];
 
 const MB = 1024 * 1024;
 
-/** TD-9: audio 100 MB (Revision 12, reduced from 500 MB), everything else 50 MB. */
+/**
+ * TD-9: audio 100 MB (Revision 12, reduced from 500 MB), everything else 50 MB,
+ * and **R99.8's ingested class recording 500 MB**.
+ *
+ * The recording cap is separate and larger because a three-hour صوت وصورة lesson
+ * is legitimately bigger than a voice memo, and it is **bounded rather than
+ * open** for the same disk-budget reason Revision 18 gave (§2.4, §6).
+ */
 export const SIZE_CAPS = {
   audio: 100 * MB,
   document: 50 * MB,
+  recording: 500 * MB,
 } as const;
 
 /**
@@ -68,7 +101,12 @@ export function mimeEssence(mime: string): string {
   return (mime.split(';')[0] ?? '').trim().toLowerCase();
 }
 
-export function isAcceptedMime(mime: string): mime is AcceptedMime {
+/**
+ * **The `/uploads/*` door.** `video/*` is refused here, whatever the caller says
+ * about the file's provenance (R99.8, R99.12) — the origin marker describes what
+ * a thing is and never widens what may be sent.
+ */
+export function isUploadableMime(mime: string): mime is UploadableMime {
   const essence = mimeEssence(mime);
   return (
     (AUDIO_MIME_TYPES as readonly string[]).includes(essence) ||
@@ -76,11 +114,55 @@ export function isAcceptedMime(mime: string): mime is AcceptedMime {
   );
 }
 
+/**
+ * **The ingestion door** — everything a person may upload, plus TD-9's
+ * recording-only video row.
+ *
+ * Audio is included rather than carved out: a صوت فقط class produces an OGG,
+ * which is an ordinary TD-9 audio type and needs no special case. Only
+ * `video/mp4` is reachable exclusively this way.
+ */
+export function isIngestibleMime(mime: string): mime is AcceptedMime {
+  const essence = mimeEssence(mime);
+  return (
+    isUploadableMime(essence) ||
+    (RECORDING_ONLY_MIME_TYPES as readonly string[]).includes(essence)
+  );
+}
+
 /** The TD-9 cap that governs this type. */
 export function sizeCapFor(mime: AcceptedMime): number {
-  return (AUDIO_MIME_TYPES as readonly string[]).includes(mimeEssence(mime))
+  const essence = mimeEssence(mime);
+  if ((RECORDING_ONLY_MIME_TYPES as readonly string[]).includes(essence)) {
+    return SIZE_CAPS.recording;
+  }
+  return (AUDIO_MIME_TYPES as readonly string[]).includes(essence)
     ? SIZE_CAPS.audio
     : SIZE_CAPS.document;
+}
+
+/**
+ * **Which container a recording of this kind of class must be** (R99.7).
+ *
+ * The format follows the class and is never silently downgraded: a صوت وصورة
+ * occurrence yields `video/mp4` with audio, a صوت فقط occurrence yields audio.
+ * Stated here beside the signatures because *what the bytes must prove* and
+ * *what the class asked for* are the same question asked twice, and the honest
+ * limit of the magic-byte window is stated once for both.
+ *
+ * **`audio_only` admits any TD-9 audio container** rather than pinning OGG: the
+ * container is the provider's to choose within what the platform accepts, and
+ * pinning it here would make a provider configuration change look like a
+ * corrupt file.
+ */
+export function recordingFamilyMatches(
+  media: 'audio_video' | 'audio_only',
+  mime: string,
+): boolean {
+  const essence = mimeEssence(mime);
+  return media === 'audio_video'
+    ? essence === 'video/mp4'
+    : (AUDIO_MIME_TYPES as readonly string[]).includes(essence);
 }
 
 /* ── Magic bytes ─────────────────────────────────────────────────────────── */
@@ -143,6 +225,19 @@ const SIGNATURES: Record<AcceptedMime, Sniffer> = {
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document': zip,
   'application/vnd.openxmlformats-officedocument.presentationml.presentation': zip,
   'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': zip,
+  /**
+   * **R99.8's ingested class recording.** `ftyp` at offset 4 — the ISO base
+   * media file format box, which MP4 shares with `audio/mp4` above; the two are
+   * the same container carrying different tracks.
+   *
+   * **The honest limit, stated rather than papered over:** a 512-byte window can
+   * prove the container and the brand, and cannot prove that an audio track is
+   * present inside it. It is what stops a renamed ZIP, an empty file and an OGG
+   * delivered for a صوت وصورة class; it is not a transcode check. That an MP4
+   * really carries audio a beneficiary can hear is proven where it can be —
+   * `verify-livekit-ingest`, playing the real file in a real browser.
+   */
+  'video/mp4': ascii(4, 'ftyp'),
 };
 
 /**
@@ -226,8 +321,26 @@ export function extensionOf(filename: string): string {
  * what lets a visibility change be a bucket migration rather than a key rewrite
  * that would break every URL ever handed out.
  */
-export function buildStorageKey(contentId: string, originalFilename: string): string {
-  const hash = randomBytes(4).toString('hex');
+export function buildStorageKey(
+  contentId: string,
+  originalFilename: string,
+  /**
+   * **R99 C2 — a DETERMINISTIC hash segment, for the one caller that needs the
+   * key to be the same on a retry.**
+   *
+   * Random is right for an upload: TD-9's hash segment exists so that replacing
+   * a file cannot be masked by a cached copy of the old one, and every upload is
+   * a new object. Ingestion is different — there is exactly **one** object per
+   * recording, and a job that copied the object and then failed to write the row
+   * must, on retry, find its own object rather than mint a second key and leave
+   * the first orphaned. The caller passes a value derived from the recording's
+   * id, and the worker **checks whether the object is already there instead of
+   * copying over it**, so §20 rule 15 holds: the key is still written once and
+   * never overwritten.
+   */
+  hashSegment?: string,
+): string {
+  const hash = hashSegment ?? randomBytes(4).toString('hex');
   const ext = extensionOf(originalFilename);
   const name = slugify(originalFilename.replace(/\.[^.]*$/, ''));
   return `content/${contentId}/${hash}/${name}${ext === '' ? '' : `.${ext}`}`;
