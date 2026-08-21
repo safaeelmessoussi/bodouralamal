@@ -2,6 +2,7 @@ import { DeleteObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
 import { PgBoss } from "pg-boss";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
+import { TD7_RETRY_POLICY } from "../jobs/runner.js";
 import { loadConfig } from "../lib/config.js";
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from "../lib/prisma.js";
 import {
@@ -559,9 +560,8 @@ describe("staging cleanup is an idempotent durable obligation (R99/R100)", () =>
     try {
       await firstBoss.start();
       await firstBoss.createQueue(queue, {
-        retryLimit: 5,
+        ...TD7_RETRY_POLICY,
         retryDelay: 2,
-        retryBackoff: true,
         deleteAfterSeconds: 60,
       });
       await firstBoss.work<{ recording_id: string }>(
@@ -621,7 +621,7 @@ describe("staging cleanup is an idempotent durable obligation (R99/R100)", () =>
     }
   });
 
-  it("keeps repeated failure observable and retryable until the retry budget ends", async () => {
+  it("runs exactly five total attempts before a repeated cleanup failure becomes terminal", async () => {
     const sessionId = await onlineClass("audio_only", subjectAudio, "tuesday");
     const rec = await completedRecording(sessionId, "audio/ogg", oggBytes());
     const unrelated = await completedRecording(sessionId, "audio/ogg", oggBytes());
@@ -635,10 +635,10 @@ describe("staging cleanup is an idempotent durable obligation (R99/R100)", () =>
 
     try {
       await boss.start();
-      // The production queue uses five retries. This test shortens only the
-      // budget to two so terminal behavior is proved without a long backoff.
+      // Keep the production attempt budget. Only the delay/backoff is disabled
+      // so the real pg-boss state machine proves the exact count promptly.
       await boss.createQueue(queue, {
-        retryLimit: 2,
+        ...TD7_RETRY_POLICY,
         retryDelay: 0,
         retryBackoff: false,
         deleteAfterSeconds: 60,
@@ -654,8 +654,8 @@ describe("staging cleanup is an idempotent durable obligation (R99/R100)", () =>
       expect(jobId).not.toBeNull();
 
       const failed = await waitForJobState(queue, jobId!, "failed");
-      expect(failed.retry_count).toBe(2);
-      expect(unavailable.attempts()).toBe(3);
+      expect(failed.retry_count).toBe(4);
+      expect(unavailable.attempts()).toBe(5);
       expect(JSON.stringify(failed.output)).toContain("staging cleanup failed");
 
       const row = await prisma.sessionRecording.findUniqueOrThrow({

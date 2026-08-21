@@ -48,8 +48,9 @@ is where the atomicity matters.
 
 ## The catalog
 
-Every job retries with exponential backoff, five attempts maximum, then dead-letters with an
-Admin-visible failure. Singleton keys prevent duplicate concurrent runs.
+Every job gets five attempts total — the initial execution plus at most four retries with
+exponential backoff — then dead-letters with an Admin-visible failure. Singleton keys prevent
+duplicate concurrent runs.
 
 | Job | Trigger | Idempotency |
 |---|---|---|

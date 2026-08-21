@@ -94,8 +94,9 @@ const PG_BOSS_MAX_CONNECTIONS = 5;
  * TD-7 retry policy: exponential backoff, **max 5 attempts**, then dead-letter
  * with an Admin-visible failure. In pg-boss 12 this is a per-QUEUE option, not
  * a constructor one, so it is applied at `createQueue` for every queue.
+ * `retryLimit` counts retries after the initial execution, hence four.
  */
-const TD7_RETRY_POLICY = { retryLimit: 5, retryBackoff: true } as const;
+export const TD7_RETRY_POLICY = { retryLimit: 4, retryBackoff: true } as const;
 
 interface WorkerDefinition {
   readonly name: string;

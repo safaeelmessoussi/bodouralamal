@@ -105,7 +105,7 @@ will see them:
 
 | Condition | Surfaces as |
 |---|---|
-| A job exhausts its five retries | Dead-lettered, with an **Admin-visible failure** |
+| A job exhausts its four retries (five total attempts) | Dead-lettered, with an **Admin-visible failure** |
 | **Backup replication fails** | A **critical** Admin-visible alert. Two consecutive failures escalate to the owner |
 | Job queue lag past 10 minutes | An alarm on the Admin dashboard |
 | TLS renewal failing | Alert at **21 days remaining** — never discovered as a browser error |

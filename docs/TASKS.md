@@ -642,7 +642,7 @@
   - [x] Signature-verified callback over the raw body; idempotent against duplicate and out-of-order delivery
   - [x] Defects: browser-vs-server provider URL · simultaneous start · orphaned egress · a failure path that could itself fail · missing `starting → stopping`
   - [x] 23 backend lifecycle · 17 HTTP wire · 30 frontend · `verify-livekit-join` **61/61**
-- [ ] **C2** — ingestion, storage import, `EducationalContent` + `SessionContent`, «التسجيلات» rendering, beneficiary visibility ladder, failure/retry
+- [x] **C2 — COMPLETE (2026-08-21)** — ingestion, storage import, `EducationalContent` + `SessionContent`, «التسجيلات» rendering, beneficiary visibility ladder, failure/retry
   - [x] **R75.6 naming is SERVER-computed** (2026-08-21) — one algorithm, one namespace per Session; the browser composes nothing and shows an editable suggestion. Latent UTC-date defect fixed on the way
   - [x] **«التسجيلات» is `origin`, not MIME** — an uploaded audio file is a material; a `video/mp4` session recording is a recording. Three guards restated
   - [x] **R99.12 upload marker** — `content_meta.origin`, bound into the ticket, describes and never permits: `video/*` still refused for both values
