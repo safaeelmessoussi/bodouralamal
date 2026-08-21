@@ -177,6 +177,8 @@ function createWorkerCatalog(
     {
       // Event-driven R100 ingestion. Failure is re-thrown by the service path
       // so pg-boss applies TD-7 retry/backoff instead of losing the recording.
+      // That includes a post-commit staging-delete failure: the relation stays
+      // authoritative, and the retry short-circuits to exact-key cleanup.
       name: QUEUES.sessionRecordingIngest,
       handler: async ([job]) => {
         const payload = (job?.data ?? {}) as { recording_id?: string };
