@@ -63,6 +63,19 @@ export async function findAccountById(db: Db, userId: string): Promise<ResolvedA
   return { user, ...(await loadRoles(db, user.id)) };
 }
 
+/** Minimal authoritative state needed before a new refresh-session anchor may
+ * be created. Kept separate from `findAccountById` because session persistence
+ * needs no role rows; the service owns the Active/Pending business decision. */
+export async function findSessionState(
+  db: Db,
+  userId: string,
+): Promise<Pick<User, 'accountStatus' | 'deletedAt'> | null> {
+  return db.user.findUnique({
+    where: { id: userId },
+    select: { accountStatus: true, deletedAt: true },
+  });
+}
+
 /**
  * §4.1b step 3.1 — the provider identity. **Every login after the first takes
  * this path**, which is why it is consulted first.

@@ -136,6 +136,17 @@ export async function issueNewSession(
     if (!(await users.lockUser(tx, userId))) {
       throw new Error('cannot issue a refresh session for a missing user');
     }
+    const state = await users.findSessionState(tx, userId);
+    if (
+      !state ||
+      state.deletedAt !== null ||
+      (state.accountStatus !== 'active' && state.accountStatus !== 'pending')
+    ) {
+      // R102: the shared issuer is itself an authority boundary. A caller that
+      // bypasses final OAuth routing still cannot create a new session after
+      // rejection (or another deactivation) won the User governing lock.
+      throw new Error('cannot issue a refresh session for an ineligible user');
+    }
     await tokens.insertSession(tx, { id: sessionId, userId, createdAt: now });
     await tokens.insert(tx, {
       userId,
@@ -423,10 +434,9 @@ export async function logout(
 }
 
 /**
- * TD-4.15 — revoke every live session of a user (§18 T7/T8/T9). Called INSIDE
- * the suspension or soft-delete transaction: a suspension that commits without
- * revoking leaves a 30-day credential alive, which is the safeguarding failure
- * the TD-12 freshness rule exists to prevent.
+ * TD-4.15 — revoke every live session of a user (§18 T7/T8/T9/T14). Called
+ * INSIDE the rejection, suspension or soft-delete transaction: a state change
+ * that commits without revoking leaves a 30-day credential alive.
  *
  * The audit detail records the affected `session_id`s, not merely a count, so a
  * specific session remains attributable (§7 attribution invariant).
@@ -438,9 +448,9 @@ export async function revokeAllSessions(
   params: {
     userId: string;
     reason: RefreshRevokedReason;
-    /** Null for system-initiated revocation; the admin's id for suspension. */
+    /** Null for system-initiated revocation; the admin's id for rejection or suspension. */
     actorUserId: string | null;
-    /** R60.8 — the capacity a suspending admin acted in. Absent when the
+    /** R60.8 — the capacity an acting admin used. Absent when the
      *  revocation is system-initiated, where there is no capacity to record. */
     activeRole?: string | undefined;
   },

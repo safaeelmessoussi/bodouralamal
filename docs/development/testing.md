@@ -14,8 +14,8 @@ Four layers, each testing something the others structurally cannot.
 **Coverage: ≥ 80 % on services and policies.** No coverage gate on generated or boilerplate
 code — a coverage number that counts generated clients measures nothing.
 
-Current default CI totals: **259 backend tests across 26 files · 725 frontend tests across 56
-files**. The repository also contains **77 backend integration files**, but the workflow does
+Current default CI totals: **269 backend tests across 27 files · 727 frontend tests across 57
+files**. The repository also contains **81 backend integration files**, but the workflow does
 not run them: they require an isolated real stack and database lifecycle that this CI slice
 does not yet provide.
 

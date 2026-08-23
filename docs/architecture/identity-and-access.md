@@ -203,14 +203,14 @@ predecessor purge, which token-row locks cannot guarantee at PostgreSQL `READ CO
 A different `session_id` locks a different row, so another browser session remains independent.
 
 **New-session creation and user-wide revocation serialize one level higher.** A session anchor
-cannot protect an anchor that does not exist yet, so successful login, suspension and revoke-all
-share the stable `User` row. The lock hierarchy is always **User → `RefreshSession` anchors in
-UUID order**. Login re-reads the account under the User lock before signing, inserts its new
-anchor/token and login audit, then commits. Suspension takes the same User lock before deciding
-the state transition, changes status and revokes every session in that transaction. Therefore
-either suspension commits first and login refuses, or login commits first and suspension's
-subsequent enumeration includes the new anchor. Locks are per user, so an unrelated person's
-login does not wait.
+cannot protect an anchor that does not exist yet, so successful login, Pending → Rejected,
+suspension and revoke-all share the stable `User` row. The lock hierarchy is always **User →
+`RefreshSession` anchors in UUID order**. The shared session issuer re-reads Active/Pending
+eligibility under that lock before inserting anything. Rejection and suspension take the same
+User lock before deciding the state transition, change status and revoke every session in that
+transaction. Therefore either the state change commits first and issuance refuses, or issuance
+commits first and the subsequent enumeration includes its new anchor. Locks are per user, so an
+unrelated person's login does not wait.
 
 The explicit User lock is PostgreSQL `FOR NO KEY UPDATE`, not `FOR UPDATE`. The application never
 changes `User.id`; the weaker mode still conflicts with another governing lock and with every
@@ -241,11 +241,18 @@ answer `401` in the standard envelope. **No new error code was introduced**, del
 telling the holder of a stolen cookie *why* it failed would confirm the token was once real.
 The distinction is recorded in the audit log, not in the response.
 
-Revoke-all exists as an internal capability — suspension and deletion use it — but **there
+Revoke-all exists as an internal capability — rejection, suspension and deletion use it — but **there
 is no user-facing "log out everywhere" control**, no such route, and no such navigation
 node. The capability exists because safeguarding requires it, not because a user invokes it.
 It locks the affected User first, then the stable session rows in UUID order before revoking,
 so no new session can appear after enumeration and another user's sessions stay independent.
+
+Pending → Rejected uses the dedicated reason `rejection` and writes both `user.reject` and
+`auth.token_revoked` in the same transaction as the status change. Mandatory audit failure
+rolls the whole decision back. Rejected remains terminal; even if a future authorized recovery
+changes the account state, the old refresh chain remains revoked and fresh authentication is
+required. An already-issued access token retains only its existing TTL and per-request
+freshness behavior; rejection does not mint, extend, or otherwise alter it.
 
 ### Logout: browser cleanup and server revocation are separate
 
