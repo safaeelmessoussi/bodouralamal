@@ -1,7 +1,10 @@
 import type { PrismaClient } from '../generated/prisma/client.js';
+import { issueAccessToken } from '../lib/access-token.js';
 import * as audit from '../repositories/audit.repository.js';
+import type { Db } from '../repositories/audit.repository.js';
 import * as users from '../repositories/user.repository.js';
 import type { ResolvedAccount } from '../repositories/user.repository.js';
+import { issueNewSession, type IssuedRefreshToken } from './refresh-token.service.js';
 
 /**
  * Login resolution and routing (SRS §4.1b steps 3–4, TD-1, TD-4.10).
@@ -22,6 +25,15 @@ export type LoginRoute =
   | { kind: 'deactivated'; reason: 'rejected' | 'suspended' | 'deleted' }
   /** 4c — brand-new person: issue an onboarding token and send them to the form. */
   | { kind: 'onboarding' };
+
+export type FinalizedLogin =
+  | { kind: 'deactivated'; reason: 'rejected' | 'suspended' | 'deleted' }
+  | {
+      kind: 'active' | 'pending';
+      account: ResolvedAccount;
+      accessToken: string;
+      refreshSession: IssuedRefreshToken;
+    };
 
 /**
  * Applies the §4.1b step-4a routing condition **in full**: status alone is not
@@ -70,7 +82,7 @@ export async function resolveLogin(
     const route = bound.identityActive
       ? routeByStatus(bound, false)
       : ({ kind: 'deactivated', reason: 'deleted' } as const);
-    await writeLoginAudit(prisma, route, bound.user.id);
+    if (route.kind === 'deactivated') await writeLoginAudit(prisma, route, bound.user.id);
     return route;
   }
 
@@ -150,7 +162,7 @@ export async function resolveLogin(
       );
       if (nowBound) {
         const route = routeByStatus(nowBound, false);
-        await writeLoginAudit(prisma, route, nowBound.user.id);
+        if (route.kind === 'deactivated') await writeLoginAudit(prisma, route, nowBound.user.id);
         return route;
       }
     }
@@ -158,13 +170,65 @@ export async function resolveLogin(
   }
 
   const route = routeByStatus(preProvisioned, true);
-  await writeLoginAudit(prisma, route, preProvisioned.user.id);
   return route;
+}
+
+/**
+ * Final authority boundary for a successful Google login.
+ *
+ * Resolution and first-login identity binding may have happened earlier, but
+ * neither snapshot is allowed to mint credentials. The stable User row
+ * serializes this transaction with suspension/user-wide revocation; account
+ * status and roles are then re-read under that lock. The refresh anchor/token
+ * and successful-login audit commit together, and the access token is returned
+ * only after that commit succeeds.
+ */
+export async function finalizeLoginSession(
+  prisma: PrismaClient,
+  params: { userId: string; boundNow: boolean; signingKey: string },
+): Promise<FinalizedLogin> {
+  return prisma.$transaction(async (tx): Promise<FinalizedLogin> => {
+    if (!(await users.lockUser(tx, params.userId))) {
+      return { kind: 'deactivated', reason: 'deleted' };
+    }
+
+    const account = await users.findAccountById(tx, params.userId);
+    if (!account) return { kind: 'deactivated', reason: 'deleted' };
+
+    const route = routeByStatus(account, params.boundNow);
+    if (route.kind === 'deactivated') {
+      await writeLoginAudit(tx, route, account.user.id);
+      return route;
+    }
+    if (route.kind === 'onboarding') {
+      // `routeByStatus` cannot produce this branch; keeping the exhaustiveness
+      // guard local prevents a future route addition from minting credentials.
+      return { kind: 'deactivated', reason: 'deleted' };
+    }
+
+    const issued = issueAccessToken(
+      {
+        userId: account.user.id,
+        roleScopes: account.roleScopes,
+        accountStatus: account.user.accountStatus,
+      },
+      params.signingKey,
+    );
+    const refreshSession = await issueNewSession(tx, account.user.id);
+    await writeLoginAudit(tx, route, account.user.id);
+
+    return {
+      kind: route.kind,
+      account,
+      accessToken: issued.token,
+      refreshSession,
+    };
+  });
 }
 
 /** TD-8: `auth.login` on success, `auth.login_denied` with the denial reason. */
 async function writeLoginAudit(
-  prisma: PrismaClient,
+  prisma: Db,
   route: LoginRoute,
   userId: string,
 ): Promise<void> {

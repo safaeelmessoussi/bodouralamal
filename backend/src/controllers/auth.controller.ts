@@ -21,9 +21,8 @@ import {
   sealFlowState,
 } from '../lib/oauth.js';
 import { issueOnboardingToken } from '../lib/onboarding-token.js';
-import { resolveLogin } from '../services/auth.service.js';
+import { finalizeLoginSession, resolveLogin } from '../services/auth.service.js';
 import {
-  issueNewSession,
   logout as logoutSession,
   REFRESH_TTL_MS,
   refreshAccessSession,
@@ -172,16 +171,16 @@ export function oauthCallback(
       return;
     }
 
-    const { token } = issueAccessToken(
-      {
-        userId: route.account.user.id,
-        roleScopes: route.account.roleScopes,
-        accountStatus: route.account.user.accountStatus,
-      },
-      config.JWT_SIGNING_KEY,
-    );
-    const session = await issueNewSession(prisma, route.account.user.id);
-    setRefreshCookie(res, session.rawToken);
+    const finalized = await finalizeLoginSession(prisma, {
+      userId: route.account.user.id,
+      boundNow: route.boundNow,
+      signingKey: config.JWT_SIGNING_KEY,
+    });
+    if (finalized.kind === 'deactivated') {
+      res.redirect(302, `${config.PUBLIC_BASE_URL}/login?error=account_deactivated`);
+      return;
+    }
+    setRefreshCookie(res, finalized.refreshSession.rawToken);
 
     // A Pending user is hard-redirected to the status screen (TD-1); the access
     // token still exists so `GET /me` works, and nothing else will serve them.
@@ -192,13 +191,16 @@ export function oauthCallback(
     // that does not exist. One authoritative policy now lives in
     // `lib/role-home.ts`, and it never names a path the client cannot serve.
     const destination =
-      route.kind === 'pending'
+      finalized.kind === 'pending'
         ? '/pending-approval'
-        : postLoginDestination(route.account.roleScopes.map((scope) => scope.role));
+        : postLoginDestination(finalized.account.roleScopes.map((scope) => scope.role));
     // The access token is delivered in the fragment so it never reaches a
     // server log or the Referer header; the client stores it in memory and
     // sends it as `Authorization: Bearer` thereafter (TD-12).
-    res.redirect(302, `${config.PUBLIC_BASE_URL}${destination}#access_token=${token}`);
+    res.redirect(
+      302,
+      `${config.PUBLIC_BASE_URL}${destination}#access_token=${finalized.accessToken}`,
+    );
   };
 }
 
