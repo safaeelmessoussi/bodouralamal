@@ -38,6 +38,10 @@
 - [x] Google OAuth: state+PKCE (flow state in a short-lived signed HttpOnly callback-scoped cookie, TD-12 Revision 16), cryptographically verified Google ID token (RS256/provider key, exact issuer, configured audience, lifetime, subject, verified email), callback branches 4a/4b/4c, first binding guarded by the authoritative User lock/status re-read, onboarding token (10 min, `jti` + ConsumedToken replay guard) (§4.1b, TD-12)
 - [x] Step-4a routing complete: Active / Pending / (Rejected|Suspended|deleted_at → deactivated screen), never reactivation (§4.1b, Revision 16)
 - [x] Email lowercasing on all identity lookups/writes (TD-12) + DB `CHECK (email = lower(email))` (TD-6)
+- [x] Cross-channel normalized-email ownership: registration, staff pre-provisioning,
+  first binding and production bootstrap share one collision-free row lock; stale onboarding
+  snapshots and concurrent absent claims cannot create two intended accounts. Upgrade backfill
+  refuses pre-existing ambiguity rather than choosing a person in migration SQL
 - [~] Registration identity extracted solely from onboarding-token payload; body fields excluded from schema (§4.1b, TD-12)
   - ✓ Backend — onboarding token carries the verified `email` + `provider_subject_id`; payload is the sole identity source
   - ✓ Tests — 8 unit tests

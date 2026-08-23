@@ -152,6 +152,7 @@ async function clear(): Promise<void> {
   await prisma.userBranchRole.deleteMany({ where: { userId: { in: ids } } });
   await prisma.user.deleteMany({ where: { id: { in: ids } } });
   await prisma.consumedToken.deleteMany({ where: { purpose: "onboarding" } });
+  await prisma.normalizedEmailLock.deleteMany({ where: { email: { startsWith: "reg-" } } });
   // After the users, never before: `intended_branch_id` is ON DELETE RESTRICT,
   // so a branch still referenced by a registration refuses to go — which is the
   // guarantee, working.

@@ -192,12 +192,34 @@ a decision a seed script may make. Restore the account first, or use a different
 # 2  On the VPS — IMMEDIATELY before migrating:
 docker compose exec db pg_dump -U app bodour > pre-migration-$(date +%F-%H%M).sql
 
+# 2a Before the normalized-email lock migration, inspect cross-channel owners.
+docker compose exec db psql -U app -d bodour -P pager=off -c '
+WITH claims AS (
+  SELECT id AS user_id, pre_provisioned_email AS email, '\''pre_provisioned'\'' AS channel
+  FROM "user" WHERE pre_provisioned_email IS NOT NULL
+  UNION ALL
+  SELECT user_id, email, '\''identity'\'' AS channel
+  FROM user_identity WHERE is_active = TRUE
+)
+SELECT email, array_agg(DISTINCT user_id) AS users,
+       array_agg(DISTINCT channel) AS channels
+FROM claims GROUP BY email HAVING count(DISTINCT user_id) > 1;'
+
 # 3  Apply
 docker compose run --rm api npx prisma migrate deploy
 
 # 4  Verify
 curl https://<domain>/healthz
 ```
+
+If step 2a returns rows, **stop**. The migration will refuse the same state, deliberately.
+Do not clear `pre_provisioned_email`, deactivate an identity, or merge Users merely to make
+the command pass: those operations decide which person owns a verified address and may also
+destroy the provenance §4.1b requires. Have the association identify the intended account,
+perform the ordinary reviewed account-resolution procedure, take a new dump, rerun the query,
+and migrate only when it returns zero rows. Prisma records a failed transactional attempt;
+after the cause is resolved, mark that named attempt rolled back with `prisma migrate resolve
+--rolled-back <migration-name>` before retrying.
 
 **The dump is the rollback point**, and it must match the pre-migration state exactly. A dump
 from the previous night rolls back the migration *and* a night of real work.

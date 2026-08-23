@@ -125,6 +125,10 @@ since conflating them would report "someone else edited this" for a record that 
 - Roster mutation locks the group row before comparing against capacity.
 - Quota enforcement locks the rate-limit counter row before comparing against the limit.
 - Display-order reordering runs as one transaction locking the parent scope.
+- Cross-table email ownership locks one `NormalizedEmailLock` row before re-reading
+  `User.pre_provisioned_email` and active `UserIdentity.email`. Inserting the lock row with
+  conflict absorption is what covers a previously absent address; a read followed by either
+  table's insert would not.
 - Authentication takes a `FOR NO KEY UPDATE` User lock before identity binding, final login
   issuance, role-switch credential decisions or user-wide revocation; revoke-all then locks that
   user's `RefreshSession` anchors in UUID order. Session-scoped refresh, logout and purge need
@@ -132,8 +136,8 @@ since conflating them would report "someone else edited this" for a record that 
   User `KEY SHARE`** for foreign-key validation. `KEY SHARE` is compatible with the governing
   `NO KEY UPDATE`; a User `FOR UPDATE` here would create Session → User versus User → Session.
 
-Lock ordering is consistent (parent before children) to prevent deadlocks; scope is rows,
-never tables.
+Lock ordering is consistent to prevent deadlocks: normalized email before User when both are
+needed, then User before refresh-session anchors. Scope is rows, never tables.
 
 ### 3. First-wins on state transitions and unique races
 

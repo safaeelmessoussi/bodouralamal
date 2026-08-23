@@ -125,9 +125,17 @@ function refreshCookies(append: ReturnType<typeof vi.fn>): string[] {
 async function clear(): Promise<void> {
   const rows = await prisma.user.findMany({
     where: { nameArabic: { startsWith: TAG } },
-    select: { id: true },
+    select: {
+      id: true,
+      preProvisionedEmail: true,
+      identities: { select: { email: true } },
+    },
   });
   const ids = rows.map((row) => row.id);
+  const emails = rows.flatMap((row) => [
+    ...(row.preProvisionedEmail ? [row.preProvisionedEmail] : []),
+    ...row.identities.map((identity) => identity.email),
+  ]);
   if (ids.length === 0) return;
 
   await prisma.refreshToken.deleteMany({ where: { userId: { in: ids } } });
@@ -138,6 +146,7 @@ async function clear(): Promise<void> {
   await prisma.userIdentity.deleteMany({ where: { userId: { in: ids } } });
   await prisma.userBranchRole.deleteMany({ where: { userId: { in: ids } } });
   await prisma.user.deleteMany({ where: { id: { in: ids } } });
+  await prisma.normalizedEmailLock.deleteMany({ where: { email: { in: emails } } });
 }
 
 beforeEach(clear);

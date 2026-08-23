@@ -150,6 +150,34 @@ binding, pre-provision matching, the bootstrap comparison, persistence. The data
 independently enforces lowercase storage with a `CHECK`, so a single unlowered code path
 cannot create a case variant that slips past the unique index.
 
+### One normalized email across both ownership channels
+
+An address may be represented before login by `User.pre_provisioned_email`, or after a
+completed binding by `UserIdentity.email`. The two same-table unique indexes cannot protect
+the **absent-row race** between those channels: registration and staff pre-provisioning could
+both observe no owner and insert into different tables.
+
+`NormalizedEmailLock` is the shared transaction boundary. It contains only the lowercased
+email and creation time — deliberately **no owner id**. Ownership remains in the two SRS
+fields above; the extra row supplies the stable target that PostgreSQL can lock even when
+neither ownership row existed when the transactions began. On first use, `INSERT … ON
+CONFLICT DO NOTHING` establishes the row and `SELECT … FOR UPDATE` holds it through the
+authoritative cross-table re-read and write.
+
+Four production writers participate: onboarding registration, staff pre-provisioning,
+first-login identity binding, and Super Admin bootstrap. Their order is email lock first,
+then the existing User lock where binding or account-state serialization also applies. A
+callback's ten-minute onboarding token is therefore a routing snapshot, not a reservation:
+if staff provision the address before submission, registration returns the existing duplicate
+conflict and its transaction rolls back the `ConsumedToken` insert too. The next verified
+OAuth attempt follows the ordinary pre-provisioned binding path.
+
+A persisted owner/claim row was rejected because it would duplicate which User the two SRS
+fields already name. A transaction advisory lock was rejected because it would hash an
+unbounded email into PostgreSQL's finite advisory-key space and depart from the repository
+row-lock convention. The dedicated row is collision-free, inspectable, and released by
+ordinary transaction rollback.
+
 ---
 
 ## Sessions

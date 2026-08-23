@@ -48,6 +48,7 @@ async function clear(): Promise<void> {
     where: { user: { nameArabic: { startsWith: TAG } } },
   });
   await prisma.user.deleteMany({ where: { nameArabic: { startsWith: TAG } } });
+  await prisma.normalizedEmailLock.deleteMany({ where: { email: { startsWith: 'user-' } } });
 }
 
 beforeEach(clear);
