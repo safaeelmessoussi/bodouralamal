@@ -13,7 +13,8 @@ erDiagram
     User ||--o{ UserIdentity : "binds"
     User ||--o{ UserBranchRole : "holds"
     User ||--o{ FamilyLink : "parent of"
-    User ||--o{ RefreshToken : "sessions"
+    User ||--o{ RefreshSession : "sessions"
+    RefreshSession ||--o{ RefreshToken : "generations"
     User ||--o{ ConsentRecord : "subject of"
     User ||--o| StudentSocialProfile : "case file"
     Role ||--o{ UserBranchRole : ""
@@ -84,10 +85,18 @@ Unique on `(user_id, role_id, branch_id)`, so one person may hold the same role 
 branch. **`branch_id IS NULL` means all branches for that assignment** — not "Super Admin".
 Super Admin's bypass follows from its role.
 
-### `RefreshToken` — session state that has to exist somewhere
+### `RefreshSession` and `RefreshToken` — one stable chain, rotating generations
 
 Rotation, revocation, the grace window, and revoke-on-suspension all need per-token server
 state that no other entity holds.
+
+`RefreshSession` is deliberately only `(id, user_id, created_at)`: it is the stable row locked
+by refresh, logout, revoke-all and `token.purge`, not another credential or revocation source.
+Token generations cannot fill that role at `READ COMMITTED`: rotation may insert a successor
+outside a lock statement's snapshot and purge may delete the predecessor on which a waiter was
+queued. The anchor is removed only when purge, while holding it, finds no token generation left.
+PostgreSQL advisory locks were rejected because §16.2 permits repository raw SQL for row locks,
+and a UUID cannot be represented by PostgreSQL's 64-bit advisory key without collision.
 
 | Field | Consumer |
 |---|---|
@@ -182,6 +191,7 @@ the consent job's forced visibility changes.
 | `RateLimitCounter (user_id, bucket, window_start)` | What makes the increment safe under concurrency |
 | `User.pre_provisioned_email` among non-null | Two accounts must never claim one address, or a first login is ambiguous about which it binds |
 | `RefreshToken.token_hash` | Makes "presented token → exactly one row" a lookup, not a scan |
+| `RefreshToken.session_id → RefreshSession.id` | Every generation has one stable, database-enforced serialization target |
 | `Enrollment (student_id, level_id)` **where not deleted** | **Exactly one organisational group per enrolled level** (BR-21). Only expressible because `level_id` sits on the enrolment row — see below |
 | `AdministrativeGroup (id, level_id)` | Redundant against the primary key **on purpose**: PostgreSQL requires a unique constraint on the referenced pair before `Enrollment` can declare its composite foreign key |
 | `StudentTeachingGroup` — at most one per `(student, subject, level)` **where not deleted** | At most one split-group per subject (BR-22). `subject` and `level` come from the teaching group, so this is a **functional** index over the join, hand-written |
@@ -374,6 +384,7 @@ SQL, and flags every `DROP`/`RENAME` for human review with its contract-phase ju
 20260821140000_r99_recording_ingestion
 20260821200000_r101_refresh_cookie_path_reason
 20260821200100_r101_invalidate_legacy_refresh_sessions
+20260823100000_r101_refresh_session_anchor
 ```
 
 Note the pattern: schema changes and their hand-written constraints are **separate
@@ -387,6 +398,11 @@ stops the old issuer before either migration, so no narrow-Path credential can b
 the sweep. `_prisma_migrations` is the one-time cutover marker: a repeated `migrate deploy`
 does not execute the data migration again and therefore cannot revoke sessions issued by the
 new application. Running migration SQL manually after cutover is prohibited.
+
+The later R101 anchor migration is ordinary forward-only schema evolution: it creates one
+`RefreshSession` per existing distinct `session_id`, refuses an inconsistent chain spanning
+more than one user, then adds the foreign key. It does not repeat the cookie-path invalidation
+and therefore cannot sign out sessions merely because `migrate deploy` is run again.
 
 ### Filename order is apply order — and it bit us
 

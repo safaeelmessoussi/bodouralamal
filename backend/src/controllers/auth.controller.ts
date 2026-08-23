@@ -26,7 +26,7 @@ import {
   issueNewSession,
   logout as logoutSession,
   REFRESH_TTL_MS,
-  rotate,
+  refreshAccessSession,
 } from '../services/refresh-token.service.js';
 
 /**
@@ -216,39 +216,6 @@ function requestedRole(req: Request): string | undefined {
 }
 
 /**
- * **Fail safe, never fail open** (§60.4, Document Owner decision).
- *
- * Three cases, and the middle one is the decision that matters:
- *
- *   * **No role requested** → `null`, an un-narrowed token. The honest reading
- *     of *"the client did not ask to be narrowed"*, and the pre-R60 behaviour.
- *   * **Requested role still assigned** → that role.
- *   * **Requested role revoked** → **the most privileged role still held**, not
- *     an un-narrowed token. Silently restoring full multi-role authority because
- *     one role disappeared is the failure mode this rule exists to prevent: the
- *     caller asked to be limited, and losing the limit is not a safe default.
- *     Returning `null` here would do exactly that.
- *
- * Precedence matches the login default and the client's switcher ordering, so
- * *"most privileged"* means the same thing everywhere.
- */
-const ROLE_PRECEDENCE = ['super_admin', 'admin', 'teacher', 'parent', 'student'] as const;
-
-export function resolveActiveRole(
-  liveScopes: readonly { role: string }[],
-  requested: string | undefined,
-): string | null {
-  if (requested === undefined) return null;
-  const held = new Set(liveScopes.map((s) => s.role));
-  if (held.has(requested)) return requested;
-
-  const fallback = ROLE_PRECEDENCE.find((role) => held.has(role));
-  // An account with no assignments at all: nothing to fall back to, and an
-  // un-narrowed token of no roles is the same thing.
-  return fallback ?? null;
-}
-
-/**
  * R101's shared CSRF boundary for the only two refresh-cookie consumers.
  *
  * This check deliberately runs before the cookie is parsed. A cross-site
@@ -273,7 +240,11 @@ export function refresh(prisma: PrismaClient, config: AppConfig) {
     const presented = parseCookies(req.header('cookie'))[REFRESH_COOKIE];
     if (!presented) throw new AppError('AUTH_REQUIRED', 'no refresh cookie');
 
-    const outcome = await rotate(prisma, presented);
+    const outcome = await refreshAccessSession(prisma, {
+      presentedRaw: presented,
+      requestedRole: requestedRole(req),
+      signingKey: config.JWT_SIGNING_KEY,
+    });
     // Every refusal is 401 AUTH_REQUIRED and they are deliberately
     // indistinguishable: telling a stolen cookie why it failed confirms it was
     // once real (TD-12, Revision 16).
@@ -281,30 +252,6 @@ export function refresh(prisma: PrismaClient, config: AppConfig) {
       res.append('Set-Cookie', clearCookie(REFRESH_COOKIE, REFRESH_COOKIE_PATH));
       throw new AppError('AUTH_REQUIRED', `refresh refused: ${outcome.kind}`);
     }
-
-    const account = await prisma.user.findUnique({ where: { id: outcome.userId } });
-    if (!account || account.deletedAt !== null) throw new AppError('AUTH_REQUIRED', 'account gone');
-
-    const assignments = await prisma.userBranchRole.findMany({
-      where: { userId: outcome.userId, deletedAt: null },
-      include: { role: true },
-    });
-    // **R60 — refresh is what makes an active role persist.** The client holds
-    // the access token in memory only, and a role switch navigates by full page
-    // load, so the token is discarded and re-acquired here on the very next
-    // page. This endpoint, not `/auth/switch-role`, is the load-bearing one.
-    const liveScopes = toRoleScopes(assignments);
-    const active = resolveActiveRole(liveScopes, requestedRole(req));
-
-    const { token, expiresAt } = issueAccessToken(
-      {
-        userId: account.id,
-        roleScopes: active === null ? liveScopes : narrowToRole(liveScopes, active) ?? liveScopes,
-        ...(active !== null ? { activeRole: active } : {}),
-        accountStatus: account.accountStatus,
-      },
-      config.JWT_SIGNING_KEY,
-    );
 
     // On `grace` no new refresh token exists — the caller keeps the successor it
     // already holds, so the cookie is deliberately left untouched (T3).
@@ -314,9 +261,9 @@ export function refresh(prisma: PrismaClient, config: AppConfig) {
     // authority it holds, and when a requested role has been revoked this is how
     // it learns which role it fell back to.
     res.json({
-      access_token: token,
-      expires_at: expiresAt.toISOString(),
-      active_role: active,
+      access_token: outcome.accessToken,
+      expires_at: outcome.accessExpiresAt.toISOString(),
+      active_role: outcome.activeRole,
     });
   };
 }

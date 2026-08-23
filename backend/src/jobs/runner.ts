@@ -3,8 +3,8 @@ import { PgBoss, type WorkHandler } from 'pg-boss';
 import type { PrismaClient } from '../generated/prisma/client.js';
 import type { AppConfig } from '../lib/config.js';
 import { purgeExpiredAuthRows } from '../repositories/audit.repository.js';
-import { deleteExpired as deleteExpiredRefreshTokens } from '../repositories/refresh-token.repository.js';
 import { createStorageClients } from '../lib/storage.js';
+import { purgeExpired as purgeExpiredRefreshTokens } from '../services/refresh-token.service.js';
 import { runMaterialization } from '../services/session-materialize.service.js';
 import { ingestRecording } from '../services/session-recording-ingest.service.js';
 import { JobRunnerReadiness } from './readiness.js';
@@ -130,7 +130,7 @@ function createWorkerCatalog(
         const consumed = await prisma.consumedToken.deleteMany({
           where: { expiresAt: { lte: new Date() } },
         });
-        const refresh = await deleteExpiredRefreshTokens(prisma, new Date());
+        const refresh = await purgeExpiredRefreshTokens(prisma, new Date());
         log(QUEUES.tokenPurge, {
           consumed_tokens: consumed.count,
           refresh_tokens: refresh,

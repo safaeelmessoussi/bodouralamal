@@ -60,7 +60,7 @@ duplicate concurrent runs.
 | `backup.replicate` | Nightly cron | `pg_dump` + `restic` push to the second Moroccan location. Failure raises a **critical** Admin-visible alert |
 | `content.quarantine-purge` | Daily cron | Permanently removes storage objects past the 90-day trash window |
 | `upload.gc` | Daily cron | Deletes initiated-but-never-completed uploads **strictly older than 48 h** — never younger, or a slow upload in progress would be reaped |
-| `token.purge` | Daily cron | Removes consumed onboarding tokens past their horizon **and refresh tokens past expiry**, so a table gaining a row per refresh does not grow unbounded |
+| `token.purge` | Daily cron | Removes consumed onboarding tokens past their horizon **and refresh tokens past expiry**. Refresh generations are discovered in bounded batches, then deleted in one transaction per `RefreshSession` while holding the same stable row refresh/logout use; a live successor is therefore never detached from logout's serialization boundary. An empty anchor is removed with its last token |
 | `ratelimit.purge` | Daily cron | Removes counters for elapsed windows. **Housekeeping only** — the quota decision is synchronous and never depends on this job |
 | `audit.purge` | Daily cron | The single sanctioned deletion path for audit rows. See below |
 | `session-recording-ingest` | A **verified** provider completion callback (R99) | Singleton per recording. Turns a provider staging object into an `EducationalContent` + `SessionContent`. See below |

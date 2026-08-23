@@ -182,13 +182,20 @@ forked chain makes reuse detection impossible.** The window exists to absorb the
 created by multiple browser tabs, which the client also mitigates with a single-flight
 mutex — one in-flight refresh, concurrent callers awaiting its result.
 
-**Refresh and logout serialize per rotation chain in PostgreSQL.** The presented hash first
-identifies the server-owned `session_id`; the transaction then locks every token row in that
-chain in deterministic issue order and re-reads the presented row before deciding. The first
-read is discovery, never authority. This gives rotation and logout one linear order even when
-one request read before the other acquired its lock: either rotation commits first and logout
-revokes its successor, or logout commits first and rotation observes the revocation. A different
-`session_id` locks a disjoint row set, so another browser session remains independent.
+**Refresh, logout and token maintenance serialize on the rotation chain, not on one token
+generation.** The presented hash first discovers the server-owned `session_id`; the transaction
+then locks that chain's stable `RefreshSession` row and re-reads the credential before deciding.
+The first read is discovery, never authority. This target survives successor insertion and
+predecessor purge, which token-row locks cannot guarantee at PostgreSQL `READ COMMITTED`.
+A different `session_id` locks a different row, so another browser session remains independent.
+
+Rotation's predecessor/successor/audit write commits as the TD-4.13 unit. The HTTP refresh then
+takes the same session lock once more, verifies that a live generation still exists, reads the
+authoritative account and assignments, and signs the access token while holding that lock. If
+logout completed between rotation and this finalization, refresh returns the ordinary `401` and
+no credential; if finalization locks first, the token was issued before logout and logout waits.
+Holding a database transaction across response delivery was rejected: a commit failure after
+bytes reached the client would expose a credential whose rotation never committed.
 
 **Reuse ends the whole session.** A replayed rotated token is the signature of a stolen
 cookie, so the response is to end the session, not to extend grace. Never accepted, never
@@ -202,6 +209,8 @@ The distinction is recorded in the audit log, not in the response.
 Revoke-all exists as an internal capability — suspension and deletion use it — but **there
 is no user-facing "log out everywhere" control**, no such route, and no such navigation
 node. The capability exists because safeguarding requires it, not because a user invokes it.
+It locks the affected stable session rows in UUID order before revoking, so it follows the
+same discipline as per-session refresh/logout without serializing other users.
 
 ### Logout: browser cleanup and server revocation are separate
 
