@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { issueAccessToken } from "../lib/access-token.js";
 import { loadConfig } from "../lib/config.js";
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from "../lib/prisma.js";
+import { issueNewSession } from "../services/refresh-token.service.js";
 import { httpCall } from "../test-support/http-client.js";
 
 /**
@@ -274,14 +275,7 @@ describe("POST /admin/users/{id}/suspend — TD-1 Active → Suspended", () => {
     await grant(id, "teacher", branchId);
     // A live credential, which the suspension must invalidate immediately —
     // otherwise a 30-day refresh token outlives the decision.
-    await prisma.refreshToken.create({
-      data: {
-        userId: id,
-        tokenHash: `${TAG}-hash-${Date.now()}`,
-        sessionId: crypto.randomUUID(),
-        expiresAt: new Date(Date.now() + 30 * 24 * 3600 * 1000),
-      },
-    });
+    await issueNewSession(prisma, id);
 
     const res = await call("POST", `/admin/users/${id}/suspend`, superAdmin, {
       version: 0,

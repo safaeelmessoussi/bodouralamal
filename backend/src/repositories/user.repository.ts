@@ -25,6 +25,15 @@ async function loadRoles(db: Db, userId: string): Promise<Omit<ResolvedAccount, 
   return { roles: rolesOf(roleScopes), roleScopes };
 }
 
+/** Authoritative account and role rows used while finalizing a refresh. The
+ * caller supplies the session-locked transaction, so access-token claims are
+ * derived before that session can be revoked by a racing logout. */
+export async function findAccountById(db: Db, userId: string): Promise<ResolvedAccount | null> {
+  const user = await db.user.findUnique({ where: { id: userId } });
+  if (!user) return null;
+  return { user, ...(await loadRoles(db, user.id)) };
+}
+
 /**
  * §4.1b step 3.1 — the provider identity. **Every login after the first takes
  * this path**, which is why it is consulted first.
