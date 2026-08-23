@@ -196,6 +196,13 @@ The authentication integration coverage drives both cookie consumers over HTTP. 
 refresh rotates first, logout receives that successor, the persisted chain is revoked, a
 retained copy is refused, another device still rotates, repeat/missing-session logout is
 idempotent, and the response clears the cookie with the matching Path and security attributes.
+The service-level R101 coverage uses explicit barriers around the real PostgreSQL chain lock —
+never timing sleeps — to force both orderings: refresh identifies first but logout locks first,
+and logout identifies first but refresh locks first. It proves the loser re-reads authoritative
+state, no live successor survives logout, predecessor grace cannot reopen the chain, and another
+session for the same user still rotates. A controlled mandatory-audit failure occurs after the
+real revocation write and proves the enclosing database transaction rolls that write back; the
+same test then proves the successful path commits both revocation and `auth.logout`.
 The R101 rollout test executes the committed data-migration SQL inside a rolled-back database
 transaction, so it verifies revocation and system audit without signing out local developers.
 

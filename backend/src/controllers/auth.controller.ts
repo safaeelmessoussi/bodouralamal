@@ -23,13 +23,11 @@ import {
 import { issueOnboardingToken } from '../lib/onboarding-token.js';
 import { resolveLogin } from '../services/auth.service.js';
 import {
-  hashToken,
   issueNewSession,
   logout as logoutSession,
   REFRESH_TTL_MS,
   rotate,
 } from '../services/refresh-token.service.js';
-import * as tokens from '../repositories/refresh-token.repository.js';
 
 /**
  * Auth endpoints (SRS TD-3.1, §4.1b, TD-12).
@@ -328,18 +326,10 @@ export function logout(prisma: PrismaClient, config: AppConfig) {
   return async (req: Request, res: Response): Promise<void> => {
     assertRefreshCookieCsrf(req, config);
     const presented = parseCookies(req.header('cookie'))[REFRESH_COOKIE];
-    res.append('Set-Cookie', clearCookie(REFRESH_COOKIE, REFRESH_COOKIE_PATH));
-
     if (presented) {
-      const row = await tokens.findByHash(prisma, hashToken(presented));
-      if (row) {
-        await logoutSession(prisma, {
-          userId: row.userId,
-          sessionId: row.sessionId,
-          actorUserId: row.userId,
-        });
-      }
+      await logoutSession(prisma, presented);
     }
+    res.append('Set-Cookie', clearCookie(REFRESH_COOKIE, REFRESH_COOKIE_PATH));
     // Idempotent by design: logging out twice, or with no cookie at all, is a
     // success. There is nothing to leak and nothing to fail.
     res.status(204).end();

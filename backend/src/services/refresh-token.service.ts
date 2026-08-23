@@ -1,6 +1,6 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 
-import type { PrismaClient } from '../generated/prisma/client.js';
+import type { Prisma, PrismaClient } from '../generated/prisma/client.js';
 import { RefreshRevokedReason } from '../generated/prisma/enums.js';
 import * as audit from '../repositories/audit.repository.js';
 import type { Db } from '../repositories/audit.repository.js';
@@ -69,6 +69,23 @@ export interface IssuedRefreshToken {
 }
 
 /**
+ * Finds the presented credential, takes the chain-wide database lock, then
+ * reads it again. The first read discovers the server-owned `session_id`; only
+ * the second is authoritative because another rotation/logout may have
+ * committed while this transaction waited for the shared chain lock.
+ */
+async function findUnderSessionLock(
+  tx: Prisma.TransactionClient,
+  presentedHash: string,
+): Promise<tokens.TokenWithSuccessor | null> {
+  const identified = await tokens.findByHash(tx, presentedHash);
+  if (!identified) return null;
+
+  await tokens.lockSessionTokens(tx, identified.sessionId);
+  return tokens.findByHash(tx, presentedHash);
+}
+
+/**
  * Starts a NEW session chain — used after a successful login, never for
  * rotation. `sessionId` is stamped here and copied by every successor, which is
  * what makes session-scoped revocation an indexed UPDATE (§7).
@@ -107,7 +124,7 @@ export async function rotate(
   const presentedHash = hashToken(presentedRaw);
 
   return prisma.$transaction(async (tx) => {
-    const presented = await tokens.findByHash(tx, presentedHash);
+    const presented = await findUnderSessionLock(tx, presentedHash);
 
     // T10/T11 — unknown or purged. Fail closed, and identically to expired.
     if (!presented) return { kind: 'rejected', reason: 'unknown' };
@@ -235,28 +252,37 @@ export async function rotate(
  * TD-4.14 — logout revokes only the CURRENT session, with its audit row in the
  * same transaction. Other devices keep working (§18 T6).
  *
- * `actorUserId` is explicit rather than inferred: for a self-service logout it
- * is the user, and passing it keeps the caller honest about attribution.
+ * The raw credential is the only session authority R101 permits. Identification
+ * therefore happens here, inside this transaction, rather than in the HTTP
+ * controller or through caller-supplied user/session ids.
  */
 export async function logout(
-  db: Db,
-  params: { userId: string; sessionId: string; actorUserId: string | null },
+  prisma: PrismaClient,
+  presentedRaw: string,
   now: Date = new Date(),
 ): Promise<number> {
-  const revokedIds = await tokens.revokeSessionTokens(
-    db,
-    params.sessionId,
-    RefreshRevokedReason.logout,
-    now,
-  );
-  await audit.write(db, {
-    actorUserId: params.actorUserId,
-    actionType: audit.AUDIT_ACTIONS.logout,
-    targetEntity: 'User',
-    targetId: params.userId,
-    detail: { session_ids: [params.sessionId], tokens_revoked: revokedIds.length },
+  const presentedHash = hashToken(presentedRaw);
+
+  return prisma.$transaction(async (tx) => {
+    const presented = await findUnderSessionLock(tx, presentedHash);
+    // R101: an unknown or concurrently purged credential is an idempotent no-op.
+    if (!presented) return 0;
+
+    const revokedIds = await tokens.revokeSessionTokens(
+      tx,
+      presented.sessionId,
+      RefreshRevokedReason.logout,
+      now,
+    );
+    await audit.write(tx, {
+      actorUserId: presented.userId,
+      actionType: audit.AUDIT_ACTIONS.logout,
+      targetEntity: 'User',
+      targetId: presented.userId,
+      detail: { session_ids: [presented.sessionId], tokens_revoked: revokedIds.length },
+    });
+    return revokedIds.length;
   });
-  return revokedIds.length;
 }
 
 /**

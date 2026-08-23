@@ -1,9 +1,10 @@
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { RefreshRevokedReason } from "../generated/prisma/enums.js";
 import { loadConfig } from "../lib/config.js";
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from "../lib/prisma.js";
 import * as auditRepo from "../repositories/audit.repository.js";
+import * as tokenRepo from "../repositories/refresh-token.repository.js";
 import {
   hashToken,
   issueNewSession,
@@ -24,6 +25,14 @@ const config = loadConfig();
 const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);
 
 const TEST_TAG = "[refresh-token-test]";
+
+function deferred(): { promise: Promise<void>; resolve: () => void } {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
 
 async function makeUser(): Promise<string> {
   const user = await prisma.user.create({
@@ -50,6 +59,10 @@ beforeEach(async () => {
   await prisma.user.deleteMany({
     where: { nameArabic: { startsWith: TEST_TAG } },
   });
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
 afterAll(async () => {
@@ -177,11 +190,7 @@ describe("§18 token lifecycle acceptance criteria", () => {
     const deviceB = await issueNewSession(prisma, userId);
     expect(deviceA.sessionId).not.toBe(deviceB.sessionId);
 
-    await logout(prisma, {
-      userId,
-      sessionId: deviceA.sessionId,
-      actorUserId: userId,
-    });
+    await logout(prisma, deviceA.rawToken);
 
     // A is dead...
     const aDead = await rotate(prisma, deviceA.rawToken);
@@ -198,11 +207,7 @@ describe("§18 token lifecycle acceptance criteria", () => {
     expect(current.kind).toBe("rotated");
     if (current.kind !== "rotated") return;
 
-    await logout(prisma, {
-      userId,
-      sessionId: predecessor.sessionId,
-      actorUserId: userId,
-    });
+    await logout(prisma, current.rawToken);
 
     // This call is deliberately inside the ordinary ten-second predecessor
     // window. Grace is valid only while the successor remains live.
@@ -216,6 +221,150 @@ describe("§18 token lifecycle acceptance criteria", () => {
         where: { sessionId: predecessor.sessionId, revokedAt: null },
       }),
     ).toBe(0);
+  });
+
+  it("R101 — logout revocation rolls back when its mandatory audit write fails", async () => {
+    const userId = await makeUser();
+    const token = await issueNewSession(prisma, userId);
+    const realWrite = auditRepo.write;
+    const auditFailure = vi.spyOn(auditRepo, "write").mockImplementation(async (db, entry) => {
+      if (entry.actionType === auditRepo.AUDIT_ACTIONS.logout) {
+        throw new Error("controlled logout audit failure");
+      }
+      return realWrite(db, entry);
+    });
+
+    await expect(logout(prisma, token.rawToken)).rejects.toThrow(
+      "controlled logout audit failure",
+    );
+
+    const afterFailure = await prisma.refreshToken.findUniqueOrThrow({
+      where: { tokenHash: hashToken(token.rawToken) },
+    });
+    expect(afterFailure.revokedAt).toBeNull();
+    expect(
+      await prisma.auditLog.count({
+        where: {
+          actionType: auditRepo.AUDIT_ACTIONS.logout,
+          targetId: userId,
+        },
+      }),
+    ).toBe(0);
+
+    auditFailure.mockRestore();
+    await expect(logout(prisma, token.rawToken)).resolves.toBe(1);
+
+    const afterSuccess = await prisma.refreshToken.findUniqueOrThrow({
+      where: { tokenHash: hashToken(token.rawToken) },
+    });
+    expect(afterSuccess.revokedReason).toBe(RefreshRevokedReason.logout);
+    expect(afterSuccess.revokedAt).toBeInstanceOf(Date);
+    expect(
+      await prisma.auditLog.count({
+        where: {
+          actionType: auditRepo.AUDIT_ACTIONS.logout,
+          targetId: userId,
+        },
+      }),
+    ).toBe(1);
+  });
+
+  it("R101 — logout wins after a predecessor refresh has identified the chain", async () => {
+    const userId = await makeUser();
+    const predecessor = await issueNewSession(prisma, userId);
+    const current = await rotate(prisma, predecessor.rawToken);
+    expect(current.kind).toBe("rotated");
+    if (current.kind !== "rotated") return;
+    const unrelated = await issueNewSession(prisma, userId);
+
+    const refreshIdentified = deferred();
+    const allowRefreshToLock = deferred();
+    const realLock = tokenRepo.lockSessionTokens;
+    let targetLockCalls = 0;
+    vi.spyOn(tokenRepo, "lockSessionTokens").mockImplementation(async (tx, sessionId) => {
+      if (sessionId === predecessor.sessionId && targetLockCalls++ === 0) {
+        refreshIdentified.resolve();
+        await allowRefreshToLock.promise;
+      }
+      return realLock(tx, sessionId);
+    });
+
+    const racingRefresh = rotate(prisma, predecessor.rawToken);
+    try {
+      await refreshIdentified.promise;
+
+      // The coordination point is scoped to the target chain. Another browser
+      // session remains free to rotate while that chain is paused.
+      const unrelatedResult = await rotate(prisma, unrelated.rawToken);
+      expect(unrelatedResult.kind).toBe("rotated");
+
+      await expect(logout(prisma, current.rawToken)).resolves.toBe(1);
+      allowRefreshToLock.resolve();
+
+      const result = await racingRefresh;
+      expect(result.kind).toBe("reuse_detected");
+      expect(
+        await prisma.refreshToken.count({
+          where: { sessionId: predecessor.sessionId, revokedAt: null },
+        }),
+      ).toBe(0);
+      expect(
+        await prisma.refreshToken.count({
+          where: { sessionId: unrelated.sessionId, revokedAt: null },
+        }),
+      ).toBe(1);
+    } finally {
+      allowRefreshToLock.resolve();
+      await racingRefresh.catch(() => undefined);
+    }
+  });
+
+  it("R101 — logout re-reads after a racing refresh and revokes its successor", async () => {
+    const userId = await makeUser();
+    const target = await issueNewSession(prisma, userId);
+    const unrelated = await issueNewSession(prisma, userId);
+
+    const logoutIdentified = deferred();
+    const allowLogoutToLock = deferred();
+    const realLock = tokenRepo.lockSessionTokens;
+    let targetLockCalls = 0;
+    vi.spyOn(tokenRepo, "lockSessionTokens").mockImplementation(async (tx, sessionId) => {
+      if (sessionId === target.sessionId && targetLockCalls++ === 0) {
+        logoutIdentified.resolve();
+        await allowLogoutToLock.promise;
+      }
+      return realLock(tx, sessionId);
+    });
+
+    const racingLogout = logout(prisma, target.rawToken);
+    try {
+      await logoutIdentified.promise;
+
+      const refreshResult = await rotate(prisma, target.rawToken);
+      expect(refreshResult.kind).toBe("rotated");
+      if (refreshResult.kind !== "rotated") return;
+
+      const unrelatedResult = await rotate(prisma, unrelated.rawToken);
+      expect(unrelatedResult.kind).toBe("rotated");
+
+      allowLogoutToLock.resolve();
+      await expect(racingLogout).resolves.toBe(1);
+
+      expect(
+        await prisma.refreshToken.count({
+          where: { sessionId: target.sessionId, revokedAt: null },
+        }),
+      ).toBe(0);
+      expect((await rotate(prisma, refreshResult.rawToken)).kind).toBe("reuse_detected");
+      expect(
+        await prisma.refreshToken.count({
+          where: { sessionId: unrelated.sessionId, revokedAt: null },
+        }),
+      ).toBe(1);
+    } finally {
+      allowLogoutToLock.resolve();
+      await racingLogout.catch(() => undefined);
+    }
   });
 
   it("T7/T8 — revoke-all kills every live session of the user", async () => {
@@ -314,11 +463,7 @@ describe("§18 token lifecycle acceptance criteria", () => {
   it("T11 — a revoked token is never accepted, at any age", async () => {
     const userId = await makeUser();
     const token = await issueNewSession(prisma, userId);
-    await logout(prisma, {
-      userId,
-      sessionId: token.sessionId,
-      actorUserId: userId,
-    });
+    await logout(prisma, token.rawToken);
 
     for (let attempt = 0; attempt < 3; attempt++) {
       const outcome = await rotate(prisma, token.rawToken);
@@ -343,11 +488,7 @@ describe("§18 token lifecycle acceptance criteria", () => {
 
     // Path 2 — logout (self-service).
     const loggingOut = await issueNewSession(prisma, userId);
-    await logout(prisma, {
-      userId,
-      sessionId: loggingOut.sessionId,
-      actorUserId: userId,
-    });
+    await logout(prisma, loggingOut.rawToken);
 
     // Path 3 — suspension (admin-initiated).
     const suspended = await issueNewSession(prisma, userId);
@@ -451,11 +592,7 @@ describe("§18 token lifecycle acceptance criteria", () => {
     const userId = await makeUser();
     const token = await issueNewSession(prisma, userId);
     const rotated = await rotate(prisma, token.rawToken);
-    await logout(prisma, {
-      userId,
-      sessionId: token.sessionId,
-      actorUserId: userId,
-    });
+    await logout(prisma, token.rawToken);
 
     const rows = await prisma.auditLog.findMany({
       where: { targetId: userId },

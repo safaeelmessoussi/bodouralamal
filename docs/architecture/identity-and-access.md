@@ -182,6 +182,14 @@ forked chain makes reuse detection impossible.** The window exists to absorb the
 created by multiple browser tabs, which the client also mitigates with a single-flight
 mutex — one in-flight refresh, concurrent callers awaiting its result.
 
+**Refresh and logout serialize per rotation chain in PostgreSQL.** The presented hash first
+identifies the server-owned `session_id`; the transaction then locks every token row in that
+chain in deterministic issue order and re-reads the presented row before deciding. The first
+read is discovery, never authority. This gives rotation and logout one linear order even when
+one request read before the other acquired its lock: either rotation commits first and logout
+revokes its successor, or logout commits first and rotation observes the revocation. A different
+`session_id` locks a disjoint row set, so another browser session remains independent.
+
 **Reuse ends the whole session.** A replayed rotated token is the signature of a stolen
 cookie, so the response is to end the session, not to extend grace. Never accepted, never
 resurrected.
@@ -202,6 +210,10 @@ revokes every live token carrying that `session_id`, writes `auth.logout` in the
 transaction, and only then returns the cookie expiry. A cookie disappearing from a browser is
 not proof that its retained value is dead; the persisted revocation is the security property.
 Another browser has another `session_id` and remains signed in.
+
+The audit row is mandatory transaction state, not best-effort logging: if `auth.logout` cannot
+be written, PostgreSQL rolls the revocation back and the endpoint does not expire the browser
+cookie. No committed state may contain a logout revocation without its required audit row.
 
 The endpoint stays idempotent: with a valid CSRF request context, an absent, unknown or
 already-cleared cookie is `204`. A repeated browser logout therefore remains safe. Missing or
