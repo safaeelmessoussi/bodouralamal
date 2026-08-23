@@ -1752,11 +1752,12 @@ model ConsumedToken {
   @@map("consumed_token")
 }
 
-/// Why a session is dead (§7, Revision 16). `reuse_detected` is a security
-/// event — a rotated token was replayed outside the grace window.
+/// Why a session is dead (§7, Revisions 16, 101 and 102). `reuse_detected` is
+/// a security event — a rotated token was replayed outside the grace window.
 enum RefreshRevokedReason {
   logout
   suspension
+  rejection
   user_deleted
   reuse_detected
   cookie_path_migration

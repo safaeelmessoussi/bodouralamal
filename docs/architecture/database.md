@@ -101,11 +101,13 @@ and a UUID cannot be represented by PostgreSQL's 64-bit advisory key without col
 The anchor is intentionally session-scoped, not user-scoped. The already-stable `User` row is
 the higher-level lock for the two operations that must govern anchors which do not exist yet:
 identity binding, new login/session creation, current-role credential decisions and user-wide
-revocation. Their order is User first, then existing `RefreshSession` ids in UUID order. The
+revocation, including Pending → Rejected. Their order is User first, then existing
+`RefreshSession` ids in UUID order. The
 explicit User mode is `FOR NO KEY UPDATE`: `User.id` is immutable, while all protected status,
 deletion and role decisions still conflict with this lock. A successful login re-reads status
-and assignments while holding it; suspension holds it while changing status and
-enumerating/revoking all anchors.
+and assignments while holding it; rejection and suspension hold it while changing status and
+enumerating/revoking all anchors. The shared session issuer independently re-checks that the
+account is Active or Pending under this lock, so a helper call cannot bypass that boundary.
 
 Refresh, logout and purge never request that **explicit** User lock. Refresh-token and audit
 inserts can nevertheless acquire an **implicit `KEY SHARE`** on the referenced User during FK
@@ -119,7 +121,7 @@ finish their FK write and release the anchor without weakening User-wide seriali
 | `token_hash` | **Hashed, never raw** — a stolen database dump must not yield usable 30-day credentials. Unique |
 | `session_id` | The stable id of one rotation chain. Makes "revoke this session" a single indexed `UPDATE` instead of a recursive walk of predecessors |
 | `rotated_from_id` | The immediate predecessor. **This one field decides all three refresh outcomes**: current → rotate, immediate predecessor within grace → accept, anything older → reuse detected |
-| `revoked_at` / `revoked_reason` | The revocation check is `revoked_at IS NULL`. The reason separates a normal logout, detected replay, safeguarding action, and R101's one-time cookie-Path rollout; NULL remains reserved for ordinary rotation |
+| `revoked_at` / `revoked_reason` | The revocation check is `revoked_at IS NULL`. The reason separates a normal logout, detected replay, suspension, R102 rejection, deletion, and R101's one-time cookie-Path rollout; NULL remains reserved for ordinary rotation |
 
 The fields **deliberately excluded** are documented in the specification with their reasons,
 so a later implementer does not re-add them by reflex: `created_at` (identical to
@@ -401,6 +403,7 @@ SQL, and flags every `DROP`/`RENAME` for human review with its contract-phase ju
 20260821200000_r101_refresh_cookie_path_reason
 20260821200100_r101_invalidate_legacy_refresh_sessions
 20260823100000_r101_refresh_session_anchor
+20260823190000_r102_rejection_revocation_reason
 ```
 
 Note the pattern: schema changes and their hand-written constraints are **separate
@@ -419,6 +422,10 @@ The later R101 anchor migration is ordinary forward-only schema evolution: it cr
 `RefreshSession` per existing distinct `session_id`, refuses an inconsistent chain spanning
 more than one user, then adds the foreign key. It does not repeat the cookie-path invalidation
 and therefore cannot sign out sessions merely because `migrate deploy` is run again.
+
+R102 is a forward-only enum extension only. It adds the durable `rejection` attribution value;
+the application transaction performs each actual Pending → Rejected revocation, so rerunning
+`migrate deploy` has no session side effect.
 
 ### Filename order is apply order — and it bit us
 

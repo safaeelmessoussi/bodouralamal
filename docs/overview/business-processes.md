@@ -55,7 +55,10 @@ Admin meets new applicants — by design, not a gap.
 An Admin reviews the queue and approves or rejects with a reason. Approving a parent+child
 bundle activates the parent, the child, and the link **atomically**, and writes an audit
 row. Rejection is **terminal** — a rejected applicant cannot re-register themselves; that
-requires staff action.
+requires staff action. Rejecting also revokes every live refresh session for that account in
+the same transaction as the state change and mandatory audit records. A retained credential
+cannot renew, and a later authorized account recovery would require a fresh authentication
+rather than reviving the old sessions.
 
 > SRS §4.1, §4.1b · TD-4.1, TD-4.2 · [Identity and access](../architecture/identity-and-access.md)
 

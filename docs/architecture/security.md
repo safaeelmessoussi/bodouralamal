@@ -17,7 +17,7 @@ threats that actually matter here are:
 | **A staff account is compromised or misused** | It reaches minors' case files | Per-request freshness assertions; audited reads; branch scoping |
 | **A parent probes for other children** | Enumeration of minors | Uniform `404`; no parent-facing search over children |
 | **A stolen session cookie** | 30-day credential | Rotation with reuse detection that kills the whole session |
-| **Login races account suspension** | Stale Active state could mint a fresh session after revoke-all | User-row serialization; authoritative status re-read before issuance |
+| **Login races account rejection or suspension** | Stale session-bearing state could mint a fresh session after revoke-all | User-row serialization; authoritative status re-read before issuance |
 | **A recording is published without consent** | Safeguarding and legal exposure | Continuously re-evaluated consent gate; forced bucket migration |
 | **Data leaves Moroccan infrastructure** | Law 09-08 violation | Fixture-only rule outside Morocco; Moroccan backup target |
 | **An implementation shortcut regresses one of the above** | The most likely of all | CI guards; tests that assert the *security property*, not the code path |
