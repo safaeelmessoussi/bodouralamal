@@ -62,6 +62,13 @@ Then routing:
 | **Pre-provisioned match** | **Create and bind** the identity transactionally, then route by status. From here every later login resolves at step 1 |
 | **Nobody we know** | Issue a short-lived onboarding token, redirect to the registration form |
 
+Resolution is deliberately not credential authority. Before an Active or Pending result can
+mint anything, the callback opens one final transaction, locks that person's stable `User` row,
+and re-reads status plus live role assignments. It creates the `RefreshSession`, first refresh
+generation, and `auth.login` audit in that transaction; the access token and cookie leave the
+service only after commit. If suspension committed after the earlier resolution, the re-read
+routes to the existing deactivated screen and creates no credential.
+
 ### The Google identity trust boundary
 
 The authorization-code exchange and ID-token validation are **two different security
@@ -189,6 +196,16 @@ The first read is discovery, never authority. This target survives successor ins
 predecessor purge, which token-row locks cannot guarantee at PostgreSQL `READ COMMITTED`.
 A different `session_id` locks a different row, so another browser session remains independent.
 
+**New-session creation and user-wide revocation serialize one level higher.** A session anchor
+cannot protect an anchor that does not exist yet, so successful login, suspension and revoke-all
+share the stable `User` row. The lock hierarchy is always **User → `RefreshSession` anchors in
+UUID order**. Login re-reads the account under the User lock before signing, inserts its new
+anchor/token and login audit, then commits. Suspension takes the same User lock before deciding
+the state transition, changes status and revokes every session in that transaction. Therefore
+either suspension commits first and login refuses, or login commits first and suspension's
+subsequent enumeration includes the new anchor. Locks are per user, so an unrelated person's
+login does not wait.
+
 Rotation's predecessor/successor/audit write commits as the TD-4.13 unit. The HTTP refresh then
 takes the same session lock once more, verifies that a live generation still exists, reads the
 authoritative account and assignments, and signs the access token while holding that lock. If
@@ -209,8 +226,8 @@ The distinction is recorded in the audit log, not in the response.
 Revoke-all exists as an internal capability — suspension and deletion use it — but **there
 is no user-facing "log out everywhere" control**, no such route, and no such navigation
 node. The capability exists because safeguarding requires it, not because a user invokes it.
-It locks the affected stable session rows in UUID order before revoking, so it follows the
-same discipline as per-session refresh/logout without serializing other users.
+It locks the affected User first, then the stable session rows in UUID order before revoking,
+so no new session can appear after enumeration and another user's sessions stay independent.
 
 ### Logout: browser cleanup and server revocation are separate
 

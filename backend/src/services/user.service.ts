@@ -7,6 +7,7 @@ import { branchesForRole } from '../policies/branch-scope.js';
 import { assertFreshActive } from '../policies/freshness.policy.js';
 import type { Actor } from '../policies/actor.js';
 import * as audit from '../repositories/audit.repository.js';
+import * as users from '../repositories/user.repository.js';
 import { revokeAllSessions } from './refresh-token.service.js';
 
 /**
@@ -555,6 +556,12 @@ export async function suspendUser(
   }
 
   await prisma.$transaction(async (tx) => {
+    // The User row is the stable serialization anchor shared by successful
+    // login/session creation and user-wide revocation. It must precede every
+    // RefreshSession lock acquired by revokeAllSessions below.
+    if (!(await users.lockUser(tx, id))) {
+      throw new AppError('NOT_FOUND', 'no such user');
+    }
     const target = await loadManageable(tx, actor, id);
     if (target.accountStatus !== 'active') {
       // TD-1 allows this transition only from Active.

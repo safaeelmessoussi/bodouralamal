@@ -118,7 +118,10 @@ function isRootClient(db: Db): db is PrismaClient {
 /**
  * Starts a NEW session chain — used after a successful login, never for
  * rotation. `sessionId` is stamped here and copied by every successor, which is
- * what makes session-scoped revocation an indexed UPDATE (§7).
+ * what makes session-scoped revocation an indexed UPDATE (§7). Every caller,
+ * including test/maintenance callers using the root client, participates in
+ * the user-level serialization boundary here; a helper call cannot bypass the
+ * lock simply because it did not enter through the OAuth controller.
  */
 export async function issueNewSession(
   db: Db,
@@ -130,6 +133,9 @@ export async function issueNewSession(
   const expiresAt = new Date(now.getTime() + REFRESH_TTL_MS);
 
   const persist = async (tx: Prisma.TransactionClient): Promise<void> => {
+    if (!(await users.lockUser(tx, userId))) {
+      throw new Error('cannot issue a refresh session for a missing user');
+    }
     await tokens.insertSession(tx, { id: sessionId, userId, createdAt: now });
     await tokens.insert(tx, {
       userId,
@@ -435,6 +441,12 @@ export async function revokeAllSessions(
   const revoke = async (
     tx: Prisma.TransactionClient,
   ): Promise<{ sessionIds: string[]; tokenCount: number }> => {
+    // User-wide revocation shares one stable serialization anchor with new
+    // login/session creation. Lock order is always User -> RefreshSession(s),
+    // so no new anchor can appear after this transaction enumerates the set.
+    if (!(await users.lockUser(tx, params.userId))) {
+      return { sessionIds: [], tokenCount: 0 };
+    }
     const sessionIds = await tokens.findUserSessionIds(tx, params.userId);
     await tokens.lockSessions(tx, sessionIds);
     const result = await tokens.revokeAllUserTokens(tx, params.userId, params.reason, now);

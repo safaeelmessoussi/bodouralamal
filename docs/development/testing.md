@@ -207,6 +207,15 @@ successor. The companion after-insertion case proves purge leaves that successor
 A controlled mandatory-audit failure occurs after the real revocation write and proves the
 enclosing database transaction rolls that write back; the same test then proves the successful
 path commits both revocation and `auth.logout`.
+The user-wide R101 race coverage uses a second set of explicit barriers around the production
+User-row lock. In the suspension-first ordering, OAuth resolution has already read Active but
+final issuance waits; suspension commits and the resumed callback re-reads Suspended, redirects
+to the existing deactivated contract, and creates no access token, cookie or session. In the
+login-first ordering, the callback holds the User lock while creating its anchor/token/audit;
+suspension waits, then enumerates and revokes that new anchor together with two older sessions.
+An unrelated user's login completes while the target is blocked, proving the lock is not global.
+A forced `auth.login` audit failure proves the new anchor and token roll back before any
+credential reaches the response.
 The R101 rollout test executes the committed data-migration SQL inside a rolled-back database
 transaction, so it verifies revocation and system audit without signing out local developers.
 

@@ -98,6 +98,14 @@ queued. The anchor is removed only when purge, while holding it, finds no token 
 PostgreSQL advisory locks were rejected because §16.2 permits repository raw SQL for row locks,
 and a UUID cannot be represented by PostgreSQL's 64-bit advisory key without collision.
 
+The anchor is intentionally session-scoped, not user-scoped. The already-stable `User` row is
+the higher-level lock for the two operations that must govern anchors which do not exist yet:
+new login/session creation and user-wide revocation. Their order is User first, then existing
+`RefreshSession` ids in UUID order. A successful login re-reads status and assignments while
+holding that User lock; suspension holds it while changing status and enumerating/revoking all
+anchors. Refresh, logout and purge never request the User lock, so they cannot invert this
+hierarchy.
+
 | Field | Consumer |
 |---|---|
 | `token_hash` | **Hashed, never raw** — a stolen database dump must not yield usable 30-day credentials. Unique |

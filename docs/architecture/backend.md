@@ -125,6 +125,9 @@ since conflating them would report "someone else edited this" for a record that 
 - Roster mutation locks the group row before comparing against capacity.
 - Quota enforcement locks the rate-limit counter row before comparing against the limit.
 - Display-order reordering runs as one transaction locking the parent scope.
+- Authentication locks the User row before final login issuance or user-wide revocation;
+  revoke-all then locks that user's `RefreshSession` anchors in UUID order. Session-scoped
+  refresh, logout and purge need only their one anchor and never acquire a User lock.
 
 Lock ordering is consistent (parent before children) to prevent deadlocks; scope is rows,
 never tables.

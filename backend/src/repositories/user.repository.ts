@@ -1,4 +1,4 @@
-import type { User } from '../generated/prisma/client.js';
+import type { Prisma, User } from '../generated/prisma/client.js';
 
 import { rolesOf, toRoleScopes, type RoleScope } from '../policies/branch-scope.js';
 import type { Db } from './audit.repository.js';
@@ -12,6 +12,27 @@ export interface ResolvedAccount {
   user: User;
   roles: string[];
   roleScopes: RoleScope[];
+}
+
+/**
+ * Serializes user-wide authentication state transitions.
+ *
+ * A refresh-session row can serialize one browser session, but it cannot stop
+ * a new session anchor from being inserted after revoke-all has enumerated the
+ * existing anchors. The stable User row is therefore the governing lock for
+ * successful login/session creation and user-wide revocation. Callers that
+ * also need session locks must take this lock first.
+ */
+export async function lockUser(
+  tx: Prisma.TransactionClient,
+  userId: string,
+): Promise<boolean> {
+  const rows = await tx.$queryRaw<Array<{ id: string }>>`
+    SELECT "id"
+    FROM "user"
+    WHERE "id" = ${userId}::uuid
+    FOR UPDATE`;
+  return rows.length === 1;
 }
 
 async function loadRoles(db: Db, userId: string): Promise<Omit<ResolvedAccount, 'user'>> {
