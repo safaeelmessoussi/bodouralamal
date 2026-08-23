@@ -20,8 +20,16 @@ export interface ResolvedAccount {
  * A refresh-session row can serialize one browser session, but it cannot stop
  * a new session anchor from being inserted after revoke-all has enumerated the
  * existing anchors. The stable User row is therefore the governing lock for
- * successful login/session creation and user-wide revocation. Callers that
- * also need session locks must take this lock first.
+ * successful login/session creation, identity/role credential decisions and
+ * user-wide revocation. Callers that also need session locks take this first.
+ *
+ * `FOR NO KEY UPDATE` is deliberate. Every protected application mutation
+ * changes non-key account state; User.id is immutable. This mode still
+ * conflicts with itself, `FOR UPDATE`, UPDATE and DELETE, so those governing
+ * operations serialize exactly as before. It is compatible with the implicit
+ * `KEY SHARE` PostgreSQL takes while refresh/logout insert child FK rows after
+ * locking a RefreshSession. A stronger `FOR UPDATE` creates the cycle
+ * Session -> implicit User KEY SHARE vs User -> Session.
  */
 export async function lockUser(
   tx: Prisma.TransactionClient,
@@ -31,7 +39,7 @@ export async function lockUser(
     SELECT "id"
     FROM "user"
     WHERE "id" = ${userId}::uuid
-    FOR UPDATE`;
+    FOR NO KEY UPDATE`;
   return rows.length === 1;
 }
 

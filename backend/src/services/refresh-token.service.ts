@@ -335,7 +335,15 @@ export async function refreshAccessSession(
     }
 
     const account = await users.findAccountById(tx, outcome.userId);
-    if (!account || account.user.deletedAt !== null) {
+    // TD-1/§4.1b: only Active and Pending are session-bearing states. Rejected
+    // is terminal/deactivated, Suspended is deactivated, and a deleted account
+    // is unavailable. Downstream route guards are not a substitute for refusing
+    // to renew credentials here.
+    if (
+      !account ||
+      account.user.deletedAt !== null ||
+      (account.user.accountStatus !== 'active' && account.user.accountStatus !== 'pending')
+    ) {
       return { kind: 'rejected', reason: 'unknown' };
     }
 

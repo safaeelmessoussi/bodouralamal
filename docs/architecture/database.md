@@ -100,11 +100,19 @@ and a UUID cannot be represented by PostgreSQL's 64-bit advisory key without col
 
 The anchor is intentionally session-scoped, not user-scoped. The already-stable `User` row is
 the higher-level lock for the two operations that must govern anchors which do not exist yet:
-new login/session creation and user-wide revocation. Their order is User first, then existing
-`RefreshSession` ids in UUID order. A successful login re-reads status and assignments while
-holding that User lock; suspension holds it while changing status and enumerating/revoking all
-anchors. Refresh, logout and purge never request the User lock, so they cannot invert this
-hierarchy.
+identity binding, new login/session creation, current-role credential decisions and user-wide
+revocation. Their order is User first, then existing `RefreshSession` ids in UUID order. The
+explicit User mode is `FOR NO KEY UPDATE`: `User.id` is immutable, while all protected status,
+deletion and role decisions still conflict with this lock. A successful login re-reads status
+and assignments while holding it; suspension holds it while changing status and
+enumerating/revoking all anchors.
+
+Refresh, logout and purge never request that **explicit** User lock. Refresh-token and audit
+inserts can nevertheless acquire an **implicit `KEY SHARE`** on the referenced User during FK
+validation. That real database edge is why `FOR NO KEY UPDATE` matters: it is compatible with
+`KEY SHARE`, whereas `FOR UPDATE` allowed a refresh/logout holding a session anchor to wait on
+User while suspension holding User waited on that same anchor. Session-first operations now
+finish their FK write and release the anchor without weakening User-wide serialization.
 
 | Field | Consumer |
 |---|---|

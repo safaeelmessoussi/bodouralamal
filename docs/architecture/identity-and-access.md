@@ -59,7 +59,7 @@ Then routing:
 | Case | Action |
 |---|---|
 | **Identity exists** | Establish the session and route on the **complete** condition (below) |
-| **Pre-provisioned match** | **Create and bind** the identity transactionally, then route by status. From here every later login resolves at step 1 |
+| **Pre-provisioned match** | Lock the matched `User`, re-read status/deletion and roles, then **create and bind** the identity transactionally only if still eligible. From here every later login resolves at step 1 |
 | **Nobody we know** | Issue a short-lived onboarding token, redirect to the registration form |
 
 Resolution is deliberately not credential authority. Before an Active or Pending result can
@@ -68,6 +68,12 @@ and re-reads status plus live role assignments. It creates the `RefreshSession`,
 generation, and `auth.login` audit in that transaction; the access token and cookie leave the
 service only after commit. If suspension committed after the earlier resolution, the re-read
 routes to the existing deactivated screen and creates no credential.
+
+The first binding has the same authoritative boundary. Its earlier email lookup only discovers
+a candidate; it does not authorize the write. The binding transaction takes the User lock and
+re-runs the complete routing condition before creating `UserIdentity` or `auth.identity_bound`.
+Suspension first therefore leaves no new identity or binding audit; binding first commits both,
+after which suspension may proceed and final issuance still re-reads the deactivated state.
 
 ### The Google identity trust boundary
 
@@ -206,11 +212,23 @@ either suspension commits first and login refuses, or login commits first and su
 subsequent enumeration includes the new anchor. Locks are per user, so an unrelated person's
 login does not wait.
 
+The explicit User lock is PostgreSQL `FOR NO KEY UPDATE`, not `FOR UPDATE`. The application never
+changes `User.id`; the weaker mode still conflicts with another governing lock and with every
+User update/delete that these flows must serialize. It is also compatible with the **implicit
+`KEY SHARE`** acquired when refresh/logout insert a `RefreshToken` or `AuditLog` row carrying a
+User foreign key. That compatibility is load-bearing: refresh/logout already hold a session
+anchor, while suspension holds User and waits for that anchor. `FOR UPDATE` would complete a
+Session → User versus User → Session deadlock; `NO KEY UPDATE` lets the child FK write finish so
+the session transaction commits and suspension can take the anchor.
+
 Rotation's predecessor/successor/audit write commits as the TD-4.13 unit. The HTTP refresh then
 takes the same session lock once more, verifies that a live generation still exists, reads the
 authoritative account and assignments, and signs the access token while holding that lock. If
 logout completed between rotation and this finalization, refresh returns the ordinary `401` and
 no credential; if finalization locks first, the token was issued before logout and logout waits.
+Only authoritative `Active` and `Pending` accounts are eligible at this boundary. Rejected,
+Suspended, deleted or missing accounts receive the same ordinary refusal and no access/refresh
+credential, rather than relying on a downstream route guard after rotating indefinitely.
 Holding a database transaction across response delivery was rejected: a commit failure after
 bytes reached the client would expose a credential whose rotation never committed.
 
@@ -443,7 +461,7 @@ one — the person could narrow themselves and never widen again. `/me` answers
 |---|---|
 | Where does it live? | The **JWT**, as `active_role` (R60). The client mirrors it in `contexts/active-role.tsx` |
 | How is it persisted? | Not server-side at all — **no column on `User` or `RefreshToken`**. The claim is in the token, and the token is per-device |
-| Does switching re-issue a token? | **Yes** — `POST /auth/switch-role`, one indexed query and one signature. No logout, no new session |
+| Does switching re-issue a token? | **Yes** — `POST /auth/switch-role`, after a User-locked re-read of current Active state and assignments. No logout, no new session, and the replacement `exp` is capped at the presented bearer's verified `exp` |
 | What makes it survive a page load? | `POST /auth/refresh`. The client holds the token in memory and switching navigates by full page load, so **refresh is the load-bearing path**; it re-asserts the role and returns the one it granted |
 | A revoked active role? | Refresh **falls back to the most privileged still-valid assignment** and says so — never a silent widening back to every role |
 | Concurrent devices? | Different active roles by construction: two tokens, no shared state, nothing to reconcile |

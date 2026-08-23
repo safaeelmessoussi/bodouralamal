@@ -7,9 +7,14 @@ import { loadConfig } from '../lib/config.js';
 import { FLOW_STATE_COOKIE, sealFlowState } from '../lib/oauth.js';
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
 import * as auditRepo from '../repositories/audit.repository.js';
+import * as tokenRepo from '../repositories/refresh-token.repository.js';
 import * as userRepo from '../repositories/user.repository.js';
 import { finalizeLoginSession } from '../services/auth.service.js';
-import { issueNewSession } from '../services/refresh-token.service.js';
+import {
+  issueNewSession,
+  logout,
+  refreshAccessSession,
+} from '../services/refresh-token.service.js';
 import { suspendUser } from '../services/user.service.js';
 import { actorFor } from '../test-support/actor.js';
 import { oauthCallback } from './auth.controller.js';
@@ -59,6 +64,19 @@ async function makeUser(params: {
     });
   }
   return user.id;
+}
+
+async function makePreProvisioned(params: {
+  label: string;
+  role: 'student';
+}): Promise<{ userId: string; identity: { email: string; providerSubjectId: string } }> {
+  const email = `${params.label}-${randomUUID()}@example.test`;
+  const userId = await makeUser({ label: params.label, role: params.role });
+  await prisma.user.update({ where: { id: userId }, data: { preProvisionedEmail: email } });
+  return {
+    userId,
+    identity: { email, providerSubjectId: `subject-${randomUUID()}` },
+  };
 }
 
 function beginGoogleLogin(identity: { email: string; providerSubjectId: string }): {
@@ -287,5 +305,249 @@ describe('R101 user-level login/session serialization', () => {
     expect(await prisma.refreshSession.count({ where: { userId } })).toBe(0);
     expect(await prisma.refreshToken.count({ where: { userId } })).toBe(0);
     expect(await prisma.auditLog.count({ where: { targetId: userId } })).toBe(0);
+  });
+
+  it('refresh FK writes converge when suspension holds the User governing lock', async () => {
+    const adminId = await makeUser({ label: 'admin', role: 'super_admin' });
+    const userId = await makeUser({ label: 'target', role: 'student' });
+    const session = await issueNewSession(prisma, userId);
+    const refreshBeforeFkWrite = deferred();
+    const allowRefreshFkWrite = deferred();
+    const suspensionHoldsUser = deferred();
+    const suspensionReachedSession = deferred();
+
+    const realInsert = tokenRepo.insert;
+    vi.spyOn(tokenRepo, 'insert').mockImplementation(async (db, data) => {
+      if (data.sessionId === session.sessionId && data.rotatedFromId) {
+        refreshBeforeFkWrite.resolve();
+        await allowRefreshFkWrite.promise;
+      }
+      return realInsert(db, data);
+    });
+
+    const realUserLock = userRepo.lockUser;
+    let signalledUserLock = false;
+    vi.spyOn(userRepo, 'lockUser').mockImplementation(async (tx, targetUserId) => {
+      const locked = await realUserLock(tx, targetUserId);
+      if (targetUserId === userId && !signalledUserLock) {
+        signalledUserLock = true;
+        suspensionHoldsUser.resolve();
+      }
+      return locked;
+    });
+
+    const realSessionLocks = tokenRepo.lockSessions;
+    vi.spyOn(tokenRepo, 'lockSessions').mockImplementation(async (tx, sessionIds) => {
+      if (sessionIds.includes(session.sessionId)) {
+        suspensionReachedSession.resolve();
+      }
+      return realSessionLocks(tx, sessionIds);
+    });
+
+    const racingRefresh = refreshAccessSession(prisma, {
+      presentedRaw: session.rawToken,
+      signingKey: config.JWT_SIGNING_KEY,
+    });
+    let suspension: Promise<Awaited<ReturnType<typeof suspendUser>>> | undefined;
+    try {
+      await refreshBeforeFkWrite.promise;
+      suspension = suspendUser(
+        prisma,
+        await actorFor(prisma, adminId),
+        userId,
+        0,
+        'FK lock race',
+      );
+      await suspensionHoldsUser.promise;
+      await suspensionReachedSession.promise;
+
+      allowRefreshFkWrite.resolve();
+      const refreshResult = await racingRefresh;
+      await suspension;
+
+      expect(refreshResult.kind).toBe('rejected');
+      expect((await prisma.user.findUniqueOrThrow({ where: { id: userId } })).accountStatus)
+        .toBe('suspended');
+      expect(await prisma.refreshToken.count({ where: { userId, revokedAt: null } })).toBe(0);
+    } finally {
+      allowRefreshFkWrite.resolve();
+      await racingRefresh.catch(() => undefined);
+      await suspension?.catch(() => undefined);
+    }
+  });
+
+  it('logout audit FK write converges when suspension holds the User governing lock', async () => {
+    const adminId = await makeUser({ label: 'admin', role: 'super_admin' });
+    const userId = await makeUser({ label: 'target', role: 'student' });
+    const session = await issueNewSession(prisma, userId);
+    const logoutBeforeAudit = deferred();
+    const allowLogoutAudit = deferred();
+    const suspensionHoldsUser = deferred();
+    const suspensionReachedSession = deferred();
+
+    const realWrite = auditRepo.write;
+    vi.spyOn(auditRepo, 'write').mockImplementation(async (db, entry) => {
+      if (entry.actionType === auditRepo.AUDIT_ACTIONS.logout && entry.targetId === userId) {
+        logoutBeforeAudit.resolve();
+        await allowLogoutAudit.promise;
+      }
+      return realWrite(db, entry);
+    });
+
+    const realUserLock = userRepo.lockUser;
+    let signalledUserLock = false;
+    vi.spyOn(userRepo, 'lockUser').mockImplementation(async (tx, targetUserId) => {
+      const locked = await realUserLock(tx, targetUserId);
+      if (targetUserId === userId && !signalledUserLock) {
+        signalledUserLock = true;
+        suspensionHoldsUser.resolve();
+      }
+      return locked;
+    });
+
+    const realSessionLocks = tokenRepo.lockSessions;
+    vi.spyOn(tokenRepo, 'lockSessions').mockImplementation(async (tx, sessionIds) => {
+      if (sessionIds.includes(session.sessionId)) {
+        suspensionReachedSession.resolve();
+      }
+      return realSessionLocks(tx, sessionIds);
+    });
+
+    const racingLogout = logout(prisma, session.rawToken);
+    let suspension: Promise<Awaited<ReturnType<typeof suspendUser>>> | undefined;
+    try {
+      await logoutBeforeAudit.promise;
+      suspension = suspendUser(
+        prisma,
+        await actorFor(prisma, adminId),
+        userId,
+        0,
+        'FK lock race',
+      );
+      await suspensionHoldsUser.promise;
+      await suspensionReachedSession.promise;
+
+      allowLogoutAudit.resolve();
+      await expect(racingLogout).resolves.toBe(1);
+      await suspension;
+
+      expect((await prisma.user.findUniqueOrThrow({ where: { id: userId } })).accountStatus)
+        .toBe('suspended');
+      expect(await prisma.refreshToken.count({ where: { userId, revokedAt: null } })).toBe(0);
+      expect(
+        await prisma.auditLog.count({ where: { actorUserId: userId, actionType: 'auth.logout' } }),
+      ).toBe(1);
+    } finally {
+      allowLogoutAudit.resolve();
+      await racingLogout.catch(() => undefined);
+      await suspension?.catch(() => undefined);
+    }
+  });
+
+  it('suspension-first prevents a stale pre-provisioned identity binding', async () => {
+    const adminId = await makeUser({ label: 'admin', role: 'super_admin' });
+    const target = await makePreProvisioned({ label: 'target', role: 'student' });
+    const bindingReachedUser = deferred();
+    const allowBindingToLock = deferred();
+    const realLock = userRepo.lockUser;
+    let targetLockCalls = 0;
+
+    vi.spyOn(userRepo, 'lockUser').mockImplementation(async (tx, targetUserId) => {
+      if (targetUserId === target.userId && ++targetLockCalls === 1) {
+        bindingReachedUser.resolve();
+        await allowBindingToLock.promise;
+      }
+      return realLock(tx, targetUserId);
+    });
+
+    const login = beginGoogleLogin(target.identity);
+    try {
+      await bindingReachedUser.promise;
+      await suspendUser(
+        prisma,
+        await actorFor(prisma, adminId),
+        target.userId,
+        0,
+        'binding race',
+      );
+      allowBindingToLock.resolve();
+      await login.promise;
+
+      expect(login.redirect).toHaveBeenCalledWith(
+        302,
+        `${config.PUBLIC_BASE_URL}/login?error=account_deactivated`,
+      );
+      expect(refreshCookies(login.append)).toEqual([]);
+      expect(await prisma.userIdentity.count({ where: { userId: target.userId } })).toBe(0);
+      expect(
+        await prisma.auditLog.count({
+          where: { targetId: target.userId, actionType: 'auth.identity_bound' },
+        }),
+      ).toBe(0);
+    } finally {
+      allowBindingToLock.resolve();
+      await login.promise.catch(() => undefined);
+    }
+  });
+
+  it('binding-first commits identity provenance before suspension and returns no live session', async () => {
+    const adminId = await makeUser({ label: 'admin', role: 'super_admin' });
+    const target = await makePreProvisioned({ label: 'target', role: 'student' });
+    const bindingHoldsUser = deferred();
+    const allowBindingToCommit = deferred();
+    const suspensionReachedUser = deferred();
+    const suspensionHoldsUser = deferred();
+    const realLock = userRepo.lockUser;
+    let targetLockCalls = 0;
+
+    vi.spyOn(userRepo, 'lockUser').mockImplementation(async (tx, targetUserId) => {
+      if (targetUserId !== target.userId) return realLock(tx, targetUserId);
+      targetLockCalls += 1;
+      if (targetLockCalls === 1) {
+        const locked = await realLock(tx, targetUserId);
+        bindingHoldsUser.resolve();
+        await allowBindingToCommit.promise;
+        return locked;
+      }
+      if (targetLockCalls === 2) {
+        suspensionReachedUser.resolve();
+        const locked = await realLock(tx, targetUserId);
+        suspensionHoldsUser.resolve();
+        return locked;
+      }
+      return realLock(tx, targetUserId);
+    });
+
+    const login = beginGoogleLogin(target.identity);
+    let suspension: Promise<Awaited<ReturnType<typeof suspendUser>>> | undefined;
+    try {
+      await bindingHoldsUser.promise;
+      suspension = suspendUser(
+        prisma,
+        await actorFor(prisma, adminId),
+        target.userId,
+        0,
+        'binding race',
+      );
+      await suspensionReachedUser.promise;
+      allowBindingToCommit.resolve();
+      await suspensionHoldsUser.promise;
+      await suspension;
+      await login.promise;
+
+      expect(await prisma.userIdentity.count({ where: { userId: target.userId } })).toBe(1);
+      expect(
+        await prisma.auditLog.count({
+          where: { targetId: target.userId, actionType: 'auth.identity_bound' },
+        }),
+      ).toBe(1);
+      expect(refreshCookies(login.append)).toEqual([]);
+      expect(await prisma.refreshToken.count({ where: { userId: target.userId, revokedAt: null } }))
+        .toBe(0);
+    } finally {
+      allowBindingToCommit.resolve();
+      await login.promise.catch(() => undefined);
+      await suspension?.catch(() => undefined);
+    }
   });
 });

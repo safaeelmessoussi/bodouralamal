@@ -81,8 +81,28 @@ export function issueAccessToken(
   signingKey: string,
   now: Date = new Date(),
 ): { token: string; claims: AccessTokenClaims; expiresAt: Date } {
+  return issueAccessTokenWithExpiryCap(params, signingKey, undefined, now);
+}
+
+/**
+ * Issues a narrowed replacement credential without extending the lifetime of
+ * the already-authenticated bearer that authorised it (R60 switch-role).
+ *
+ * A role switch changes capacity, not session lifetime. Giving every switch a
+ * fresh one-hour `exp` would make the endpoint an alternate refresh mechanism:
+ * a retained bearer could outlive logout by switching repeatedly. The cap is
+ * the verified predecessor claim, expressed in JWT epoch seconds so no
+ * millisecond conversion can accidentally round it upward.
+ */
+export function issueAccessTokenWithExpiryCap(
+  params: IssueParams,
+  signingKey: string,
+  maximumExp: number | undefined,
+  now: Date = new Date(),
+): { token: string; claims: AccessTokenClaims; expiresAt: Date } {
   const iat = Math.floor(now.getTime() / 1000);
-  const exp = iat + ACCESS_TTL_SECONDS;
+  const ordinaryExp = iat + ACCESS_TTL_SECONDS;
+  const exp = maximumExp === undefined ? ordinaryExp : Math.min(ordinaryExp, maximumExp);
 
   const claims: AccessTokenClaims = {
     sub: params.userId,

@@ -216,6 +216,25 @@ suspension waits, then enumerates and revokes that new anchor together with two 
 An unrelated user's login completes while the target is blocked, proving the lock is not global.
 A forced `auth.login` audit failure proves the new anchor and token roll back before any
 credential reaches the response.
+The auth hardening companion coverage drives two additional database-level crossings. A refresh
+holds its real session anchor immediately before successor insertion while suspension holds the
+User governing lock and queues on that anchor; the successor's implicit User FK `KEY SHARE`
+finishes, then suspension revokes it and refresh finalization refuses. Logout is forced through
+the analogous ordering immediately before its mandatory audit insert. Both use explicit barriers
+on production repository calls rather than sleeps, proving `FOR NO KEY UPDATE` removes the old
+FK-lock cycle without weakening the business outcome. The same suite forces both
+suspension-versus-first-binding orders: suspension-first writes neither identity nor binding
+audit, while binding-first commits both before final credential issuance observes suspension.
+
+Active-role HTTP coverage uses a bearer minted 50 minutes in the past, logs out its refresh
+session, and switches the same role twice. Both replacements retain an `exp` no later than the
+original, while authoritative suspension and deletion each refuse switching. Refresh lifecycle
+coverage moves a Pending account to terminal Rejected and proves repeated presentation returns
+no credential; a Pending control still rotates for its status-screen session. It also reactivates
+a suspended account and presents its old cookie, proving reactivation never reverses durable
+session revocation. Durable immediate
+revoke-all on Pending → Rejected remains an Owner decision because TD-4.15 currently enumerates
+only suspension and deletion and the revocation-reason enum has no rejection value.
 The R101 rollout test executes the committed data-migration SQL inside a rolled-back database
 transaction, so it verifies revocation and system audit without signing out local developers.
 

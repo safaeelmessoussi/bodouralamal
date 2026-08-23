@@ -10,6 +10,7 @@ import {
   issueNewSession,
   logout,
   purgeExpired,
+  refreshAccessSession,
   revokeAllSessions,
   ROTATION_GRACE_MS,
   rotate,
@@ -412,6 +413,71 @@ describe("§18 token lifecycle acceptance criteria", () => {
     expect(live).toBe(0);
     const user = await prisma.user.findUnique({ where: { id: userId } });
     expect(user?.accountStatus).toBe("suspended");
+  });
+
+  it("reactivation does not revive a refresh credential revoked by suspension", async () => {
+    const userId = await makeUser();
+    const adminId = await makeUser();
+    const oldSession = await issueNewSession(prisma, userId);
+
+    await prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: userId },
+        data: { accountStatus: "suspended" },
+      });
+      await revokeAllSessions(tx, {
+        userId,
+        reason: RefreshRevokedReason.suspension,
+        actorUserId: adminId,
+      });
+    });
+    // Reactivation changes account state only; TD-4.15's durable revocation is
+    // not reversible. A person must authenticate again into a new session.
+    await prisma.user.update({
+      where: { id: userId },
+      data: { accountStatus: "active" },
+    });
+
+    const outcome = await refreshAccessSession(prisma, {
+      presentedRaw: oldSession.rawToken,
+      signingKey: config.JWT_SIGNING_KEY,
+    });
+    expect(outcome.kind).toBe("reuse_detected");
+    expect(await prisma.refreshToken.count({ where: { userId, revokedAt: null } })).toBe(0);
+  });
+
+  it("refuses credential renewal after Pending becomes terminal Rejected", async () => {
+    const userId = await makeUser();
+    await prisma.user.update({ where: { id: userId }, data: { accountStatus: "pending" } });
+    const pendingSession = await issueNewSession(prisma, userId);
+    await prisma.user.update({ where: { id: userId }, data: { accountStatus: "rejected" } });
+
+    const first = await refreshAccessSession(prisma, {
+      presentedRaw: pendingSession.rawToken,
+      signingKey: config.JWT_SIGNING_KEY,
+    });
+    expect(first.kind).toBe("rejected");
+
+    // The caller never receives the internally-minted successor, so retaining
+    // and replaying the old cookie cannot turn rejection into repeated renewal.
+    const repeated = await refreshAccessSession(prisma, {
+      presentedRaw: pendingSession.rawToken,
+      signingKey: config.JWT_SIGNING_KEY,
+    });
+    expect(repeated.kind).toBe("rejected");
+    expect(await prisma.refreshToken.count({ where: { userId } })).toBe(2);
+  });
+
+  it("keeps Pending refresh eligible for the status-screen session", async () => {
+    const userId = await makeUser();
+    await prisma.user.update({ where: { id: userId }, data: { accountStatus: "pending" } });
+    const pendingSession = await issueNewSession(prisma, userId);
+
+    const outcome = await refreshAccessSession(prisma, {
+      presentedRaw: pendingSession.rawToken,
+      signingKey: config.JWT_SIGNING_KEY,
+    });
+    expect(outcome.kind).toBe("rotated");
   });
 
   it("T9 — user deletion revokes with reason user_deleted", async () => {

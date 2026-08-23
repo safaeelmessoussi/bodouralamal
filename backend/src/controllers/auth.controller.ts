@@ -1,13 +1,10 @@
 import type { Request, Response } from 'express';
 
 import type { PrismaClient } from '../generated/prisma/client.js';
-import { issueAccessToken } from '../lib/access-token.js';
 import { postLoginDestination } from '../lib/role-home.js';
 import { clearCookie, parseCookies, serializeCookie } from '../lib/cookies.js';
 import type { AppConfig } from '../lib/config.js';
-import { narrowToRole, toRoleScopes } from '../policies/branch-scope.js';
-import { requireActor } from '../middleware/authenticate.js';
-import * as audit from '../repositories/audit.repository.js';
+import { requireAccessTokenExp, requireActor } from '../middleware/authenticate.js';
 import { AppError } from '../lib/errors.js';
 import {
   buildAuthorizationUrl,
@@ -21,7 +18,7 @@ import {
   sealFlowState,
 } from '../lib/oauth.js';
 import { issueOnboardingToken } from '../lib/onboarding-token.js';
-import { finalizeLoginSession, resolveLogin } from '../services/auth.service.js';
+import { finalizeLoginSession, resolveLogin, switchActiveRole } from '../services/auth.service.js';
 import {
   logout as logoutSession,
   REFRESH_TTL_MS,
@@ -288,7 +285,7 @@ export function logout(prisma: PrismaClient, config: AppConfig) {
 /**
  * `POST /auth/switch-role` — work as a different one of your own roles (R60.3).
  *
- * **One indexed query and one signature.** No logout, no new session, no
+ * No logout, no new session, no
  * refresh-cookie change: the refresh chain is about *who is signed in*, and this
  * changes only *in what capacity*.
  *
@@ -312,48 +309,18 @@ export function switchRole(prisma: PrismaClient, config: AppConfig) {
     const role = typeof body?.role === 'string' ? body.role.trim() : '';
     if (role === '') throw new AppError('VALIDATION_FAILED', 'role is required');
 
-    const assignments = await prisma.userBranchRole.findMany({
-      where: { userId: actor.userId, deletedAt: null },
-      include: { role: true },
-    });
-    const liveScopes = toRoleScopes(assignments);
-    const narrowed = narrowToRole(liveScopes, role);
-
-    // §60.2's invariant, enforced where the token is minted: a role the live
-    // rows do not carry cannot become a claim. 403 rather than 404 — the caller
-    // is authenticated and the roles are their own, so there is nothing to hide.
-    if (!narrowed) {
-      throw new AppError('FORBIDDEN', 'that role is not assigned to this account', {
-        reason: 'ROLE_NOT_ASSIGNED',
-        role,
-      });
-    }
-
-    const { token, expiresAt } = issueAccessToken(
-      {
-        userId: actor.userId,
-        roleScopes: narrowed,
-        activeRole: role,
-        accountStatus: actor.accountStatus ?? 'active',
-      },
-      config.JWT_SIGNING_KEY,
-    );
-
-    await audit.write(prisma, {
-      actorUserId: actor.userId,
-      activeRole: actor.activeRole,
-      actionType: 'auth.role_switch',
-      targetEntity: 'User',
-      targetId: actor.userId,
-      // Both ends of the move: "which capacity did they leave" is as much of the
-      // story as which they entered.
-      detail: { from: actor.activeRole ?? null, to: role },
+    const switched = await switchActiveRole(prisma, {
+      userId: actor.userId,
+      requestedRole: role,
+      presentedActiveRole: actor.activeRole,
+      presentedExp: requireAccessTokenExp(req),
+      signingKey: config.JWT_SIGNING_KEY,
     });
 
     res.json({
-      access_token: token,
-      expires_at: expiresAt.toISOString(),
-      active_role: role,
+      access_token: switched.accessToken,
+      expires_at: switched.accessExpiresAt.toISOString(),
+      active_role: switched.activeRole,
     });
   };
 }

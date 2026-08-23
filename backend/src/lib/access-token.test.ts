@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   ACCESS_TTL_SECONDS,
   issueAccessToken,
+  issueAccessTokenWithExpiryCap,
   verifyAccessToken,
 } from "./access-token.js";
 
@@ -40,6 +41,20 @@ describe("access token (TD-12)", () => {
     const { claims } = issueAccessToken(PARAMS, KEY);
     expect(claims.exp - claims.iat).toBe(ACCESS_TTL_SECONDS);
     expect(ACCESS_TTL_SECONDS).toBe(3600);
+  });
+
+  it("caps a role-switch token at the presented bearer's original expiry", () => {
+    const now = new Date("2026-08-23T10:00:00.000Z");
+    const originalExp = Math.floor(now.getTime() / 1000) + 600;
+    const { claims, expiresAt } = issueAccessTokenWithExpiryCap(
+      { ...PARAMS, activeRole: "teacher" },
+      KEY,
+      originalExp,
+      now,
+    );
+
+    expect(claims.exp).toBe(originalExp);
+    expect(expiresAt).toEqual(new Date(originalExp * 1000));
   });
 
   it("round-trips through verification", () => {

@@ -254,6 +254,15 @@ audit write fails, the new session rolls back and no cookie or access token is r
 user-wide suspension takes that same User lock before status mutation and then locks session
 anchors in UUID order, so revoke-all cannot miss a concurrently inserted session.
 
+First identity binding and role switching use that boundary too. Binding re-reads the matched
+account under the User lock before creating either the provider identity or its mandatory audit,
+so a suspension that wins cannot leave a ghost binding. Role switching re-reads current Active
+state and role assignments under the lock, and its token can never expire after the verified
+bearer that authorized the switch; it changes capacity but cannot substitute for refresh after
+logout. At the PostgreSQL layer this governing lock is `FOR NO KEY UPDATE`, deliberately
+compatible with the implicit User `KEY SHARE` taken by refresh/logout FK inserts while still
+serializing every non-key account mutation.
+
 ## The guardrails
 
 Twenty-one numbered rules close the document the specification ends with, deliberately —

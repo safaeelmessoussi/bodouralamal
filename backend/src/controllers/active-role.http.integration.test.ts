@@ -1,8 +1,11 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
-import { issueAccessToken } from "../lib/access-token.js";
+import { issueAccessToken, verifyAccessToken } from "../lib/access-token.js";
 import { loadConfig } from "../lib/config.js";
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from "../lib/prisma.js";
+import { issueNewSession } from "../services/refresh-token.service.js";
+import { suspendUser } from "../services/user.service.js";
+import { actorFor } from "../test-support/actor.js";
 import { httpCall } from "../test-support/http-client.js";
 
 /**
@@ -41,7 +44,7 @@ const call = (method: string, path: string, token?: string, body?: unknown) =>
   });
 
 /** A token exactly as the platform mints it for an un-narrowed session. */
-const tokenFor = (userId: string, roles: string[]): string =>
+const tokenFor = (userId: string, roles: string[], now?: Date): string =>
   issueAccessToken(
     {
       userId,
@@ -49,6 +52,7 @@ const tokenFor = (userId: string, roles: string[]): string =>
       accountStatus: "active" as never,
     },
     config.JWT_SIGNING_KEY,
+    now,
   ).token;
 
 let multiRole = "";
@@ -72,6 +76,8 @@ async function clear(): Promise<void> {
     select: { id: true },
   });
   const ids = users.map((u) => u.id);
+  await prisma.refreshToken.deleteMany({ where: { userId: { in: ids } } });
+  await prisma.refreshSession.deleteMany({ where: { userId: { in: ids } } });
   await prisma.auditLog.deleteMany({
     where: { OR: [{ actorUserId: { in: ids } }, { targetId: { in: ids } }] },
   });
@@ -145,6 +151,17 @@ async function switchTo(
   return { ...res.body, status: res.status };
 }
 
+async function logoutWith(rawToken: string): Promise<Response> {
+  return fetch(`${BASE}/auth/logout`, {
+    method: "POST",
+    headers: {
+      cookie: `bodour_refresh=${rawToken}`,
+      origin: config.PUBLIC_BASE_URL,
+      "x-requested-with": "XMLHttpRequest",
+    },
+  });
+}
+
 describe("switching to a role the account holds", () => {
   it("returns a token narrowed to it, and says which role was granted", async () => {
     const res = await switchTo("teacher");
@@ -180,6 +197,64 @@ describe("switching to a role the account holds", () => {
     });
     expect(row).not.toBeNull();
     expect(row?.detail).toMatchObject({ from: null, to: "teacher" });
+  });
+
+  it("cannot become an alternate refresh after logout or repeated same-role switches", async () => {
+    const issuedAt = new Date(Date.now() - 50 * 60 * 1000);
+    const retainedBearer = tokenFor(multiRole, ["teacher"], issuedAt);
+    const original = verifyAccessToken(retainedBearer, config.JWT_SIGNING_KEY);
+    expect(original.valid).toBe(true);
+    if (!original.valid) return;
+
+    const session = await issueNewSession(prisma, multiRole);
+    expect((await logoutWith(session.rawToken)).status).toBe(204);
+
+    const first = await switchTo("teacher", retainedBearer);
+    expect(first.status).toBe(200);
+    const second = await switchTo("teacher", first.access_token!);
+    expect(second.status).toBe(200);
+
+    for (const candidate of [first.access_token!, second.access_token!]) {
+      const verified = verifyAccessToken(candidate, config.JWT_SIGNING_KEY);
+      expect(verified.valid).toBe(true);
+      if (verified.valid) expect(verified.claims.exp).toBeLessThanOrEqual(original.claims.exp);
+    }
+  });
+
+  it("refuses role switching from a retained bearer after suspension", async () => {
+    const target = await prisma.user.create({
+      data: {
+        sex: "female",
+        nameArabic: `${TAG} موقوفة`,
+        accountStatus: "active",
+      },
+    });
+    await grant(target.id, "teacher");
+    const retainedBearer = tokenFor(target.id, ["teacher"]);
+
+    await suspendUser(
+      prisma,
+      await actorFor(prisma, multiRole),
+      target.id,
+      target.version,
+      "اختبار تعليق الحساب",
+    );
+
+    const result = await switchTo("teacher", retainedBearer);
+    expect(result.status).toBe(403);
+    expect(result.access_token).toBeUndefined();
+  });
+
+  it("refuses role switching from a retained bearer after soft deletion", async () => {
+    const retainedBearer = multiToken;
+    await prisma.user.update({
+      where: { id: multiRole },
+      data: { deletedAt: new Date() },
+    });
+
+    const result = await switchTo("teacher", retainedBearer);
+    expect(result.status).toBe(403);
+    expect(result.access_token).toBeUndefined();
   });
 });
 
