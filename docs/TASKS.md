@@ -35,7 +35,7 @@
 - [x] Hand-written SQL migrations via `migrate dev --create-only`: explicit `CREATE COLLATION "ar-x-icu"` registration, column collations, CHECKs (incl. bp score checks), partial unique indexes, cross-table ayah trigger (TD-6, TD-6a)
 - [x] Production seed, idempotent (§15.1): roles, categories/levels, subjects, academic year, 114 Surahs, SystemSetting defaults, Super Admin allow-list (via `pre_provisioned_email`, Revision 15 — no placeholder identity)
 - [x] Dev fixtures with `NODE_ENV` guard (§15.2)
-- [x] Google OAuth: state+PKCE (flow state in a short-lived signed HttpOnly callback-scoped cookie, TD-12 Revision 16), cryptographically verified Google ID token (RS256/provider key, exact issuer, configured audience, lifetime, subject, verified email), callback branches 4a/4b/4c, onboarding token (10 min, `jti` + ConsumedToken replay guard) (§4.1b, TD-12)
+- [x] Google OAuth: state+PKCE (flow state in a short-lived signed HttpOnly callback-scoped cookie, TD-12 Revision 16), cryptographically verified Google ID token (RS256/provider key, exact issuer, configured audience, lifetime, subject, verified email), callback branches 4a/4b/4c, first binding guarded by the authoritative User lock/status re-read, onboarding token (10 min, `jti` + ConsumedToken replay guard) (§4.1b, TD-12)
 - [x] Step-4a routing complete: Active / Pending / (Rejected|Suspended|deleted_at → deactivated screen), never reactivation (§4.1b, Revision 16)
 - [x] Email lowercasing on all identity lookups/writes (TD-12) + DB `CHECK (email = lower(email))` (TD-6)
 - [~] Registration identity extracted solely from onboarding-token payload; body fields excluded from schema (§4.1b, TD-12)
@@ -49,7 +49,8 @@
   - △ *presigned mint* arrives with **M6 (Storage)**; the `/uploads/*` endpoints are not built, so this cannot be green before then
 - [x] `RefreshToken` entity + unique `token_hash` + `session_id` chain (§7/TD-6, Revision 16) — forward-only migration
 - [x] Session layer: 1 h access JWT, 30 d rotating refresh cookie (HttpOnly/Secure/SameSite=Lax/Path `/api/v1/auth`), hashed-never-raw storage, revocation list (TD-12, R101)
-- [x] Rotation / logout / revoke-on-suspension transactions (TD-4.13/14/15); logout revocation + `auth.logout` audit are atomic; refresh/logout/purge serialize on a stable per-`session_id` row; final login issuance and revoke-all serialize on the User row before session anchors, re-read authoritative status/roles, and cannot race a new session past suspension; post-rotation access issuance re-checks under its session lock; 10 s grace is idempotent (no chain fork) and cannot resurrect a logged-out chain
+- [x] Rotation / logout / revoke-on-suspension transactions (TD-4.13/14/15); logout revocation + `auth.logout` audit are atomic; refresh/logout/purge serialize on a stable per-`session_id` row; identity binding, final login issuance, switch-role and revoke-all serialize on the User row before session anchors and re-read authoritative state; the explicit User `NO KEY UPDATE` is compatible with implicit child-FK `KEY SHARE`, closing the session→User/User→session deadlock; post-rotation access issuance permits only Active/Pending under its session lock; 10 s grace is idempotent (no chain fork) and cannot resurrect a logged-out chain
+- [ ] Owner decision — whether `Pending → Rejected` must immediately revoke every refresh session, and if so the durable `RefreshRevokedReason` plus required audit semantics. Current active text mandates revoke-all/reasons for suspension and deletion only; refresh already refuses Rejected accounts and issues no credential
 - [x] R101 rollout: old API stops first; migration audits and invalidates every live legacy narrow-Path session as `cookie_path_migration`; users reauthenticate
 - [x] Token-lifecycle acceptance criteria T1–T12 green (§18, Revision 16)
 - [x] Pending hard-redirect; zero data access except `GET /me` + logout (TD-1); client-side global Pending route guard (§14.4)
@@ -1034,7 +1035,7 @@
 
 ### R60 — the Active Role as a security context (2026-08-11)
 - [x] `active_role` JWT claim; the token is **already narrowed** when it is present
-- [x] `POST /auth/switch-role` — live rows decide, 403 `ROLE_NOT_ASSIGNED` otherwise, audited
+- [x] `POST /auth/switch-role` — User-locked authoritative Active state and live assignments decide, 403 otherwise, audited; replacement expiry is capped at the presented bearer's verified expiry so switching cannot become refresh
 - [x] TD-12 freshness narrows too — the split that would have left high-risk endpoints unrestricted
 - [x] Refresh re-asserts, returns the granted role, and fails safe to the most privileged remaining
 - [x] `/me` reads live rows so the switcher keeps its menu

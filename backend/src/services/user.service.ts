@@ -843,6 +843,12 @@ export async function setUserRoles(
   const actor = await assertFreshActive(prisma, caller.userId, USER_ADMIN_ROLES, caller.activeRole);
 
   await prisma.$transaction(async (tx) => {
+    // Role-switch and login issuance derive credentials from these assignments.
+    // Share their User governing row so a credential is wholly before or wholly
+    // after this replacement, never signed from a half-stale assignment set.
+    if (!(await users.lockUser(tx, id))) {
+      throw new AppError('NOT_FOUND', 'no such user');
+    }
     // Visibility is asserted here rather than inside the shared core: approval
     // reaches an applicant the §4.2 R25 user-list rule deliberately hides from
     // a branch Admin (a self-registered person has no branch assignment yet),
