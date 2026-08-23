@@ -34,6 +34,9 @@ docker compose up -d db minio
 # 5  Migrate
 #    ON AN EXISTING DEPLOYMENT: pg_dump IMMEDIATELY BEFORE this line.
 #    Migrations are forward-only; this dump is the rollback point.
+#    The normalized-email migration deliberately aborts if historical data
+#    already assigns one address to two Users. Follow the migration runbook;
+#    never clear or merge an identity merely to make deploy green.
 docker compose run --rm api npx prisma migrate deploy
 
 # 6  Seed — idempotent, safe to re-run

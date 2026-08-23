@@ -63,6 +63,9 @@ async function clear(): Promise<void> {
     where: { OR: [{ parentId: { in: ids } }, { studentId: { in: ids } }] },
   });
   await prisma.user.deleteMany({ where: { id: { in: ids } } });
+  await prisma.normalizedEmailLock.deleteMany({
+    where: { email: { startsWith: "preprov-" } },
+  });
   // Branches created for the scope filter tests.
   await prisma.branch.deleteMany({ where: { name: { startsWith: TAG } } });
 }

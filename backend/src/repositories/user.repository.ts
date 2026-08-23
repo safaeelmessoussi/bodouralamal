@@ -43,6 +43,57 @@ export async function lockUser(
   return rows.length === 1;
 }
 
+/**
+ * Serializes every authoritative ownership decision for one normalized email.
+ *
+ * The lock row is inserted transactionally when the email has never been seen.
+ * `createMany(... skipDuplicates)` is PostgreSQL `ON CONFLICT DO NOTHING`, so
+ * concurrent absent-row creators converge on one row rather than surfacing a
+ * uniqueness error. The explicit row lock then protects the cross-table re-read
+ * performed by the caller until its whole ownership transaction commits.
+ */
+export async function lockNormalizedEmail(
+  tx: Prisma.TransactionClient,
+  email: string,
+): Promise<void> {
+  await tx.normalizedEmailLock.createMany({
+    data: [{ email }],
+    skipDuplicates: true,
+  });
+  const rows = await tx.$queryRaw<Array<{ email: string }>>`
+    SELECT "email"
+    FROM "normalized_email_lock"
+    WHERE "email" = ${email}
+    FOR UPDATE`;
+  if (rows.length !== 1) {
+    throw new Error('normalized email lock row was not established');
+  }
+}
+
+/**
+ * Returns the distinct Users currently claiming an email across both active
+ * ownership channels. A pre-provisioned address remains authoritative even on
+ * a soft-deleted row (R20); an identity participates while it is active.
+ * Call only while holding `lockNormalizedEmail` for the same address when the
+ * result governs a write.
+ */
+export async function emailClaimingUserIds(db: Db, email: string): Promise<string[]> {
+  const preProvisioned = await db.user.findMany({
+    where: { preProvisionedEmail: email },
+    select: { id: true },
+  });
+  const identities = await db.userIdentity.findMany({
+    where: { email, isActive: true },
+    select: { userId: true },
+  });
+  return [
+    ...new Set([
+      ...preProvisioned.map((row) => row.id),
+      ...identities.map((row) => row.userId),
+    ]),
+  ];
+}
+
 async function loadRoles(db: Db, userId: string): Promise<Omit<ResolvedAccount, 'user'>> {
   const assignments = await db.userBranchRole.findMany({
     where: { userId, deletedAt: null },

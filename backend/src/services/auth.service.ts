@@ -105,11 +105,25 @@ export async function resolveLogin(
   // suspension may commit between it and this transaction.
   try {
     return await prisma.$transaction(async (tx): Promise<LoginRoute> => {
+      // Email ownership is the outer lock for every writer. It closes the race
+      // with a stale onboarding token while the User lock below continues to
+      // serialize binding against suspension and rejection.
+      await users.lockNormalizedEmail(tx, email);
       if (!(await users.lockUser(tx, preProvisioned.user.id))) {
         return { kind: 'deactivated', reason: 'deleted' };
       }
       const current = await users.findAccountById(tx, preProvisioned.user.id);
       if (!current) return { kind: 'deactivated', reason: 'deleted' };
+
+      const claimingUsers = await users.emailClaimingUserIds(tx, email);
+      if (
+        claimingUsers.length !== 1 ||
+        claimingUsers[0] !== current.user.id
+      ) {
+        throw new AppError('DUPLICATE', 'email ownership changed before identity binding', {
+          reason: 'EMAIL_ALREADY_CLAIMED',
+        });
+      }
 
       const currentRoute = routeByStatus(current, false);
       if (currentRoute.kind === 'deactivated') {

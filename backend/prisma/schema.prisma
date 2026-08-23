@@ -645,6 +645,20 @@ model UserIdentity {
   @@map("user_identity")
 }
 
+/// Stable cross-table lock target for normalized email ownership decisions.
+///
+/// `User.preProvisionedEmail` and `UserIdentity.email` remain the authoritative
+/// ownership facts. This row deliberately carries no owner id: it exists only
+/// so registration, staff pre-provisioning, bootstrap and first binding can
+/// serialize an email that had no row in either ownership channel when their
+/// transactions began.
+model NormalizedEmailLock {
+  email     String   @id
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("normalized_email_lock")
+}
+
 model Role {
   id   String @id @default(uuid()) @db.Uuid
   /// Seeded set (§15.1): super_admin, admin, teacher, student, parent.
@@ -1757,10 +1771,10 @@ model ConsumedToken {
 enum RefreshRevokedReason {
   logout
   suspension
-  rejection
   user_deleted
   reuse_detected
   cookie_path_migration
+  rejection
 
   @@map("refresh_revoked_reason")
 }

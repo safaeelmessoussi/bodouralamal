@@ -95,6 +95,8 @@ export async function preProvision(
       if (!branch) throw new AppError('NOT_FOUND', 'branch not found');
     }
 
+    await users.lockNormalizedEmail(tx, email);
+
     /**
      * **An email may be claimed by at most ONE live account** — and the unique
      * index alone does not say that.
@@ -109,16 +111,13 @@ export async function preProvision(
      * **Reproduced before it was fixed** — `POST /admin/users` answered `201`
      * for an address with a live active identity.
      *
-     * Checked here rather than declared, because the invariant spans two tables
-     * and no unique index can express it. The window is the transaction's own;
-     * the partial unique index still catches the pre-provisioned half, and
-     * `bindIdentity`'s own uniqueness catches the identity half.
+     * A stable normalized-email row is locked before this re-read because the
+     * invariant spans two tables and either row may be absent. Same-table
+     * uniqueness remains a backstop, while the shared row closes the cross-table
+     * check-then-insert race.
      */
-    const claimed = await tx.userIdentity.findFirst({
-      where: { email, isActive: true, user: { deletedAt: null } },
-      select: { id: true },
-    });
-    if (claimed) {
+    const claimedBy = await users.emailClaimingUserIds(tx, email);
+    if (claimedBy.length > 0) {
       throw new AppError('DUPLICATE', 'that email already belongs to an account', {
         reason: 'EMAIL_ALREADY_CLAIMED',
       });

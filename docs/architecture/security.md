@@ -18,6 +18,7 @@ threats that actually matter here are:
 | **A parent probes for other children** | Enumeration of minors | Uniform `404`; no parent-facing search over children |
 | **A stolen session cookie** | 30-day credential | Rotation with reuse detection that kills the whole session |
 | **Login races account rejection or suspension** | Stale session-bearing state could mint a fresh session after revoke-all | User-row serialization; authoritative status re-read before issuance |
+| **Registration races staff pre-provisioning** | One verified email could become attached to two different accounts through separate tables | Shared normalized-email row lock; cross-channel re-read inside each ownership transaction |
 | **A recording is published without consent** | Safeguarding and legal exposure | Continuously re-evaluated consent gate; forced bucket migration |
 | **Data leaves Moroccan infrastructure** | Law 09-08 violation | Fixture-only rule outside Morocco; Moroccan backup target |
 | **An implementation shortcut regresses one of the above** | The most likely of all | CI guards; tests that assert the *security property*, not the code path |

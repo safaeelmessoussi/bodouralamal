@@ -520,6 +520,24 @@ These are the traps the specification exists to prevent. Each has a dedicated te
 - **Suspension revokes refresh tokens inside its own transaction**
 - **Two-tab concurrent refresh rotates exactly once and logs nobody out**
 
+## Cross-channel email ownership is a database concurrency test
+
+`email-ownership.integration.test.ts` coordinates the production
+`lockNormalizedEmail` boundary against real PostgreSQL. It never substitutes an in-memory
+mutex and never sleeps to guess which transaction won. Four properties are pinned:
+
+- an onboarding token issued before staff pre-provisioning cannot create a second account,
+  remains unconsumed on refusal, and a later verified login binds the intended staff account;
+- registration and pre-provisioning arriving from an initially absent, case-varied address
+  produce exactly one committed owner and one expected duplicate conflict;
+- registration committed first prevents later pre-provisioning from opening the other channel;
+- a forced failure after lock acquisition rolls back both the ownership write and a newly
+  inserted lock row, after which the same legitimate operation succeeds.
+
+Successful ownership tests delete the lock rows for their own generated addresses. The rows
+have no User foreign key by design, so deleting tagged Users alone is no longer sufficient
+test cleanup.
+
 ## The token lifecycle is specified as tests
 
 The refresh chain is *the only part of the system where a single missing check silently

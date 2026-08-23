@@ -79,6 +79,19 @@ standing in for an unbound account would make *"has an identity"* stop meaning *
 authenticated"* — and that predicate is what the entire login routing rests on. An account
 awaiting its first binding is represented by `pre_provisioned_email` and nothing else.
 
+### `NormalizedEmailLock` — synchronization, not ownership
+
+`User.pre_provisioned_email` and active `UserIdentity.email` are separate representations of
+one normalized-address claim. Their indexes cannot constrain one another and cannot lock an
+address absent from both tables. `NormalizedEmailLock(email, created_at)` supplies one stable
+row per address for the production ownership writers to lock before deciding.
+
+It deliberately has no User foreign key. Adding one would make it a third ownership record
+that could disagree with the two SRS fields; deleting it on account lifecycle changes would
+also reopen the race. Rows may therefore outlive an active claim and remain harmless lock
+targets. The availability decision always comes from an under-lock re-read of the actual
+ownership channels.
+
 ### `UserBranchRole` — the whole authorization model
 
 Unique on `(user_id, role_id, branch_id)`, so one person may hold the same role once per
@@ -208,6 +221,7 @@ the consent job's forced visibility changes.
 | `AcademicYear` exactly one `is_current` | Partial unique index |
 | `RateLimitCounter (user_id, bucket, window_start)` | What makes the increment safe under concurrency |
 | `User.pre_provisioned_email` among non-null | Two accounts must never claim one address, or a first login is ambiguous about which it binds |
+| `NormalizedEmailLock.email` | One collision-free transaction boundary across pre-provisioned and completed identity ownership, including absent-row creation |
 | `RefreshToken.token_hash` | Makes "presented token → exactly one row" a lookup, not a scan |
 | `RefreshToken.session_id → RefreshSession.id` | Every generation has one stable, database-enforced serialization target |
 | `Enrollment (student_id, level_id)` **where not deleted** | **Exactly one organisational group per enrolled level** (BR-21). Only expressible because `level_id` sits on the enrolment row — see below |
@@ -404,6 +418,7 @@ SQL, and flags every `DROP`/`RENAME` for human review with its contract-phase ju
 20260821200100_r101_invalidate_legacy_refresh_sessions
 20260823100000_r101_refresh_session_anchor
 20260823190000_r102_rejection_revocation_reason
+20260823210000_normalized_email_ownership_lock
 ```
 
 Note the pattern: schema changes and their hand-written constraints are **separate
@@ -426,6 +441,13 @@ and therefore cannot sign out sessions merely because `migrate deploy` is run ag
 R102 is a forward-only enum extension only. It adds the durable `rejection` attribution value;
 the application transaction performs each actual Pending → Rejected revocation, so rerunning
 `migrate deploy` has no session side effect.
+
+The normalized-email migration creates and backfills only lock targets; it does not choose an
+owner. Before backfill it checks the union of retained pre-provisioned addresses and active
+identities and aborts if one email already names more than one User. Automatically clearing a
+pre-provisioned address or merging people would destroy provenance and make a person-level
+decision in migration SQL. Reconcile such rows explicitly using the deployment runbook, then
+rerun `migrate deploy`; a clean retry is forward-only and backfill is idempotent.
 
 ### Filename order is apply order — and it bit us
 
