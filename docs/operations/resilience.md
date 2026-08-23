@@ -85,6 +85,7 @@ Worth listing under resilience because the temptation is to treat them as errors
 | Two admins approve one registration | First commits; the second gets `409 STATE_CONFLICT`, which the UI treats as "already handled, refreshing" |
 | Two concurrent enrolments at capacity − 1 | A row lock admits **exactly one** |
 | Two tabs refresh simultaneously | Exactly one rotation; the loser is absorbed by the grace window and **nobody is logged out** |
+| Refresh races current-session logout | Both take the same chain-scoped PostgreSQL lock and re-read after it. Rotation first means logout revokes the successor; logout first means refresh is refused. No live successor survives logout; other sessions use disjoint locks |
 
 > **Concurrency conflicts are never surfaced as 500s**, and escalating the isolation level to
 > paper over a missing lock is prohibited.

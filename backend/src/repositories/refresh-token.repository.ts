@@ -1,4 +1,4 @@
-import type { RefreshToken } from '../generated/prisma/client.js';
+import type { Prisma, RefreshToken } from '../generated/prisma/client.js';
 import { RefreshRevokedReason } from '../generated/prisma/enums.js';
 
 import type { Db } from './audit.repository.js';
@@ -17,6 +17,33 @@ export async function findByHash(db: Db, tokenHash: string): Promise<TokenWithSu
     where: { tokenHash },
     include: { rotatedTo: true },
   });
+}
+
+/**
+ * Serializes every refresh-token state transition for one rotation chain.
+ *
+ * Locking only the presented row is insufficient: logout presents the current
+ * token while a racing grace request may present its predecessor, so the two
+ * operations would lock different rows and could still pass each other. Every
+ * token in a chain carries the same indexed `session_id`; locking that set in a
+ * deterministic order gives rotation and current-session logout one shared
+ * PostgreSQL boundary without serializing another browser session of the same
+ * user.
+ *
+ * Callers identify the session before this lock and MUST re-read the presented
+ * token afterwards. Under PostgreSQL READ COMMITTED, that second statement sees
+ * the rotation or revocation that made the caller wait.
+ */
+export async function lockSessionTokens(
+  tx: Prisma.TransactionClient,
+  sessionId: string,
+): Promise<void> {
+  await tx.$queryRaw`
+    SELECT "id"
+    FROM "refresh_token"
+    WHERE "session_id" = ${sessionId}::uuid
+    ORDER BY "issued_at", "id"
+    FOR UPDATE`;
 }
 
 /** True when `tokenId` has itself been rotated — i.e. the caller's token is at
