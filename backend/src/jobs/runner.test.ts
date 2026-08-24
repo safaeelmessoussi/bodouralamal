@@ -35,6 +35,7 @@ function fakeRunner() {
   const boss = {
     start: vi.fn(async () => undefined),
     createQueue: vi.fn(async () => undefined),
+    updateQueue: vi.fn(async () => undefined),
     work: vi.fn(async (name: string) => {
       live.push({
         name,
@@ -68,6 +69,8 @@ describe('job runner startup readiness', () => {
       QUEUES.tokenPurge,
       QUEUES.rateLimitPurge,
       QUEUES.auditPurge,
+      QUEUES.consentReevaluate,
+      QUEUES.contentBucketMigrate,
       QUEUES.sessionMaterialize,
       QUEUES.sessionRecordingIngest,
     ]);
@@ -79,17 +82,21 @@ describe('job runner startup readiness', () => {
       active_workers: registered.length,
     });
 
-    // Queue-only consent work is still registered for transactional enqueue,
-    // but health does not invent a worker that this slice did not implement.
+    // Both halves of BR-2 are real workers and therefore part of readiness.
     expect(boss.createQueue).toHaveBeenCalledWith(
       QUEUES.consentReevaluate,
-      expect.any(Object),
+      { retryLimit: 4, retryBackoff: true },
+    );
+    expect(boss.updateQueue).toHaveBeenCalledWith(
+      QUEUES.contentBucketMigrate,
+      { retryLimit: 4, retryBackoff: true },
     );
     expect(boss.createQueue).toHaveBeenCalledWith(
       QUEUES.sessionRecordingIngest,
       { retryLimit: 4, retryBackoff: true },
     );
-    expect(registered).not.toContain(QUEUES.consentReevaluate);
+    expect(registered).toContain(QUEUES.consentReevaluate);
+    expect(registered).toContain(QUEUES.contentBucketMigrate);
   });
 
   it('marks the subsystem failed when pg-boss startup rejects', async () => {
@@ -140,7 +147,7 @@ describe('job runner startup readiness', () => {
     expect(readiness.snapshot()).toMatchObject({
       state: 'down',
       reason: 'startup_failed',
-      expected_workers: 5,
+      expected_workers: 7,
       registered_workers: 2,
       active_workers: 2,
     });

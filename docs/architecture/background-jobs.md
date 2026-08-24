@@ -29,19 +29,22 @@ Which means:
 // ✅  the insert joins the transaction
 await prisma.$transaction(async (tx) => {
   await rosterRepo.enrol(tx, …);
-  await jobsRepo.enqueue(tx, 'consent.reevaluate', { group_id });
+  await jobsRepo.enqueue(tx, 'consent.reevaluate', { session_id });
 });
 
 // ❌  boss.send() uses its own connection and sits OUTSIDE the transaction
 await prisma.$transaction(async (tx) => {
   await rosterRepo.enrol(tx, …);
 });
-await boss.send('consent.reevaluate', { group_id });   // prohibited here
+await boss.send('consent.reevaluate', { session_id });   // prohibited here
 ```
 
 Job rows are inserted through a dedicated `JobsRepository` using pg-boss's documented job
-table format. This is **one of only two places raw SQL is permitted** in application code —
-the other being `SELECT … FOR UPDATE` row locks.
+table format. The repository copies retry, expiry, retention and policy values from the
+registered queue row; inserting only `name` and `data` would silently bypass TD-7's retry
+contract. A singleton key deduplicates pending `created`/`retry` work while permitting one
+follow-up to be committed behind an active full recompute. This is **one of only two places
+raw SQL is permitted** in application code — the other being `SELECT … FOR UPDATE` row locks.
 
 `boss.send()` is not banned outright; it is banned **for job-triggering mutations**, which
 is where the atomicity matters.
@@ -83,11 +86,11 @@ polled within 15 seconds or be processing a job. The bounded startup grace uses 
 window, so an initial empty fetch does not make an ordinary deployment flap; a long recording
 ingestion is not called stale merely because its handler is busy.
 
-This runtime catalog is deliberately not the same thing as TD-7 release completeness. A
-queue registered only so a transactional enqueue can persist — currently
-`consent.reevaluate` — is not reported as a worker until its handler exists. TD-7 jobs whose
-implementations have not landed remain release-readiness gaps; health neither implements
-them nor invents running handlers for them.
+This runtime catalog is deliberately not the same thing as TD-7 release completeness.
+`consent.reevaluate` and the consent-forced arm of `content.bucket-migrate` now have real
+handlers and are therefore part of readiness. Other TD-7 jobs whose implementations have not
+landed remain release-readiness gaps; health neither implements them nor invents running
+handlers for them.
 
 > **`session-recording-ingest` was implemented before it was specified, and that sequence is
 > worth keeping visible.** R99 authorised the ingestion pipeline in terms (R99.13, R99.14) and
@@ -238,9 +241,43 @@ that never existed. The job exists to advance the horizon and to reconcile.
 
 ### `consent.reevaluate` — full recompute, deliberately
 
-It recomputes the group's entire consent state rather than applying a delta. That makes it
-**idempotent**, safe to run twice, and safe to run after a missed event — properties worth
-far more here than the efficiency a delta would buy on groups of a few dozen students.
+It recomputes the complete current audience of every Session linked to the same recording,
+rather than applying a delta. Audience resolution is the canonical R43/R92 rule: entire
+Level at the occurrence's audience branches, Administrative Group, or Teaching Group. The
+union is strict: one linked Session containing one beneficiary without an effective latest
+`media_release` grant forces the recording. Absence is no consent; an empty audience does not
+engage the gate.
+
+Session rows are locked in UUID order before the audiences are resolved. Consent, enrollment,
+Teaching Group membership, Session-content links and recording imports take the same anchors
+when they enqueue, so a concurrent mutation is either included in this recompute or commits a
+follow-up. Recording rows are then locked in UUID order. The worker can only move toward
+safety: it sets `consent_forced_private`, writes the system `content.visibility_change` audit,
+and enqueues the physical transition in one transaction. It never automatically clears a
+forced state after a later grant; BR-3 reserves that decision to an Admin with justification.
+
+For a public item, `consent_forced_private = true` immediately removes it from application
+library/session reads while `visibility = public` and `storage_bucket = public` honestly
+represent the still-pending physical copy. `content.bucket-migrate` then:
+
+1. hashes the immutable canonical source;
+2. server-side copies it to the private bucket with that SHA-256 as server metadata;
+3. hashes the destination and requires identical bytes and size;
+4. under a content row lock, re-reads the version/key/forced state;
+5. deletes the public source; and only then commits `visibility = private`, the private
+   bucket coordinate and mandatory system audit.
+
+A delete failure rolls the database transition back and TD-7 retries. If deletion succeeded
+but the database commit did not, the private object's server-written digest makes recovery
+provable even though the source is gone. Duplicate work is idempotent, and a stale snapshot
+cannot overwrite a replacement or a deletion. This worker implements only consent-forced
+public → private movement; it is not general visibility editing or bucket housekeeping.
+
+Rows committed before B-01 used the older three-column repository insert and therefore lack
+per-job retry/expiry policy. They are not bulk-rewritten. When such a row becomes active, the
+worker first commits one correctly configured full-recompute follow-up under the same
+singleton key; many legacy duplicates therefore converge on one pending recovery obligation,
+and an old one-shot failure cannot strand safeguarding.
 
 ### `audit.purge` — the one that needed three attempts
 

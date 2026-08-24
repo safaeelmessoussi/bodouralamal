@@ -80,34 +80,36 @@ a new state change with its own actor and timestamp — history is never overwri
 **Absence of a record means no consent.** Never assumed, never inferred, never defaulted
 true.
 
-### The group consent gate
+### The Session consent gate
 
 This is where consent becomes structural rather than administrative.
 
-> If a Group has **even one** enrolled student without effective media consent, **every
-> session recording for that Group is forced private.**
+> If a Session's resolved audience has **even one** beneficiary without effective media
+> consent, every recording linked to it is forced private. Shared recordings use the union
+> of all linked Session audiences.
 > — [`BR-2`](../reference/business-rules.md#br-2)
 
 Crucially, this is **not a check performed at upload time**. It is a continuously
 maintained invariant, re-evaluated automatically whenever any of three things happen:
 
-1. a student joins or leaves any group,
+1. a beneficiary joins/leaves/moves in an enrollment or Teaching Group, or a Session-content
+   link changes,
 2. a consent is granted or revoked for an enrolled student,
-3. a recording is uploaded.
+3. a recording is uploaded, imported, or replaced.
 
 A recording published while everyone consented **flips to private** when a non-consenting
-student later enrols, or when a parent revokes. The object physically migrates between
-storage buckets; anyone following an old public link lands on a friendly explanation page,
-never a raw storage error.
+beneficiary later joins the resolved audience, or when consent is revoked. Application reads
+fail closed when the re-evaluation commits; the durable worker copies and hashes the canonical
+bytes, retires the public object, then commits private placement. General friendly stale-link
+routing remains a separate storage/UI item.
 
 **Only an Admin can lift a consent-forced private state, and only with a written
 justification** that is recorded in the audit log. A teacher can never do it
 ([`BR-3`](../reference/business-rules.md#br-3)).
 
-One edge case is worth stating because it looks like a bug: a group with **zero** enrolled
-students has no non-consenting student, so the gate does not engage and uploads take the
-category default. The first enrolment of a non-consenting student triggers re-evaluation
-and forces the flip.
+One edge case is worth stating because it looks like a bug: a Session whose resolved audience
+is empty has no non-consenting beneficiary, so the gate does not engage. The first audience
+mutation adding a beneficiary without consent triggers re-evaluation and forces the flip.
 
 > SRS §4.1a, §4.9 · [Storage](../architecture/storage.md#consent-gating) ·
 > [Background jobs](../architecture/background-jobs.md)

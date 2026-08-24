@@ -5,8 +5,16 @@ import { page, pageWindow, type Page, type PageParams } from '../lib/pagination.
 import * as scope from '../policies/branch-scope.js';
 import * as audit from '../repositories/audit.repository.js';
 import * as trash from '../repositories/trash.repository.js';
-import { enqueue, JOB_QUEUES } from '../repositories/jobs.repository.js';
 import type { Actor } from '../policies/actor.js';
+import {
+  consentSessionIdsForStudent,
+  enqueueConsentReevaluationForSessions,
+  enqueueConsentReevaluationForStudent,
+} from './consent-reevaluation.service.js';
+
+// Kept as a public re-export for existing callers; the safeguarding engine now
+// owns the inverse-audience lookup and its Session lock discipline.
+export { enqueueConsentReevaluationForStudent } from './consent-reevaluation.service.js';
 
 /**
  * Enrollment — a student's membership of a Level **through one Administrative
@@ -70,89 +78,6 @@ function assertCanManage(actor: Actor): void {
  *   contains anybody. A student in no session enqueues no jobs, exactly as a
  *   student in no group did before — a normal outcome, not a silent failure.
  */
-export async function enqueueConsentReevaluationForStudent(
-  tx: Prisma.TransactionClient,
-  studentId: string,
-): Promise<string[]> {
-  // The inverse of §4.4c's roster resolution: which schedules cover this
-  // student? Expressed as one query over the three teaching modes rather than
-  // three round trips, and deliberately NOT importing `audienceWhere` — that
-  // resolves students *for a schedule*, and this asks the opposite question.
-  const schedules = await tx.recurringCourseSchedule.findMany({
-    where: {
-      deletedAt: null,
-      OR: [
-        {
-          teachingMode: 'administrative_group',
-          administrativeGroup: {
-            deletedAt: null,
-            enrollments: { some: { studentId, deletedAt: null } },
-          },
-        },
-        {
-          teachingMode: 'teaching_group',
-          teachingGroup: {
-            deletedAt: null,
-            members: { some: { studentId, deletedAt: null } },
-          },
-        },
-        {
-          teachingMode: 'entire_level',
-          level: {
-            enrollments: {
-              some: {
-                studentId,
-                deletedAt: null,
-                // **R66 — a group-less enrolment is a valid enrolment.** A
-                // relation filter never matches a NULL relation, so requiring a
-                // live group here skipped every `entire_level` session of a
-                // student enrolled directly in an unsubdivided Level — and with
-                // them the consent re-evaluation BR-2/§4.9 rely on to force a
-                // recording private when consent changes.
-                OR: [{ administrativeGroupId: null }, { administrativeGroup: { deletedAt: null } }],
-              },
-            },
-          },
-        },
-      ],
-    },
-    select: { id: true, teachingMode: true, branchId: true, levelId: true },
-  });
-  if (schedules.length === 0) return [];
-
-  // An entire-level schedule only covers the student if they are ENROLLED at
-  // that schedule's branch (§4.4c, the branch bound). R66 — this used to reach
-  // through the Administrative Group, which meant a student in an unsubdivided
-  // Level matched nothing at all.
-  const enrolmentBranches = new Set(
-    (
-      await tx.enrollment.findMany({
-        where: { studentId, deletedAt: null },
-        select: { levelId: true, branchId: true },
-      })
-    ).map((e) => `${e.levelId}:${e.branchId}`),
-  );
-  const covering = schedules.filter(
-    (s) =>
-      s.teachingMode !== 'entire_level' ||
-      (s.levelId !== null && enrolmentBranches.has(`${s.levelId}:${s.branchId}`)),
-  );
-  if (covering.length === 0) return [];
-
-  const sessions = await tx.session.findMany({
-    where: { deletedAt: null, scheduleId: { in: covering.map((s) => s.id) } },
-    select: { id: true },
-  });
-
-  for (const s of sessions) {
-    // Singleton per session (TD-7): several changes affecting one session
-    // collapse into one pending job, which is safe because the handler is a
-    // full idempotent recompute rather than a delta.
-    await enqueue(tx, JOB_QUEUES.consentReevaluate, { session_id: s.id }, s.id);
-  }
-  return sessions.map((s) => s.id);
-}
-
 /**
  * §4.4b / Revision 27 — a restricted Level admits only a matching `User.sex`,
  * and a **null sex is not eligible**. Without the person-side half the
@@ -715,6 +640,8 @@ export async function moveStudent(
     });
     if (!row) throw new AppError('NOT_FOUND', 'student is not enrolled in the source group');
 
+    const formerConsentSessions = await consentSessionIdsForStudent(tx, studentId);
+
     // Re-pointed in place rather than soft-deleted and re-created: the
     // enrolment is the same fact about the same person, and a new row would
     // reset `enrolled_at` — losing how long they have been in this Level, which
@@ -738,7 +665,11 @@ export async function moveStudent(
     // Teaching Group seats SURVIVE a move within a Level: the splits belong to
     // the (Subject, Level), not to the administrative group (§4.4c), so a
     // student moved between administrative groups keeps their Quran group.
-    await enqueueConsentReevaluationForStudent(tx, studentId);
+    const currentConsentSessions = await consentSessionIdsForStudent(tx, studentId);
+    await enqueueConsentReevaluationForSessions(tx, [
+      ...formerConsentSessions,
+      ...currentConsentSessions,
+    ]);
 
     await audit.write(tx, {
       actorUserId: actor.userId,

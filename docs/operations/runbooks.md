@@ -287,6 +287,23 @@ obligation is only deletion of that row's recorded staging bucket/key. Redrive t
 job after restoring MinIO. Do not delete the canonical content key, do not enqueue a general
 bucket sweep, and do not use `upload.gc` for this recording-specific obligation.
 
+For `consent.reevaluate`, first inspect the named `session_id`. A missing/deleted occurrence
+converges as an empty no-op; a repeated storage/placement inconsistency is fail-closed and must
+be investigated rather than bypassed. Do not clear `consent_forced_private` to make the job
+green.
+
+For `content.bucket-migrate`, inspect `content_id` and the current row before redrive:
+
+- `consent_forced_private = true`, `visibility = public`, `storage_bucket = public` is a valid
+  pending safeguard. Public application reads are already closed, but the stable object URL
+  remains until migration succeeds.
+- A private destination with a server SHA-256 and a missing public source is the supported
+  delete-succeeded/DB-rollback recovery state; redrive the existing job.
+- Never manually set visibility to private before confirming the public object is gone, never
+  delete the private canonical object, and never use `upload.gc` for this exact transition.
+- A terminal failure remains in pg-boss after five attempts. Restore MinIO/repair the named
+  inconsistency, then redrive; do not enqueue a general bucket sweep.
+
 If backup replication has failed twice consecutively, escalate to the owner.
 
 ---

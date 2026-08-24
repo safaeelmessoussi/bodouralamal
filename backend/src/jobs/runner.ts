@@ -3,11 +3,16 @@ import { PgBoss, type WorkHandler } from 'pg-boss';
 import type { PrismaClient } from '../generated/prisma/client.js';
 import type { AppConfig } from '../lib/config.js';
 import { purgeExpiredAuthRows } from '../repositories/audit.repository.js';
-import { createStorageClients } from '../lib/storage.js';
+import { BUCKETS, createStorageClients } from '../lib/storage.js';
 import { purgeExpired as purgeExpiredRefreshTokens } from '../services/refresh-token.service.js';
 import { runMaterialization } from '../services/session-materialize.service.js';
 import { ingestRecording } from '../services/session-recording-ingest.service.js';
+import {
+  migrateConsentForcedContent,
+  reevaluateSessionConsent,
+} from '../services/consent-reevaluation.service.js';
 import { JobRunnerReadiness } from './readiness.js';
+import { ensureDurableLegacyFollowup } from '../repositories/jobs.repository.js';
 
 /**
  * pg-boss bootstrap and job runner (SRS TD-7, §3.1, §20 rule 1).
@@ -30,14 +35,14 @@ export const QUEUES = {
   auditPurge: 'audit.purge',
   /**
    * §4.1a: enqueued by every `ConsentRecord` change, roster change and upload.
-   * The queue is **registered here but has no worker yet** — `pgboss.job` is
-   * partitioned by queue name, so registration is what makes the §16.2
-   * same-transaction insert possible at all. The handler recomputes a group's
-   * consent state and force-corrects recording visibility, which needs the
-   * content and bucket-migration machinery of M6; until then jobs accumulate and
-   * drain on restart, exactly as TD-16 describes for a stopped worker.
+   * Full current-state recompute for an occurrence's resolved audience. The
+   * worker closes the application read gate and durably hands any physical
+   * public → private transition to `content.bucket-migrate`.
    */
   consentReevaluate: 'consent.reevaluate',
+  /** Minimum TD-7 placement worker used by BR-2 safeguarding. It moves only an
+   * already consent-forced canonical object from public to private. */
+  contentBucketMigrate: 'content.bucket-migrate',
 
   /**
    * `session.materialize` (TD-7, Revision 43) — turns a Recurring Course
@@ -159,6 +164,57 @@ function createWorkerCatalog(
       },
     },
     {
+      name: QUEUES.consentReevaluate,
+      handler: async ([job]) => {
+        const payload = (job?.data ?? {}) as { session_id?: string };
+        if (!job || !payload.session_id) {
+          throw new Error('consent.reevaluate requires session_id');
+        }
+        await ensureDurableLegacyFollowup(
+          prisma,
+          job.id,
+          QUEUES.consentReevaluate,
+          { session_id: payload.session_id },
+          payload.session_id,
+        );
+        const outcome = await reevaluateSessionConsent(prisma, payload.session_id);
+        log(QUEUES.consentReevaluate, {
+          session_id: outcome.sessionId,
+          recordings_inspected: outcome.recordingsInspected,
+          recordings_forced: outcome.recordingsForced,
+          migrations_enqueued: outcome.migrationsEnqueued,
+        });
+      },
+    },
+    {
+      name: QUEUES.contentBucketMigrate,
+      handler: async ([job]) => {
+        const payload = (job?.data ?? {}) as {
+          content_id?: string;
+          target_bucket?: string;
+        };
+        if (!job || !payload.content_id || payload.target_bucket !== BUCKETS.private) {
+          throw new Error('content.bucket-migrate requires content_id and target_bucket=private');
+        }
+        await ensureDurableLegacyFollowup(
+          prisma,
+          job.id,
+          QUEUES.contentBucketMigrate,
+          { content_id: payload.content_id, target_bucket: BUCKETS.private },
+          payload.content_id,
+        );
+        const outcome = await migrateConsentForcedContent(
+          prisma,
+          storage,
+          payload.content_id,
+        );
+        log(QUEUES.contentBucketMigrate, {
+          content_id: outcome.contentId,
+          state: outcome.state,
+        });
+      },
+    },
+    {
       // Nightly rolling-horizon extension. An empty payload sweeps every active
       // schedule; per-schedule reconciliation uses the same handler.
       name: QUEUES.sessionMaterialize,
@@ -227,6 +283,10 @@ export async function startJobRunner(
 
     for (const queue of Object.values(QUEUES)) {
       await boss.createQueue(queue, TD7_RETRY_POLICY);
+      // `createQueue` is CREATE-IF-ABSENT. Without an explicit update, a queue
+      // created by an older deployment silently retains obsolete retry/policy
+      // settings forever even though startup appears to apply the constants.
+      await boss.updateQueue(queue, TD7_RETRY_POLICY);
     }
 
     for (const worker of workers) {

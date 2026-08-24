@@ -6,9 +6,10 @@ MinIO, self-hosted in a container. Data residency rules out every managed object
 S3-compatible storage runs on the same box as everything else.
 
 > **Status:** the Nginx proxy, upload/replace/delete flow, permission-checked private mint,
-> recording ingestion, and durable R99 staging cleanup are built and tested. Visibility
-> transitions, `content.bucket-migrate`, consent re-evaluation, and the general retention jobs
-> remain open and are called out below rather than implied by the implemented upload flow.
+> recording ingestion, durable R99 staging cleanup, consent re-evaluation and the
+> consent-forced public → private `content.bucket-migrate` arm are built and tested. General
+> visibility editing and the retention jobs remain open and are called out below rather than
+> implied by the implemented safeguarding flow.
 
 ## Two buckets, and the boundary between them
 
@@ -32,14 +33,14 @@ Completion checks the signed ticket against that authoritative visibility again 
 a contradictory object before any database write. The second check matters across deployments:
 an already-issued ticket remains valid for up to two hours.
 
-There is deliberately no literal-bucket `CHECK` on `educational_content`. The specified
-visibility transition is asynchronous copy–verify–delete through `content.bucket-migrate`,
-and the current model has no migration-state column with which a constraint could represent
-that valid in-flight state. A check equating `public`/`private` strings directly would either
-reject the specified transition or pretend the physical copy had completed when only the row
-had changed. Until the transition endpoint and worker ship together, no production route can
-change an existing row's visibility; that missing operation is fail-closed, not an alternate
-write path.
+There is deliberately no literal-bucket `CHECK` on `educational_content`. A consent-forced
+transition is asynchronous copy–verify–delete. Its explicit pending state is the existing
+combination `consent_forced_private = true`, `visibility = public`, `storage_bucket = public`:
+application reads fail closed while visibility and bucket continue to describe the physical
+source honestly. A check equating the flag with private placement would reject that safe
+state; a check changing visibility first would claim privacy while anonymous bytes still
+exist. General visibility editing remains unbuilt and cannot use this safeguarding-only arm
+as a publication path.
 
 ### Visibility changes move the object
 
@@ -51,11 +52,13 @@ on storage 403/404 responses.
 **Never a raw XML S3 error.** A beneficiary following an old WhatsApp link should not meet
 `<Error><Code>NoSuchKey</Code>`.
 
-The migration runs as a background job (copy, verify, delete — idempotent, skipped if
-already in the target). Object storage cannot join a database transaction, so the move is
-eventually consistent. That is safe because **the database row is the source of truth**, and
-the presigned-mint endpoint checks the row: a not-yet-migrated object is already unreachable
-through any legitimate path.
+The migration runs as a background job (copy, full SHA-256 verify, delete — idempotent,
+restart-safe). Object storage cannot join a database transaction, so the move is eventually
+consistent. During the pending interval the consent flag is the application fail-safe; the
+stable MinIO public URL remains readable until the worker retires it, which is the SRS's
+explicit asynchronous job boundary rather than a claim of storage atomicity. The final
+transaction deletes that public object before the row may say `private`, so there is never a
+committed private row with the old anonymous object still serving.
 
 ## Presigned URLs
 
@@ -281,27 +284,28 @@ the display name stored in the database.
 
 The storage-facing half of [`BR-2`](../reference/business-rules.md#br-2).
 
-> If a group has **even one** enrolled student without effective media consent, **every
-> session recording for that group is forced private.**
+> If a Session's resolved audience has **even one** beneficiary without effective media
+> consent, every recording linked to that Session is forced private. A recording shared by
+> Sessions uses the union of those audiences.
 
 This is a **continuously maintained invariant**, not an upload-time check. Three events
-trigger re-evaluation: a roster change, a consent change for an enrolled student, and every
-recording upload. Each enqueues a job that recomputes the group's consent state and
-force-corrects the visibility of every affected recording — migrating objects between
-buckets as needed.
+trigger re-evaluation: a roster/Teaching Group membership change, a consent change for an
+affected beneficiary, every recording upload/import or replacement, and Session-content link
+changes. Each enqueues a full current-state job for the affected occurrence.
 
 A recording published while everyone consented **flips to private** when a non-consenting
 student later enrols.
 
 **Only an Admin can lift the forced state, and only with a written justification** recorded
-in the audit log. A teacher cannot, and the API refuses it — tested at the API level, not
-just hidden in the UI.
+in the audit log. The engine deliberately never clears the flag after a later grant. The
+Admin override surface is still a separate M6 item and is not invented by this worker.
 
-One edge case that reads like a bug and is not: a group with **zero** students has no
-non-consenting student, so the gate does not engage and uploads take the category default.
-The first enrolment of a non-consenting student triggers the flip.
+One edge case that reads like a bug and is not: a Session with a **zero-person resolved
+audience** has no non-consenting beneficiary, so the gate does not engage and an unforced
+upload keeps its Category default. The first audience mutation adding a non-consenting
+beneficiary triggers the flip.
 
-> [Business processes](../overview/business-processes.md#the-group-consent-gate) ·
+> [Business processes](../overview/business-processes.md#the-session-consent-gate) ·
 > [Background jobs](background-jobs.md)
 
 ## Global scope is a privilege

@@ -25,6 +25,14 @@ workers, and the long-running-handler exception are covered without sleeps. Cont
 separately prove that a healthy database plus a present `pgboss` schema cannot make
 `/healthz` green when the runner never started.
 
+The B-01 safeguarding suite uses real PostgreSQL, MinIO and pg-boss. It proves the public
+anonymous read before withdrawal, the explicit fail-closed application state, full-stream
+SHA-256 equality after migration, old-public-key retirement, duplicate idempotency, a
+grant-before-old-job ordering, delete-before-DB rollback recovery, transient TD-7 retry,
+restart recovery, terminal failure observability and stale replacement/deletion CAS. It never
+deletes the historical consent backlog: only tagged fixture jobs receive temporary priority
+and all tagged rows/objects are removed.
+
 ## Running them
 
 ```bash
