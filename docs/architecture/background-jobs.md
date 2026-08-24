@@ -57,9 +57,9 @@ duplicate concurrent runs.
 
 | Job | Trigger | Idempotency |
 |---|---|---|
-| `consent.reevaluate` | Roster change · split-group membership change · consent change · upload | Singleton per session (Revision 43 — the gate's subject is a session's resolved audience, BR-2); **full recompute**, so re-running is harmless |
+| `consent.reevaluate` | Roster/Teaching-Group change · consent change · recording import/replacement · Session-content link · R92 occurrence-audience change | Singleton per session (Revision 43 — the gate's subject is a session's resolved audience, BR-2); **full recompute**, so re-running is harmless |
 | `session.materialize` | Course-schedule create or edit · **nightly cron** | Singleton per schedule. Turns a recurring schedule into dated occurrences over a rolling horizon. See below |
-| `content.bucket-migrate` | Visibility change · consent forcing | Copy–verify–delete; skipped if already in the target bucket |
+| `content.bucket-migrate` | Visibility change · consent forcing · exact old-public-key retirement after replacement/deletion | The consent arm pins the source key; copy–verify–delete and exact retirement are idempotent across replacement, deletion and ambiguous delete responses |
 | `backup.replicate` | Nightly cron | `pg_dump` + `restic` push to the second Moroccan location. Failure raises a **critical** Admin-visible alert |
 | `content.quarantine-purge` | Daily cron | Permanently removes storage objects past the 90-day trash window |
 | `upload.gc` | Daily cron | Deletes initiated-but-never-completed uploads **strictly older than 48 h** — never younger, or a slow upload in progress would be reaped |
@@ -85,6 +85,13 @@ provides the ongoing signal: every expected handler must remain active and must 
 polled within 15 seconds or be processing a job. The bounded startup grace uses the same
 window, so an initial empty fetch does not make an ordinary deployment flap; a long recording
 ingestion is not called stale merely because its handler is busy.
+
+Before any worker registers or readiness can become green, startup reconciles the TD-7 retry
+policy on every implemented queue and scans live recording-linked Sessions in bounded UUID
+batches. Each batch inserts the ordinary singleton reevaluation obligations transactionally.
+The scan is repeatable and does not rewrite content or guess consent; it closes rollout and
+backlog gaps left by older trigger coverage. Queue policy updates change retry/backoff only,
+so pg-boss retention, expiry and deletion horizons—and historical jobs—remain intact.
 
 This runtime catalog is deliberately not the same thing as TD-7 release completeness.
 `consent.reevaluate` and the consent-forced arm of `content.bucket-migrate` now have real
@@ -248,17 +255,24 @@ union is strict: one linked Session containing one beneficiary without an effect
 `media_release` grant forces the recording. Absence is no consent; an empty audience does not
 engage the gate.
 
-Session rows are locked in UUID order before the audiences are resolved. Consent, enrollment,
-Teaching Group membership, Session-content links and recording imports take the same anchors
-when they enqueue, so a concurrent mutation is either included in this recompute or commits a
-follow-up. Recording rows are then locked in UUID order. The worker can only move toward
-safety: it sets `consent_forced_private`, writes the system `content.visibility_change` audit,
-and enqueues the physical transition in one transaction. It never automatically clears a
-forced state after a later grant; BR-3 reserves that decision to an Admin with justification.
+The inverse student-to-Session trigger follows retained live occurrences even after their
+recurring schedule is soft-deleted, and it applies R92 occurrence audience branches rather
+than falling back to the schedule branch. Changing those R92 branches enqueues in the same
+transaction as the audience update.
+
+The complete shared-recording Session graph is discovered first, then its rows are locked once
+in global UUID order before audiences are resolved. Link/replacement/deletion writers take the
+same anchors; if the graph grows during acquisition, the worker retries rather than taking a
+late lower-order lock. Recording rows are then locked in UUID order. A concurrent mutation is
+therefore included or commits a follow-up. The worker can only move toward safety: it sets
+`consent_forced_private`, writes the system `content.visibility_change` audit, and enqueues an
+exact-source physical transition in one transaction. It never automatically clears a forced
+state after a later grant; BR-3 reserves that decision to an Admin with justification.
 
 For a public item, `consent_forced_private = true` immediately removes it from application
-library/session reads while `visibility = public` and `storage_bucket = public` honestly
-represent the still-pending physical copy. `content.bucket-migrate` then:
+library/session reads and from Nginx's stable public origin. `visibility = public` and
+`storage_bucket = public` still honestly represent the network-internal source while physical
+work is pending. `content.bucket-migrate`, carrying the exact source key, then:
 
 1. hashes the immutable canonical source;
 2. server-side copies it to the private bucket with that SHA-256 as server metadata;
@@ -272,6 +286,13 @@ but the database commit did not, the private object's server-written digest make
 provable even though the source is gone. Duplicate work is idempotent, and a stale snapshot
 cannot overwrite a replacement or a deletion. This worker implements only consent-forced
 public → private movement; it is not general visibility editing or bucket housekeeping.
+
+Replacement and deletion also commit exact-key retirement obligations in this same queue.
+Replacement can publish a new canonical key only with the monotonic flag already set, queues
+the new key's migration, and retires the old key into private quarantine. A stale migration
+whose row now names another key becomes that same retirement operation. A missing source is
+success, which is what makes a retry after an ambiguous successful delete converge without
+guessing or touching the replacement key.
 
 Rows committed before B-01 used the older three-column repository insert and therefore lack
 per-job retry/expiry policy. They are not bulk-rewritten. When such a row becomes active, the

@@ -52,14 +52,21 @@ function fakeRunner() {
   return { boss, live };
 }
 
+function fakePrisma() {
+  return {
+    session: { findMany: vi.fn(async () => []) },
+  } as unknown as PrismaClient;
+}
+
 describe('job runner startup readiness', () => {
   it('derives expected workers from exactly the catalog it registers', async () => {
     const { boss } = fakeRunner();
+    const prisma = fakePrisma();
     const readiness = new JobRunnerReadiness(boss, () => 1_000);
 
     await startJobRunner(
       boss as unknown as PgBoss,
-      {} as PrismaClient,
+      prisma,
       CONFIG,
       readiness,
     );
@@ -97,6 +104,25 @@ describe('job runner startup readiness', () => {
     );
     expect(registered).toContain(QUEUES.consentReevaluate);
     expect(registered).toContain(QUEUES.contentBucketMigrate);
+
+    // CREATE IF ABSENT is not a policy update. Every implemented queue is
+    // reconciled before the rollout sweep, and no worker can consume until the
+    // sweep has durably covered the live recording backlog.
+    expect(boss.updateQueue).toHaveBeenCalledTimes(Object.values(QUEUES).length);
+    for (const queue of Object.values(QUEUES)) {
+      expect(boss.updateQueue).toHaveBeenCalledWith(queue, {
+        retryLimit: 4,
+        retryBackoff: true,
+      });
+    }
+    expect(prisma.session.findMany).toHaveBeenCalledOnce();
+    const lastQueueUpdate = Math.max(
+      ...boss.updateQueue.mock.invocationCallOrder,
+    );
+    const sweepRead = vi.mocked(prisma.session.findMany).mock.invocationCallOrder[0];
+    const firstWorker = boss.work.mock.invocationCallOrder[0];
+    expect(sweepRead).toBeGreaterThan(lastQueueUpdate);
+    expect(firstWorker).toBeGreaterThan(sweepRead ?? 0);
   });
 
   it('marks the subsystem failed when pg-boss startup rejects', async () => {
@@ -107,7 +133,7 @@ describe('job runner startup readiness', () => {
     await expect(
       startJobRunner(
         boss as unknown as PgBoss,
-        {} as PrismaClient,
+        fakePrisma(),
         CONFIG,
         readiness,
       ),
@@ -139,7 +165,7 @@ describe('job runner startup readiness', () => {
     await expect(
       startJobRunner(
         boss as unknown as PgBoss,
-        {} as PrismaClient,
+        fakePrisma(),
         CONFIG,
         readiness,
       ),

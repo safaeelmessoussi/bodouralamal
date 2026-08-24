@@ -44,6 +44,7 @@ import { teachesQuran } from './policies/roster-resolution.js';
 import { toRoleScopes } from './policies/branch-scope.js';
 import { createStorageClients } from './lib/storage.js';
 import { createOnlineClassProvider } from './lib/online-class-provider.js';
+import { publicObjectIsReadable } from './services/consent-reevaluation.service.js';
 import { authenticate, optionalAuthenticate } from './middleware/authenticate.js';
 import { childContext } from './middleware/child-context.js';
 import {
@@ -172,6 +173,34 @@ export function createApp(
   app.disable('x-powered-by');
 
   app.use(requestContext);
+
+  /**
+   * Internal Nginx auth subrequest; it is not exposed by the public routing
+   * table and is not a client API. GET/HEAD against the anonymous MinIO bucket
+   * is admitted only while the database still names the exact public key.
+   * Writes keep using their signed MinIO capability unchanged.
+   */
+  app.get('/internal/storage/public-authorize', async (req, res) => {
+    const originalUri = req.header('x-original-uri');
+    if (!originalUri) {
+      throw new AppError('FORBIDDEN', 'storage authorization URI is missing');
+    }
+    const pathname = new URL(originalUri, 'http://storage.internal').pathname;
+    const prefix = '/storage/public/';
+    if (!pathname.startsWith(prefix)) {
+      throw new AppError('FORBIDDEN', 'storage authorization path is outside public storage');
+    }
+    const storageKey = decodeURIComponent(pathname.slice(prefix.length));
+    const allowed = storageKey.length > 0 && await publicObjectIsReadable(prisma, storageKey);
+    if (!allowed) {
+      throw new AppError('FORBIDDEN', 'public storage coordinate is not currently readable');
+    }
+    res.sendStatus(204);
+  });
+
+  // Internal storage authorization is intentionally excluded from the ordinary
+  // request log: canonical keys are high-volume infrastructure coordinates,
+  // not user actions. Public/API requests below retain the existing access log.
   app.use(accessLog);
   /**
    * **R99 — the provider callback needs its RAW bytes, so it is mounted before

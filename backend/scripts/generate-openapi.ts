@@ -747,6 +747,37 @@ const document = {
       patch: op('Edit a scheduled exam', 'TD-3.6 (R58). **The arrangements are editable; the identity is not.** `title`, `description`, `date`, `start_time`, `end_time`, `room_id`, `administrative_group_id` and `staff` may change — those are arrangements, and arrangements change. **`mode`, `level_id`, `subject_id`, `academic_year_id` and `branch_id` are refused** by a `.strict()` schema rather than dropped: each would change *what is examined, for whom, or where* while keeping the grades and submissions already recorded against the old answer, which is the reasoning §4.4 applies to a course schedule\'s scope. Moving an exam to another level is a new exam. **TD-15**: a stale `version` is `409 VERSION_CONFLICT`, never a silent overwrite. **Staff are REPLACED, not merged** — one call is one decision, and there is no window in which the exam holds half of an intended change.', { '204': 'Updated.', '400': `${ENVELOPE} VALIDATION_FAILED — a malformed body, or a key the boundary refuses.`, '401': ENVELOPE, '403': `${ENVELOPE} FORBIDDEN.`, '404': `${ENVELOPE} NOT_FOUND for an unknown exam or one out of the caller\'s branch scope.`, '409': `${ENVELOPE} VERSION_CONFLICT (TD-15), or STATE_CONFLICT with ONLINE_NOT_AVAILABLE for an online row.` }),
       delete: op('Delete a scheduled exam', 'TD-3.6 (R58), TD-5, BR-15. **Soft delete plus a `Trash` snapshot**, and the staff rows are tombstoned in the same transaction — a soft delete without a snapshot is a row nobody can find and nobody can restore, which is exactly the defect found in Events and Course Schedules once already. The ninety-day window then applies as it does to every other entity.', { '204': 'Deleted; the Trash carries the snapshot.', '401': ENVELOPE, '403': `${ENVELOPE} FORBIDDEN.`, '404': `${ENVELOPE} NOT_FOUND for an unknown exam or one out of scope.` }),
     },
+    '/internal/storage/public-authorize': {
+      // Infrastructure is still a contract: documenting the hook keeps router
+      // parity strict without pretending it is a client/API-v1 operation.
+      servers: [{ url: '/', description: 'Container-network infrastructure path (§3.1)' }],
+      get: {
+        ...op(
+          'Authorize one canonical public object read (internal)',
+          'Nginx auth-subrequest only; the public routing table marks the caller path ' +
+            '`internal`. BR-2/§4.1a and TD-4.9 require the current database state to close ' +
+            'access before eventual public-object retirement completes. `X-Original-URI` ' +
+            'must name `/storage/public/{exact storage key}`. A live undeleted public/public ' +
+            'row with `consent_forced_private = false` answers 204; every missing, stale, ' +
+            'deleted, replaced or forced coordinate answers the TD-3.8 FORBIDDEN envelope. ' +
+            'No browser or generated client calls this operation directly.',
+          {
+            '204': 'Exact current public coordinate is readable.',
+            '403': `${ENVELOPE} FORBIDDEN — absent, malformed, stale, deleted, replaced or consent-forced coordinate.`,
+          },
+        ),
+        'x-internal': true,
+        parameters: [
+          {
+            name: 'X-Original-URI',
+            in: 'header',
+            required: true,
+            schema: { type: 'string' },
+            description: 'Original same-origin storage URI captured by Nginx.',
+          },
+        ],
+      },
+    },
     '/healthz': {
       // TD-14 serves this at the ORIGIN root, outside the /api/v1 prefix, so the
       // document must override the global server base. Without this the contract

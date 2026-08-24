@@ -533,9 +533,17 @@ export async function linkContent(
   if (!content) throw new AppError("NOT_FOUND", "no such content");
 
   return prisma.$transaction(async (tx) => {
-    // Session is the BR-2 serialization anchor. The same lock is taken by the
-    // full re-evaluation before it resolves the current audience/links.
-    await enqueueConsentReevaluationForSessions(tx, [sessionId]);
+    // A shared recording is one lock graph, not one seed at a time. Acquire the
+    // target plus every existing linked Session in one sorted call so the
+    // reevaluator can never hold a high seed and ask for a lower peer later.
+    const linkedSessions = await tx.sessionContent.findMany({
+      where: { contentId, deletedAt: null, session: { deletedAt: null } },
+      select: { sessionId: true },
+    });
+    await enqueueConsentReevaluationForSessions(tx, [
+      sessionId,
+      ...linkedSessions.map((link) => link.sessionId),
+    ]);
     const existing = await tx.sessionContent.findFirst({
       where: { sessionId, contentId },
       select: { id: true, deletedAt: true },
@@ -580,10 +588,16 @@ export async function unlinkContent(
   await loadForWrite(prisma, actor, sessionId);
 
   await prisma.$transaction(async (tx) => {
-    // Enqueue while the link is still present. The job runs only after COMMIT
-    // and therefore recomputes the post-unlink truth; this call also locks the
-    // occurrence against a concurrent recompute.
-    await enqueueConsentReevaluationForSessions(tx, [sessionId]);
+    // Enqueue while the link is still present, and lock the complete shared
+    // recording graph in one global order before changing it.
+    const linkedSessions = await tx.sessionContent.findMany({
+      where: { contentId, deletedAt: null, session: { deletedAt: null } },
+      select: { sessionId: true },
+    });
+    await enqueueConsentReevaluationForSessions(
+      tx,
+      linkedSessions.map((link) => link.sessionId),
+    );
     const row = await tx.sessionContent.findFirst({
       where: { sessionId, contentId, deletedAt: null },
     });
@@ -955,6 +969,11 @@ export async function setSessionAudienceBranches(
         data: wanted.map((branchId) => ({ sessionId, branchId })),
       });
     }
+
+    // R92 changes the canonical BR-2 audience. The Session row updated above is
+    // the same serialization anchor used by reevaluation, and the job insert is
+    // part of this transaction so no committed audience can lose its obligation.
+    await enqueueConsentReevaluationForSessions(tx, [sessionId]);
 
     await audit.write(tx, {
       actorUserId: actor.userId,

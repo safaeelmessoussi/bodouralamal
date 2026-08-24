@@ -295,10 +295,15 @@ green.
 For `content.bucket-migrate`, inspect `content_id` and the current row before redrive:
 
 - `consent_forced_private = true`, `visibility = public`, `storage_bucket = public` is a valid
-  pending safeguard. Public application reads are already closed, but the stable object URL
-  remains until migration succeeds.
+  pending safeguard. Public application reads and Nginx's stable object URL are already
+  closed; only the network-internal public-bucket copy remains until migration succeeds.
+- Inspect `source_key` and `operation` in the job payload. An ordinary consent migration must
+  name the row's current canonical key. `operation = retire_public` is an exact obsolete-key
+  obligation after replacement/deletion and must never be rewritten to the current key.
 - A private destination with a server SHA-256 and a missing public source is the supported
   delete-succeeded/DB-rollback recovery state; redrive the existing job.
+- A retirement whose public source is already missing is complete, including after an
+  ambiguous successful delete response. Do not recreate it or delete the replacement key.
 - Never manually set visibility to private before confirming the public object is gone, never
   delete the private canonical object, and never use `upload.gc` for this exact transition.
 - A terminal failure remains in pg-boss after five attempts. Restore MinIO/repair the named
@@ -333,7 +338,11 @@ bash scripts/dev/test-integration.sh   # includes the storage-proxy round trip
 
 A `SignatureDoesNotMatch` failure after an Nginx edit almost always means the `/storage/`
 location stopped stripping the prefix, or stopped rewriting `Host` consistently with the
-endpoint the signature was computed for.
+endpoint the signature was computed for. Non-default test ports are part of that exact Host;
+normalizing them away invalidates the signature. Also verify a signed public-staging PUT,
+an unsigned staging GET denial, one current canonical public read, and one forced/deleted
+canonical public denial—the staging and canonical locations intentionally have different
+authorization behavior.
 
 ### B-03 rollout: let legacy direct PUT capabilities expire
 

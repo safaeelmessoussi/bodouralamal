@@ -7,9 +7,10 @@ import { PgBoss } from 'pg-boss';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createApp } from '../app.js';
-import { TD7_RETRY_POLICY } from '../jobs/runner.js';
+import { createWorkerCatalog, TD7_RETRY_POLICY } from '../jobs/runner.js';
 import { issueAccessToken } from '../lib/access-token.js';
 import { loadConfig } from '../lib/config.js';
+import { quarantineKeyFor } from '../lib/file-types.js';
 import { hashStoredObject } from '../lib/object-verification.js';
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from '../lib/prisma.js';
 import {
@@ -19,6 +20,7 @@ import {
   statObjectStrict,
   type StorageClients,
 } from '../lib/storage.js';
+import type { Actor } from '../policies/actor.js';
 import {
   ensureDurableLegacyFollowup,
   JOB_QUEUES,
@@ -36,8 +38,15 @@ import {
   type SavedConsentVersion,
 } from '../test-support/consent-setting.js';
 import { CONSENT_TEXT_VERSION_KEY } from './registration.service.js';
+import {
+  completeUpload,
+  deleteContent,
+  initiateUpload,
+} from './content.service.js';
+import { deleteCourseSchedule } from './course-schedule.service.js';
 import { visibleContentIds } from './library.service.js';
 import {
+  enqueueConsentSafeguardingSweep,
   enqueueConsentReevaluationForStudent,
   migrateConsentForcedContent,
   reevaluateSessionConsent,
@@ -78,6 +87,20 @@ function track(bucket: string, key: string): void {
 
 function publicObjectUrl(key: string): string {
   return `${config.MINIO_ENDPOINT}/${BUCKETS.public}/${key}`;
+}
+
+function proxiedPublicObjectUrl(key: string): string {
+  return `${config.STORAGE_BASE_URL}/${BUCKETS.public}/${key}`;
+}
+
+function adminActor(s: Pick<Scenario, 'actorId' | 'branchId'>): Actor {
+  return {
+    userId: s.actorId,
+    roles: ['admin'],
+    activeRole: 'admin',
+    accountStatus: 'active',
+    roleScopes: [{ role: 'admin', branches: [s.branchId] }],
+  };
 }
 
 function canonicalBytes(label: string): Buffer {
@@ -194,6 +217,73 @@ async function decide(
   });
 }
 
+async function replaceScenarioFile(
+  s: Scenario,
+  label: string,
+): Promise<{ key: string; bytes: Buffer }> {
+  const metadata = await prisma.educationalContent.findUniqueOrThrow({
+    where: { id: s.contentId },
+    select: {
+      levelId: true,
+      subjectId: true,
+      academicYearId: true,
+      branchId: true,
+    },
+  });
+  const bytes = canonicalBytes(label);
+  const initiated = await initiateUpload(prisma, clients, config.JWT_SIGNING_KEY, adminActor(s), {
+    filename: `${label}.pdf`,
+    size: bytes.length,
+    mime: 'application/pdf',
+    meta: {
+      ...metadata,
+      visibility: 'public',
+      origin: 'session_recording',
+      replacesContentId: s.contentId,
+    },
+  });
+  track(BUCKETS.public, initiated.key);
+  const uploaded = await fetch(initiated.putUrl, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/pdf' },
+    body: bytes,
+  });
+  expect(uploaded.status).toBe(200);
+  const unsignedStagingRead = await fetch(
+    `${config.STORAGE_BASE_URL}/${BUCKETS.public}/${initiated.key}`,
+    { redirect: 'manual' },
+  );
+  expect(unsignedStagingRead.status).toBe(302);
+  expect(
+    new URL(
+      unsignedStagingRead.headers.get('location') ?? '',
+      config.STORAGE_BASE_URL,
+    ).pathname,
+  ).toBe('/content-unavailable');
+  expect(
+    (
+      await fetch(`${config.STORAGE_BASE_URL}/${BUCKETS.public}/${initiated.key}`, {
+        method: 'HEAD',
+        redirect: 'manual',
+      })
+    ).status,
+  ).toBe(302);
+  await completeUpload(
+    prisma,
+    clients,
+    config.JWT_SIGNING_KEY,
+    adminActor(s),
+    initiated.uploadId,
+    { title: `${TAG} ${label}`, description: null },
+  );
+  const current = await prisma.educationalContent.findUniqueOrThrow({
+    where: { id: s.contentId },
+    select: { storageBucket: true, storageKey: true },
+  });
+  track(current.storageBucket, current.storageKey);
+  return { key: current.storageKey, bytes };
+}
+
 function failingPublicDelete(
   base: StorageClients,
   key: string,
@@ -226,6 +316,54 @@ async function jobCount(queue: string, field: string, value: string): Promise<nu
     WHERE name = ${queue} AND data->>${field} = ${value}
   `;
   return Number(rows[0]?.count ?? 0);
+}
+
+async function runProductionJob(
+  queue: string,
+  field: string,
+  value: string,
+  operation?: string | null,
+): Promise<void> {
+  const rows = await prisma.$queryRaw<
+    { id: string; data: Record<string, unknown> }[]
+  >`
+    SELECT id, data
+    FROM pgboss.job
+    WHERE name = ${queue}
+      AND data->>${field} = ${value}
+    ORDER BY created_on DESC
+  `;
+  const job = rows.find((candidate) => {
+    if (operation === undefined) return true;
+    if (operation === null) return candidate.data['operation'] === undefined;
+    return candidate.data['operation'] === operation;
+  });
+  if (!job) throw new Error(`no ${queue} fixture job for ${field}=${value}`);
+  const worker = createWorkerCatalog(prisma, clients, () => undefined)
+    .find((candidate) => candidate.name === queue);
+  if (!worker) throw new Error(`production catalog has no ${queue} handler`);
+  await worker.handler([{ id: job.id, data: job.data } as never]);
+}
+
+function deferred(): {
+  promise: Promise<void>;
+  resolve: () => void;
+} {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
+function twoPartyBarrier(): () => Promise<void> {
+  const release = deferred();
+  let arrivals = 0;
+  return async () => {
+    arrivals += 1;
+    if (arrivals === 2) release.resolve();
+    await release.promise;
+  };
 }
 
 async function waitUntil(
@@ -268,6 +406,12 @@ async function cleanup(): Promise<void> {
       WHERE name = ${JOB_QUEUES.consentReevaluate}
         AND data->>'session_id' = ANY(${sessionIds}::text[])
     `;
+    await prisma.sessionAudienceBranch.deleteMany({
+      where: { sessionId: { in: sessionIds } },
+    });
+    await prisma.trash.deleteMany({
+      where: { targetId: { in: sessionIds } },
+    });
   }
   await prisma.auditLog.deleteMany({
     where: {
@@ -279,7 +423,11 @@ async function cleanup(): Promise<void> {
       ],
     },
   });
+  await prisma.trash.deleteMany({ where: { deletedById: { in: userIds } } });
   await prisma.sessionContent.deleteMany({ where: { contentId: { in: contentIds } } });
+  if (contentIds.length > 0) {
+    await prisma.trash.deleteMany({ where: { targetId: { in: contentIds } } });
+  }
   await prisma.educationalContent.deleteMany({ where: { id: { in: contentIds } } });
   await prisma.consentRecord.deleteMany({
     where: {
@@ -298,6 +446,13 @@ async function cleanup(): Promise<void> {
     await deleteObject(clients, object.bucket, object.key).catch(() => undefined);
     // A migration writes the same key in private without going through `track`.
     await deleteObject(clients, BUCKETS.private, object.key).catch(() => undefined);
+    for (const contentId of contentIds) {
+      await deleteObject(
+        clients,
+        BUCKETS.private,
+        quarantineKeyFor(contentId, object.key),
+      ).catch(() => undefined);
+    }
   }
   trackedObjects.clear();
   trackedContentIds.clear();
@@ -381,10 +536,23 @@ describe('B-01 consent safeguarding', () => {
       await jobCount(JOB_QUEUES.consentReevaluate, 'session_id', s.fixture.sessionId),
     ).toBeGreaterThan(0);
 
-    await reevaluateSessionConsent(prisma, s.fixture.sessionId);
+    await runProductionJob(
+      JOB_QUEUES.consentReevaluate,
+      'session_id',
+      s.fixture.sessionId,
+    );
+    await runProductionJob(
+      JOB_QUEUES.contentBucketMigrate,
+      'content_id',
+      s.contentId,
+    );
     expect(await visibleContentIds(prisma, null, [s.contentId])).toEqual(new Set());
-    await migrateConsentForcedContent(prisma, clients, s.contentId);
     expect((await fetch(publicObjectUrl(s.key))).status).toBe(404);
+    const proxied = await fetch(proxiedPublicObjectUrl(s.key), {
+      redirect: 'manual',
+    });
+    expect(proxied.status).toBe(302);
+    expect(proxied.headers.get('location')).toBe('/content-unavailable');
 
     const mint = await fetch(`${apiBase}/content/${s.contentId}/download-url`, {
       headers: { authorization: `Bearer ${token}` },
@@ -396,6 +564,26 @@ describe('B-01 consent safeguarding', () => {
   it('withdrawal durably closes the application gate and migrates identical canonical bytes', async () => {
     const s = await scenario('withdrawal');
     expect((await fetch(publicObjectUrl(s.key))).status).toBe(200);
+    expect((await fetch(proxiedPublicObjectUrl(s.key))).status).toBe(200);
+    expect(
+      (
+        await fetch(proxiedPublicObjectUrl(s.key), {
+          method: 'HEAD',
+          redirect: 'manual',
+        })
+      ).status,
+    ).toBe(200);
+    const internalAuthorizeUrl = new URL(
+      '/internal/storage/public-authorize',
+      apiBase,
+    );
+    expect(
+      (
+        await fetch(internalAuthorizeUrl, {
+          headers: { 'x-original-uri': `/storage/public/${s.key}` },
+        })
+      ).status,
+    ).toBe(204);
     expect(await visibleContentIds(prisma, null, [s.contentId])).toEqual(
       new Set([s.contentId]),
     );
@@ -419,10 +607,37 @@ describe('B-01 consent safeguarding', () => {
       storageBucket: BUCKETS.public,
       consentForcedPrivate: true,
     });
-    // Explicit pending lifecycle: application reads fail closed while the
-    // physical public object still exists for the durable copy worker.
+    // The physical copy/delete remains a durable job, but the application and
+    // the only production object origin both consult this committed row. Direct
+    // MinIO below is deliberately the container-internal storage truth, not a
+    // production delivery path.
     expect(await visibleContentIds(prisma, null, [s.contentId])).toEqual(new Set());
     expect((await fetch(publicObjectUrl(s.key))).status).toBe(200);
+    const pendingProxy = await fetch(proxiedPublicObjectUrl(s.key), {
+      redirect: 'manual',
+    });
+    expect(pendingProxy.status).toBe(302);
+    expect(pendingProxy.headers.get('location')).toBe('/content-unavailable');
+    expect(
+      (
+        await fetch(proxiedPublicObjectUrl(s.key), {
+          method: 'HEAD',
+          redirect: 'manual',
+        })
+      ).status,
+    ).toBe(302);
+    const internalDenied = await fetch(internalAuthorizeUrl, {
+      headers: { 'x-original-uri': `/storage/public/${s.key}` },
+    });
+    expect(internalDenied.status).toBe(403);
+    expect(await internalDenied.json()).toMatchObject({
+      error: {
+        code: 'FORBIDDEN',
+        message_key: 'errors.forbidden',
+        details: {},
+        request_id: expect.any(String),
+      },
+    });
 
     expect(await migrateConsentForcedContent(prisma, clients, s.contentId)).toMatchObject({
       state: 'completed',
@@ -436,7 +651,15 @@ describe('B-01 consent safeguarding', () => {
       storageKey: s.key,
       consentForcedPrivate: true,
     });
+    // The observable commit cannot be separated from anonymous revocation.
     expect((await fetch(publicObjectUrl(s.key))).status).toBe(404);
+    expect(
+      (
+        await fetch(proxiedPublicObjectUrl(s.key), {
+          redirect: 'manual',
+        })
+      ).status,
+    ).toBe(302);
     expect(await hashStoredObject(clients, BUCKETS.private, s.key)).toEqual({
       sizeBytes: s.bytes.length,
       sha256: createHash('sha256').update(s.bytes).digest('hex'),
@@ -449,6 +672,205 @@ describe('B-01 consent safeguarding', () => {
         },
       }),
     ).toBe(2);
+  });
+
+  it('an R92 audience override transaction enqueues and safeguards a newly unsafe recording', async () => {
+    const s = await scenario('r92-audience');
+    await prisma.recurringCourseSchedule.update({
+      where: { id: s.fixture.scheduleId },
+      data: {
+        teachingMode: 'entire_level',
+        levelId: s.fixture.levelId,
+        administrativeGroupId: null,
+      },
+    });
+    const secondBranch = await prisma.branch.create({
+      data: {
+        name: `${TAG} r92 second branch`,
+        operationalStartDate: new Date('2026-01-01'),
+      },
+    });
+    const secondGroup = await prisma.administrativeGroup.create({
+      data: {
+        name: `${TAG} r92 second group`,
+        levelId: s.fixture.levelId,
+        branchId: secondBranch.id,
+      },
+    });
+    const noConsentStudent = await person('r92 no-consent student');
+    await prisma.enrollment.create({
+      data: {
+        studentId: noConsentStudent,
+        levelId: s.fixture.levelId,
+        branchId: secondBranch.id,
+        administrativeGroupId: secondGroup.id,
+      },
+    });
+    const adminRole = await prisma.role.findUniqueOrThrow({ where: { name: 'admin' } });
+    await prisma.userBranchRole.create({
+      data: { userId: s.actorId, roleId: adminRole.id, branchId: secondBranch.id },
+    });
+    const version = await prisma.session.findUniqueOrThrow({
+      where: { id: s.fixture.sessionId },
+      select: { version: true },
+    });
+    const token = issueAccessToken(
+      {
+        userId: s.actorId,
+        roleScopes: [{ role: 'admin', branches: [s.branchId, secondBranch.id] }],
+        accountStatus: 'active',
+      },
+      config.JWT_SIGNING_KEY,
+    ).token;
+
+    const changed = await fetch(
+      `${apiBase}/sessions/${s.fixture.sessionId}/audience-branches`,
+      {
+        method: 'PUT',
+        headers: {
+          authorization: `Bearer ${token}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({
+          version: version.version,
+          branch_ids: [s.branchId, secondBranch.id],
+        }),
+      },
+    );
+    expect(changed.status).toBe(200);
+    expect(
+      await jobCount(JOB_QUEUES.consentReevaluate, 'session_id', s.fixture.sessionId),
+    ).toBeGreaterThan(0);
+
+    await runProductionJob(
+      JOB_QUEUES.consentReevaluate,
+      'session_id',
+      s.fixture.sessionId,
+    );
+    await runProductionJob(
+      JOB_QUEUES.contentBucketMigrate,
+      'content_id',
+      s.contentId,
+    );
+    expect(
+      await prisma.educationalContent.findUniqueOrThrow({ where: { id: s.contentId } }),
+    ).toMatchObject({ consentForcedPrivate: true, visibility: 'private' });
+    expect((await fetch(publicObjectUrl(s.key))).status).toBe(404);
+  });
+
+  it('a consent change still reaches a protected Session after its schedule is soft-deleted', async () => {
+    const s = await scenario('retained-session');
+    const removed = await deleteCourseSchedule(
+      prisma,
+      adminActor(s),
+      s.fixture.scheduleId,
+      new Date('2026-08-24T00:00:00Z'),
+    );
+    expect(removed.retained).toBe(1);
+    expect(
+      await prisma.session.findUniqueOrThrow({ where: { id: s.fixture.sessionId } }),
+    ).toMatchObject({ deletedAt: null });
+
+    expect(await decide(s, false)).toContain(s.fixture.sessionId);
+    await runProductionJob(
+      JOB_QUEUES.consentReevaluate,
+      'session_id',
+      s.fixture.sessionId,
+    );
+    await runProductionJob(
+      JOB_QUEUES.contentBucketMigrate,
+      'content_id',
+      s.contentId,
+    );
+    expect((await fetch(publicObjectUrl(s.key))).status).toBe(404);
+  });
+
+  it('the bounded rollout sweep discovers a live recording with no historical job', async () => {
+    const s = await scenario('rollout-sweep');
+    await prisma.consentRecord.create({
+      data: {
+        studentId: s.studentId,
+        consentType: 'media_release',
+        granted: false,
+        method: 'staff_recorded',
+        consentTextVersion: 'b01-test-v1',
+        grantedByUserId: s.actorId,
+        revokedAt: new Date(),
+        revokedByUserId: s.actorId,
+      },
+    });
+    await prisma.$executeRaw`
+      DELETE FROM pgboss.job
+      WHERE (name = ${JOB_QUEUES.consentReevaluate}
+             AND data->>'session_id' = ${s.fixture.sessionId})
+         OR (name = ${JOB_QUEUES.contentBucketMigrate}
+             AND data->>'content_id' = ${s.contentId})
+    `;
+
+    const first = await enqueueConsentSafeguardingSweep(prisma, {
+      batchSize: 1,
+      onlySessionIds: [s.fixture.sessionId],
+    });
+    expect(first).toEqual({ sessionsScanned: 1, obligationsInserted: 1, batches: 1 });
+    const duplicate = await enqueueConsentSafeguardingSweep(prisma, {
+      batchSize: 1,
+      onlySessionIds: [s.fixture.sessionId],
+    });
+    expect(duplicate).toEqual({ sessionsScanned: 1, obligationsInserted: 0, batches: 1 });
+
+    await runProductionJob(
+      JOB_QUEUES.consentReevaluate,
+      'session_id',
+      s.fixture.sessionId,
+    );
+    await runProductionJob(
+      JOB_QUEUES.contentBucketMigrate,
+      'content_id',
+      s.contentId,
+    );
+    expect((await fetch(publicObjectUrl(s.key))).status).toBe(404);
+  });
+
+  it('locks a shared recording graph once in global order and gates the union audience', async () => {
+    const first = await scenario('shared-lock-first');
+    const second = await scenario('shared-lock-second');
+    await prisma.sessionContent.updateMany({
+      where: {
+        sessionId: second.fixture.sessionId,
+        contentId: second.contentId,
+        deletedAt: null,
+      },
+      data: { deletedAt: new Date(), deletedById: second.actorId },
+    });
+    await prisma.sessionContent.create({
+      data: { sessionId: second.fixture.sessionId, contentId: first.contentId },
+    });
+    await decide(second, false);
+
+    const barrier = twoPartyBarrier();
+    const discovered: string[][] = [];
+    const run = (sessionId: string) =>
+      reevaluateSessionConsent(prisma, sessionId, {
+        beforeSessionLocks: async (sessionIds) => {
+          discovered.push([...sessionIds]);
+          await barrier();
+        },
+      });
+    const outcomes = await Promise.all([
+      run(first.fixture.sessionId),
+      run(second.fixture.sessionId),
+    ]);
+
+    const expectedGraph = [first.fixture.sessionId, second.fixture.sessionId].sort();
+    expect(discovered).toEqual([expectedGraph, expectedGraph]);
+    expect(outcomes.reduce((sum, outcome) => sum + outcome.recordingsForced, 0)).toBe(1);
+    expect(outcomes.reduce((sum, outcome) => sum + outcome.migrationsEnqueued, 0)).toBe(1);
+    expect(
+      await prisma.educationalContent.findUniqueOrThrow({ where: { id: first.contentId } }),
+    ).toMatchObject({ consentForcedPrivate: true, visibility: 'public' });
+
+    await migrateConsentForcedContent(prisma, clients, first.contentId, first.key);
+    expect(await statObjectStrict(clients, BUCKETS.public, first.key)).toBeNull();
   });
 
   it('duplicates are idempotent and a grant committed before an old job runs wins', async () => {
@@ -477,6 +899,26 @@ describe('B-01 consent safeguarding', () => {
     expect(await statObjectStrict(clients, BUCKETS.private, unsafe.key)).not.toBeNull();
   });
 
+  it('never lifts a committed consent safeguard when consent is later re-granted', async () => {
+    const s = await scenario('monotonic-regrant');
+    await decide(s, false);
+    await reevaluateSessionConsent(prisma, s.fixture.sessionId);
+    expect(
+      await prisma.educationalContent.findUniqueOrThrow({ where: { id: s.contentId } }),
+    ).toMatchObject({ consentForcedPrivate: true, visibility: 'public' });
+
+    await decide(s, true);
+    await reevaluateSessionConsent(prisma, s.fixture.sessionId);
+    expect(
+      await prisma.educationalContent.findUniqueOrThrow({ where: { id: s.contentId } }),
+    ).toMatchObject({ consentForcedPrivate: true, visibility: 'public' });
+
+    await migrateConsentForcedContent(prisma, clients, s.contentId, s.key);
+    expect(
+      await prisma.educationalContent.findUniqueOrThrow({ where: { id: s.contentId } }),
+    ).toMatchObject({ consentForcedPrivate: true, visibility: 'private' });
+  });
+
   it('a transient public-delete failure stays fail-closed and retryable', async () => {
     const s = await scenario('delete-retry');
     await decide(s, false);
@@ -496,7 +938,16 @@ describe('B-01 consent safeguarding', () => {
       storageBucket: BUCKETS.public,
       consentForcedPrivate: true,
     });
+    // The physical transition remains retryable without reopening either the
+    // application read or the database-authorized public origin.
     expect(await visibleContentIds(prisma, null, [s.contentId])).toEqual(new Set());
+    expect(
+      (
+        await fetch(proxiedPublicObjectUrl(s.key), {
+          redirect: 'manual',
+        })
+      ).status,
+    ).toBe(302);
     expect(await statObjectStrict(clients, BUCKETS.public, s.key)).not.toBeNull();
     expect(await statObjectStrict(clients, BUCKETS.private, s.key)).not.toBeNull();
 
@@ -504,6 +955,9 @@ describe('B-01 consent safeguarding', () => {
       state: 'completed',
     });
     expect(await statObjectStrict(clients, BUCKETS.public, s.key)).toBeNull();
+    expect(
+      await prisma.educationalContent.findUniqueOrThrow({ where: { id: s.contentId } }),
+    ).toMatchObject({ consentForcedPrivate: true, visibility: 'private' });
   });
 
   it('recovers when public delete succeeded but the database transaction rolled back', async () => {
@@ -601,7 +1055,7 @@ describe('B-01 consent safeguarding', () => {
           });
         },
       }),
-    ).resolves.toMatchObject({ state: 'stale' });
+    ).resolves.toMatchObject({ state: 'retired' });
     expect(
       await prisma.educationalContent.findUniqueOrThrow({
         where: { id: replacement.contentId },
@@ -611,6 +1065,7 @@ describe('B-01 consent safeguarding', () => {
       sizeBytes: replacementBytes.length,
       sha256: createHash('sha256').update(replacementBytes).digest('hex'),
     });
+    expect(await statObjectStrict(clients, BUCKETS.public, replacement.key)).toBeNull();
 
     // A fresh full recompute migrates the winner, never the stale coordinate.
     await reevaluateSessionConsent(prisma, replacement.fixture.sessionId);
@@ -633,8 +1088,106 @@ describe('B-01 consent safeguarding', () => {
           });
         },
       }),
-    ).resolves.toMatchObject({ state: 'deleted' });
-    expect(await statObjectStrict(clients, BUCKETS.public, deleted.key)).not.toBeNull();
+    ).resolves.toMatchObject({ state: 'retired' });
+    expect(await statObjectStrict(clients, BUCKETS.public, deleted.key)).toBeNull();
+  });
+
+  it('replacement closes the new coordinate and durably retires the exact old public key', async () => {
+    const s = await scenario('service-replacement');
+    await decide(s, false);
+    const replacement = await replaceScenarioFile(s, 'service-replacement-winner');
+
+    const current = await prisma.educationalContent.findUniqueOrThrow({
+      where: { id: s.contentId },
+    });
+    expect(current).toMatchObject({
+      storageKey: replacement.key,
+      storageBucket: BUCKETS.public,
+      visibility: 'public',
+      consentForcedPrivate: true,
+    });
+    expect(await statObjectStrict(clients, BUCKETS.public, s.key)).toBeNull();
+    expect(await hashStoredObject(
+      clients,
+      BUCKETS.private,
+      quarantineKeyFor(s.contentId, s.key),
+    )).toEqual({
+      sizeBytes: s.bytes.length,
+      sha256: createHash('sha256').update(s.bytes).digest('hex'),
+    });
+    expect((await fetch(publicObjectUrl(replacement.key))).status).toBe(200);
+    expect(
+      (
+        await fetch(proxiedPublicObjectUrl(replacement.key), {
+          redirect: 'manual',
+        })
+      ).status,
+    ).toBe(302);
+
+    const retireJobs = await prisma.$queryRaw<
+      { source_key: string | null; singleton_key: string | null }[]
+    >`
+      SELECT data->>'source_key' AS source_key, singleton_key
+      FROM pgboss.job
+      WHERE name = ${JOB_QUEUES.contentBucketMigrate}
+        AND data->>'content_id' = ${s.contentId}
+        AND data->>'operation' = 'retire_public'
+    `;
+    expect(retireJobs).toContainEqual({
+      source_key: s.key,
+      singleton_key: `${s.contentId}:consent:${s.key}`,
+    });
+
+    await runProductionJob(
+      JOB_QUEUES.contentBucketMigrate,
+      'content_id',
+      s.contentId,
+      null,
+    );
+    expect(await hashStoredObject(clients, BUCKETS.private, replacement.key)).toEqual({
+      sizeBytes: replacement.bytes.length,
+      sha256: createHash('sha256').update(replacement.bytes).digest('hex'),
+    });
+    expect(await statObjectStrict(clients, BUCKETS.public, replacement.key)).toBeNull();
+  });
+
+  it('deletion denies the stale coordinate and recovers its exact-key retirement job', async () => {
+    const s = await scenario('service-deletion');
+    await decide(s, false);
+    await deleteContent(
+      prisma,
+      failingPublicDelete(clients, s.key, 'before'),
+      adminActor(s),
+      s.contentId,
+    );
+
+    expect(
+      await prisma.educationalContent.findUniqueOrThrow({ where: { id: s.contentId } }),
+    ).toMatchObject({ deletedAt: expect.any(Date) });
+    expect(await statObjectStrict(clients, BUCKETS.public, s.key)).not.toBeNull();
+    expect(
+      (
+        await fetch(proxiedPublicObjectUrl(s.key), {
+          redirect: 'manual',
+        })
+      ).status,
+    ).toBe(302);
+
+    await runProductionJob(
+      JOB_QUEUES.contentBucketMigrate,
+      'content_id',
+      s.contentId,
+      'retire_public',
+    );
+    expect(await statObjectStrict(clients, BUCKETS.public, s.key)).toBeNull();
+    expect(await hashStoredObject(
+      clients,
+      BUCKETS.private,
+      quarantineKeyFor(s.contentId, s.key),
+    )).toEqual({
+      sizeBytes: s.bytes.length,
+      sha256: createHash('sha256').update(s.bytes).digest('hex'),
+    });
   });
 
   it('a durable obligation survives a worker restart and drains through pg-boss', async () => {

@@ -61,7 +61,7 @@ export async function enqueue(
   queue: string,
   data: Record<string, unknown>,
   singletonKey?: string,
-): Promise<void> {
+): Promise<boolean> {
   // pg-boss 12 intentionally keeps execution policy on the QUEUE row and its
   // own `send()` copies those values into each job. A three-column raw INSERT
   // produces a row whose retry/expiry/policy contract is NULL: it may be
@@ -118,6 +118,7 @@ export async function enqueue(
   if (result[0]?.registered !== true) {
     throw new Error(`pg-boss queue is not registered: ${queue}`);
   }
+  return result[0]?.inserted === true;
 }
 
 /**

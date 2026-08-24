@@ -10,8 +10,8 @@
 # endpoint may be implemented without SRS documentation. An entry with no
 # citation is rejected by the check.
 #
-# Paths are relative to the /api/v1 prefix except /healthz (TD-14, served at
-# the origin root per §19.1 step 8).
+# Paths are relative to the /api/v1 prefix except /healthz and the explicitly
+# internal storage hook, both served at the origin root.
 #
 # CI (scripts/ci/check-openapi-td3.sh) fails when:
 #   * an endpoint is in docs/openapi.json but NOT here      → undocumented
@@ -292,3 +292,4 @@ GET /jobs/{id}                                # TD-3.7
 
 # ── Observability (TD-14)
 GET /healthz                                  # TD-14, §19.1 step 8
+GET /internal/storage/public-authorize        # §3.1 storage proxy, §4.1a/BR-2, TD-4.9; Nginx internal auth subrequest only

@@ -65,18 +65,9 @@ function assertCanManage(actor: Actor): void {
  * be for a Teaching Group or an entire Level, "the group's consent state" has no
  * referent.
  *
- * **Two things a reader will otherwise trip over:**
- *
- * - **The retiring `roster.service.ts` still enqueues `{ group_id }`.** Both
- *   shapes therefore sit in the queue during the expand phase. Nothing breaks,
- *   because `consent.reevaluate` has **no consumer yet** — the handler arrives
- *   with M6 — and the contract migration removes the old producer before it
- *   does. A handler written before then must accept both or the old rows must
- *   be drained.
- * - **This currently enqueues nothing, and that is correct.** Course schedules
- *   and sessions are not built yet (M3b, later), so no session's audience
- *   contains anybody. A student in no session enqueues no jobs, exactly as a
- *   student in no group did before — a normal outcome, not a silent failure.
+ * The production handler consumes this shape as a full recompute. A student in
+ * no live resolved Session audience still enqueues nothing; that is the exact
+ * empty affected set, not a dropped safeguarding obligation.
  */
 /**
  * §4.4b / Revision 27 — a restricted Level admits only a matching `User.sex`,

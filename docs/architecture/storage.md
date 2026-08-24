@@ -15,7 +15,7 @@ S3-compatible storage runs on the same box as everything else.
 
 | Bucket | Holds | Served how |
 |---|---|---|
-| **public** | Only content whose visibility is `public` | Stable URLs behind the reverse proxy |
+| **public** | Canonical content whose visibility is `public`, plus disposable browser-upload staging | Canonical stable URLs pass an exact live-row authorization subrequest; staging is write-only at the public origin |
 | **private** | All `private` and `hidden` content, **plus every group recording under a consent restriction** | **Never** a stable URL. Every read is a short-lived presigned URL minted after a server-side permission check |
 
 **Visibility is never encoded in the storage key.** The bucket carries it. That is what
@@ -42,6 +42,18 @@ state; a check changing visibility first would claim privacy while anonymous byt
 exist. General visibility editing remains unbuilt and cannot use this safeguarding-only arm
 as a publication path.
 
+The public bucket's anonymous S3 policy is not the production access boundary. MinIO is
+network-internal; Nginx is the only published object origin. Every canonical public GET/HEAD
+asks the API whether one undeleted row still names that exact key as public/public with
+`consent_forced_private = false`. A committed flag, replacement or deletion therefore closes
+the stable public origin immediately even while object retirement is still pending. The
+more-specific `public/staging/` proxy location preserves signed PUT bodies and refuses
+GET/HEAD, because no database row is allowed to name a browser-writable staging key.
+The canonical public location sends only GET/HEAD through that read gate. Its unchanged
+non-read SigV4 passthrough exists for still-live pre-R103 capabilities to expire normally;
+current code never mints a browser write to a canonical key, and legacy replacements are
+still refused at completion when their ticket lacks the required compare-and-swap version.
+
 ### Visibility changes move the object
 
 Switching public content to private migrates the object to the private bucket and removes
@@ -54,11 +66,11 @@ on storage 403/404 responses.
 
 The migration runs as a background job (copy, full SHA-256 verify, delete — idempotent,
 restart-safe). Object storage cannot join a database transaction, so the move is eventually
-consistent. During the pending interval the consent flag is the application fail-safe; the
-stable MinIO public URL remains readable until the worker retires it, which is the SRS's
-explicit asynchronous job boundary rather than a claim of storage atomicity. The final
-transaction deletes that public object before the row may say `private`, so there is never a
-committed private row with the old anonymous object still serving.
+consistent. During the pending interval the consent flag closes both application reads and
+the only published storage origin; only the network-internal public-bucket copy remains until
+the worker retires it. The final transaction deletes that source before the row may say
+`private`. A delete-succeeded/DB-rollback retry proves the already-copied private bytes from
+their server-written SHA-256 before completing the row transition.
 
 ## Presigned URLs
 
@@ -80,7 +92,8 @@ exactly what the browser sends through the proxy. The `/storage/` location must:
 
 - strip the `/storage` prefix when forwarding to MinIO, and
 - **rewrite the `Host` header consistently with the endpoint the signature was computed
-  for.**
+  for, including any non-default port.** The proxy uses the exact incoming HTTP Host rather
+  than Nginx's normalized host value.
 
 Any mismatch between signed host/path and proxied host/path yields
 `SignatureDoesNotMatch` — an error that looks like a credentials problem and is not.
@@ -100,6 +113,7 @@ POST /uploads/initiate
   → branch scope validated HERE (a teacher passing "global" is refused)
   → per-user quota checked and incremented, under a row lock, in one transaction
   → PUT capability addresses staging/content/... — never the future content key
+  → public-bucket staging accepts the signed PUT but is never anonymously readable
   → { upload_id, key, put_url }
 
   browser PUTs directly to storage through the proxy, with progress
@@ -288,10 +302,12 @@ The storage-facing half of [`BR-2`](../reference/business-rules.md#br-2).
 > consent, every recording linked to that Session is forced private. A recording shared by
 > Sessions uses the union of those audiences.
 
-This is a **continuously maintained invariant**, not an upload-time check. Three events
-trigger re-evaluation: a roster/Teaching Group membership change, a consent change for an
-affected beneficiary, every recording upload/import or replacement, and Session-content link
-changes. Each enqueues a full current-state job for the affected occurrence.
+This is a **continuously maintained invariant**, not an upload-time check. Re-evaluation is
+triggered by roster/Teaching Group membership changes, consent changes, recording
+upload/import/replacement, Session-content link changes and R92 occurrence-audience changes.
+Retained live occurrences remain affected after their recurring schedule is soft-deleted, and
+startup scans live recording links in bounded batches for older backlog. Every path enqueues
+the same full current-state job for the affected occurrence.
 
 A recording published while everyone consented **flips to private** when a non-consenting
 student later enrols.

@@ -5,7 +5,7 @@
 A REST API under `/api/v1`, **on the same origin as the client**. JSON in, JSON out, bearer
 authentication unless a route is explicitly public. Plural nouns, kebab-case paths.
 
-Current surface: **47 operations across 35 paths**. Full inventory:
+Current surface: **156 operations across 120 paths**. Full inventory:
 [API endpoints](../reference/api-endpoints.md).
 
 ## The contract is generated, and it is governed
@@ -58,6 +58,16 @@ strict reading, the branch and room CRUD that three other sections required woul
 | **Lists** | Paginated, always ([below](#pagination)) |
 | **Caching** | Off by default; one endpoint opts in ([below](#caching)) |
 | **Response bodies** | An explicit contract DTO, never an ORM entity ([below](#the-contract-is-an-interface-not-a-serialisation)) |
+
+### Internal infrastructure is documented, not hidden
+
+One generated operation is neither a browser API nor under `/api/v1`:
+`GET /internal/storage/public-authorize`. Nginx alone reaches it through an `internal`
+auth-subrequest while serving a canonical public object (§3.1, BR-2, TD-4.9). It is marked
+`x-internal`, has an origin-root server override, and still appears in router parity and the
+cited endpoint registry. This keeps “internal” from becoming a way to hide an undocumented
+route. The hook carries no human credential, returns no domain data, and its non-2xx responses
+still use the TD-3.8 envelope.
 
 ## The contract is an interface, not a serialisation
 
