@@ -320,10 +320,14 @@ endpoint the signature was computed for.
 
 ### B-03 rollout: let legacy direct PUT capabilities expire
 
-The B-03 application release accepts outstanding old tickets and promotes their object to a
-new canonical key, so no ticket migration or database rewrite is required. Already-completed
-rows from the old release are different: their original PUT target is their canonical key,
-and an issued presigned URL cannot be individually revoked.
+The R103 application release accepts outstanding non-replacement upload tickets through the
+SHA-256 finalizer, but **refuses every outstanding replacement ticket that lacks
+`replaces_version`**. There is no two-hour completion-ticket wait: the refusal is fail-closed
+at deployment, the old content remains authoritative, and the user simply initiates the
+replacement again. No accepted content row or historical object is rewritten.
+
+Already-completed rows from the former direct-upload release are different: their original PUT
+target is their canonical key, and an issued presigned URL cannot be individually revoked.
 
 Stop the old API before rollout and record that time. Do not declare the immutable-
 finalization invariant fully active until one PUT TTL (one hour) has passed since that stop;
@@ -333,6 +337,11 @@ or rewrite historical keys as a shortcut: either is a separate operational/data 
 with a wider blast radius. The development audit on 2026-08-24 found 11 current rows proven
 to have been created by the former direct upload path, with the newest upload audit older
 than two days, so no development URL remained live.
+
+The one-hour bound is repository-wide: `PRESIGN_TTL_SECONDS.put` is the only production PUT
+TTL and no other production presigner overrides it. R103 does not change that TTL. After the
+drain, newly accepted browser uploads use 32-hex SHA-256-based canonical identities; R99
+provider recordings retain their existing server-controlled ingestion keys.
 
 ---
 

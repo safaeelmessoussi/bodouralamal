@@ -103,11 +103,15 @@ POST /uploads/initiate
 
 POST /uploads/{upload_id}/complete
   → HEAD verifies size against the declared value and the caps
-  → server issues an ETag-conditional RANGED GET (bytes 0-511) and inspects magic bytes
+  → server opens one full staging GET (ETag conditional only as an ordinary race optimization)
+  → prefix held until magic validation; exact length + SHA-256 cover the complete stream
   → mismatch → object deleted, no record created, 409 VALIDATION_FAILED
-  → source-ETag-conditional server-side copy to a distinct content/... key
+  → exact accepted stream is PUT into unique private staging/server-finalization/...
+  → canonical 32-hex identity derives from finalization id + accepted SHA-256
+  → server-owned object is streamed to canonical PUT and re-hashed end to end
+  → server-finalization object deleted best-effort; browser never had its key or authority
   → row + mandatory audit commit together (create, or compare-and-swap replacement)
-  → staging key deleted last; a cleanup miss cannot mutate the accepted bytes
+  → client staging key deleted last; a cleanup miss cannot mutate the accepted bytes
 
 POST /uploads/{upload_id}/abort
   → deletes only unreferenced staging; best-effort because upload.gc owns abandonment
@@ -118,13 +122,23 @@ isolation. That capability is harmless after completion because it can recreate 
 only the staging key. The database always names the distinct canonical key, for which the
 browser was never given write authority.
 
-The canonical hash binds the signed finalization identity to the ETag that passed validation.
-The conditional copy therefore fails if the client changes staging after validation, while
-two retries of the same source version resolve to the same key and identical bytes. A real
-MinIO probe found that this release honors source `If-Match` but ignores CopyObject's
-destination `If-None-Match`; the design consequently does not pretend that unsupported
-condition protects anything. Different source versions derive different canonical keys, and
-database publication decides the single winner.
+The canonical version segment is the first 128 bits (32 hex characters) of
+`SHA-256("upload-finalization-sha256-v1" || NUL || finalization_id || NUL || content_sha256)`.
+The full accepted SHA-256 is written to mandatory audit detail and canonical object metadata;
+an existing retry candidate is read and checked against that full digest. The 128-bit path
+component has negligible collision probability at this application's scale while keeping the
+existing layout compact. MinIO's plaintext single-part PUT ETag is MD5, so it is explicitly
+**not byte identity**. `If-Match` can reject an ordinary overwrite between HEAD and GET, but
+no hash/key/publication decision trusts it.
+
+The private server-finalization object resolves the otherwise unavoidable key-order problem:
+the content digest is not known until the stream ends, yet the destination key includes it.
+Buffering up to 100 MB in memory was rejected. Reopening the client-writable key after hashing
+would recreate the TOCTOU. Instead, one already-open source response is validated and hashed
+while becoming an unguessable server-only object; canonical PUT reads only that immutable
+source and re-hashes it. A real equal-size/equal-MD5 PDF collision test overwrites client
+staging after the source read opens and proves MinIO finishes that request from one stable
+snapshot; canonical bytes and audit SHA-256 remain the accepted snapshot.
 
 ### `upload_id` is a signed ticket, not a database row
 
@@ -163,16 +177,40 @@ contradictory ticket before updating its storage coordinates.
 Publication is optimistic and exact: the replacement update matches the observed version,
 bucket and old canonical key, increments the version once, and writes `content.replace` in
 the same transaction. Competing tickets therefore cannot both publish or quarantine one
-another's object. The loser removes only its own ETag-derived canonical candidate; a same-
+another's object. The loser removes only its own SHA-derived canonical candidate; a same-
 ticket retry recognizes the committed finalization audit and converges without another
-version bump.
+version bump. If same-ticket readers accepted different stable client-staging snapshots,
+the mandatory audit identifies the one winner and the loser removes only its distinct key.
 
-**The server never streams or buffers the whole file to validate it.** A 512-byte window is
-enough to check magic bytes, and fetching more would put a 100 MB file through the API
-container's memory on a 4 GB box.
+An outstanding replacement ticket that has `replaces` but no `replaces_version` is a pre-B-03
+grant with no authoritative compare-and-swap observation. Completion rejects it with
+`VERSION_CONFLICT` / `REPLACEMENT_REINITIATION_REQUIRED`, discards its unreferenced upload
+object where safe, and leaves the existing content untouched. Reloading today's version was
+rejected because it would silently give an old ticket authority it never carried.
+
+**The server streams but never buffers the whole file.** Memory is bounded by storage stream
+chunks plus the first 512-byte validation window. This is deliberately limited to browser
+uploads under the existing 50/100 MB caps; R99's 500 MB provider object remains a storage-side
+copy and does not enter the process.
 
 **Declared content type is not trusted.** Magic bytes are, which is the only check that
 survives a renamed file.
+
+### Finalization failure boundaries
+
+Storage PUTs are object-atomic: a failed or short streamed request never becomes a complete
+canonical object. Source read, magic, length or hash failure publishes no row. A failed
+server-finalization or canonical PUT leaves the client staging object available for the same
+ticket to retry; the per-attempt private object is deleted best-effort. If the canonical PUT
+succeeds and the database/audit transaction fails, completion removes that unreferenced
+candidate only after the database can prove no matching publication committed. An ambiguous
+commit or cleanup outage may therefore leave an unreachable canonical or staging object for
+future `upload.gc`; it may not leave a row naming incomplete bytes.
+
+After publication, client-staging deletion is best-effort and duplicate completion uses the
+mandatory finalization audit before touching it. A retained PUT can recreate only that
+unreferenced client key. Neither post-commit cleanup failure nor later staging mutation can
+change the canonical coordinate or bytes.
 
 ### Limits
 
@@ -215,8 +253,9 @@ compatible — it is a drop-in change to the upload path only.
 ## Keys
 
 ```
-content/{content_id}/{short-random-hash}/{original-filename-slugified}.{ext}
+content/{content_id}/{version-segment}/{original-filename-slugified}.{ext}
 staging/content/{content_id}/{unguessable-nonce}/{original-filename-slugified}.{ext}
+staging/server-finalization/{content_id}/{unguessable-nonce}
 quarantine/{content_id}/…                    (soft-deleted objects)
 ```
 
@@ -224,8 +263,10 @@ Three properties, each load-bearing:
 
 **A short collision-resistant hash segment** defeats browser, proxy, and CDN caching
 collisions when a file with the same name is re-uploaded. Ordinary upload finalization uses
-128 bits derived from its signed finalization identity and verified source ETag; R99 ingestion
-uses its retry-stable recording identity. Both are server-generated and never client-writable.
+128 bits derived from its signed finalization identity and the full accepted content SHA-256;
+R99 ingestion retains its 8-hex retry-stable recording identity. Both canonical forms are
+server-generated and never client-writable. The full browser-upload SHA-256 remains in audit
+detail and object metadata even though the path uses its domain-separated 128-bit derivative.
 
 **Keys are immutable once written.** Replacing a file on an existing record generates a
 *new* key with a new hash segment and updates the database reference; the old object is
@@ -388,9 +429,10 @@ would eventually become uploadable by accident.
 
 ### Server-side object primitives
 
-`statObject` · `readObjectHead` · `copyObject` · `deleteObject`, all on the internal client and
-all **O(1) in the object's size**. The one that matters is `copyObject`: S3 and MinIO perform
-the copy *inside* the storage service, so a 500 MB recording never enters this process. The
+`statObject` · `readObjectHead` · `openObjectRead` · `putObjectStream` · `copyObject` ·
+`deleteObject`, all on the internal client. The stream primitives are bounded-memory; the
+metadata/copy/delete primitives are **O(1) in the object's size**. The R99 primitive that
+matters is `copyObject`: S3 and MinIO perform the copy *inside* the storage service, so a 500 MB recording never enters this process. The
 obvious `GetObject` → buffer → `PutObject` would put half a gigabyte through a container pinned
 at `--max-old-space-size=768` (TD-13) for every concurrent ingestion, on a 4 GB VPS (§2.4).
 That is not a tuning problem; it is the wrong mechanism.
@@ -399,9 +441,13 @@ That is not a tuning problem; it is the wrong mechanism.
 a TD-9 key carries a transliterated slug of a filename a person chose.
 
 Upload completion uses the strict stat variant: only an actual 404 means absent; a storage
-outage is never reinterpreted as permission to overwrite. Its ranged read and final copy both
-carry the verified source ETag. R99 uses the same verifier, so a provider object changing
-between HEAD and magic-byte read is likewise refused rather than accepted from two versions.
+outage is never reinterpreted as permission to overwrite. R103 then uses full-stream SHA-256
+and the private server-finalization source described above. R99 retains the ranged verifier:
+its HEAD and magic-byte read share an ETag, so an ordinary provider overwrite between those
+operations is refused. Its later verification-to-copy step is still pinned only by that
+storage ETag; because R99 gives no client a writable capability this is outside B-03, but
+stronger source pinning remains a separate hardening observation rather than being silently
+folded into the browser-upload pipeline.
 
 ## File preview behaviour
 

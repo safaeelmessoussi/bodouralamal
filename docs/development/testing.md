@@ -14,7 +14,7 @@ Four layers, each testing something the others structurally cannot.
 **Coverage: ≥ 80 % on services and policies.** No coverage gate on generated or boilerplate
 code — a coverage number that counts generated clients measures nothing.
 
-Current default CI totals: **269 backend tests across 27 files · 727 frontend tests across 57
+Current default CI totals: **270 backend tests across 27 files · 727 frontend tests across 57
 files**. The repository also contains **82 backend integration files**, but the workflow does
 not run them: they require an isolated real stack and database lifecycle that this CI slice
 does not yet provide.
@@ -67,22 +67,27 @@ public/private reads, unrelated-object isolation, `SessionContent`, and recordin
 cleanup owns exact object keys (including quarantine keys), so a green rerun cannot be borrowing
 bytes or rows from an earlier run.
 
-B-03 drives the actual presigned PUT, strict HEAD, conditional ranged read and server-side
-MinIO copy. A production hook pauses exactly after verification, replaces staging through the
-retained real PUT, then resumes the conditional copy and proves the database remains empty.
-Two-party barriers pause concurrent completions after real promotion and before database
-publication; same-ticket calls converge to one row/audit/object, while different replacement
-tickets produce one winner and one version conflict. Controlled CopyObject, audit and
-DeleteObject failures prove retry, compensating cleanup and post-commit staging cleanup. A
-stop immediately after promotion proves restart recovery reuses one canonical object rather
-than overwriting or duplicating it. Legacy outstanding and already-completed tickets exercise
-the deployment compatibility path, including the rule that abort/retry can never delete a
-canonical key still named by a row.
+B-03 drives the actual presigned PUT, strict HEAD, one full staging GET, bounded magic/length
+validation, SHA-256 hashing into private server staging, and the re-hashed canonical PUT. The
+committed collision fixture is a copyright-free pair of valid equal-size PDFs with identical
+real MD5 and different SHA-256. A production hook pauses after the real source GET is open and
+its prefix accepted, replaces staging through the retained real PUT, then proves canonical
+download and mandatory audit still match the opened snapshot's SHA-256. A separate truncated
+source fixture proves no row/canonical object appears and client staging remains retryable.
 
-The completed B-03 matrix is **47/47** in the content service and **83/83** across
-content, upload HTTP and R99 ingest. The full isolated backend integration run is
-**1,663/1,663 across 82 files**. The recorder browser harness remains **22/22** and the
-library-recorder harness **16/16** after immutable finalization.
+Two-party barriers pause concurrent completions after real canonical publication and before
+database publication; same-ticket calls converge to one row/audit/object, including when the
+two readers accepted different stable snapshots for either creation or replacement, while
+different replacement tickets produce one winner and one version conflict. Controlled canonical `PutObject`, audit and `DeleteObject`
+failures prove retry, compensating cleanup and post-commit staging cleanup. A stop immediately
+after canonical PUT proves restart recovery reuses one canonical object rather than overwriting
+or duplicating it. Legacy non-replacement and already-completed tickets retain safe compatibility;
+an outstanding replacement without `replaces_version` is rejected and must be re-initiated.
+
+The completed B-03 matrix is **50/50** in the content service and **86/86** across
+content, upload HTTP and R99 ingest. The full isolated backend integration count is recorded
+by the latest `CHANGES.log` entry after each cumulative run. The recorder browser harness and
+library-recorder harness remain the relevant browser gates.
 
 **Some of the contract lives in headers.** The shared HTTP helper therefore returns
 `res.headers` alongside status and body — the calendar bootstrap's `Cache-Control` and `ETag`
