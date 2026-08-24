@@ -56,8 +56,7 @@ export interface UploadTicketClaims {
   key: string;
   /**
    * Stable identity of one finalization grant. The canonical key is derived
-   * from this value and the ETag that passed verification, so a changed source
-   * version cannot collide with an already-promoted version. Optional only for
+   * from this value and the full accepted stream's SHA-256. Optional only for
    * tickets minted before B-03; those receive a deterministic legacy identity
    * at completion.
    */

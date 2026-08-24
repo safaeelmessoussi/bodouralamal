@@ -310,7 +310,7 @@ export function extensionOf(filename: string): string {
 }
 
 /**
- * `content/{content_id}/{short-random-hash}/{slug}.{ext}` (TD-9).
+ * `content/{content_id}/{version-segment}/{slug}.{ext}` (TD-9).
  *
  * **The hash segment is why re-uploading a file with the same name cannot be
  * masked by a cached copy** of the old one. Keys are immutable once written:
@@ -328,8 +328,8 @@ export function buildStorageKey(
    * **A DETERMINISTIC hash segment, for a caller that needs one immutable
    * version to resolve to the same key on retry.**
    *
-   * B-03 derives this from a signed finalization identity and the verified
-   * source ETag. R99 has exactly **one** object per recording, and a job that
+   * R103 derives this from a signed finalization identity and the complete
+   * accepted stream's SHA-256. R99 has exactly **one** object per recording, and a job that
    * copied the object and then failed to write the row
    * must, on retry, find its own object rather than mint a second key and leave
    * the first orphaned. Its caller passes a value derived from the recording's
@@ -362,6 +362,18 @@ export function buildUploadStagingKey(
   const ext = extensionOf(originalFilename);
   const name = slugify(originalFilename.replace(/\.[^.]*$/, ''));
   return `staging/content/${contentId}/${nonce}/${name}${ext === '' ? '' : `.${ext}`}`;
+}
+
+/**
+ * A server-only intermediate key for B-03 full-stream finalization.
+ *
+ * It deliberately shares no prefix with the browser-writable staging key and
+ * is always written with the internal storage client. A random per-attempt key
+ * prevents two concurrent completions from sharing or deleting one another's
+ * immutable source.
+ */
+export function buildServerFinalizationKey(contentId: string): string {
+  return `staging/server-finalization/${contentId}/${randomBytes(16).toString('hex')}`;
 }
 
 /** Where a soft-deleted object waits out BR-15's 90-day window (TD-9). */
