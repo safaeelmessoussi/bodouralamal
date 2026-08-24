@@ -28,12 +28,15 @@ separately prove that a healthy database plus a present `pgboss` schema cannot m
 The B-01 safeguarding suite uses real PostgreSQL, MinIO and pg-boss. It proves the public
 anonymous and Nginx-gated read before withdrawal; the committed application/public-origin
 denial while physical migration is pending; full-stream SHA-256 equality; and write-only
-public staging. Its 18 scenarios cover R92 audience changes, retained Sessions after schedule
+public staging. Its 19 scenarios cover R92 audience changes, retained Sessions after schedule
 deletion, bounded startup discovery, opposing shared-recording lock graphs, monotonic re-grant
 ordering, real upload replacement, exact old/new-key obligations, deletion before/after an
 ambiguous storage response, duplicate/stale jobs, retry, process restart, terminal failure
-observability and replacement/deletion CAS. It never deletes the historical consent backlog:
-only tagged fixture jobs receive temporary priority and all tagged rows/objects are removed.
+observability and replacement/deletion CAS. The real Nginx case additionally proves the
+external method allowlist, S3 Select/WebDAV-shaped denial before MinIO, signed-versus-unsigned
+PUT behavior, exact bucket-root denial with listing queries, and fail-closed duplicate/encoded
+path normalization. It never deletes the historical consent backlog: only tagged fixture jobs
+receive temporary priority and all tagged rows/objects are removed.
 
 ## Running them
 

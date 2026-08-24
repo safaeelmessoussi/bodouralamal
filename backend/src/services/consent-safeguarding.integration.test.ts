@@ -93,6 +93,41 @@ function proxiedPublicObjectUrl(key: string): string {
   return `${config.STORAGE_BASE_URL}/${BUCKETS.public}/${key}`;
 }
 
+const S3_SELECT_REQUEST = `<?xml version="1.0" encoding="UTF-8"?>
+<SelectObjectContentRequest xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+  <Expression>SELECT * FROM S3Object</Expression>
+  <ExpressionType>SQL</ExpressionType>
+  <InputSerialization><CSV /></InputSerialization>
+  <OutputSerialization><CSV /></OutputSerialization>
+</SelectObjectContentRequest>`;
+
+async function expectMethodDeniedAtNginx(
+  url: string,
+  method: string,
+  body?: string,
+): Promise<void> {
+  const response = await fetch(url, {
+    method,
+    ...(body === undefined
+      ? {}
+      : { body, headers: { 'content-type': 'application/xml' } }),
+    redirect: 'manual',
+  });
+  expect(response.status, `${method} ${url}`).toBe(405);
+  const responseBody = await response.text();
+  expect(responseBody.toLowerCase()).not.toContain('<error>');
+  expect(responseBody.toLowerCase()).not.toContain('<listbucketresult');
+}
+
+async function expectNoBucketListing(url: string): Promise<void> {
+  const response = await fetch(url, { redirect: 'manual' });
+  expect(response.ok, url).toBe(false);
+  expect(response.status, url).toBeGreaterThanOrEqual(400);
+  const responseBody = await response.text();
+  expect(responseBody.toLowerCase()).not.toContain('<listbucketresult');
+  expect(response.headers.get('content-type') ?? '').not.toContain('application/xml');
+}
+
 function adminActor(s: Pick<Scenario, 'actorId' | 'branchId'>): Actor {
   return {
     userId: s.actorId,
@@ -508,6 +543,125 @@ afterAll(async () => {
 });
 
 describe('B-01 consent safeguarding', () => {
+  it('allows only exact public reads and signed PUTs at the production Nginx origin', async () => {
+    const s = await scenario('nginx-public-allowlist');
+    const canonicalUrl = proxiedPublicObjectUrl(s.key);
+
+    expect((await fetch(canonicalUrl)).status).toBe(200);
+    expect((await fetch(canonicalUrl, { method: 'HEAD' })).status).toBe(200);
+
+    for (const method of ['POST', 'DELETE', 'PATCH', 'OPTIONS', 'PROPFIND']) {
+      await expectMethodDeniedAtNginx(canonicalUrl, method);
+    }
+    await expectMethodDeniedAtNginx(
+      `${canonicalUrl}?select&select-type=2`,
+      'POST',
+      S3_SELECT_REQUEST,
+    );
+
+    // PUT is the sole write-shaped exception, and MinIO must still require its
+    // SigV4 capability. An unsigned request must not overwrite canonical bytes.
+    const unsignedCanonicalPut = await fetch(canonicalUrl, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/pdf' },
+      body: canonicalBytes('unsigned-canonical-overwrite'),
+      redirect: 'manual',
+    });
+    expect(unsignedCanonicalPut.status).toBe(403);
+    expect(await hashStoredObject(clients, BUCKETS.public, s.key)).toEqual({
+      sizeBytes: s.bytes.length,
+      sha256: createHash('sha256').update(s.bytes).digest('hex'),
+    });
+
+    const initiated = await initiateUpload(
+      prisma,
+      clients,
+      config.JWT_SIGNING_KEY,
+      adminActor(s),
+      {
+        filename: 'nginx-public-allowlist.pdf',
+        size: s.bytes.length,
+        mime: 'application/pdf',
+        meta: {
+          levelId: s.fixture.levelId,
+          subjectId: s.fixture.subjectId,
+          academicYearId: (
+            await prisma.academicYear.findFirstOrThrow({ select: { id: true } })
+          ).id,
+          branchId: s.branchId,
+          visibility: 'public',
+          origin: 'session_recording',
+        },
+      },
+    );
+    track(BUCKETS.public, initiated.key);
+    const stagingUrl = `${config.STORAGE_BASE_URL}/${BUCKETS.public}/${initiated.key}`;
+    expect(
+      (
+        await fetch(initiated.putUrl, {
+          method: 'PUT',
+          headers: { 'content-type': 'application/pdf' },
+          body: s.bytes,
+        })
+      ).status,
+    ).toBe(200);
+    for (const method of ['GET', 'HEAD']) {
+      const denied = await fetch(stagingUrl, { method, redirect: 'manual' });
+      expect(denied.status, `${method} ${stagingUrl}`).toBe(302);
+      expect(
+        new URL(denied.headers.get('location') ?? '', config.STORAGE_BASE_URL).pathname,
+      ).toBe('/content-unavailable');
+    }
+    await expectMethodDeniedAtNginx(
+      `${stagingUrl}?select&select-type=2`,
+      'POST',
+      S3_SELECT_REQUEST,
+    );
+    await expectMethodDeniedAtNginx(stagingUrl, 'DELETE');
+
+    const unsignedStagingPutUrl = new URL(initiated.putUrl);
+    unsignedStagingPutUrl.search = '';
+    expect(
+      (
+        await fetch(unsignedStagingPutUrl, {
+          method: 'PUT',
+          headers: { 'content-type': 'application/pdf' },
+          body: canonicalBytes('unsigned-staging-overwrite'),
+          redirect: 'manual',
+        })
+      ).status,
+    ).toBe(403);
+    expect(await hashStoredObject(clients, BUCKETS.public, initiated.key)).toEqual({
+      sizeBytes: s.bytes.length,
+      sha256: createHash('sha256').update(s.bytes).digest('hex'),
+    });
+
+    const publicRoot = `${config.STORAGE_BASE_URL}/${BUCKETS.public}`;
+    for (const rootUrl of [
+      publicRoot,
+      `${publicRoot}?list-type=2&prefix=content%2F`,
+      `${publicRoot}/`,
+      `${publicRoot}/?list-type=2`,
+      `${config.STORAGE_BASE_URL}//${BUCKETS.public}?list-type=2`,
+      `${config.STORAGE_BASE_URL}/%70ublic?list-type=2`,
+      `${config.STORAGE_BASE_URL}/${BUCKETS.public}%2F?list-type=2`,
+    ]) {
+      await expectNoBucketListing(rootUrl);
+    }
+
+    // Nginx normalizes location matching, but the authorizer receives the
+    // original coordinate. Alternate path spellings therefore fail closed
+    // instead of slipping through the generic /storage/ proxy.
+    for (const normalizedUrl of [
+      `${config.STORAGE_BASE_URL}//${BUCKETS.public}/${s.key}`,
+      `${config.STORAGE_BASE_URL}/%70ublic/${s.key}`,
+      `${config.STORAGE_BASE_URL}/${BUCKETS.public}%2F${s.key}`,
+    ]) {
+      const response = await fetch(normalizedUrl, { redirect: 'manual' });
+      expect(response.status, normalizedUrl).not.toBe(200);
+    }
+  });
+
   it('closes the real HTTP consent-withdrawal flow and preserves authorized private mint', async () => {
     const s = await scenario('http-withdrawal');
     const token = issueAccessToken(

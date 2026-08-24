@@ -342,7 +342,12 @@ endpoint the signature was computed for. Non-default test ports are part of that
 normalizing them away invalidates the signature. Also verify a signed public-staging PUT,
 an unsigned staging GET denial, one current canonical public read, and one forced/deleted
 canonical public denial—the staging and canonical locations intentionally have different
-authorization behavior.
+authorization behavior. Inspect `nginx -T`, not only the source file, then verify that
+canonical and staging S3 Select-style POST plus DELETE receive Nginx `405`, that unsigned PUT
+still receives MinIO `403`, and that `/storage/public`, `/storage/public/` and either form with
+`?list-type=2` cannot return a bucket listing. Duplicate/encoded separator probes must either
+select the same denial or fail the exact-coordinate authorizer; none may fall through the
+generic `/storage/` proxy.
 
 ### B-03 rollout: let legacy direct PUT capabilities expire
 
