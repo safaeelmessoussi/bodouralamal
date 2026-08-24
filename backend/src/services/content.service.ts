@@ -271,16 +271,21 @@ export async function initiateUpload(
   });
   if (!year) throw new AppError('NOT_FOUND', 'no such academic year');
 
-  const visibility =
-    input.meta.visibility ?? (await categoryDefaultVisibility(prisma, input.meta.levelId));
-
   // Replacement keeps the record and its identity; only the object changes
-  // (TD-9). Resolving it here means an unauthorized replacement is refused
-  // before a presigned PUT is ever minted.
+  // (R53, TD-9). Its existing visibility is therefore authoritative: a
+  // replacement is not the distinct TD-1 visibility transition and must not
+  // choose a bucket from either a client value or the Category default.
+  // Resolving it here also means an unauthorized replacement is refused before
+  // a presigned PUT is ever minted.
   let contentId: string = randomUUID();
+  let visibility: string;
   if (input.meta.replacesContentId) {
     const existing = await loadWritableContent(prisma, actor, input.meta.replacesContentId);
     contentId = existing.id;
+    visibility = existing.visibility;
+  } else {
+    visibility =
+      input.meta.visibility ?? (await categoryDefaultVisibility(prisma, input.meta.levelId));
   }
 
   const key = buildStorageKey(contentId, input.filename);
@@ -391,6 +396,40 @@ export interface CompleteInput {
   description: string | null;
 }
 
+/**
+ * B-02 — the database visibility is the authority and the bucket follows it.
+ *
+ * Initiation derives this relationship, but completion checks it again because
+ * an upload ticket lives for two hours: a ticket minted by an older release may
+ * otherwise survive a deployment and reintroduce the contradiction. The wrong
+ * object is discarded before any database write, just like every other upload
+ * completion validation failure (§4.9).
+ */
+async function assertStoragePlacement(
+  clients: StorageClients,
+  claims: UploadTicketClaims,
+  authoritativeVisibility: string,
+): Promise<BucketName> {
+  const knownVisibility = ['public', 'private', 'hidden'].includes(
+    authoritativeVisibility,
+  );
+  const expectedBucket = bucketFor(authoritativeVisibility);
+  if (
+    !knownVisibility ||
+    claims.visibility !== authoritativeVisibility ||
+    claims.bucket !== expectedBucket
+  ) {
+    await discardObject(clients, claims.bucket, claims.key);
+    throw new AppError(
+      'VALIDATION_FAILED',
+      'upload storage placement contradicts authoritative content visibility',
+      { reason: 'VISIBILITY_STORAGE_MISMATCH' },
+      409,
+    );
+  }
+  return expectedBucket;
+}
+
 export async function completeUpload(
   prisma: PrismaClient,
   clients: StorageClients,
@@ -406,6 +445,8 @@ export async function completeUpload(
     return replaceContentFile(prisma, clients, actor, claims, input, size);
   }
 
+  const storageBucket = await assertStoragePlacement(clients, claims, claims.visibility);
+
   await prisma.$transaction(async (tx) => {
     await tx.educationalContent.create({
       data: {
@@ -417,7 +458,7 @@ export async function completeUpload(
         subjectId: claims.subject_id,
         academicYearId: claims.academic_year_id,
         branchId: claims.branch_id,
-        storageBucket: claims.bucket,
+        storageBucket,
         storageKey: claims.key,
         originalFilename: claims.filename,
         mimeType: claims.mime,
@@ -482,10 +523,22 @@ async function loadWritableContent(
   prisma: PrismaClient,
   actor: Actor,
   contentId: string,
-): Promise<{ id: string; branchId: string | null; storageBucket: string; storageKey: string }> {
+): Promise<{
+  id: string;
+  branchId: string | null;
+  visibility: string;
+  storageBucket: string;
+  storageKey: string;
+}> {
   const row = await prisma.educationalContent.findFirst({
     where: { id: contentId, deletedAt: null },
-    select: { id: true, branchId: true, storageBucket: true, storageKey: true },
+    select: {
+      id: true,
+      branchId: true,
+      visibility: true,
+      storageBucket: true,
+      storageKey: true,
+    },
   });
   // §20 rule 17: out of scope answers 404, never 403 — a 403 would confirm the
   // record exists to someone with no business knowing it does.
@@ -519,6 +572,11 @@ async function replaceContentFile(
   size: number,
 ): Promise<{ id: string }> {
   const existing = await loadWritableContent(prisma, actor, claims.cid);
+  const storageBucket = await assertStoragePlacement(
+    clients,
+    claims,
+    existing.visibility,
+  );
 
   await prisma.$transaction(async (tx) => {
     await tx.educationalContent.update({
@@ -526,7 +584,7 @@ async function replaceContentFile(
       data: {
         title: input.title,
         description: input.description,
-        storageBucket: claims.bucket,
+        storageBucket,
         storageKey: claims.key,
         originalFilename: claims.filename,
         mimeType: claims.mime,

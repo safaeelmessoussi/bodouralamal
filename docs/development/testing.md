@@ -15,7 +15,7 @@ Four layers, each testing something the others structurally cannot.
 code — a coverage number that counts generated clients measures nothing.
 
 Current default CI totals: **269 backend tests across 27 files · 727 frontend tests across 57
-files**. The repository also contains **81 backend integration files**, but the workflow does
+files**. The repository also contains **82 backend integration files**, but the workflow does
 not run them: they require an isolated real stack and database lifecycle that this CI slice
 does not yet provide.
 
@@ -58,6 +58,15 @@ Not mocks. The properties being checked **do not exist in a mock**:
 
 A mock returns whatever you told it to. The whole point of these tests is to find out what
 PostgreSQL, MinIO, and Nginx *really* do.
+
+The content/storage suite includes a focused B-02 placement matrix. It treats
+`EducationalContent.visibility` as the authority, inspects the real row and both MinIO buckets,
+and reads through the real Nginx storage boundary. The matrix covers new public/private content,
+replacement with omitted or manipulated visibility, a contradictory pre-fix ticket, anonymous
+public/private reads, unrelated-object isolation, `SessionContent`, and recording origin. Its
+cleanup owns exact object keys (including quarantine keys), so a green rerun cannot be borrowing
+bytes or rows from an earlier run. **Last run: 32/32 focused; 1,648/1,648 full integration across
+82 files.**
 
 **Some of the contract lives in headers.** The shared HTTP helper therefore returns
 `res.headers` alongside status and body — the calendar bootstrap's `Cache-Control` and `ETag`
