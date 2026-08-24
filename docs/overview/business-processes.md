@@ -93,15 +93,21 @@ Crucially, this is **not a check performed at upload time**. It is a continuousl
 maintained invariant, re-evaluated automatically whenever any of three things happen:
 
 1. a beneficiary joins/leaves/moves in an enrollment or Teaching Group, or a Session-content
-   link changes,
+   link or R92 occurrence-audience branch changes,
 2. a consent is granted or revoked for an enrolled student,
 3. a recording is uploaded, imported, or replaced.
 
+Retained live Sessions stay in this trigger graph even when their recurring schedule has been
+soft-deleted. Deployment startup also walks live recording-linked Sessions in bounded batches
+and inserts the same idempotent reevaluation obligations, so older backlog converges without a
+separate policy path.
+
 A recording published while everyone consented **flips to private** when a non-consenting
 beneficiary later joins the resolved audience, or when consent is revoked. Application reads
-fail closed when the re-evaluation commits; the durable worker copies and hashes the canonical
-bytes, retires the public object, then commits private placement. General friendly stale-link
-routing remains a separate storage/UI item.
+and the stable public storage origin fail closed when re-evaluation commits; the durable
+worker pins, copies and hashes the exact canonical key, retires its network-internal public
+copy, then commits private placement. Replacement/deletion retain exact old-key obligations,
+so stale work cannot delete newer bytes. General visibility editing remains separate.
 
 **Only an Admin can lift a consent-forced private state, and only with a written
 justification** that is recorded in the audit log. A teacher can never do it

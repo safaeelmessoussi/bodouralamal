@@ -19,7 +19,7 @@ threats that actually matter here are:
 | **A stolen session cookie** | 30-day credential | Rotation with reuse detection that kills the whole session |
 | **Login races account rejection or suspension** | Stale session-bearing state could mint a fresh session after revoke-all | User-row serialization; authoritative status re-read before issuance |
 | **Registration races staff pre-provisioning** | One verified email could become attached to two different accounts through separate tables | Shared normalized-email row lock; cross-channel re-read inside each ownership transaction |
-| **A recording is published without consent** | Safeguarding and legal exposure | Continuously re-evaluated consent gate; forced bucket migration |
+| **A recording is published without consent** | Safeguarding and legal exposure | Continuously re-evaluated monotonic consent gate; exact-row authorization on the only public object origin; forced bucket migration |
 | **Data leaves Moroccan infrastructure** | Law 09-08 violation | Fixture-only rule outside Morocco; Moroccan backup target |
 | **An implementation shortcut regresses one of the above** | The most likely of all | CI guards; tests that assert the *security property*, not the code path |
 
@@ -34,6 +34,13 @@ Everything is one origin behind Nginx, under one Let's Encrypt certificate.
 storage share an origin, cross-origin requests are not part of normal operation. The staging
 frontend runs against mocks and calls no real backend, which is what deletes the last
 exception that would otherwise have existed.
+
+The MinIO public bucket's anonymous policy is likewise not a second external origin:
+production publishes Nginx only. Canonical public GET/HEAD requests pass an internal API
+subrequest that requires an exact live public/public database coordinate with no committed
+consent lock. Browser-writable public staging has a separate signed-PUT location and refuses
+reads. A consent flag, replacement or deletion therefore revokes the stable origin before
+eventual copy/delete work completes, and direct object-store access remains network-internal.
 
 Nginx sets on client responses:
 

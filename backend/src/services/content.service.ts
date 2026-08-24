@@ -38,7 +38,14 @@ import { teacherBranchIds } from '../policies/roster-resolution.js';
 import * as audit from '../repositories/audit.repository.js';
 import { snapshot } from '../repositories/trash.repository.js';
 import { visibleContentIds } from './library.service.js';
-import { enqueueConsentReevaluationForSessions } from './consent-reevaluation.service.js';
+import {
+  enqueueConsentContentMigration,
+  enqueueConsentPublicRetirement,
+  enqueueConsentReevaluationForSessions,
+  recordingContentRequiresSafeguardUnderLocks,
+  retireConsentPublicObject,
+} from './consent-reevaluation.service.js';
+import { lockLiveSessions } from '../repositories/consent-safeguarding.repository.js';
 
 /**
  * Educational content storage — the TD-3.5 upload flow and the presigned-GET
@@ -69,15 +76,16 @@ import { enqueueConsentReevaluationForSessions } from './consent-reevaluation.se
  * every authorization decision taken at phase one and identifies one immutable
  * finalization, so `/complete` cannot restate them.
  *
- * ## What is deliberately NOT here
+ * ## Where consent joins this lifecycle
  *
  * The **consent gate** (BR-2/BR-3) attaches to a *Session's resolved audience*,
  * and content is not owned by a session — it is *referenced* by one (§4.9,
- * Revision 43). So an upload has no audience to gate at the moment it happens;
- * the gate engages when content is linked to a session, and its engine
- * (`consent.reevaluate`, §4.1a) is a separate M6 deliverable. `visibility` here
- * is the caller's choice, defaulted from the Category setting, and
- * `consent_forced_private` is left to the engine that owns it.
+ * Revision 43). A new upload has no audience at initiation, so linking/import
+ * enqueues the full current-state engine. A replacement is different: it keeps
+ * the existing links, takes their Session anchors, and must preserve or engage
+ * the monotonic consent safeguard before publishing its new coordinate.
+ * `visibility` remains the existing row's/defaulted domain tier; BR-2 may only
+ * force it toward private, never use replacement as a publication override.
  */
 
 /* ── Shared helpers ──────────────────────────────────────────────────────── */
@@ -519,6 +527,8 @@ interface WritableContent {
   id: string;
   branchId: string | null;
   visibility: string;
+  consentForcedPrivate: boolean;
+  origin: 'uploaded' | 'session_recording';
   storageBucket: string;
   storageKey: string;
   version: number;
@@ -837,12 +847,26 @@ export async function completeUpload(
       }
       await discardStagingObject(prisma, clients, claims);
       if (publication.published) {
-        await quarantineObject(
-          clients,
-          replacement.storageBucket,
-          replacement.storageKey,
-          claims.cid,
-        );
+        if (publication.retireOldPublic) {
+          try {
+            await retireConsentPublicObject(
+              clients,
+              claims.cid,
+              replacement.storageKey,
+            );
+          } catch {
+            // The exact-key TD-7 obligation committed with the replacement.
+            // Publication succeeded; a transient cleanup error must not lie to
+            // the caller or lose the durable safeguarding retry.
+          }
+        } else {
+          await quarantineObject(
+            clients,
+            replacement.storageBucket,
+            replacement.storageKey,
+            claims.cid,
+          );
+        }
       }
       return { id: claims.cid };
     }
@@ -927,6 +951,8 @@ async function loadWritableContent(
       id: true,
       branchId: true,
       visibility: true,
+      consentForcedPrivate: true,
+      origin: true,
       storageBucket: true,
       storageKey: true,
       version: true,
@@ -965,7 +991,11 @@ async function replaceContentFile(
   finalizationId: string,
   contentSha256: string,
   existing: WritableContent,
-): Promise<{ published: boolean; acceptedCanonicalKey: string }> {
+): Promise<{
+  published: boolean;
+  acceptedCanonicalKey: string;
+  retireOldPublic: boolean;
+}> {
   return prisma.$transaction(async (tx) => {
     // Replacement is an upload trigger for every occurrence already referencing
     // this recording. Session locks precede the content CAS, matching the
@@ -974,10 +1004,19 @@ async function replaceContentFile(
       where: { contentId: claims.cid, deletedAt: null, session: { deletedAt: null } },
       select: { sessionId: true },
     });
-    await enqueueConsentReevaluationForSessions(
+    const lockedSessionIds = await enqueueConsentReevaluationForSessions(
       tx,
       linkedSessions.map((link) => link.sessionId),
     );
+    const retireOldPublic =
+      existing.storageBucket === BUCKETS.public &&
+      existing.origin === 'session_recording' &&
+      (existing.consentForcedPrivate ||
+        (await recordingContentRequiresSafeguardUnderLocks(
+          tx,
+          claims.cid,
+          lockedSessionIds,
+        )));
 
     const written = await tx.educationalContent.updateMany({
       where: {
@@ -990,6 +1029,7 @@ async function replaceContentFile(
       data: {
         title: input.title,
         description: input.description,
+        ...(retireOldPublic ? { consentForcedPrivate: true } : {}),
         storageBucket: claims.bucket,
         storageKey: canonicalKey,
         originalFilename: claims.filename,
@@ -1005,6 +1045,7 @@ async function replaceContentFile(
         return {
           published: false,
           acceptedCanonicalKey: accepted.canonicalKey,
+          retireOldPublic: false,
         };
       }
       const current = await tx.educationalContent.findUnique({
@@ -1033,7 +1074,32 @@ async function replaceContentFile(
         upload_finalization_id: finalizationId,
       },
     });
-    return { published: true, acceptedCanonicalKey: canonicalKey };
+    if (retireOldPublic) {
+      if (!existing.consentForcedPrivate) {
+        await audit.write(tx, {
+          actorUserId: null,
+          actionType: 'content.visibility_change',
+          targetEntity: 'EducationalContent',
+          targetId: claims.cid,
+          detail: {
+            reason: 'consent_gate',
+            old_visibility: existing.visibility,
+            new_visibility: existing.visibility,
+            old_consent_forced_private: false,
+            new_consent_forced_private: true,
+            bucket_migration_pending: true,
+            source: 'content.replace',
+          },
+        });
+      }
+      await enqueueConsentPublicRetirement(tx, claims.cid, existing.storageKey);
+      await enqueueConsentContentMigration(tx, claims.cid, canonicalKey);
+    }
+    return {
+      published: true,
+      acceptedCanonicalKey: canonicalKey,
+      retireOldPublic,
+    };
   });
 }
 
@@ -1074,19 +1140,47 @@ export async function deleteContent(
 ): Promise<void> {
   const existing = await loadWritableContent(prisma, actor, contentId);
 
-  await prisma.$transaction(async (tx) => {
+  const retireOldPublic = await prisma.$transaction(async (tx) => {
+    const linkedSessions = await tx.sessionContent.findMany({
+      where: { contentId, deletedAt: null, session: { deletedAt: null } },
+      select: { sessionId: true },
+    });
+    const lockedSessionIds = await lockLiveSessions(
+      tx,
+      linkedSessions.map((link) => link.sessionId),
+    );
+    const retireForConsent =
+      existing.storageBucket === BUCKETS.public &&
+      existing.origin === 'session_recording' &&
+      (existing.consentForcedPrivate ||
+        (await recordingContentRequiresSafeguardUnderLocks(
+          tx,
+          contentId,
+          lockedSessionIds,
+        )));
     const row = await tx.educationalContent.findUnique({ where: { id: contentId } });
-    await tx.educationalContent.update({
-      where: { id: contentId },
+    const written = await tx.educationalContent.updateMany({
+      where: {
+        id: contentId,
+        deletedAt: null,
+        version: existing.version,
+        storageBucket: existing.storageBucket,
+        storageKey: existing.storageKey,
+      },
       data: { deletedAt: new Date(), deletedById: actor.userId },
     });
+    if (written.count === 0 || row === null) {
+      throw new AppError('VERSION_CONFLICT', 'content changed during deletion', {
+        expected_version: existing.version,
+      });
+    }
     await snapshot(tx, {
       targetEntity: 'EducationalContent',
       targetId: contentId,
       // `size_bytes` is a `BigInt`, which has no JSON representation and would
       // throw on serialisation — the snapshot has to survive the round-trip, so
       // it is stringified here rather than lost with the row it describes.
-      snapshot: { ...row, sizeBytes: row?.sizeBytes.toString() ?? null },
+      snapshot: { ...row, sizeBytes: row.sizeBytes.toString() },
       deletedById: actor.userId,
     });
     await audit.write(tx, {
@@ -1097,9 +1191,22 @@ export async function deleteContent(
       targetId: contentId,
       detail: { storage_key: existing.storageKey },
     });
+    if (retireForConsent) {
+      await enqueueConsentPublicRetirement(tx, contentId, existing.storageKey);
+    }
+    return retireForConsent;
   });
 
-  await quarantineObject(clients, existing.storageBucket, existing.storageKey, contentId);
+  if (retireOldPublic) {
+    try {
+      await retireConsentPublicObject(clients, contentId, existing.storageKey);
+    } catch {
+      // The delete and its exact-key job are already committed. A transient
+      // storage failure is retried by the existing TD-7 placement worker.
+    }
+  } else {
+    await quarantineObject(clients, existing.storageBucket, existing.storageKey, contentId);
+  }
 }
 
 /**

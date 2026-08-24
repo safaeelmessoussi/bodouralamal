@@ -8482,6 +8482,55 @@
         }
       }
     },
+    "/internal/storage/public-authorize": {
+      "servers": [
+        {
+          "url": "/",
+          "description": "Container-network infrastructure path (§3.1)"
+        }
+      ],
+      "get": {
+        "summary": "Authorize one canonical public object read (internal)",
+        "description": "Nginx auth-subrequest only; the public routing table marks the caller path `internal`. BR-2/§4.1a and TD-4.9 require the current database state to close access before eventual public-object retirement completes. `X-Original-URI` must name `/storage/public/{exact storage key}`. A live undeleted public/public row with `consent_forced_private = false` answers 204; every missing, stale, deleted, replaced or forced coordinate answers the TD-3.8 FORBIDDEN envelope. No browser or generated client calls this operation directly.",
+        "responses": {
+          "204": {
+            "description": "Exact current public coordinate is readable."
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN — absent, malformed, stale, deleted, replaced or consent-forced coordinate.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        },
+        "x-internal": true,
+        "parameters": [
+          {
+            "name": "X-Original-URI",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Original same-origin storage URI captured by Nginx."
+          }
+        ]
+      }
+    },
     "/healthz": {
       "servers": [
         {

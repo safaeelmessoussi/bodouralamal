@@ -2,7 +2,8 @@
 
 # API endpoints
 
-**89 operations across 66 paths**, all under `/api/v1` except the health check.
+**156 operations across 120 paths**, all under `/api/v1` except the health check and the
+Nginx-only storage authorization hook.
 The count comes from the generator, which reconciles against the live router — if this line
 disagrees with `openapi.json`, this line is the one that is wrong.
 
@@ -21,6 +22,12 @@ service, not by the URL prefix).
 | | Path | Audience |
 |---|---|---|
 | `GET` | `/healthz` | 🌐 Readiness for database, storage, pg-boss infrastructure (`queue`), and this process's registered workers (`jobs`). Stable worker reasons/counts live under `details.jobs`; schema presence alone is insufficient. Served at the **origin root**, not under the API prefix |
+
+## Internal infrastructure
+
+| | Path | Audience |
+|---|---|---|
+| `GET` | `/internal/storage/public-authorize` | Nginx `internal` auth subrequest only. Checks the exact current public storage coordinate against BR-2/TD-4.9; no browser or generated client calls it |
 
 ## Authentication
 

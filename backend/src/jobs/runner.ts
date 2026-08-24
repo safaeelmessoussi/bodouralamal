@@ -8,8 +8,11 @@ import { purgeExpired as purgeExpiredRefreshTokens } from '../services/refresh-t
 import { runMaterialization } from '../services/session-materialize.service.js';
 import { ingestRecording } from '../services/session-recording-ingest.service.js';
 import {
+  contentMigrationSingletonKey,
+  enqueueConsentSafeguardingSweep,
   migrateConsentForcedContent,
   reevaluateSessionConsent,
+  retireConsentPublicObject,
 } from '../services/consent-reevaluation.service.js';
 import { JobRunnerReadiness } from './readiness.js';
 import { ensureDurableLegacyFollowup } from '../repositories/jobs.repository.js';
@@ -120,7 +123,7 @@ export function createBoss(config: AppConfig): PgBoss {
  * `startJobRunner` registers this list and readiness derives its expectations
  * from the same list, so health cannot drift onto a second set of queue names.
  */
-function createWorkerCatalog(
+export function createWorkerCatalog(
   prisma: PrismaClient,
   storage: ReturnType<typeof createStorageClients>,
   log: (queue: string, detail: Record<string, unknown>) => void,
@@ -192,22 +195,42 @@ function createWorkerCatalog(
         const payload = (job?.data ?? {}) as {
           content_id?: string;
           target_bucket?: string;
+          operation?: string;
+          source_key?: string;
         };
         if (!job || !payload.content_id || payload.target_bucket !== BUCKETS.private) {
           throw new Error('content.bucket-migrate requires content_id and target_bucket=private');
         }
+        if (payload.operation === 'retire_public' && !payload.source_key) {
+          throw new Error('content.bucket-migrate retire_public requires source_key');
+        }
+        const durablePayload = {
+          content_id: payload.content_id,
+          target_bucket: BUCKETS.private,
+          ...(payload.operation === undefined ? {} : { operation: payload.operation }),
+          ...(payload.source_key === undefined ? {} : { source_key: payload.source_key }),
+        };
         await ensureDurableLegacyFollowup(
           prisma,
           job.id,
           QUEUES.contentBucketMigrate,
-          { content_id: payload.content_id, target_bucket: BUCKETS.private },
-          payload.content_id,
+          durablePayload,
+          payload.source_key === undefined
+            ? payload.content_id
+            : contentMigrationSingletonKey(payload.content_id, payload.source_key),
         );
-        const outcome = await migrateConsentForcedContent(
-          prisma,
-          storage,
-          payload.content_id,
-        );
+        const outcome = payload.operation === 'retire_public'
+          ? await retireConsentPublicObject(
+              storage,
+              payload.content_id,
+              payload.source_key!,
+            ).then(() => ({ contentId: payload.content_id!, state: 'retired' as const }))
+          : await migrateConsentForcedContent(
+              prisma,
+              storage,
+              payload.content_id,
+              payload.source_key,
+            );
         log(QUEUES.contentBucketMigrate, {
           content_id: outcome.contentId,
           state: outcome.state,
@@ -288,6 +311,17 @@ export async function startJobRunner(
       // settings forever even though startup appears to apply the constants.
       await boss.updateQueue(queue, TD7_RETRY_POLICY);
     }
+
+    // Deployment/bootstrap reconciliation runs before any handler can consume
+    // work. Readiness stays `starting` until every live recording-linked Session
+    // has an ordinary durable reevaluation obligation.
+    const sweep = await enqueueConsentSafeguardingSweep(prisma);
+    log('consent.safeguarding-sweep', {
+      sessions_scanned: sweep.sessionsScanned,
+      obligations_inserted: sweep.obligationsInserted,
+      batches: sweep.batches,
+      complete: true,
+    });
 
     for (const worker of workers) {
       await boss.work(worker.name, worker.handler);

@@ -26,12 +26,14 @@ separately prove that a healthy database plus a present `pgboss` schema cannot m
 `/healthz` green when the runner never started.
 
 The B-01 safeguarding suite uses real PostgreSQL, MinIO and pg-boss. It proves the public
-anonymous read before withdrawal, the explicit fail-closed application state, full-stream
-SHA-256 equality after migration, old-public-key retirement, duplicate idempotency, a
-grant-before-old-job ordering, delete-before-DB rollback recovery, transient TD-7 retry,
-restart recovery, terminal failure observability and stale replacement/deletion CAS. It never
-deletes the historical consent backlog: only tagged fixture jobs receive temporary priority
-and all tagged rows/objects are removed.
+anonymous and Nginx-gated read before withdrawal; the committed application/public-origin
+denial while physical migration is pending; full-stream SHA-256 equality; and write-only
+public staging. Its 18 scenarios cover R92 audience changes, retained Sessions after schedule
+deletion, bounded startup discovery, opposing shared-recording lock graphs, monotonic re-grant
+ordering, real upload replacement, exact old/new-key obligations, deletion before/after an
+ambiguous storage response, duplicate/stale jobs, retry, process restart, terminal failure
+observability and replacement/deletion CAS. It never deletes the historical consent backlog:
+only tagged fixture jobs receive temporary priority and all tagged rows/objects are removed.
 
 ## Running them
 
