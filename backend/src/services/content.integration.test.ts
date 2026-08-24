@@ -1,6 +1,21 @@
 import { randomBytes } from "node:crypto";
 
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import {
+  CopyObjectCommand,
+  DeleteObjectCommand,
+  HeadObjectCommand,
+  ListObjectsV2Command,
+} from "@aws-sdk/client-s3";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+} from "vitest";
 
 import { loadConfig } from "../lib/config.js";
 import { quarantineKeyFor } from "../lib/file-types.js";
@@ -19,6 +34,7 @@ import {
   type UploadTicketClaims,
 } from "../lib/upload-token.js";
 import type { Actor } from "../policies/actor.js";
+import * as audit from "../repositories/audit.repository.js";
 import {
   createTeachingContext,
   staff,
@@ -127,6 +143,30 @@ async function putObject(
     headers: { "content-type": mime },
   });
   return res.status;
+}
+
+async function keysUnder(bucket: string, prefix: string): Promise<string[]> {
+  const listed = await clients.internal.send(
+    new ListObjectsV2Command({ Bucket: bucket, Prefix: prefix }),
+  );
+  const keys = (listed.Contents ?? []).flatMap((entry) =>
+    entry.Key === undefined ? [] : [entry.Key],
+  );
+  for (const key of keys) trackObject(bucket, key);
+  return keys;
+}
+
+function twoPartyBarrier(): () => Promise<void> {
+  let arrived = 0;
+  let release!: () => void;
+  const bothArrived = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return async () => {
+    arrived += 1;
+    if (arrived === 2) release();
+    await bothArrived;
+  };
 }
 
 /**
@@ -301,6 +341,10 @@ beforeEach(async () => {
   });
 });
 
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
 afterAll(async () => {
   await clear();
   await prisma.$disconnect();
@@ -354,7 +398,12 @@ async function uploadPdf(
       description: null,
     },
   );
-  return { ...created, initiated, bytes };
+  const stored = await prisma.educationalContent.findUniqueOrThrow({
+    where: { id: created.id },
+    select: { storageBucket: true, storageKey: true },
+  });
+  trackObject(stored.storageBucket, stored.storageKey);
+  return { ...created, ...stored, initiated, bytes };
 }
 
 /**
@@ -398,13 +447,14 @@ describe("the two-phase upload (TD-3.5)", () => {
     const row = await prisma.educationalContent.findUniqueOrThrow({
       where: { id },
     });
-    expect(row.storageKey).toBe(initiated.key);
+    expect(row.storageKey).not.toBe(initiated.key);
+    expect(initiated.key).toMatch(/^staging\/content\//);
     expect(row.storageBucket).toBe(BUCKETS.private);
     expect(Number(row.sizeBytes)).toBe(bytes.length);
     // TD-9: the true filename is kept verbatim; the key carries a slug of it.
     expect(row.originalFilename).toBe("درس القرآن.pdf");
     expect(row.storageKey).toMatch(
-      /^content\/[0-9a-f-]{36}\/[0-9a-f]{8}\/drs-alqran\.pdf$/,
+      /^content\/[0-9a-f-]{36}\/[0-9a-f]{32}\/drs-alqran\.pdf$/,
     );
   });
 
@@ -633,7 +683,7 @@ describe("abort", () => {
       meta: meta() as never,
     });
     await putObject(initiated.putUrl, bytes, "application/pdf");
-    await abortUpload(clients, KEY, admin(), initiated.uploadId);
+    await abortUpload(prisma, clients, KEY, admin(), initiated.uploadId);
 
     const e = await failure(() =>
       completeUpload(prisma, clients, KEY, admin(), initiated.uploadId, {
@@ -755,6 +805,608 @@ describe("the presigned GET mint (TD-3.5, TD-12)", () => {
   });
 });
 
+describe("B-03 — immutable upload finalization", () => {
+  it("promotes exact validated bytes to a distinct canonical key and removes staging", async () => {
+    const uploaded = await uploadPdf(admin(), "ترقية آمنة");
+    const ticket = trackTicket(uploaded.initiated.uploadId);
+
+    expect(ticket.key).toBe(uploaded.initiated.key);
+    expect(ticket.finalization_id).toMatch(/^[0-9a-f-]{36}$/);
+    expect(uploaded.storageKey).not.toBe(ticket.key);
+    expect(uploaded.storageKey.startsWith(`content/${uploaded.id}/`)).toBe(true);
+    expect(await statObject(clients, ticket.bucket, ticket.key)).toBeNull();
+
+    const download = await mintDownloadUrl(
+      prisma,
+      clients,
+      admin(),
+      uploaded.id,
+      undefined,
+    );
+    const bytes = Buffer.from(await (await fetch(download.url)).arrayBuffer());
+    expect(bytes.equals(uploaded.bytes)).toBe(true);
+  });
+
+  it("a retained completed-upload PUT can mutate staging but never canonical bytes", async () => {
+    const uploaded = await uploadPdf(admin(), "رابط محتفظ به", {
+      visibility: "public",
+    });
+    const changed = pdfBytes();
+    expect(changed.equals(uploaded.bytes)).toBe(false);
+
+    // The original capability remains cryptographically valid for one hour,
+    // but after completion it addresses only the deleted staging key.
+    expect(
+      await putObject(uploaded.initiated.putUrl, changed, "application/pdf"),
+    ).toBe(200);
+    expect(
+      await statObject(clients, BUCKETS.public, uploaded.initiated.key),
+    ).toMatchObject({ sizeBytes: changed.length });
+
+    const row = await prisma.educationalContent.findUniqueOrThrow({
+      where: { id: uploaded.id },
+    });
+    expect(row.storageKey).toBe(uploaded.storageKey);
+    const canonical = await fetch(stableObjectUrl(BUCKETS.public, row.storageKey));
+    expect(Buffer.from(await canonical.arrayBuffer()).equals(uploaded.bytes)).toBe(true);
+  });
+
+  it("forces the validation-to-copy TOCTOU and refuses a changed source version", async () => {
+    const first = pdfBytes();
+    const second = pdfBytes();
+    const initiated = await initiateUpload(prisma, clients, KEY, admin(), {
+      filename: "race.pdf",
+      size: first.length,
+      mime: "application/pdf",
+      meta: meta() as never,
+    });
+    const ticket = trackTicket(initiated.uploadId);
+    expect(await putObject(initiated.putUrl, first, "application/pdf")).toBe(200);
+
+    const e = await failure(() =>
+      completeUpload(
+        prisma,
+        clients,
+        KEY,
+        admin(),
+        initiated.uploadId,
+        { title: `${TAG} سباق`, description: null },
+        {
+          afterVerification: async () => {
+            expect(
+              await putObject(initiated.putUrl, second, "application/pdf"),
+            ).toBe(200);
+          },
+        },
+      ),
+    );
+
+    expect(e.code).toBe("VALIDATION_FAILED");
+    expect(e.status).toBe(409);
+    expect(e.details?.["reason"]).toBe("OBJECT_CHANGED_DURING_PROMOTION");
+    expect(await prisma.educationalContent.findUnique({ where: { id: ticket.cid } })).toBeNull();
+    expect(await keysUnder(ticket.bucket, `content/${ticket.cid}/`)).toEqual([]);
+    expect(await statObject(clients, ticket.bucket, ticket.key)).toMatchObject({
+      sizeBytes: second.length,
+    });
+  });
+
+  it("keeps staging retryable when canonical promotion fails, then succeeds", async () => {
+    const bytes = pdfBytes();
+    const initiated = await initiateUpload(prisma, clients, KEY, admin(), {
+      filename: "copy-retry.pdf",
+      size: bytes.length,
+      mime: "application/pdf",
+      meta: meta() as never,
+    });
+    const ticket = trackTicket(initiated.uploadId);
+    expect(await putObject(initiated.putUrl, bytes, "application/pdf")).toBe(200);
+
+    const realSend = clients.internal.send.bind(clients.internal);
+    let failCopy = true;
+    const copyFailure = vi.spyOn(clients.internal, "send").mockImplementation(
+      async (command, ...args) => {
+        if (failCopy && command instanceof CopyObjectCommand) {
+          failCopy = false;
+          throw new Error("controlled copy failure");
+        }
+        return realSend(command, ...args);
+      },
+    );
+
+    const e = await failure(() =>
+      completeUpload(prisma, clients, KEY, admin(), initiated.uploadId, {
+        title: `${TAG} نسخ معاد`,
+        description: null,
+      }),
+    );
+    expect(e.code).toBe("SERVICE_UNAVAILABLE");
+    expect(await prisma.educationalContent.findUnique({ where: { id: ticket.cid } })).toBeNull();
+    expect(await statObject(clients, ticket.bucket, ticket.key)).not.toBeNull();
+    expect(await keysUnder(ticket.bucket, `content/${ticket.cid}/`)).toEqual([]);
+
+    copyFailure.mockRestore();
+    await expect(
+      completeUpload(prisma, clients, KEY, admin(), initiated.uploadId, {
+        title: `${TAG} نسخ معاد`,
+        description: null,
+      }),
+    ).resolves.toEqual({ id: ticket.cid });
+  });
+
+  it("maps a storage verification outage to 503 and creates no row", async () => {
+    const bytes = pdfBytes();
+    const initiated = await initiateUpload(prisma, clients, KEY, admin(), {
+      filename: "head-outage.pdf",
+      size: bytes.length,
+      mime: "application/pdf",
+      meta: meta() as never,
+    });
+    const ticket = trackTicket(initiated.uploadId);
+    expect(await putObject(initiated.putUrl, bytes, "application/pdf")).toBe(200);
+    const realSend = clients.internal.send.bind(clients.internal);
+    const headFailure = vi.spyOn(clients.internal, "send").mockImplementation(
+      async (command, ...args) => {
+        if (
+          command instanceof HeadObjectCommand &&
+          command.input.Key === ticket.key
+        ) {
+          throw new Error("controlled HEAD outage");
+        }
+        return realSend(command, ...args);
+      },
+    );
+
+    const e = await failure(() =>
+      completeUpload(prisma, clients, KEY, admin(), initiated.uploadId, {
+        title: `${TAG} تخزين متوقف`,
+        description: null,
+      }),
+    );
+    expect(e).toMatchObject({
+      code: "SERVICE_UNAVAILABLE",
+      status: 503,
+      details: { reason: "STORAGE_VERIFICATION_FAILED" },
+    });
+    expect(await prisma.educationalContent.findUnique({ where: { id: ticket.cid } })).toBeNull();
+    headFailure.mockRestore();
+    expect(await statObject(clients, ticket.bucket, ticket.key)).not.toBeNull();
+  });
+
+  it("rolls back audit/DB failure and removes the unreferenced canonical copy", async () => {
+    const bytes = pdfBytes();
+    const initiated = await initiateUpload(prisma, clients, KEY, admin(), {
+      filename: "db-rollback.pdf",
+      size: bytes.length,
+      mime: "application/pdf",
+      meta: meta() as never,
+    });
+    const ticket = trackTicket(initiated.uploadId);
+    expect(await putObject(initiated.putUrl, bytes, "application/pdf")).toBe(200);
+
+    const realWrite = audit.write;
+    const auditFailure = vi.spyOn(audit, "write").mockImplementation(async (db, entry) => {
+      if (entry.actionType === "content.upload" && entry.targetId === ticket.cid) {
+        throw new Error("controlled content audit failure");
+      }
+      return realWrite(db, entry);
+    });
+
+    await expect(
+      completeUpload(prisma, clients, KEY, admin(), initiated.uploadId, {
+        title: `${TAG} معاملة فاشلة`,
+        description: null,
+      }),
+    ).rejects.toThrow("controlled content audit failure");
+    expect(await prisma.educationalContent.findUnique({ where: { id: ticket.cid } })).toBeNull();
+    expect(await keysUnder(ticket.bucket, `content/${ticket.cid}/`)).toEqual([]);
+    expect(await statObject(clients, ticket.bucket, ticket.key)).not.toBeNull();
+
+    auditFailure.mockRestore();
+    await expect(
+      completeUpload(prisma, clients, KEY, admin(), initiated.uploadId, {
+        title: `${TAG} معاملة ناجحة`,
+        description: null,
+      }),
+    ).resolves.toEqual({ id: ticket.cid });
+  });
+
+  it("recovers after a stop between promotion and DB finalization without another object", async () => {
+    const bytes = pdfBytes();
+    const initiated = await initiateUpload(prisma, clients, KEY, admin(), {
+      filename: "restart.pdf",
+      size: bytes.length,
+      mime: "application/pdf",
+      meta: meta() as never,
+    });
+    const ticket = trackTicket(initiated.uploadId);
+    expect(await putObject(initiated.putUrl, bytes, "application/pdf")).toBe(200);
+
+    await expect(
+      completeUpload(
+        prisma,
+        clients,
+        KEY,
+        admin(),
+        initiated.uploadId,
+        { title: `${TAG} قبل التوقف`, description: null },
+        {
+          afterPromotion: async () => {
+            throw new Error("simulated process stop after promotion");
+          },
+        },
+      ),
+    ).rejects.toThrow("simulated process stop after promotion");
+    expect(await prisma.educationalContent.findUnique({ where: { id: ticket.cid } })).toBeNull();
+    expect(await keysUnder(ticket.bucket, `content/${ticket.cid}/`)).toHaveLength(1);
+
+    await expect(
+      completeUpload(prisma, clients, KEY, admin(), initiated.uploadId, {
+        title: `${TAG} بعد الاستئناف`,
+        description: null,
+      }),
+    ).resolves.toEqual({ id: ticket.cid });
+    expect(await keysUnder(ticket.bucket, `content/${ticket.cid}/`)).toHaveLength(1);
+    expect(
+      await prisma.auditLog.count({
+        where: { actionType: "content.upload", targetId: ticket.cid },
+      }),
+    ).toBe(1);
+  });
+
+  it("keeps accepted content intact when staging cleanup fails and converges on retry", async () => {
+    const bytes = pdfBytes();
+    const initiated = await initiateUpload(prisma, clients, KEY, admin(), {
+      filename: "cleanup.pdf",
+      size: bytes.length,
+      mime: "application/pdf",
+      meta: meta() as never,
+    });
+    const ticket = trackTicket(initiated.uploadId);
+    expect(await putObject(initiated.putUrl, bytes, "application/pdf")).toBe(200);
+
+    const realSend = clients.internal.send.bind(clients.internal);
+    let failDelete = true;
+    const cleanupFailure = vi.spyOn(clients.internal, "send").mockImplementation(
+      async (command, ...args) => {
+        if (
+          failDelete &&
+          command instanceof DeleteObjectCommand &&
+          command.input.Key === ticket.key
+        ) {
+          failDelete = false;
+          throw new Error("controlled staging cleanup failure");
+        }
+        return realSend(command, ...args);
+      },
+    );
+
+    await expect(
+      completeUpload(prisma, clients, KEY, admin(), initiated.uploadId, {
+        title: `${TAG} تنظيف`,
+        description: null,
+      }),
+    ).resolves.toEqual({ id: ticket.cid });
+    const row = await prisma.educationalContent.findUniqueOrThrow({
+      where: { id: ticket.cid },
+    });
+    trackObject(row.storageBucket, row.storageKey);
+    expect(await statObject(clients, ticket.bucket, ticket.key)).not.toBeNull();
+    expect(await statObject(clients, row.storageBucket, row.storageKey)).not.toBeNull();
+
+    cleanupFailure.mockRestore();
+    await expect(
+      completeUpload(prisma, clients, KEY, admin(), initiated.uploadId, {
+        title: `${TAG} لا يتكرر`,
+        description: null,
+      }),
+    ).resolves.toEqual({ id: ticket.cid });
+    expect(await statObject(clients, ticket.bucket, ticket.key)).toBeNull();
+    expect(
+      await prisma.auditLog.count({
+        where: { actionType: "content.upload", targetId: ticket.cid },
+      }),
+    ).toBe(1);
+  });
+
+  it("duplicate and concurrent same-ticket completion publish once", async () => {
+    const bytes = pdfBytes();
+    const initiated = await initiateUpload(prisma, clients, KEY, admin(), {
+      filename: "duplicate.pdf",
+      size: bytes.length,
+      mime: "application/pdf",
+      meta: meta() as never,
+    });
+    const ticket = trackTicket(initiated.uploadId);
+    expect(await putObject(initiated.putUrl, bytes, "application/pdf")).toBe(200);
+    const barrier = twoPartyBarrier();
+    const complete = () =>
+      completeUpload(
+        prisma,
+        clients,
+        KEY,
+        admin(),
+        initiated.uploadId,
+        { title: `${TAG} متزامن`, description: null },
+        { afterPromotion: barrier },
+      );
+
+    await expect(Promise.all([complete(), complete()])).resolves.toEqual([
+      { id: ticket.cid },
+      { id: ticket.cid },
+    ]);
+    await expect(
+      completeUpload(prisma, clients, KEY, admin(), initiated.uploadId, {
+        title: `${TAG} تكرار لاحق`,
+        description: null,
+      }),
+    ).resolves.toEqual({ id: ticket.cid });
+
+    expect(await prisma.educationalContent.count({ where: { id: ticket.cid } })).toBe(1);
+    expect(
+      await prisma.auditLog.count({
+        where: { actionType: "content.upload", targetId: ticket.cid },
+      }),
+    ).toBe(1);
+    expect(await keysUnder(ticket.bucket, `content/${ticket.cid}/`)).toHaveLength(1);
+  });
+
+  it("competing replacements serialize: one wins, one conflicts, old bytes stay quarantined", async () => {
+    const original = await uploadPdf(admin(), "أصل التنافس");
+    const before = await prisma.educationalContent.findUniqueOrThrow({
+      where: { id: original.id },
+    });
+    const makeReplacement = async (filename: string, bytes: Buffer) => {
+      const initiated = await initiateUpload(prisma, clients, KEY, admin(), {
+        filename,
+        size: bytes.length,
+        mime: "application/pdf",
+        meta: meta({ replacesContentId: original.id }) as never,
+      });
+      trackTicket(initiated.uploadId);
+      expect(await putObject(initiated.putUrl, bytes, "application/pdf")).toBe(200);
+      return initiated;
+    };
+    const aBytes = pdfBytes();
+    const bBytes = pdfBytes();
+    const a = await makeReplacement("a.pdf", aBytes);
+    const b = await makeReplacement("b.pdf", bBytes);
+    const barrier = twoPartyBarrier();
+    const run = (uploadId: string, title: string) =>
+      completeUpload(
+        prisma,
+        clients,
+        KEY,
+        admin(),
+        uploadId,
+        { title, description: null },
+        { afterPromotion: barrier },
+      );
+    const results = await Promise.allSettled([
+      run(a.uploadId, `${TAG} فائز أ`),
+      run(b.uploadId, `${TAG} فائز ب`),
+    ]);
+
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+    const rejected = results.find((result) => result.status === "rejected");
+    expect(rejected).toMatchObject({ reason: { code: "VERSION_CONFLICT" } });
+    const after = await prisma.educationalContent.findUniqueOrThrow({
+      where: { id: original.id },
+    });
+    trackObject(after.storageBucket, after.storageKey);
+    trackObject(
+      before.storageBucket,
+      quarantineKeyFor(original.id, before.storageKey),
+    );
+    expect(after.version).toBe(before.version + 1);
+    expect(
+      await prisma.auditLog.count({
+        where: { actionType: "content.replace", targetId: original.id },
+      }),
+    ).toBe(1);
+    expect(await statObject(clients, before.storageBucket, before.storageKey)).toBeNull();
+    expect(
+      await statObject(
+        clients,
+        before.storageBucket,
+        quarantineKeyFor(original.id, before.storageKey),
+      ),
+    ).not.toBeNull();
+    expect(await keysUnder(after.storageBucket, `content/${original.id}/`)).toEqual([
+      after.storageKey,
+    ]);
+  });
+
+  it("a failed replacement copy preserves the old canonical row and bytes", async () => {
+    const original = await uploadPdf(admin(), "أصل محفوظ");
+    const before = await prisma.educationalContent.findUniqueOrThrow({
+      where: { id: original.id },
+    });
+    const bytes = pdfBytes();
+    const replacement = await initiateUpload(prisma, clients, KEY, admin(), {
+      filename: "failed-copy.pdf",
+      size: bytes.length,
+      mime: "application/pdf",
+      meta: meta({ replacesContentId: original.id }) as never,
+    });
+    trackTicket(replacement.uploadId);
+    expect(await putObject(replacement.putUrl, bytes, "application/pdf")).toBe(200);
+
+    const realSend = clients.internal.send.bind(clients.internal);
+    const copyFailure = vi.spyOn(clients.internal, "send").mockImplementation(
+      async (command, ...args) => {
+        if (command instanceof CopyObjectCommand) {
+          throw new Error("controlled replacement copy failure");
+        }
+        return realSend(command, ...args);
+      },
+    );
+    const e = await failure(() =>
+      completeUpload(prisma, clients, KEY, admin(), replacement.uploadId, {
+        title: `${TAG} لا ينشر`,
+        description: null,
+      }),
+    );
+    expect(e.code).toBe("SERVICE_UNAVAILABLE");
+    expect(
+      await prisma.educationalContent.findUniqueOrThrow({ where: { id: original.id } }),
+    ).toEqual(before);
+    copyFailure.mockRestore();
+
+    const download = await mintDownloadUrl(
+      prisma,
+      clients,
+      admin(),
+      original.id,
+      undefined,
+    );
+    expect(
+      Buffer.from(await (await fetch(download.url)).arrayBuffer()).equals(original.bytes),
+    ).toBe(true);
+  });
+
+  it("a failed replacement validation never changes or quarantines the old canonical object", async () => {
+    const original = await uploadPdf(admin(), "أصل قبل رفض التحقق");
+    const before = await prisma.educationalContent.findUniqueOrThrow({
+      where: { id: original.id },
+    });
+    const fakePdf = Buffer.concat([
+      Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      randomBytes(200),
+    ]);
+    const replacement = await initiateUpload(prisma, clients, KEY, admin(), {
+      filename: "invalid.pdf",
+      size: fakePdf.length,
+      mime: "application/pdf",
+      meta: meta({ replacesContentId: original.id }) as never,
+    });
+    trackTicket(replacement.uploadId);
+    expect(
+      await putObject(replacement.putUrl, fakePdf, "application/pdf"),
+    ).toBe(200);
+
+    const e = await failure(() =>
+      completeUpload(prisma, clients, KEY, admin(), replacement.uploadId, {
+        title: `${TAG} مرفوض`,
+        description: null,
+      }),
+    );
+    expect(e).toMatchObject({ code: "VALIDATION_FAILED", status: 409 });
+    expect(
+      await prisma.educationalContent.findUniqueOrThrow({ where: { id: original.id } }),
+    ).toEqual(before);
+    expect(await statObject(clients, before.storageBucket, before.storageKey)).not.toBeNull();
+    expect(
+      await statObject(
+        clients,
+        before.storageBucket,
+        quarantineKeyFor(original.id, before.storageKey),
+      ),
+    ).toBeNull();
+  });
+
+  it("completes an outstanding legacy ticket through promotion and retries idempotently", async () => {
+    const contentId = crypto.randomUUID();
+    const bytes = pdfBytes();
+    const legacyKey = `content/${contentId}/${randomBytes(4).toString("hex")}/legacy.pdf`;
+    const uploadId = issueUploadTicket(
+      {
+        sub: adminId,
+        cid: contentId,
+        bucket: BUCKETS.private,
+        key: legacyKey,
+        filename: "legacy.pdf",
+        mime: "application/pdf",
+        size: bytes.length,
+        level_id: levelId,
+        subject_id: subjectId,
+        academic_year_id: academicYearId,
+        branch_id: branchId,
+        visibility: "private",
+      },
+      KEY,
+    ).token;
+    trackObject(BUCKETS.private, legacyKey);
+    const putUrl = await presignPutUrl(clients, BUCKETS.private, legacyKey);
+    expect(await putObject(putUrl, bytes, "application/pdf")).toBe(200);
+
+    await expect(
+      completeUpload(prisma, clients, KEY, admin(), uploadId, {
+        title: `${TAG} تذكرة قديمة`,
+        description: null,
+      }),
+    ).resolves.toEqual({ id: contentId });
+    const row = await prisma.educationalContent.findUniqueOrThrow({
+      where: { id: contentId },
+    });
+    trackObject(row.storageBucket, row.storageKey);
+    expect(row.storageKey).not.toBe(legacyKey);
+    expect(await statObject(clients, BUCKETS.private, legacyKey)).toBeNull();
+    await expect(
+      completeUpload(prisma, clients, KEY, admin(), uploadId, {
+        title: `${TAG} لا يتكرر`,
+        description: null,
+      }),
+    ).resolves.toEqual({ id: contentId });
+    expect(
+      await prisma.auditLog.count({
+        where: { actionType: "content.upload", targetId: contentId },
+      }),
+    ).toBe(1);
+  });
+
+  it("never deletes a canonical row named by an already-completed legacy ticket", async () => {
+    const uploaded = await uploadPdf(admin(), "قديم مكتمل");
+    const legacyCompleted = issueUploadTicket(
+      {
+        sub: adminId,
+        cid: uploaded.id,
+        bucket: uploaded.storageBucket,
+        key: uploaded.storageKey,
+        filename: "legacy-completed.pdf",
+        mime: "application/pdf",
+        size: uploaded.bytes.length,
+        level_id: levelId,
+        subject_id: subjectId,
+        academic_year_id: academicYearId,
+        branch_id: branchId,
+        visibility: "private",
+      },
+      KEY,
+    ).token;
+
+    await expect(
+      completeUpload(prisma, clients, KEY, admin(), legacyCompleted, {
+        title: `${TAG} لا يعاد`,
+        description: null,
+      }),
+    ).resolves.toEqual({ id: uploaded.id });
+    await abortUpload(prisma, clients, KEY, admin(), legacyCompleted);
+    expect(
+      await statObject(clients, uploaded.storageBucket, uploaded.storageKey),
+    ).toMatchObject({ sizeBytes: uploaded.bytes.length });
+  });
+
+  it("completing one upload never touches an unrelated staging object", async () => {
+    const unrelatedBytes = pdfBytes();
+    const unrelated = await initiateUpload(prisma, clients, KEY, admin(), {
+      filename: "unrelated.pdf",
+      size: unrelatedBytes.length,
+      mime: "application/pdf",
+      meta: meta() as never,
+    });
+    const unrelatedTicket = trackTicket(unrelated.uploadId);
+    expect(
+      await putObject(unrelated.putUrl, unrelatedBytes, "application/pdf"),
+    ).toBe(200);
+
+    await uploadPdf(admin(), "لا يلمس غيره");
+    expect(
+      await statObject(clients, unrelatedTicket.bucket, unrelatedTicket.key),
+    ).toMatchObject({ sizeBytes: unrelatedBytes.length });
+  });
+});
+
 describe("B-02 — authoritative visibility/storage placement", () => {
   it("stores new private content only in private storage and never serves it anonymously", async () => {
     const { id, initiated, bytes } = await uploadPdf(admin(), "خاص جديد");
@@ -764,13 +1416,14 @@ describe("B-02 — authoritative visibility/storage placement", () => {
 
     expect(row.visibility).toBe("private");
     expect(row.storageBucket).toBe(BUCKETS.private);
-    expect(await statObject(clients, BUCKETS.private, initiated.key)).toMatchObject({
+    expect(await statObject(clients, BUCKETS.private, row.storageKey)).toMatchObject({
       sizeBytes: bytes.length,
     });
-    expect(await statObject(clients, BUCKETS.public, initiated.key)).toBeNull();
+    expect(await statObject(clients, BUCKETS.private, initiated.key)).toBeNull();
+    expect(await statObject(clients, BUCKETS.public, row.storageKey)).toBeNull();
 
     const anonymous = await fetch(
-      stableObjectUrl(BUCKETS.private, initiated.key),
+      stableObjectUrl(BUCKETS.private, row.storageKey),
       { redirect: "manual" },
     );
     expect(anonymous.status).toBe(302);
@@ -797,12 +1450,13 @@ describe("B-02 — authoritative visibility/storage placement", () => {
 
     expect(row.visibility).toBe("public");
     expect(row.storageBucket).toBe(BUCKETS.public);
-    expect(await statObject(clients, BUCKETS.public, initiated.key)).toMatchObject({
+    expect(await statObject(clients, BUCKETS.public, row.storageKey)).toMatchObject({
       sizeBytes: bytes.length,
     });
-    expect(await statObject(clients, BUCKETS.private, initiated.key)).toBeNull();
+    expect(await statObject(clients, BUCKETS.public, initiated.key)).toBeNull();
+    expect(await statObject(clients, BUCKETS.private, row.storageKey)).toBeNull();
 
-    const anonymous = await fetch(stableObjectUrl(BUCKETS.public, initiated.key));
+    const anonymous = await fetch(stableObjectUrl(BUCKETS.public, row.storageKey));
     expect(anonymous.status).toBe(200);
     expect(Buffer.from(await anonymous.arrayBuffer()).equals(bytes)).toBe(true);
   });
@@ -811,7 +1465,7 @@ describe("B-02 — authoritative visibility/storage placement", () => {
     const first = await uploadPdf(admin(), "خاص قبل الاستبدال");
     trackObject(
       BUCKETS.private,
-      quarantineKeyFor(first.id, first.initiated.key),
+      quarantineKeyFor(first.id, first.storageKey),
     );
     const settingKey = `content.default_visibility.category.${categoryId}`;
     settingKeysToClean.add(settingKey);
@@ -848,11 +1502,12 @@ describe("B-02 — authoritative visibility/storage placement", () => {
     });
     expect(row.visibility).toBe("private");
     expect(row.storageBucket).toBe(BUCKETS.private);
-    expect(await statObject(clients, BUCKETS.private, initiated.key)).not.toBeNull();
-    expect(await statObject(clients, BUCKETS.public, initiated.key)).toBeNull();
+    expect(await statObject(clients, BUCKETS.private, row.storageKey)).not.toBeNull();
+    expect(await statObject(clients, BUCKETS.private, initiated.key)).toBeNull();
+    expect(await statObject(clients, BUCKETS.public, row.storageKey)).toBeNull();
     expect(
       (
-        await fetch(stableObjectUrl(BUCKETS.private, initiated.key), {
+        await fetch(stableObjectUrl(BUCKETS.private, row.storageKey), {
           redirect: "manual",
         })
       ).status,

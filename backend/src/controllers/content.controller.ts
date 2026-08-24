@@ -72,9 +72,10 @@ export function complete(prisma: PrismaClient, clients: StorageClients, config: 
   };
 }
 
-export function abort(clients: StorageClients, config: AppConfig) {
+export function abort(prisma: PrismaClient, clients: StorageClients, config: AppConfig) {
   return async (req: Request, res: Response): Promise<void> => {
     await content.abortUpload(
+      prisma,
       clients,
       config.JWT_SIGNING_KEY,
       requireActor(req),

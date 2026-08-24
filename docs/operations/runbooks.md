@@ -318,6 +318,22 @@ A `SignatureDoesNotMatch` failure after an Nginx edit almost always means the `/
 location stopped stripping the prefix, or stopped rewriting `Host` consistently with the
 endpoint the signature was computed for.
 
+### B-03 rollout: let legacy direct PUT capabilities expire
+
+The B-03 application release accepts outstanding old tickets and promotes their object to a
+new canonical key, so no ticket migration or database rewrite is required. Already-completed
+rows from the old release are different: their original PUT target is their canonical key,
+and an issued presigned URL cannot be individually revoked.
+
+Stop the old API before rollout and record that time. Do not declare the immutable-
+finalization invariant fully active until one PUT TTL (one hour) has passed since that stop;
+after that bound every old direct capability has expired. The new release may run during the
+drain because all newly issued URLs target staging. Do **not** rotate object-store credentials
+or rewrite historical keys as a shortcut: either is a separate operational/data migration
+with a wider blast radius. The development audit on 2026-08-24 found 11 current rows proven
+to have been created by the former direct upload path, with the newest upload audit older
+than two days, so no development URL remained live.
+
 ---
 
 **Related:** [Deployment](deployment.md), [Resilience](resilience.md),

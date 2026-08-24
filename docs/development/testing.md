@@ -59,14 +59,30 @@ Not mocks. The properties being checked **do not exist in a mock**:
 A mock returns whatever you told it to. The whole point of these tests is to find out what
 PostgreSQL, MinIO, and Nginx *really* do.
 
-The content/storage suite includes a focused B-02 placement matrix. It treats
+The content/storage suite includes focused B-02 placement and B-03 finalization matrices. B-02 treats
 `EducationalContent.visibility` as the authority, inspects the real row and both MinIO buckets,
 and reads through the real Nginx storage boundary. The matrix covers new public/private content,
 replacement with omitted or manipulated visibility, a contradictory pre-fix ticket, anonymous
 public/private reads, unrelated-object isolation, `SessionContent`, and recording origin. Its
 cleanup owns exact object keys (including quarantine keys), so a green rerun cannot be borrowing
-bytes or rows from an earlier run. **Last run: 32/32 focused; 1,648/1,648 full integration across
-82 files.**
+bytes or rows from an earlier run.
+
+B-03 drives the actual presigned PUT, strict HEAD, conditional ranged read and server-side
+MinIO copy. A production hook pauses exactly after verification, replaces staging through the
+retained real PUT, then resumes the conditional copy and proves the database remains empty.
+Two-party barriers pause concurrent completions after real promotion and before database
+publication; same-ticket calls converge to one row/audit/object, while different replacement
+tickets produce one winner and one version conflict. Controlled CopyObject, audit and
+DeleteObject failures prove retry, compensating cleanup and post-commit staging cleanup. A
+stop immediately after promotion proves restart recovery reuses one canonical object rather
+than overwriting or duplicating it. Legacy outstanding and already-completed tickets exercise
+the deployment compatibility path, including the rule that abort/retry can never delete a
+canonical key still named by a row.
+
+The completed B-03 matrix is **47/47** in the content service and **83/83** across
+content, upload HTTP and R99 ingest. The full isolated backend integration run is
+**1,663/1,663 across 82 files**. The recorder browser harness remains **22/22** and the
+library-recorder harness **16/16** after immutable finalization.
 
 **Some of the contract lives in headers.** The shared HTTP helper therefore returns
 `res.headers` alongside status and body — the calendar bootstrap's `Cache-Control` and `ETag`
@@ -506,6 +522,7 @@ These are the traps the specification exists to prevent. Each has a dedicated te
 - Consent revocation **rippling through to bucket migration**
 - Teacher **global-scope rejection**
 - **Re-upload cache-key immutability**
+- **Retained completed-upload PUT mutates staging only**, including a forced verification/copy race
 - Pending-session **data-access denial across all endpoints**, plus the client route guard
 - **Child-context verification on every student-context endpoint**, including the
   Student-role bypass and the foreign-parent `404`
