@@ -5,10 +5,10 @@
 MinIO, self-hosted in a container. Data residency rules out every managed object store, so
 S3-compatible storage runs on the same box as everything else.
 
-> **Status:** the storage subsystem is specified in full and its Nginx proxy path is built
-> and tested (a signed PUT/GET round trip passes). The upload endpoints themselves land with
-> **M6**. This page describes the design as specified; where something is not yet built it
-> says so.
+> **Status:** the Nginx proxy, upload/replace/delete flow, permission-checked private mint,
+> recording ingestion, and durable R99 staging cleanup are built and tested. Visibility
+> transitions, `content.bucket-migrate`, consent re-evaluation, and the general retention jobs
+> remain open and are called out below rather than implied by the implemented upload flow.
 
 ## Two buckets, and the boundary between them
 
@@ -20,6 +20,26 @@ S3-compatible storage runs on the same box as everything else.
 **Visibility is never encoded in the storage key.** The bucket carries it. That is what
 makes a visibility change a physical move rather than a rename, and it is why a key can
 safely be immutable.
+
+### One authority for placement
+
+`EducationalContent.visibility` is the domain fact; `storage_bucket` is its physical
+consequence. New uploads validate the requested/default visibility on the server and derive
+the bucket from it. A replacement inherits the existing row's visibility — it changes the
+file under R53/TD-9, not the visibility state under TD-1 — so neither an omitted value, a
+Category default, nor a manipulated replacement request can select a different bucket.
+Completion checks the signed ticket against that authoritative visibility again and discards
+a contradictory object before any database write. The second check matters across deployments:
+an already-issued ticket remains valid for up to two hours.
+
+There is deliberately no literal-bucket `CHECK` on `educational_content`. The specified
+visibility transition is asynchronous copy–verify–delete through `content.bucket-migrate`,
+and the current model has no migration-state column with which a constraint could represent
+that valid in-flight state. A check equating `public`/`private` strings directly would either
+reject the specified transition or pretend the physical copy had completed when only the row
+had changed. Until the transition endpoint and worker ship together, no production route can
+change an existing row's visibility; that missing operation is fail-closed, not an alternate
+write path.
 
 ### Visibility changes move the object
 
@@ -117,7 +137,10 @@ completion updates that row instead of creating one. A replacement **is** an upl
 the same presigned PUT, whitelist, cap, magic-byte verification and quota — so a second route
 would be this flow written twice, and the copy that drifts still passes its own tests.
 Resolving the target at `/initiate` also means an unauthorized replacement is refused **before**
-a URL is minted.
+a URL is minted. The target row's visibility also determines the replacement bucket. The
+generic upload payload may carry `visibility`, but on a replacement it is not a second write
+surface: the record keeps its authoritative value, and completion refuses any older or
+contradictory ticket before updating its storage coordinates.
 
 **The server never streams or buffers the whole file to validate it.** A 512-byte window is
 enough to check magic bytes, and fetching more would put a 100 MB file through the API

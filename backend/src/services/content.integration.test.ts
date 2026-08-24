@@ -3,13 +3,21 @@ import { randomBytes } from "node:crypto";
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { loadConfig } from "../lib/config.js";
+import { quarantineKeyFor } from "../lib/file-types.js";
 import {
   BUCKETS,
   createStorageClients,
+  deleteObject,
+  presignPutUrl,
+  statObject,
   type StorageClients,
 } from "../lib/storage.js";
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from "../lib/prisma.js";
-import { issueUploadTicket } from "../lib/upload-token.js";
+import {
+  issueUploadTicket,
+  verifyUploadTicket,
+  type UploadTicketClaims,
+} from "../lib/upload-token.js";
 import type { Actor } from "../policies/actor.js";
 import {
   createTeachingContext,
@@ -44,11 +52,31 @@ const TAG = "[content-test]";
 let clients: StorageClients;
 let adminId = "";
 let teacherId = "";
+let categoryId = "";
 let levelId = "";
 let subjectId = "";
 let branchId = "";
 let otherBranchId = "";
 let academicYearId = "";
+let sessionId = "";
+
+const objectsToClean = new Map<string, { bucket: string; key: string }>();
+const settingKeysToClean = new Set<string>();
+
+function trackObject(bucket: string, key: string): void {
+  objectsToClean.set(`${bucket}\u0000${key}`, { bucket, key });
+}
+
+function trackTicket(uploadId: string): UploadTicketClaims {
+  const ticket = verifyUploadTicket(uploadId, KEY);
+  if (!ticket.valid) throw new Error(`test received an invalid upload ticket: ${ticket.reason}`);
+  trackObject(ticket.claims.bucket, ticket.claims.key);
+  return ticket.claims;
+}
+
+function stableObjectUrl(bucket: string, key: string): string {
+  return `${config.STORAGE_BASE_URL}/${bucket}/${key}`;
+}
 
 const actorOf = (
   userId: string,
@@ -146,13 +174,33 @@ async function clear(): Promise<void> {
 
   const contents = await prisma.educationalContent.findMany({
     where: { title: { startsWith: TAG } },
-    select: { id: true },
+    select: { id: true, storageBucket: true, storageKey: true },
   });
+  for (const content of contents) {
+    trackObject(content.storageBucket, content.storageKey);
+    trackObject(
+      content.storageBucket,
+      quarantineKeyFor(content.id, content.storageKey),
+    );
+  }
+  for (const object of objectsToClean.values()) {
+    await deleteObject(clients, object.bucket, object.key);
+  }
+  objectsToClean.clear();
+  if (settingKeysToClean.size > 0) {
+    await prisma.systemSetting.deleteMany({
+      where: { key: { in: [...settingKeysToClean] } },
+    });
+    settingKeysToClean.clear();
+  }
   await prisma.trash.deleteMany({
     where: { targetId: { in: contents.map((c) => c.id) } },
   });
   await prisma.auditLog.deleteMany({ where: { actorUserId: { in: ids } } });
   await prisma.rateLimitCounter.deleteMany({ where: { userId: { in: ids } } });
+  await prisma.sessionContent.deleteMany({
+    where: { contentId: { in: contents.map((c) => c.id) } },
+  });
   await prisma.educationalContent.deleteMany({
     where: { title: { startsWith: TAG } },
   });
@@ -228,8 +276,10 @@ beforeEach(async () => {
   // a suite that builds a slightly different model is testing something the
   // application cannot produce.
   const fixture = await createTeachingContext(prisma, TAG, branchId);
+  categoryId = fixture.categoryId;
   levelId = fixture.levelId;
   subjectId = fixture.subjectId;
+  sessionId = fixture.sessionId;
   await staff(prisma, fixture, teacherId);
 
   // **Real `UserBranchRole` rows, not just role names on the actor.** TD-12's
@@ -271,6 +321,19 @@ async function uploadPdf(
   title: string,
   over: Record<string, unknown> = {},
 ) {
+  const replacementId = over["replacesContentId"];
+  if (typeof replacementId === "string") {
+    const current = await prisma.educationalContent.findUnique({
+      where: { id: replacementId },
+      select: { storageBucket: true, storageKey: true },
+    });
+    if (current) {
+      trackObject(
+        current.storageBucket,
+        quarantineKeyFor(replacementId, current.storageKey),
+      );
+    }
+  }
   const bytes = pdfBytes();
   const initiated = await initiateUpload(prisma, clients, KEY, actor, {
     filename: "درس القرآن.pdf",
@@ -278,6 +341,7 @@ async function uploadPdf(
     mime: "application/pdf",
     meta: meta(over) as never,
   });
+  trackTicket(initiated.uploadId);
   expect(await putObject(initiated.putUrl, bytes, "application/pdf")).toBe(200);
   const created = await completeUpload(
     prisma,
@@ -691,6 +755,246 @@ describe("the presigned GET mint (TD-3.5, TD-12)", () => {
   });
 });
 
+describe("B-02 — authoritative visibility/storage placement", () => {
+  it("stores new private content only in private storage and never serves it anonymously", async () => {
+    const { id, initiated, bytes } = await uploadPdf(admin(), "خاص جديد");
+    const row = await prisma.educationalContent.findUniqueOrThrow({
+      where: { id },
+    });
+
+    expect(row.visibility).toBe("private");
+    expect(row.storageBucket).toBe(BUCKETS.private);
+    expect(await statObject(clients, BUCKETS.private, initiated.key)).toMatchObject({
+      sizeBytes: bytes.length,
+    });
+    expect(await statObject(clients, BUCKETS.public, initiated.key)).toBeNull();
+
+    const anonymous = await fetch(
+      stableObjectUrl(BUCKETS.private, initiated.key),
+      { redirect: "manual" },
+    );
+    expect(anonymous.status).toBe(302);
+
+    const authorised = await mintDownloadUrl(
+      prisma,
+      clients,
+      admin(),
+      id,
+      undefined,
+    );
+    const downloaded = await fetch(authorised.url);
+    expect(downloaded.status).toBe(200);
+    expect(Buffer.from(await downloaded.arrayBuffer()).equals(bytes)).toBe(true);
+  });
+
+  it("stores genuinely public content only in public storage and serves those bytes anonymously", async () => {
+    const { id, initiated, bytes } = await uploadPdf(admin(), "عام جديد", {
+      visibility: "public",
+    });
+    const row = await prisma.educationalContent.findUniqueOrThrow({
+      where: { id },
+    });
+
+    expect(row.visibility).toBe("public");
+    expect(row.storageBucket).toBe(BUCKETS.public);
+    expect(await statObject(clients, BUCKETS.public, initiated.key)).toMatchObject({
+      sizeBytes: bytes.length,
+    });
+    expect(await statObject(clients, BUCKETS.private, initiated.key)).toBeNull();
+
+    const anonymous = await fetch(stableObjectUrl(BUCKETS.public, initiated.key));
+    expect(anonymous.status).toBe(200);
+    expect(Buffer.from(await anonymous.arrayBuffer()).equals(bytes)).toBe(true);
+  });
+
+  it("inherits private visibility on replacement even when the Category default is public", async () => {
+    const first = await uploadPdf(admin(), "خاص قبل الاستبدال");
+    trackObject(
+      BUCKETS.private,
+      quarantineKeyFor(first.id, first.initiated.key),
+    );
+    const settingKey = `content.default_visibility.category.${categoryId}`;
+    settingKeysToClean.add(settingKey);
+    await prisma.systemSetting.create({
+      data: { key: settingKey, value: "public" },
+    });
+
+    const bytes = pdfBytes();
+    const initiated = await initiateUpload(prisma, clients, KEY, admin(), {
+      filename: "بديل خاص.pdf",
+      size: bytes.length,
+      mime: "application/pdf",
+      // This is the real replacement shape from the UI: visibility is omitted.
+      // The Category default must not become a second authority for this row.
+      meta: {
+        levelId,
+        subjectId,
+        academicYearId,
+        branchId,
+        replacesContentId: first.id,
+      },
+    });
+    const ticket = trackTicket(initiated.uploadId);
+    expect(ticket.visibility).toBe("private");
+    expect(ticket.bucket).toBe(BUCKETS.private);
+    expect(await putObject(initiated.putUrl, bytes, "application/pdf")).toBe(200);
+    await completeUpload(prisma, clients, KEY, admin(), initiated.uploadId, {
+      title: `${TAG} خاص بعد الاستبدال`,
+      description: null,
+    });
+
+    const row = await prisma.educationalContent.findUniqueOrThrow({
+      where: { id: first.id },
+    });
+    expect(row.visibility).toBe("private");
+    expect(row.storageBucket).toBe(BUCKETS.private);
+    expect(await statObject(clients, BUCKETS.private, initiated.key)).not.toBeNull();
+    expect(await statObject(clients, BUCKETS.public, initiated.key)).toBeNull();
+    expect(
+      (
+        await fetch(stableObjectUrl(BUCKETS.private, initiated.key), {
+          redirect: "manual",
+        })
+      ).status,
+    ).toBe(302);
+  });
+
+  it("inherits public visibility on replacement despite a manipulated private request", async () => {
+    const first = await uploadPdf(admin(), "عام قبل الاستبدال", {
+      visibility: "public",
+    });
+    const second = await uploadPdf(admin(), "عام بعد الاستبدال", {
+      replacesContentId: first.id,
+      visibility: "private",
+    });
+    const ticket = trackTicket(second.initiated.uploadId);
+    const row = await prisma.educationalContent.findUniqueOrThrow({
+      where: { id: first.id },
+    });
+
+    expect(ticket.visibility).toBe("public");
+    expect(ticket.bucket).toBe(BUCKETS.public);
+    expect(row.visibility).toBe("public");
+    expect(row.storageBucket).toBe(BUCKETS.public);
+    expect(await statObject(clients, BUCKETS.public, row.storageKey)).not.toBeNull();
+    expect(await statObject(clients, BUCKETS.private, row.storageKey)).toBeNull();
+    const anonymous = await fetch(stableObjectUrl(row.storageBucket, row.storageKey));
+    expect(anonymous.status).toBe(200);
+    expect(Buffer.from(await anonymous.arrayBuffer()).equals(second.bytes)).toBe(true);
+  });
+
+  it("rejects a legacy contradictory replacement ticket and preserves the previous content", async () => {
+    const first = await uploadPdf(admin(), "قديم صالح");
+    const before = await prisma.educationalContent.findUniqueOrThrow({
+      where: { id: first.id },
+    });
+    const bytes = pdfBytes();
+    const key = `content/${first.id}/${randomBytes(4).toString("hex")}/legacy.pdf`;
+    const uploadId = issueUploadTicket(
+      {
+        sub: adminId,
+        cid: first.id,
+        bucket: BUCKETS.public,
+        key,
+        filename: "legacy.pdf",
+        mime: "application/pdf",
+        size: bytes.length,
+        level_id: levelId,
+        subject_id: subjectId,
+        academic_year_id: academicYearId,
+        branch_id: branchId,
+        visibility: "public",
+        origin: "uploaded",
+        replaces: first.id,
+      },
+      KEY,
+    ).token;
+    trackObject(BUCKETS.public, key);
+    const putUrl = await presignPutUrl(clients, BUCKETS.public, key);
+    expect(await putObject(putUrl, bytes, "application/pdf")).toBe(200);
+
+    const e = await failure(() =>
+      completeUpload(prisma, clients, KEY, admin(), uploadId, {
+        title: `${TAG} يجب ألا يحفظ`,
+        description: null,
+      }),
+    );
+    expect(e.code).toBe("VALIDATION_FAILED");
+    expect(e.status).toBe(409);
+    expect(e.details?.["reason"]).toBe("VISIBILITY_STORAGE_MISMATCH");
+    expect(
+      await prisma.educationalContent.findUniqueOrThrow({ where: { id: first.id } }),
+    ).toEqual(before);
+    expect(await statObject(clients, BUCKETS.public, key)).toBeNull();
+    expect(await statObject(clients, BUCKETS.private, before.storageKey)).not.toBeNull();
+  });
+
+  it("leaves unrelated content and its object untouched when another item is replaced", async () => {
+    const target = await uploadPdf(admin(), "هدف");
+    const unrelated = await uploadPdf(admin(), "غير مرتبط", {
+      visibility: "public",
+    });
+    const unrelatedBefore = await prisma.educationalContent.findUniqueOrThrow({
+      where: { id: unrelated.id },
+    });
+
+    await uploadPdf(admin(), "هدف بديل", {
+      replacesContentId: target.id,
+      visibility: "public",
+    });
+
+    expect(
+      await prisma.educationalContent.findUniqueOrThrow({
+        where: { id: unrelated.id },
+      }),
+    ).toEqual(unrelatedBefore);
+    const stat = await statObject(
+      clients,
+      unrelatedBefore.storageBucket,
+      unrelatedBefore.storageKey,
+    );
+    expect(stat?.sizeBytes).toBe(unrelated.bytes.length);
+    const bytes = await fetch(
+      stableObjectUrl(unrelatedBefore.storageBucket, unrelatedBefore.storageKey),
+    );
+    expect(Buffer.from(await bytes.arrayBuffer()).equals(unrelated.bytes)).toBe(true);
+  });
+
+  it("preserves SessionContent links and recording origin across replacement", async () => {
+    const first = await uploadPdf(admin(), "تسجيل مرتبط", {
+      origin: "session_recording",
+    });
+    const link = await prisma.sessionContent.create({
+      data: { sessionId, contentId: first.id },
+    });
+
+    await uploadPdf(admin(), "تسجيل مرتبط بديل", {
+      replacesContentId: first.id,
+      visibility: "public",
+    });
+
+    const after = await prisma.educationalContent.findUniqueOrThrow({
+      where: { id: first.id },
+      select: { origin: true, visibility: true, storageBucket: true },
+    });
+    expect(after).toEqual({
+      origin: "session_recording",
+      visibility: "private",
+      storageBucket: BUCKETS.private,
+    });
+    expect(
+      await prisma.sessionContent.findUniqueOrThrow({
+        where: { id: link.id },
+      }),
+    ).toMatchObject({
+      id: link.id,
+      sessionId,
+      contentId: first.id,
+      deletedAt: null,
+    });
+  });
+});
+
 describe("replace and delete (R53)", () => {
   it("replacement mints a NEW key and never overwrites the old object (TD-9)", async () => {
     const first = await uploadPdf(admin(), "نسخة أولى");
@@ -716,6 +1020,14 @@ describe("replace and delete (R53)", () => {
 
   it("deletion soft-deletes, snapshots to the Trash, and leaves the file recoverable", async () => {
     const { id } = await uploadPdf(admin(), "للحذف");
+    const before = await prisma.educationalContent.findUniqueOrThrow({
+      where: { id },
+      select: { storageBucket: true, storageKey: true },
+    });
+    trackObject(
+      before.storageBucket,
+      quarantineKeyFor(id, before.storageKey),
+    );
     await deleteContent(prisma, clients, admin(), id);
 
     const row = await prisma.educationalContent.findUniqueOrThrow({

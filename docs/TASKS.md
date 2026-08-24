@@ -1111,6 +1111,7 @@
   - ✓ `upload_id` is a **signed ticket, not a table** — §7 defines no pending-upload entity, so `upload.gc` reaps objects no content row claims rather than reconciling a table against a bucket. The ticket binds every phase-one authorization decision so `/complete` cannot restate them
   - ✓ Teacher branch scope resolves through `CourseScheduleStaff` (§4.4c), never the role assignment
   - ✓ **Replace and delete** shipped with it (R53): replacement extends `/uploads/initiate` via `replaces_content_id`; `DELETE /content/{id}` soft-deletes, snapshots and quarantines
+  - ✓ **B-02 visibility/storage invariant:** `EducationalContent.visibility` is authoritative; creation derives its bucket, replacement inherits the existing row's tier, and completion rejects/discards a contradictory or pre-fix ticket before changing storage coordinates. Real PostgreSQL/MinIO coverage asserts database rows, both buckets, anonymous/public bytes, signed private reads, unrelated content and `SessionContent` links
   - ⚠ **Video is refused**, per TD-9's whitelist and §4.9 Revision 12. The Owner's brief asked for video support; widening the list is an SRS revision, not an implementation choice
 - [x] Authoritative per-user upload quota 30/hour in PostgreSQL (`RateLimitCounter`), locked + incremented in the initiate transaction (TD-4.12, TD-15.2); `429 RATE_LIMITED` envelope; never in-process memory, never pg-boss, never njs (§3.1 Revision 14)
 - [x] Magic-byte validation at /complete via ranged GET (bytes 0–511) to MinIO + HEAD size check; reject-and-delete (§4.9, TD-9)
