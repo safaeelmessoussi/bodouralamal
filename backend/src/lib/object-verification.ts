@@ -42,8 +42,9 @@ import {
 } from './file-types.js';
 import {
   deleteObject,
+  isStoragePreconditionFailed,
   readObjectHead,
-  statObject,
+  statObjectStrict,
   type StorageClients,
 } from './storage.js';
 
@@ -68,7 +69,7 @@ export interface ObjectVerificationRequest {
 }
 
 export type ObjectVerification =
-  | { ok: true; sizeBytes: number }
+  | { ok: true; sizeBytes: number; etag: string }
   | {
       ok: false;
       /**
@@ -80,7 +81,7 @@ export type ObjectVerification =
        * * `SIZE` — not the declared size, or over the cap.
        * * `MAGIC` — the bytes are not what the type claims.
        */
-      reason: 'MISSING' | 'EMPTY' | 'SIZE' | 'MAGIC';
+      reason: 'MISSING' | 'EMPTY' | 'SIZE' | 'MAGIC' | 'CHANGED';
       detail: Record<string, unknown>;
     };
 
@@ -97,7 +98,7 @@ export async function verifyStoredObject(
   clients: StorageClients,
   request: ObjectVerificationRequest,
 ): Promise<ObjectVerification> {
-  const stat = await statObject(clients, request.bucket, request.key);
+  const stat = await statObjectStrict(clients, request.bucket, request.key);
   if (stat === null) {
     return { ok: false, reason: 'MISSING', detail: { key: request.key } };
   }
@@ -121,7 +122,31 @@ export async function verifyStoredObject(
     };
   }
 
-  const head = await readObjectHead(clients, request.bucket, request.key);
+  if (stat.etag === null) {
+    throw new Error(`storage returned no ETag for ${request.bucket}/${request.key}`);
+  }
+
+  let head: Buffer;
+  try {
+    // The ranged read must describe the same object version as the HEAD. A
+    // retained presigned PUT can replace the key between those two operations.
+    head = await readObjectHead(
+      clients,
+      request.bucket,
+      request.key,
+      512,
+      stat.etag,
+    );
+  } catch (error) {
+    if (isStoragePreconditionFailed(error)) {
+      return {
+        ok: false,
+        reason: 'CHANGED',
+        detail: { reason: 'OBJECT_CHANGED_DURING_VERIFICATION' },
+      };
+    }
+    throw error;
+  }
   if (!magicBytesMatch(request.mime as AcceptedMime, head)) {
     return {
       ok: false,
@@ -130,7 +155,7 @@ export async function verifyStoredObject(
     };
   }
 
-  return { ok: true, sizeBytes: stat.sizeBytes };
+  return { ok: true, sizeBytes: stat.sizeBytes, etag: stat.etag };
 }
 
 /** TD-9's delete-on-mismatch, best-effort: the refusal is what matters, and a

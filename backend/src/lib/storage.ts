@@ -123,14 +123,15 @@ export async function presignGetUrl(
   return toProxyUrl(signed, clients.storagePrefix);
 }
 
-/* ── Server-side object operations (R99 C2) ──────────────────────────────── */
+/* ── Server-side object operations (TD-9 / R99 C2) ──────────────────────── */
 
 /**
  * **Everything below runs on the INTERNAL client and never moves bytes through
  * this process.**
  *
- * R99's ingestion has to take a recording of up to 500 MB (TD-9) out of the
- * staging bucket and into the content lifecycle. The obvious implementation —
+ * Upload finalization and R99 ingestion both move verified bytes out of staging
+ * without giving a browser write authority over the canonical key. R99 can be
+ * up to 500 MB (TD-9). The obvious implementation —
  * `GetObject` into a buffer, `PutObject` back out — would put half a gigabyte
  * through a container pinned at `--max-old-space-size=768` (TD-13) for every
  * concurrent ingestion, on a 4 GB VPS (§2.4). It is not a tuning problem; it is
@@ -153,6 +154,8 @@ export interface ObjectStat {
   /** What the store believes the type is. **A claim, never a fact** — the magic
    *  bytes are what turn it into one (TD-9). */
   contentType: string | null;
+  /** Opaque storage version identifier used for conditional reads/copies. */
+  etag: string | null;
 }
 
 /**
@@ -162,7 +165,35 @@ export interface ObjectStat {
  * answer in both callers: an upload that never completed, and a provider that
  * reported a file it did not write.
  */
-export async function statObject(
+function objectStatOf(head: {
+  ContentLength?: number | undefined;
+  ContentType?: string | undefined;
+  ETag?: string | undefined;
+}): ObjectStat {
+  return {
+    sizeBytes: Number(head.ContentLength ?? 0),
+    contentType: head.ContentType ?? null,
+    etag: head.ETag ?? null,
+  };
+}
+
+function isStorageNotFound(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  const candidate = error as {
+    name?: unknown;
+    $metadata?: { httpStatusCode?: unknown };
+  };
+  return (
+    candidate.$metadata?.httpStatusCode === 404 ||
+    candidate.name === 'NotFound' ||
+    candidate.name === 'NoSuchKey'
+  );
+}
+
+/** Like `statObject`, but an unavailable store is an error rather than a
+ * fabricated "missing" object. Publication code must never overwrite a key
+ * merely because its safety HEAD failed. */
+export async function statObjectStrict(
   clients: StorageClients,
   bucket: string,
   key: string,
@@ -171,10 +202,21 @@ export async function statObject(
     const head = await clients.internal.send(
       new HeadObjectCommand({ Bucket: bucket, Key: key }),
     );
-    return {
-      sizeBytes: Number(head.ContentLength ?? 0),
-      contentType: head.ContentType ?? null,
-    };
+    return objectStatOf(head);
+  } catch (error) {
+    if (isStorageNotFound(error)) return null;
+    throw error;
+  }
+}
+
+/** Compatibility-shaped best-effort HEAD for cleanup/inspection callers. */
+export async function statObject(
+  clients: StorageClients,
+  bucket: string,
+  key: string,
+): Promise<ObjectStat | null> {
+  try {
+    return await statObjectStrict(clients, bucket, key);
   } catch {
     return null;
   }
@@ -192,12 +234,14 @@ export async function readObjectHead(
   bucket: string,
   key: string,
   length = 512,
+  ifMatch?: string,
 ): Promise<Buffer> {
   const ranged = await clients.internal.send(
     new GetObjectCommand({
       Bucket: bucket,
       Key: key,
       Range: `bytes=0-${String(length - 1)}`,
+      ...(ifMatch === undefined ? {} : { IfMatch: ifMatch }),
     }),
   );
   return Buffer.from(await ranged.Body!.transformToByteArray());
@@ -223,16 +267,30 @@ export async function copyObject(
   source: { bucket: string; key: string },
   destination: { bucket: string; key: string },
   contentType?: string,
+  options: { sourceIfMatch?: string } = {},
 ): Promise<void> {
   await clients.internal.send(
     new CopyObjectCommand({
       Bucket: destination.bucket,
       Key: destination.key,
       CopySource: encodeURI(`/${source.bucket}/${source.key}`),
+      ...(options.sourceIfMatch === undefined
+        ? {}
+        : { CopySourceIfMatch: options.sourceIfMatch }),
       ...(contentType === undefined
         ? {}
         : { ContentType: contentType, MetadataDirective: 'REPLACE' as const }),
     }),
+  );
+}
+
+/** AWS SDK errors are deliberately inspected without depending on a provider
+ * class: MinIO and S3 use the same HTTP 412 for a failed conditional request. */
+export function isStoragePreconditionFailed(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    (error as { $metadata?: { httpStatusCode?: unknown } }).$metadata?.httpStatusCode === 412
   );
 }
 

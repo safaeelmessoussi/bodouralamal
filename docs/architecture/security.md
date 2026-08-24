@@ -192,9 +192,12 @@ so clients handle one shape.
   child context.
 - **Public bucket policies are never used to serve private content**, and long-lived
   presigned links are prohibited.
-- Uploads are validated **server-side at completion** by fetching the first 512 bytes back
-  and checking magic bytes — not by trusting the declared content type. Size is verified from
-  object metadata. A mismatch deletes the object and creates no record.
+- Upload PUT capabilities address disposable `staging/content/...` keys only. Completion
+  binds HEAD, the 512-byte magic read and server-side promotion to one storage ETag, then the
+  database names a distinct canonical key for which no client received write authority.
+  Reusing a still-valid PUT can therefore change staging but not accepted bytes.
+- Declared content type is not trusted. Size comes from object metadata and magic bytes from
+  the conditional ranged read; mismatch creates no record.
 - Storage keys are **immutable**; a replacement mints a new key. Visibility is **never
   encoded in the key** — the bucket carries it.
 

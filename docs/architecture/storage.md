@@ -88,26 +88,43 @@ access is the one path production never uses.
 
 ## Uploads
 
-MVP uploads are **single-shot presigned PUT**, followed by a server-side completion check.
+MVP uploads are **single-shot presigned PUT to a disposable staging key**, followed by a
+server-controlled immutable finalization.
 
 ```
 POST /uploads/initiate
   { filename, size, mime, content_meta }
   → branch scope validated HERE (a teacher passing "global" is refused)
   → per-user quota checked and incremented, under a row lock, in one transaction
+  → PUT capability addresses staging/content/... — never the future content key
   → { upload_id, key, put_url }
 
   browser PUTs directly to storage through the proxy, with progress
 
 POST /uploads/{upload_id}/complete
-  → server issues a RANGED GET (bytes 0-511) to MinIO and inspects magic bytes
   → HEAD verifies size against the declared value and the caps
+  → server issues an ETag-conditional RANGED GET (bytes 0-511) and inspects magic bytes
   → mismatch → object deleted, no record created, 409 VALIDATION_FAILED
-  → otherwise the content row is created (or UPDATED, on a replacement)
+  → source-ETag-conditional server-side copy to a distinct content/... key
+  → row + mandatory audit commit together (create, or compare-and-swap replacement)
+  → staging key deleted last; a cleanup miss cannot mutate the accepted bytes
 
 POST /uploads/{upload_id}/abort
-  → deletes the object; best-effort, because upload.gc sweeps what a client abandons
+  → deletes only unreferenced staging; best-effort because upload.gc owns abandonment
 ```
+
+The original PUT remains valid for its one-hour TTL; object stores cannot revoke one URL in
+isolation. That capability is harmless after completion because it can recreate or replace
+only the staging key. The database always names the distinct canonical key, for which the
+browser was never given write authority.
+
+The canonical hash binds the signed finalization identity to the ETag that passed validation.
+The conditional copy therefore fails if the client changes staging after validation, while
+two retries of the same source version resolve to the same key and identical bytes. A real
+MinIO probe found that this release honors source `If-Match` but ignores CopyObject's
+destination `If-None-Match`; the design consequently does not pretend that unsupported
+condition protects anything. Different source versions derive different canonical keys, and
+database publication decides the single winner.
 
 ### `upload_id` is a signed ticket, not a database row
 
@@ -119,8 +136,9 @@ there was none. The ticket carries the state instead, and `upload.gc` (TD-7) the
 *objects* older than 48 h that no content row claims — which is the thing that actually needs
 collecting, and is true whether or not any bookkeeping row ever existed.
 
-**The ticket binds every authorization decision taken at `/initiate`** — caller, key, bucket,
-declared size and type, and the §4.9 scope fields. Without that binding, a Teacher could
+**The ticket binds every authorization decision taken at `/initiate`** — caller, staging key,
+bucket, finalization identity, declared size and type, and the §4.9 scope fields. A replacement
+also binds the target version it observed. Without that binding, a Teacher could
 initiate inside their own branch and complete into the Global scope, and the check at phase one
 would be decorative. **Title and description are deliberately not bound**: they are free text no
 authorization turns on, and keeping them out holds the ticket to a few hundred bytes, which
@@ -141,6 +159,13 @@ a URL is minted. The target row's visibility also determines the replacement buc
 generic upload payload may carry `visibility`, but on a replacement it is not a second write
 surface: the record keeps its authoritative value, and completion refuses any older or
 contradictory ticket before updating its storage coordinates.
+
+Publication is optimistic and exact: the replacement update matches the observed version,
+bucket and old canonical key, increments the version once, and writes `content.replace` in
+the same transaction. Competing tickets therefore cannot both publish or quarantine one
+another's object. The loser removes only its own ETag-derived canonical candidate; a same-
+ticket retry recognizes the committed finalization audit and converges without another
+version bump.
 
 **The server never streams or buffers the whole file to validate it.** A 512-byte window is
 enough to check magic bytes, and fetching more would put a 100 MB file through the API
@@ -191,13 +216,16 @@ compatible — it is a drop-in change to the upload path only.
 
 ```
 content/{content_id}/{short-random-hash}/{original-filename-slugified}.{ext}
+staging/content/{content_id}/{unguessable-nonce}/{original-filename-slugified}.{ext}
 quarantine/{content_id}/…                    (soft-deleted objects)
 ```
 
 Three properties, each load-bearing:
 
-**A short random hash segment** (8 hex characters, generated at key creation) defeats
-browser, proxy, and CDN caching collisions when a file with the same name is re-uploaded.
+**A short collision-resistant hash segment** defeats browser, proxy, and CDN caching
+collisions when a file with the same name is re-uploaded. Ordinary upload finalization uses
+128 bits derived from its signed finalization identity and verified source ETag; R99 ingestion
+uses its retry-stable recording identity. Both are server-generated and never client-writable.
 
 **Keys are immutable once written.** Replacing a file on an existing record generates a
 *new* key with a new hash segment and updates the database reference; the old object is
@@ -346,7 +374,7 @@ ticket. It was written inside `content.service.ts` against `UploadTicketClaims`,
 correct while a browser was the only way bytes reached a bucket; R99's ingestion has to make
 the same assertions about an object no ticket describes.
 
-The two callers differ in exactly three places, and each difference is deliberate:
+The two callers differ in exactly three policy places, and each difference is deliberate:
 
 | | `/uploads/*` complete | `session-recording-ingest` |
 |---|---|---|
@@ -369,6 +397,11 @@ That is not a tuning problem; it is the wrong mechanism.
 
 `CopySource` is **URI-encoded**. The private copy this replaced built it by interpolation, and
 a TD-9 key carries a transliterated slug of a filename a person chose.
+
+Upload completion uses the strict stat variant: only an actual 404 means absent; a storage
+outage is never reinterpreted as permission to overwrite. Its ranged read and final copy both
+carry the verified source ETag. R99 uses the same verifier, so a provider object changing
+between HEAD and magic-byte read is likewise refused rather than accepted from two versions.
 
 ## File preview behaviour
 

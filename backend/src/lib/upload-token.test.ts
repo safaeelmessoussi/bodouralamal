@@ -20,7 +20,8 @@ const claims = {
   sub: "user-1",
   cid: "content-1",
   bucket: "private",
-  key: "content/content-1/abcd1234/notes.pdf",
+  key: "staging/content/content-1/0123456789abcdef/notes.pdf",
+  finalization_id: "11111111-2222-4333-8444-555555555555",
   filename: "notes.pdf",
   mime: "application/pdf",
   size: 1024,
@@ -91,6 +92,21 @@ describe("the upload ticket", () => {
       KEY,
     ).token;
     expect(verifyUploadTicket(partial, KEY).valid).toBe(false);
+  });
+
+  it("refuses malformed immutable-finalization claims even with a valid signature", () => {
+    const malformed = issueUploadTicket(
+      {
+        ...claims,
+        finalization_id: 42 as unknown as string,
+        replaces_version: "zero" as unknown as number,
+      },
+      KEY,
+    ).token;
+    expect(verifyUploadTicket(malformed, KEY)).toEqual({
+      valid: false,
+      reason: "malformed",
+    });
   });
 
   it("refuses a malformed token rather than throwing", () => {
