@@ -47,12 +47,23 @@ network-internal; Nginx is the only published object origin. Every canonical pub
 asks the API whether one undeleted row still names that exact key as public/public with
 `consent_forced_private = false`. A committed flag, replacement or deletion therefore closes
 the stable public origin immediately even while object retirement is still pending. The
-more-specific `public/staging/` proxy location preserves signed PUT bodies and refuses
-GET/HEAD, because no database row is allowed to name a browser-writable staging key.
-The canonical public location sends only GET/HEAD through that read gate. Its unchanged
-non-read SigV4 passthrough exists for still-live pre-R103 capabilities to expire normally;
-current code never mints a browser write to a canonical key, and legacy replacements are
-still refused at completion when their ticket lacks the required compare-and-swap version.
+external method allowlist is deliberately smaller than the S3 API: canonical paths admit
+database-gated GET/HEAD and SigV4 PUT only; `public/staging/` admits SigV4 PUT only, with
+GET/HEAD sent to the unavailable page. Nginx refuses every other method before MinIO, so an
+anonymous S3 Select POST, multipart/control operation or WebDAV-shaped request cannot turn
+the download policy into a second read or mutation path. PUT remains delegated to MinIO's
+signature check, preserving current staging uploads and still-live pre-R103 canonical
+capabilities until their one-hour expiry. Current code never mints a browser write to a
+canonical key, and legacy replacements are still refused at completion when their ticket
+lacks the required compare-and-swap version.
+
+`/storage/public` and `/storage/public/` are bucket coordinates, not object coordinates, and
+are denied by exact Nginx locations with or without query parameters. They are never
+redirected: forwarding a `?list-type=2` query to another storage path would merely relocate
+the bucket-listing exposure. Nginx's normalized location matching still selects these public
+rules for duplicate or encoded separators, while the read authorizer receives the original
+URI and therefore refuses any alternate spelling that is not the exact current DB
+coordinate.
 
 ### Visibility changes move the object
 

@@ -203,6 +203,11 @@ so clients handle one shape.
   binds HEAD, the 512-byte magic read and server-side promotion to one storage ETag, then the
   database names a distinct canonical key for which no client received write authority.
   Reusing a still-valid PUT can therefore change staging but not accepted bytes.
+- The published public-bucket proxy is an explicit method boundary, not a general S3
+  endpoint: exact canonical GET/HEAD is database-authorized, PUT requires MinIO SigV4, every
+  other method is refused by Nginx, and both public bucket-root spellings are denied before
+  query parameters can become listing/control operations. Public staging admits only signed
+  PUT and is never readable.
 - Declared content type is not trusted. Size comes from object metadata and magic bytes from
   the conditional ranged read; mismatch creates no record.
 - Storage keys are **immutable**; a replacement mints a new key. Visibility is **never

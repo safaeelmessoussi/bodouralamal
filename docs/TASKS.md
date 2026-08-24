@@ -169,7 +169,7 @@
   - ✓ Tests — a declined media release is recorded with actor + timestamp, not omitted (BR-1)
   - ✓ Backend — `staff_recorded` path complete: `GET`/`POST /students/{id}/consents`, Admin/Super Admin only (TD-2), append-only history, BR-1 effective status, §4.1a re-evaluation enqueued in-transaction
   - ✓ Tests — 20 integration tests; six mutations caught
-  - ✓ B-01 — `consent.reevaluate` plus the consent-forced public → private bucket migration are durable workers; closure adds R92/deleted-schedule triggers, bounded startup convergence, one globally ordered shared-recording lock graph, exact-key retirement/recovery, retry-policy reconciliation and an exact-row public-origin gate; the Admin override/consent-management UI remains M6
+  - ✓ B-01 — `consent.reevaluate` plus the consent-forced public → private bucket migration are durable workers; closure adds R92/deleted-schedule triggers, bounded startup convergence, one globally ordered shared-recording lock graph, exact-key retirement/recovery, retry-policy reconciliation and an exact-row public-origin gate whose external surface is limited to authorized GET/HEAD and SigV4 PUT, with bucket roots and all other S3 methods denied; the Admin override/consent-management UI remains M6
 - [x] `POST /family-links` — staff-mediated link of an existing child (§4.3 Revision 23)
   - ✓ Backend — Admin/Super Admin only with the TD-12 freshness assertion; creates a `Pending` link decided in the §5.6 queue; duplicate answers `DUPLICATE`, never `FAMILY_LINK_PENDING`
   - ✓ Tests — 11 service + 6 HTTP tests; five mutations caught, including one reopening parent self-service
