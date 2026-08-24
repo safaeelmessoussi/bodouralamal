@@ -1,4 +1,4 @@
-import type { Prisma } from '../generated/prisma/client.js';
+import type { Prisma, PrismaClient } from '../generated/prisma/client.js';
 
 /**
  * Same-transaction job enqueue (SRS §16.2, TD-4, TD-7, TD-16).
@@ -27,6 +27,10 @@ import type { Prisma } from '../generated/prisma/client.js';
 /** TD-7 job names. Kept here so the enqueue side cannot drift from the runner. */
 export const JOB_QUEUES = {
   consentReevaluate: 'consent.reevaluate',
+  /** TD-7's canonical-object placement transition. B-01 implements only the
+   * consent-forced public → private arm; publication remains a separate,
+   * explicitly authorised operation. */
+  contentBucketMigrate: 'content.bucket-migrate',
   /** TD-7, Revision 43. Singleton per schedule: several edits collapse into one
    *  pending job, which is safe because materialization is a full idempotent
    *  reconcile rather than a delta. */
@@ -58,8 +62,93 @@ export async function enqueue(
   data: Record<string, unknown>,
   singletonKey?: string,
 ): Promise<void> {
-  await tx.$executeRaw`
-    INSERT INTO pgboss.job (name, data, singleton_key)
-    VALUES (${queue}, ${JSON.stringify(data)}::jsonb, ${singletonKey ?? null})
+  // pg-boss 12 intentionally keeps execution policy on the QUEUE row and its
+  // own `send()` copies those values into each job. A three-column raw INSERT
+  // produces a row whose retry/expiry/policy contract is NULL: it may be
+  // fetched, but a transient failure is not governed by TD-7's configured
+  // retry boundary. Mirror only that queue-default copy here; lifecycle
+  // timestamps/state keep their table defaults.
+  const result = await tx.$queryRaw<{ registered: boolean; inserted: boolean }[]>`
+    WITH queue AS (
+      SELECT * FROM pgboss.queue WHERE name = ${queue}
+    ), inserted AS (
+    INSERT INTO pgboss.job (
+      name,
+      data,
+      singleton_key,
+      expire_seconds,
+      deletion_seconds,
+      keep_until,
+      retry_limit,
+      retry_delay,
+      retry_backoff,
+      retry_delay_max,
+      policy,
+      dead_letter,
+      heartbeat_seconds
+    )
+    SELECT
+      q.name,
+      ${JSON.stringify(data)}::jsonb,
+      ${singletonKey ?? null},
+      q.expire_seconds,
+      q.deletion_seconds,
+      now() + q.retention_seconds * interval '1 second',
+      q.retry_limit,
+      q.retry_delay,
+      q.retry_backoff,
+      q.retry_delay_max,
+      q.policy,
+      q.dead_letter,
+      q.heartbeat_seconds
+    FROM queue q
+    WHERE ${singletonKey ?? null}::text IS NULL
+       OR NOT EXISTS (
+         SELECT 1 FROM pgboss.job existing
+         WHERE existing.name = q.name
+           AND existing.singleton_key = ${singletonKey ?? null}
+           AND existing.state IN ('created', 'retry')
+       )
+    RETURNING 1
+    )
+    SELECT
+      EXISTS (SELECT 1 FROM queue) AS registered,
+      EXISTS (SELECT 1 FROM inserted) AS inserted
   `;
+  if (result[0]?.registered !== true) {
+    throw new Error(`pg-boss queue is not registered: ${queue}`);
+  }
+}
+
+/**
+ * Pre-B-01 transactional inserts populated only name/data/singleton_key. Those
+ * historical rows can execute, but they do not carry queue retry/expiry policy.
+ * When one becomes active, commit one correctly configured full-recompute
+ * follow-up before doing its work. Pending-key deduplication bounds hundreds of
+ * legacy rows for the same subject to one recovery obligation.
+ *
+ * This avoids an unsafe bulk rewrite of historical jobs and closes the one-shot
+ * failure window during ordinary draining. New rows are a cheap no-op here.
+ */
+export async function ensureDurableLegacyFollowup(
+  prisma: PrismaClient,
+  jobId: string,
+  queue: string,
+  data: Record<string, unknown>,
+  singletonKey: string,
+): Promise<boolean> {
+  return prisma.$transaction(async (tx) => {
+    const rows = await tx.$queryRaw<{ legacy: boolean }[]>`
+      SELECT (
+        retry_limit IS NULL OR expire_seconds IS NULL OR
+        deletion_seconds IS NULL OR keep_until IS NULL OR policy IS NULL
+      ) AS legacy
+      FROM pgboss.job
+      WHERE id = ${jobId}::uuid AND name = ${queue}
+      FOR UPDATE
+    `;
+    if (rows[0]?.legacy !== true) return false;
+    await enqueue(tx, queue, data, singletonKey);
+    return true;
+  });
 }

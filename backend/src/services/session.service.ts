@@ -23,6 +23,7 @@ import {
   SELECT_PROTECTABLE,
 } from "../policies/session-protection.js";
 import type { Actor } from "../policies/actor.js";
+import { enqueueConsentReevaluationForSessions } from "./consent-reevaluation.service.js";
 
 /**
  * Sessions — the materialized dated occurrence (SRS §4.4, TD-1, TD-8,
@@ -532,6 +533,9 @@ export async function linkContent(
   if (!content) throw new AppError("NOT_FOUND", "no such content");
 
   return prisma.$transaction(async (tx) => {
+    // Session is the BR-2 serialization anchor. The same lock is taken by the
+    // full re-evaluation before it resolves the current audience/links.
+    await enqueueConsentReevaluationForSessions(tx, [sessionId]);
     const existing = await tx.sessionContent.findFirst({
       where: { sessionId, contentId },
       select: { id: true, deletedAt: true },
@@ -576,6 +580,10 @@ export async function unlinkContent(
   await loadForWrite(prisma, actor, sessionId);
 
   await prisma.$transaction(async (tx) => {
+    // Enqueue while the link is still present. The job runs only after COMMIT
+    // and therefore recomputes the post-unlink truth; this call also locks the
+    // occurrence against a concurrent recompute.
+    await enqueueConsentReevaluationForSessions(tx, [sessionId]);
     const row = await tx.sessionContent.findFirst({
       where: { sessionId, contentId, deletedAt: null },
     });

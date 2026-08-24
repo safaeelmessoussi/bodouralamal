@@ -344,7 +344,7 @@ export async function copyObject(
   source: { bucket: string; key: string },
   destination: { bucket: string; key: string },
   contentType?: string,
-  options: { sourceIfMatch?: string } = {},
+  options: { sourceIfMatch?: string; sha256?: string } = {},
 ): Promise<void> {
   await clients.internal.send(
     new CopyObjectCommand({
@@ -354,9 +354,15 @@ export async function copyObject(
       ...(options.sourceIfMatch === undefined
         ? {}
         : { CopySourceIfMatch: options.sourceIfMatch }),
-      ...(contentType === undefined
+      ...(contentType === undefined && options.sha256 === undefined
         ? {}
-        : { ContentType: contentType, MetadataDirective: 'REPLACE' as const }),
+        : {
+            ...(contentType === undefined ? {} : { ContentType: contentType }),
+            ...(options.sha256 === undefined
+              ? {}
+              : { Metadata: { sha256: options.sha256 } }),
+            MetadataDirective: 'REPLACE' as const,
+          }),
     }),
   );
 }

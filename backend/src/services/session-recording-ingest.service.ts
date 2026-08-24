@@ -23,6 +23,7 @@ import {
 } from "../lib/storage.js";
 import * as audit from "../repositories/audit.repository.js";
 import { bucketFor, categoryDefaultVisibility } from "./content.service.js";
+import { enqueueConsentReevaluationForSessions } from "./consent-reevaluation.service.js";
 
 /**
  * **Turning a provider's staging object into a بذور الأمل library item**
@@ -344,6 +345,11 @@ export async function ingestRecording(
       where: { id: recording.id },
       data: { educationalContentId: contentId, ingestionFailureReason: null },
     });
+
+    // §4.1a treats creation/import of a linked recording as a consent-gate
+    // trigger. This shares the Session lock already held above and commits the
+    // obligation with the content/link/relation transaction.
+    await enqueueConsentReevaluationForSessions(tx, [recording.sessionId]);
 
     await audit.write(tx, {
       // **No actor.** §7's attribution invariant (Revision 17) makes a null

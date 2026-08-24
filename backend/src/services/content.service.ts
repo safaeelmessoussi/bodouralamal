@@ -38,6 +38,7 @@ import { teacherBranchIds } from '../policies/roster-resolution.js';
 import * as audit from '../repositories/audit.repository.js';
 import { snapshot } from '../repositories/trash.repository.js';
 import { visibleContentIds } from './library.service.js';
+import { enqueueConsentReevaluationForSessions } from './consent-reevaluation.service.js';
 
 /**
  * Educational content storage — the TD-3.5 upload flow and the presigned-GET
@@ -966,6 +967,18 @@ async function replaceContentFile(
   existing: WritableContent,
 ): Promise<{ published: boolean; acceptedCanonicalKey: string }> {
   return prisma.$transaction(async (tx) => {
+    // Replacement is an upload trigger for every occurrence already referencing
+    // this recording. Session locks precede the content CAS, matching the
+    // re-evaluation lock hierarchy and avoiding a Session↔Content deadlock.
+    const linkedSessions = await tx.sessionContent.findMany({
+      where: { contentId: claims.cid, deletedAt: null, session: { deletedAt: null } },
+      select: { sessionId: true },
+    });
+    await enqueueConsentReevaluationForSessions(
+      tx,
+      linkedSessions.map((link) => link.sessionId),
+    );
+
     const written = await tx.educationalContent.updateMany({
       where: {
         id: claims.cid,
