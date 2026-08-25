@@ -102,6 +102,10 @@ export interface ScopeOptions {
   /** The chosen Level teaches no Subjects. A real curriculum state, and the one
    *  a screen must explain rather than present as an empty dropdown. */
   levelTeachesNothing: boolean;
+  /** §4.9's default content visibility for the chosen Level, through its
+   *  Category (§15.1). `null` when no Level is chosen or the lists have not
+   *  arrived — never guessed, and never `public` on absence. */
+  defaultVisibility: 'public' | 'private' | 'hidden' | null;
 }
 
 export interface UseScopeOptionsInput {
@@ -432,5 +436,36 @@ export function useScopeOptions({
     ready,
     levelTeachesNothing:
       wants('subjectId') && value.levelId !== '' && !loadingSubjects && subjects.length === 0,
+    /**
+     * §4.9's default content visibility for the currently chosen Level, through
+     * its Category (§15.1) — `null` until both lists have arrived.
+     *
+     * Resolved here rather than on the screen because the Level → Category hop
+     * is the same one `categoryDefaultVisibility` makes on the server, and a
+     * screen re-deriving it would be a second answer to one question.
+     */
+    defaultVisibility: defaultVisibilityForLevel(levels, value.levelId),
   };
+}
+
+/**
+ * The chosen Level's §15.1 default, resolved server-side and carried on the
+ * Level itself.
+ *
+ * **Read from the Level, not from the Category.** The screens that scope an
+ * upload load Levels; `/admin/categories` is Admin-only (TD-2 R26, R30) and the
+ * content page never requests it, so resolving through a Category list would
+ * have produced `null` on every screen that needs this and left the selector
+ * inert — the same defect in a new place.
+ */
+export function defaultVisibilityForLevel(
+  levels: readonly Level[],
+  levelId: string,
+): 'public' | 'private' | 'hidden' | null {
+  if (levelId === '') return null;
+  const level = levels.find((row) => row.id === levelId);
+  // Absent is not `public`. A screen that guessed the open tier while the list
+  // was still arriving would preselect it, and a distracted person would ship
+  // content publicly because a request was slow.
+  return level?.default_visibility ?? null;
 }

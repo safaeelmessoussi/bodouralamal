@@ -90,6 +90,16 @@ export interface LevelSummary {
   groupCount: number;
   subjectCount: number;
   enrollmentCount: number;
+  /**
+   * §4.9's default content visibility for this Level, resolved through its
+   * Category (§15.1) — the same hop `categoryDefaultVisibility` makes.
+   *
+   * It rides the LEVEL rather than the Category because §14.1 requires the
+   * upload screen to honour the default, and that screen loads Levels and not
+   * Categories. A value the screen cannot read is a default it cannot honour,
+   * which is exactly how the visibility selector came to be missing.
+   */
+  defaultVisibility: 'public' | 'private' | 'hidden';
   version: number;
 }
 
@@ -217,6 +227,17 @@ export async function listLevels(
     },
   });
 
+  // One query for every Category represented, not one per Level: the settings
+  // are a handful of rows and this list is read by every scoping screen.
+  const categoryIds = [...new Set(rows.map((row) => row.categoryId))];
+  const settings = await prisma.systemSetting.findMany({
+    where: { key: { in: categoryIds.map((id) => `${DEFAULT_VISIBILITY_PREFIX}${id}`) } },
+    select: { key: true, value: true },
+  });
+  const byCategory = new Map(
+    settings.map((row) => [row.key.slice(DEFAULT_VISIBILITY_PREFIX.length), row.value]),
+  );
+
   return rows.map((row) => ({
     id: row.id,
     name: row.name,
@@ -227,8 +248,23 @@ export async function listLevels(
     groupCount: row._count.administrativeGroups,
     subjectCount: row._count.subjects,
     enrollmentCount: row._count.enrollments,
+    defaultVisibility: readDefaultVisibility(byCategory.get(row.categoryId)),
     version: row.version,
   }));
+}
+
+/** §15.1's key shape, in one place so the read and the write cannot drift. */
+const DEFAULT_VISIBILITY_PREFIX = 'content.default_visibility.category.';
+
+/**
+ * The stored value is JSON, and anything unrecognised resolves to `private`.
+ *
+ * **Never widen on a surprise.** A malformed settings row must not resolve to
+ * `public`, which would propose publishing content because a setting was wrong.
+ */
+function readDefaultVisibility(raw: unknown): 'public' | 'private' | 'hidden' {
+  const value = typeof raw === 'string' ? raw : undefined;
+  return value === 'public' || value === 'hidden' ? value : 'private';
 }
 
 /**

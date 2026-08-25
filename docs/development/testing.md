@@ -191,6 +191,7 @@ result is reported in the slice that ran them.
 | `scripts/dev/browser/verify-sorting.sh` | The sorting contract **clicked** across four tables: ascending → descending → ascending, exactly one header claiming a direction, non-sortable headers not clickable, the actions column never sortable, and **no row on two pages** of a sorted collection (R76.3's `id` tiebreaker). **Last run: 39/39.** |
 | `scripts/dev/browser/verify-public-calendar.sh` | قائمة and تقويم driven **anonymously**: both views offered, the choice in the URL, month stepping withheld where it means nothing, RTL with the marker on the inline start — and what a public reader must NOT see (no student name, no notification surface, no recordings, **no cancellation reason**). R83 removes a cancelled occurrence from the ordinary projection; `include_cancelled=true` still retrieves it. **Last run: 18/18.** |
 | `scripts/dev/browser/verify-library-recorder.sh` | The recorder's second entry point in مكتبة المحتوى, plus the sort indicator's **measured** placement. **Last run: 16/16.** |
+| `scripts/dev/browser/verify-content-visibility.sh` | §14.1's visibility selector, **operated**: not disabled while the default is unknown · shows a placeholder rather than عام for a `null` state · initialises from the Level's Category default · خاص is genuinely selectable and stays selected · the `/uploads/initiate` body carries `visibility: "private"` · a Level change re-proposes the new default · the **replace** dialog offers no control. Performs a real upload and removes its own row afterwards. **Last run: 15/15.** |
 | `scripts/dev/browser/verify-recorder.sh` | R75 with a **real `MediaRecorder`**: start · elapsed advancing · pause freezing the reading · resume · stop · editable name · save · discard · a second recording numbered « 2» — then the bytes in **MinIO** through a presigned URL, the row in the library, and the link as a *recording* on the Session page. Chrome runs with `--use-fake-device-for-media-capture`, which supplies a synthetic microphone; **the API is not stubbed**. **Last run: 22/22.** |
 | `scripts/dev/browser/verify-schedule-edit.sh` | «تعديل العنصر»: the dialog opens with the row's own mode, a seeded المستوى and its own الحلقة; changing only «نهاية التكرار» saves; and `teaching_mode`/`target_id` are untouched afterwards. **Last run: 12/12.** |
 | `scripts/dev/browser/verify-notifications.sh` | **Audience/API harness** for R77/R82/R83: cancellation and restoration reconciliation, Event scope recipients, personal calendars, and send/decline/repeat. It calls `/notify` directly, so it proves the server resolver and not the UI button. **Last run: 22/22.** |
@@ -368,6 +369,31 @@ TD-4.13 **rotates the refresh token on every use**, with reuse detection behind
 it, so re-presenting the token the script was handed works exactly once per
 identity. Switching between three sessions means carrying each one's *rotated*
 cookie forward — which is what a second person on a second device actually is.
+
+## Source-text tests cannot see a browser
+
+The visibility selector shipped once with tests that passed and a control nobody could
+operate. Two of its three defects were **browser behaviour, not code**:
+
+- `busy` mapped to `disabled`, so the control was present and inoperable;
+- `value=''` with no matching `<option>` made the browser render the **first** option — عام —
+  for a state that was actually `null`, so the control displayed a tier it did not hold and
+  did not send.
+
+Neither is visible in source. The tests asserted on the file's text and on the adapter, and
+both assertions were true while the screen was broken. **A test that reads source cannot
+observe a disabled attribute, a browser's first-option fallback, or what a `<select>` shows.**
+
+The rule this leaves: **when the property is what a person sees or can do, the test has to be
+a browser.** `verify-content-visibility.sh` operates the real control and reads the real
+request body, and each of the two defects was reintroduced to prove it fails — the repository's
+standing requirement that a guard be proven against the defect it exists for.
+
+One further honesty note, recorded because it is the kind of thing that otherwise becomes
+folklore: a **third** defect was suspected from reading the code — an effect overwriting a
+deliberate choice — and could not be demonstrated in the browser. The implementation still
+guards against it because doing so is cheap and states the rule legibly, but no check claims
+to catch it, and the harness says so where it would otherwise be read as protection.
 
 ## Four environment traps the integration suite sets
 

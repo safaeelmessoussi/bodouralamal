@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { kindOf, type ContentKind } from '../adapters/content.js';
 import { deleteContent } from '../adapters/uploads.js';
@@ -11,6 +11,7 @@ import { DataTable, type Column, type RowAction, type TableStatus } from '../com
 import { Button } from '../components/ui/button.js';
 import { Dialog } from '../components/ui/dialog.js';
 import { ScopeSelectors } from '../components/scope/scope-selectors.js';
+import { SelectField } from '../components/ui/field.js';
 import { useScopeOptions } from '../hooks/use-scope-options.js';
 import { useSession } from '../contexts/session.js';
 import { useActiveRole } from '../contexts/active-role.js';
@@ -183,14 +184,63 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
    */
   const [suggestedName, setSuggestedName] = useState('');
 
+  /**
+   * **§14.1's visibility selection**, and the three ways the first attempt at
+   * it was wrong — all found by an Owner operating the real screen, none
+   * findable by the source-text tests that shipped with it.
+   *
+   * 1. It passed `busy={visibility === null}`, which `SelectField` maps to
+   *    `disabled`. Before a Level was chosen the control was present and
+   *    **inoperable** — *«I cannot actually choose another value»*.
+   * 2. It passed `value={visibility ?? ''}` with **no `''` option**, so the
+   *    browser fell back to rendering the first option, **عام**. The control
+   *    displayed *public* while holding nothing and sending nothing: the
+   *    original defect wearing a dropdown.
+   * (1) and (2) are what the Owner actually hit, and the browser regression
+   * catches both — verified by reintroducing each and watching it fail.
+   *
+   * A third concern was **suspected and could not be demonstrated**: an effect
+   * that mirrors the default on every recomputation would overwrite a
+   * deliberate choice. Driving it in a real browser, the naive form and this
+   * one behave identically on real data, so it is recorded as unproven rather
+   * than claimed as a fixed defect.
+   *
+   * `initialisedFor` is kept anyway, for two reasons that do not depend on that
+   * suspicion: it states §14.1's rule *"propose once per Level, then respect
+   * the person"* in a form a reader can check, and it makes the effect
+   * unable to wipe a selection if the resolved default ever goes momentarily
+   * unknown. It is cheap, and it is legible.
+   */
+  const [visibility, setVisibility] = useState<string | null>(null);
+  const initialisedFor = useRef<string | null>(null);
+  const categoryDefault = scope.defaultVisibility;
+  useEffect(() => {
+    if (levelId === '') {
+      // No target, so no honest default to show. The placeholder says so.
+      initialisedFor.current = null;
+      setVisibility(null);
+      return;
+    }
+    // Not knowable yet — WAIT rather than propose. Clobbering a person's
+    // selection because a list was still arriving is defect (3) above.
+    if (categoryDefault === null) return;
+    if (initialisedFor.current === levelId) return;
+    initialisedFor.current = levelId;
+    setVisibility(categoryDefault);
+  }, [levelId, categoryDefault]);
+
   const meta = useMemo(
     () => ({
       level_id: levelId,
       subject_id: subjectId,
       academic_year_id: academicYearId,
       branch_id: branchId === '' || branchId === GLOBAL ? null : branchId,
+      // Sent explicitly once it is knowable. The server's Category fallback
+      // stays as the contract's default for other callers, but this screen no
+      // longer relies on it: what the person saw is what is sent.
+      ...(visibility === null ? {} : { visibility: visibility as 'public' | 'private' | 'hidden' }),
     }),
-    [levelId, subjectId, academicYearId, branchId],
+    [levelId, subjectId, academicYearId, branchId, visibility],
   );
 
   /**
@@ -353,6 +403,36 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
       </Dialog>
 
       <Dialog open={uploading} onClose={() => setUploading(false)} title={t('content.upload.action')}>
+        {/**
+          * §14.1 — offered on UPLOAD only. Replacement deliberately has no such
+          * control: R53 keeps the record and changes only the object, so the
+          * existing row's visibility is authoritative and a selector there
+          * would quietly turn a file swap into a publication decision.
+          *
+          * All three tiers are offered to everyone who can reach this screen,
+          * and that is derived rather than assumed: `assertUploadScope` gates
+          * the Global/branch scope and nothing else, so §4.9 places no
+          * per-role limit on the tier itself. §14.1's *"not editable by
+          * Teachers"* is about the consent-forced state, which no new upload
+          * can be in — `consent_forced_private` starts false and only BR-2 may
+          * set it, never a person and never this form.
+          */}
+        <SelectField
+          label={t('content.col.visibility')}
+          value={visibility ?? ''}
+          // **Honest while unknown, and never disabled.** The placeholder gives
+          // `''` a real option, so the browser cannot fall back to rendering
+          // عام for a state that is actually `null`. It is offered only while
+          // the value IS unknown: once a tier is chosen there is nothing
+          // truthful for an empty option to mean.
+          {...(visibility === null ? { placeholder: t('common.choose') } : {})}
+          onChange={setVisibility}
+          options={[
+            { value: 'public', label: t('content.visibility.public') },
+            { value: 'private', label: t('content.visibility.private') },
+            { value: 'hidden', label: t('content.visibility.hidden') },
+          ]}
+        />
         <FileUploader
           meta={meta}
           token={accessToken}
