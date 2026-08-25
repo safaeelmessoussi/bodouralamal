@@ -1,5 +1,23 @@
 # Tasks — بذور الأمل Platform
 
+## Staging accepted — 2026-08-25
+
+`https://staging.bodouralamal.com` is deployed, healthy and accepted at
+`9d6dff139acaadbe8ae788b1df7a99984c5fea7f`, the exact commit that passed CI 4/4.
+
+**Open items carried forward, none blocking:**
+
+- **Rule AX, remaining instance:** the Content **Recorder** dialog still takes its scope from
+  the page filters. Its own slice — R75's recorder has a separate submit path.
+- **Rule AX, borderline:** `session-materials-dialog` takes the Session's scope as context and
+  does not display it. Owner decision whether *"fixed → disabled, not hidden"* applies.
+- **Automated authenticated Staging E2E** — the next bounded engineering task the Owner
+  already scoped: it must preserve the real authentication boundary rather than minting
+  unauthenticated sessions, which is why `issue-dev-session.ts` still refuses a non-loopback
+  database and was never weakened.
+- **Housekeeping:** the disposable `bodour_v` database, the stale `bodouralamal-db` container
+  on port 5434, and the old `bodouralamal-*` volumes are all retained for a later cleanup task.
+
 ## ✅ FIXED — the Content Upload screen had no visibility selector (§14.1)
 
 **Found 2026-08-25 by an Owner performing a real upload on Staging and being unable to mark
