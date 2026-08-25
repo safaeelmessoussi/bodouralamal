@@ -1,6 +1,7 @@
 import { describe, expect, it, vi, afterEach } from 'vitest';
 
 import CONTENT_PAGE from './content.tsx?raw';
+import UPLOAD_FORM from '../components/content/content-upload-form.tsx?raw';
 import { defaultVisibilityForLevel } from '../hooks/use-scope-options.js';
 import { uploadFile } from '../adapters/uploads.js';
 import { t } from '../i18n/index.js';
@@ -139,25 +140,28 @@ describe('the chosen tier is the tier that is sent', () => {
   });
 });
 
-/* ── Replacement must not become a visibility change ─────────────────────── */
+/* ── Replacement must not become a visibility or scope change ────────────── */
 
-describe('replacement changes the object, never the tier', () => {
-  it('the replace dialog passes no visibility, so the row’s own tier stays authoritative', () => {
-    const page = readSource();
-    const replace = page.slice(page.indexOf('open={replacing !== null}'));
-    const uploader = replace.slice(replace.indexOf('<FileUploader'), replace.indexOf('/>', replace.indexOf('<FileUploader')));
-    expect(uploader).toContain('replaces_content_id');
-    // R53 keeps the record and swaps the object. A selector here would turn a
-    // file swap into a publication decision nobody asked for.
-    expect(uploader).not.toContain('visibility');
+describe('replacement changes the object, never the tier or the scope', () => {
+  it('the replace dialog passes `replacing`, which locks every determining field', () => {
+    const replace = readSource().slice(readSource().indexOf('open={replacing !== null}'));
+    expect(replace).toContain('replacing={{');
   });
 
-  it('the selector is rendered inside the UPLOAD dialog only', () => {
-    const page = readSource();
-    const upload = page.slice(page.indexOf('open={uploading}'), page.indexOf('open={replacing !== null}'));
-    expect(upload).toContain("t('content.visibility.private')");
-    const afterReplace = page.slice(page.indexOf('open={replacing !== null}'));
-    expect(afterReplace).not.toContain("t('content.visibility.private')");
+  it('a locked form omits visibility from the payload entirely', () => {
+    // R53 swaps the object and keeps the record, so the row's own tier stays
+    // authoritative. The guard is the `locked` arm of the meta builder.
+    const src = form();
+    const meta = src.slice(src.indexOf('const meta = useMemo'), src.indexOf('const problem'));
+    expect(meta).toContain('visibility === null || locked');
+    expect(meta).toContain('replaces_content_id');
+  });
+
+  it('locks every scope field rather than hiding them', () => {
+    // The rule is that a determining field is never hidden — «this is fixed» is
+    // exactly what a hidden field cannot say.
+    expect(form()).toContain('locked: FIELDS');
+    expect(form()).toContain('disabled={locked}');
   });
 });
 
@@ -169,9 +173,9 @@ describe('consent-forced private cannot be overridden here', () => {
     // publication override, which is BR-3's separate Admin-with-justification
     // workflow and deliberately not this slice.
     //
-    const page = readSource();
-    expect(page).not.toContain('consent_forced_private');
-    const meta = page.slice(page.indexOf('const meta = useMemo'), page.indexOf('const scopeProblem'));
+    const src = form();
+    expect(src).not.toContain('consent_forced_private');
+    const meta = src.slice(src.indexOf('const meta = useMemo'), src.indexOf('const problem'));
     expect(meta).toContain('visibility');
   });
 
@@ -186,6 +190,11 @@ describe('consent-forced private cannot be overridden here', () => {
  *  Stripping matters here: the file explains in prose why the consent flag is
  *  absent, and an assertion that tripped on the explanation would teach the
  *  next author to delete the explanation rather than keep the property. */
+/** The self-contained upload form's CODE, comments stripped. */
+function form(): string {
+  return UPLOAD_FORM.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+}
+
 function readSource(): string {
   return CONTENT_PAGE.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
 }

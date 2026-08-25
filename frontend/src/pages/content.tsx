@@ -1,17 +1,16 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import { kindOf, type ContentKind } from '../adapters/content.js';
 import { deleteContent } from '../adapters/uploads.js';
 import { AdminLayout } from '../components/admin/admin-layout.js';
 import { AudioRecorder } from '../components/content/audio-recorder.js';
-import { FileUploader } from '../components/content/file-uploader.js';
+import { ContentUploadForm } from '../components/content/content-upload-form.js';
 import { TeacherLayout } from '../components/teacher/teacher-layout.js';
 import { ConfirmDialog } from '../components/ui/confirm-dialog.js';
 import { DataTable, type Column, type RowAction, type TableStatus } from '../components/ui/data-table.js';
 import { Button } from '../components/ui/button.js';
 import { Dialog } from '../components/ui/dialog.js';
 import { ScopeSelectors } from '../components/scope/scope-selectors.js';
-import { SelectField } from '../components/ui/field.js';
 import { useScopeOptions } from '../hooks/use-scope-options.js';
 import { useSession } from '../contexts/session.js';
 import { useActiveRole } from '../contexts/active-role.js';
@@ -185,75 +184,39 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
   const [suggestedName, setSuggestedName] = useState('');
 
   /**
-   * **§14.1's visibility selection**, and the three ways the first attempt at
-   * it was wrong — all found by an Owner operating the real screen, none
-   * findable by the source-text tests that shipped with it.
+   * **The page's filters seed an upload; they no longer decide it** (Owner UX
+   * rule, 2026-08-25).
    *
-   * 1. It passed `busy={visibility === null}`, which `SelectField` maps to
-   *    `disabled`. Before a Level was chosen the control was present and
-   *    **inoperable** — *«I cannot actually choose another value»*.
-   * 2. It passed `value={visibility ?? ''}` with **no `''` option**, so the
-   *    browser fell back to rendering the first option, **عام**. The control
-   *    displayed *public* while holding nothing and sending nothing: the
-   *    original defect wearing a dropdown.
-   * (1) and (2) are what the Owner actually hit, and the browser regression
-   * catches both — verified by reintroducing each and watching it fail.
-   *
-   * A third concern was **suspected and could not be demonstrated**: an effect
-   * that mirrors the default on every recomputation would overwrite a
-   * deliberate choice. Driving it in a real browser, the naive form and this
-   * one behave identically on real data, so it is recorded as unproven rather
-   * than claimed as a fixed defect.
-   *
-   * `initialisedFor` is kept anyway, for two reasons that do not depend on that
-   * suspicion: it states §14.1's rule *"propose once per Level, then respect
-   * the person"* in a form a reader can check, and it makes the effect
-   * unable to wipe a selection if the resolved default ever goes momentarily
-   * unknown. It is cheap, and it is legible.
+   * Every field that determines what gets created now lives inside the dialog
+   * and is editable there, so the page holds no upload meta, no visibility and
+   * no scope hint. Holding any of them would be a second answer to *what is
+   * about to be saved* — and the first answer would be the invisible one.
    */
-  const [visibility, setVisibility] = useState<string | null>(null);
-  const initialisedFor = useRef<string | null>(null);
-  const categoryDefault = scope.defaultVisibility;
-  useEffect(() => {
-    if (levelId === '') {
-      // No target, so no honest default to show. The placeholder says so.
-      initialisedFor.current = null;
-      setVisibility(null);
-      return;
-    }
-    // Not knowable yet — WAIT rather than propose. Clobbering a person's
-    // selection because a list was still arriving is defect (3) above.
-    if (categoryDefault === null) return;
-    if (initialisedFor.current === levelId) return;
-    initialisedFor.current = levelId;
-    setVisibility(categoryDefault);
-  }, [levelId, categoryDefault]);
+  const uploadSeed = useMemo(
+    () => ({ levelId, subjectId, academicYearId, branchId }),
+    [levelId, subjectId, academicYearId, branchId],
+  );
 
-  const meta = useMemo(
+  /**
+   * **The recorder still takes its scope from the page, and that is a known
+   * remaining instance of the same pattern**, listed in the platform audit
+   * (`docs/development/ux-architecture.md`, rule AX). It is left as it was in
+   * this slice rather than converted half-way: R75's recorder has its own
+   * dialog and its own submit path, and changing both flows at once would make
+   * one browser regression answer for two behaviours.
+   */
+  const recorderMeta = useMemo(
     () => ({
       level_id: levelId,
       subject_id: subjectId,
       academic_year_id: academicYearId,
       branch_id: branchId === '' || branchId === GLOBAL ? null : branchId,
-      // Sent explicitly once it is knowable. The server's Category fallback
-      // stays as the contract's default for other callers, but this screen no
-      // longer relies on it: what the person saw is what is sent.
-      ...(visibility === null ? {} : { visibility: visibility as 'public' | 'private' | 'hidden' }),
     }),
-    [levelId, subjectId, academicYearId, branchId, visibility],
+    [levelId, subjectId, academicYearId, branchId],
   );
 
-  /**
-   * Why the upload cannot start yet, in the person's terms.
-   *
-   * Stated above the form rather than enforced by a button that fails on click:
-   * §14.4 wants the reason visible, and "choose a level first" is a smaller
-   * thing to read than a validation error after filling in a title.
-   */
-  const scopeProblem = scope.levelTeachesNothing
-    ? // Actionable rather than merely refusing: the fix is an assignment on
-      // another screen, and naming it is what turns a dead end into a next step.
-      t('scope.assignSubjectsHint')
+  const recorderScopeProblem = scope.levelTeachesNothing
+    ? t('scope.assignSubjectsHint')
     : levelId === '' || subjectId === '' || academicYearId === ''
       ? t('content.upload.chooseScope')
       : !isAdmin && (branchId === '' || branchId === GLOBAL)
@@ -383,13 +346,13 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
             through the same pipeline and needs the same four fields, so a
             missing Level here fails for the same reason and says the same
             thing rather than inventing a second wording. */}
-        {scopeProblem !== null ? (
+        {recorderScopeProblem !== null ? (
           <p className="state" role="status">
-            {scopeProblem}
+            {recorderScopeProblem}
           </p>
         ) : (
           <AudioRecorder
-            meta={meta}
+            meta={recorderMeta}
             token={accessToken}
             suggestedName={suggestedName}
             onSaved={() => {
@@ -417,34 +380,22 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
           * can be in — `consent_forced_private` starts false and only BR-2 may
           * set it, never a person and never this form.
           */}
-        <SelectField
-          label={t('content.col.visibility')}
-          value={visibility ?? ''}
-          // **Honest while unknown, and never disabled.** The placeholder gives
-          // `''` a real option, so the browser cannot fall back to rendering
-          // عام for a state that is actually `null`. It is offered only while
-          // the value IS unknown: once a tier is chosen there is nothing
-          // truthful for an empty option to mean.
-          {...(visibility === null ? { placeholder: t('common.choose') } : {})}
-          onChange={setVisibility}
-          options={[
-            { value: 'public', label: t('content.visibility.public') },
-            { value: 'private', label: t('content.visibility.private') },
-            { value: 'hidden', label: t('content.visibility.hidden') },
-          ]}
-        />
-        <FileUploader
-          meta={meta}
-          token={accessToken}
-          submitLabel={t('content.upload.action')}
-          disabledReason={scopeProblem}
-          onCancel={() => setUploading(false)}
-          onUploaded={() => {
-            setUploading(false);
-            setNotice(t('content.uploaded'));
-            void load();
-          }}
-        />
+        {/* Mounted only while open, so each opening seeds itself from the
+            filters as they are NOW rather than from a stale first render. */}
+        {uploading ? (
+          <ContentUploadForm
+            token={accessToken}
+            mayAssignGlobal={isAdmin}
+            initial={uploadSeed}
+            submitLabel={t('content.upload.action')}
+            onCancel={() => setUploading(false)}
+            onUploaded={() => {
+              setUploading(false);
+              setNotice(t('content.uploaded'));
+              void load();
+            }}
+          />
+        ) : null}
       </Dialog>
 
       <Dialog
@@ -457,17 +408,25 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
             {/* TD-9: the record and every link to it survive; only the object
                 changes, under a new key, with the old one quarantined. */}
             <p className="muted">{t('content.replaceExplainer')}</p>
-            <FileUploader
-              meta={{
-                level_id: replacing.level_id,
-                subject_id: replacing.subject_id,
-                academic_year_id: replacing.academic_year_id,
-                branch_id: replacing.branch_id,
-                replaces_content_id: replacing.id,
-              }}
+            {/* The same form, with every determining field DISABLED rather than
+                hidden: R53 swaps the object and keeps the record, so the scope
+                and tier are the row's — and a person replacing a file should be
+                able to see which row they are replacing into. */}
+            <ContentUploadForm
               token={accessToken}
-              initialTitle={replacing.title}
-              initialDescription={replacing.description ?? ''}
+              mayAssignGlobal={isAdmin}
+              initial={{
+                levelId: replacing.level_id,
+                subjectId: replacing.subject_id,
+                academicYearId: replacing.academic_year_id,
+                branchId: replacing.branch_id ?? '',
+              }}
+              replacing={{
+                id: replacing.id,
+                title: replacing.title,
+                description: replacing.description ?? '',
+                visibility: replacing.visibility,
+              }}
               submitLabel={t('content.replace')}
               onCancel={() => setReplacing(null)}
               onUploaded={() => {

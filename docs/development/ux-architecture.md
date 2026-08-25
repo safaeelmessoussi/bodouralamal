@@ -1604,6 +1604,68 @@ it is the same defect wearing the fix**: `verify-calendar-filters.mjs` chooses a
 branch in the list, switches to the grid, and asserts the **grid's own request**
 carries `branch_id`.
 
+## AX · A create/edit form contains every field that decides what is saved
+
+**Owner decision, 2026-08-25.**
+
+> **Every field that materially determines the object being created or edited must be
+> visible inside that create/edit form.** The form may pre-fill those fields from the current
+> page filters or context, but they must still be visible so the person can understand
+> exactly what will be saved.
+
+### The defect it comes from
+
+The Content Upload dialog carried a file, a title, a description and a visibility — and then
+said:
+
+> «اختاري المستوى والمادة والسنة الدراسية قبل الرفع.»
+
+while containing **none of those three controls**. They lived in the page's *filter* bar,
+which the screen also used as the upload target. So the form instructed the reader to go and
+do something outside itself, and the thing being created was invisible at the moment of
+creating it. *"What am I about to save?"* was unanswerable by reading the form.
+
+The page filters doubling as the write scope was a deliberate, documented choice —
+*"what you are looking at is what you are adding to"* — and it removes one class of mistake.
+It creates a worse one: **invisible state decides a write.**
+
+### What the rule requires
+
+- **Pre-fill, do not depend.** Opening the dialog from a filtered page seeds the form. After
+  that the form owns its values, and nothing it saves is read from page state.
+- **Changing a field in the form changes the target.** If it cannot, it is not a field.
+- **Fixed by permission or context → disabled, never hidden.** *"This is fixed"* is exactly
+  what a hidden field fails to say. Replacement (R53) shows its Level, Subject, Year, Branch
+  and tier **disabled**, because the person needs to see which row they are replacing into.
+- **Withholding a VALUE is not hiding a FIELD.** The Global / بدون فرع option is offered only
+  to callers who may assign it (§4.9); the Branch selector itself stays visible for everyone.
+  The server still decides (rule O).
+- **Dependencies belong to the form** (rule AE): a form's Subject narrows to its Level, so a
+  pair the server refuses cannot be offered. That is why the form runs its own
+  `useScopeOptions` in `mode: 'form'` rather than borrowing the filter bar's.
+- **A dependent default is re-proposed, never left stale.** Changing Level re-proposes that
+  Category's visibility default; it must never silently publish under the previous Level's.
+
+### Platform audit, 2026-08-25
+
+| Screen | Verdict |
+|---|---|
+| **Content Upload dialog** | **Was the violation. Fixed** — `ContentUploadForm` carries Level, Subject, Year, Branch, Visibility, file, title, description |
+| **Content Recorder dialog** (same page) | **Open — the one remaining confirmed instance.** `AudioRecorder` still takes its scope from the page filters. Left for its own slice: R75's recorder has a separate submit path, and converting both at once would make one browser regression answer for two behaviours |
+| `session-materials-dialog` | **Borderline, Owner decision.** Its scope is the **Session's**, passed as a prop — context, not a page filter, and correctly not editable. Under *"fixed → disabled, not hidden"* it should arguably display Level/Subject read-only |
+| `groups.tsx` | Compliant — name, Level and Branch are inside its `FormDialog` |
+| `scheduling.tsx` | Compliant — the form runs its own scope hook, seeded from the row being edited |
+| `enrollments.tsx` | Compliant — Level and Branch are local dialog state |
+| `users` · `teaching-structure` · `approvals` · `quran-workspace` · `register`/`children` | Compliant |
+
+A sweep for files that submit `level_id`/`subject_id`/`branch_id`/`academic_year_id` without
+rendering a control found **no further production screen** — every other hit was a test file.
+
+> Guarded behaviourally by `scripts/dev/browser/verify-content-visibility.sh`, which asserts
+> the dialog contains all five selectors, that they are seeded from the page filters, that
+> they are editable on a create form and **disabled on a replacement**, and that the
+> `/uploads/initiate` payload matches what is visible.
+
 ## AK · UI text is not prose, and does not take the prose measure
 
 `p { max-width: var(--measure) }` — 64ch — is right for a paragraph somebody

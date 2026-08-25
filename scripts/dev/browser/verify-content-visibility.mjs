@@ -145,6 +145,42 @@ const readVis = () => evaluate(`(() => {
   };
 })()`);
 
+/** Reads every labelled control inside the OPEN dialog — the form's own view of
+ *  what will be saved, which is the whole point of the self-containment rule. */
+const readDialogFields = () => evaluate(`(() => {
+  const d = document.querySelector('dialog[open]');
+  if (!d) return { open: false };
+  return {
+    open: true,
+    selects: [...d.querySelectorAll('.field')].map((f) => {
+      const s = f.querySelector('select');
+      if (!s) return null;
+      return {
+        label: (f.querySelector('label')?.textContent ?? '').trim(),
+        value: s.value,
+        shown: s.options[s.selectedIndex]?.text ?? null,
+        disabled: s.disabled,
+        count: s.options.length,
+      };
+    }).filter(Boolean),
+    hasFile: !!d.querySelector('input[type="file"]'),
+    hasTitle: !!d.querySelector('input[type="text"]'),
+  };
+})()`);
+
+/** Sets a dialog select by its visible label. */
+const setDialogSelect = (label, value) => evaluate(`(() => {
+  const d = document.querySelector('dialog[open]');
+  if (!d) return 'no-dialog';
+  const field = [...d.querySelectorAll('.field')].find((f) => (f.querySelector('label')?.textContent ?? '').trim() === ${JSON.stringify(label)});
+  const el = field?.querySelector('select');
+  if (!el) return 'missing';
+  const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set;
+  setter.call(el, ${JSON.stringify(value)});
+  el.dispatchEvent(new Event('change', { bubbles: true }));
+  return 'ok';
+})()`);
+
 const openUpload = () => evaluate(`(() => {
   const btn = [...document.querySelectorAll('button')].find((b) => b.textContent.includes('رفع ملف') && !b.closest('dialog'));
   if (!btn) return 'no-button';
@@ -188,11 +224,16 @@ const replaced = await evaluate(`(async () => {
   return 'opened';
 })()`);
 if (replaced === 'opened') {
-  const rv = await readVis();
+  const rf = await readDialogFields();
   check(
-    'the REPLACE dialog offers no visibility control (R53 stays a file swap)',
-    rv.present === false,
-    JSON.stringify(rv),
+    'the REPLACE dialog SHOWS the scope and tier rather than hiding them',
+    rf.selects.length >= 5,
+    `${rf.selects.length} selects: ${rf.selects.map((s) => s.label).join(' | ')}`,
+  );
+  check(
+    'every one of them is DISABLED — replacement swaps the object, not the scope',
+    rf.selects.length > 0 && rf.selects.every((s) => s.disabled === true),
+    JSON.stringify(rf.selects.map((s) => [s.label, s.disabled])),
   );
 } else {
   check('the replace dialog could be opened', false, `state=${replaced}`);
@@ -246,6 +287,49 @@ check(
   vis.value === 'public',
   `value=${vis.value} shown=${vis.shown}`,
 );
+
+/* ── 2b. The dialog CONTAINS every determining field, seeded from the page ── */
+const fields = await readDialogFields();
+check('the dialog contains a file input and a title', fields.hasFile && fields.hasTitle, JSON.stringify({ f: fields.hasFile, t: fields.hasTitle }));
+check(
+  'the dialog contains Level, Subject, Academic Year, Branch AND Visibility',
+  fields.selects.length >= 5,
+  `${fields.selects.length} selects: ${fields.selects.map((s) => s.label).join(' | ')}`,
+);
+const byLabel = Object.fromEntries(fields.selects.map((s) => [s.label, s]));
+check(
+  'the Level inside the dialog is seeded from the page filter',
+  byLabel['المستوى']?.value === PUBLIC_LEVEL,
+  `dialog level=${byLabel['المستوى']?.value} filter=${PUBLIC_LEVEL}`,
+);
+check(
+  'Subject and Academic Year are seeded too, not left blank',
+  (byLabel['المادة']?.value ?? '') !== '' && (byLabel['السنة الدراسية']?.value ?? '') !== '',
+  JSON.stringify({ subject: byLabel['المادة']?.value, year: byLabel['السنة الدراسية']?.value }),
+);
+check(
+  'every dialog field is editable (none silently fixed on a create form)',
+  fields.selects.every((s) => s.disabled === false),
+  JSON.stringify(fields.selects.map((s) => [s.label, s.disabled])),
+);
+
+/* ── 2c. A Level change WITHIN the same Category still re-proposes ───────── */
+await evaluate(`(() => { const b=[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='إلغاء'); if(b) b.click(); })()`);
+await new Promise((r) => setTimeout(r, 300));
+await fillScope(SAME_CATEGORY_LEVEL);
+await openUpload();
+await new Promise((r) => setTimeout(r, 600));
+vis = await readVis();
+check(
+  'a second Level in the same Category still seeds the dialog from the page filter',
+  vis.value === 'public',
+  `value=${vis.value} shown=${vis.shown}`,
+);
+await evaluate(`(() => { const b=[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='إلغاء'); if(b) b.click(); })()`);
+await new Promise((r) => setTimeout(r, 300));
+await fillScope(PUBLIC_LEVEL);
+await openUpload();
+await new Promise((r) => setTimeout(r, 600));
 
 /* ── 3. An explicit choice SURVIVES ordinary rerenders (defect 3) ────────── */
 check('خاص can actually be chosen', (await setSelect(VIS, 'private')) === 'ok');
@@ -306,17 +390,25 @@ check(
   `content_meta=${JSON.stringify(sent?.content_meta)}`,
 );
 
-/* ── 4b. A Level change WITHIN the same Category still re-proposes ───────── */
-await evaluate(`(() => { const b=[...document.querySelectorAll('button')].find(b=>b.textContent.trim()==='إلغاء'); if(b) b.click(); })()`);
-await new Promise((r) => setTimeout(r, 300));
-await fillScope(SAME_CATEGORY_LEVEL);
+/* ── 4a2. Changing Level INSIDE the dialog re-narrows Subject and re-proposes
+        visibility — the dependency belongs to the form, not the page ─────── */
+// A successful upload closes the dialog, so reopen it — seeded again from the
+// page filters, which is itself the behaviour the rule asks for.
 await openUpload();
-await new Promise((r) => setTimeout(r, 600));
-vis = await readVis();
+await new Promise((r) => setTimeout(r, 700));
+check('the Level can be changed inside the dialog', (await setDialogSelect('المستوى', PRIVATE_LEVEL)) === 'ok');
+await new Promise((r) => setTimeout(r, 1200));
+const afterLevelChange = await readDialogFields();
+const after = Object.fromEntries(afterLevelChange.selects.map((s) => [s.label, s]));
 check(
-  'a Level change within ONE Category re-proposes that default, discarding the previous choice',
-  vis.value === 'public',
-  `value=${vis.value} shown=${vis.shown} — خاص must not carry over to a different Level`,
+  'changing Level in the dialog re-proposes THAT Category default (private → خاص)',
+  after['الظهور']?.value === 'private',
+  `visibility=${after['الظهور']?.value} shown=${after['الظهور']?.shown}`,
+);
+check(
+  'the Subject list re-narrows to the new Level rather than keeping a stale pair',
+  (after['المادة']?.count ?? 0) >= 1,
+  `subject options=${after['المادة']?.count} value=${after['المادة']?.value}`,
 );
 
 /* ── 5. A different Level re-proposes ITS default ────────────────────────── */
