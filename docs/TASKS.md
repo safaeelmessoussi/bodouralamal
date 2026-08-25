@@ -1,5 +1,28 @@
 # Tasks — بذور الأمل Platform
 
+## Next engineering cleanup — CI has been red on `develop` since before 2026-08-20
+
+**`prisma generate` never runs in the clean CI jobs.** The `backend` and `API contract` jobs
+run `npm ci` → `npm run lint` → `npm run typecheck`, and `src/generated/prisma/**` is
+gitignored, so typecheck cannot find the client:
+
+```
+TS2307: Cannot find module './generated/prisma/client.js'
+```
+
+followed by a cascade of `TS7006` on every parameter whose type came from it. It passes on a
+developer machine only because the working tree already holds a generated client, which is
+the same shape of blindness that hid the frontend lock-file break: **local green and CI green
+were never the same thing, and nobody was comparing them.**
+
+The fix is one step before lint/typecheck in both jobs. It is recorded here rather than done
+inside the staging slice because greening CI may surface further failures behind this first
+one, and that is its own task with its own verification.
+
+> Discovered 2026-08-25 during the staging deployment. The other cause of the same red build
+> — `frontend/package-lock.json` out of sync so `npm ci` failed on every clean checkout — was
+> fixed in that slice because it blocked the deployment build itself.
+
 > **Backend Release-Candidate status (2026-07-29, SRS Revision 33).** M0–M3 are **complete on the backend**:
 > every TD-3 endpoint for those milestones is implemented, documented and router-reconciled, and both the
 > §18 *Registration, Approvals & Family* and *Scheduling & Calendar* checklists are green. 97 unit + 473
