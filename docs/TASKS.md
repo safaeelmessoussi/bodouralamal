@@ -69,7 +69,7 @@ All three tiers are offered to everyone who can reach the screen, and that is *d
 per-role limit on the tier itself. §14.1's *"not editable by Teachers"* is about the
 consent-forced state, which no new upload can be in.
 
-## Next engineering cleanup — CI has been red on `develop` since before 2026-08-20
+## ✅ FIXED — CI had been red on `develop` since before 2026-08-20
 
 **`prisma generate` never runs in the clean CI jobs.** The `backend` and `API contract` jobs
 run `npm ci` → `npm run lint` → `npm run typecheck`, and `src/generated/prisma/**` is
@@ -84,9 +84,11 @@ developer machine only because the working tree already holds a generated client
 the same shape of blindness that hid the frontend lock-file break: **local green and CI green
 were never the same thing, and nobody was comparing them.**
 
-The fix is one step before lint/typecheck in both jobs. It is recorded here rather than done
-inside the staging slice because greening CI may surface further failures behind this first
-one, and that is its own task with its own verification.
+**Fixed 2026-08-25**: `npx prisma generate` now runs after `npm ci` in both the `backend` and
+`contract` jobs. It was pulled into the staging slice after all, because the adopted release
+flow makes **clean CI on the exact commit a precondition for deploying to Staging** — so
+leaving it red would have blocked the very promotion it was recorded beside. Nothing further
+was hiding behind it: the run went green on the first attempt.
 
 > Discovered 2026-08-25 during the staging deployment. The other cause of the same red build
 > — `frontend/package-lock.json` out of sync so `npm ci` failed on every clean checkout — was

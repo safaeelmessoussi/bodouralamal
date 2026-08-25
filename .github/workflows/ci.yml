@@ -85,6 +85,10 @@ jobs:
           cache-dependency-path: backend/package-lock.json
       - run: npm ci
         working-directory: backend
+      # Same reason as the backend job: the generator imports the client it
+      # describes, so a clean checkout has nothing to generate the contract from.
+      - run: npx prisma generate
+        working-directory: backend
       # Regenerate FROM THE IMPLEMENTATION, then fail if the committed document
       # differs. Without this the gate below would be validating a file a human
       # could hand-edit — exactly what §3.1 forbids ("never hand-edited to fix a
@@ -127,6 +131,14 @@ jobs:
           cache: npm
           cache-dependency-path: backend/package-lock.json
       - run: npm ci
+      # **`prisma generate` is a BUILD STEP, not a developer convenience.**
+      # `src/generated/prisma/**` is gitignored, so on a clean checkout it does
+      # not exist and every file importing the client fails to typecheck —
+      # `TS2307` followed by a cascade of `TS7006` on every parameter whose type
+      # came from it. It passed locally only because a working tree already had
+      # the client, which is the same blindness that hid a broken lockfile: local
+      # green and CI green were never the same thing.
+      - run: npx prisma generate
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
