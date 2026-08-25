@@ -154,6 +154,7 @@ async function clear(): Promise<void> {
   });
   await prisma.user.deleteMany({ where: { id: { in: ids } } });
   await prisma.consumedToken.deleteMany({ where: { purpose: "onboarding" } });
+  await prisma.normalizedEmailLock.deleteMany({ where: { email: { startsWith: "appr-" } } });
   // After the users: `intended_branch_id` is ON DELETE RESTRICT, so a branch
   // still referenced refuses to go.
   await prisma.branch.deleteMany({ where: { name: { startsWith: TAG } } });

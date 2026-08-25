@@ -1,4 +1,5 @@
 import type { PrismaClient } from '../generated/prisma/client.js';
+import { RefreshRevokedReason } from '../generated/prisma/enums.js';
 import { AppError } from '../lib/errors.js';
 import type { Actor } from '../policies/actor.js';
 import { pageWindow, type Page } from '../lib/pagination.js';
@@ -6,7 +7,9 @@ import { composeArabicName } from '../lib/person-name.js';
 import { assertFreshActive } from '../policies/freshness.policy.js';
 import * as audit from '../repositories/audit.repository.js';
 import * as trash from '../repositories/trash.repository.js';
+import * as users from '../repositories/user.repository.js';
 import { enrolAtPlacement, type PlacementInput } from './enrollment.service.js';
+import { revokeAllSessions } from './refresh-token.service.js';
 import { applyRoleAssignments } from './user.service.js';
 
 /**
@@ -477,9 +480,11 @@ export async function decide(
     // status, so it finds nothing pending and takes the STATE_CONFLICT path
     // that was always intended.
     //
-    // §16.2 sanctioned raw-SQL exception (a): SELECT … FOR UPDATE row lock —
-    // the same pattern branch, room, group and roster already use.
-    await tx.$queryRaw`SELECT id FROM "user" WHERE id = ${id}::uuid FOR UPDATE`;
+    // R102 shares the authentication hierarchy: User first, then every stable
+    // RefreshSession anchor in deterministic UUID order. `FOR NO KEY UPDATE`
+    // still gives TD-15.3 first-wins, while remaining compatible with the
+    // implicit User KEY SHARE taken by a racing refresh's child-FK writes.
+    await users.lockUser(tx, id);
 
     const applicant = await tx.user.findFirst({
       where: { id, accountStatus: 'pending', deletedAt: null, childLinks: { none: {} } },
@@ -494,6 +499,7 @@ export async function decide(
     if (applicant) {
       const nextStatus = decision.approve ? 'active' : 'rejected';
       let activated = 1;
+      const rejectedUserIds = new Set<string>(decision.approve ? [] : [applicant.id]);
 
       // TD-1: Pending → Active | Rejected. The guard on `accountStatus` in the
       // WHERE above is what makes a double-approval first-wins (TD-15.3): the
@@ -502,10 +508,17 @@ export async function decide(
 
       for (const link of applicant.parentLinks) {
         // Child activation + link decision, atomic with the parent (TD-4.2).
-        await tx.user.updateMany({
+        // Legacy pre-R62 bundles may still transition an already-created child
+        // User. Take that account's governing lock before changing it so its
+        // own session creation/revocation follows the same hierarchy.
+        if (!decision.approve) await users.lockUser(tx, link.studentId);
+        const childTransition = await tx.user.updateMany({
           where: { id: link.studentId, accountStatus: 'pending', deletedAt: null },
           data: { accountStatus: nextStatus },
         });
+        if (!decision.approve && childTransition.count === 1) {
+          rejectedUserIds.add(link.studentId);
+        }
         await tx.familyLink.update({
           where: { id: link.id },
           data: {
@@ -516,6 +529,20 @@ export async function decide(
           },
         });
         activated += 1;
+      }
+
+      if (!decision.approve) {
+        // R102: status, durable revocation and both mandatory audit facts share
+        // this approval transaction. `revokeAllSessions` reuses the already-
+        // held User lock, then locks that user's anchors in UUID order.
+        for (const rejectedUserId of [...rejectedUserIds].sort()) {
+          await revokeAllSessions(tx, {
+            userId: rejectedUserId,
+            reason: RefreshRevokedReason.rejection,
+            actorUserId: actor.userId,
+            activeRole: actor.activeRole,
+          });
+        }
       }
 
       // Revision 49 — the role the account was approved FOR, granted in this
@@ -656,6 +683,24 @@ export async function decide(
           ...(decision.reason ? { reason: decision.reason } : {}),
         },
       });
+
+      // Modern R62 registration decisions contain only the applicant. Preserve
+      // complete attribution for any legacy bundle child that also transitioned
+      // by recording that rejection against the child's own User row.
+      for (const rejectedUserId of [...rejectedUserIds].filter((userId) => userId !== applicant.id)) {
+        await audit.write(tx, {
+          actorUserId: actor.userId,
+          activeRole: actor.activeRole,
+          actionType: 'user.reject',
+          targetEntity: 'User',
+          targetId: rejectedUserId,
+          detail: {
+            type: 'registration_bundle_child',
+            parent_applicant_id: applicant.id,
+            ...(decision.reason ? { reason: decision.reason } : {}),
+          },
+        });
+      }
 
       return { type: 'registration' as const, activated };
     }

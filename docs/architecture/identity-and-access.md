@@ -45,7 +45,8 @@ sequenceDiagram
     G-->>A: GET /auth/google/callback?code&state
     A->>A: validate state + PKCE
     A->>G: exchange code
-    G-->>A: verified email + subject id
+    G-->>A: signed ID token
+    A->>A: verify signature + provider claims<br/>then extract verified email + subject id
 
     Note over A: Resolution order — always against the LOWERCASED email
     A->>A: 1. UserIdentity(google, subject_id)?
@@ -58,8 +59,44 @@ Then routing:
 | Case | Action |
 |---|---|
 | **Identity exists** | Establish the session and route on the **complete** condition (below) |
-| **Pre-provisioned match** | **Create and bind** the identity transactionally, then route by status. From here every later login resolves at step 1 |
+| **Pre-provisioned match** | Lock the matched `User`, re-read status/deletion and roles, then **create and bind** the identity transactionally only if still eligible. From here every later login resolves at step 1 |
 | **Nobody we know** | Issue a short-lived onboarding token, redirect to the registration form |
+
+Resolution is deliberately not credential authority. Before an Active or Pending result can
+mint anything, the callback opens one final transaction, locks that person's stable `User` row,
+and re-reads status plus live role assignments. It creates the `RefreshSession`, first refresh
+generation, and `auth.login` audit in that transaction; the access token and cookie leave the
+service only after commit. If suspension committed after the earlier resolution, the re-read
+routes to the existing deactivated screen and creates no credential.
+
+The first binding has the same authoritative boundary. Its earlier email lookup only discovers
+a candidate; it does not authorize the write. The binding transaction takes the User lock and
+re-runs the complete routing condition before creating `UserIdentity` or `auth.identity_bound`.
+Suspension first therefore leaves no new identity or binding audit; binding first commits both,
+after which suspension may proceed and final issuance still re-reads the deactivated state.
+
+### The Google identity trust boundary
+
+The authorization-code exchange and ID-token validation are **two different security
+steps**. TLS protects the server-to-server code exchange; it does not make an unverified
+JWT payload an identity. The callback passes Google's `id_token` to the supported Google
+Auth Library before it reads `sub` or `email`. The verifier requires an `RS256` protected
+header with a non-empty provider key id, verifies the signature against Google's fetched
+and cached signing certificates, and checks the token lifetime, the two documented Google
+issuers, and this deployment's configured client id as the audience. Only then does the
+application require a non-empty subject and email plus `email_verified = true`.
+
+Malformed tokens, bad signatures, expired tokens, wrong issuer or audience, unknown keys,
+and provider-certificate retrieval failures all fail closed as `oauth_unavailable` without
+touching an account. A false or missing `email_verified` claim uses the SRS-specific
+`email_unverified` redirect. Neither the token nor provider error details are logged.
+
+This is a pure authorization-code flow (`response_type=code`), so the browser receives no
+ID token in the authorization response. A nonce is therefore not added: the signed,
+short-lived flow state binds the browser callback and PKCE binds the exchanged code, while
+Google defines `nonce` as optional for this response type. If the flow ever changes to a
+hybrid or implicit response that returns an ID token through the browser, that decision
+must be revisited rather than copied forward.
 
 ### The routing condition, in full
 
@@ -113,6 +150,34 @@ binding, pre-provision matching, the bootstrap comparison, persistence. The data
 independently enforces lowercase storage with a `CHECK`, so a single unlowered code path
 cannot create a case variant that slips past the unique index.
 
+### One normalized email across both ownership channels
+
+An address may be represented before login by `User.pre_provisioned_email`, or after a
+completed binding by `UserIdentity.email`. The two same-table unique indexes cannot protect
+the **absent-row race** between those channels: registration and staff pre-provisioning could
+both observe no owner and insert into different tables.
+
+`NormalizedEmailLock` is the shared transaction boundary. It contains only the lowercased
+email and creation time — deliberately **no owner id**. Ownership remains in the two SRS
+fields above; the extra row supplies the stable target that PostgreSQL can lock even when
+neither ownership row existed when the transactions began. On first use, `INSERT … ON
+CONFLICT DO NOTHING` establishes the row and `SELECT … FOR UPDATE` holds it through the
+authoritative cross-table re-read and write.
+
+Four production writers participate: onboarding registration, staff pre-provisioning,
+first-login identity binding, and Super Admin bootstrap. Their order is email lock first,
+then the existing User lock where binding or account-state serialization also applies. A
+callback's ten-minute onboarding token is therefore a routing snapshot, not a reservation:
+if staff provision the address before submission, registration returns the existing duplicate
+conflict and its transaction rolls back the `ConsumedToken` insert too. The next verified
+OAuth attempt follows the ordinary pre-provisioned binding path.
+
+A persisted owner/claim row was rejected because it would duplicate which User the two SRS
+fields already name. A transaction advisory lock was rejected because it would hash an
+unbounded email into PostgreSQL's finite advisory-key space and depart from the repository
+row-lock convention. The dedicated row is collision-free, inspectable, and released by
+ordinary transaction rollback.
+
 ---
 
 ## Sessions
@@ -120,17 +185,18 @@ cannot create a case variant that slips past the unique index.
 | Token | Lifetime | Transport |
 |---|---|---|
 | **Access** | 1 hour | `Authorization: Bearer` header — **never a cookie** |
-| **Refresh** | 30 days | `HttpOnly; Secure; SameSite=Lax` cookie |
+| **Refresh** | 30 days | `HttpOnly; Secure; SameSite=Lax; Path=/api/v1/auth` cookie |
 
 ### The CSRF posture
 
 Because the access token lives in a header and never in a cookie, **ordinary API mutations
 are structurally immune to CSRF** — a cross-site attacker cannot set the header.
 
-`POST /auth/refresh` is **the only cookie-authenticated route** in the system. It
-additionally requires a custom header (`X-Requested-With`) and validates the `Origin`
-against the configured public base URL. Combined with `SameSite=Lax`, that closes the
-remaining surface without a double-submit token system.
+Exactly two routes consume the refresh cookie: `POST /auth/refresh` and
+`POST /auth/logout`. Both require a custom header (`X-Requested-With`) and validate the
+`Origin` against the configured public base URL **before reading the cookie**. Combined with
+`SameSite=Lax`, that closes the remaining surface without a double-submit token system.
+The browser manages the credential throughout; frontend JavaScript never receives it.
 
 > **Same-origin routing is a delivery mechanism, not a security shield.** Never treat it as
 > CSRF protection by itself.
@@ -157,6 +223,43 @@ forked chain makes reuse detection impossible.** The window exists to absorb the
 created by multiple browser tabs, which the client also mitigates with a single-flight
 mutex — one in-flight refresh, concurrent callers awaiting its result.
 
+**Refresh, logout and token maintenance serialize on the rotation chain, not on one token
+generation.** The presented hash first discovers the server-owned `session_id`; the transaction
+then locks that chain's stable `RefreshSession` row and re-reads the credential before deciding.
+The first read is discovery, never authority. This target survives successor insertion and
+predecessor purge, which token-row locks cannot guarantee at PostgreSQL `READ COMMITTED`.
+A different `session_id` locks a different row, so another browser session remains independent.
+
+**New-session creation and user-wide revocation serialize one level higher.** A session anchor
+cannot protect an anchor that does not exist yet, so successful login, Pending → Rejected,
+suspension and revoke-all share the stable `User` row. The lock hierarchy is always **User →
+`RefreshSession` anchors in UUID order**. The shared session issuer re-reads Active/Pending
+eligibility under that lock before inserting anything. Rejection and suspension take the same
+User lock before deciding the state transition, change status and revoke every session in that
+transaction. Therefore either the state change commits first and issuance refuses, or issuance
+commits first and the subsequent enumeration includes its new anchor. Locks are per user, so an
+unrelated person's login does not wait.
+
+The explicit User lock is PostgreSQL `FOR NO KEY UPDATE`, not `FOR UPDATE`. The application never
+changes `User.id`; the weaker mode still conflicts with another governing lock and with every
+User update/delete that these flows must serialize. It is also compatible with the **implicit
+`KEY SHARE`** acquired when refresh/logout insert a `RefreshToken` or `AuditLog` row carrying a
+User foreign key. That compatibility is load-bearing: refresh/logout already hold a session
+anchor, while suspension holds User and waits for that anchor. `FOR UPDATE` would complete a
+Session → User versus User → Session deadlock; `NO KEY UPDATE` lets the child FK write finish so
+the session transaction commits and suspension can take the anchor.
+
+Rotation's predecessor/successor/audit write commits as the TD-4.13 unit. The HTTP refresh then
+takes the same session lock once more, verifies that a live generation still exists, reads the
+authoritative account and assignments, and signs the access token while holding that lock. If
+logout completed between rotation and this finalization, refresh returns the ordinary `401` and
+no credential; if finalization locks first, the token was issued before logout and logout waits.
+Only authoritative `Active` and `Pending` accounts are eligible at this boundary. Rejected,
+Suspended, deleted or missing accounts receive the same ordinary refusal and no access/refresh
+credential, rather than relying on a downstream route guard after rotating indefinitely.
+Holding a database transaction across response delivery was rejected: a commit failure after
+bytes reached the client would expose a credential whose rotation never committed.
+
 **Reuse ends the whole session.** A replayed rotated token is the signature of a stolen
 cookie, so the response is to end the session, not to extend grace. Never accepted, never
 resurrected.
@@ -166,9 +269,40 @@ answer `401` in the standard envelope. **No new error code was introduced**, del
 telling the holder of a stolen cookie *why* it failed would confirm the token was once real.
 The distinction is recorded in the audit log, not in the response.
 
-Revoke-all exists as an internal capability — suspension and deletion use it — but **there
+Revoke-all exists as an internal capability — rejection, suspension and deletion use it — but **there
 is no user-facing "log out everywhere" control**, no such route, and no such navigation
 node. The capability exists because safeguarding requires it, not because a user invokes it.
+It locks the affected User first, then the stable session rows in UUID order before revoking,
+so no new session can appear after enumeration and another user's sessions stay independent.
+
+Pending → Rejected uses the dedicated reason `rejection` and writes both `user.reject` and
+`auth.token_revoked` in the same transaction as the status change. Mandatory audit failure
+rolls the whole decision back. Rejected remains terminal; even if a future authorized recovery
+changes the account state, the old refresh chain remains revoked and fresh authentication is
+required. An already-issued access token retains only its existing TTL and per-request
+freshness behavior; rejection does not mint, extend, or otherwise alter it.
+
+### Logout: browser cleanup and server revocation are separate
+
+`POST /auth/logout` identifies the current rotation chain from the HttpOnly refresh cookie,
+revokes every live token carrying that `session_id`, writes `auth.logout` in the same
+transaction, and only then returns the cookie expiry. A cookie disappearing from a browser is
+not proof that its retained value is dead; the persisted revocation is the security property.
+Another browser has another `session_id` and remains signed in.
+
+The audit row is mandatory transaction state, not best-effort logging: if `auth.logout` cannot
+be written, PostgreSQL rolls the revocation back and the endpoint does not expire the browser
+cookie. No committed state may contain a logout revocation without its required audit row.
+
+The endpoint stays idempotent: with a valid CSRF request context, an absent, unknown or
+already-cleared cookie is `204`. A repeated browser logout therefore remains safe. Missing or
+foreign CSRF context is `401` before the cookie is inspected.
+
+Revision 101 changes the Path from `/api/v1/auth/refresh` to `/api/v1/auth`. The deployment
+that introduces it stops the old API, atomically invalidates all live pre-cutover refresh
+rows with `cookie_path_migration` plus system audit, applies the new code, and asks users to
+authenticate again. Stopping the old issuer first is load-bearing: otherwise it could mint a
+legacy narrow-path cookie after the one-time sweep.
 
 ### Freshness: where statelessness ends
 
@@ -362,7 +496,7 @@ one — the person could narrow themselves and never widen again. `/me` answers
 |---|---|
 | Where does it live? | The **JWT**, as `active_role` (R60). The client mirrors it in `contexts/active-role.tsx` |
 | How is it persisted? | Not server-side at all — **no column on `User` or `RefreshToken`**. The claim is in the token, and the token is per-device |
-| Does switching re-issue a token? | **Yes** — `POST /auth/switch-role`, one indexed query and one signature. No logout, no new session |
+| Does switching re-issue a token? | **Yes** — `POST /auth/switch-role`, after a User-locked re-read of current Active state and assignments. No logout, no new session, and the replacement `exp` is capped at the presented bearer's verified `exp` |
 | What makes it survive a page load? | `POST /auth/refresh`. The client holds the token in memory and switching navigates by full page load, so **refresh is the load-bearing path**; it re-asserts the role and returns the one it granted |
 | A revoked active role? | Refresh **falls back to the most privileged still-valid assignment** and says so — never a silent widening back to every role |
 | Concurrent devices? | Different active roles by construction: two tokens, no shared state, nothing to reconcile |

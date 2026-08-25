@@ -6,24 +6,47 @@ Four layers, each testing something the others structurally cannot.
 
 | Layer | Scope | Tooling | Gate |
 |---|---|---|---|
-| **Unit** | Services: interval merge, state machines, consent evaluation, time and DST logic, Arabic normalization | Vitest | Per PR |
-| **Integration** | Repositories against **real PostgreSQL**: constraints actually reject bad writes, partial indexes, native collation ordering, soft-delete filtering | Vitest + a real stack | Per PR |
-| **API** | Every endpoint against the contract; **permission-matrix tests generated from the matrix**; child-context tests; envelope conformance | Supertest | Per PR |
-| **E2E** | Every journey, RTL rendering, mandatory UI states, upload retry | Playwright | Pre-merge to `main` |
+| **Unit/default** | Services: interval merge, state machines, consent evaluation, time and DST logic, Arabic normalization | Vitest | CI on every push/PR |
+| **Integration** | Repositories against **real PostgreSQL**: constraints actually reject bad writes, partial indexes, native collation ordering, soft-delete filtering | Vitest + a real stack | Local only — CI infrastructure gap |
+| **API** | HTTP integration tests against the contract; child-context tests; envelope conformance | Vitest + a real stack | Local only — CI infrastructure gap |
+| **Browser/E2E** | Journeys, RTL rendering, mandatory UI states, upload retry | Chrome over CDP | Manual — CI infrastructure gap |
 
 **Coverage: ≥ 80 % on services and policies.** No coverage gate on generated or boilerplate
 code — a coverage number that counts generated clients measures nothing.
 
-Current totals: **893 backend across 49 files · 345 frontend across 27**. The backend figure
-is the integration sweep, which is what `scripts/dev/test-integration.sh` runs and what CI
-gates on; the unit suite is a subset of it rather than a separate number.
+Current default CI totals: **270 backend tests across 27 files · 727 frontend tests across 57
+files**. The repository also contains **82 backend integration files**, but the workflow does
+not run them: they require an isolated real stack and database lifecycle that this CI slice
+does not yet provide.
+
+The backend total includes deterministic worker-readiness regression tests. They inject the
+clock and pg-boss live-worker view, so startup failure, incomplete registration, lost/stale
+workers, and the long-running-handler exception are covered without sleeps. Controller tests
+separately prove that a healthy database plus a present `pgboss` schema cannot make
+`/healthz` green when the runner never started.
+
+The B-01 safeguarding suite uses real PostgreSQL, MinIO and pg-boss. It proves the public
+anonymous and Nginx-gated read before withdrawal; the committed application/public-origin
+denial while physical migration is pending; full-stream SHA-256 equality; and write-only
+public staging. Its 19 scenarios cover R92 audience changes, retained Sessions after schedule
+deletion, bounded startup discovery, opposing shared-recording lock graphs, monotonic re-grant
+ordering, real upload replacement, exact old/new-key obligations, deletion before/after an
+ambiguous storage response, duplicate/stale jobs, retry, process restart, terminal failure
+observability and replacement/deletion CAS. The real Nginx case additionally proves the
+external method allowlist, S3 Select/WebDAV-shaped denial before MinIO, signed-versus-unsigned
+PUT behavior, exact bucket-root denial with listing queries, and fail-closed duplicate/encoded
+path normalization. It never deletes the historical consent backlog: only tagged fixture jobs
+receive temporary priority and all tagged rows/objects are removed.
 
 ## Running them
 
 ```bash
 # Unit — no stack required
-cd backend && npm test
-cd frontend && npm test
+cd backend && npm run lint && npm run typecheck && npm test && npm run build
+cd frontend && npm run lint && npm run typecheck && npm test && npm run build
+
+# Repository and contract guards — all twenty are represented in CI
+for g in scripts/ci/check-*.sh; do bash "$g"; done
 
 # Integration — needs the stack up
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
@@ -31,6 +54,11 @@ bash scripts/dev/test-integration.sh
 ```
 
 Integration tests run **serially**, because the suites share one database.
+
+The two production-build commands intentionally repeat part of typechecking: both package
+build scripts include a compiler pass, while CI also keeps the named exact-typecheck step.
+The separate step gives type failures their own gate; the build then verifies emission and
+bundling, which typecheck alone cannot observe.
 
 ## Why integration tests use a real database
 
@@ -43,6 +71,36 @@ Not mocks. The properties being checked **do not exist in a mock**:
 
 A mock returns whatever you told it to. The whole point of these tests is to find out what
 PostgreSQL, MinIO, and Nginx *really* do.
+
+The content/storage suite includes focused B-02 placement and B-03 finalization matrices. B-02 treats
+`EducationalContent.visibility` as the authority, inspects the real row and both MinIO buckets,
+and reads through the real Nginx storage boundary. The matrix covers new public/private content,
+replacement with omitted or manipulated visibility, a contradictory pre-fix ticket, anonymous
+public/private reads, unrelated-object isolation, `SessionContent`, and recording origin. Its
+cleanup owns exact object keys (including quarantine keys), so a green rerun cannot be borrowing
+bytes or rows from an earlier run.
+
+B-03 drives the actual presigned PUT, strict HEAD, one full staging GET, bounded magic/length
+validation, SHA-256 hashing into private server staging, and the re-hashed canonical PUT. The
+committed collision fixture is a copyright-free pair of valid equal-size PDFs with identical
+real MD5 and different SHA-256. A production hook pauses after the real source GET is open and
+its prefix accepted, replaces staging through the retained real PUT, then proves canonical
+download and mandatory audit still match the opened snapshot's SHA-256. A separate truncated
+source fixture proves no row/canonical object appears and client staging remains retryable.
+
+Two-party barriers pause concurrent completions after real canonical publication and before
+database publication; same-ticket calls converge to one row/audit/object, including when the
+two readers accepted different stable snapshots for either creation or replacement, while
+different replacement tickets produce one winner and one version conflict. Controlled canonical `PutObject`, audit and `DeleteObject`
+failures prove retry, compensating cleanup and post-commit staging cleanup. A stop immediately
+after canonical PUT proves restart recovery reuses one canonical object rather than overwriting
+or duplicating it. Legacy non-replacement and already-completed tickets retain safe compatibility;
+an outstanding replacement without `replaces_version` is rejected and must be re-initiated.
+
+The completed B-03 matrix is **50/50** in the content service and **86/86** across
+content, upload HTTP and R99 ingest. The full isolated backend integration count is recorded
+by the latest `CHANGES.log` entry after each cumulative run. The recorder browser harness and
+library-recorder harness remain the relevant browser gates.
 
 **Some of the contract lives in headers.** The shared HTTP helper therefore returns
 `res.headers` alongside status and body — the calendar bootstrap's `Cache-Control` and `ETag`
@@ -131,11 +189,28 @@ result is reported in the slice that ran them.
 | `scripts/dev/browser/verify-reorder.sh` | R76 on the five real admin screens: is «الترتيب» gone, is the header a focusable button, does pressing it send `sort_by` to the server, does a dropped row move **and survive a reload**, is the handle disabled and explained when it cannot be used |
 | `scripts/dev/browser/verify-circles-reorder.sh` | R78.1 on the real حلقات المواد page: handle disabled and explained with no `(Level, Subject)` chosen, enabled once chosen, a circle dragged to last and **persisted server-side**, surviving a reload, and ↑/↓ reordering too. Circles addressed by **seeded id, never by title**. **Last run: 9/9.** |
 | `scripts/dev/browser/verify-sorting.sh` | The sorting contract **clicked** across four tables: ascending → descending → ascending, exactly one header claiming a direction, non-sortable headers not clickable, the actions column never sortable, and **no row on two pages** of a sorted collection (R76.3's `id` tiebreaker). **Last run: 39/39.** |
-| `scripts/dev/browser/verify-public-calendar.sh` | قائمة and تقويم driven **anonymously**: both views offered, the choice in the URL, month stepping withheld where it means nothing, RTL with the marker on the inline start — and what a public reader must NOT see (no student name, no notification surface, no recordings, **no cancellation reason**). A cancelled occurrence stays listed and says so. **Last run: 18/18.** |
+| `scripts/dev/browser/verify-public-calendar.sh` | قائمة and تقويم driven **anonymously**: both views offered, the choice in the URL, month stepping withheld where it means nothing, RTL with the marker on the inline start — and what a public reader must NOT see (no student name, no notification surface, no recordings, **no cancellation reason**). R83 removes a cancelled occurrence from the ordinary projection; `include_cancelled=true` still retrieves it. **Last run: 18/18.** |
 | `scripts/dev/browser/verify-library-recorder.sh` | The recorder's second entry point in مكتبة المحتوى, plus the sort indicator's **measured** placement. **Last run: 16/16.** |
 | `scripts/dev/browser/verify-recorder.sh` | R75 with a **real `MediaRecorder`**: start · elapsed advancing · pause freezing the reading · resume · stop · editable name · save · discard · a second recording numbered « 2» — then the bytes in **MinIO** through a presigned URL, the row in the library, and the link as a *recording* on the Session page. Chrome runs with `--use-fake-device-for-media-capture`, which supplies a synthetic microphone; **the API is not stubbed**. **Last run: 22/22.** |
 | `scripts/dev/browser/verify-schedule-edit.sh` | «تعديل العنصر»: the dialog opens with the row's own mode, a seeded المستوى and its own الحلقة; changing only «نهاية التكرار» saves; and `teaching_mode`/`target_id` are untouched afterwards. **Last run: 12/12.** |
-| `scripts/dev/browser/verify-notifications.sh` | R77 on the real student dashboard: does a student see her own occurrences, does a cancellation reach her **with its reason**, is the notice unread and singular, does «تم الاطّلاع» clear it, does restoring **withdraw** an unread notice and **correct** a read one — driven as three real sessions (student · administrator · unrelated student) against the scenario the seeder builds. **Last run: 18/18.** |
+| `scripts/dev/browser/verify-notifications.sh` | **Audience/API harness** for R77/R82/R83: cancellation and restoration reconciliation, Event scope recipients, personal calendars, and send/decline/repeat. It calls `/notify` directly, so it proves the server resolver and not the UI button. **Last run: 22/22.** |
+| `scripts/dev/browser/verify-notify-ui.sh` | The real sender-to-recipient flow: clicks the UI decision, records the page's request, then opens the recipient's own bell. Covers Session cancel/reschedule, Event create and delete/cancel, unrelated recipients, grade publication, R91 staffing and R92 cross-branch audience. |
+
+### Testing the Google identity boundary without trusting a fixture token
+
+OAuth verifier tests do not call live Google services and do not replace cryptographic
+validation with payload decoding. They generate an ephemeral RSA keypair, sign deterministic
+ID tokens locally, inject only the corresponding provider-certificate response, and run the
+real Google Auth Library verifier. The matrix includes a valid token, invalid signature,
+expiry, wrong issuer, wrong audience, malformed/unsupported headers, unknown key, missing
+identity claims, unverified email and signing-certificate retrieval failure.
+
+The code exchange has a separate narrow verifier seam, and the callback exposes that same
+dependency only to tests. A callback test carries a valid signed flow-state cookie and PKCE
+verifier through the production handler, rejects a decodable forged token, and proves that
+account resolution is never reached. Identity binding and pre-provisioned-account resolution
+remain covered by the database integration suite; no test seam grants a role or bypasses
+those services.
 
 ### Getting past the login wall without bypassing it
 
@@ -146,8 +221,8 @@ session properly.
 
 `scripts/dev/issue-dev-session.sh` mints one by calling **`issueNewSession`, the
 production code path the OAuth callback itself calls**, and prints the raw token
-to be set as the ordinary `bodour_refresh` cookie — confined to its own route
-(TD-12), exactly as the server sets it. **Nothing about authorisation is
+to be set as the ordinary `bodour_refresh` cookie at `Path=/api/v1/auth`
+(TD-12, R101), exactly as the server sets it. **Nothing about authorisation is
 bypassed**: the user is an ordinary `super_admin` row, and every request it makes
 is checked by the same TD-2 rules as any other. What is replaced is the identity
 *provider*, and only in a development database — the script refuses to run
@@ -159,6 +234,52 @@ It takes an optional user uuid:
 bash scripts/dev/issue-dev-session.sh              # the script's own Super Admin
 bash scripts/dev/issue-dev-session.sh <user-uuid>  # an existing user, as they are
 ```
+
+The authentication integration coverage drives both cookie consumers over HTTP. It proves a
+refresh rotates first, logout receives that successor, the persisted chain is revoked, a
+retained copy is refused, another device still rotates, repeat/missing-session logout is
+idempotent, and the response clears the cookie with the matching Path and security attributes.
+The service-level R101 coverage uses explicit barriers around the real PostgreSQL session lock —
+never timing sleeps — to force both ordinary orderings: refresh identifies first but logout
+locks first, and logout identifies first but refresh locks first. A controller-level HTTP test
+then pauses the refresh after its rotation transaction but before final access-token issuance,
+lets logout commit, and proves the resumed response is `401` with no credential. The purge race
+holds rotation before successor insertion, queues purge on the stable session row, then queues
+logout while purge owns it; after the predecessor is deleted, logout still revokes the exact
+successor. The companion after-insertion case proves purge leaves that successor usable.
+A controlled mandatory-audit failure occurs after the real revocation write and proves the
+enclosing database transaction rolls that write back; the same test then proves the successful
+path commits both revocation and `auth.logout`.
+The user-wide R101 race coverage uses a second set of explicit barriers around the production
+User-row lock. In the suspension-first ordering, OAuth resolution has already read Active but
+final issuance waits; suspension commits and the resumed callback re-reads Suspended, redirects
+to the existing deactivated contract, and creates no access token, cookie or session. In the
+login-first ordering, the callback holds the User lock while creating its anchor/token/audit;
+suspension waits, then enumerates and revokes that new anchor together with two older sessions.
+An unrelated user's login completes while the target is blocked, proving the lock is not global.
+A forced `auth.login` audit failure proves the new anchor and token roll back before any
+credential reaches the response.
+The auth hardening companion coverage drives two additional database-level crossings. A refresh
+holds its real session anchor immediately before successor insertion while suspension holds the
+User governing lock and queues on that anchor; the successor's implicit User FK `KEY SHARE`
+finishes, then suspension revokes it and refresh finalization refuses. Logout is forced through
+the analogous ordering immediately before its mandatory audit insert. Both use explicit barriers
+on production repository calls rather than sleeps, proving `FOR NO KEY UPDATE` removes the old
+FK-lock cycle without weakening the business outcome. The same suite forces both
+suspension-versus-first-binding orders: suspension-first writes neither identity nor binding
+audit, while binding-first commits both before final credential issuance observes suspension.
+
+Active-role HTTP coverage uses a bearer minted 50 minutes in the past, logs out its refresh
+session, and switches the same role twice. Both replacements retain an `exp` no later than the
+original, while authoritative suspension and deletion each refuse switching. Refresh lifecycle
+coverage moves a Pending account to terminal Rejected and proves repeated presentation returns
+no credential; a Pending control still rotates for its status-screen session. It also reactivates
+a suspended account and presents its old cookie, proving reactivation never reverses durable
+session revocation. Durable immediate
+revoke-all on Pending → Rejected remains an Owner decision because TD-4.15 currently enumerates
+only suspension and deletion and the revocation-reason enum has no rejection value.
+The R101 rollout test executes the committed data-migration SQL inside a rolled-back database
+transaction, so it verifies revocation and system audit without signing out local developers.
 
 **With a uuid it grants nothing.** The Super Admin role is created only for the
 script's own default user; a user named on the command line is minted for exactly
@@ -419,6 +540,7 @@ These are the traps the specification exists to prevent. Each has a dedicated te
 - Consent revocation **rippling through to bucket migration**
 - Teacher **global-scope rejection**
 - **Re-upload cache-key immutability**
+- **Retained completed-upload PUT mutates staging only**, including a forced verification/copy race
 - Pending-session **data-access denial across all endpoints**, plus the client route guard
 - **Child-context verification on every student-context endpoint**, including the
   Student-role bypass and the foreign-parent `404`
@@ -441,6 +563,24 @@ These are the traps the specification exists to prevent. Each has a dedicated te
 - **Replayed refresh token outside the grace window revokes the whole session**
 - **Suspension revokes refresh tokens inside its own transaction**
 - **Two-tab concurrent refresh rotates exactly once and logs nobody out**
+
+## Cross-channel email ownership is a database concurrency test
+
+`email-ownership.integration.test.ts` coordinates the production
+`lockNormalizedEmail` boundary against real PostgreSQL. It never substitutes an in-memory
+mutex and never sleeps to guess which transaction won. Four properties are pinned:
+
+- an onboarding token issued before staff pre-provisioning cannot create a second account,
+  remains unconsumed on refusal, and a later verified login binds the intended staff account;
+- registration and pre-provisioning arriving from an initially absent, case-varied address
+  produce exactly one committed owner and one expected duplicate conflict;
+- registration committed first prevents later pre-provisioning from opening the other channel;
+- a forced failure after lock acquisition rolls back both the ownership write and a newly
+  inserted lock row, after which the same legitimate operation succeeds.
+
+Successful ownership tests delete the lock rows for their own generated addresses. The rows
+have no User foreign key by design, so deleting tagged Users alone is no longer sufficient
+test cleanup.
 
 ## The token lifecycle is specified as tests
 
@@ -558,8 +698,9 @@ feature. `verify-notifications.mjs` mints **once per identity** and reuses it.
 **`/auth/refresh` compares `X-Requested-With` literally** — the value must be
 `XMLHttpRequest` (TD-12's CSRF posture). Any other value is `AUTH_REQUIRED`.
 
-**One refresh cookie, one consumer.** A harness that drives the API *and* loads
-the app needs a **separate session per phase**: the page's own refresh rotates
+**One refresh chain, one rotating browser credential.** Refresh and logout are
+the only two consumers (R101), but a harness that drives the API *and* loads the
+app still needs a **separate session per phase**: the page's own refresh rotates
 the cookie, and the other phase's mint then fails. The symptom is a dashboard
 stuck at «جارٍ التحميل…», which reads as a missing feature.
 
@@ -902,6 +1043,22 @@ did not.
 and then lists the staging bucket and checks the **extensions and the byte
 counts** — because a zero-length file is a passing lifecycle and a failed
 recording, which is exactly the pair that check exists to tell apart.
+
+### The staging-cleanup failure is after success, so test both truths
+
+`session-recording-ingest.integration.test.ts` drives real MinIO and injects a fault only at
+the selected `DeleteObject` call. The intermediate assertion is load-bearing: the canonical
+object, content row and relation exist while the staging object remains, and
+`ingestion_failure_reason` stays null. A retry must then delete the selected staging key while
+the canonical object and an unrelated staging object remain byte-addressable.
+
+The same suite runs the service behind a real temporary pg-boss queue. It observes the
+durable `retry` row, stops that worker completely, starts a new worker and proves eventual
+cleanup. A bounded test-only retry budget also reaches terminal `failed` state and asserts
+that the cleanup error remains in job output. Every temporary queue and fixture object is
+removed by the suite. The terminal-failure case uses the production retry limit against real
+pg-boss and proves five executions total; only its delay is removed so the assertion finishes
+promptly. The production queue name and worker catalog are unchanged.
 
 ### And only a real browser proves that a recording can be HEARD
 

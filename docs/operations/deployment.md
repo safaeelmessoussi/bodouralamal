@@ -25,12 +25,18 @@ cp infra.env.example infra.env # the Postgres password — must match DATABASE_U
 # 3  Pull images — BUILT IN CI, never built here
 docker pull <registry>/bodour-api:<tag>
 
-# 4  Start data services first
+# 4  Existing deployment: stop the legacy cookie issuer, then start data services
+#    R101's next migration invalidates every live refresh session. The old API
+#    must not mint another narrow-path cookie after that one-time sweep.
+docker compose stop nginx api
 docker compose up -d db minio
 
 # 5  Migrate
 #    ON AN EXISTING DEPLOYMENT: pg_dump IMMEDIATELY BEFORE this line.
 #    Migrations are forward-only; this dump is the rollback point.
+#    The normalized-email migration deliberately aborts if historical data
+#    already assigns one address to two Users. Follow the migration runbook;
+#    never clear or merge an identity merely to make deploy green.
 docker compose run --rm api npx prisma migrate deploy
 
 # 6  Seed — idempotent, safe to re-run
@@ -70,6 +76,17 @@ a dump from twelve hours earlier rolls back the migration *and* twelve hours of 
 Before it reaches production, every migration has already been **rehearsed against a staging
 database seeded to ceiling-scale fixtures**. Duration matters: an `ALTER` that rewrites a
 million audit rows must be known about beforehand, not discovered during a deploy window.
+
+The Revision-101 deployment intentionally signs everybody out once. With the legacy API
+already stopped, its migration marks every live refresh row `cookie_path_migration` and
+writes system `auth.token_revoked` audit rows before the new `/api/v1/auth` cookie Path is
+issued. Users authenticate again after the deployment. Do not restart the old API after this
+migration: it would be able to mint a narrow-path credential after the invalidation boundary.
+Do not start the new API before step 5 either: the data migration intentionally selects every
+live row visible at that point. Prisma records it in `_prisma_migrations`, so repeating
+`migrate deploy` is safe and does not sweep sessions issued after cutover; executing the raw
+SQL manually is not an operating procedure. Step 7 is the only point that may begin issuing
+the new cookie.
 
 > [Database § migrations](../architecture/database.md#migrations)
 
@@ -150,6 +167,7 @@ That drill is not a formality. It is the check on
 - [ ] Per-IP rate limits active at Nginx
 - [ ] Per-user upload quota enforced, proven by exhausting it
 - [ ] Same-origin routing serves client, API, and storage under one domain
+- [ ] R101 deployment only: old API stopped before migration; users warned that sessions will end
 - [ ] Signed PUT/GET round trip passes **through the proxy**
 - [ ] No PII in logs (log audit)
 

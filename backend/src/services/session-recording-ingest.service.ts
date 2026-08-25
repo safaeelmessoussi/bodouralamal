@@ -23,6 +23,7 @@ import {
 } from "../lib/storage.js";
 import * as audit from "../repositories/audit.repository.js";
 import { bucketFor, categoryDefaultVisibility } from "./content.service.js";
+import { enqueueConsentReevaluationForSessions } from "./consent-reevaluation.service.js";
 
 /**
  * **Turning a provider's staging object into a بذور الأمل library item**
@@ -84,8 +85,8 @@ export interface IngestOutcome {
    *  TD-7's backoff applies and a corrected staging object is picked up on the
    *  next attempt (R99.14 — a failure somebody can act on). */
   failure?: string;
-  /** `false` when the staging object outlived a successful ingestion. Valid
-   *  content is preserved and the sweep is retryable. */
+  /** A returned attempt has removed staging (or found it already absent).
+   *  Cleanup failure is thrown so this same durable job remains retryable. */
   stagingCleaned?: boolean;
 }
 
@@ -97,6 +98,23 @@ export class IngestionFailure extends Error {
   constructor(readonly reason: string) {
     super(reason);
     this.name = "IngestionFailure";
+  }
+}
+
+/**
+ * The canonical ingest has committed, but its exact staging object could not
+ * yet be removed. This is deliberately distinct from `IngestionFailure`: the
+ * recording is already valid and available, so the failure belongs to the
+ * durable job obligation, not to `ingestionFailureReason` or the UI state.
+ */
+export class RecordingStagingCleanupFailure extends Error {
+  constructor(
+    readonly bucket: string,
+    readonly key: string,
+    cause: unknown,
+  ) {
+    super(`staging cleanup failed for ${bucket}/${key}`, { cause });
+    this.name = "RecordingStagingCleanupFailure";
   }
 }
 
@@ -143,12 +161,12 @@ export async function ingestRecording(
    * rather than a check that usually wins the race.
    */
   if (recording.educationalContentId !== null) {
-    const cleaned = await sweepStaging(clients, recording.outputBucket, recording.outputKey);
+    await sweepStaging(clients, recording.outputBucket, recording.outputKey);
     return {
       recordingId,
       contentId: recording.educationalContentId,
       alreadyIngested: true,
-      stagingCleaned: cleaned,
+      stagingCleaned: true,
     };
   }
 
@@ -328,6 +346,11 @@ export async function ingestRecording(
       data: { educationalContentId: contentId, ingestionFailureReason: null },
     });
 
+    // §4.1a treats creation/import of a linked recording as a consent-gate
+    // trigger. This shares the Session lock already held above and commits the
+    // obligation with the content/link/relation transaction.
+    await enqueueConsentReevaluationForSessions(tx, [recording.sessionId]);
+
     await audit.write(tx, {
       // **No actor.** §7's attribution invariant (Revision 17) makes a null
       // actor mean *system-initiated*, which is exactly what this is: the
@@ -358,13 +381,13 @@ export async function ingestRecording(
    * the platform owns and does not serve. Undoing a good ingestion to tidy it up
    * would be the wrong trade in every direction.
    */
-  const stagingCleaned = await sweepStaging(clients, stagingBucket, stagingKey);
+  await sweepStaging(clients, stagingBucket, stagingKey);
 
   return {
     recordingId,
     contentId: created,
     alreadyIngested: false,
-    stagingCleaned,
+    stagingCleaned: true,
   };
 }
 
@@ -394,18 +417,25 @@ async function fail(
   throw new IngestionFailure(reason);
 }
 
-/** Best-effort, and the caller is told which it was. */
+/**
+ * Immediate cleanup, backed by the current job's durable TD-7 retry.
+ *
+ * S3 `DeleteObject` is idempotent: an already-missing key is success. A real
+ * storage failure is allowed to escape only after the canonical object and
+ * relation committed. pg-boss therefore retries this same recording; the
+ * first-read idempotency anchor above skips every ingest step and addresses
+ * only the bucket/key recorded on this `SessionRecording`.
+ */
 async function sweepStaging(
   clients: StorageClients,
   bucket: string | null,
   key: string | null,
-): Promise<boolean> {
-  if (!bucket || !key) return true;
+): Promise<void> {
+  if (!bucket || !key) return;
   try {
     await deleteObject(clients, bucket, key);
-    return true;
-  } catch {
-    return false;
+  } catch (error) {
+    throw new RecordingStagingCleanupFailure(bucket, key, error);
   }
 }
 

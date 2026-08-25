@@ -3,6 +3,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { createApp } from '../src/app.js';
 import { createPrismaClient } from '../src/lib/prisma.js';
 import type { AppConfig } from '../src/lib/config.js';
+import { JobRunnerReadiness } from '../src/jobs/readiness.js';
 
 /**
  * Placeholder values used only to build the router for introspection. Generation
@@ -144,6 +145,76 @@ const document = {
           },
         },
       },
+      HealthResponse: {
+        type: 'object',
+        required: ['status', 'components', 'details'],
+        properties: {
+          status: { type: 'string', enum: ['ok', 'degraded'] },
+          components: {
+            type: 'object',
+            required: ['database', 'storage', 'jobs', 'queue'],
+            properties: {
+              database: { type: 'string', enum: ['ok', 'down'] },
+              storage: { type: 'string', enum: ['ok', 'down'] },
+              jobs: { type: 'string', enum: ['ok', 'down'] },
+              queue: {
+                type: 'string',
+                enum: ['ok', 'down', 'not_configured'],
+              },
+            },
+          },
+          details: {
+            type: 'object',
+            required: ['jobs'],
+            properties: {
+              jobs: {
+                type: 'object',
+                required: [
+                  'state',
+                  'reason',
+                  'expected_workers',
+                  'registered_workers',
+                  'active_workers',
+                ],
+                properties: {
+                  state: { type: 'string', enum: ['ok', 'down'] },
+                  reason: {
+                    type: 'string',
+                    enum: [
+                      'ready',
+                      'not_started',
+                      'starting',
+                      'startup_failed',
+                      'worker_registration_incomplete',
+                      'worker_registry_unavailable',
+                      'worker_missing',
+                      'worker_not_active',
+                      'worker_stale',
+                      'stopping',
+                      'stopped',
+                    ],
+                  },
+                  expected_workers: { type: 'integer', minimum: 0 },
+                  registered_workers: { type: 'integer', minimum: 0 },
+                  active_workers: { type: 'integer', minimum: 0 },
+                  missing_workers: {
+                    type: 'array',
+                    items: { type: 'string' },
+                  },
+                  inactive_workers: {
+                    type: 'array',
+                    items: { type: 'string' },
+                  },
+                  stale_workers: {
+                    type: 'array',
+                    items: { type: 'string' },
+                  },
+                },
+              },
+            },
+          },
+        },
+      },
     },
   },
   paths: {
@@ -166,8 +237,9 @@ const document = {
     '/auth/refresh': {
       post: op(
         'Rotate the refresh token',
-        'The ONLY cookie-authenticated route (TD-12). Requires X-Requested-With and an Origin ' +
-          'matching PUBLIC_BASE_URL. Rotation, the 10s predecessor grace window, and ' +
+        'One of exactly two refresh-cookie authenticated routes (TD-12, R101), with logout. ' +
+          'The HttpOnly cookie is scoped to /api/v1/auth. Requires X-Requested-With and an ' +
+          'Origin matching PUBLIC_BASE_URL. Rotation, the 10s predecessor grace window, and ' +
           'reuse detection are per TD-4.13 and §18 T1–T12.',
         {
           '200': 'New access token; a rotated refresh cookie unless the grace window applied.',
@@ -202,8 +274,14 @@ const document = {
     '/auth/logout': {
       post: op(
         'Log out of the current session',
-        'Revokes the current session only; other devices are unaffected (TD-4.14).',
-        { '204': 'Session revoked. Idempotent.' },
+        'The other permitted refresh-cookie authenticated route (TD-12, R101). Requires the ' +
+          'same X-Requested-With and Origin checks as refresh, revokes the cookie\'s current ' +
+          'server-side session only, and expires the HttpOnly cookie at Path=/api/v1/auth. ' +
+          'Other devices are unaffected (TD-4.14).',
+        {
+          '204': 'Session revoked, or no current session existed. Idempotent.',
+          '401': `${ENVELOPE} Missing or invalid CSRF request context.`,
+        },
       ),
     },
     '/me': {
@@ -397,7 +475,7 @@ const document = {
       post: op('Reactivate a suspended account', '**TD-1 `Suspended → Active`**. Body: `{ version }`. **Sessions stay revoked** — the person signs in again, which is the only way the new state is actually proven rather than assumed. **`Rejected` is deliberately not reachable from here**: TD-1 makes it terminal and §4.1b step 4a refuses it at login, because re-admitting a rejected applicant is a fresh registration decision rather than the undo of a suspension. Any other starting status is `409 STATE_CONFLICT` with `reason: INVALID_TRANSITION`.', { '200': 'The reactivated user.', '400': `${ENVELOPE} VALIDATION_FAILED — a missing version.`, '401': ENVELOPE, '403': ENVELOPE, '404': `${ENVELOPE} NOT_FOUND for an unknown user or one outside the caller's visibility.`, '409': `${ENVELOPE} VERSION_CONFLICT, or STATE_CONFLICT with reason INVALID_TRANSITION.` }),
     },
     '/admin/users/{id}/roles': {
-      put: op('Replace a user\'s role and branch-scope assignments', '§5.6 *"role/branch-scope assignment"*, §14.2, TD-2. Body: `{ assignments: [{ role, branch_id }] }` — **the complete set the user should hold afterwards**. A `PUT` of the whole set rather than add/remove verbs: the set is what an administrator reasons about, one call yields one audit row describing one decision, and **there is no window in which the user holds half of an intended change** — which add-then-remove creates every time a role moves between branches. **`branch_id: null` means all branches for that assignment** (§7 R24), never *no branch*; it is a required, explicitly nullable key rather than an optional one, so the unscoped grant is never the easiest thing to type by accident. **Removal is a soft delete** (TD-5) — a revoked assignment is tombstoned, so *"who was an administrator at this branch in March"* stays answerable, and re-granting an identical assignment revives that row rather than colliding with the unique index that spans deleted rows. **Only a Super Admin may grant or revoke `admin` or `super_admin`**; an Admin doing either is privilege propagation, the same rule `POST /admin/users` applies to creation. **`super_admin` IS assignable here**, unlike at creation: Revision 22 states that after bootstrap *every subsequent change of administrators happens exclusively through the application*, and refusing the role would leave a VPS shell as the only route to a second Super Admin. **The last active Super Admin cannot lose the role** (`409 STATE_CONFLICT`, `reason: LAST_SUPER_ADMIN`). **Sessions are deliberately NOT revoked** — Revision 10 resolves this trade-off explicitly: every safeguarding-sensitive operation re-asserts live assignments per request, so a revoked role stops mattering immediately where it matters, and §7 fixes `RefreshRevokedReason` at four values, none of which honestly describes a demotion.', { '200': 'The user with their new assignments.', '400': `${ENVELOPE} VALIDATION_FAILED — an unknown role, or a missing branch_id key.`, '401': ENVELOPE, '403': `${ENVELOPE} FORBIDDEN — an Admin attempting to grant or revoke an administrator role.`, '404': `${ENVELOPE} NOT_FOUND for an unknown user, one outside the caller's visibility, or an unknown branch.`, '409': `${ENVELOPE} STATE_CONFLICT with reason LAST_SUPER_ADMIN.` }),
+      put: op('Replace a user\'s role and branch-scope assignments', '§5.6 *"role/branch-scope assignment"*, §14.2, TD-2. Body: `{ assignments: [{ role, branch_id }] }` — **the complete set the user should hold afterwards**. A `PUT` of the whole set rather than add/remove verbs: the set is what an administrator reasons about, one call yields one audit row describing one decision, and **there is no window in which the user holds half of an intended change** — which add-then-remove creates every time a role moves between branches. **`branch_id: null` means all branches for that assignment** (§7 R24), never *no branch*; it is a required, explicitly nullable key rather than an optional one, so the unscoped grant is never the easiest thing to type by accident. **Removal is a soft delete** (TD-5) — a revoked assignment is tombstoned, so *"who was an administrator at this branch in March"* stays answerable, and re-granting an identical assignment revives that row rather than colliding with the unique index that spans deleted rows. **Only a Super Admin may grant or revoke `admin` or `super_admin`**; an Admin doing either is privilege propagation, the same rule `POST /admin/users` applies to creation. **`super_admin` IS assignable here**, unlike at creation: Revision 22 states that after bootstrap *every subsequent change of administrators happens exclusively through the application*, and refusing the role would leave a VPS shell as the only route to a second Super Admin. **The last active Super Admin cannot lose the role** (`409 STATE_CONFLICT`, `reason: LAST_SUPER_ADMIN`). **Sessions are deliberately NOT revoked** — Revision 10 resolves this trade-off explicitly: every safeguarding-sensitive operation re-asserts live assignments per request, so a revoked role stops mattering immediately where it matters, and the enumerated RefreshRevokedReason values in §7 cover logout, safeguarding actions, replay and the R101 one-time rollout; none honestly describes a demotion.', { '200': 'The user with their new assignments.', '400': `${ENVELOPE} VALIDATION_FAILED — an unknown role, or a missing branch_id key.`, '401': ENVELOPE, '403': `${ENVELOPE} FORBIDDEN — an Admin attempting to grant or revoke an administrator role.`, '404': `${ENVELOPE} NOT_FOUND for an unknown user, one outside the caller's visibility, or an unknown branch.`, '409': `${ENVELOPE} STATE_CONFLICT with reason LAST_SUPER_ADMIN.` }),
     },
     '/family-links': {
       post: op('Link an existing child to a parent (staff-mediated)', '§4.3 Revision 23: the MVP gives parents NO search over existing children — there is no parent-facing directory and TD-10 search belongs to the staff-only §14.2 screen — so this is an Admin/Super Admin operation (TD-2) with the TD-12 freshness assertion. Both parties are identified from §14.2, where staff are already authorized to browse users, which is why accepting ids here raises no enumeration concern. The link is created `Pending` even though staff created it (§4.3 retains that rule without exception) and is decided in the §5.6 approval queue. Parent self-service remains registering a NEW child through §4.1b. Body: `{ parent_id, student_id }`.', { '201': 'Pending link created; awaits an approval decision.', '400': `${ENVELOPE} VALIDATION_FAILED for a bad id pair, or a user named as their own parent.`, '401': ENVELOPE, '403': `${ENVELOPE} FORBIDDEN (TD-12 freshness or TD-2 role).`, '404': `${ENVELOPE} NOT_FOUND when either party does not exist or is soft-deleted.`, '409': `${ENVELOPE} DUPLICATE when a live link already exists — never FAMILY_LINK_PENDING, whose TD-3.8 definition is restricted to own-resource contexts.` }),
@@ -669,6 +747,37 @@ const document = {
       patch: op('Edit a scheduled exam', 'TD-3.6 (R58). **The arrangements are editable; the identity is not.** `title`, `description`, `date`, `start_time`, `end_time`, `room_id`, `administrative_group_id` and `staff` may change — those are arrangements, and arrangements change. **`mode`, `level_id`, `subject_id`, `academic_year_id` and `branch_id` are refused** by a `.strict()` schema rather than dropped: each would change *what is examined, for whom, or where* while keeping the grades and submissions already recorded against the old answer, which is the reasoning §4.4 applies to a course schedule\'s scope. Moving an exam to another level is a new exam. **TD-15**: a stale `version` is `409 VERSION_CONFLICT`, never a silent overwrite. **Staff are REPLACED, not merged** — one call is one decision, and there is no window in which the exam holds half of an intended change.', { '204': 'Updated.', '400': `${ENVELOPE} VALIDATION_FAILED — a malformed body, or a key the boundary refuses.`, '401': ENVELOPE, '403': `${ENVELOPE} FORBIDDEN.`, '404': `${ENVELOPE} NOT_FOUND for an unknown exam or one out of the caller\'s branch scope.`, '409': `${ENVELOPE} VERSION_CONFLICT (TD-15), or STATE_CONFLICT with ONLINE_NOT_AVAILABLE for an online row.` }),
       delete: op('Delete a scheduled exam', 'TD-3.6 (R58), TD-5, BR-15. **Soft delete plus a `Trash` snapshot**, and the staff rows are tombstoned in the same transaction — a soft delete without a snapshot is a row nobody can find and nobody can restore, which is exactly the defect found in Events and Course Schedules once already. The ninety-day window then applies as it does to every other entity.', { '204': 'Deleted; the Trash carries the snapshot.', '401': ENVELOPE, '403': `${ENVELOPE} FORBIDDEN.`, '404': `${ENVELOPE} NOT_FOUND for an unknown exam or one out of scope.` }),
     },
+    '/internal/storage/public-authorize': {
+      // Infrastructure is still a contract: documenting the hook keeps router
+      // parity strict without pretending it is a client/API-v1 operation.
+      servers: [{ url: '/', description: 'Container-network infrastructure path (§3.1)' }],
+      get: {
+        ...op(
+          'Authorize one canonical public object read (internal)',
+          'Nginx auth-subrequest only; the public routing table marks the caller path ' +
+            '`internal`. BR-2/§4.1a and TD-4.9 require the current database state to close ' +
+            'access before eventual public-object retirement completes. `X-Original-URI` ' +
+            'must name `/storage/public/{exact storage key}`. A live undeleted public/public ' +
+            'row with `consent_forced_private = false` answers 204; every missing, stale, ' +
+            'deleted, replaced or forced coordinate answers the TD-3.8 FORBIDDEN envelope. ' +
+            'No browser or generated client calls this operation directly.',
+          {
+            '204': 'Exact current public coordinate is readable.',
+            '403': `${ENVELOPE} FORBIDDEN — absent, malformed, stale, deleted, replaced or consent-forced coordinate.`,
+          },
+        ),
+        'x-internal': true,
+        parameters: [
+          {
+            name: 'X-Original-URI',
+            in: 'header',
+            required: true,
+            schema: { type: 'string' },
+            description: 'Original same-origin storage URI captured by Nginx.',
+          },
+        ],
+      },
+    },
     '/healthz': {
       // TD-14 serves this at the ORIGIN root, outside the /api/v1 prefix, so the
       // document must override the global server base. Without this the contract
@@ -676,12 +785,40 @@ const document = {
       // answers 401 — a consumer following the document would call the wrong URL
       // and conclude the service was unhealthy.
       servers: [{ url: '/', description: 'Served at the origin root (TD-14)' }],
-      get: op(
-        'Health check',
-        'Public. Checks database, storage and job-queue components (TD-14); §19.1 step 8 ' +
-          'asserts a 200 here on deployment.',
-        { '200': 'All components healthy.', '503': 'At least one component is down.' },
-      ),
+      get: {
+        summary: 'Health check',
+        description:
+          'Public. Checks database, storage, pg-boss queue infrastructure and this API process\'s ' +
+          'registered worker readiness (TD-14); §19.1 step 8 asserts a 200 here on deployment. ' +
+          'The existing `components.database`, `components.storage`, and `components.jobs` fields ' +
+          'remain; `components.queue` and `details.jobs` add stable worker lifecycle detail.',
+        responses: {
+          '200': {
+            description: 'All components healthy.',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/HealthResponse' },
+              },
+            },
+          },
+          '503': {
+            description: 'At least one component is unavailable or unready.',
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/HealthResponse' },
+              },
+            },
+          },
+          '500': {
+            description: `${ENVELOPE} INTERNAL — unexpected server fault; details are never leaked to the client.`,
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/ErrorEnvelope' },
+              },
+            },
+          },
+        },
+      },
     },
   },
 };
@@ -700,7 +837,11 @@ const document = {
 // client as parameters, so this needs no environment and no database connection —
 // constructing a PrismaClient does not connect.
 function mountedOperations(): Set<string> {
-  const app = createApp(createPrismaClient(SYNTHETIC_CONFIG.DATABASE_URL), SYNTHETIC_CONFIG);
+  const app = createApp(
+    createPrismaClient(SYNTHETIC_CONFIG.DATABASE_URL),
+    SYNTHETIC_CONFIG,
+    new JobRunnerReadiness({ getWipData: () => [] }),
+  );
 
   const found = new Set<string>();
   const walk = (stack: unknown[], prefix: string): void => {

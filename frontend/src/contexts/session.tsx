@@ -88,9 +88,8 @@ export async function refreshAccessToken(): Promise<string | null> {
       const requested = storedActiveRole();
       const response = await fetch('/api/v1/auth/refresh', {
         method: 'POST',
-        // TD-12: the refresh endpoint is the only cookie-authenticated route and
-        // additionally requires this custom header, which a cross-site form
-        // cannot set.
+        // R101: refresh and logout are the only refresh-cookie consumers. Both
+        // require this custom header, which a cross-site form cannot set.
         headers: {
           'X-Requested-With': 'XMLHttpRequest',
           'Content-Type': 'application/json',

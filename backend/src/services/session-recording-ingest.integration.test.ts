@@ -1,6 +1,8 @@
-import { PutObjectCommand } from "@aws-sdk/client-s3";
+import { DeleteObjectCommand, PutObjectCommand } from "@aws-sdk/client-s3";
+import { PgBoss } from "pg-boss";
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
+import { TD7_RETRY_POLICY } from "../jobs/runner.js";
 import { loadConfig } from "../lib/config.js";
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from "../lib/prisma.js";
 import {
@@ -13,7 +15,10 @@ import type { Actor } from "../policies/actor.js";
 import type { RoleScope } from "../policies/branch-scope.js";
 import { createCourseSchedule } from "./course-schedule.service.js";
 import { createLevel } from "./level.service.js";
-import { ingestRecording } from "./session-recording-ingest.service.js";
+import {
+  ingestRecording,
+  RecordingStagingCleanupFailure,
+} from "./session-recording-ingest.service.js";
 import { applyProviderReport } from "./session-recording.service.js";
 
 /**
@@ -95,6 +100,86 @@ async function putStaging(key: string, bytes: Buffer): Promise<void> {
   await clients.internal.send(
     new PutObjectCommand({ Bucket: STAGING, Key: key, Body: bytes }),
   );
+}
+
+/**
+ * A real MinIO client with one controlled fault at the exact delete boundary.
+ * HEAD, ranged GET, CopyObject and every non-target delete still go to MinIO;
+ * only the selected `DeleteObject` calls fail before leaving this process.
+ */
+function failTargetDeletes(
+  base: StorageClients,
+  target: { bucket: string; key: string },
+  failures: number,
+): { clients: StorageClients; attempts: () => number } {
+  let attempts = 0;
+  const internal = {
+    send: async (command: unknown): Promise<unknown> => {
+      if (
+        command instanceof DeleteObjectCommand &&
+        command.input.Bucket === target.bucket &&
+        command.input.Key === target.key
+      ) {
+        attempts += 1;
+        if (attempts <= failures) {
+          throw new Error("controlled transient staging-delete failure");
+        }
+      }
+      return base.internal.send(command as never);
+    },
+  } as unknown as StorageClients["internal"];
+
+  return {
+    clients: { ...base, internal },
+    attempts: () => attempts,
+  };
+}
+
+type StoredJob = {
+  state: "created" | "retry" | "active" | "completed" | "failed";
+  retry_count: number;
+  output: unknown;
+};
+
+async function storedJob(queue: string, id: string): Promise<StoredJob | null> {
+  const rows = await prisma.$queryRaw<StoredJob[]>`
+    SELECT state::text, retry_count, output
+    FROM pgboss.job
+    WHERE name = ${queue} AND id = ${id}::uuid`;
+  return rows[0] ?? null;
+}
+
+async function waitForJobState(
+  queue: string,
+  id: string,
+  expected: StoredJob["state"],
+  timeoutMs = 20_000,
+): Promise<StoredJob> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const row = await storedJob(queue, id);
+    if (row?.state === expected) return row;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  throw new Error(`job ${id} did not reach ${expected}`);
+}
+
+function testBoss(): PgBoss {
+  const boss = new PgBoss({ connectionString: config.DATABASE_URL, max: 1 });
+  // A test assertion observes failures through durable job state. Do not also
+  // turn pg-boss's process-level error event into an unhandled exception.
+  boss.on("error", () => undefined);
+  return boss;
+}
+
+async function dropTestQueue(queue: string): Promise<void> {
+  const boss = testBoss();
+  await boss.start();
+  try {
+    if (await boss.getQueue(queue)) await boss.deleteQueue(queue);
+  } finally {
+    await boss.stop({ graceful: true });
+  }
 }
 
 /* ── Fixture ─────────────────────────────────────────────────────────────── */
@@ -391,6 +476,206 @@ describe("a completed recording becomes a library item (R99.13)", () => {
     // §7's attribution invariant (Revision 17): null means system-initiated,
     // not attribution lost. Who chose to record is `session.recording_start`.
     expect(row.actorUserId).toBeNull();
+  });
+});
+
+/* ── Post-commit staging cleanup ────────────────────────────────────────── */
+
+describe("staging cleanup is an idempotent durable obligation (R99/R100)", () => {
+  it("preserves the canonical ingest, then retries only the exact staging key", async () => {
+    const sessionId = await onlineClass("audio_only", subjectAudio, "tuesday");
+    const rec = await completedRecording(sessionId, "audio/ogg", oggBytes());
+    const unrelated = await completedRecording(sessionId, "audio/ogg", oggBytes());
+    const flaky = failTargetDeletes(
+      clients,
+      { bucket: STAGING, key: rec.key },
+      1,
+    );
+
+    const failedCleanup = ingestRecording(prisma, flaky.clients, rec.id);
+    await expect(failedCleanup).rejects.toBeInstanceOf(RecordingStagingCleanupFailure);
+    await expect(failedCleanup).rejects.toMatchObject({
+      name: "RecordingStagingCleanupFailure",
+      bucket: STAGING,
+      key: rec.key,
+    });
+    expect(flaky.attempts()).toBe(1);
+
+    // The failure happened AFTER the durable copy and transaction. It is not
+    // an import failure and cannot make valid content disappear or look failed.
+    const row = await prisma.sessionRecording.findUniqueOrThrow({
+      where: { id: rec.id },
+      select: { educationalContentId: true, ingestionFailureReason: true },
+    });
+    expect(row.educationalContentId).not.toBeNull();
+    expect(row.ingestionFailureReason).toBeNull();
+    const content = await prisma.educationalContent.findUniqueOrThrow({
+      where: { id: row.educationalContentId! },
+      select: { storageBucket: true, storageKey: true },
+    });
+    expect(await statObject(clients, content.storageBucket, content.storageKey)).toMatchObject({
+      sizeBytes: 4096,
+    });
+    expect(await statObject(clients, STAGING, rec.key)).not.toBeNull();
+    expect(await statObject(clients, STAGING, unrelated.key)).not.toBeNull();
+
+    // A retry sees the durable relation first, skips verification/copy/rows,
+    // and removes only the staging coordinates stored on this recording.
+    const retried = await ingestRecording(prisma, clients, rec.id);
+    expect(retried).toMatchObject({
+      contentId: row.educationalContentId,
+      alreadyIngested: true,
+      stagingCleaned: true,
+    });
+    expect(await statObject(clients, STAGING, rec.key)).toBeNull();
+    expect(await statObject(clients, STAGING, unrelated.key)).not.toBeNull();
+    expect(await statObject(clients, content.storageBucket, content.storageKey)).toMatchObject({
+      sizeBytes: 4096,
+    });
+
+    // MinIO/S3 DeleteObject treats an absent key as success. Repeating the
+    // cleanup therefore converges without touching the canonical object.
+    await expect(ingestRecording(prisma, clients, rec.id)).resolves.toMatchObject({
+      alreadyIngested: true,
+      stagingCleaned: true,
+    });
+    expect(await statObject(clients, content.storageBucket, content.storageKey)).toMatchObject({
+      sizeBytes: 4096,
+    });
+  });
+
+  it("survives a pg-boss worker restart and eventually removes staging", async () => {
+    const sessionId = await onlineClass("audio_only", subjectAudio, "tuesday");
+    const rec = await completedRecording(sessionId, "audio/ogg", oggBytes());
+    const unrelated = await completedRecording(sessionId, "audio/ogg", oggBytes());
+    const flaky = failTargetDeletes(
+      clients,
+      { bucket: STAGING, key: rec.key },
+      1,
+    );
+    const queue = `test-r99-cleanup-restart-${rec.id}`;
+    let firstBoss: PgBoss | null = testBoss();
+    let restartedBoss: PgBoss | null = null;
+
+    try {
+      await firstBoss.start();
+      await firstBoss.createQueue(queue, {
+        ...TD7_RETRY_POLICY,
+        retryDelay: 2,
+        deleteAfterSeconds: 60,
+      });
+      await firstBoss.work<{ recording_id: string }>(
+        queue,
+        { pollingIntervalSeconds: 0.5 },
+        async ([job]) => {
+          await ingestRecording(prisma, flaky.clients, job!.data.recording_id);
+        },
+      );
+      const jobId = await firstBoss.send(queue, { recording_id: rec.id });
+      expect(jobId).not.toBeNull();
+
+      const retry = await waitForJobState(queue, jobId!, "retry");
+      expect(JSON.stringify(retry.output)).toContain("staging cleanup failed");
+      expect(flaky.attempts()).toBe(1);
+      const committed = await prisma.sessionRecording.findUniqueOrThrow({
+        where: { id: rec.id },
+        select: { educationalContentId: true, ingestionFailureReason: true },
+      });
+      expect(committed.educationalContentId).not.toBeNull();
+      expect(committed.ingestionFailureReason).toBeNull();
+
+      // Stop every worker/process-local reference. The retry row is still in
+      // Postgres, which is the obligation that the old implementation lost.
+      await firstBoss.stop({ graceful: true });
+      firstBoss = null;
+      expect(await storedJob(queue, jobId!)).toMatchObject({
+        state: "retry",
+      });
+
+      restartedBoss = testBoss();
+      await restartedBoss.start();
+      await restartedBoss.work<{ recording_id: string }>(
+        queue,
+        { pollingIntervalSeconds: 0.5 },
+        async ([job]) => {
+          await ingestRecording(prisma, clients, job!.data.recording_id);
+        },
+      );
+      await waitForJobState(queue, jobId!, "completed");
+
+      expect(await statObject(clients, STAGING, rec.key)).toBeNull();
+      expect(await statObject(clients, STAGING, unrelated.key)).not.toBeNull();
+      const content = await prisma.educationalContent.findUniqueOrThrow({
+        where: { id: committed.educationalContentId! },
+        select: { storageBucket: true, storageKey: true },
+      });
+      expect(await statObject(clients, content.storageBucket, content.storageKey)).toMatchObject({
+        sizeBytes: 4096,
+      });
+    } finally {
+      if (firstBoss) await firstBoss.stop({ graceful: true }).catch(() => undefined);
+      if (restartedBoss) {
+        await restartedBoss.stop({ graceful: true }).catch(() => undefined);
+      }
+      await dropTestQueue(queue);
+    }
+  });
+
+  it("runs exactly five total attempts before a repeated cleanup failure becomes terminal", async () => {
+    const sessionId = await onlineClass("audio_only", subjectAudio, "tuesday");
+    const rec = await completedRecording(sessionId, "audio/ogg", oggBytes());
+    const unrelated = await completedRecording(sessionId, "audio/ogg", oggBytes());
+    const unavailable = failTargetDeletes(
+      clients,
+      { bucket: STAGING, key: rec.key },
+      Number.MAX_SAFE_INTEGER,
+    );
+    const queue = `test-r99-cleanup-failure-${rec.id}`;
+    let boss: PgBoss | null = testBoss();
+
+    try {
+      await boss.start();
+      // Keep the production attempt budget. Only the delay/backoff is disabled
+      // so the real pg-boss state machine proves the exact count promptly.
+      await boss.createQueue(queue, {
+        ...TD7_RETRY_POLICY,
+        retryDelay: 0,
+        retryBackoff: false,
+        deleteAfterSeconds: 60,
+      });
+      await boss.work<{ recording_id: string }>(
+        queue,
+        { pollingIntervalSeconds: 0.5 },
+        async ([job]) => {
+          await ingestRecording(prisma, unavailable.clients, job!.data.recording_id);
+        },
+      );
+      const jobId = await boss.send(queue, { recording_id: rec.id });
+      expect(jobId).not.toBeNull();
+
+      const failed = await waitForJobState(queue, jobId!, "failed");
+      expect(failed.retry_count).toBe(4);
+      expect(unavailable.attempts()).toBe(5);
+      expect(JSON.stringify(failed.output)).toContain("staging cleanup failed");
+
+      const row = await prisma.sessionRecording.findUniqueOrThrow({
+        where: { id: rec.id },
+        select: { educationalContentId: true, ingestionFailureReason: true },
+      });
+      expect(row.educationalContentId).not.toBeNull();
+      expect(row.ingestionFailureReason).toBeNull();
+      const content = await prisma.educationalContent.findUniqueOrThrow({
+        where: { id: row.educationalContentId! },
+        select: { storageBucket: true, storageKey: true },
+      });
+      expect(await statObject(clients, content.storageBucket, content.storageKey)).not.toBeNull();
+      expect(await statObject(clients, STAGING, rec.key)).not.toBeNull();
+      expect(await statObject(clients, STAGING, unrelated.key)).not.toBeNull();
+    } finally {
+      if (boss) await boss.stop({ graceful: true }).catch(() => undefined);
+      boss = null;
+      await dropTestQueue(queue);
+    }
   });
 });
 

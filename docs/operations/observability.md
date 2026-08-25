@@ -24,10 +24,44 @@ It checks:
 
 - **Database** connectivity
 - **MinIO** reachability
-- **Job queue** heartbeat
+- **pg-boss queue infrastructure** — whether the durable queue schema is available
+- **Application workers** — whether this API process completed runner startup, registered
+  its implemented worker catalog, and those workers remain active and fresh
 
 Returns `200`, or **`503` with per-component detail** so a failure names which dependency is
 down rather than reporting a generic outage.
+
+The existing `components.database`, `components.storage`, and `components.jobs` fields remain
+stable. `components.queue` separates infrastructure from workers, while `details.jobs` gives a
+machine-readable reason and expected/registered/active counts. In particular,
+`queue: "ok"` with `jobs: "down"` means enqueue storage exists but this process has no ready
+runner — schema presence alone is never a worker heartbeat.
+
+```json
+{
+  "status": "degraded",
+  "components": {
+    "database": "ok",
+    "storage": "ok",
+    "jobs": "down",
+    "queue": "ok"
+  },
+  "details": {
+    "jobs": {
+      "state": "down",
+      "reason": "startup_failed",
+      "expected_workers": 5,
+      "registered_workers": 0,
+      "active_workers": 0
+    }
+  }
+}
+```
+
+Worker reason codes distinguish `not_started`, `starting`, `startup_failed`, incomplete
+registration, a missing/inactive/stale worker, shutdown, and an unavailable live-worker
+registry. Names appear only for missing or stale workers and contain queue identifiers, never
+payload data.
 
 That per-component detail is what makes the [degraded-operation
 matrix](resilience.md#degraded-operation) actionable — "MinIO is down" and "PostgreSQL is
@@ -71,7 +105,7 @@ will see them:
 
 | Condition | Surfaces as |
 |---|---|
-| A job exhausts its five retries | Dead-lettered, with an **Admin-visible failure** |
+| A job exhausts its four retries (five total attempts) | Dead-lettered, with an **Admin-visible failure** |
 | **Backup replication fails** | A **critical** Admin-visible alert. Two consecutive failures escalate to the owner |
 | Job queue lag past 10 minutes | An alarm on the Admin dashboard |
 | TLS renewal failing | Alert at **21 days remaining** — never discovered as a browser error |

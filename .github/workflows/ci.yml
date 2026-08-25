@@ -1,4 +1,4 @@
-# CI skeleton — SRS §19.2 gates (M0 scope: lint, typecheck, test runners,
+# CI — SRS §19.2 gates (lint, typecheck, test runners, production builds,
 # TD-6a migration-presence check, `db push` ban, .env commit check, TD-6b
 # DROP/RENAME migration lint, OpenAPI↔TD-3 conformance).
 # Later milestones extend this file (testcontainers integration tests, TD-2
@@ -37,6 +37,16 @@ jobs:
         run: bash scripts/ci/check-header-nav-exclusive.sh
       - name: Design-token discipline (components use semantic tokens only)
         run: bash scripts/ci/check-design-tokens.sh
+      - name: Closed dialogs stay out of layout until opened
+        run: bash scripts/ci/check-dialog-hidden-when-closed.sh
+      - name: Progress meters keep logical RTL-safe sizing
+        run: bash scripts/ci/check-progress-css.sh
+      - name: Shared page-header and button layout invariants
+        run: bash scripts/ci/check-shared-layout.sh
+      - name: Association terminology remains consistent
+        run: bash scripts/ci/check-association-terminology.sh
+      - name: Arabic UI uses Western numerals
+        run: bash scripts/ci/check-western-digits.sh
       - name: Public display identity resolved server-side (§7, §20 rule 21)
         run: bash scripts/ci/check-display-identity.sh
       # R60 shipped two defects from reading the account's full role list where
@@ -102,7 +112,7 @@ jobs:
         run: bash scripts/ci/check-openapi-td3.sh
 
   backend:
-    name: Backend — lint, typecheck, test
+    name: Backend — lint, typecheck, test, build
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -118,9 +128,10 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
+      - run: npm run build
 
   frontend:
-    name: Frontend — lint, typecheck, test
+    name: Frontend — lint, typecheck, test, build
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -136,3 +147,4 @@ jobs:
       - run: npm run lint
       - run: npm run typecheck
       - run: npm test
+      - run: npm run build

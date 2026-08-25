@@ -13,7 +13,8 @@ erDiagram
     User ||--o{ UserIdentity : "binds"
     User ||--o{ UserBranchRole : "holds"
     User ||--o{ FamilyLink : "parent of"
-    User ||--o{ RefreshToken : "sessions"
+    User ||--o{ RefreshSession : "sessions"
+    RefreshSession ||--o{ RefreshToken : "generations"
     User ||--o{ ConsentRecord : "subject of"
     User ||--o| StudentSocialProfile : "case file"
     Role ||--o{ UserBranchRole : ""
@@ -78,23 +79,62 @@ standing in for an unbound account would make *"has an identity"* stop meaning *
 authenticated"* — and that predicate is what the entire login routing rests on. An account
 awaiting its first binding is represented by `pre_provisioned_email` and nothing else.
 
+### `NormalizedEmailLock` — synchronization, not ownership
+
+`User.pre_provisioned_email` and active `UserIdentity.email` are separate representations of
+one normalized-address claim. Their indexes cannot constrain one another and cannot lock an
+address absent from both tables. `NormalizedEmailLock(email, created_at)` supplies one stable
+row per address for the production ownership writers to lock before deciding.
+
+It deliberately has no User foreign key. Adding one would make it a third ownership record
+that could disagree with the two SRS fields; deleting it on account lifecycle changes would
+also reopen the race. Rows may therefore outlive an active claim and remain harmless lock
+targets. The availability decision always comes from an under-lock re-read of the actual
+ownership channels.
+
 ### `UserBranchRole` — the whole authorization model
 
 Unique on `(user_id, role_id, branch_id)`, so one person may hold the same role once per
 branch. **`branch_id IS NULL` means all branches for that assignment** — not "Super Admin".
 Super Admin's bypass follows from its role.
 
-### `RefreshToken` — session state that has to exist somewhere
+### `RefreshSession` and `RefreshToken` — one stable chain, rotating generations
 
 Rotation, revocation, the grace window, and revoke-on-suspension all need per-token server
 state that no other entity holds.
+
+`RefreshSession` is deliberately only `(id, user_id, created_at)`: it is the stable row locked
+by refresh, logout, revoke-all and `token.purge`, not another credential or revocation source.
+Token generations cannot fill that role at `READ COMMITTED`: rotation may insert a successor
+outside a lock statement's snapshot and purge may delete the predecessor on which a waiter was
+queued. The anchor is removed only when purge, while holding it, finds no token generation left.
+PostgreSQL advisory locks were rejected because §16.2 permits repository raw SQL for row locks,
+and a UUID cannot be represented by PostgreSQL's 64-bit advisory key without collision.
+
+The anchor is intentionally session-scoped, not user-scoped. The already-stable `User` row is
+the higher-level lock for the two operations that must govern anchors which do not exist yet:
+identity binding, new login/session creation, current-role credential decisions and user-wide
+revocation, including Pending → Rejected. Their order is User first, then existing
+`RefreshSession` ids in UUID order. The
+explicit User mode is `FOR NO KEY UPDATE`: `User.id` is immutable, while all protected status,
+deletion and role decisions still conflict with this lock. A successful login re-reads status
+and assignments while holding it; rejection and suspension hold it while changing status and
+enumerating/revoking all anchors. The shared session issuer independently re-checks that the
+account is Active or Pending under this lock, so a helper call cannot bypass that boundary.
+
+Refresh, logout and purge never request that **explicit** User lock. Refresh-token and audit
+inserts can nevertheless acquire an **implicit `KEY SHARE`** on the referenced User during FK
+validation. That real database edge is why `FOR NO KEY UPDATE` matters: it is compatible with
+`KEY SHARE`, whereas `FOR UPDATE` allowed a refresh/logout holding a session anchor to wait on
+User while suspension holding User waited on that same anchor. Session-first operations now
+finish their FK write and release the anchor without weakening User-wide serialization.
 
 | Field | Consumer |
 |---|---|
 | `token_hash` | **Hashed, never raw** — a stolen database dump must not yield usable 30-day credentials. Unique |
 | `session_id` | The stable id of one rotation chain. Makes "revoke this session" a single indexed `UPDATE` instead of a recursive walk of predecessors |
 | `rotated_from_id` | The immediate predecessor. **This one field decides all three refresh outcomes**: current → rotate, immediate predecessor within grace → accept, anything older → reuse detected |
-| `revoked_at` / `revoked_reason` | The revocation check is `revoked_at IS NULL`. The reason separates a normal logout from a **detected replay**, which is a security event |
+| `revoked_at` / `revoked_reason` | The revocation check is `revoked_at IS NULL`. The reason separates a normal logout, detected replay, suspension, R102 rejection, deletion, and R101's one-time cookie-Path rollout; NULL remains reserved for ordinary rotation |
 
 The fields **deliberately excluded** are documented in the specification with their reasons,
 so a later implementer does not re-add them by reflex: `created_at` (identical to
@@ -181,7 +221,9 @@ the consent job's forced visibility changes.
 | `AcademicYear` exactly one `is_current` | Partial unique index |
 | `RateLimitCounter (user_id, bucket, window_start)` | What makes the increment safe under concurrency |
 | `User.pre_provisioned_email` among non-null | Two accounts must never claim one address, or a first login is ambiguous about which it binds |
+| `NormalizedEmailLock.email` | One collision-free transaction boundary across pre-provisioned and completed identity ownership, including absent-row creation |
 | `RefreshToken.token_hash` | Makes "presented token → exactly one row" a lookup, not a scan |
+| `RefreshToken.session_id → RefreshSession.id` | Every generation has one stable, database-enforced serialization target |
 | `Enrollment (student_id, level_id)` **where not deleted** | **Exactly one organisational group per enrolled level** (BR-21). Only expressible because `level_id` sits on the enrolment row — see below |
 | `AdministrativeGroup (id, level_id)` | Redundant against the primary key **on purpose**: PostgreSQL requires a unique constraint on the referenced pair before `Enrollment` can declare its composite foreign key |
 | `StudentTeachingGroup` — at most one per `(student, subject, level)` **where not deleted** | At most one split-group per subject (BR-22). `subject` and `level` come from the teaching group, so this is a **functional** index over the join, hand-written |
@@ -339,10 +381,73 @@ SQL, and flags every `DROP`/`RENAME` for human review with its contract-phase ju
 20260729060000_r36_1_display_name_not_blank
 20260729150624_r36_1_public_display_name
 20260801194116_r39_user_intended_branch
+20260802131723_r40_arabic_name_parts
+20260802135318_r41_french_name_parts
+20260804101500_r43_educational_model_expand
+20260804101600_r43_educational_model_constraints
+20260804180000_r43_4_session_staff_snapshot
+20260804200000_r43_contract_drop_retired_model
+20260805190000_r49_requested_role
+20260805200000_r49_intended_category
+20260805210000_r50_effective_until
+20260809120000_r57_schedule_title
+20260809180000_r58_exam_mode
+20260809190000_r58_exam_branch_date_index
+20260811120000_r62_child_applications
+20260811180000_r64_child_application_branch
+20260811210000_r66_enrollment_branch
+20260812090000_r68_identity_review
+20260812150000_r71_event_staff
+20260812170000_r73_quran_subject_marker
+20260818120000_r77_session_cancellation_notification
+20260818160000_r78_assignment_and_reschedule_events
+20260818200000_r79_beneficiary_fact
+20260818220000_r80_sex_not_null
+20260819000000_r81_exam_max_grade
+20260819120000_r82_notification_targets
+20260819160000_r83_optional_reason
+20260819200000_r88_teaching_profile
+20260819230000_r91_effective_staffing
+20260820010000_r92_session_audience_branch
+20260820120000_r93_event_staff_assigned
+20260820160000_r96_user_qr_identity
+20260820180000_r97_delivery_mode
+20260821090000_r99_recording
+20260821140000_r99_recording_ingestion
+20260821200000_r101_refresh_cookie_path_reason
+20260821200100_r101_invalidate_legacy_refresh_sessions
+20260823100000_r101_refresh_session_anchor
+20260823190000_r102_rejection_revocation_reason
+20260823210000_normalized_email_ownership_lock
 ```
 
 Note the pattern: schema changes and their hand-written constraints are **separate
 migrations**, and revision-driven changes carry the revision number in the name.
+
+R101 deliberately uses two adjacent migrations. PostgreSQL cannot safely add an enum value
+and consume it in persisted rows inside the same migration transaction. The first migration
+adds `cookie_path_migration`; after Prisma commits it, the second uses one data-modifying CTE
+to write system audit and revoke every still-live pre-cutover token atomically. Deployment
+stops the old issuer before either migration, so no narrow-Path credential can be minted after
+the sweep. `_prisma_migrations` is the one-time cutover marker: a repeated `migrate deploy`
+does not execute the data migration again and therefore cannot revoke sessions issued by the
+new application. Running migration SQL manually after cutover is prohibited.
+
+The later R101 anchor migration is ordinary forward-only schema evolution: it creates one
+`RefreshSession` per existing distinct `session_id`, refuses an inconsistent chain spanning
+more than one user, then adds the foreign key. It does not repeat the cookie-path invalidation
+and therefore cannot sign out sessions merely because `migrate deploy` is run again.
+
+R102 is a forward-only enum extension only. It adds the durable `rejection` attribution value;
+the application transaction performs each actual Pending → Rejected revocation, so rerunning
+`migrate deploy` has no session side effect.
+
+The normalized-email migration creates and backfills only lock targets; it does not choose an
+owner. Before backfill it checks the union of retained pre-provisioned addresses and active
+identities and aborts if one email already names more than one User. Automatically clearing a
+pre-provisioned address or merging people would destroy provenance and make a person-level
+decision in migration SQL. Reconcile such rows explicitly using the deployment runbook, then
+rerun `migrate deploy`; a clean retry is forward-only and backfill is idempotent.
 
 ### Filename order is apply order — and it bit us
 

@@ -1,7 +1,12 @@
 import type { PrismaClient } from '../generated/prisma/client.js';
+import { issueAccessToken, issueAccessTokenWithExpiryCap } from '../lib/access-token.js';
+import { AppError } from '../lib/errors.js';
+import { narrowToRole } from '../policies/branch-scope.js';
 import * as audit from '../repositories/audit.repository.js';
+import type { Db } from '../repositories/audit.repository.js';
 import * as users from '../repositories/user.repository.js';
 import type { ResolvedAccount } from '../repositories/user.repository.js';
+import { issueNewSession, type IssuedRefreshToken } from './refresh-token.service.js';
 
 /**
  * Login resolution and routing (SRS §4.1b steps 3–4, TD-1, TD-4.10).
@@ -22,6 +27,15 @@ export type LoginRoute =
   | { kind: 'deactivated'; reason: 'rejected' | 'suspended' | 'deleted' }
   /** 4c — brand-new person: issue an onboarding token and send them to the form. */
   | { kind: 'onboarding' };
+
+export type FinalizedLogin =
+  | { kind: 'deactivated'; reason: 'rejected' | 'suspended' | 'deleted' }
+  | {
+      kind: 'active' | 'pending';
+      account: ResolvedAccount;
+      accessToken: string;
+      refreshSession: IssuedRefreshToken;
+    };
 
 /**
  * Applies the §4.1b step-4a routing condition **in full**: status alone is not
@@ -70,7 +84,7 @@ export async function resolveLogin(
     const route = bound.identityActive
       ? routeByStatus(bound, false)
       : ({ kind: 'deactivated', reason: 'deleted' } as const);
-    await writeLoginAudit(prisma, route, bound.user.id);
+    if (route.kind === 'deactivated') await writeLoginAudit(prisma, route, bound.user.id);
     return route;
   }
 
@@ -86,11 +100,39 @@ export async function resolveLogin(
     return preRoute;
   }
 
-  // ── Step 4b — bind transactionally (TD-4.10).
+  // ── Step 4b — bind transactionally with the authoritative User state
+  // (TD-4.10). The pre-provision lookup above is discovery, not authority: a
+  // suspension may commit between it and this transaction.
   try {
-    await prisma.$transaction(async (tx) => {
+    return await prisma.$transaction(async (tx): Promise<LoginRoute> => {
+      // Email ownership is the outer lock for every writer. It closes the race
+      // with a stale onboarding token while the User lock below continues to
+      // serialize binding against suspension and rejection.
+      await users.lockNormalizedEmail(tx, email);
+      if (!(await users.lockUser(tx, preProvisioned.user.id))) {
+        return { kind: 'deactivated', reason: 'deleted' };
+      }
+      const current = await users.findAccountById(tx, preProvisioned.user.id);
+      if (!current) return { kind: 'deactivated', reason: 'deleted' };
+
+      const claimingUsers = await users.emailClaimingUserIds(tx, email);
+      if (
+        claimingUsers.length !== 1 ||
+        claimingUsers[0] !== current.user.id
+      ) {
+        throw new AppError('DUPLICATE', 'email ownership changed before identity binding', {
+          reason: 'EMAIL_ALREADY_CLAIMED',
+        });
+      }
+
+      const currentRoute = routeByStatus(current, false);
+      if (currentRoute.kind === 'deactivated') {
+        await writeLoginAudit(tx, currentRoute, current.user.id);
+        return currentRoute;
+      }
+
       await users.bindIdentity(tx, {
-        userId: preProvisioned.user.id,
+        userId: current.user.id,
         provider: 'google',
         providerSubjectId: identity.providerSubjectId,
         email,
@@ -114,7 +156,7 @@ export async function resolveLogin(
        */
       const raised = await tx.familyLink.updateMany({
         where: {
-          studentId: preProvisioned.user.id,
+          studentId: current.user.id,
           status: 'approved',
           deletedAt: null,
           // Idempotent: a re-entry after a partial failure re-stamps nothing,
@@ -125,10 +167,10 @@ export async function resolveLogin(
       });
 
       await audit.write(tx, {
-        actorUserId: preProvisioned.user.id,
+        actorUserId: current.user.id,
         actionType: audit.AUDIT_ACTIONS.identityBound,
         targetEntity: 'User',
-        targetId: preProvisioned.user.id,
+        targetId: current.user.id,
         // `pre_provisioned_email` is retained, not cleared (§7), so the
         // provenance of how this account was created survives the binding.
         detail: {
@@ -139,6 +181,7 @@ export async function resolveLogin(
           ...(raised.count > 0 ? { family_links_flagged_for_review: raised.count } : {}),
         },
       });
+      return routeByStatus(current, true);
     });
   } catch (error) {
     // Lost the race to a concurrent first login: re-read and continue as 4a.
@@ -150,21 +193,149 @@ export async function resolveLogin(
       );
       if (nowBound) {
         const route = routeByStatus(nowBound, false);
-        await writeLoginAudit(prisma, route, nowBound.user.id);
+        if (route.kind === 'deactivated') await writeLoginAudit(prisma, route, nowBound.user.id);
         return route;
       }
     }
     throw error;
   }
+}
 
-  const route = routeByStatus(preProvisioned, true);
-  await writeLoginAudit(prisma, route, preProvisioned.user.id);
-  return route;
+/**
+ * Final authority boundary for a successful Google login.
+ *
+ * Resolution and first-login identity binding may have happened earlier, but
+ * neither snapshot is allowed to mint credentials. The stable User row
+ * serializes this transaction with suspension/user-wide revocation; account
+ * status and roles are then re-read under that lock. The refresh anchor/token
+ * and successful-login audit commit together, and the access token is returned
+ * only after that commit succeeds.
+ */
+export async function finalizeLoginSession(
+  prisma: PrismaClient,
+  params: { userId: string; boundNow: boolean; signingKey: string },
+): Promise<FinalizedLogin> {
+  return prisma.$transaction(async (tx): Promise<FinalizedLogin> => {
+    if (!(await users.lockUser(tx, params.userId))) {
+      return { kind: 'deactivated', reason: 'deleted' };
+    }
+
+    const account = await users.findAccountById(tx, params.userId);
+    if (!account) return { kind: 'deactivated', reason: 'deleted' };
+
+    const route = routeByStatus(account, params.boundNow);
+    if (route.kind === 'deactivated') {
+      await writeLoginAudit(tx, route, account.user.id);
+      return route;
+    }
+    if (route.kind === 'onboarding') {
+      // `routeByStatus` cannot produce this branch; keeping the exhaustiveness
+      // guard local prevents a future route addition from minting credentials.
+      return { kind: 'deactivated', reason: 'deleted' };
+    }
+
+    const issued = issueAccessToken(
+      {
+        userId: account.user.id,
+        roleScopes: account.roleScopes,
+        accountStatus: account.user.accountStatus,
+      },
+      params.signingKey,
+    );
+    const refreshSession = await issueNewSession(tx, account.user.id);
+    await writeLoginAudit(tx, route, account.user.id);
+
+    return {
+      kind: route.kind,
+      account,
+      accessToken: issued.token,
+      refreshSession,
+    };
+  });
+}
+
+export interface SwitchedRole {
+  accessToken: string;
+  accessExpiresAt: Date;
+  activeRole: string;
+}
+
+/**
+ * R60 role switching changes authority, never authentication lifetime.
+ *
+ * The User governing lock serializes this credential decision with suspension,
+ * deletion and final login issuance. Account status and assignments are read
+ * only after that lock. The replacement JWT is capped at the verified bearer's
+ * original `exp`, so neither logout nor an absent refresh session can turn this
+ * endpoint into an alternate refresh mechanism.
+ */
+export async function switchActiveRole(
+  prisma: PrismaClient,
+  params: {
+    userId: string;
+    requestedRole: string;
+    presentedActiveRole?: string | undefined;
+    presentedExp: number;
+    signingKey: string;
+  },
+): Promise<SwitchedRole> {
+  return prisma.$transaction(async (tx): Promise<SwitchedRole> => {
+    if (!(await users.lockUser(tx, params.userId))) {
+      throw new AppError('FORBIDDEN', 'account is not active');
+    }
+    const account = await users.findAccountById(tx, params.userId);
+    if (
+      !account ||
+      account.user.deletedAt !== null ||
+      account.user.accountStatus !== 'active'
+    ) {
+      throw new AppError('FORBIDDEN', 'account is not active');
+    }
+
+    const narrowed = narrowToRole(account.roleScopes, params.requestedRole);
+    if (!narrowed) {
+      throw new AppError('FORBIDDEN', 'that role is not assigned to this account', {
+        reason: 'ROLE_NOT_ASSIGNED',
+        role: params.requestedRole,
+      });
+    }
+
+    const now = new Date();
+    if (params.presentedExp <= Math.floor(now.getTime() / 1000)) {
+      throw new AppError('AUTH_REQUIRED', 'access token expired during role switch');
+    }
+    const issued = issueAccessTokenWithExpiryCap(
+      {
+        userId: account.user.id,
+        roleScopes: narrowed,
+        activeRole: params.requestedRole,
+        accountStatus: account.user.accountStatus,
+      },
+      params.signingKey,
+      params.presentedExp,
+      now,
+    );
+
+    await audit.write(tx, {
+      actorUserId: account.user.id,
+      activeRole: params.presentedActiveRole,
+      actionType: 'auth.role_switch',
+      targetEntity: 'User',
+      targetId: account.user.id,
+      detail: { from: params.presentedActiveRole ?? null, to: params.requestedRole },
+    });
+
+    return {
+      accessToken: issued.token,
+      accessExpiresAt: issued.expiresAt,
+      activeRole: params.requestedRole,
+    };
+  });
 }
 
 /** TD-8: `auth.login` on success, `auth.login_denied` with the denial reason. */
 async function writeLoginAudit(
-  prisma: PrismaClient,
+  prisma: Db,
   route: LoginRoute,
   userId: string,
 ): Promise<void> {

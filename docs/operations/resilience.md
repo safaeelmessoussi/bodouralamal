@@ -48,10 +48,10 @@ data loss.
 
 | Dependency down | Blast radius | Behaviour |
 |---|---|---|
-| **Google OAuth** | New logins and registrations only | **Active sessions are unaffected** — token refresh is local and never calls Google. `/login` shows a friendly "temporarily unavailable" state with retry. No queuing of registrations |
+| **Google OAuth** | New logins and registrations only | **Active sessions are unaffected** — token refresh is local and never calls Google. Code exchange, ID-token verification, or signing-certificate retrieval failure all fail closed; `/login` shows a friendly "temporarily unavailable" state with retry. Provider certificates are cached according to Google's response. No queuing of registrations |
 | **MinIO** | Uploads, downloads, previews, bucket migrations | Those return `503`; content pages render their error state with retry. **Everything else — scheduling, grading, Quran, approvals — continues fully.** Migration jobs retry; the database row remains the source of truth, so **no window of wrong exposure opens** |
 | **PostgreSQL** | Everything | Total API outage. Health returns `503`; Nginx serves the static client shell and maps API failures to a friendly maintenance interstitial — **never a raw 502 page.** There is no read-only or cached mode |
-| **Job workers** (database up, workers down) | Background latency only | **Enqueues keep succeeding** — they are database inserts inside application transactions. Jobs are **delayed, never lost**, and drain on restart. Queue-lag alarm past 10 minutes |
+| **Job workers** (database up, workers down) | Background latency only | Health returns `503` with `queue: ok`, `jobs: down`, and a stable runner reason. **Enqueues keep succeeding** — they are database inserts inside application transactions. Jobs are **delayed, never lost**, and drain on restart. Queue-lag alarm past 10 minutes |
 | **Backup target** | Backup redundancy only | Critical alert; production continues; nightly retry |
 | **Let's Encrypt renewal** | Future TLS validity | Alert at **21 days remaining** |
 
@@ -85,6 +85,8 @@ Worth listing under resilience because the temptation is to treat them as errors
 | Two admins approve one registration | First commits; the second gets `409 STATE_CONFLICT`, which the UI treats as "already handled, refreshing" |
 | Two concurrent enrolments at capacity − 1 | A row lock admits **exactly one** |
 | Two tabs refresh simultaneously | Exactly one rotation; the loser is absorbed by the grace window and **nobody is logged out** |
+| Refresh races current-session logout | Both lock the stable `RefreshSession` row. Logout first refuses rotation; rotation first is followed by a second locked issuance check, so logout in that gap makes refresh return `401`. If issuance locks first, the access token is issued before logout and logout waits. No live successor survives; other sessions use disjoint rows |
+| `token.purge` races refresh/logout at expiry | Purge locks the same session anchor before deleting generations and removes the anchor only with the last token. A deleted predecessor cannot hide a newly inserted successor from logout |
 
 > **Concurrency conflicts are never surfaced as 500s**, and escalating the isolation level to
 > paper over a missing lock is prohibited.

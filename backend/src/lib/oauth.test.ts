@@ -1,6 +1,13 @@
-import { createHash, createHmac } from "node:crypto";
+import {
+  createHash,
+  createHmac,
+  createSign,
+  generateKeyPairSync,
+  type KeyObject,
+} from "node:crypto";
 
-import { describe, expect, it } from "vitest";
+import { OAuth2Client } from "google-auth-library";
+import { describe, expect, it, vi } from "vitest";
 
 import {
   buildAuthorizationUrl,
@@ -9,6 +16,7 @@ import {
   exchangeCode,
   openFlowState,
   sealFlowState,
+  verifyGoogleIdToken,
 } from "./oauth.js";
 
 /**
@@ -22,9 +30,70 @@ import {
  * happy path would notice.
  */
 const KEY = "test-jwt-signing-key-at-least-32-chars-long";
+const GOOGLE_CLIENT_ID = "client-123";
+const TEST_KEY_ID = "google-test-key";
+const { privateKey: googlePrivateKey, publicKey: googlePublicKey } =
+  generateKeyPairSync("rsa", { modulusLength: 2048 });
+const { privateKey: foreignPrivateKey } = generateKeyPairSync("rsa", {
+  modulusLength: 2048,
+});
 
-const idToken = (claims: Record<string, unknown>): string =>
-  `header.${Buffer.from(JSON.stringify(claims)).toString("base64url")}.sig`;
+function googleClaims(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  const now = Math.floor(Date.now() / 1000);
+  return {
+    iss: "https://accounts.google.com",
+    aud: GOOGLE_CLIENT_ID,
+    iat: now - 10,
+    exp: now + 3600,
+    sub: "google-sub-1",
+    email: "Safae.EL@Example.COM",
+    email_verified: true,
+    ...overrides,
+  };
+}
+
+function signedIdToken(
+  claims: Record<string, unknown> = googleClaims(),
+  options: {
+    alg?: string;
+    kid?: string;
+    signingKey?: KeyObject;
+  } = {},
+): string {
+  const header = Buffer.from(
+    JSON.stringify({
+      alg: options.alg ?? "RS256",
+      kid: options.kid ?? TEST_KEY_ID,
+      typ: "JWT",
+    }),
+  ).toString("base64url");
+  const payload = Buffer.from(JSON.stringify(claims)).toString("base64url");
+  const signed = `${header}.${payload}`;
+  const signature = createSign("RSA-SHA256")
+    .update(signed)
+    .end()
+    .sign(options.signingKey ?? googlePrivateKey)
+    .toString("base64url");
+  return `${signed}.${signature}`;
+}
+
+function localGoogleClient(): OAuth2Client {
+  const client = new OAuth2Client();
+  const localCertificates = {
+    certs: {
+      [TEST_KEY_ID]: googlePublicKey
+        .export({ type: "spki", format: "pem" })
+        .toString(),
+    },
+    format: "PEM",
+  } as unknown as Awaited<
+    ReturnType<OAuth2Client["getFederatedSignonCertsAsync"]>
+  >;
+  vi.spyOn(client, "getFederatedSignonCertsAsync").mockResolvedValue(
+    localCertificates,
+  );
+  return client;
+}
 
 /** A `fetch` stand-in; `exchangeCode` takes one so no network is involved. */
 const respondWith = (body: unknown, ok = true): typeof fetch =>
@@ -186,27 +255,13 @@ describe("the authorization URL", () => {
   });
 });
 
-describe("exchangeCode — what Google says is not taken on trust", () => {
-  const base = {
-    code: "auth-code",
-    codeVerifier: "verifier",
-    clientId: "client-123",
-    clientSecret: "secret",
-    redirectUri: "https://example.test/cb",
-  };
-
-  it("accepts a verified email for OUR client and lowercases it", async () => {
-    const result = await exchangeCode({
-      ...base,
-      fetchImpl: respondWith({
-        id_token: idToken({
-          aud: "client-123",
-          sub: "google-sub-1",
-          email: "Safae.EL@Example.COM",
-          email_verified: true,
-        }),
-      }),
-    });
+describe("Google ID-token verification — identity is cryptographically established", () => {
+  it("accepts a valid Google-signed token and normalizes its verified email", async () => {
+    const result = await verifyGoogleIdToken(
+      signedIdToken(),
+      GOOGLE_CLIENT_ID,
+      localGoogleClient(),
+    );
 
     expect(result).toEqual({
       ok: true,
@@ -217,50 +272,192 @@ describe("exchangeCode — what Google says is not taken on trust", () => {
     });
   });
 
-  it("rejects a token minted for ANOTHER client (audience confusion)", async () => {
-    // Without the `aud` check, a token obtained by any other Google app would
-    // authenticate its holder here.
-    const result = await exchangeCode({
-      ...base,
-      fetchImpl: respondWith({
-        id_token: idToken({
-          aud: "someone-elses-client",
-          sub: "google-sub-1",
-          email: "a@example.com",
-          email_verified: true,
-        }),
-      }),
-    });
+  it("rejects an invalid signature even when every claim looks valid", async () => {
+    const result = await verifyGoogleIdToken(
+      signedIdToken(googleClaims(), { signingKey: foreignPrivateKey }),
+      GOOGLE_CLIENT_ID,
+      localGoogleClient(),
+    );
 
     expect(result).toEqual({ ok: false, reason: "oauth_unavailable" });
   });
 
-  it("refuses an unverified email as its own distinct reason (§4.1b step 7)", async () => {
-    const unverified = await exchangeCode({
-      ...base,
-      fetchImpl: respondWith({
-        id_token: idToken({
-          aud: "client-123",
-          sub: "google-sub-1",
-          email: "a@example.com",
-          email_verified: false,
-        }),
-      }),
-    });
-    expect(unverified).toEqual({ ok: false, reason: "email_unverified" });
+  it("rejects an expired token", async () => {
+    const now = Math.floor(Date.now() / 1000);
+    const result = await verifyGoogleIdToken(
+      signedIdToken(googleClaims({ iat: now - 3600, exp: now - 600 })),
+      GOOGLE_CLIENT_ID,
+      localGoogleClient(),
+    );
 
-    // A missing flag is not a verified one.
-    const absent = await exchangeCode({
-      ...base,
-      fetchImpl: respondWith({
-        id_token: idToken({
-          aud: "client-123",
-          sub: "google-sub-1",
-          email: "a@example.com",
-        }),
-      }),
+    expect(result).toEqual({ ok: false, reason: "oauth_unavailable" });
+  });
+
+  it("accepts only Google's documented issuers", async () => {
+    const result = await verifyGoogleIdToken(
+      signedIdToken(googleClaims({ iss: "googleapis.com" })),
+      GOOGLE_CLIENT_ID,
+      localGoogleClient(),
+    );
+
+    expect(result).toEqual({ ok: false, reason: "oauth_unavailable" });
+  });
+
+  it("rejects a token minted for another OAuth client", async () => {
+    const result = await verifyGoogleIdToken(
+      signedIdToken(googleClaims({ aud: "someone-elses-client" })),
+      GOOGLE_CLIENT_ID,
+      localGoogleClient(),
+    );
+
+    expect(result).toEqual({ ok: false, reason: "oauth_unavailable" });
+  });
+
+  it("rejects malformed tokens and unsupported protected headers", async () => {
+    const client = localGoogleClient();
+
+    await expect(verifyGoogleIdToken("not.a.jwt", GOOGLE_CLIENT_ID, client)).resolves.toEqual({
+      ok: false,
+      reason: "oauth_unavailable",
     });
-    expect(absent).toEqual({ ok: false, reason: "email_unverified" });
+    await expect(
+      verifyGoogleIdToken(
+        signedIdToken(googleClaims(), { alg: "HS256" }),
+        GOOGLE_CLIENT_ID,
+        client,
+      ),
+    ).resolves.toEqual({ ok: false, reason: "oauth_unavailable" });
+    await expect(
+      verifyGoogleIdToken(
+        signedIdToken(googleClaims(), { kid: "unknown-key" }),
+        GOOGLE_CLIENT_ID,
+        client,
+      ),
+    ).resolves.toEqual({ ok: false, reason: "oauth_unavailable" });
+    await expect(
+      verifyGoogleIdToken(
+        signedIdToken(googleClaims(), { kid: "" }),
+        GOOGLE_CLIENT_ID,
+        client,
+      ),
+    ).resolves.toEqual({ ok: false, reason: "oauth_unavailable" });
+  });
+
+  it("requires present, non-empty subject and email claims", async () => {
+    const client = localGoogleClient();
+    const withoutSubject = googleClaims();
+    const withoutEmail = googleClaims();
+    delete withoutSubject["sub"];
+    delete withoutEmail["email"];
+
+    await expect(
+      verifyGoogleIdToken(signedIdToken(googleClaims({ sub: "" })), GOOGLE_CLIENT_ID, client),
+    ).resolves.toEqual({ ok: false, reason: "oauth_unavailable" });
+    await expect(
+      verifyGoogleIdToken(
+        signedIdToken(googleClaims({ email: "   " })),
+        GOOGLE_CLIENT_ID,
+        client,
+      ),
+    ).resolves.toEqual({ ok: false, reason: "oauth_unavailable" });
+    await expect(
+      verifyGoogleIdToken(signedIdToken(withoutSubject), GOOGLE_CLIENT_ID, client),
+    ).resolves.toEqual({ ok: false, reason: "oauth_unavailable" });
+    await expect(
+      verifyGoogleIdToken(signedIdToken(withoutEmail), GOOGLE_CLIENT_ID, client),
+    ).resolves.toEqual({ ok: false, reason: "oauth_unavailable" });
+  });
+
+  it("refuses false or missing email verification as the SRS-specific reason", async () => {
+    const client = localGoogleClient();
+    const withoutFlag = googleClaims();
+    delete withoutFlag["email_verified"];
+
+    await expect(
+      verifyGoogleIdToken(
+        signedIdToken(googleClaims({ email_verified: false })),
+        GOOGLE_CLIENT_ID,
+        client,
+      ),
+    ).resolves.toEqual({ ok: false, reason: "email_unverified" });
+    await expect(
+      verifyGoogleIdToken(signedIdToken(withoutFlag), GOOGLE_CLIENT_ID, client),
+    ).resolves.toEqual({ ok: false, reason: "email_unverified" });
+  });
+
+  it("fails closed when Google's signing certificates cannot be obtained", async () => {
+    const client = new OAuth2Client();
+    vi.spyOn(client, "getFederatedSignonCertsAsync").mockRejectedValue(
+      new Error("JWKS unavailable"),
+    );
+
+    const result = await verifyGoogleIdToken(
+      signedIdToken(),
+      GOOGLE_CLIENT_ID,
+      client,
+    );
+
+    expect(result).toEqual({ ok: false, reason: "oauth_unavailable" });
+  });
+});
+
+describe("exchangeCode — code exchange and ID-token trust remain separate", () => {
+  const base = {
+    code: "auth-code",
+    codeVerifier: "verifier",
+    clientId: GOOGLE_CLIENT_ID,
+    clientSecret: "secret",
+    redirectUri: "https://example.test/cb",
+  };
+
+  it("passes the returned token and configured audience to the verifier", async () => {
+    const verifyIdToken = vi.fn(async () => ({
+      ok: true as const,
+      identity: {
+        email: "safae.el@example.com",
+        providerSubjectId: "google-sub-1",
+      },
+    }));
+    const result = await exchangeCode({
+      ...base,
+      fetchImpl: respondWith({ id_token: "provider-token" }),
+      verifyIdToken,
+    });
+
+    expect(result).toEqual({
+      ok: true,
+      identity: {
+        email: "safae.el@example.com",
+        providerSubjectId: "google-sub-1",
+      },
+    });
+    expect(verifyIdToken).toHaveBeenCalledExactlyOnceWith(
+      "provider-token",
+      GOOGLE_CLIENT_ID,
+    );
+  });
+
+  it("never trusts a decodable payload when the verifier refuses it", async () => {
+    const forged = `header.${Buffer.from(
+      JSON.stringify({
+        aud: GOOGLE_CLIENT_ID,
+        sub: "attacker-subject",
+        email: "attacker@example.com",
+        email_verified: true,
+      }),
+    ).toString("base64url")}.signature`;
+    const verifyIdToken = vi.fn(async () => ({
+      ok: false as const,
+      reason: "oauth_unavailable" as const,
+    }));
+    const result = await exchangeCode({
+      ...base,
+      fetchImpl: respondWith({ id_token: forged }),
+      verifyIdToken,
+    });
+
+    expect(result).toEqual({ ok: false, reason: "oauth_unavailable" });
+    expect(verifyIdToken).toHaveBeenCalledExactlyOnceWith(forged, GOOGLE_CLIENT_ID);
   });
 
   it("collapses every upstream failure into oauth_unavailable, leaking nothing", async () => {
@@ -286,11 +483,14 @@ describe("exchangeCode — what Google says is not taken on trust", () => {
     });
     expect(thrown).toEqual({ ok: false, reason: "oauth_unavailable" });
 
-    const garbage = await exchangeCode({
+    const verifierFailure = await exchangeCode({
       ...base,
-      fetchImpl: respondWith({ id_token: "not.a.valid.token" }),
+      fetchImpl: respondWith({ id_token: "provider-token" }),
+      verifyIdToken: async () => {
+        throw new Error("certificate retrieval failed");
+      },
     });
-    expect(garbage).toEqual({ ok: false, reason: "oauth_unavailable" });
+    expect(verifierFailure).toEqual({ ok: false, reason: "oauth_unavailable" });
   });
 
   it("sends the verifier and the code, not the challenge", async () => {

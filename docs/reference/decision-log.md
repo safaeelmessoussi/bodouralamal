@@ -2,8 +2,10 @@
 
 # Decision log
 
-Every numbered specification revision, currently through **Revision 37.2**. Each records a
-decision, **and what was rejected** — which is usually the more valuable half.
+The authoritative SRS is currently through **Revision 101**. This page is a navigation index
+for the foundational decisions and the latest security decision, not a second copy of every
+revision's normative text. Each entry records a decision, **and what was rejected** — which is
+usually the more valuable half.
 
 *(A hard count used to sit here. It was replaced with the current head, because a number that
 must be incremented by hand is a number that drifts — the hazard this log itself documents
@@ -17,6 +19,12 @@ probably here. Most non-obvious choices were argued once, in writing, by someone
 you may not have.
 
 ---
+
+## Latest owner decision
+
+| # | Date | Decision |
+|---|---|---|
+| **101** | 2026-08-21 | **Logout uses the browser-managed refresh cookie to revoke its current server-side session.** Revision 10's one-cookie-route rule and Revision 16's current-session logout rule could not both hold when the cookie Path admitted refresh but excluded logout. Exactly two routes may now consume the cookie: refresh and logout, both behind the same custom-header, Origin and SameSite protections. The Path is the narrowest shared prefix, `/api/v1/auth`; no credential reaches JavaScript and no session id is added to the access token. **Clearing was rejected as revocation:** logout resolves the persisted rotation chain, revokes that chain only, audits it, then expires the cookie, while another device remains live. **A mixed legacy rollout was also rejected:** the old issuer stops first and a forward-only migration atomically audits and invalidates every pre-cutover live refresh row as `cookie_path_migration`; users authenticate again. |
 
 ## The most consequential
 

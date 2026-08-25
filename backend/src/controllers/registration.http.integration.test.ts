@@ -111,6 +111,7 @@ async function clear(): Promise<void> {
   await prisma.userIdentity.deleteMany({ where: { userId: { in: ids } } });
   await prisma.user.deleteMany({ where: { id: { in: ids } } });
   await prisma.consumedToken.deleteMany({ where: { purpose: "onboarding" } });
+  await prisma.normalizedEmailLock.deleteMany({ where: { email: { startsWith: "httpreg-" } } });
   await prisma.branch.deleteMany({ where: { name: { startsWith: TAG } } });
   // After the users too: `intended_category_id` is ON DELETE RESTRICT, for the
   // same reason the branch is — a Category with requests pointing at it must not

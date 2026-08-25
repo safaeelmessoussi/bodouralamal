@@ -17,7 +17,9 @@ threats that actually matter here are:
 | **A staff account is compromised or misused** | It reaches minors' case files | Per-request freshness assertions; audited reads; branch scoping |
 | **A parent probes for other children** | Enumeration of minors | Uniform `404`; no parent-facing search over children |
 | **A stolen session cookie** | 30-day credential | Rotation with reuse detection that kills the whole session |
-| **A recording is published without consent** | Safeguarding and legal exposure | Continuously re-evaluated consent gate; forced bucket migration |
+| **Login races account rejection or suspension** | Stale session-bearing state could mint a fresh session after revoke-all | User-row serialization; authoritative status re-read before issuance |
+| **Registration races staff pre-provisioning** | One verified email could become attached to two different accounts through separate tables | Shared normalized-email row lock; cross-channel re-read inside each ownership transaction |
+| **A recording is published without consent** | Safeguarding and legal exposure | Continuously re-evaluated monotonic consent gate; exact-row authorization on the only public object origin; forced bucket migration |
 | **Data leaves Moroccan infrastructure** | Law 09-08 violation | Fixture-only rule outside Morocco; Moroccan backup target |
 | **An implementation shortcut regresses one of the above** | The most likely of all | CI guards; tests that assert the *security property*, not the code path |
 
@@ -32,6 +34,13 @@ Everything is one origin behind Nginx, under one Let's Encrypt certificate.
 storage share an origin, cross-origin requests are not part of normal operation. The staging
 frontend runs against mocks and calls no real backend, which is what deletes the last
 exception that would otherwise have existed.
+
+The MinIO public bucket's anonymous policy is likewise not a second external origin:
+production publishes Nginx only. Canonical public GET/HEAD requests pass an internal API
+subrequest that requires an exact live public/public database coordinate with no committed
+consent lock. Browser-writable public staging has a separate signed-PUT location and refuses
+reads. A consent flag, replacement or deletion therefore revokes the stable origin before
+eventual copy/delete work completes, and direct object-store access remains network-internal.
 
 Nginx sets on client responses:
 
@@ -51,7 +60,9 @@ against users on unreliable connections.
 
 ### Cookie attributes never vary by environment
 
-`HttpOnly; Secure; SameSite=Lax` in development, staging, and production alike.
+`HttpOnly; Secure; SameSite=Lax; Path=/api/v1/auth` in development, staging, and production
+alike. The Path admits exactly the two refresh-cookie consumers, `/auth/refresh` and
+`/auth/logout`; both enforce the same custom-header and Origin checks before reading it.
 Environment-conditional downgrades — `SameSite=None`, dropping `Secure`, wildcard CORS with
 credentials — are **prohibited**.
 
@@ -63,6 +74,17 @@ same-origin stack and the production rehearsal, never through the staging origin
 
 Local development terminates at HTTP on `localhost`, which browsers treat as a secure
 context — so the `Secure` cookie is delivered normally without weakening a single attribute.
+
+### The external identity assertion is verified, not decoded
+
+Google's token endpoint is a transport boundary, not proof that a JWT payload is authentic.
+The callback consumes identity only after the supported Google verifier has checked the
+RS256 signature against the provider's cached signing keys, exact issuer, configured
+audience and token lifetime; the application then requires a non-empty subject and a
+verified email. See [the complete boundary](identity-and-access.md#the-google-identity-trust-boundary).
+Any verification or signing-key retrieval failure stops before account lookup and returns
+the existing generic OAuth-unavailable redirect. Raw ID tokens, emails and provider errors
+never enter logs.
 
 ## No existence leaks
 
@@ -177,9 +199,17 @@ so clients handle one shape.
   child context.
 - **Public bucket policies are never used to serve private content**, and long-lived
   presigned links are prohibited.
-- Uploads are validated **server-side at completion** by fetching the first 512 bytes back
-  and checking magic bytes — not by trusting the declared content type. Size is verified from
-  object metadata. A mismatch deletes the object and creates no record.
+- Upload PUT capabilities address disposable `staging/content/...` keys only. Completion
+  binds HEAD, the 512-byte magic read and server-side promotion to one storage ETag, then the
+  database names a distinct canonical key for which no client received write authority.
+  Reusing a still-valid PUT can therefore change staging but not accepted bytes.
+- The published public-bucket proxy is an explicit method boundary, not a general S3
+  endpoint: exact canonical GET/HEAD is database-authorized, PUT requires MinIO SigV4, every
+  other method is refused by Nginx, and both public bucket-root spellings are denied before
+  query parameters can become listing/control operations. Public staging admits only signed
+  PUT and is never readable.
+- Declared content type is not trusted. Size comes from object metadata and magic bytes from
+  the conditional ranged read; mismatch creates no record.
 - Storage keys are **immutable**; a replacement mints a new key. Visibility is **never
   encoded in the key** — the bucket carries it.
 
@@ -233,6 +263,21 @@ which may have been purged or overwritten. That is why revocation-bearing entiti
 
 A revocation path that mutates state without its audit row **in the same transaction** is
 non-compliant, not merely under-logged.
+
+The same atomicity applies at login. Successful `auth.login`, the new refresh anchor/token,
+and the authoritative account/role read share one User-locked transaction. If its mandatory
+audit write fails, the new session rolls back and no cookie or access token is returned. A
+user-wide suspension takes that same User lock before status mutation and then locks session
+anchors in UUID order, so revoke-all cannot miss a concurrently inserted session.
+
+First identity binding and role switching use that boundary too. Binding re-reads the matched
+account under the User lock before creating either the provider identity or its mandatory audit,
+so a suspension that wins cannot leave a ghost binding. Role switching re-reads current Active
+state and role assignments under the lock, and its token can never expire after the verified
+bearer that authorized the switch; it changes capacity but cannot substitute for refresh after
+logout. At the PostgreSQL layer this governing lock is `FOR NO KEY UPDATE`, deliberately
+compatible with the implicit User `KEY SHARE` taken by refresh/logout FK inserts while still
+serializing every non-key account mutation.
 
 ## The guardrails
 

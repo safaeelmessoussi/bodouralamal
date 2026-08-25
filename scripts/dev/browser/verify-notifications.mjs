@@ -39,7 +39,7 @@ const cookie = (value) =>
     name: 'bodour_refresh',
     value,
     domain: 'localhost',
-    path: '/api/v1/auth/refresh',
+    path: '/api/v1/auth',
     httpOnly: true,
   });
 

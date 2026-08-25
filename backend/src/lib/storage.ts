@@ -7,6 +7,7 @@ import {
   S3Client,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { Readable } from 'node:stream';
 
 import type { AppConfig } from './config.js';
 
@@ -123,23 +124,26 @@ export async function presignGetUrl(
   return toProxyUrl(signed, clients.storagePrefix);
 }
 
-/* ── Server-side object operations (R99 C2) ──────────────────────────────── */
+/* ── Server-side object operations (TD-9 / R99 C2) ──────────────────────── */
 
 /**
- * **Everything below runs on the INTERNAL client and never moves bytes through
- * this process.**
+ * **Everything below runs on the INTERNAL client.** R99's large provider
+ * recordings remain storage-side copies. R103's browser-upload finalization
+ * deliberately uses bounded streams through this process so SHA-256 covers the
+ * exact accepted bytes; browser uploads remain capped at 100 MB.
  *
- * R99's ingestion has to take a recording of up to 500 MB (TD-9) out of the
- * staging bucket and into the content lifecycle. The obvious implementation —
+ * Upload finalization and R99 ingestion both move verified bytes out of staging
+ * without giving a browser write authority over the canonical key. R99 can be
+ * up to 500 MB (TD-9). The obvious implementation —
  * `GetObject` into a buffer, `PutObject` back out — would put half a gigabyte
  * through a container pinned at `--max-old-space-size=768` (TD-13) for every
  * concurrent ingestion, on a 4 GB VPS (§2.4). It is not a tuning problem; it is
  * the wrong mechanism.
  *
- * S3 and MinIO both perform `CopyObject` **inside the storage service**, so the
- * object never leaves it and this process exchanges two small HTTP messages.
- * Everything here is deliberately O(1) in the object's size: a HEAD, a 512-byte
- * ranged GET, a server-side copy, a delete.
+ * R99 specifically uses `CopyObject` **inside the storage service**, so its
+ * 500 MB object never enters this process. R103 is the bounded browser-upload
+ * exception: its streaming helpers remain O(1) in memory. The older HEAD,
+ * ranged-read, storage-side copy and delete primitives remain available to R99.
  *
  * These live in `storage.ts` rather than beside the ingestion worker because
  * they are storage operations, not recording operations — `content.service.ts`
@@ -153,6 +157,11 @@ export interface ObjectStat {
   /** What the store believes the type is. **A claim, never a fact** — the magic
    *  bytes are what turn it into one (TD-9). */
   contentType: string | null;
+  /** Opaque storage version identifier used for conditional reads/copies. */
+  etag: string | null;
+  /** Server-written collision-resistant identity, when the object lifecycle
+   *  records one. Never inferred from the ETag. */
+  sha256: string | null;
 }
 
 /**
@@ -162,7 +171,37 @@ export interface ObjectStat {
  * answer in both callers: an upload that never completed, and a provider that
  * reported a file it did not write.
  */
-export async function statObject(
+function objectStatOf(head: {
+  ContentLength?: number | undefined;
+  ContentType?: string | undefined;
+  ETag?: string | undefined;
+  Metadata?: Record<string, string> | undefined;
+}): ObjectStat {
+  return {
+    sizeBytes: Number(head.ContentLength ?? 0),
+    contentType: head.ContentType ?? null,
+    etag: head.ETag ?? null,
+    sha256: head.Metadata?.['sha256'] ?? null,
+  };
+}
+
+function isStorageNotFound(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  const candidate = error as {
+    name?: unknown;
+    $metadata?: { httpStatusCode?: unknown };
+  };
+  return (
+    candidate.$metadata?.httpStatusCode === 404 ||
+    candidate.name === 'NotFound' ||
+    candidate.name === 'NoSuchKey'
+  );
+}
+
+/** Like `statObject`, but an unavailable store is an error rather than a
+ * fabricated "missing" object. Publication code must never overwrite a key
+ * merely because its safety HEAD failed. */
+export async function statObjectStrict(
   clients: StorageClients,
   bucket: string,
   key: string,
@@ -171,10 +210,21 @@ export async function statObject(
     const head = await clients.internal.send(
       new HeadObjectCommand({ Bucket: bucket, Key: key }),
     );
-    return {
-      sizeBytes: Number(head.ContentLength ?? 0),
-      contentType: head.ContentType ?? null,
-    };
+    return objectStatOf(head);
+  } catch (error) {
+    if (isStorageNotFound(error)) return null;
+    throw error;
+  }
+}
+
+/** Compatibility-shaped best-effort HEAD for cleanup/inspection callers. */
+export async function statObject(
+  clients: StorageClients,
+  bucket: string,
+  key: string,
+): Promise<ObjectStat | null> {
+  try {
+    return await statObjectStrict(clients, bucket, key);
   } catch {
     return null;
   }
@@ -192,15 +242,86 @@ export async function readObjectHead(
   bucket: string,
   key: string,
   length = 512,
+  ifMatch?: string,
 ): Promise<Buffer> {
   const ranged = await clients.internal.send(
     new GetObjectCommand({
       Bucket: bucket,
       Key: key,
       Range: `bytes=0-${String(length - 1)}`,
+      ...(ifMatch === undefined ? {} : { IfMatch: ifMatch }),
     }),
   );
   return Buffer.from(await ranged.Body!.transformToByteArray());
+}
+
+export interface OpenObjectRead {
+  body: Readable;
+  etag: string | null;
+}
+
+/** Opens one storage read. Once this resolves, callers consume the body from
+ * that request rather than reopening the key after validation. */
+export async function openObjectRead(
+  clients: StorageClients,
+  bucket: string,
+  key: string,
+  ifMatch?: string,
+): Promise<OpenObjectRead> {
+  const object = await clients.internal.send(
+    new GetObjectCommand({
+      Bucket: bucket,
+      Key: key,
+      ...(ifMatch === undefined ? {} : { IfMatch: ifMatch }),
+    }),
+  );
+  if (object.Body === undefined) {
+    throw new Error(`storage returned no body for ${bucket}/${key}`);
+  }
+  const body = object.Body;
+  if (body instanceof Readable) return { body, etag: object.ETag ?? null };
+  if (!(Symbol.asyncIterator in Object(body))) {
+    throw new Error(`storage returned a non-streaming body for ${bucket}/${key}`);
+  }
+  return {
+    body: Readable.from(body as AsyncIterable<Uint8Array>, { objectMode: false }),
+    etag: object.ETag ?? null,
+  };
+}
+
+/** Server-authorised PUT of a bounded stream. The caller owns validation and
+ * hashing; S3/MinIO publishes the object only when the complete body succeeds. */
+export async function putObjectStream(
+  clients: StorageClients,
+  destination: { bucket: string; key: string },
+  body: Readable,
+  options: {
+    contentLength?: number;
+    contentType: string;
+    sha256?: string;
+    abortSignal?: AbortSignal;
+  },
+): Promise<{ etag: string | null }> {
+  const command =
+    new PutObjectCommand({
+      Bucket: destination.bucket,
+      Key: destination.key,
+      Body: body,
+      ...(options.contentLength === undefined
+        ? {}
+        : { ContentLength: options.contentLength }),
+      ContentType: options.contentType,
+      ...(options.sha256 === undefined
+        ? {}
+        : { Metadata: { sha256: options.sha256 } }),
+    });
+  const stored = await clients.internal.send(
+    command,
+    options.abortSignal === undefined
+      ? undefined
+      : { abortSignal: options.abortSignal },
+  );
+  return { etag: stored.ETag ?? null };
 }
 
 /**
@@ -223,16 +344,36 @@ export async function copyObject(
   source: { bucket: string; key: string },
   destination: { bucket: string; key: string },
   contentType?: string,
+  options: { sourceIfMatch?: string; sha256?: string } = {},
 ): Promise<void> {
   await clients.internal.send(
     new CopyObjectCommand({
       Bucket: destination.bucket,
       Key: destination.key,
       CopySource: encodeURI(`/${source.bucket}/${source.key}`),
-      ...(contentType === undefined
+      ...(options.sourceIfMatch === undefined
         ? {}
-        : { ContentType: contentType, MetadataDirective: 'REPLACE' as const }),
+        : { CopySourceIfMatch: options.sourceIfMatch }),
+      ...(contentType === undefined && options.sha256 === undefined
+        ? {}
+        : {
+            ...(contentType === undefined ? {} : { ContentType: contentType }),
+            ...(options.sha256 === undefined
+              ? {}
+              : { Metadata: { sha256: options.sha256 } }),
+            MetadataDirective: 'REPLACE' as const,
+          }),
     }),
+  );
+}
+
+/** AWS SDK errors are deliberately inspected without depending on a provider
+ * class: MinIO and S3 use the same HTTP 412 for a failed conditional request. */
+export function isStoragePreconditionFailed(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    (error as { $metadata?: { httpStatusCode?: unknown } }).$metadata?.httpStatusCode === 412
   );
 }
 

@@ -47,7 +47,7 @@ export function ApplicationHeader(): ReactNode {
     // TD-4.14: the server revokes this session's refresh token. Clearing the
     // in-memory access token alone would leave a live 30-day credential behind.
     try {
-      await api('/auth/logout', { method: 'POST' });
+      await api('/auth/logout', { method: 'POST', refreshCookieAuth: true });
     } finally {
       setAccessToken(null);
       window.location.assign('/');

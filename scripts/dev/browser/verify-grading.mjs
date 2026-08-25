@@ -22,7 +22,7 @@ await send('Network.setCookie', {
   name: 'bodour_refresh',
   value: COOKIE,
   domain: 'localhost',
-  path: '/api/v1/auth/refresh',
+  path: '/api/v1/auth',
   httpOnly: true,
 });
 await send('Emulation.setDeviceMetricsOverride', {
@@ -236,7 +236,7 @@ if (studentCookie) {
     name: 'bodour_refresh',
     value: studentCookie,
     domain: 'localhost',
-    path: '/api/v1/auth/refresh',
+    path: '/api/v1/auth',
     httpOnly: true,
   });
 

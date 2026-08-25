@@ -175,9 +175,11 @@ describe("the route is mounted (the defect this file was written for)", () => {
     expect(res.status).toBe(201);
     expect(res.body.upload_id).toBeTruthy();
     expect(res.body.put_url).toContain(config.STORAGE_BASE_URL);
-    // TD-9's key shape, asserted here because the key is what the browser then
-    // PUTs to — a malformed one fails much later and much less clearly.
-    expect(res.body.key).toMatch(/^content\/[0-9a-f-]{36}\/[0-9a-f]{8}\//);
+    // B-03: the browser may PUT only to a one-ticket staging key. Completion
+    // promotes the verified bytes to the separate immutable TD-9 key.
+    expect(res.body.key).toMatch(
+      /^staging\/content\/[0-9a-f-]{36}\/[0-9a-f]{32}\//,
+    );
   });
 
   it("never answers NOT_FOUND with empty details — that shape means UNMOUNTED", async () => {

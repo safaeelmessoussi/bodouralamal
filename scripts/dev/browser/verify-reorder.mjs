@@ -48,14 +48,14 @@ await send('Page.enable');
 await send('Runtime.enable');
 await send('Network.enable');
 
-// The refresh cookie is confined to its one route (TD-12), exactly as the server
-// sets it — the harness must not widen it, or it would be testing a cookie the
-// application never issues.
+// Refresh and logout are the only cookie consumers (TD-12, R101), exactly as
+// the server sets it — the harness must not widen it, or it would be testing a
+// cookie the application never issues.
 await send('Network.setCookie', {
   name: 'bodour_refresh',
   value: COOKIE,
   domain: 'localhost',
-  path: '/api/v1/auth/refresh',
+  path: '/api/v1/auth',
   httpOnly: true,
 });
 

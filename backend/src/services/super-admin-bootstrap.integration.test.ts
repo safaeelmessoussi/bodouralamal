@@ -80,6 +80,9 @@ async function clear(): Promise<void> {
   await prisma.userIdentity.deleteMany({ where: { userId: { in: ids } } });
   await prisma.userBranchRole.deleteMany({ where: { userId: { in: ids } } });
   await prisma.user.deleteMany({ where: { id: { in: ids } } });
+  await prisma.normalizedEmailLock.deleteMany({
+    where: { email: { contains: "sa-boot-" } },
+  });
 }
 
 /**

@@ -1,13 +1,10 @@
 import type { Request, Response } from 'express';
 
 import type { PrismaClient } from '../generated/prisma/client.js';
-import { issueAccessToken } from '../lib/access-token.js';
 import { postLoginDestination } from '../lib/role-home.js';
 import { clearCookie, parseCookies, serializeCookie } from '../lib/cookies.js';
 import type { AppConfig } from '../lib/config.js';
-import { narrowToRole, toRoleScopes } from '../policies/branch-scope.js';
-import { requireActor } from '../middleware/authenticate.js';
-import * as audit from '../repositories/audit.repository.js';
+import { requireAccessTokenExp, requireActor } from '../middleware/authenticate.js';
 import { AppError } from '../lib/errors.js';
 import {
   buildAuthorizationUrl,
@@ -17,18 +14,16 @@ import {
   FLOW_STATE_COOKIE,
   FLOW_STATE_TTL_SECONDS,
   openFlowState,
+  type OAuthExchangeDependencies,
   sealFlowState,
 } from '../lib/oauth.js';
 import { issueOnboardingToken } from '../lib/onboarding-token.js';
-import { resolveLogin } from '../services/auth.service.js';
+import { finalizeLoginSession, resolveLogin, switchActiveRole } from '../services/auth.service.js';
 import {
-  hashToken,
-  issueNewSession,
   logout as logoutSession,
   REFRESH_TTL_MS,
-  rotate,
+  refreshAccessSession,
 } from '../services/refresh-token.service.js';
-import * as tokens from '../repositories/refresh-token.repository.js';
 
 /**
  * Auth endpoints (SRS TD-3.1, §4.1b, TD-12).
@@ -41,8 +36,8 @@ import * as tokens from '../repositories/refresh-token.repository.js';
  */
 
 const REFRESH_COOKIE = 'bodour_refresh';
-/** TD-12: the refresh cookie is confined to the one route that reads it. */
-const REFRESH_COOKIE_PATH = '/api/v1/auth/refresh';
+/** R101: exactly refresh and logout consume this cookie. */
+const REFRESH_COOKIE_PATH = '/api/v1/auth';
 const FLOW_COOKIE_PATH = '/api/v1/auth/google';
 
 function redirectUri(config: AppConfig): string {
@@ -95,7 +90,11 @@ export function startOAuth(config: AppConfig) {
  * Every failure is a redirect with one of the four defined keys; no partial
  * state is ever persisted on a failure path.
  */
-export function oauthCallback(prisma: PrismaClient, config: AppConfig) {
+export function oauthCallback(
+  prisma: PrismaClient,
+  config: AppConfig,
+  exchangeDependencies: OAuthExchangeDependencies = {},
+) {
   return async (req: Request, res: Response): Promise<void> => {
     // The flow cookie is single-use whatever happens next.
     res.append('Set-Cookie', clearCookie(FLOW_STATE_COOKIE, FLOW_COOKIE_PATH));
@@ -134,6 +133,7 @@ export function oauthCallback(prisma: PrismaClient, config: AppConfig) {
       clientId: config.GOOGLE_CLIENT_ID,
       clientSecret: config.GOOGLE_CLIENT_SECRET,
       redirectUri: redirectUri(config),
+      ...exchangeDependencies,
     });
     if (!exchange.ok) {
       res.redirect(302, loginError(config, exchange.reason));
@@ -168,16 +168,16 @@ export function oauthCallback(prisma: PrismaClient, config: AppConfig) {
       return;
     }
 
-    const { token } = issueAccessToken(
-      {
-        userId: route.account.user.id,
-        roleScopes: route.account.roleScopes,
-        accountStatus: route.account.user.accountStatus,
-      },
-      config.JWT_SIGNING_KEY,
-    );
-    const session = await issueNewSession(prisma, route.account.user.id);
-    setRefreshCookie(res, session.rawToken);
+    const finalized = await finalizeLoginSession(prisma, {
+      userId: route.account.user.id,
+      boundNow: route.boundNow,
+      signingKey: config.JWT_SIGNING_KEY,
+    });
+    if (finalized.kind === 'deactivated') {
+      res.redirect(302, `${config.PUBLIC_BASE_URL}/login?error=account_deactivated`);
+      return;
+    }
+    setRefreshCookie(res, finalized.refreshSession.rawToken);
 
     // A Pending user is hard-redirected to the status screen (TD-1); the access
     // token still exists so `GET /me` works, and nothing else will serve them.
@@ -188,13 +188,16 @@ export function oauthCallback(prisma: PrismaClient, config: AppConfig) {
     // that does not exist. One authoritative policy now lives in
     // `lib/role-home.ts`, and it never names a path the client cannot serve.
     const destination =
-      route.kind === 'pending'
+      finalized.kind === 'pending'
         ? '/pending-approval'
-        : postLoginDestination(route.account.roleScopes.map((scope) => scope.role));
+        : postLoginDestination(finalized.account.roleScopes.map((scope) => scope.role));
     // The access token is delivered in the fragment so it never reaches a
     // server log or the Referer header; the client stores it in memory and
     // sends it as `Authorization: Bearer` thereafter (TD-12).
-    res.redirect(302, `${config.PUBLIC_BASE_URL}${destination}#access_token=${token}`);
+    res.redirect(
+      302,
+      `${config.PUBLIC_BASE_URL}${destination}#access_token=${finalized.accessToken}`,
+    );
   };
 }
 
@@ -212,55 +215,35 @@ function requestedRole(req: Request): string | undefined {
 }
 
 /**
- * **Fail safe, never fail open** (§60.4, Document Owner decision).
+ * R101's shared CSRF boundary for the only two refresh-cookie consumers.
  *
- * Three cases, and the middle one is the decision that matters:
- *
- *   * **No role requested** → `null`, an un-narrowed token. The honest reading
- *     of *"the client did not ask to be narrowed"*, and the pre-R60 behaviour.
- *   * **Requested role still assigned** → that role.
- *   * **Requested role revoked** → **the most privileged role still held**, not
- *     an un-narrowed token. Silently restoring full multi-role authority because
- *     one role disappeared is the failure mode this rule exists to prevent: the
- *     caller asked to be limited, and losing the limit is not a safe default.
- *     Returning `null` here would do exactly that.
- *
- * Precedence matches the login default and the client's switcher ordering, so
- * *"most privileged"* means the same thing everywhere.
+ * This check deliberately runs before the cookie is parsed. A cross-site
+ * caller must not be able to distinguish a browser holding a live session
+ * from one holding nothing by comparing responses.
  */
-const ROLE_PRECEDENCE = ['super_admin', 'admin', 'teacher', 'parent', 'student'] as const;
-
-export function resolveActiveRole(
-  liveScopes: readonly { role: string }[],
-  requested: string | undefined,
-): string | null {
-  if (requested === undefined) return null;
-  const held = new Set(liveScopes.map((s) => s.role));
-  if (held.has(requested)) return requested;
-
-  const fallback = ROLE_PRECEDENCE.find((role) => held.has(role));
-  // An account with no assignments at all: nothing to fall back to, and an
-  // un-narrowed token of no roles is the same thing.
-  return fallback ?? null;
+function assertRefreshCookieCsrf(req: Request, config: AppConfig): void {
+  if (req.header('x-requested-with') !== 'XMLHttpRequest') {
+    throw new AppError('AUTH_REQUIRED', 'missing X-Requested-With');
+  }
+  const origin = req.header('origin');
+  if (origin && origin !== config.PUBLIC_BASE_URL) {
+    throw new AppError('AUTH_REQUIRED', 'origin mismatch');
+  }
 }
 
-/** `POST /auth/refresh` — TD-12's sole cookie-authenticated route. */
+/** `POST /auth/refresh` — one of R101's two refresh-cookie consumers. */
 export function refresh(prisma: PrismaClient, config: AppConfig) {
   return async (req: Request, res: Response): Promise<void> => {
-    // CSRF posture (TD-12): a custom header a cross-site form cannot set, plus
-    // an Origin that must match our own. SameSite=Lax is the third leg.
-    if (req.header('x-requested-with') !== 'XMLHttpRequest') {
-      throw new AppError('AUTH_REQUIRED', 'missing X-Requested-With');
-    }
-    const origin = req.header('origin');
-    if (origin && origin !== config.PUBLIC_BASE_URL) {
-      throw new AppError('AUTH_REQUIRED', 'origin mismatch');
-    }
+    assertRefreshCookieCsrf(req, config);
 
     const presented = parseCookies(req.header('cookie'))[REFRESH_COOKIE];
     if (!presented) throw new AppError('AUTH_REQUIRED', 'no refresh cookie');
 
-    const outcome = await rotate(prisma, presented);
+    const outcome = await refreshAccessSession(prisma, {
+      presentedRaw: presented,
+      requestedRole: requestedRole(req),
+      signingKey: config.JWT_SIGNING_KEY,
+    });
     // Every refusal is 401 AUTH_REQUIRED and they are deliberately
     // indistinguishable: telling a stolen cookie why it failed confirms it was
     // once real (TD-12, Revision 16).
@@ -268,30 +251,6 @@ export function refresh(prisma: PrismaClient, config: AppConfig) {
       res.append('Set-Cookie', clearCookie(REFRESH_COOKIE, REFRESH_COOKIE_PATH));
       throw new AppError('AUTH_REQUIRED', `refresh refused: ${outcome.kind}`);
     }
-
-    const account = await prisma.user.findUnique({ where: { id: outcome.userId } });
-    if (!account || account.deletedAt !== null) throw new AppError('AUTH_REQUIRED', 'account gone');
-
-    const assignments = await prisma.userBranchRole.findMany({
-      where: { userId: outcome.userId, deletedAt: null },
-      include: { role: true },
-    });
-    // **R60 — refresh is what makes an active role persist.** The client holds
-    // the access token in memory only, and a role switch navigates by full page
-    // load, so the token is discarded and re-acquired here on the very next
-    // page. This endpoint, not `/auth/switch-role`, is the load-bearing one.
-    const liveScopes = toRoleScopes(assignments);
-    const active = resolveActiveRole(liveScopes, requestedRole(req));
-
-    const { token, expiresAt } = issueAccessToken(
-      {
-        userId: account.id,
-        roleScopes: active === null ? liveScopes : narrowToRole(liveScopes, active) ?? liveScopes,
-        ...(active !== null ? { activeRole: active } : {}),
-        accountStatus: account.accountStatus,
-      },
-      config.JWT_SIGNING_KEY,
-    );
 
     // On `grace` no new refresh token exists — the caller keeps the successor it
     // already holds, so the cookie is deliberately left untouched (T3).
@@ -301,29 +260,22 @@ export function refresh(prisma: PrismaClient, config: AppConfig) {
     // authority it holds, and when a requested role has been revoked this is how
     // it learns which role it fell back to.
     res.json({
-      access_token: token,
-      expires_at: expiresAt.toISOString(),
-      active_role: active,
+      access_token: outcome.accessToken,
+      expires_at: outcome.accessExpiresAt.toISOString(),
+      active_role: outcome.activeRole,
     });
   };
 }
 
-/** `POST /auth/logout` — revokes the CURRENT session only (TD-4.14). */
-export function logout(prisma: PrismaClient) {
+/** `POST /auth/logout` — revokes the CURRENT session only (TD-4.14, R101). */
+export function logout(prisma: PrismaClient, config: AppConfig) {
   return async (req: Request, res: Response): Promise<void> => {
+    assertRefreshCookieCsrf(req, config);
     const presented = parseCookies(req.header('cookie'))[REFRESH_COOKIE];
-    res.append('Set-Cookie', clearCookie(REFRESH_COOKIE, REFRESH_COOKIE_PATH));
-
     if (presented) {
-      const row = await tokens.findByHash(prisma, hashToken(presented));
-      if (row) {
-        await logoutSession(prisma, {
-          userId: row.userId,
-          sessionId: row.sessionId,
-          actorUserId: row.userId,
-        });
-      }
+      await logoutSession(prisma, presented);
     }
+    res.append('Set-Cookie', clearCookie(REFRESH_COOKIE, REFRESH_COOKIE_PATH));
     // Idempotent by design: logging out twice, or with no cookie at all, is a
     // success. There is nothing to leak and nothing to fail.
     res.status(204).end();
@@ -333,7 +285,7 @@ export function logout(prisma: PrismaClient) {
 /**
  * `POST /auth/switch-role` — work as a different one of your own roles (R60.3).
  *
- * **One indexed query and one signature.** No logout, no new session, no
+ * No logout, no new session, no
  * refresh-cookie change: the refresh chain is about *who is signed in*, and this
  * changes only *in what capacity*.
  *
@@ -357,48 +309,18 @@ export function switchRole(prisma: PrismaClient, config: AppConfig) {
     const role = typeof body?.role === 'string' ? body.role.trim() : '';
     if (role === '') throw new AppError('VALIDATION_FAILED', 'role is required');
 
-    const assignments = await prisma.userBranchRole.findMany({
-      where: { userId: actor.userId, deletedAt: null },
-      include: { role: true },
-    });
-    const liveScopes = toRoleScopes(assignments);
-    const narrowed = narrowToRole(liveScopes, role);
-
-    // §60.2's invariant, enforced where the token is minted: a role the live
-    // rows do not carry cannot become a claim. 403 rather than 404 — the caller
-    // is authenticated and the roles are their own, so there is nothing to hide.
-    if (!narrowed) {
-      throw new AppError('FORBIDDEN', 'that role is not assigned to this account', {
-        reason: 'ROLE_NOT_ASSIGNED',
-        role,
-      });
-    }
-
-    const { token, expiresAt } = issueAccessToken(
-      {
-        userId: actor.userId,
-        roleScopes: narrowed,
-        activeRole: role,
-        accountStatus: actor.accountStatus ?? 'active',
-      },
-      config.JWT_SIGNING_KEY,
-    );
-
-    await audit.write(prisma, {
-      actorUserId: actor.userId,
-      activeRole: actor.activeRole,
-      actionType: 'auth.role_switch',
-      targetEntity: 'User',
-      targetId: actor.userId,
-      // Both ends of the move: "which capacity did they leave" is as much of the
-      // story as which they entered.
-      detail: { from: actor.activeRole ?? null, to: role },
+    const switched = await switchActiveRole(prisma, {
+      userId: actor.userId,
+      requestedRole: role,
+      presentedActiveRole: actor.activeRole,
+      presentedExp: requireAccessTokenExp(req),
+      signingKey: config.JWT_SIGNING_KEY,
     });
 
     res.json({
-      access_token: token,
-      expires_at: expiresAt.toISOString(),
-      active_role: role,
+      access_token: switched.accessToken,
+      expires_at: switched.accessExpiresAt.toISOString(),
+      active_role: switched.activeRole,
     });
   };
 }

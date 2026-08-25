@@ -63,6 +63,12 @@ async function wipe(): Promise<void> {
   await prisma.eventLevel.deleteMany({ where: { eventId: { in: eventIds } } });
   await prisma.eventStaff.deleteMany({ where: { eventId: { in: eventIds } } }).catch(() => undefined);
   await prisma.event.deleteMany({ where: { id: { in: eventIds } } });
+  // The Event-cancellation phase soft-deletes its activity and therefore owns
+  // a Trash probe row as well. `target_id` is intentionally not a foreign key,
+  // so forgetting this would leave an orphan after every otherwise-clean run.
+  await prisma.trash.deleteMany({
+    where: { targetEntity: 'Event', targetId: { in: eventIds } },
+  });
 
   const users = await prisma.user.findMany({
     where: { nameArabic: { startsWith: TAG } },

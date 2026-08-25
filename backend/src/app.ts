@@ -36,6 +36,7 @@ import * as profile from './controllers/profile.controller.js';
 import { createRegistration } from './controllers/registration.controller.js';
 import { healthController } from './controllers/health.controller.js';
 import type { PrismaClient } from './generated/prisma/client.js';
+import type { JobRunnerReadiness } from './jobs/readiness.js';
 import { verifyAccessToken } from './lib/access-token.js';
 import type { AppConfig } from './lib/config.js';
 import { AppError } from './lib/errors.js';
@@ -43,6 +44,7 @@ import { teachesQuran } from './policies/roster-resolution.js';
 import { toRoleScopes } from './policies/branch-scope.js';
 import { createStorageClients } from './lib/storage.js';
 import { createOnlineClassProvider } from './lib/online-class-provider.js';
+import { publicObjectIsReadable } from './services/consent-reevaluation.service.js';
 import { authenticate, optionalAuthenticate } from './middleware/authenticate.js';
 import { childContext } from './middleware/child-context.js';
 import {
@@ -159,7 +161,11 @@ function meController(prisma: PrismaClient, config: AppConfig) {
   };
 }
 
-export function createApp(prisma: PrismaClient, config: AppConfig): Express {
+export function createApp(
+  prisma: PrismaClient,
+  config: AppConfig,
+  jobReadiness: Pick<JobRunnerReadiness, 'snapshot'>,
+): Express {
   const app = express();
 
   // Nginx terminates TLS and is the only thing in front of us (§3.1).
@@ -167,6 +173,34 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
   app.disable('x-powered-by');
 
   app.use(requestContext);
+
+  /**
+   * Internal Nginx auth subrequest; it is not exposed by the public routing
+   * table and is not a client API. GET/HEAD against the anonymous MinIO bucket
+   * is admitted only while the database still names the exact public key.
+   * Writes keep using their signed MinIO capability unchanged.
+   */
+  app.get('/internal/storage/public-authorize', async (req, res) => {
+    const originalUri = req.header('x-original-uri');
+    if (!originalUri) {
+      throw new AppError('FORBIDDEN', 'storage authorization URI is missing');
+    }
+    const pathname = new URL(originalUri, 'http://storage.internal').pathname;
+    const prefix = '/storage/public/';
+    if (!pathname.startsWith(prefix)) {
+      throw new AppError('FORBIDDEN', 'storage authorization path is outside public storage');
+    }
+    const storageKey = decodeURIComponent(pathname.slice(prefix.length));
+    const allowed = storageKey.length > 0 && await publicObjectIsReadable(prisma, storageKey);
+    if (!allowed) {
+      throw new AppError('FORBIDDEN', 'public storage coordinate is not currently readable');
+    }
+    res.sendStatus(204);
+  });
+
+  // Internal storage authorization is intentionally excluded from the ordinary
+  // request log: canonical keys are high-volume infrastructure coordinates,
+  // not user actions. Public/API requests below retain the existing access log.
   app.use(accessLog);
   /**
    * **R99 — the provider callback needs its RAW bytes, so it is mounted before
@@ -185,7 +219,7 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
   app.use(express.json({ limit: '2mb' }));
 
   // TD-14: public and unauthenticated, served at the origin root (§19.1 step 8).
-  app.get('/healthz', healthController(prisma, config));
+  app.get('/healthz', healthController(prisma, config, jobReadiness));
 
   // R98 — `null` when the association runs no online classes, which is a
   // complete configuration; the join route then answers `503` naming the
@@ -211,7 +245,7 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
     '/integrations/online-class/callback',
     recordingCtl.callback(prisma, onlineClass),
   );
-  api.post('/auth/logout', auth.logout(prisma));
+  api.post('/auth/logout', auth.logout(prisma, config));
   api.get('/me', meController(prisma, config));
   // Public, gated by the signed onboarding token — no session exists yet
   // (§4.1b step 4c, TD-3.2).
@@ -564,7 +598,7 @@ export function createApp(prisma: PrismaClient, config: AppConfig): Express {
   // (`lib/upload-token.ts`), which is why no pending-upload table exists.
   guarded.post('/uploads/initiate', contentCtl.initiate(prisma, storage, config));
   guarded.post('/uploads/:uploadId/complete', contentCtl.complete(prisma, storage, config));
-  guarded.post('/uploads/:uploadId/abort', contentCtl.abort(storage, config));
+  guarded.post('/uploads/:uploadId/abort', contentCtl.abort(prisma, storage, config));
   // R53: replacement reuses the upload flow (`replaces_content_id`); deletion is
   // its own route because it moves no bytes in.
   guarded.delete('/content/:id', contentCtl.remove(prisma, storage));

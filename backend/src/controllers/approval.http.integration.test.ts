@@ -190,6 +190,7 @@ async function clear(): Promise<void> {
   });
   await prisma.user.deleteMany({ where: { id: { in: ids } } });
   await prisma.consumedToken.deleteMany({ where: { purpose: "onboarding" } });
+  await prisma.normalizedEmailLock.deleteMany({ where: { email: { startsWith: "httpappr-" } } });
   // After the users: `intended_branch_id` is ON DELETE RESTRICT.
   await prisma.branch.deleteMany({ where: { name: { startsWith: TAG } } });
   // **Last, not first.** `intended_branch_id` and `intended_category_id` are

@@ -162,6 +162,7 @@ async function clear(): Promise<void> {
     await prisma.refreshToken.deleteMany({ where: { userId: { in: ids } } });
     await prisma.user.deleteMany({ where: { id: { in: ids } } });
   }
+  await prisma.normalizedEmailLock.deleteMany({ where: { email: { startsWith: "staffreg-" } } });
   await prisma.branch.deleteMany({ where: { name: { startsWith: TAG } } });
   // **Last, not first.** `intended_branch_id` and `intended_category_id` are
   // both ON DELETE RESTRICT (R39, R49), so a Category or Branch still named by

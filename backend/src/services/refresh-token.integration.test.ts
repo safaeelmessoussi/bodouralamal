@@ -1,14 +1,16 @@
-import { afterAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { RefreshRevokedReason } from "../generated/prisma/enums.js";
 import { loadConfig } from "../lib/config.js";
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from "../lib/prisma.js";
 import * as auditRepo from "../repositories/audit.repository.js";
+import * as tokenRepo from "../repositories/refresh-token.repository.js";
 import {
   hashToken,
   issueNewSession,
   logout,
   purgeExpired,
+  refreshAccessSession,
   revokeAllSessions,
   ROTATION_GRACE_MS,
   rotate,
@@ -24,6 +26,14 @@ const config = loadConfig();
 const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);
 
 const TEST_TAG = "[refresh-token-test]";
+
+function deferred(): { promise: Promise<void>; resolve: () => void } {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
 
 async function makeUser(): Promise<string> {
   const user = await prisma.user.create({
@@ -50,6 +60,10 @@ beforeEach(async () => {
   await prisma.user.deleteMany({
     where: { nameArabic: { startsWith: TEST_TAG } },
   });
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
 });
 
 afterAll(async () => {
@@ -177,11 +191,7 @@ describe("§18 token lifecycle acceptance criteria", () => {
     const deviceB = await issueNewSession(prisma, userId);
     expect(deviceA.sessionId).not.toBe(deviceB.sessionId);
 
-    await logout(prisma, {
-      userId,
-      sessionId: deviceA.sessionId,
-      actorUserId: userId,
-    });
+    await logout(prisma, deviceA.rawToken);
 
     // A is dead...
     const aDead = await rotate(prisma, deviceA.rawToken);
@@ -189,6 +199,173 @@ describe("§18 token lifecycle acceptance criteria", () => {
     // ...B is untouched and still rotates.
     const bAlive = await rotate(prisma, deviceB.rawToken);
     expect(bAlive.kind).toBe("rotated");
+  });
+
+  it("R101 — logout cannot resurrect the session through the predecessor grace window", async () => {
+    const userId = await makeUser();
+    const predecessor = await issueNewSession(prisma, userId);
+    const current = await rotate(prisma, predecessor.rawToken);
+    expect(current.kind).toBe("rotated");
+    if (current.kind !== "rotated") return;
+
+    await logout(prisma, current.rawToken);
+
+    // This call is deliberately inside the ordinary ten-second predecessor
+    // window. Grace is valid only while the successor remains live.
+    const retainedPredecessor = await rotate(prisma, predecessor.rawToken);
+    expect(retainedPredecessor.kind).toBe("reuse_detected");
+
+    const retainedCurrent = await rotate(prisma, current.rawToken);
+    expect(retainedCurrent.kind).toBe("reuse_detected");
+    expect(
+      await prisma.refreshToken.count({
+        where: { sessionId: predecessor.sessionId, revokedAt: null },
+      }),
+    ).toBe(0);
+  });
+
+  it("R101 — logout revocation rolls back when its mandatory audit write fails", async () => {
+    const userId = await makeUser();
+    const token = await issueNewSession(prisma, userId);
+    const realWrite = auditRepo.write;
+    const auditFailure = vi.spyOn(auditRepo, "write").mockImplementation(async (db, entry) => {
+      if (entry.actionType === auditRepo.AUDIT_ACTIONS.logout) {
+        throw new Error("controlled logout audit failure");
+      }
+      return realWrite(db, entry);
+    });
+
+    await expect(logout(prisma, token.rawToken)).rejects.toThrow(
+      "controlled logout audit failure",
+    );
+
+    const afterFailure = await prisma.refreshToken.findUniqueOrThrow({
+      where: { tokenHash: hashToken(token.rawToken) },
+    });
+    expect(afterFailure.revokedAt).toBeNull();
+    expect(
+      await prisma.auditLog.count({
+        where: {
+          actionType: auditRepo.AUDIT_ACTIONS.logout,
+          targetId: userId,
+        },
+      }),
+    ).toBe(0);
+
+    auditFailure.mockRestore();
+    await expect(logout(prisma, token.rawToken)).resolves.toBe(1);
+
+    const afterSuccess = await prisma.refreshToken.findUniqueOrThrow({
+      where: { tokenHash: hashToken(token.rawToken) },
+    });
+    expect(afterSuccess.revokedReason).toBe(RefreshRevokedReason.logout);
+    expect(afterSuccess.revokedAt).toBeInstanceOf(Date);
+    expect(
+      await prisma.auditLog.count({
+        where: {
+          actionType: auditRepo.AUDIT_ACTIONS.logout,
+          targetId: userId,
+        },
+      }),
+    ).toBe(1);
+  });
+
+  it("R101 — logout wins after a predecessor refresh has identified the chain", async () => {
+    const userId = await makeUser();
+    const predecessor = await issueNewSession(prisma, userId);
+    const current = await rotate(prisma, predecessor.rawToken);
+    expect(current.kind).toBe("rotated");
+    if (current.kind !== "rotated") return;
+    const unrelated = await issueNewSession(prisma, userId);
+
+    const refreshIdentified = deferred();
+    const allowRefreshToLock = deferred();
+    const realLock = tokenRepo.lockSession;
+    let targetLockCalls = 0;
+    vi.spyOn(tokenRepo, "lockSession").mockImplementation(async (tx, sessionId) => {
+      if (sessionId === predecessor.sessionId && targetLockCalls++ === 0) {
+        refreshIdentified.resolve();
+        await allowRefreshToLock.promise;
+      }
+      return realLock(tx, sessionId);
+    });
+
+    const racingRefresh = rotate(prisma, predecessor.rawToken);
+    try {
+      await refreshIdentified.promise;
+
+      // The coordination point is scoped to the target chain. Another browser
+      // session remains free to rotate while that chain is paused.
+      const unrelatedResult = await rotate(prisma, unrelated.rawToken);
+      expect(unrelatedResult.kind).toBe("rotated");
+
+      await expect(logout(prisma, current.rawToken)).resolves.toBe(1);
+      allowRefreshToLock.resolve();
+
+      const result = await racingRefresh;
+      expect(result.kind).toBe("reuse_detected");
+      expect(
+        await prisma.refreshToken.count({
+          where: { sessionId: predecessor.sessionId, revokedAt: null },
+        }),
+      ).toBe(0);
+      expect(
+        await prisma.refreshToken.count({
+          where: { sessionId: unrelated.sessionId, revokedAt: null },
+        }),
+      ).toBe(1);
+    } finally {
+      allowRefreshToLock.resolve();
+      await racingRefresh.catch(() => undefined);
+    }
+  });
+
+  it("R101 — logout re-reads after a racing refresh and revokes its successor", async () => {
+    const userId = await makeUser();
+    const target = await issueNewSession(prisma, userId);
+    const unrelated = await issueNewSession(prisma, userId);
+
+    const logoutIdentified = deferred();
+    const allowLogoutToLock = deferred();
+    const realLock = tokenRepo.lockSession;
+    let targetLockCalls = 0;
+    vi.spyOn(tokenRepo, "lockSession").mockImplementation(async (tx, sessionId) => {
+      if (sessionId === target.sessionId && targetLockCalls++ === 0) {
+        logoutIdentified.resolve();
+        await allowLogoutToLock.promise;
+      }
+      return realLock(tx, sessionId);
+    });
+
+    const racingLogout = logout(prisma, target.rawToken);
+    try {
+      await logoutIdentified.promise;
+
+      const refreshResult = await rotate(prisma, target.rawToken);
+      expect(refreshResult.kind).toBe("rotated");
+      if (refreshResult.kind !== "rotated") return;
+
+      const unrelatedResult = await rotate(prisma, unrelated.rawToken);
+      expect(unrelatedResult.kind).toBe("rotated");
+
+      allowLogoutToLock.resolve();
+      await expect(racingLogout).resolves.toBe(1);
+
+      expect(
+        await prisma.refreshToken.count({
+          where: { sessionId: target.sessionId, revokedAt: null },
+        }),
+      ).toBe(0);
+      expect((await rotate(prisma, refreshResult.rawToken)).kind).toBe("reuse_detected");
+      expect(
+        await prisma.refreshToken.count({
+          where: { sessionId: unrelated.sessionId, revokedAt: null },
+        }),
+      ).toBe(1);
+    } finally {
+      allowLogoutToLock.resolve();
+      await racingLogout.catch(() => undefined);
+    }
   });
 
   it("T7/T8 — revoke-all kills every live session of the user", async () => {
@@ -238,6 +415,71 @@ describe("§18 token lifecycle acceptance criteria", () => {
     expect(user?.accountStatus).toBe("suspended");
   });
 
+  it("reactivation does not revive a refresh credential revoked by suspension", async () => {
+    const userId = await makeUser();
+    const adminId = await makeUser();
+    const oldSession = await issueNewSession(prisma, userId);
+
+    await prisma.$transaction(async (tx) => {
+      await tx.user.update({
+        where: { id: userId },
+        data: { accountStatus: "suspended" },
+      });
+      await revokeAllSessions(tx, {
+        userId,
+        reason: RefreshRevokedReason.suspension,
+        actorUserId: adminId,
+      });
+    });
+    // Reactivation changes account state only; TD-4.15's durable revocation is
+    // not reversible. A person must authenticate again into a new session.
+    await prisma.user.update({
+      where: { id: userId },
+      data: { accountStatus: "active" },
+    });
+
+    const outcome = await refreshAccessSession(prisma, {
+      presentedRaw: oldSession.rawToken,
+      signingKey: config.JWT_SIGNING_KEY,
+    });
+    expect(outcome.kind).toBe("reuse_detected");
+    expect(await prisma.refreshToken.count({ where: { userId, revokedAt: null } })).toBe(0);
+  });
+
+  it("refuses credential renewal after Pending becomes terminal Rejected", async () => {
+    const userId = await makeUser();
+    await prisma.user.update({ where: { id: userId }, data: { accountStatus: "pending" } });
+    const pendingSession = await issueNewSession(prisma, userId);
+    await prisma.user.update({ where: { id: userId }, data: { accountStatus: "rejected" } });
+
+    const first = await refreshAccessSession(prisma, {
+      presentedRaw: pendingSession.rawToken,
+      signingKey: config.JWT_SIGNING_KEY,
+    });
+    expect(first.kind).toBe("rejected");
+
+    // The caller never receives the internally-minted successor, so retaining
+    // and replaying the old cookie cannot turn rejection into repeated renewal.
+    const repeated = await refreshAccessSession(prisma, {
+      presentedRaw: pendingSession.rawToken,
+      signingKey: config.JWT_SIGNING_KEY,
+    });
+    expect(repeated.kind).toBe("rejected");
+    expect(await prisma.refreshToken.count({ where: { userId } })).toBe(2);
+  });
+
+  it("keeps Pending refresh eligible for the status-screen session", async () => {
+    const userId = await makeUser();
+    await prisma.user.update({ where: { id: userId }, data: { accountStatus: "pending" } });
+    const pendingSession = await issueNewSession(prisma, userId);
+
+    const outcome = await refreshAccessSession(prisma, {
+      presentedRaw: pendingSession.rawToken,
+      signingKey: config.JWT_SIGNING_KEY,
+    });
+    expect(outcome.kind).toBe("rotated");
+  });
+
   it("T9 — user deletion revokes with reason user_deleted", async () => {
     const userId = await makeUser();
     const adminId = await makeUser();
@@ -282,16 +524,129 @@ describe("§18 token lifecycle acceptance criteria", () => {
     // Fail-closed: gone is as good as expired.
     const afterPurge = await rotate(prisma, stale.rawToken);
     expect(afterPurge.kind).toBe("rejected");
+    expect(
+      await prisma.refreshSession.count({ where: { id: stale.sessionId } }),
+    ).toBe(0);
+    await expect(purgeExpired(prisma)).resolves.toBe(0);
+  });
+
+  it("R101 — purge cannot remove a predecessor anchor and make logout lose the successor", async () => {
+    const userId = await makeUser();
+    const refreshAt = new Date("2026-08-23T10:00:00.000Z");
+    const issuedAt = new Date(refreshAt.getTime() - (30 * 24 * 60 * 60 * 1000) + 1);
+    const purgeAt = new Date(refreshAt.getTime() + 2);
+    const predecessor = await issueNewSession(prisma, userId, issuedAt);
+
+    const beforeSuccessorInsert = deferred();
+    const allowSuccessorInsert = deferred();
+    const purgeReachedLock = deferred();
+    const purgeHoldsLock = deferred();
+    const allowPurgeDelete = deferred();
+    const logoutReachedLock = deferred();
+
+    const realInsert = tokenRepo.insert;
+    vi.spyOn(tokenRepo, "insert").mockImplementation(async (db, data) => {
+      if (data.sessionId === predecessor.sessionId && data.rotatedFromId) {
+        beforeSuccessorInsert.resolve();
+        await allowSuccessorInsert.promise;
+      }
+      return realInsert(db, data);
+    });
+
+    const realLock = tokenRepo.lockSession;
+    let targetLockCalls = 0;
+    vi.spyOn(tokenRepo, "lockSession").mockImplementation(async (tx, sessionId) => {
+      if (sessionId !== predecessor.sessionId) return realLock(tx, sessionId);
+      targetLockCalls += 1;
+      if (targetLockCalls === 2) {
+        purgeReachedLock.resolve();
+        const locked = await realLock(tx, sessionId);
+        purgeHoldsLock.resolve();
+        await allowPurgeDelete.promise;
+        return locked;
+      }
+      if (targetLockCalls === 3) logoutReachedLock.resolve();
+      return realLock(tx, sessionId);
+    });
+
+    const racingRefresh = rotate(prisma, predecessor.rawToken, refreshAt);
+    let racingPurge: Promise<number> | undefined;
+    let racingLogout: Promise<number> | undefined;
+    try {
+      await beforeSuccessorInsert.promise;
+
+      // Purge has selected the now-expired predecessor and is queued on the
+      // stable session row before rotation inserts its successor.
+      racingPurge = purgeExpired(prisma, purgeAt);
+      await purgeReachedLock.promise;
+
+      allowSuccessorInsert.resolve();
+      const refreshed = await racingRefresh;
+      expect(refreshed.kind).toBe("rotated");
+      if (refreshed.kind !== "rotated") return;
+
+      await purgeHoldsLock.promise;
+      racingLogout = logout(prisma, predecessor.rawToken);
+      await logoutReachedLock.promise;
+
+      allowPurgeDelete.resolve();
+      await expect(racingPurge).resolves.toBeGreaterThanOrEqual(1);
+      await expect(racingLogout).resolves.toBe(1);
+
+      const successor = await prisma.refreshToken.findUniqueOrThrow({
+        where: { tokenHash: hashToken(refreshed.rawToken) },
+      });
+      expect(successor.rotatedFromId).toBeNull();
+      expect(successor.revokedReason).toBe(RefreshRevokedReason.logout);
+      expect(
+        await prisma.refreshToken.count({
+          where: { sessionId: predecessor.sessionId, revokedAt: null },
+        }),
+      ).toBe(0);
+      expect((await rotate(prisma, predecessor.rawToken)).kind).toBe("rejected");
+      expect((await rotate(prisma, refreshed.rawToken)).kind).toBe("reuse_detected");
+    } finally {
+      allowSuccessorInsert.resolve();
+      allowPurgeDelete.resolve();
+      await racingRefresh.catch(() => undefined);
+      await racingPurge?.catch(() => undefined);
+      await racingLogout?.catch(() => undefined);
+    }
+  });
+
+  it("R101 — purge after rotation removes only the expired predecessor and leaves the session usable", async () => {
+    const userId = await makeUser();
+    const refreshAt = new Date("2026-08-23T11:00:00.000Z");
+    const issuedAt = new Date(refreshAt.getTime() - (30 * 24 * 60 * 60 * 1000) + 1);
+    const predecessor = await issueNewSession(prisma, userId, issuedAt);
+    const refreshed = await rotate(prisma, predecessor.rawToken, refreshAt);
+    expect(refreshed.kind).toBe("rotated");
+    if (refreshed.kind !== "rotated") return;
+
+    await expect(
+      purgeExpired(prisma, new Date(refreshAt.getTime() + 2)),
+    ).resolves.toBeGreaterThanOrEqual(1);
+
+    expect(
+      await prisma.refreshToken.count({
+        where: { sessionId: predecessor.sessionId, revokedAt: null },
+      }),
+    ).toBe(1);
+    expect(
+      await prisma.refreshSession.count({ where: { id: predecessor.sessionId } }),
+    ).toBe(1);
+    await expect(logout(prisma, refreshed.rawToken)).resolves.toBe(1);
+    expect(
+      await prisma.refreshToken.count({
+        where: { sessionId: predecessor.sessionId, revokedAt: null },
+      }),
+    ).toBe(0);
   });
 
   it("T11 — a revoked token is never accepted, at any age", async () => {
     const userId = await makeUser();
     const token = await issueNewSession(prisma, userId);
-    await logout(prisma, {
-      userId,
-      sessionId: token.sessionId,
-      actorUserId: userId,
-    });
+    await logout(prisma, token.rawToken);
 
     for (let attempt = 0; attempt < 3; attempt++) {
       const outcome = await rotate(prisma, token.rawToken);
@@ -316,11 +671,7 @@ describe("§18 token lifecycle acceptance criteria", () => {
 
     // Path 2 — logout (self-service).
     const loggingOut = await issueNewSession(prisma, userId);
-    await logout(prisma, {
-      userId,
-      sessionId: loggingOut.sessionId,
-      actorUserId: userId,
-    });
+    await logout(prisma, loggingOut.rawToken);
 
     // Path 3 — suspension (admin-initiated).
     const suspended = await issueNewSession(prisma, userId);
@@ -424,11 +775,7 @@ describe("§18 token lifecycle acceptance criteria", () => {
     const userId = await makeUser();
     const token = await issueNewSession(prisma, userId);
     const rotated = await rotate(prisma, token.rawToken);
-    await logout(prisma, {
-      userId,
-      sessionId: token.sessionId,
-      actorUserId: userId,
-    });
+    await logout(prisma, token.rawToken);
 
     const rows = await prisma.auditLog.findMany({
       where: { targetId: userId },

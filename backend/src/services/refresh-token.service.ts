@@ -1,10 +1,13 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 
-import type { PrismaClient } from '../generated/prisma/client.js';
+import type { Prisma, PrismaClient } from '../generated/prisma/client.js';
 import { RefreshRevokedReason } from '../generated/prisma/enums.js';
+import { issueAccessToken } from '../lib/access-token.js';
+import { narrowToRole } from '../policies/branch-scope.js';
 import * as audit from '../repositories/audit.repository.js';
 import type { Db } from '../repositories/audit.repository.js';
 import * as tokens from '../repositories/refresh-token.repository.js';
+import * as users from '../repositories/user.repository.js';
 
 /**
  * Refresh-token lifecycle (SRS TD-12, TD-4.13/14/15, §18 T1–T12).
@@ -46,6 +49,23 @@ export type RefreshOutcome =
   /** T10/T11 — expired, unknown or purged. */
   | { kind: 'rejected'; reason: 'unknown' | 'expired' };
 
+export type RefreshAccessOutcome =
+  | Extract<RefreshOutcome, { kind: 'rejected' | 'reuse_detected' }>
+  | {
+      kind: 'rotated';
+      accessToken: string;
+      accessExpiresAt: Date;
+      activeRole: string | null;
+      rawToken: string;
+      refreshExpiresAt: Date;
+    }
+  | {
+      kind: 'grace';
+      accessToken: string;
+      accessExpiresAt: Date;
+      activeRole: string | null;
+    };
+
 /** Tokens are stored hashed, never raw (§18 T2). */
 export function hashToken(raw: string): string {
   return createHash('sha256').update(raw, 'utf8').digest('hex');
@@ -69,9 +89,39 @@ export interface IssuedRefreshToken {
 }
 
 /**
+ * Finds the presented credential, takes the stable session-row lock, then
+ * reads it again. The first read discovers the server-owned `session_id`; only
+ * the second is authoritative because another rotation/logout/purge may have
+ * committed while this transaction waited.
+ */
+async function identifyAndLockSession(
+  tx: Prisma.TransactionClient,
+  presentedHash: string,
+): Promise<
+  | {
+      identified: tokens.TokenWithSuccessor;
+      current: tokens.TokenWithSuccessor | null;
+    }
+  | null
+> {
+  const identified = await tokens.findByHash(tx, presentedHash);
+  if (!identified) return null;
+
+  if (!(await tokens.lockSession(tx, identified.sessionId))) return null;
+  return { identified, current: await tokens.findByHash(tx, presentedHash) };
+}
+
+function isRootClient(db: Db): db is PrismaClient {
+  return '$transaction' in db;
+}
+
+/**
  * Starts a NEW session chain — used after a successful login, never for
  * rotation. `sessionId` is stamped here and copied by every successor, which is
- * what makes session-scoped revocation an indexed UPDATE (§7).
+ * what makes session-scoped revocation an indexed UPDATE (§7). Every caller,
+ * including test/maintenance callers using the root client, participates in
+ * the user-level serialization boundary here; a helper call cannot bypass the
+ * lock simply because it did not enter through the OAuth controller.
  */
 export async function issueNewSession(
   db: Db,
@@ -82,13 +132,33 @@ export async function issueNewSession(
   const sessionId = randomUUID();
   const expiresAt = new Date(now.getTime() + REFRESH_TTL_MS);
 
-  await tokens.insert(db, {
-    userId,
-    sessionId,
-    tokenHash: hashToken(rawToken),
-    issuedAt: now,
-    expiresAt,
-  });
+  const persist = async (tx: Prisma.TransactionClient): Promise<void> => {
+    if (!(await users.lockUser(tx, userId))) {
+      throw new Error('cannot issue a refresh session for a missing user');
+    }
+    const state = await users.findSessionState(tx, userId);
+    if (
+      !state ||
+      state.deletedAt !== null ||
+      (state.accountStatus !== 'active' && state.accountStatus !== 'pending')
+    ) {
+      // R102: the shared issuer is itself an authority boundary. A caller that
+      // bypasses final OAuth routing still cannot create a new session after
+      // rejection (or another deactivation) won the User governing lock.
+      throw new Error('cannot issue a refresh session for an ineligible user');
+    }
+    await tokens.insertSession(tx, { id: sessionId, userId, createdAt: now });
+    await tokens.insert(tx, {
+      userId,
+      sessionId,
+      tokenHash: hashToken(rawToken),
+      issuedAt: now,
+      expiresAt,
+    });
+  };
+
+  if (isRootClient(db)) await db.$transaction(persist);
+  else await persist(db);
   return { rawToken, sessionId, expiresAt };
 }
 
@@ -107,10 +177,11 @@ export async function rotate(
   const presentedHash = hashToken(presentedRaw);
 
   return prisma.$transaction(async (tx) => {
-    const presented = await tokens.findByHash(tx, presentedHash);
+    const locked = await identifyAndLockSession(tx, presentedHash);
 
     // T10/T11 — unknown or purged. Fail closed, and identically to expired.
-    if (!presented) return { kind: 'rejected', reason: 'unknown' };
+    if (!locked?.current) return { kind: 'rejected', reason: 'unknown' };
+    const presented = locked.current;
     if (presented.expiresAt <= now) return { kind: 'rejected', reason: 'expired' };
 
     /** T5 — end the whole chain and record it as a security event. */
@@ -161,6 +232,12 @@ export async function rotate(
     if (successor !== null) {
       // At least two generations old: unambiguously a replayed secret.
       if (await tokens.hasSuccessor(tx, successor.id)) return detectReuse();
+
+      // The predecessor grace exists only while its successor is the live
+      // credential for this session. Logout/suspension/deletion revoke that
+      // successor, so accepting the predecessor afterwards would resurrect a
+      // deliberately ended session for up to ten seconds (R101).
+      if (successor.revokedAt !== null) return detectReuse();
 
       // T3 — immediate predecessor inside the window: accept, but do NOT mint a
       // third token; forking the chain would destroy reuse detection (TD-12).
@@ -225,39 +302,141 @@ export async function rotate(
   });
 }
 
+const ROLE_PRECEDENCE = ['super_admin', 'admin', 'teacher', 'parent', 'student'] as const;
+
+/** R60 fail-safe active-role resolution, kept beside the authoritative role
+ * read that supplies access-token claims. */
+export function resolveActiveRole(
+  liveScopes: readonly { role: string }[],
+  requested: string | undefined,
+): string | null {
+  if (requested === undefined) return null;
+  const held = new Set(liveScopes.map((scope) => scope.role));
+  if (held.has(requested)) return requested;
+  return ROLE_PRECEDENCE.find((role) => held.has(role)) ?? null;
+}
+
+/**
+ * Completes the HTTP refresh lifecycle at the session-serialization boundary.
+ *
+ * Rotation commits first because its predecessor/successor/audit triple is the
+ * TD-4.13 unit. Before any access token is signed, a second transaction locks
+ * the same stable session row, verifies that the chain still has a live token,
+ * and reads the authoritative account/role rows. A logout that linearizes in
+ * between therefore turns this request into a refusal; if finalization locks
+ * first, the access token is issued before logout and logout waits.
+ */
+export async function refreshAccessSession(
+  prisma: PrismaClient,
+  params: {
+    presentedRaw: string;
+    requestedRole?: string | undefined;
+    signingKey: string;
+  },
+): Promise<RefreshAccessOutcome> {
+  const outcome = await rotate(prisma, params.presentedRaw);
+  if (outcome.kind === 'rejected' || outcome.kind === 'reuse_detected') return outcome;
+
+  return prisma.$transaction(async (tx): Promise<RefreshAccessOutcome> => {
+    if (!(await tokens.lockSession(tx, outcome.sessionId))) {
+      return { kind: 'rejected', reason: 'unknown' };
+    }
+    if (!(await tokens.hasLiveToken(tx, outcome.sessionId, new Date()))) {
+      return { kind: 'rejected', reason: 'unknown' };
+    }
+
+    const account = await users.findAccountById(tx, outcome.userId);
+    // TD-1/§4.1b: only Active and Pending are session-bearing states. Rejected
+    // is terminal/deactivated, Suspended is deactivated, and a deleted account
+    // is unavailable. Downstream route guards are not a substitute for refusing
+    // to renew credentials here.
+    if (
+      !account ||
+      account.user.deletedAt !== null ||
+      (account.user.accountStatus !== 'active' && account.user.accountStatus !== 'pending')
+    ) {
+      return { kind: 'rejected', reason: 'unknown' };
+    }
+
+    const activeRole = resolveActiveRole(account.roleScopes, params.requestedRole);
+    const roleScopes =
+      activeRole === null
+        ? account.roleScopes
+        : narrowToRole(account.roleScopes, activeRole) ?? account.roleScopes;
+    const issued = issueAccessToken(
+      {
+        userId: account.user.id,
+        roleScopes,
+        ...(activeRole !== null ? { activeRole } : {}),
+        accountStatus: account.user.accountStatus,
+      },
+      params.signingKey,
+    );
+
+    if (outcome.kind === 'rotated') {
+      return {
+        kind: 'rotated',
+        accessToken: issued.token,
+        accessExpiresAt: issued.expiresAt,
+        activeRole,
+        rawToken: outcome.rawToken,
+        refreshExpiresAt: outcome.expiresAt,
+      };
+    }
+    return {
+      kind: 'grace',
+      accessToken: issued.token,
+      accessExpiresAt: issued.expiresAt,
+      activeRole,
+    };
+  });
+}
+
 /**
  * TD-4.14 — logout revokes only the CURRENT session, with its audit row in the
  * same transaction. Other devices keep working (§18 T6).
  *
- * `actorUserId` is explicit rather than inferred: for a self-service logout it
- * is the user, and passing it keeps the caller honest about attribution.
+ * The raw credential is the only session authority R101 permits. Identification
+ * therefore happens here, inside this transaction, rather than in the HTTP
+ * controller or through caller-supplied user/session ids.
  */
 export async function logout(
-  db: Db,
-  params: { userId: string; sessionId: string; actorUserId: string | null },
+  prisma: PrismaClient,
+  presentedRaw: string,
   now: Date = new Date(),
 ): Promise<number> {
-  const revokedIds = await tokens.revokeSessionTokens(
-    db,
-    params.sessionId,
-    RefreshRevokedReason.logout,
-    now,
-  );
-  await audit.write(db, {
-    actorUserId: params.actorUserId,
-    actionType: audit.AUDIT_ACTIONS.logout,
-    targetEntity: 'User',
-    targetId: params.userId,
-    detail: { session_ids: [params.sessionId], tokens_revoked: revokedIds.length },
+  const presentedHash = hashToken(presentedRaw);
+
+  return prisma.$transaction(async (tx) => {
+    const locked = await identifyAndLockSession(tx, presentedHash);
+    // R101: unknown, or a fully purged session whose anchor is gone, is an
+    // idempotent no-op. If purge removed only the presented predecessor while a
+    // successor remains, the pre-lock discovery still identifies the exact
+    // locked session and logout must revoke that successor.
+    if (!locked) return 0;
+    const presented = locked.current ?? locked.identified;
+
+    const revokedIds = await tokens.revokeSessionTokens(
+      tx,
+      presented.sessionId,
+      RefreshRevokedReason.logout,
+      now,
+    );
+    await audit.write(tx, {
+      actorUserId: presented.userId,
+      actionType: audit.AUDIT_ACTIONS.logout,
+      targetEntity: 'User',
+      targetId: presented.userId,
+      detail: { session_ids: [presented.sessionId], tokens_revoked: revokedIds.length },
+    });
+    return revokedIds.length;
   });
-  return revokedIds.length;
 }
 
 /**
- * TD-4.15 — revoke every live session of a user (§18 T7/T8/T9). Called INSIDE
- * the suspension or soft-delete transaction: a suspension that commits without
- * revoking leaves a 30-day credential alive, which is the safeguarding failure
- * the TD-12 freshness rule exists to prevent.
+ * TD-4.15 — revoke every live session of a user (§18 T7/T8/T9/T14). Called
+ * INSIDE the rejection, suspension or soft-delete transaction: a state change
+ * that commits without revoking leaves a 30-day credential alive.
  *
  * The audit detail records the affected `session_id`s, not merely a count, so a
  * specific session remains attributable (§7 attribution invariant).
@@ -269,31 +448,48 @@ export async function revokeAllSessions(
   params: {
     userId: string;
     reason: RefreshRevokedReason;
-    /** Null for system-initiated revocation; the admin's id for suspension. */
+    /** Null for system-initiated revocation; the admin's id for rejection or suspension. */
     actorUserId: string | null;
-    /** R60.8 — the capacity a suspending admin acted in. Absent when the
+    /** R60.8 — the capacity an acting admin used. Absent when the
      *  revocation is system-initiated, where there is no capacity to record. */
     activeRole?: string | undefined;
   },
   now: Date = new Date(),
 ): Promise<{ sessionIds: string[]; tokenCount: number }> {
-  const result = await tokens.revokeAllUserTokens(db, params.userId, params.reason, now);
+  const revoke = async (
+    tx: Prisma.TransactionClient,
+  ): Promise<{ sessionIds: string[]; tokenCount: number }> => {
+    // User-wide revocation shares one stable serialization anchor with new
+    // login/session creation. Lock order is always User -> RefreshSession(s),
+    // so no new anchor can appear after this transaction enumerates the set.
+    if (!(await users.lockUser(tx, params.userId))) {
+      return { sessionIds: [], tokenCount: 0 };
+    }
+    const sessionIds = await tokens.findUserSessionIds(tx, params.userId);
+    await tokens.lockSessions(tx, sessionIds);
+    const result = await tokens.revokeAllUserTokens(tx, params.userId, params.reason, now);
 
-  // Written even when nothing was live: "an admin suspended this user and no
-  // session existed" is itself the answer to "why is there no revocation row?".
-  await audit.write(db, {
-    actorUserId: params.actorUserId,
-    ...(params.activeRole !== undefined ? { activeRole: params.activeRole } : {}),
-    actionType: audit.AUDIT_ACTIONS.tokenRevoked,
-    targetEntity: 'User',
-    targetId: params.userId,
-    detail: {
-      reason: params.reason,
-      session_ids: result.sessionIds,
-      tokens_revoked: result.tokenCount,
-    },
-  });
-  return result;
+    // Written even when nothing was live: "an admin suspended this user and no
+    // session existed" is itself the answer to "why is there no revocation row?".
+    await audit.write(tx, {
+      actorUserId: params.actorUserId,
+      ...(params.activeRole !== undefined ? { activeRole: params.activeRole } : {}),
+      actionType: audit.AUDIT_ACTIONS.tokenRevoked,
+      targetEntity: 'User',
+      targetId: params.userId,
+      detail: {
+        reason: params.reason,
+        session_ids: result.sessionIds,
+        tokens_revoked: result.tokenCount,
+      },
+    });
+    return result;
+  };
+
+  // Production suspension/deletion already supplies its governing transaction.
+  // Standalone callers still need one transaction for locks + revocation + audit.
+  if (isRootClient(db)) return db.$transaction(revoke);
+  return revoke(db);
 }
 
 /**
@@ -302,6 +498,20 @@ export async function revokeAllSessions(
  * expired one (§18 T10). No audit row: nothing is revoked here, and the
  * attribution invariant concerns revocation, not garbage collection.
  */
-export async function purgeExpired(db: Db, now: Date = new Date()): Promise<number> {
-  return tokens.deleteExpired(db, now);
+export async function purgeExpired(prisma: PrismaClient, now: Date = new Date()): Promise<number> {
+  let deleted = 0;
+
+  while (true) {
+    const sessionIds = await tokens.findExpiredSessionIds(prisma, now);
+    if (sessionIds.length === 0) return deleted;
+
+    for (const sessionId of sessionIds) {
+      deleted += await prisma.$transaction(async (tx) => {
+        if (!(await tokens.lockSession(tx, sessionId))) return 0;
+        const count = await tokens.deleteExpiredForSession(tx, sessionId, now);
+        await tokens.deleteSessionIfEmpty(tx, sessionId);
+        return count;
+      });
+    }
+  }
 }

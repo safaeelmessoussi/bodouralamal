@@ -1,15 +1,23 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 
 import type { ContentOrigin, Prisma, PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
 import {
   buildStorageKey,
+  buildServerFinalizationKey,
+  buildUploadStagingKey,
   isUploadableMime,
+  mimeEssence,
   quarantineKeyFor,
   sizeCapFor,
   type AcceptedMime,
 } from '../lib/file-types.js';
-import { discardObject, verifyStoredObject } from '../lib/object-verification.js';
+import {
+  discardObject,
+  hashStoredObject,
+  streamObjectToStorageWithSha256,
+  streamVerifiedObjectToStorage,
+} from '../lib/object-verification.js';
 import {
   BUCKETS,
   copyObject,
@@ -30,6 +38,14 @@ import { teacherBranchIds } from '../policies/roster-resolution.js';
 import * as audit from '../repositories/audit.repository.js';
 import { snapshot } from '../repositories/trash.repository.js';
 import { visibleContentIds } from './library.service.js';
+import {
+  enqueueConsentContentMigration,
+  enqueueConsentPublicRetirement,
+  enqueueConsentReevaluationForSessions,
+  recordingContentRequiresSafeguardUnderLocks,
+  retireConsentPublicObject,
+} from './consent-reevaluation.service.js';
+import { lockLiveSessions } from '../repositories/consent-safeguarding.repository.js';
 
 /**
  * Educational content storage — the TD-3.5 upload flow and the presigned-GET
@@ -37,8 +53,8 @@ import { visibleContentIds } from './library.service.js';
  *
  * ## The two phases, and why the split is not an implementation detail
  *
- * A browser uploads **straight to MinIO** through a presigned PUT; the file
- * never passes through this process (§2.3 — the VPS is small and the
+ * A browser uploads **straight to a MinIO staging key** through a presigned PUT;
+ * the file never passes through this process (§2.3 — the VPS is small and the
  * connections are mobile). That means the server sees the object only *after*
  * it exists, so validation splits in two:
  *
@@ -48,25 +64,28 @@ import { visibleContentIds } from './library.service.js';
  *   Teacher on a phone connection must learn they cannot publish Globally
  *   *before* uploading 80 MB, not after.
  * * **`/complete`** decides what only the object itself can answer: are these
- *   really the bytes that were declared? §4.9 (Revision 8) fixes the mechanism —
- *   a **ranged GET of `bytes=0-511`** for the magic bytes and a **HEAD** for the
- *   true size. The server never streams or buffers the file to validate it.
+ *   really the bytes that were declared? It opens one full staging read, holds
+ *   its prefix until magic validation succeeds, enforces the exact byte count,
+ *   and hashes every accepted byte with SHA-256 while streaming to a private,
+ *   server-owned object. The canonical PUT re-hashes that immutable source;
+ *   only then may the row/audit transaction publish its coordinate (R103).
  *
  * ## What holds the two phases together
  *
  * A signed ticket, not a table — see `lib/upload-token.ts` for why. It binds
- * every authorization decision taken at phase one, so `/complete` cannot restate
- * them.
+ * every authorization decision taken at phase one and identifies one immutable
+ * finalization, so `/complete` cannot restate them.
  *
- * ## What is deliberately NOT here
+ * ## Where consent joins this lifecycle
  *
  * The **consent gate** (BR-2/BR-3) attaches to a *Session's resolved audience*,
  * and content is not owned by a session — it is *referenced* by one (§4.9,
- * Revision 43). So an upload has no audience to gate at the moment it happens;
- * the gate engages when content is linked to a session, and its engine
- * (`consent.reevaluate`, §4.1a) is a separate M6 deliverable. `visibility` here
- * is the caller's choice, defaulted from the Category setting, and
- * `consent_forced_private` is left to the engine that owns it.
+ * Revision 43). A new upload has no audience at initiation, so linking/import
+ * enqueues the full current-state engine. A replacement is different: it keeps
+ * the existing links, takes their Session anchors, and must preserve or engage
+ * the monotonic consent safeguard before publishing its new coordinate.
+ * `visibility` remains the existing row's/defaulted domain tier; BR-2 may only
+ * force it toward private, never use replacement as a publication override.
  */
 
 /* ── Shared helpers ──────────────────────────────────────────────────────── */
@@ -271,20 +290,31 @@ export async function initiateUpload(
   });
   if (!year) throw new AppError('NOT_FOUND', 'no such academic year');
 
-  const visibility =
-    input.meta.visibility ?? (await categoryDefaultVisibility(prisma, input.meta.levelId));
-
   // Replacement keeps the record and its identity; only the object changes
-  // (TD-9). Resolving it here means an unauthorized replacement is refused
-  // before a presigned PUT is ever minted.
+  // (R53, TD-9). Its existing visibility is therefore authoritative: a
+  // replacement is not the distinct TD-1 visibility transition and must not
+  // choose a bucket from either a client value or the Category default.
+  // Resolving it here also means an unauthorized replacement is refused before
+  // a presigned PUT is ever minted.
   let contentId: string = randomUUID();
+  let visibility: string;
+  let replacesVersion: number | undefined;
   if (input.meta.replacesContentId) {
     const existing = await loadWritableContent(prisma, actor, input.meta.replacesContentId);
     contentId = existing.id;
+    visibility = existing.visibility;
+    replacesVersion = existing.version;
+  } else {
+    visibility =
+      input.meta.visibility ?? (await categoryDefaultVisibility(prisma, input.meta.levelId));
   }
 
-  const key = buildStorageKey(contentId, input.filename);
+  // The browser receives a capability for this disposable key only. The
+  // authoritative `content/...` key does not exist until the server has
+  // validated and promoted this exact object version (B-03).
+  const key = buildUploadStagingKey(contentId, input.filename);
   const bucket = bucketFor(visibility);
+  const finalizationId = randomUUID();
 
   const putUrl = await prisma.$transaction(async (tx) => {
     await consumeUploadQuota(tx, actor.userId, new Date());
@@ -299,6 +329,7 @@ export async function initiateUpload(
       cid: contentId,
       bucket,
       key,
+      finalization_id: finalizationId,
       filename: input.filename,
       mime,
       size: input.size,
@@ -309,6 +340,7 @@ export async function initiateUpload(
       visibility,
       origin: input.meta.origin ?? 'uploaded',
       ...(input.meta.replacesContentId ? { replaces: input.meta.replacesContentId } : {}),
+      ...(replacesVersion === undefined ? {} : { replaces_version: replacesVersion }),
     },
     signingKey,
   );
@@ -351,20 +383,55 @@ function claimsOf(uploadId: string, signingKey: string, actor: Actor): UploadTic
  * says a mismatched upload is destroyed at once, while a recording's staging
  * object must survive so the attempt can be retried (R99.14).
  */
-async function verifyObject(
+async function streamAndVerifyObject(
   clients: StorageClients,
   claims: UploadTicketClaims,
-): Promise<{ size: number }> {
-  const outcome = await verifyStoredObject(clients, {
-    bucket: claims.bucket,
-    key: claims.key,
-    mime: claims.mime,
-    // The browser declared it at `/initiate`; a different number means the
-    // object is not the one that was authorised.
-    declaredSize: claims.size,
-    cap: sizeCapFor(claims.mime as AcceptedMime),
-  });
-  if (outcome.ok) return { size: outcome.sizeBytes };
+  serverStagingKey: string,
+  hooks: UploadCompletionHooks,
+): Promise<{
+  size: number;
+  sourceEtag: string;
+  serverStagingEtag: string | null;
+  contentSha256: string;
+}> {
+  let outcome;
+  try {
+    outcome = await streamVerifiedObjectToStorage(
+      clients,
+      {
+        bucket: claims.bucket,
+        key: claims.key,
+        mime: claims.mime,
+        // The browser declared it at `/initiate`; a different number means the
+        // object is not the one that was authorised.
+        declaredSize: claims.size,
+        cap: sizeCapFor(claims.mime as AcceptedMime),
+      },
+      { bucket: BUCKETS.private, key: serverStagingKey },
+      {
+        onMagicValidated: async () =>
+          hooks.afterSourceMagicValidated?.({
+            bucket: claims.bucket,
+            stagingKey: claims.key,
+          }),
+      },
+    );
+  } catch {
+    await discardObject(clients, BUCKETS.private, serverStagingKey);
+    throw new AppError('SERVICE_UNAVAILABLE', 'storage verification failed', {
+      reason: 'STORAGE_VERIFICATION_FAILED',
+    });
+  }
+  if (outcome.ok) {
+    return {
+      size: outcome.sizeBytes,
+      sourceEtag: outcome.sourceEtag,
+      serverStagingEtag: outcome.destinationEtag,
+      contentSha256: outcome.sha256,
+    };
+  }
+
+  await discardObject(clients, BUCKETS.private, serverStagingKey);
 
   if (outcome.reason === 'MISSING') {
     // Nothing was ever PUT, or the PUT failed. This is the state
@@ -372,10 +439,16 @@ async function verifyObject(
     throw new AppError('UPLOAD_INCOMPLETE', 'no object at the initiated key');
   }
 
-  await discardObject(clients, claims.bucket, claims.key);
+  // A changed key is a retryable race, not corrupt bytes. Deleting the newer
+  // version here could sabotage a concurrent completion that is validating it.
+  if (outcome.reason !== 'CHANGED') {
+    await discardObject(clients, claims.bucket, claims.key);
+  }
   throw new AppError(
     'VALIDATION_FAILED',
-    outcome.reason === 'MAGIC'
+    outcome.reason === 'CHANGED'
+      ? 'the staged object changed while it was being verified'
+      : outcome.reason === 'MAGIC'
       ? 'magic bytes do not match the declared MIME type'
       : 'stored size does not match the declared size',
     outcome.detail,
@@ -391,21 +464,242 @@ export interface CompleteInput {
   description: string | null;
 }
 
-export async function completeUpload(
-  prisma: PrismaClient,
-  clients: StorageClients,
-  signingKey: string,
-  actor: Actor,
-  uploadId: string,
-  input: CompleteInput,
-): Promise<{ id: string }> {
-  const claims = claimsOf(uploadId, signingKey, actor);
-  const { size } = await verifyObject(clients, claims);
+/** Narrow deterministic barriers for concurrency tests. Production passes no
+ * hooks; tests pause immediately between real storage operations. */
+export interface UploadCompletionHooks {
+  /** Pauses after the real full-object GET is open and its magic prefix has
+   * been accepted, before those bytes are written to server-owned staging. */
+  afterSourceMagicValidated?: (context: {
+    bucket: string;
+    stagingKey: string;
+  }) => Promise<void>;
+  afterVerification?: (context: {
+    bucket: string;
+    stagingKey: string;
+    serverStagingKey: string;
+    sourceEtag: string;
+    sha256: string;
+  }) => Promise<void>;
+  afterPromotion?: (context: {
+    bucket: string;
+    stagingKey: string;
+    canonicalKey: string;
+  }) => Promise<void>;
+}
 
-  if (claims.replaces) {
-    return replaceContentFile(prisma, clients, actor, claims, input, size);
+/**
+ * B-02 — the database visibility is the authority and the bucket follows it.
+ *
+ * Initiation derives this relationship, but completion checks it again because
+ * an upload ticket lives for two hours: a ticket minted by an older release may
+ * otherwise survive a deployment and reintroduce the contradiction. The wrong
+ * object is discarded before any database write, just like every other upload
+ * completion validation failure (§4.9).
+ */
+async function assertStoragePlacement(
+  clients: StorageClients,
+  claims: UploadTicketClaims,
+  authoritativeVisibility: string,
+): Promise<BucketName> {
+  const knownVisibility = ['public', 'private', 'hidden'].includes(
+    authoritativeVisibility,
+  );
+  const expectedBucket = bucketFor(authoritativeVisibility);
+  if (
+    !knownVisibility ||
+    claims.visibility !== authoritativeVisibility ||
+    claims.bucket !== expectedBucket
+  ) {
+    await discardObject(clients, claims.bucket, claims.key);
+    throw new AppError(
+      'VALIDATION_FAILED',
+      'upload storage placement contradicts authoritative content visibility',
+      { reason: 'VISIBILITY_STORAGE_MISMATCH' },
+      409,
+    );
+  }
+  return expectedBucket;
+}
+
+type ContentDb = PrismaClient | Prisma.TransactionClient;
+
+interface WritableContent {
+  id: string;
+  branchId: string | null;
+  visibility: string;
+  consentForcedPrivate: boolean;
+  origin: 'uploaded' | 'session_recording';
+  storageBucket: string;
+  storageKey: string;
+  version: number;
+}
+
+/** A stable identity for pre-B-03 tickets which did not carry one. */
+function finalizationIdOf(claims: UploadTicketClaims): string {
+  return (
+    claims.finalization_id ??
+    createHash('sha256')
+      .update(`legacy-upload\0${claims.sub}\0${claims.cid}\0${claims.bucket}\0${claims.key}`)
+      .digest('hex')
+  );
+}
+
+/**
+ * The final key binds both the signed finalization grant and the SHA-256 of the
+ * complete accepted stream. The domain-separated SHA-256 is truncated to 128
+ * bits for the path segment: negligible collision probability at this scale,
+ * while the full content digest remains in mandatory audit and object metadata.
+ */
+function canonicalKeyFor(
+  claims: UploadTicketClaims,
+  finalizationId: string,
+  contentSha256: string,
+): string {
+  const versionHash = createHash('sha256')
+    .update(`upload-finalization-sha256-v1\0${finalizationId}\0${contentSha256}`)
+    .digest('hex')
+    .slice(0, 32);
+  return buildStorageKey(claims.cid, claims.filename, versionHash);
+}
+
+interface PublishedFinalization {
+  canonicalKey: string;
+  contentSha256: string | null;
+}
+
+async function publishedFinalization(
+  db: ContentDb,
+  claims: UploadTicketClaims,
+  finalizationId: string,
+): Promise<PublishedFinalization | null> {
+  // Compatibility for a ticket completed by the direct-to-canonical flow
+  // before deployment. Its row points at the ticket's own key and its older
+  // audit does not contain a finalization identity.
+  if (claims.finalization_id === undefined) {
+    const legacy = await db.educationalContent.findUnique({
+      where: { id: claims.cid },
+      select: { storageKey: true },
+    });
+    if (legacy?.storageKey === claims.key) {
+      return { canonicalKey: claims.key, contentSha256: null };
+    }
   }
 
+  const auditRow = await db.auditLog.findFirst({
+    where: {
+      actionType: claims.replaces ? 'content.replace' : 'content.upload',
+      targetEntity: 'EducationalContent',
+      targetId: claims.cid,
+      detail: { path: ['upload_finalization_id'], equals: finalizationId },
+    },
+    select: { detail: true },
+  });
+  if (auditRow === null) return null;
+  const detail = auditRow.detail;
+  if (typeof detail !== 'object' || detail === null || Array.isArray(detail)) {
+    throw new Error(`content finalization audit ${finalizationId} has no detail object`);
+  }
+  const canonicalKey = detail['canonical_key'] ?? detail['new_key'];
+  if (typeof canonicalKey !== 'string') {
+    throw new Error(`content finalization audit ${finalizationId} has no canonical key`);
+  }
+  return {
+    canonicalKey,
+    contentSha256:
+      typeof detail['content_sha256'] === 'string'
+        ? detail['content_sha256']
+        : null,
+  };
+}
+
+/** Delete only a disposable upload object, never a key an authoritative row
+ * still names. The database check is required for pre-B-03 tickets, whose PUT
+ * target and canonical key were the same. */
+async function discardStagingObject(
+  prisma: PrismaClient,
+  clients: StorageClients,
+  claims: UploadTicketClaims,
+): Promise<void> {
+  if (claims.key.startsWith('staging/content/')) {
+    await discardObject(clients, claims.bucket, claims.key);
+    return;
+  }
+
+  let referenced: number;
+  try {
+    referenced = await prisma.educationalContent.count({
+      where: {
+        storageBucket: claims.bucket,
+        storageKey: claims.key,
+        // Both states are intentional: a soft-deleted row may still depend on
+        // its recoverable object after quarantine copy/delete failed.
+        OR: [{ deletedAt: null }, { deletedAt: { not: null } }],
+      },
+    });
+  } catch {
+    // Legacy keys need the database to distinguish disposable from canonical.
+    // An unavailable database means "leave it for upload.gc", never guess and
+    // risk deleting accepted content.
+    return;
+  }
+  if (referenced === 0) {
+    await discardObject(clients, claims.bucket, claims.key);
+  }
+}
+
+/** Streaming, bounded-memory promotion of a server-owned accepted byte stream. */
+async function promoteVerifiedObject(
+  clients: StorageClients,
+  claims: UploadTicketClaims,
+  serverStaging: { bucket: string; key: string; etag: string | null },
+  canonicalKey: string,
+  size: number,
+  contentSha256: string,
+): Promise<void> {
+  let existing;
+  try {
+    existing = await hashStoredObject(clients, claims.bucket, canonicalKey);
+  } catch {
+    throw new AppError('SERVICE_UNAVAILABLE', 'canonical object safety check failed', {
+      reason: 'STORAGE_UNAVAILABLE',
+    });
+  }
+
+  if (existing !== null) {
+    if (existing.sizeBytes === size && existing.sha256 === contentSha256) return;
+    throw new AppError('STATE_CONFLICT', 'canonical finalization key is already occupied', {
+      reason: 'CANONICAL_KEY_OCCUPIED',
+    });
+  }
+
+  try {
+    await streamObjectToStorageWithSha256(
+      clients,
+      serverStaging,
+      { bucket: claims.bucket, key: canonicalKey },
+      {
+        sizeBytes: size,
+        sha256: contentSha256,
+        contentType: mimeEssence(claims.mime),
+      },
+    );
+  } catch {
+    throw new AppError('SERVICE_UNAVAILABLE', 'storage promotion failed', {
+      reason: 'STORAGE_PROMOTION_FAILED',
+    });
+  }
+}
+
+async function createContentFromFinalization(
+  prisma: PrismaClient,
+  actor: Actor,
+  claims: UploadTicketClaims,
+  input: CompleteInput,
+  size: number,
+  canonicalKey: string,
+  finalizationId: string,
+  contentSha256: string,
+): Promise<void> {
   await prisma.$transaction(async (tx) => {
     await tx.educationalContent.create({
       data: {
@@ -418,17 +712,10 @@ export async function completeUpload(
         academicYearId: claims.academic_year_id,
         branchId: claims.branch_id,
         storageBucket: claims.bucket,
-        storageKey: claims.key,
+        storageKey: canonicalKey,
         originalFilename: claims.filename,
         mimeType: claims.mime,
         sizeBytes: BigInt(size),
-        /**
-         * **Bound into the ticket at `/initiate`, never re-stated at
-         * `/complete`** — the same rule the scope fields follow. `origin` is
-         * what «التسجيلات» is decided by (R99.10), so letting the completion
-         * body set it would make the classification a client's choice taken
-         * after the upload was authorised.
-         */
         origin: claims.origin ?? 'uploaded',
       },
     });
@@ -443,16 +730,195 @@ export async function completeUpload(
         size_bytes: size,
         visibility: claims.visibility,
         branch_id: claims.branch_id,
+        staging_key: claims.key,
+        canonical_key: canonicalKey,
+        content_sha256: contentSha256,
+        upload_finalization_id: finalizationId,
       },
     });
   });
+}
 
-  return { id: claims.cid };
+export async function completeUpload(
+  prisma: PrismaClient,
+  clients: StorageClients,
+  signingKey: string,
+  actor: Actor,
+  uploadId: string,
+  input: CompleteInput,
+  hooks: UploadCompletionHooks = {},
+): Promise<{ id: string }> {
+  const claims = claimsOf(uploadId, signingKey, actor);
+  const finalizationId = finalizationIdOf(claims);
+
+  // A successful completion is durable in the mandatory audit transaction.
+  // Check it before touching staging: retries still succeed after cleanup.
+  if (await publishedFinalization(prisma, claims, finalizationId)) {
+    await discardStagingObject(prisma, clients, claims);
+    return { id: claims.cid };
+  }
+
+  // R103 rollout is deliberately fail-closed for an outstanding replacement
+  // grant minted before B-03. Re-reading today's version would turn a stale
+  // ticket into authority it never carried.
+  if (claims.replaces && claims.replaces_version === undefined) {
+    await discardStagingObject(prisma, clients, claims);
+    throw new AppError(
+      'VERSION_CONFLICT',
+      'legacy replacement must be initiated again',
+      { reason: 'REPLACEMENT_REINITIATION_REQUIRED' },
+    );
+  }
+
+  let replacement: WritableContent | null = null;
+  if (claims.replaces) {
+    replacement = await loadWritableContent(prisma, actor, claims.cid);
+    if (
+      claims.replaces_version !== undefined &&
+      claims.replaces_version !== replacement.version
+    ) {
+      throw new AppError('VERSION_CONFLICT', 'content changed after replacement initiation', {
+        expected_version: claims.replaces_version,
+      });
+    }
+    await assertStoragePlacement(clients, claims, replacement.visibility);
+  } else {
+    await assertStoragePlacement(clients, claims, claims.visibility);
+  }
+
+  const serverStagingKey = buildServerFinalizationKey(claims.cid);
+  const {
+    size,
+    sourceEtag,
+    serverStagingEtag,
+    contentSha256,
+  } = await streamAndVerifyObject(clients, claims, serverStagingKey, hooks);
+  const canonicalKey = canonicalKeyFor(claims, finalizationId, contentSha256);
+  try {
+    await hooks.afterVerification?.({
+      bucket: claims.bucket,
+      stagingKey: claims.key,
+      serverStagingKey,
+      sourceEtag,
+      sha256: contentSha256,
+    });
+
+    await promoteVerifiedObject(
+      clients,
+      claims,
+      {
+        bucket: BUCKETS.private,
+        key: serverStagingKey,
+        etag: serverStagingEtag,
+      },
+      canonicalKey,
+      size,
+      contentSha256,
+    );
+    await hooks.afterPromotion?.({
+      bucket: claims.bucket,
+      stagingKey: claims.key,
+      canonicalKey,
+    });
+  } finally {
+    // This object is server-owned and disposable as soon as canonical PUT has
+    // either completed or failed. A cleanup miss is a harmless upload.gc orphan.
+    await discardObject(clients, BUCKETS.private, serverStagingKey);
+  }
+
+  try {
+    if (replacement) {
+      const publication = await replaceContentFile(
+        prisma,
+        actor,
+        claims,
+        input,
+        size,
+        canonicalKey,
+        finalizationId,
+        contentSha256,
+        replacement,
+      );
+      // A same-ticket loser may have accepted a different immutable staging
+      // snapshot and therefore promoted a different candidate. The winner's
+      // audit is authoritative; remove only this call's unpublished object.
+      if (publication.acceptedCanonicalKey !== canonicalKey) {
+        await discardObject(clients, claims.bucket, canonicalKey);
+      }
+      await discardStagingObject(prisma, clients, claims);
+      if (publication.published) {
+        if (publication.retireOldPublic) {
+          try {
+            await retireConsentPublicObject(
+              clients,
+              claims.cid,
+              replacement.storageKey,
+            );
+          } catch {
+            // The exact-key TD-7 obligation committed with the replacement.
+            // Publication succeeded; a transient cleanup error must not lie to
+            // the caller or lose the durable safeguarding retry.
+          }
+        } else {
+          await quarantineObject(
+            clients,
+            replacement.storageBucket,
+            replacement.storageKey,
+            claims.cid,
+          );
+        }
+      }
+      return { id: claims.cid };
+    }
+
+    await createContentFromFinalization(
+      prisma,
+      actor,
+      claims,
+      input,
+      size,
+      canonicalKey,
+      finalizationId,
+      contentSha256,
+    );
+    await discardStagingObject(prisma, clients, claims);
+    return { id: claims.cid };
+  } catch (error) {
+    // A concurrent same-ticket winner owns the same canonical key. Its audit is
+    // committed with its row, so the loser converges to success and must not
+    // delete the winner's object. Every other failure gets compensating cleanup.
+    let published = false;
+    let publicationKnown = false;
+    try {
+      const accepted = await publishedFinalization(prisma, claims, finalizationId);
+      published = accepted !== null;
+      publicationKnown = true;
+      // Under the SHA flow two concurrent readers may have accepted different
+      // stable staging snapshots and therefore produced different candidates.
+      // Only the audit's candidate is authoritative; the loser removes its own.
+      if (accepted !== null && accepted.canonicalKey !== canonicalKey) {
+        await discardObject(clients, claims.bucket, canonicalKey);
+      }
+    } catch {
+      // A failed COMMIT can be outcome-ambiguous. Never delete a canonical
+      // object while the database is unavailable to prove it unreferenced;
+      // upload.gc is the safe recovery boundary for a possible orphan.
+    }
+    if (published) {
+      await discardStagingObject(prisma, clients, claims);
+      return { id: claims.cid };
+    }
+    if (publicationKnown) {
+      await discardObject(clients, claims.bucket, canonicalKey);
+    }
+    throw error;
+  }
 }
 
 /* ── POST /uploads/{upload_id}/abort ─────────────────────────────────────── */
 
 export async function abortUpload(
+  prisma: PrismaClient,
   clients: StorageClients,
   signingKey: string,
   actor: Actor,
@@ -462,11 +928,7 @@ export async function abortUpload(
   // Best-effort by design: aborting an upload that never started is a success
   // from the caller's point of view, and `upload.gc` (TD-7) sweeps anything a
   // client abandons without telling us.
-  try {
-    await deleteObject(clients, claims.bucket, claims.key);
-  } catch {
-    /* already gone */
-  }
+  await discardStagingObject(prisma, clients, claims);
 }
 
 /* ── Replace and delete (Revision 53) ────────────────────────────────────── */
@@ -482,10 +944,19 @@ async function loadWritableContent(
   prisma: PrismaClient,
   actor: Actor,
   contentId: string,
-): Promise<{ id: string; branchId: string | null; storageBucket: string; storageKey: string }> {
+): Promise<WritableContent> {
   const row = await prisma.educationalContent.findFirst({
     where: { id: contentId, deletedAt: null },
-    select: { id: true, branchId: true, storageBucket: true, storageKey: true },
+    select: {
+      id: true,
+      branchId: true,
+      visibility: true,
+      consentForcedPrivate: true,
+      origin: true,
+      storageBucket: true,
+      storageKey: true,
+      version: true,
+    },
   });
   // §20 rule 17: out of scope answers 404, never 403 — a 403 would confirm the
   // record exists to someone with no business knowing it does.
@@ -512,40 +983,124 @@ async function loadWritableContent(
  */
 async function replaceContentFile(
   prisma: PrismaClient,
-  clients: StorageClients,
   actor: Actor,
   claims: UploadTicketClaims,
   input: CompleteInput,
   size: number,
-): Promise<{ id: string }> {
-  const existing = await loadWritableContent(prisma, actor, claims.cid);
+  canonicalKey: string,
+  finalizationId: string,
+  contentSha256: string,
+  existing: WritableContent,
+): Promise<{
+  published: boolean;
+  acceptedCanonicalKey: string;
+  retireOldPublic: boolean;
+}> {
+  return prisma.$transaction(async (tx) => {
+    // Replacement is an upload trigger for every occurrence already referencing
+    // this recording. Session locks precede the content CAS, matching the
+    // re-evaluation lock hierarchy and avoiding a Session↔Content deadlock.
+    const linkedSessions = await tx.sessionContent.findMany({
+      where: { contentId: claims.cid, deletedAt: null, session: { deletedAt: null } },
+      select: { sessionId: true },
+    });
+    const lockedSessionIds = await enqueueConsentReevaluationForSessions(
+      tx,
+      linkedSessions.map((link) => link.sessionId),
+    );
+    const retireOldPublic =
+      existing.storageBucket === BUCKETS.public &&
+      existing.origin === 'session_recording' &&
+      (existing.consentForcedPrivate ||
+        (await recordingContentRequiresSafeguardUnderLocks(
+          tx,
+          claims.cid,
+          lockedSessionIds,
+        )));
 
-  await prisma.$transaction(async (tx) => {
-    await tx.educationalContent.update({
-      where: { id: claims.cid },
+    const written = await tx.educationalContent.updateMany({
+      where: {
+        id: claims.cid,
+        deletedAt: null,
+        version: existing.version,
+        storageBucket: existing.storageBucket,
+        storageKey: existing.storageKey,
+      },
       data: {
         title: input.title,
         description: input.description,
+        ...(retireOldPublic ? { consentForcedPrivate: true } : {}),
         storageBucket: claims.bucket,
-        storageKey: claims.key,
+        storageKey: canonicalKey,
         originalFilename: claims.filename,
         mimeType: claims.mime,
         sizeBytes: BigInt(size),
         version: { increment: 1 },
       },
     });
+
+    if (written.count === 0) {
+      const accepted = await publishedFinalization(tx, claims, finalizationId);
+      if (accepted !== null) {
+        return {
+          published: false,
+          acceptedCanonicalKey: accepted.canonicalKey,
+          retireOldPublic: false,
+        };
+      }
+      const current = await tx.educationalContent.findUnique({
+        where: { id: claims.cid },
+        select: { id: true },
+      });
+      if (!current) throw new AppError('NOT_FOUND', 'no such content');
+      throw new AppError('VERSION_CONFLICT', 'content changed during replacement', {
+        expected_version: existing.version,
+      });
+    }
+
     await audit.write(tx, {
       actorUserId: actor.userId,
       activeRole: actor.activeRole,
       actionType: 'content.replace',
       targetEntity: 'EducationalContent',
       targetId: claims.cid,
-      detail: { previous_key: existing.storageKey, new_key: claims.key, size_bytes: size },
+      detail: {
+        previous_key: existing.storageKey,
+        new_key: canonicalKey,
+        canonical_key: canonicalKey,
+        staging_key: claims.key,
+        size_bytes: size,
+        content_sha256: contentSha256,
+        upload_finalization_id: finalizationId,
+      },
     });
+    if (retireOldPublic) {
+      if (!existing.consentForcedPrivate) {
+        await audit.write(tx, {
+          actorUserId: null,
+          actionType: 'content.visibility_change',
+          targetEntity: 'EducationalContent',
+          targetId: claims.cid,
+          detail: {
+            reason: 'consent_gate',
+            old_visibility: existing.visibility,
+            new_visibility: existing.visibility,
+            old_consent_forced_private: false,
+            new_consent_forced_private: true,
+            bucket_migration_pending: true,
+            source: 'content.replace',
+          },
+        });
+      }
+      await enqueueConsentPublicRetirement(tx, claims.cid, existing.storageKey);
+      await enqueueConsentContentMigration(tx, claims.cid, canonicalKey);
+    }
+    return {
+      published: true,
+      acceptedCanonicalKey: canonicalKey,
+      retireOldPublic,
+    };
   });
-
-  await quarantineObject(clients, existing.storageBucket, existing.storageKey, claims.cid);
-  return { id: claims.cid };
 }
 
 async function quarantineObject(
@@ -585,19 +1140,47 @@ export async function deleteContent(
 ): Promise<void> {
   const existing = await loadWritableContent(prisma, actor, contentId);
 
-  await prisma.$transaction(async (tx) => {
+  const retireOldPublic = await prisma.$transaction(async (tx) => {
+    const linkedSessions = await tx.sessionContent.findMany({
+      where: { contentId, deletedAt: null, session: { deletedAt: null } },
+      select: { sessionId: true },
+    });
+    const lockedSessionIds = await lockLiveSessions(
+      tx,
+      linkedSessions.map((link) => link.sessionId),
+    );
+    const retireForConsent =
+      existing.storageBucket === BUCKETS.public &&
+      existing.origin === 'session_recording' &&
+      (existing.consentForcedPrivate ||
+        (await recordingContentRequiresSafeguardUnderLocks(
+          tx,
+          contentId,
+          lockedSessionIds,
+        )));
     const row = await tx.educationalContent.findUnique({ where: { id: contentId } });
-    await tx.educationalContent.update({
-      where: { id: contentId },
+    const written = await tx.educationalContent.updateMany({
+      where: {
+        id: contentId,
+        deletedAt: null,
+        version: existing.version,
+        storageBucket: existing.storageBucket,
+        storageKey: existing.storageKey,
+      },
       data: { deletedAt: new Date(), deletedById: actor.userId },
     });
+    if (written.count === 0 || row === null) {
+      throw new AppError('VERSION_CONFLICT', 'content changed during deletion', {
+        expected_version: existing.version,
+      });
+    }
     await snapshot(tx, {
       targetEntity: 'EducationalContent',
       targetId: contentId,
       // `size_bytes` is a `BigInt`, which has no JSON representation and would
       // throw on serialisation — the snapshot has to survive the round-trip, so
       // it is stringified here rather than lost with the row it describes.
-      snapshot: { ...row, sizeBytes: row?.sizeBytes.toString() ?? null },
+      snapshot: { ...row, sizeBytes: row.sizeBytes.toString() },
       deletedById: actor.userId,
     });
     await audit.write(tx, {
@@ -608,9 +1191,22 @@ export async function deleteContent(
       targetId: contentId,
       detail: { storage_key: existing.storageKey },
     });
+    if (retireForConsent) {
+      await enqueueConsentPublicRetirement(tx, contentId, existing.storageKey);
+    }
+    return retireForConsent;
   });
 
-  await quarantineObject(clients, existing.storageBucket, existing.storageKey, contentId);
+  if (retireOldPublic) {
+    try {
+      await retireConsentPublicObject(clients, contentId, existing.storageKey);
+    } catch {
+      // The delete and its exact-key job are already committed. A transient
+      // storage failure is retried by the existing TD-7 placement worker.
+    }
+  } else {
+    await quarantineObject(clients, existing.storageBucket, existing.storageKey, contentId);
+  }
 }
 
 /**

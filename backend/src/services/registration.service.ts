@@ -4,6 +4,7 @@ import { AppError, uniqueViolationFields } from '../lib/errors.js';
 import { verifyOnboardingToken } from '../lib/onboarding-token.js';
 import { composeArabicName, composeFrenchName } from '../lib/person-name.js';
 import * as audit from '../repositories/audit.repository.js';
+import * as users from '../repositories/user.repository.js';
 import { submitChildApplications } from './child-application.service.js';
 import type { RegistrationInput } from '../validators/registration.validators.js';
 
@@ -134,6 +135,18 @@ export async function register(
       await tx.consumedToken.create({
         data: { jti, purpose: 'onboarding', expiresAt: new Date(exp * 1000) },
       });
+
+      // The callback's "nobody known" result is only a ten-minute routing
+      // snapshot. Staff may have pre-provisioned this address since then, so
+      // registration must serialize and re-read both ownership channels before
+      // creating a second account. The lock row also covers the absent-row race
+      // where registration and provisioning begin concurrently.
+      await users.lockNormalizedEmail(tx, email);
+      if ((await users.emailClaimingUserIds(tx, email)).length > 0) {
+        throw new AppError('DUPLICATE', 'that email now belongs to an account', {
+          reason: 'EMAIL_ALREADY_CLAIMED',
+        });
+      }
 
       const applicantData = input.kind === 'adult' ? input.applicant : input.parent;
 

@@ -2,13 +2,15 @@ import type { Request, Response } from 'express';
 
 import type { AppConfig } from '../lib/config.js';
 import type { PrismaClient } from '../generated/prisma/client.js';
+import type { JobRunnerReadiness } from '../jobs/readiness.js';
 import { OUTBOUND_TIMEOUT_MS } from '../lib/oauth.js';
 
 /**
  * `GET /healthz` (SRS TD-14) — public and unauthenticated. Checks DB
- * connectivity, MinIO reachability and the pg-boss queue heartbeat, returning
- * `200` or **`503` with per-component detail**, which is what the TD-16
- * degraded-operation matrix is read against and what §19.1 step 8 asserts.
+ * connectivity, MinIO reachability, pg-boss infrastructure, and this process's
+ * actual worker readiness. It returns `200` or **`503` with per-component
+ * detail**, which is what the TD-16 degraded-operation matrix is read against
+ * and what §19.1 step 8 asserts.
  */
 
 type ComponentState = 'ok' | 'down' | 'not_configured';
@@ -34,13 +36,13 @@ async function checkStorage(config: AppConfig): Promise<ComponentState> {
 }
 
 /**
- * pg-boss stores its state in PostgreSQL, so "is the queue alive" is a question
- * about its schema. The runner is wired (M1.10), so this normally reports `ok`;
- * `not_configured` remains for an environment where the schema has not been
- * created yet — reporting that honestly beats a health endpoint that lies about
- * a component it has not checked.
+ * This checks durable queue infrastructure only. Worker readiness is a separate
+ * process-local signal: the schema can survive while the runner never started,
+ * failed startup, or stopped polling.
  */
-async function checkJobQueue(prisma: PrismaClient): Promise<ComponentState> {
+async function checkQueueInfrastructure(
+  prisma: PrismaClient,
+): Promise<ComponentState> {
   try {
     const [row] = await prisma.$queryRaw<{ present: boolean }[]>`
       SELECT EXISTS (
@@ -53,22 +55,30 @@ async function checkJobQueue(prisma: PrismaClient): Promise<ComponentState> {
   }
 }
 
-export function healthController(prisma: PrismaClient, config: AppConfig) {
+export function healthController(
+  prisma: PrismaClient,
+  config: AppConfig,
+  jobReadiness: Pick<JobRunnerReadiness, 'snapshot'>,
+) {
   return async (_req: Request, res: Response): Promise<void> => {
-    const [database, storage, jobs] = await Promise.all([
+    const [database, storage, queue] = await Promise.all([
       checkDatabase(prisma),
       checkStorage(config),
-      checkJobQueue(prisma),
+      checkQueueInfrastructure(prisma),
     ]);
+    const jobDetail = jobReadiness.snapshot();
+    const jobs: ComponentState = jobDetail.state;
 
-    const components = { database, storage, jobs };
-    // `not_configured` is not a failure — it is an honest statement about a
-    // component this milestone has not built yet.
-    const healthy = Object.values(components).every((state) => state !== 'down');
+    // Existing component names and value types remain intact. `queue` and the
+    // worker detail are additive; `jobs` now means what its name always claimed:
+    // this application's workers, not merely a surviving database schema.
+    const components = { database, storage, jobs, queue };
+    const healthy = Object.values(components).every((state) => state === 'ok');
 
     res.status(healthy ? 200 : 503).json({
       status: healthy ? 'ok' : 'degraded',
       components,
+      details: { jobs: jobDetail },
     });
   };
 }

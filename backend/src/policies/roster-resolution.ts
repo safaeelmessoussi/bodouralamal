@@ -239,7 +239,7 @@ export async function audienceBranchesForSession(
 
 /** Resolve a schedule's audience to actual student rows. */
 export async function resolveAudience(
-  prisma: PrismaClient,
+  prisma: PrismaClient | Prisma.TransactionClient,
   spec: AudienceSpec,
   select?: Prisma.UserSelect,
 ): Promise<{ id: string }[]> {

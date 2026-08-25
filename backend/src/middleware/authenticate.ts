@@ -16,6 +16,8 @@ import type { Actor } from '../policies/actor.js';
 declare module 'express-serve-static-core' {
   interface Request {
     actor?: Actor;
+    /** Verified bearer lifetime, kept out of the business-level Actor shape. */
+    accessTokenExp?: number;
   }
 }
 
@@ -52,6 +54,7 @@ export function authenticate(config: AppConfig) {
         : {}),
       accountStatus: verified.claims.account_status,
     };
+    req.accessTokenExp = verified.claims.exp;
     next();
   };
 }
@@ -113,4 +116,12 @@ export function optionalAuthenticate(config: AppConfig) {
 export function requireActor(req: Request): Actor {
   if (!req.actor) throw new AppError('AUTH_REQUIRED', 'unauthenticated');
   return req.actor;
+}
+
+/** The guarded router sets this from a successfully verified bearer token. */
+export function requireAccessTokenExp(req: Request): number {
+  if (req.accessTokenExp === undefined) {
+    throw new AppError('AUTH_REQUIRED', 'unauthenticated');
+  }
+  return req.accessTokenExp;
 }

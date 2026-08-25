@@ -29,43 +29,75 @@ Which means:
 // ✅  the insert joins the transaction
 await prisma.$transaction(async (tx) => {
   await rosterRepo.enrol(tx, …);
-  await jobsRepo.enqueue(tx, 'consent.reevaluate', { group_id });
+  await jobsRepo.enqueue(tx, 'consent.reevaluate', { session_id });
 });
 
 // ❌  boss.send() uses its own connection and sits OUTSIDE the transaction
 await prisma.$transaction(async (tx) => {
   await rosterRepo.enrol(tx, …);
 });
-await boss.send('consent.reevaluate', { group_id });   // prohibited here
+await boss.send('consent.reevaluate', { session_id });   // prohibited here
 ```
 
 Job rows are inserted through a dedicated `JobsRepository` using pg-boss's documented job
-table format. This is **one of only two places raw SQL is permitted** in application code —
-the other being `SELECT … FOR UPDATE` row locks.
+table format. The repository copies retry, expiry, retention and policy values from the
+registered queue row; inserting only `name` and `data` would silently bypass TD-7's retry
+contract. A singleton key deduplicates pending `created`/`retry` work while permitting one
+follow-up to be committed behind an active full recompute. This is **one of only two places
+raw SQL is permitted** in application code — the other being `SELECT … FOR UPDATE` row locks.
 
 `boss.send()` is not banned outright; it is banned **for job-triggering mutations**, which
 is where the atomicity matters.
 
 ## The catalog
 
-Every job retries with exponential backoff, five attempts maximum, then dead-letters with an
-Admin-visible failure. Singleton keys prevent duplicate concurrent runs.
+Every job gets five attempts total — the initial execution plus at most four retries with
+exponential backoff — then dead-letters with an Admin-visible failure. Singleton keys prevent
+duplicate concurrent runs.
 
 | Job | Trigger | Idempotency |
 |---|---|---|
-| `consent.reevaluate` | Roster change · split-group membership change · consent change · upload | Singleton per session (Revision 43 — the gate's subject is a session's resolved audience, BR-2); **full recompute**, so re-running is harmless |
+| `consent.reevaluate` | Roster/Teaching-Group change · consent change · recording import/replacement · Session-content link · R92 occurrence-audience change | Singleton per session (Revision 43 — the gate's subject is a session's resolved audience, BR-2); **full recompute**, so re-running is harmless |
 | `session.materialize` | Course-schedule create or edit · **nightly cron** | Singleton per schedule. Turns a recurring schedule into dated occurrences over a rolling horizon. See below |
-| `content.bucket-migrate` | Visibility change · consent forcing | Copy–verify–delete; skipped if already in the target bucket |
+| `content.bucket-migrate` | Visibility change · consent forcing · exact old-public-key retirement after replacement/deletion | The consent arm pins the source key; copy–verify–delete and exact retirement are idempotent across replacement, deletion and ambiguous delete responses |
 | `backup.replicate` | Nightly cron | `pg_dump` + `restic` push to the second Moroccan location. Failure raises a **critical** Admin-visible alert |
 | `content.quarantine-purge` | Daily cron | Permanently removes storage objects past the 90-day trash window |
 | `upload.gc` | Daily cron | Deletes initiated-but-never-completed uploads **strictly older than 48 h** — never younger, or a slow upload in progress would be reaped |
-| `token.purge` | Daily cron | Removes consumed onboarding tokens past their horizon **and refresh tokens past expiry**, so a table gaining a row per refresh does not grow unbounded |
+| `token.purge` | Daily cron | Removes consumed onboarding tokens past their horizon **and refresh tokens past expiry**. Refresh generations are discovered in bounded batches, then deleted in one transaction per `RefreshSession` while holding the same stable row refresh/logout use; a live successor is therefore never detached from logout's serialization boundary. An empty anchor is removed with its last token |
 | `ratelimit.purge` | Daily cron | Removes counters for elapsed windows. **Housekeeping only** — the quota decision is synchronous and never depends on this job |
 | `audit.purge` | Daily cron | The single sanctioned deletion path for audit rows. See below |
 | `session-recording-ingest` | A **verified** provider completion callback (R99) | Singleton per recording. Turns a provider staging object into an `EducationalContent` + `SessionContent`. See below |
 
 Post-MVP additions (`import.csv`, `export.csv`, `grade.recalculate`) join with their
 features.
+
+## Runtime worker health
+
+`GET /healthz` keeps **queue infrastructure** and **application workers** as two
+different components. The `pgboss` schema proves that durable enqueue storage exists; it
+does not prove that this API process started a runner. The worker component is ready only
+after runner initialization completed and every handler in the implementation's worker
+catalog registered successfully.
+
+The readiness expectation is derived from the same catalog the runner loops over — there is
+no second list of queue names in the health controller. pg-boss's live worker registry then
+provides the ongoing signal: every expected handler must remain active and must either have
+polled within 15 seconds or be processing a job. The bounded startup grace uses the same
+window, so an initial empty fetch does not make an ordinary deployment flap; a long recording
+ingestion is not called stale merely because its handler is busy.
+
+Before any worker registers or readiness can become green, startup reconciles the TD-7 retry
+policy on every implemented queue and scans live recording-linked Sessions in bounded UUID
+batches. Each batch inserts the ordinary singleton reevaluation obligations transactionally.
+The scan is repeatable and does not rewrite content or guess consent; it closes rollout and
+backlog gaps left by older trigger coverage. Queue policy updates change retry/backoff only,
+so pg-boss retention, expiry and deletion horizons—and historical jobs—remain intact.
+
+This runtime catalog is deliberately not the same thing as TD-7 release completeness.
+`consent.reevaluate` and the consent-forced arm of `content.bucket-migrate` now have real
+handlers and are therefore part of readiness. Other TD-7 jobs whose implementations have not
+landed remain release-readiness gaps; health neither implements them nor invents running
+handlers for them.
 
 > **`session-recording-ingest` was implemented before it was specified, and that sequence is
 > worth keeping visible.** R99 authorised the ingestion pipeline in terms (R99.13, R99.14) and
@@ -95,8 +127,10 @@ and inserts one job.
 **The order is the design.** Each step protects against a specific way of producing a broken
 library item:
 
-1. **Already ingested?** → return what is there. `session_recording.educational_content_id` is
-   `UNIQUE`, and it is the durable idempotency anchor for the whole pipeline.
+1. **Already ingested?** → skip verification, copying and database writes, then finish the
+   exact staging cleanup recorded on that `SessionRecording`.
+   `session_recording.educational_content_id` is `UNIQUE`, and it is the durable idempotency
+   anchor for both the ingest and a post-commit cleanup retry.
 2. **Verify the actual bytes**, never the provider's metadata — exists, non-empty, within
    TD-9's cap, magic bytes matching, **and the media family the class asked for**. An OGG
    delivered for a صوت وصورة class is a perfectly valid OGG and is refused anyway, because
@@ -106,8 +140,17 @@ library item:
 4. **One transaction**: allocate the R75.6 name under `SELECT … FOR UPDATE` on the occurrence,
    create the `EducationalContent` (`origin = session_recording`), create the `SessionContent`
    link, set `educational_content_id`, write the audit row.
-5. **Then sweep staging.** A cleanup failure must never undo valid content — what is left
-   behind is one object in a bucket the platform owns and does not serve.
+5. **Then sweep staging.** A cleanup failure never undoes valid content: the relation is
+   already committed, so «متاح» remains true. The worker throws the cleanup failure to
+   pg-boss instead of swallowing it; the same durable job retries, lands on step 1, and
+   addresses only that recording's stored staging bucket/key. S3 `DeleteObject` treats an
+   already-missing key as success, so a worker killed after the delete but before job
+   completion converges safely on the next attempt.
+
+This is **not `upload.gc`**. The ingest job first attempts immediate cleanup and retains its
+own durable obligation only when that exact post-commit delete fails. `upload.gc` is the
+separate age-based collector for initiated browser uploads that never completed; neither is
+a general scan of the recording bucket.
 
 **Availability is derived, never stored.** *«متاح»* is exactly
 `educational_content_id IS NOT NULL`. An `available` status value would be a second fact that
@@ -124,6 +167,11 @@ so a corrected one can be retried — and no content row is created.
 than random, so a job that copied the object and then died finds *its own* object on retry
 instead of minting a second key and orphaning the first. The object is copied only if it is not
 already there, so the key is still written exactly once (§20 rule 15).
+
+**A cleanup failure is not an ingestion failure.** It does not populate
+`ingestion_failure_reason`, because the canonical object, content row and relation already
+exist. Repeated storage failure remains on the existing pg-boss job under TD-7's retry budget
+and terminal failed-job observability; it never creates a second worker or an in-memory retry.
 
 ### `session.materialize` — eager, and the reason is correctness
 
@@ -200,9 +248,57 @@ that never existed. The job exists to advance the horizon and to reconcile.
 
 ### `consent.reevaluate` — full recompute, deliberately
 
-It recomputes the group's entire consent state rather than applying a delta. That makes it
-**idempotent**, safe to run twice, and safe to run after a missed event — properties worth
-far more here than the efficiency a delta would buy on groups of a few dozen students.
+It recomputes the complete current audience of every Session linked to the same recording,
+rather than applying a delta. Audience resolution is the canonical R43/R92 rule: entire
+Level at the occurrence's audience branches, Administrative Group, or Teaching Group. The
+union is strict: one linked Session containing one beneficiary without an effective latest
+`media_release` grant forces the recording. Absence is no consent; an empty audience does not
+engage the gate.
+
+The inverse student-to-Session trigger follows retained live occurrences even after their
+recurring schedule is soft-deleted, and it applies R92 occurrence audience branches rather
+than falling back to the schedule branch. Changing those R92 branches enqueues in the same
+transaction as the audience update.
+
+The complete shared-recording Session graph is discovered first, then its rows are locked once
+in global UUID order before audiences are resolved. Link/replacement/deletion writers take the
+same anchors; if the graph grows during acquisition, the worker retries rather than taking a
+late lower-order lock. Recording rows are then locked in UUID order. A concurrent mutation is
+therefore included or commits a follow-up. The worker can only move toward safety: it sets
+`consent_forced_private`, writes the system `content.visibility_change` audit, and enqueues an
+exact-source physical transition in one transaction. It never automatically clears a forced
+state after a later grant; BR-3 reserves that decision to an Admin with justification.
+
+For a public item, `consent_forced_private = true` immediately removes it from application
+library/session reads and from Nginx's stable public origin. `visibility = public` and
+`storage_bucket = public` still honestly represent the network-internal source while physical
+work is pending. `content.bucket-migrate`, carrying the exact source key, then:
+
+1. hashes the immutable canonical source;
+2. server-side copies it to the private bucket with that SHA-256 as server metadata;
+3. hashes the destination and requires identical bytes and size;
+4. under a content row lock, re-reads the version/key/forced state;
+5. deletes the public source; and only then commits `visibility = private`, the private
+   bucket coordinate and mandatory system audit.
+
+A delete failure rolls the database transition back and TD-7 retries. If deletion succeeded
+but the database commit did not, the private object's server-written digest makes recovery
+provable even though the source is gone. Duplicate work is idempotent, and a stale snapshot
+cannot overwrite a replacement or a deletion. This worker implements only consent-forced
+public → private movement; it is not general visibility editing or bucket housekeeping.
+
+Replacement and deletion also commit exact-key retirement obligations in this same queue.
+Replacement can publish a new canonical key only with the monotonic flag already set, queues
+the new key's migration, and retires the old key into private quarantine. A stale migration
+whose row now names another key becomes that same retirement operation. A missing source is
+success, which is what makes a retry after an ambiguous successful delete converge without
+guessing or touching the replacement key.
+
+Rows committed before B-01 used the older three-column repository insert and therefore lack
+per-job retry/expiry policy. They are not bulk-rewritten. When such a row becomes active, the
+worker first commits one correctly configured full-recompute follow-up under the same
+singleton key; many legacy duplicates therefore converge on one pending recovery obligation,
+and an old one-shot failure cannot strand safeguarding.
 
 ### `audit.purge` — the one that needed three attempts
 

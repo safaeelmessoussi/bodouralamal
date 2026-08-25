@@ -6,11 +6,16 @@ GitHub Actions, four parallel jobs, on every push to `develop`/`main` and on eve
 request.
 
 ```
-guards      twelve guard scripts — the SRS rules that are mechanically checkable
+guards      eighteen dependency-free guard scripts — mechanically checkable repository rules
 contract    regenerate the OpenAPI document, fail on drift, check conformance
-backend     lint · typecheck · test
-frontend    lint · typecheck · test
+backend     lint · exact typecheck · default tests · production build
+frontend    lint · exact typecheck · tests · production build
 ```
+
+The contract job runs the remaining two guard scripts, so **all twenty committed
+`scripts/ci/check-*.sh` checks execute in CI**. They stay in the contract job because both
+operate on the generated OpenAPI artifact and that job already installs the backend
+dependencies needed to regenerate it.
 
 ## The guards
 
@@ -26,10 +31,16 @@ Each exists because something went wrong, or would plausibly go wrong silently. 
 | `check-prisma-mass-write.sh` | A mass-write Prisma call that skips soft-delete filtering |
 | `check-header-nav-exclusive.sh` | The burger and horizontal navigation both visible at one width |
 | `check-design-tokens.sh` | A raw colour, a reach past the semantic token layer, or a stylesheet nobody imports |
+| `check-dialog-hidden-when-closed.sh` | A mounted native dialog whose author CSS defeats the browser rule hiding it while closed |
+| `check-progress-css.sh` | A progress fill using physical/direction-blind sizing, missing clipping or reduced-motion support, or an unloaded stylesheet |
+| `check-shared-layout.sh` | The shared page header redefined per page, a second button system in CSS, or the header losing its two-column grid |
+| `check-association-terminology.sh` | Superseded Arabic role/person vocabulary returning to the user-facing catalogue |
+| `check-western-digits.sh` | Arabic-Indic digit conversion or rendered literals where the interface requires Western numerals |
 | `check-display-identity.sh` | Raw name fields reaching the frontend · an inline display-name fallback · a controller exposing both inputs outside the one admissible staff screen |
+| `check-active-role-presentation.sh` | Presentation reading the account's full role list instead of the currently active role |
+| `check-provider-seam.sh` | Online-class provider details escaping the one provider-integration seam |
 | `check-openapi-td3.sh` | An endpoint that contradicts the specification, is implemented undocumented, or is documented but absent from the router |
 | `check-openapi-current.sh` | `docs/openapi.json` describing an API that is no longer the one served — a served endpoint with no generator mapping, a mapping the router does not serve, or a document that reconciles but was never regenerated |
-| `check-shared-layout.sh` | The shared page header redefined per page, a second button system in CSS, or the header losing its two-column grid |
 | `check-doc-links.sh` | A broken relative link or missing anchor in the documentation (SRS §16.4, listed in §19.2) |
 | `check-migration-order.sh` | A migration referencing a column that a **later-named** migration adds — fine on every existing database, fatal on an empty one, so it would surface exactly once: at the first production deploy (TD-6a) |
 | `check-contract-dto.sh` | A controller handing a service result straight to `res.json` · a spread inside `dto.ts` that turns an allow-list back into "everything" (SRS §16.2, Revision 38) |
@@ -93,8 +104,9 @@ a response code or a path changed.
 > to protect rots.
 
 **Documented-but-unimplemented endpoints report `PENDING`** and do not fail the build. A gate
-that is red from M1 to M6 is a gate nobody reads. The final release checklist flips `PENDING`
-to fatal.
+that is red from M1 to M6 is a gate nobody reads. `TD3_REQUIRE_COMPLETE=1` is deliberately not
+enabled in this workflow: the remaining registry gaps first need Owner/SRS reconciliation,
+including entries superseded by Revisions 58 and 81. Ordinary conformance remains enforced.
 
 ## Stories behind three guards
 
@@ -153,14 +165,19 @@ the ledger** rather than drive-by additions:
 - Permission-matrix API tests generated from the matrix
 - Playwright end-to-end journeys
 - The ≥ 80 % coverage gate on services and policies
+- Fatal `TD3_REQUIRE_COMPLETE=1` release completeness, pending Owner/SRS reconciliation
+- Container-image publication; the backend/frontend jobs verify application production builds
+  but do not publish deployable images
 
 ## Deployment
 
 There is **no automatic deployment to production.** The pipeline is
 [deliberate and manual](../operations/deployment.md), ten steps, run by a human on the VPS.
 
-**Images are built in CI and pulled** — never built on the server, where the frontend build's
-~2 GB peak would exhaust a 4 GB box.
+CI now verifies both application production builds. It **does not yet build or publish
+container images**; reconciling that with the production deployment procedure is a separate
+operations slice. The frontend build's ~2 GB peak remains the reason deployment must not
+compile it beside the running services.
 
 Pushing to `develop` triggers an automatic **Vercel** build of the frontend in a
 fixture-pointing configuration that calls no real backend.

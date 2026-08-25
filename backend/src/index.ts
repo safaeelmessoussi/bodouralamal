@@ -3,13 +3,15 @@
 // later in a request.
 import { createApp } from './app.js';
 import { createBoss, startJobRunner, stopJobRunner } from './jobs/runner.js';
+import { JobRunnerReadiness } from './jobs/readiness.js';
 import { loadConfig } from './lib/config.js';
 import { createPrismaClient } from './lib/prisma.js';
 
 const config = loadConfig();
 const prisma = createPrismaClient(config.DATABASE_URL);
-const app = createApp(prisma, config);
 const boss = createBoss(config);
+const jobReadiness = new JobRunnerReadiness(boss);
+const app = createApp(prisma, config, jobReadiness);
 
 function log(message: string, detail: Record<string, unknown> = {}): void {
   process.stdout.write(
@@ -23,7 +25,7 @@ const server = app.listen(config.PORT, () => {
 
 // R-3: pg-boss workers run inside the API container, keeping the VPS container
 // count and memory footprint low (§3.1).
-startJobRunner(boss, prisma, config)
+startJobRunner(boss, prisma, config, jobReadiness)
   .then(() => log('job runner started'))
   .catch((error: unknown) => {
     // TD-16: enqueues keep succeeding even with workers down, because they are
@@ -44,7 +46,7 @@ startJobRunner(boss, prisma, config)
 for (const signal of ['SIGTERM', 'SIGINT'] as const) {
   process.on(signal, () => {
     server.close(() => {
-      void stopJobRunner(boss)
+      void stopJobRunner(boss, jobReadiness)
         .catch(() => undefined)
         .then(() => prisma.$disconnect())
         .finally(() => process.exit(0));

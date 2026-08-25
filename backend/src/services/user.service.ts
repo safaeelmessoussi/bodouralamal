@@ -7,6 +7,7 @@ import { branchesForRole } from '../policies/branch-scope.js';
 import { assertFreshActive } from '../policies/freshness.policy.js';
 import type { Actor } from '../policies/actor.js';
 import * as audit from '../repositories/audit.repository.js';
+import * as users from '../repositories/user.repository.js';
 import { revokeAllSessions } from './refresh-token.service.js';
 
 /**
@@ -94,6 +95,8 @@ export async function preProvision(
       if (!branch) throw new AppError('NOT_FOUND', 'branch not found');
     }
 
+    await users.lockNormalizedEmail(tx, email);
+
     /**
      * **An email may be claimed by at most ONE live account** — and the unique
      * index alone does not say that.
@@ -108,16 +111,13 @@ export async function preProvision(
      * **Reproduced before it was fixed** — `POST /admin/users` answered `201`
      * for an address with a live active identity.
      *
-     * Checked here rather than declared, because the invariant spans two tables
-     * and no unique index can express it. The window is the transaction's own;
-     * the partial unique index still catches the pre-provisioned half, and
-     * `bindIdentity`'s own uniqueness catches the identity half.
+     * A stable normalized-email row is locked before this re-read because the
+     * invariant spans two tables and either row may be absent. Same-table
+     * uniqueness remains a backstop, while the shared row closes the cross-table
+     * check-then-insert race.
      */
-    const claimed = await tx.userIdentity.findFirst({
-      where: { email, isActive: true, user: { deletedAt: null } },
-      select: { id: true },
-    });
-    if (claimed) {
+    const claimedBy = await users.emailClaimingUserIds(tx, email);
+    if (claimedBy.length > 0) {
       throw new AppError('DUPLICATE', 'that email already belongs to an account', {
         reason: 'EMAIL_ALREADY_CLAIMED',
       });
@@ -555,6 +555,12 @@ export async function suspendUser(
   }
 
   await prisma.$transaction(async (tx) => {
+    // The User row is the stable serialization anchor shared by successful
+    // login/session creation and user-wide revocation. It must precede every
+    // RefreshSession lock acquired by revokeAllSessions below.
+    if (!(await users.lockUser(tx, id))) {
+      throw new AppError('NOT_FOUND', 'no such user');
+    }
     const target = await loadManageable(tx, actor, id);
     if (target.accountStatus !== 'active') {
       // TD-1 allows this transition only from Active.
@@ -836,6 +842,12 @@ export async function setUserRoles(
   const actor = await assertFreshActive(prisma, caller.userId, USER_ADMIN_ROLES, caller.activeRole);
 
   await prisma.$transaction(async (tx) => {
+    // Role-switch and login issuance derive credentials from these assignments.
+    // Share their User governing row so a credential is wholly before or wholly
+    // after this replacement, never signed from a half-stale assignment set.
+    if (!(await users.lockUser(tx, id))) {
+      throw new AppError('NOT_FOUND', 'no such user');
+    }
     // Visibility is asserted here rather than inside the shared core: approval
     // reaches an applicant the §4.2 R25 user-list rule deliberately hides from
     // a branch Admin (a self-registered person has no branch assignment yet),
@@ -852,11 +864,10 @@ export async function setUserRoles(
   // (`assertFreshActive`), so a revoked role stops mattering *immediately*
   // where it matters, and the stateless window is accepted elsewhere.
   //
-  // Revoking would also require a new `RefreshRevokedReason`, and §7 fixes that
-  // enum at four values — `logout`, `suspension`, `user_deleted`,
-  // `reuse_detected`. Reusing `suspension` for a demotion would make the audit
-  // trail say something untrue about why access ended, which is worse than the
-  // hour.
+  // Revoking would also require a new `RefreshRevokedReason`. §7's values
+  // describe logout, safeguarding actions, replay, and R101's one-time rollout;
+  // none describes a demotion. Reusing `suspension` would make the audit trail
+  // say something untrue about why access ended, which is worse than the hour.
   return readOne(prisma, id);
 }
 

@@ -23,7 +23,7 @@
 - [x] `/CLAUDE.md`, `/AGENTS.md`, `docs/CHANGES.log` committed (§16.3)
 - [x] `.env.example` generated from TD-13 inventory; boot-time fail-fast validation for Required vars
 - [x] Version pins per §3.1a (Node 22 LTS image, PG 17, Prisma 6, React 19, Vite 6, Express 5, pg-boss 10)
-- [x] CI skeleton: lint, typecheck, test runners, TD-6a migration-presence check, `db push` ban check, `.env` commit check, DROP/RENAME migration lint (TD-6b), OpenAPI↔TD-3 conformance check (§3.1)
+- [x] CI: all 20 committed guards, lint, exact typecheck, default test runners, backend/frontend production builds, and ordinary OpenAPI↔TD-3 conformance (§3.1). Integration/browser/coverage infrastructure and fatal `TD3_REQUIRE_COMPLETE=1` remain separate slices
 
 ## M1 — Infrastructure & Platform Core
 - [x] `docker-compose.yml`: api, db, minio, nginx (+certbot); TZ=Africa/Casablanca; tzdata pinned (TD-11)
@@ -35,22 +35,28 @@
 - [x] Hand-written SQL migrations via `migrate dev --create-only`: explicit `CREATE COLLATION "ar-x-icu"` registration, column collations, CHECKs (incl. bp score checks), partial unique indexes, cross-table ayah trigger (TD-6, TD-6a)
 - [x] Production seed, idempotent (§15.1): roles, categories/levels, subjects, academic year, 114 Surahs, SystemSetting defaults, Super Admin allow-list (via `pre_provisioned_email`, Revision 15 — no placeholder identity)
 - [x] Dev fixtures with `NODE_ENV` guard (§15.2)
-- [x] Google OAuth: state+PKCE (flow state in a short-lived signed HttpOnly callback-scoped cookie, TD-12 Revision 16), callback branches 4a/4b/4c, onboarding token (10 min, `jti` + ConsumedToken replay guard) (§4.1b, TD-12)
+- [x] Google OAuth: state+PKCE (flow state in a short-lived signed HttpOnly callback-scoped cookie, TD-12 Revision 16), cryptographically verified Google ID token (RS256/provider key, exact issuer, configured audience, lifetime, subject, verified email), callback branches 4a/4b/4c, first binding guarded by the authoritative User lock/status re-read, onboarding token (10 min, `jti` + ConsumedToken replay guard) (§4.1b, TD-12)
 - [x] Step-4a routing complete: Active / Pending / (Rejected|Suspended|deleted_at → deactivated screen), never reactivation (§4.1b, Revision 16)
 - [x] Email lowercasing on all identity lookups/writes (TD-12) + DB `CHECK (email = lower(email))` (TD-6)
+- [x] Cross-channel normalized-email ownership: registration, staff pre-provisioning,
+  first binding and production bootstrap share one collision-free row lock; stale onboarding
+  snapshots and concurrent absent claims cannot create two intended accounts. Upgrade backfill
+  refuses pre-existing ambiguity rather than choosing a person in migration SQL
 - [~] Registration identity extracted solely from onboarding-token payload; body fields excluded from schema (§4.1b, TD-12)
   - ✓ Backend — onboarding token carries the verified `email` + `provider_subject_id`; payload is the sole identity source
   - ✓ Tests — 8 unit tests
   - ✓ Security — a substituted-email token fails signature verification (§20 rule 9)
   - △ Later milestone (M2) — `POST /registrations` and the Zod schema that must not even accept those fields
-- [x] Access token via Authorization header only; refresh = sole cookie route with custom header + Origin check (TD-12)
+- [x] Access token via Authorization header only; refresh and logout are the only refresh-cookie consumers, both with the same custom-header + Origin checks; cookie Path `/api/v1/auth` (TD-12, R101)
 - [~] High-risk endpoint fresh DB status assertions (presigned mint, social profile, approvals, overrides) (TD-12)
   - ✓ Covered on every surface that exists — approvals (5 assertions), consent overrides (3), social profile, user management, family links: a mid-session suspension or a revoked role assignment loses the capability on the **next call**, on the caller's still-valid token
   - △ *presigned mint* arrives with **M6 (Storage)**; the `/uploads/*` endpoints are not built, so this cannot be green before then
 - [x] `RefreshToken` entity + unique `token_hash` + `session_id` chain (§7/TD-6, Revision 16) — forward-only migration
-- [x] Session layer: 1 h access JWT, 30 d rotating refresh cookie (HttpOnly/Secure/SameSite=Lax), hashed-never-raw storage, revocation list (TD-12)
-- [x] Rotation / logout / revoke-on-suspension transactions (TD-4.13/14/15); 10 s grace window is idempotent (no chain fork); reuse outside grace revokes the whole session
-- [x] Token-lifecycle acceptance criteria T1–T12 green (§18, Revision 16)
+- [x] Session layer: 1 h access JWT, 30 d rotating refresh cookie (HttpOnly/Secure/SameSite=Lax/Path `/api/v1/auth`), hashed-never-raw storage, revocation list (TD-12, R101)
+- [x] Rotation / logout / revoke-on-suspension transactions (TD-4.13/14/15); logout revocation + `auth.logout` audit are atomic; refresh/logout/purge serialize on a stable per-`session_id` row; identity binding, final login issuance, switch-role and revoke-all serialize on the User row before session anchors and re-read authoritative state; the explicit User `NO KEY UPDATE` is compatible with implicit child-FK `KEY SHARE`, closing the session→User/User→session deadlock; post-rotation access issuance permits only Active/Pending under its session lock; 10 s grace is idempotent (no chain fork) and cannot resurrect a logged-out chain
+- [x] R102 Pending → Rejected closure: the approval transaction holds the User-first → RefreshSession-anchor hierarchy, revokes every live session as `rejection`, and atomically writes `user.reject` plus `auth.token_revoked`; refresh/login races cannot leave a live successor or new session, unrelated users remain independent, and later state changes never resurrect an old credential
+- [x] R101 rollout: old API stops first; migration audits and invalidates every live legacy narrow-Path session as `cookie_path_migration`; users reauthenticate
+- [x] Token-lifecycle acceptance criteria T1–T14 green (§18, Revisions 16, 101 and 102)
 - [x] Pending hard-redirect; zero data access except `GET /me` + logout (TD-1); client-side global Pending route guard (§14.4)
   - ✓ Backend · ✓ Tests · ✓ Security · ✓ Frontend — `PendingGuard` renders the §2.1 status screen before any authenticated route mounts, so no skeleton leaks
 - [x] Error envelope middleware + canonical code catalog incl. VERSION_CONFLICT/SERVICE_UNAVAILABLE + i18n message keys (TD-3.8)
@@ -64,7 +70,11 @@
   - ✓ Security — upstream failures leak no detail; they surface as the canonical envelope
   - △ Later milestone (M6) — the full TD-16 matrix needs the storage endpoints that must 503 while MinIO is down
 - [x] request_id propagation, JSON logs, no-PII log policy (TD-14)
-- [x] `GET /healthz` with component checks (TD-14)
+- [x] `GET /healthz` with truthful dependency and worker-readiness checks (TD-14)
+  - ✓ Queue infrastructure is independent from process-local runner readiness; a surviving
+    `pgboss` schema cannot make stopped/failed/unregistered workers healthy
+  - ✓ Expected workers derive from the actual registration catalog; live pg-boss activity
+    detects missing, inactive, and stale workers with an injected-clock test seam
 - [~] pg-boss bootstrap + job runner; JobsRepository same-transaction job inserts (§16.2, TD-4); token.purge + ratelimit.purge + audit.purge crons (TD-7)
   - ✓ Backend — runner in the API container; all three crons scheduled in Postgres with the TD-7 retry policy
   - ✓ Tests — all three purges run against the live worker and their effects verified
@@ -88,7 +98,7 @@
   - ✓ Tests — 10 HTTP tests asserting the **exact key set** of every branch and room response. **There was no HTTP-level test here before**, which is how the contract drifted unnoticed
   - ✓ Frontend integration — the `/admin/branches` screen (§14.2), first consumer of the shared CRUD framework
 - [~] §18 Authentication & Onboarding checklist — **backend green**, two items outstanding by milestone/ownership
-  - ✓ **`state` + PKCE now tested** — `lib/oauth.ts` had **no test at all**; 18 unit tests now cover verifier entropy and uniqueness, S256 derivation, seal/open round-trip, tampered payload and signature, a foreign signing key, the purpose-separated key (a payload signed with the *raw* JWT key must not open), malformed cookie shapes, the authorization URL's `S256`/`state`/`prompt`, and `exchangeCode`'s audience check, `email_verified` refusal, lowercasing and single `oauth_unavailable` failure mode. **Eight mutations all caught**, including PKCE downgraded to `plain` and the audience check removed
+  - ✓ **`state`, PKCE and Google identity verification tested** — 27 focused unit/controller tests cover verifier entropy and uniqueness, S256 derivation, signed-cookie tamper resistance and purpose separation, authorization URL constraints, code-exchange separation, and the real Google Auth Library path with local RSA keys: valid signature, invalid signature, expiry, exact issuer, configured audience, RS256/key id, required subject/email, `email_verified`, provider-certificate failure and callback refusal before account resolution. No live Google service or decoded fixture token stands in for verification
   - ✓ **§19.2 Pending-session data-access denial now asserted** — the whole guarded surface, **derived from the generated contract** rather than a hand-kept list, so a newly documented route is covered automatically. Suspended and rejected sessions too, with an active-token control. TD-1's two exceptions (`GET /me`, logout) are asserted **reachable**, keeping them decisions rather than holes. Mutation-tested: removing the gate fails 32 cases
   - ✓ **`/auth/refresh` CSRF posture now tested** — the custom header and Origin check were implemented but untested; 8 HTTP tests, and the check is proven to run **before** the cookie is read so a probe cannot learn whether a cookie was valid. Three mutations caught
   - ✓ §4.1b all three routing branches, pre-provisioned binding, `jti` replay → 409, email lowercasing, JWT role scopes, suspension revoking refresh, the Nginx same-origin round-trip, body-email substitution, the auth audit rows, and rejected/suspended/soft-deleted all reaching the deactivated screen
@@ -159,7 +169,7 @@
   - ✓ Tests — a declined media release is recorded with actor + timestamp, not omitted (BR-1)
   - ✓ Backend — `staff_recorded` path complete: `GET`/`POST /students/{id}/consents`, Admin/Super Admin only (TD-2), append-only history, BR-1 effective status, §4.1a re-evaluation enqueued in-transaction
   - ✓ Tests — 20 integration tests; six mutations caught
-  - △ Later milestone (M6) — the `consent.reevaluate` worker (recompute + bucket migration) and the consent-management UI
+  - ✓ B-01 — `consent.reevaluate` plus the consent-forced public → private bucket migration are durable workers; closure adds R92/deleted-schedule triggers, bounded startup convergence, one globally ordered shared-recording lock graph, exact-key retirement/recovery, retry-policy reconciliation and an exact-row public-origin gate whose external surface is limited to authorized GET/HEAD and SigV4 PUT, with bucket roots and all other S3 methods denied; the Admin override/consent-management UI remains M6
 - [x] `POST /family-links` — staff-mediated link of an existing child (§4.3 Revision 23)
   - ✓ Backend — Admin/Super Admin only with the TD-12 freshness assertion; creates a `Pending` link decided in the §5.6 queue; duplicate answers `DUPLICATE`, never `FAMILY_LINK_PENDING`
   - ✓ Tests — 11 service + 6 HTTP tests; five mutations caught, including one reopening parent self-service
@@ -383,7 +393,7 @@
 - [x] Enrolment service — enrol · un-enrol · **move within a Level as one action** (§5.6) · roster · `levelsForStudent`
   - ✓ `level_id` read from the group, never the caller; no capacity check anywhere (BR-23)
   - ✓ Gender restriction enforced, with a **null `sex` not eligible** rather than a wildcard (R27)
-  - △ **Consent enqueue emits `{ session_id }` and currently finds no sessions** — schedules are a later M3b task. The retiring `roster.service.ts` still emits `{ group_id }`; both shapes sit in the queue during the expand phase, and `consent.reevaluate` has **no consumer until M6**
+  - ✓ Consent enqueue emits `{ session_id }`; the live worker resolves the current R43/R92 Session audience and safely drains historical queue-only work
 - [x] Course schedule CRUD with conflict detection **against materialized Sessions** — room, teacher **and assistant** — under the TD-4.6c row lock; `SCHEDULE_CONFLICT`
   - ✓ Touching boundaries are **not** a conflict, so back-to-back classes stay legal; a **cancelled** session frees its room while keeping the row
   - ✓ Branch agreement enforced for group targets and rooms; BR-23 confirmed — a capacity of 1 refuses nothing
@@ -403,7 +413,7 @@
   - ✓ Content is **referenced, never owned** — unlinking leaves the file untouched, and one item may be referenced by many sessions
 - [ ] Approval assigns Levels and one Administrative Group each, in the approval transaction (TD-4.2, §4.1)
 - [ ] Quran as a schedulable Subject **with the BR-9 carve-out** — a Quran `LevelSubject` generates no grading components (§4.4b)
-- [ ] Consent gate re-subjected to the session's resolved audience; `consent.reevaluate` payload `{ session_id }` (BR-2, TD-7)
+- [x] Consent gate re-subjected to the session's resolved audience; `consent.reevaluate` payload `{ session_id }` (BR-2, TD-7)
 - [ ] Retire `CAPACITY_FULL` and the roster row-lock; `Room.capacity` informational (BR-23, TD-15.2)
 
 **API & screens**
@@ -638,7 +648,7 @@
   - [x] Signature-verified callback over the raw body; idempotent against duplicate and out-of-order delivery
   - [x] Defects: browser-vs-server provider URL · simultaneous start · orphaned egress · a failure path that could itself fail · missing `starting → stopping`
   - [x] 23 backend lifecycle · 17 HTTP wire · 30 frontend · `verify-livekit-join` **61/61**
-- [ ] **C2** — ingestion, storage import, `EducationalContent` + `SessionContent`, «التسجيلات» rendering, beneficiary visibility ladder, failure/retry
+- [x] **C2 — COMPLETE (2026-08-21)** — ingestion, storage import, `EducationalContent` + `SessionContent`, «التسجيلات» rendering, beneficiary visibility ladder, failure/retry
   - [x] **R75.6 naming is SERVER-computed** (2026-08-21) — one algorithm, one namespace per Session; the browser composes nothing and shows an editable suggestion. Latent UTC-date defect fixed on the way
   - [x] **«التسجيلات» is `origin`, not MIME** — an uploaded audio file is a material; a `video/mp4` session recording is a recording. Three guards restated
   - [x] **R99.12 upload marker** — `content_meta.origin`, bound into the ticket, describes and never permits: `video/*` still refused for both values
@@ -647,6 +657,7 @@
   - [x] **Server-side storage primitives** — stat · ranged head · `CopyObject` **inside MinIO** · delete. No 500 MB through Node
   - [x] **`session-recording-ingest`** — same-transaction enqueue from the verified callback, singleton per recording; the webhook persists and returns
   - [x] **Worker** — verify actual bytes (incl. media family) → durable copy → `EducationalContent` + `SessionContent` → link → sweep staging last
+  - [x] **R99 staging-cleanup recovery** — a post-commit delete failure now keeps the existing ingest job retryable; relation-first retries perform only the exact idempotent staging delete, survive worker restart, and never target canonical or unrelated objects
   - [x] **Idempotent under duplicate callback, retry and concurrency** — one object, one content row, one link, no false suffix increment
   - [x] **Defect found by C2's tests:** the transition table conflated *already there* with *just moved*, so a re-delivered completion enqueued a second job
   - [x] **`verify-livekit-ingest` 27/27** — the real «بدء التسجيل» button; a **27 s / 338 KB OGG** and an **11.4 s MP4** genuinely decoded by a real media element (`readyState`/`duration`), not merely fetched
@@ -719,6 +730,12 @@
 - [x] **Guard added:** the Prisma enum, the frontend union and the Arabic headlines must agree — proved against the defect
 - [x] **`verify-notifications`'s real scope stated**: it POSTs to `/notify`, so it proves the audience and not the flow. That gap is why it was green while manual use was not
 - [x] All 23 browser scripts green — **503 checks**
+
+### C-01 — Event cancellation notification (2026-08-21)
+- [x] The ordinary Event delete commits first; only an activity then offers the optional R82.5 notification decision. Decline sends no request. Classes/exams and Session R77/R83 behavior are unchanged
+- [x] `event_cancelled` reuses the existing route, adapter and Event audience resolver. The deleted Event's authoritative Trash scope and live Event staff freeze the audience without a schema, migration or second Event copy
+- [x] Only the recorded deleter can send after deletion; an unrelated valid administrator gets `404`. Repeat sends are idempotent and unrelated recipients receive nothing
+- [x] Focused verification: 27 backend HTTP integration tests · 8 frontend decision-flow tests · `verify-notify-ui` **37/37**, including the real DELETE-before-notify request order and the recipient's own bell
 
 ### R92 — cross-branch occurrence audiences (2026-08-20)
 - [x] **SRS Revision 92** + migration `20260820010000_r92_session_audience_branch`. `SessionAudienceBranch (session, branch)`, **replacement** semantics
@@ -1022,7 +1039,7 @@
 
 ### R60 — the Active Role as a security context (2026-08-11)
 - [x] `active_role` JWT claim; the token is **already narrowed** when it is present
-- [x] `POST /auth/switch-role` — live rows decide, 403 `ROLE_NOT_ASSIGNED` otherwise, audited
+- [x] `POST /auth/switch-role` — User-locked authoritative Active state and live assignments decide, 403 otherwise, audited; replacement expiry is capped at the presented bearer's verified expiry so switching cannot become refresh
 - [x] TD-12 freshness narrows too — the split that would have left high-risk endpoints unrestricted
 - [x] Refresh re-asserts, returns the granted role, and fails safe to the most privileged remaining
 - [x] `/me` reads live rows so the switcher keeps its menu
@@ -1094,14 +1111,16 @@
   - ✓ `upload_id` is a **signed ticket, not a table** — §7 defines no pending-upload entity, so `upload.gc` reaps objects no content row claims rather than reconciling a table against a bucket. The ticket binds every phase-one authorization decision so `/complete` cannot restate them
   - ✓ Teacher branch scope resolves through `CourseScheduleStaff` (§4.4c), never the role assignment
   - ✓ **Replace and delete** shipped with it (R53): replacement extends `/uploads/initiate` via `replaces_content_id`; `DELETE /content/{id}` soft-deletes, snapshots and quarantines
+  - ✓ **B-02 visibility/storage invariant:** `EducationalContent.visibility` is authoritative; creation derives its bucket, replacement inherits the existing row's tier, and completion rejects/discards a contradictory or pre-fix ticket before changing storage coordinates. Real PostgreSQL/MinIO coverage asserts database rows, both buckets, anonymous/public bytes, signed private reads, unrelated content and `SessionContent` links
+  - ✓ **B-03 immutable finalization (R103):** the presigned PUT targets `staging/content/...`; one full stable source read validates magic/length and hashes the exact accepted bytes into private server staging, then a re-hashed server-controlled PUT creates the 32-hex SHA-256-based canonical key. MD5 ETag is only an optional race optimization, never identity. Transactional audit publication, same-ticket convergence across different stable snapshots, replacement compare-and-swap, idempotent retry/restart and retained-PUT isolation are proven against real PostgreSQL/MinIO; unsafe legacy replacements without `replaces_version` fail closed and must be re-initiated. `upload.gc` remains the separate abandoned-object collector
   - ⚠ **Video is refused**, per TD-9's whitelist and §4.9 Revision 12. The Owner's brief asked for video support; widening the list is an SRS revision, not an implementation choice
 - [x] Authoritative per-user upload quota 30/hour in PostgreSQL (`RateLimitCounter`), locked + incremented in the initiate transaction (TD-4.12, TD-15.2); `429 RATE_LIMITED` envelope; never in-process memory, never pg-boss, never njs (§3.1 Revision 14)
 - [x] Magic-byte validation at /complete via ranged GET (bytes 0–511) to MinIO + HEAD size check; reject-and-delete (§4.9, TD-9)
-- [x] Hash-segmented immutable keys; replacement mints new key + quarantines old (TD-9)
+- [x] Hash-segmented immutable canonical keys; clients write staging only, completion canonicalizes one fully read SHA-256-verified byte stream, and replacement mints a new key + quarantines old (TD-9, R103)
 - [x] FileUploader: progress, failure, clean retry (R-9) (§14.3) — `XMLHttpRequest` for the PUT, because `fetch` cannot report upload progress
 - [~] Phone-recording upload guidance panel on /teacher/content (§4.9) — **panel shipped**; cross-browser playback E2E for TD-9 containers (§14.7) still to run
-- [ ] Visibility transitions + bucket-migrate job + `/content-unavailable` (§3.1, TD-4.9)
-- [ ] Consent re-evaluation engine wired to enrollment/teaching-group membership/consent/upload; consent_forced_private; **empty resolved audience → Category default** (§4.1a, §4.9, BR-2 as restated by R43)
+- [~] Visibility transitions + bucket-migrate job + `/content-unavailable` (§3.1, TD-4.9) — the consent-forced exact-key public → private worker and Nginx fail-closed public gate are complete; general visibility editing and the friendly stale-link page remain
+- [x] Consent re-evaluation engine wired to enrollment/Teaching Group membership, consent, R92 audience changes, retained Sessions after schedule deletion, recording upload/import/replacement and Session-content links; bounded startup sweep; monotonic `consent_forced_private`; **empty resolved audience disengages the gate** (§4.1a, §4.9, BR-2 as restated by R43)
 - [ ] Admin-only consent-gate override with mandatory justification + audit (BR-3, TD-8)
 - [x] Presigned GET mint with full permission + child-context check, 10 min TTL (TD-12)
 - [~] Resources directory nesting: Category→Level→Year(current pinned)→Branch(Global top)→Subject (§5.2)

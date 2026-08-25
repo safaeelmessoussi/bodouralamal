@@ -595,6 +595,7 @@ model User {
   auditEntries               AuditLog[]
   trashEntries               Trash[]
   rateLimitCounters          RateLimitCounter[]
+  refreshSessions            RefreshSession[]
   refreshTokens              RefreshToken[]
   /// R99 — recordings this person started or stopped. Two relations because a
   /// cover may stop what the main مؤطِّرة began, and both facts are audited.
@@ -642,6 +643,20 @@ model UserIdentity {
   @@unique([provider, providerSubjectId])
   @@index([email])
   @@map("user_identity")
+}
+
+/// Stable cross-table lock target for normalized email ownership decisions.
+///
+/// `User.preProvisionedEmail` and `UserIdentity.email` remain the authoritative
+/// ownership facts. This row deliberately carries no owner id: it exists only
+/// so registration, staff pre-provisioning, bootstrap and first binding can
+/// serialize an email that had no row in either ownership channel when their
+/// transactions began.
+model NormalizedEmailLock {
+  email     String   @id
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("normalized_email_lock")
 }
 
 model Role {
@@ -1751,15 +1766,37 @@ model ConsumedToken {
   @@map("consumed_token")
 }
 
-/// Why a session is dead (§7, Revision 16). `reuse_detected` is a security
-/// event — a rotated token was replayed outside the grace window.
+/// Why a session is dead (§7, Revisions 16, 101 and 102). `reuse_detected` is
+/// a security event — a rotated token was replayed outside the grace window.
 enum RefreshRevokedReason {
   logout
   suspension
   user_deleted
   reuse_detected
+  cookie_path_migration
+  rejection
 
   @@map("refresh_revoked_reason")
+}
+
+/// Stable database lock target for one refresh-token rotation chain (R101).
+///
+/// Token rows are generations and may be inserted by rotation or deleted by
+/// `token.purge`, so they cannot by themselves serialize the session at
+/// PostgreSQL READ COMMITTED. This row carries no credential or revocation
+/// state; it exists only for the lifetime of the chain and is removed once the
+/// last token row has been purged.
+model RefreshSession {
+  id     String @id @db.Uuid
+  userId String @map("user_id") @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  tokens RefreshToken[]
+
+  @@index([userId])
+  @@map("refresh_session")
 }
 
 /// One row per ISSUED refresh token (§7, Revision 16). This is the server-side
@@ -1781,7 +1818,8 @@ model RefreshToken {
   /// whole chain" (reuse detected) single indexed UPDATEs — walking
   /// `rotatedFromId` would need a recursive CTE, and §16.2 permits raw SQL
   /// only for row locks and pg-boss inserts.
-  sessionId String @map("session_id") @db.Uuid
+  sessionId String         @map("session_id") @db.Uuid
+  session   RefreshSession @relation(fields: [sessionId], references: [id], onDelete: Restrict)
 
   /// Hashed, NEVER raw (TD-12): a stolen database dump must not yield usable
   /// 30-day credentials. Unique (TD-6).

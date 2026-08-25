@@ -4,9 +4,9 @@
 
 **What exists, how each part is currently verified, and where the gaps are.**
 
-Derived from the repository on 2026-08-18 — the route table (`lib/route.ts` and
-the admin module registry), `app.ts`'s 140 mounted operations, `openapi.json`
-(107 paths / 141 operations), the TD-3 registry, and the test and harness files
+Derived from the repository on 2026-08-21 — the route table (`lib/route.ts` and
+the admin module registry), `app.ts`'s 155 mounted operations, `openapi.json`
+(119 paths / 155 operations), the TD-3 registry, and the test and harness files
 themselves. **Not** from the SRS's intentions: this page says what is *built*.
 
 ## How to read the verification columns
@@ -42,9 +42,9 @@ rather than summarised.
 | 12 | Cancellation | session row action | ✓ | ✓ `notification`, `business-scenario` | ✓ 18/18 | |
 | 13 | Restoration | session row action | ✓ | ✓ same | ✓ 18/18 | |
 | 14 | Rescheduling | session override | ✓ | ✓ `notification` (R78.4) | **gap** | API-verified only |
-| 14a | Event notice, optional | «إشعار المعنيين» after a save (R82.5) | ✓ | ✓ `notification-targets` | ✓ 19/19 `verify-notifications` | send / decline / repeat |
-| 14b | Event audience | scope → recipients (R82.7) | ✓ | ✓ `notification-targets` | ✓ within 19/19 | Level · Branch+Category · Category-wide · global |
-| 14c | Personal calendar | `GET /me/calendar` (R82.8) | ✓ | ✓ `notification-targets` | ✓ within 19/19 | asked as each of three people |
+| 14a | Event notice, optional | «إشعار المعنيين» after a saved create, reschedule or delete (R82.5) | ✓ `notify-confirmation` (8) | ✓ `notification-targets` (27) | ✓ 37/37 `verify-notify-ui` | delete commits first; send / decline / repeat |
+| 14b | Event audience | scope → recipients (R82.7) | ✓ | ✓ within `notification-targets` (27) | ✓ within 37/37 | Level · Branch+Category · Category-wide · global · deleted Event Trash snapshot |
+| 14c | Personal calendar | `GET /me/calendar` (R82.8) | ✓ | ✓ within `notification-targets` (27) | ✓ within 37/37 | asked as each of three people |
 | 14d | Grade published | publish → notice (R82.4) | ✓ | ✓ `notification-targets` | ✓ within `verify-grading` | draft is silent; republish idempotent |
 | 15 | Teaching profile | «الملف التدريسي» on **إدارة المؤطِّرات** (R88) | ✓ | ✓ `teaching-profile` (15) | ✓ 13/13 `verify-teaching-profile` | **planning data**; the screen says it grants nothing. Moved off `المستخدمون` 2026-08-19 — see 15b |
 | 15b | إدارة المؤطِّرات | `/admin/teachers` | ✓ `teachers.test.tsx` (14) | ✓ `user-management` R88 block (5) | ✓ within 13/13 | population = live `teacher` role; a مؤطِّرة who also studies is listed, a beneficiary who does not teach is not |
@@ -56,8 +56,8 @@ rather than summarised.
 | 15h | Class delivery حضوري / عن بُعد | `طريقة الحضور` on the class form and the occurrence editor (R97) | ✓ `delivery.test.ts` (21) | ✓ `delivery` (32) | ✓ 24/24 `verify-delivery` | one inheritance mechanism; an online occurrence holds no room; October stays October |
 | 15i | **Entering a class عن بُعد** | «دخول الحصة» → `/classroom/{id}` (R98) | ✓ `classroom.test.tsx` (23) | ✓ `online-class` (38) · `online-class.http` (9) | ✓ 46/46 `verify-livekit-join` | **بذور الأمل authorizes, the provider executes**; a REAL three-party room; expired/future/capability-only مؤطِّرة refused; guardian enters as the child; room derived, never stored |
 | 15j | **Recording an online class** | «بدء التسجيل» inside the classroom (R99) | ✓ within `classroom.test.tsx` (30) | ✓ `session-recording` (23) · `online-class.http` (17) | ✓ within 61/61 `verify-livekit-join` | **optional and explicit** — joining records nothing; server-side capture survives the starter's tab closing; صوت وصورة → real MP4, صوت فقط → real OGG; signed idempotent callback; beneficiary refused 403 but still sees «جاري التسجيل» |
-| 15k | **Importing a recording into the library** | «التسجيلات» on the Session page and the content library (R99 C2) | ✓ within `classroom.test.tsx` (31) | ✓ `session-recording-ingest` (19) · `session-page.http` (19) · `upload.http` (14) | ✓ 27/27 `verify-livekit-ingest` | **provider `completed` is not «متاح»** — availability is derived from the content row existing; a real OGG and a real MP4 **played by a real media element** (`readyState`/`duration`); the URL is Bodour's, never staging; different-Level beneficiary refused 404; ordinary MP4 upload still refused, marker or no marker |
-| 21 | **Notifications, end to end through the UI** | cancel · reschedule · event · grade publish → the recipient's own bell | ✓ `notification-types` (6) · `notify-confirmation` (7) | ✓ `notification-targets`, `session-audience` (23) | ✓ 27/27 `verify-notify-ui` | the button a person presses, and the notice she reads |
+| 15k | **Importing a recording into the library** | «التسجيلات» on the Session page and the content library (R99 C2) | ✓ within `classroom.test.tsx` (31) | ✓ `session-recording-ingest` (22) · `session-page.http` (19) · `upload.http` (14) | ✓ 27/27 `verify-livekit-ingest` | **provider `completed` is not «متاح»** — availability is derived from the content row existing; a real OGG and a real MP4 **played by a real media element** (`readyState`/`duration`); the URL is Bodour's, never staging; different-Level beneficiary refused 404; ordinary MP4 upload still refused, marker or no marker |
+| 21 | **Notifications, end to end through the UI** | Session cancel/reschedule · Event create/cancel · grade publish → the recipient's own bell | ✓ `notification-types` (6) · `notify-confirmation` (8) | ✓ `notification-targets` (27) · `session-audience` | ✓ 37/37 `verify-notify-ui` | the button a person presses, and the notice she reads |
 | 15a | Capability ≠ authorization | declared-everything teacher (R88.3) | ✓ | ✓ within the 15 | — | no roster, no Quran marker, no class in her calendar |
 | 15 | Content library | `/admin/content`, `/teacher/content` | ✓ | ✓ `library`, `content`, `upload` | ✓ 16/16 recorder | |
 | 16 | Session materials | materials dialog | ✓ | ✓ `session-page` | ✓ 22/22 | |
@@ -107,7 +107,7 @@ under the table.
 | `verify-quran-entry.sh` | 24 | **Section C** — إدخال الحفظ driven as ten identities: Admin and مؤطِّرة and assistant entry, حفظي's bars and history, reload persistence, whole-Level/Group/Circle rosters, R88 granting nothing, R91 both ways, R92 reached then narrowed, مراجعة not inflating, two-Level grouping, a forged Surah refused | 24/24 |
 | `verify-occurrence-details.sh` | 23 | **AT** — the one details dialog opened from all four calendars on a real Session; two content sections; no page step; every focused read a 200 | 13/13 |
 | `verify-teacher-scheduling.sh` | 22 | **The merged مؤطرة surface** — one node, the calendar+table page, a responsible selector offering only her, an activity she creates end to end with an assistant (asserted from the network layer), **R93's assignment notice in the assistant's own bell**, and **R94's type picker** — نشاط + امتحان, never حصة, with an exam saved against one of her own classes | 12/12 |
-| `verify-notify-ui.sh` | 21 | **The notification pipeline as a person uses it** — clicks «إرسال الإشعار», logs in as the recipient, reads the notice from her own bell; R91/R92 recipients, **and the grade-republish reactivation** | 32/32 |
+| `verify-notify-ui.sh` | 21 | **The notification pipeline as a person uses it** — clicks «إرسال الإشعار», logs in as the recipient, reads the notice from her own bell; R91/R92 recipients, Event deletion/cancellation, **and the grade-republish reactivation** | 37/37 |
 | `verify-cross-branch.sh` | 15g, 20 | **R91 × R92** — six identities on one combined occurrence: audience, venue, calendars, notifications and staffing, each asked of the person it concerns | 16/16 |
 | `verify-effective-staffing.sh` | 15e, 15f | **R91** — the replacement as four identities: dated rows, Safa twice, per-date occurrences, and a handover that leaves the past alone | 13/13 |
 | `verify-staff-picker.sh` | 15c, 10 | **AR** — five مؤطِّرات an administrator must tell apart; all offered, each marked **before** the choice and named after it, nothing disabled, the one with no profile assigned anyway | 13/13 |
@@ -123,6 +123,10 @@ under the table.
 carried forward. `verify-circles-reorder` failed once on keyboard-reorder timing
 and passed 9/9 on re-run — recorded because a transient that is not written down
 is one somebody re-investigates.
+
+The C-01 slice reran the focused `verify-notify-ui` harness at **37/37** on
+2026-08-21. The 508-check statement above remains the most recent complete
+all-harness sweep; this focused result is not folded into that historical total.
 
 ### Why `verify-notifications` was green while the feature was not
 

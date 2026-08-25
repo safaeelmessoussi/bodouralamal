@@ -7,9 +7,9 @@ import { createHmac, hkdfSync, timingSafeEqual } from 'node:crypto';
  * ## Why a signed token and not a table
  *
  * TD-3.5 is a two-phase flow: `/initiate` mints a presigned PUT, the browser
- * uploads straight to MinIO, and `/complete` verifies the object and creates the
- * `EducationalContent` row. Something has to carry the decisions taken at phase
- * one into phase two.
+ * uploads straight to a staging key, and `/complete` verifies and promotes the
+ * object before creating the `EducationalContent` row. Something has to carry
+ * the decisions taken at phase one into phase two.
  *
  * **§7 defines no pending-upload entity**, and inventing one would be a schema
  * decision the specification has not taken — plus a table that can disagree with
@@ -20,8 +20,9 @@ import { createHmac, hkdfSync, timingSafeEqual } from 'node:crypto';
  *
  * ## What the token binds, and what it does not
  *
- * **Everything an authorization decision depends on** — the caller, the target
- * key and bucket, the declared size and MIME type, and the §4.9 scope fields
+ * **Everything an authorization decision depends on** — the caller, the staging
+ * key and bucket, the finalization identity, the declared size and MIME type,
+ * and the §4.9 scope fields
  * (level, subject, academic year, branch, visibility). All of those are checked
  * at `/initiate`, so a `/complete` that could restate them would let a Teacher
  * initiate inside their branch and complete into the Global scope — re-running
@@ -51,7 +52,15 @@ export interface UploadTicketClaims {
    *  because TD-9's key structure embeds it. */
   cid: string;
   bucket: string;
+  /** Browser-writable staging key. It is never stored on EducationalContent. */
   key: string;
+  /**
+   * Stable identity of one finalization grant. The canonical key is derived
+   * from this value and the full accepted stream's SHA-256. Optional only for
+   * tickets minted before B-03; those receive a deterministic legacy identity
+   * at completion.
+   */
+  finalization_id?: string;
   filename: string;
   mime: string;
   size: number;
@@ -74,6 +83,8 @@ export interface UploadTicketClaims {
   /** Set when this upload replaces the file on an existing content record
    *  (TD-9: a new key, the old object quarantined, never an overwrite). */
   replaces?: string;
+  /** Version observed when a replacement grant was minted (TD-15/B-03 CAS). */
+  replaces_version?: number;
   iat: number;
   exp: number;
 }
@@ -135,6 +146,8 @@ export function verifyUploadTicket(
     typeof claims.bucket !== 'string' ||
     typeof claims.mime !== 'string' ||
     typeof claims.size !== 'number' ||
+    (claims.finalization_id !== undefined && typeof claims.finalization_id !== 'string') ||
+    (claims.replaces_version !== undefined && typeof claims.replaces_version !== 'number') ||
     typeof claims.exp !== 'number'
   ) {
     return { valid: false, reason: 'malformed' };
