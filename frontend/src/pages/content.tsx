@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import { kindOf, type ContentKind } from '../adapters/content.js';
 import { deleteContent } from '../adapters/uploads.js';
@@ -185,26 +185,49 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
   const [suggestedName, setSuggestedName] = useState('');
 
   /**
-   * **§14.1's visibility selection.** The screen was built without it: the
-   * service accepted `meta.visibility`, the client type declared it, the Arabic
-   * labels existed for the table column — and no control ever emitted a value,
-   * so the Category default silently always won and nobody could publish
-   * privately. Rule P, found by an Owner trying to use the screen.
+   * **§14.1's visibility selection**, and the three ways the first attempt at
+   * it was wrong — all found by an Owner operating the real screen, none
+   * findable by the source-text tests that shipped with it.
    *
-   * `null` means *not chosen yet*; the effect below fills it from the Category
-   * as soon as the Level makes one knowable, which is what "honouring Category
-   * defaults" means. It is never initialised to a literal: preselecting
-   * `public` because a list had not arrived is how content gets published by
-   * accident.
+   * 1. It passed `busy={visibility === null}`, which `SelectField` maps to
+   *    `disabled`. Before a Level was chosen the control was present and
+   *    **inoperable** — *«I cannot actually choose another value»*.
+   * 2. It passed `value={visibility ?? ''}` with **no `''` option**, so the
+   *    browser fell back to rendering the first option, **عام**. The control
+   *    displayed *public* while holding nothing and sending nothing: the
+   *    original defect wearing a dropdown.
+   * (1) and (2) are what the Owner actually hit, and the browser regression
+   * catches both — verified by reintroducing each and watching it fail.
+   *
+   * A third concern was **suspected and could not be demonstrated**: an effect
+   * that mirrors the default on every recomputation would overwrite a
+   * deliberate choice. Driving it in a real browser, the naive form and this
+   * one behave identically on real data, so it is recorded as unproven rather
+   * than claimed as a fixed defect.
+   *
+   * `initialisedFor` is kept anyway, for two reasons that do not depend on that
+   * suspicion: it states §14.1's rule *"propose once per Level, then respect
+   * the person"* in a form a reader can check, and it makes the effect
+   * unable to wipe a selection if the resolved default ever goes momentarily
+   * unknown. It is cheap, and it is legible.
    */
   const [visibility, setVisibility] = useState<string | null>(null);
+  const initialisedFor = useRef<string | null>(null);
   const categoryDefault = scope.defaultVisibility;
   useEffect(() => {
-    // Follows the Level. Choosing a different Level re-proposes that Category's
-    // default rather than carrying the previous one across, because the default
-    // is a property of where the content is going, not of this dialog.
+    if (levelId === '') {
+      // No target, so no honest default to show. The placeholder says so.
+      initialisedFor.current = null;
+      setVisibility(null);
+      return;
+    }
+    // Not knowable yet — WAIT rather than propose. Clobbering a person's
+    // selection because a list was still arriving is defect (3) above.
+    if (categoryDefault === null) return;
+    if (initialisedFor.current === levelId) return;
+    initialisedFor.current = levelId;
     setVisibility(categoryDefault);
-  }, [categoryDefault]);
+  }, [levelId, categoryDefault]);
 
   const meta = useMemo(
     () => ({
@@ -397,7 +420,12 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
         <SelectField
           label={t('content.col.visibility')}
           value={visibility ?? ''}
-          busy={visibility === null}
+          // **Honest while unknown, and never disabled.** The placeholder gives
+          // `''` a real option, so the browser cannot fall back to rendering
+          // عام for a state that is actually `null`. It is offered only while
+          // the value IS unknown: once a tier is chosen there is nothing
+          // truthful for an empty option to mean.
+          {...(visibility === null ? { placeholder: t('common.choose') } : {})}
           onChange={setVisibility}
           options={[
             { value: 'public', label: t('content.visibility.public') },
