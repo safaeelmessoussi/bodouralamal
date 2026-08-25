@@ -213,6 +213,24 @@ curl https://<domain>/healthz
 ```
 
 If step 2a returns rows, **stop**. The migration will refuse the same state, deliberately.
+**Worked example, 2026-08-25 (development).** `safae1025@gmail.com` was claimed by two live
+Users: **علا علام**, holding an *active bound* `UserIdentity` on it since 2026-08-02, and a
+**pending** account pre-provisioned with the same address ten days later that nobody had ever
+signed into. The Owner resolved it in favour of the bound identity and authorised clearing
+**only** `pre_provisioned_email` on the pending row — no deletion, no merge, no change to the
+identity, roles, enrolments or audit. The migration was then re-run normally.
+
+Prisma records an aborted attempt as **failed**, so `migrate deploy` refuses until it is
+resolved. Confirm the transaction genuinely left nothing behind — the `RAISE` aborts the whole
+migration, so `to_regclass('public.normalized_email_lock')` should be `ABSENT` and no later
+migration should have applied — and only then mark it rolled back, which is the truthful
+record, before deploying again:
+
+```bash
+npx prisma migrate resolve --rolled-back "20260823210000_normalized_email_ownership_lock"
+npx prisma migrate deploy
+```
+
 Do not clear `pre_provisioned_email`, deactivate an identity, or merge Users merely to make
 the command pass: those operations decide which person owns a verified address and may also
 destroy the provenance §4.1b requires. Have the association identify the intended account,
