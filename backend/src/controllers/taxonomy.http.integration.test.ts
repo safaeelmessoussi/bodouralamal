@@ -279,6 +279,65 @@ describe("Subjects (§5.6 الفئات والمواد)", () => {
 describe("Levels (§5.6 مستويات, TD-4.6b)", () => {
   let levelId = "";
 
+  /**
+   * §14.1 requires the upload screen to *honour* the Category default, and a
+   * screen cannot honour a value it has no way to read. The default therefore
+   * rides the Level — the list every scoping screen already loads — rather
+   * than the Category, which is Admin-only (TD-2 R26, R30) and which the
+   * content page never requests.
+   *
+   * **The defect this guards:** the selector was missing entirely, so the
+   * default silently always won and nobody could publish privately. A field
+   * that reported the wrong default would reproduce it in a subtler form —
+   * the screen would show one tier and the server would store another.
+   */
+  it("carries its Category's §15.1 default visibility, read rather than assumed", async () => {
+    const created = await call("POST", "/admin/categories", superAdmin, {
+      name: `${TAG} فئة الظهور`,
+    });
+    const category = String((created.body.data as unknown as Record<string, unknown>)["id"]);
+    const level = await call("POST", "/admin/levels", superAdmin, {
+      name: `${TAG} مستوى الظهور`,
+      category_id: category,
+      gender_restriction: "any",
+    });
+    expect(level.status).toBe(201);
+    const levelRowId = String((level.body.data as unknown as Record<string, unknown>)["id"]);
+
+    const withoutSetting = (await call("GET", "/admin/levels", superAdmin)).body
+      .data as unknown as { id: string; default_visibility: string }[];
+    // No settings row yet. `private` is the safe tier and the one the server's
+    // own `categoryDefaultVisibility` falls back to — never `public`.
+    expect(withoutSetting.find((row) => row.id === levelRowId)?.default_visibility).toBe(
+      "private",
+    );
+
+    await prisma.systemSetting.create({
+      data: { key: `content.default_visibility.category.${category}`, value: "public" },
+    });
+    const withSetting = (await call("GET", "/admin/levels", superAdmin)).body
+      .data as unknown as { id: string; default_visibility: string }[];
+    expect(withSetting.find((row) => row.id === levelRowId)?.default_visibility).toBe(
+      "public",
+    );
+
+    await prisma.systemSetting.updateMany({
+      where: { key: `content.default_visibility.category.${category}` },
+      data: { value: "nonsense" },
+    });
+    const withGarbage = (await call("GET", "/admin/levels", superAdmin)).body
+      .data as unknown as { id: string; default_visibility: string }[];
+    // Never widen on a surprise: a malformed settings row must not propose the
+    // open tier.
+    expect(withGarbage.find((row) => row.id === levelRowId)?.default_visibility).toBe(
+      "private",
+    );
+
+    await prisma.systemSetting.deleteMany({
+      where: { key: `content.default_visibility.category.${category}` },
+    });
+  });
+
   it("R66: creates ONLY the Level — no group, and no branch to ask for", async () => {
     // TD-4.6b created a first group in the same transaction, which is why this
     // endpoint used to demand a branch. R66 retires it: a Level belongs to a

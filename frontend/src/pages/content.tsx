@@ -11,6 +11,7 @@ import { DataTable, type Column, type RowAction, type TableStatus } from '../com
 import { Button } from '../components/ui/button.js';
 import { Dialog } from '../components/ui/dialog.js';
 import { ScopeSelectors } from '../components/scope/scope-selectors.js';
+import { SelectField } from '../components/ui/field.js';
 import { useScopeOptions } from '../hooks/use-scope-options.js';
 import { useSession } from '../contexts/session.js';
 import { useActiveRole } from '../contexts/active-role.js';
@@ -183,14 +184,40 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
    */
   const [suggestedName, setSuggestedName] = useState('');
 
+  /**
+   * **§14.1's visibility selection.** The screen was built without it: the
+   * service accepted `meta.visibility`, the client type declared it, the Arabic
+   * labels existed for the table column — and no control ever emitted a value,
+   * so the Category default silently always won and nobody could publish
+   * privately. Rule P, found by an Owner trying to use the screen.
+   *
+   * `null` means *not chosen yet*; the effect below fills it from the Category
+   * as soon as the Level makes one knowable, which is what "honouring Category
+   * defaults" means. It is never initialised to a literal: preselecting
+   * `public` because a list had not arrived is how content gets published by
+   * accident.
+   */
+  const [visibility, setVisibility] = useState<string | null>(null);
+  const categoryDefault = scope.defaultVisibility;
+  useEffect(() => {
+    // Follows the Level. Choosing a different Level re-proposes that Category's
+    // default rather than carrying the previous one across, because the default
+    // is a property of where the content is going, not of this dialog.
+    setVisibility(categoryDefault);
+  }, [categoryDefault]);
+
   const meta = useMemo(
     () => ({
       level_id: levelId,
       subject_id: subjectId,
       academic_year_id: academicYearId,
       branch_id: branchId === '' || branchId === GLOBAL ? null : branchId,
+      // Sent explicitly once it is knowable. The server's Category fallback
+      // stays as the contract's default for other callers, but this screen no
+      // longer relies on it: what the person saw is what is sent.
+      ...(visibility === null ? {} : { visibility: visibility as 'public' | 'private' | 'hidden' }),
     }),
-    [levelId, subjectId, academicYearId, branchId],
+    [levelId, subjectId, academicYearId, branchId, visibility],
   );
 
   /**
@@ -353,6 +380,31 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
       </Dialog>
 
       <Dialog open={uploading} onClose={() => setUploading(false)} title={t('content.upload.action')}>
+        {/**
+          * §14.1 — offered on UPLOAD only. Replacement deliberately has no such
+          * control: R53 keeps the record and changes only the object, so the
+          * existing row's visibility is authoritative and a selector there
+          * would quietly turn a file swap into a publication decision.
+          *
+          * All three tiers are offered to everyone who can reach this screen,
+          * and that is derived rather than assumed: `assertUploadScope` gates
+          * the Global/branch scope and nothing else, so §4.9 places no
+          * per-role limit on the tier itself. §14.1's *"not editable by
+          * Teachers"* is about the consent-forced state, which no new upload
+          * can be in — `consent_forced_private` starts false and only BR-2 may
+          * set it, never a person and never this form.
+          */}
+        <SelectField
+          label={t('content.col.visibility')}
+          value={visibility ?? ''}
+          busy={visibility === null}
+          onChange={setVisibility}
+          options={[
+            { value: 'public', label: t('content.visibility.public') },
+            { value: 'private', label: t('content.visibility.private') },
+            { value: 'hidden', label: t('content.visibility.hidden') },
+          ]}
+        />
         <FileUploader
           meta={meta}
           token={accessToken}

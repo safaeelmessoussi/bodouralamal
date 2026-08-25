@@ -1,9 +1,9 @@
 # Tasks — بذور الأمل Platform
 
-## Defect — the Content Upload screen has no visibility selector (§14.1)
+## ✅ FIXED — the Content Upload screen had no visibility selector (§14.1)
 
 **Found 2026-08-25 by an Owner performing a real upload on Staging and being unable to mark
-it private.**
+it private. Fixed the same day, before Staging acceptance.**
 
 §14.1 specifies the node as:
 
@@ -19,8 +19,7 @@ The selection does not exist. Everything around it does:
 | `UploadMeta` (client type) | **declares** `visibility?: 'public' \| 'private' \| 'hidden'` |
 | `content.tsx` | renders visibility as a **read-only column** and never sets it |
 | i18n | `content.visibility.public/private/hidden` exist and are used — for the column |
-| `docs/openapi.json` | `content_meta` has **no declared properties at all**, so the contract
-  describes neither `visibility` nor `origin` nor `replaces_content_id` |
+| `docs/openapi.json` | already documented `visibility?` in prose — see the correction below |
 
 So the platform silently always takes the Category default. On the staging fixtures that is
 `public` for الكبار, which is why an Owner asking for private content got public content and
@@ -28,18 +27,47 @@ no control to change it.
 
 **This is rule P again — a complete capability with no reach — and it is the seventh
 instance.** The service, the client type and the copy were all built; the control was not.
-The empty `content_meta` schema is why no contract gate caught it.
 
-Bounded fix: add the selector to the shared content form, defaulted from the Category and
-disabled (not hidden) when `consent_forced_private` is true, per §14.1 and rule O. Give
-`content_meta` real properties in the generator so the contract stops under-describing the
-request. **Not done inside the staging slice** — it is product work, and the Owner's
-instruction was to determine intended behaviour and report rather than modify the product to
-satisfy a test.
+> **Correction to the first report of this defect.** It said the OpenAPI document omitted
+> `visibility` from `content_meta`. It does not: the `/uploads/initiate` description already
+> lists `{ … visibility?, origin?, replaces_content_id? }` and states the Category fallback.
+> What is true is that the generator emits **no request-body schema for any operation** —
+> bodies are documented in prose throughout, by design, because TD-3 is canonical and OpenAPI
+> is a generated artifact. So the contract was **not** incomplete here, and adding a schema
+> for this one operation would have introduced a second convention into a document that
+> uniformly has none. **No OpenAPI schema change was made.**
 
-Private content remains reachable today without it: two of the three seeded Categories
-default to `private`, so uploading to a Level in one produces private content — which is also
-how automated staging E2E can cover the private path without any UI change.
+### What was built
+
+A `SelectField` on the **upload** dialog only, offering the three tiers through the existing
+`content.visibility.*` labels — no new terminology and no new i18n keys.
+
+**The default rides the Level, not the Category, and that is the load-bearing decision.**
+`GET /admin/categories` is Admin-only (TD-2 R26, R30) and the content page never requests it,
+so resolving the default through a Category list would have returned `null` on every screen
+that needs it — *the same defect in a new place*. It now travels on `LevelDto`
+(`default_visibility`), which is the very list that offers the Level, so a screen that can
+offer a Level can always honour its default. That also mirrors the server:
+`categoryDefaultVisibility` is keyed on a **level id**.
+
+Four properties the implementation holds deliberately:
+
+- **Absent is never `public`.** No Level chosen, list not arrived, or a payload predating the
+  field all resolve to `null` — the selector waits rather than proposing the open tier. A
+  dialog that preselected `public` because a request was slow would publish content by
+  accident.
+- **A malformed settings row resolves to `private`**, server-side and client-side. Never
+  widen on a surprise.
+- **Replacement has no selector**, so R53 stays a file swap rather than becoming a
+  publication decision; the row's own visibility remains authoritative.
+- **`consent_forced_private` is not reachable from this form.** BR-2 owns it, a new upload
+  starts `false`, and lifting it is BR-3's separate Admin-with-justification workflow —
+  deliberately not this slice.
+
+All three tiers are offered to everyone who can reach the screen, and that is *derived*:
+`assertUploadScope` gates the Global/branch scope and nothing else, so §4.9 places no
+per-role limit on the tier itself. §14.1's *"not editable by Teachers"* is about the
+consent-forced state, which no new upload can be in.
 
 ## Next engineering cleanup — CI has been red on `develop` since before 2026-08-20
 

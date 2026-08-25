@@ -1141,6 +1141,9 @@ export interface LevelDto extends LevelCoreDto {
   group_count: number;
   subject_count: number;
   enrollment_count: number;
+  /** §4.9's default content visibility for this Level, through its Category
+   *  (§15.1). §14.1's upload screen preselects it. */
+  default_visibility: string;
 }
 
 /**
@@ -1160,6 +1163,7 @@ export function levelDto(row: {
   groupCount: number;
   subjectCount: number;
   enrollmentCount: number;
+  defaultVisibility: string;
   version: number;
 }): LevelDto {
   return {
@@ -1172,6 +1176,7 @@ export function levelDto(row: {
     group_count: row.groupCount,
     subject_count: row.subjectCount,
     enrollment_count: row.enrollmentCount,
+    default_visibility: row.defaultVisibility,
     version: row.version,
   };
 }

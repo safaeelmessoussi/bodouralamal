@@ -25,6 +25,14 @@ export interface Category {
   display_order: number | null;
   /** Live Levels in this Category — what says whether deleting it is possible. */
   level_count: number;
+  /**
+   * §4.9's default content visibility for this Category (§15.1).
+   *
+   * The upload screen preselects it, which is what §14.1's *"visibility
+   * selection honoring Category defaults"* means in practice. Optional on the
+   * type because create/update responses do not read the settings table.
+   */
+  default_visibility?: 'public' | 'private' | 'hidden';
   /** TD-15: loaded by the edit form and sent back; a stale one is a `409`. */
   version: number;
 }
@@ -117,6 +125,13 @@ export async function deleteSubject(id: string, token: string | null): Promise<v
 export type GenderRestriction = 'any' | 'girls_only' | 'boys_only';
 
 export interface Level {
+  /**
+   * §4.9's default content visibility for this Level, through its Category
+   * (§15.1). §14.1's upload screen preselects it, and it rides the Level
+   * because that is the list the screen loads — a default the screen cannot
+   * read is a default it cannot honour.
+   */
+  default_visibility?: 'public' | 'private' | 'hidden';
   id: string;
   name: string;
   category_id: string;
