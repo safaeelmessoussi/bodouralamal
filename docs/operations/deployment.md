@@ -132,6 +132,12 @@ everything else to TLS.
 **Renewal failure alerts at 21 days remaining** — never discovered as a browser error by a
 user.
 
+**Certbot writing a new certificate is not the same as serving it.** Nginx holds the
+certificate in memory and keeps serving the old one until it reloads, so a renewal loop on
+its own produces a current file on disk behind an expired certificate on the wire — a
+failure that looks like certbot's and is not. The `nginx` service therefore runs a six-hour
+`nginx -s reload` loop beside its worker, well inside the 30-day renewal window.
+
 ## What the seed does, and does not do
 
 **Does** (idempotently, safe to re-run):
@@ -189,6 +195,24 @@ Step 6 there is followed by `npm run seed:fixtures`, which is the only added ste
 
 **Never copy a development database or its MinIO objects into Staging.** A developer's
 database is not fixture data.
+
+Two committed pieces make the Staging host reproducible from Git, and neither holds a secret:
+
+| File | What it is |
+|---|---|
+| `docker-compose.staging.yml` | Hard container memory ceilings for a small VPS, on top of the soft budgets the base file already sets. It publishes no port, relaxes no limit and substitutes no security setting — an overlay that changed behaviour would be changing the very thing Staging exists to rehearse |
+| `scripts/deploy/enable-tls.sh` | Performs `tls.conf.example`'s manual steps 1–3 **idempotently**, refuses to run before the certificate exists, and keeps the ACME location above the redirect |
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.staging.yml \
+  --profile production up -d
+```
+
+`scripts/deploy/enable-tls.sh` exists because those steps were manual, un-rerunnable, and
+asked an operator to hand-edit a tracked file during the one window where the site is
+already public. Activating the TLS block **before** the certificate exists is worse than it
+sounds: `ssl_certificate` pointing at a missing file is a hard config error, so Nginx does
+not start at all. The script checks first.
 
 ## The dress rehearsal
 

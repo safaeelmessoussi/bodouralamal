@@ -159,6 +159,28 @@ volume mounted at `/var/lib/postgresql`, not `/var/lib/postgresql/data`.** Data 
 major-version subdirectory, which is what keeps `pg_upgrade --link` possible without
 mount-boundary issues. Mounting at `.../data` makes the container refuse to start outright.
 
+## What the Staging VM backup does and does not cover
+
+OVH Standard automated VM backup is enabled on the Staging host. It is a **whole-VM
+snapshot**, so what it covers follows from where things sit rather than from any application
+configuration:
+
+| | Covered? | Because |
+|---|---|---|
+| PostgreSQL data | yes | `bodour_db-data` is a Docker volume under `/var/lib/docker/volumes`, on the root filesystem |
+| MinIO objects | yes | `bodour_minio-data`, same place |
+| TLS certificate and ACME state | yes | `bodour_certbot-conf` / `bodour_certbot-www`, same place |
+| `/opt/bodour/.env` and `infra.env` | **yes — and this matters** | The snapshot therefore contains every staging secret. Treat a restored image as credential-bearing |
+
+**This closes nothing for Production.** A VM snapshot is not the specified backup: §6 requires
+a **second Moroccan location**, a tested restore, and an RTO the drill has actually met. A
+snapshot of the wrong country would not satisfy Law 09-08 even if it were tested, and it has
+not been. `backup.replicate` remains unbuilt and production backup/restore remains an open
+readiness item.
+
+For Staging specifically, losing the VM costs nothing that cannot be rebuilt: it holds only
+fixtures, and the deployment is reproducible from Git plus regenerated secrets.
+
 ## The dress rehearsal still runs on the real VPS
 
 Staging exercises a great deal that Preview never could — TLS automation, the memory ceiling

@@ -27,13 +27,18 @@ server {
     ssl_prefer_server_ciphers off;
     ssl_session_cache         shared:SSL:10m;
     ssl_session_timeout       1d;
-    ssl_stapling              on;
-    ssl_stapling_verify       on;
+    # OCSP stapling is deliberately OFF. Let's Encrypt stopped publishing an
+    # OCSP responder URL in its certificates, so `ssl_stapling on` staples
+    # nothing and emits `"ssl_stapling" ignored, no OCSP responder URL` on every
+    # start and reload. Dead config that warns forever trains an operator to
+    # ignore nginx warnings, which is the actual cost.
+    ssl_stapling              off;
 
-    # HSTS is safe here and only here: this block exists only when a real
-    # certificate is installed. It is deliberately absent from the HTTP server
-    # so local development is unaffected.
-    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    # HSTS is NOT set here. `add_header` does not inherit into a location that
+    # declares its own, and every routed location does — so a header on this
+    # block reached nothing. It is emitted per-location from the $hsts map in
+    # nginx.conf, which is empty over plain HTTP and therefore still absent in
+    # local development, exactly as this template originally intended.
 
     # Identical routing to the HTTP server — one shared snippet, so the two
     # can never drift (§19.0: no environment-conditional security divergence).

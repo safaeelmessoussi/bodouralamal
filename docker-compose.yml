@@ -113,6 +113,15 @@ services:
 
   nginx:
     image: nginx:stable-alpine
+    # **Reload periodically, or the renewal never reaches the browser.**
+    # `certbot renew` writes a new certificate to disk; nginx keeps the old one
+    # in memory until it reloads. Without this the certificate renews on the
+    # 12-hour loop below, the file on disk is current, and the site serves an
+    # expired certificate anyway — a failure that looks like certbot's and is
+    # not. Six hours is well inside Let's Encrypt's 30-day renewal window.
+    command: >
+      /bin/sh -c "while :; do sleep 6h & wait $${!}; nginx -s reload; done &
+      nginx -g 'daemon off;'"
     ports:
       - "80:80"
       - "443:443"

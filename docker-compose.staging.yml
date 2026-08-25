@@ -1,0 +1,46 @@
+# Staging overlay (SRS §19.0 Revision 104) — the Staging tier, not Preview.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.staging.yml \
+#     --profile production up -d
+#
+# It is a SEPARATE file, never `docker-compose.override.yml`, for the same
+# reason the dev overlay is: Compose must not merge it by accident.
+#
+# WHAT THIS FILE MAY CONTAIN: resource ceilings for a small VPS. Nothing else.
+# It publishes no port, relaxes no rate limit, substitutes no security setting
+# and holds no secret — R104 clause (3) makes Staging production-shaped in every
+# particular, so an overlay that changed behaviour would be changing the thing
+# the environment exists to rehearse.
+#
+# The pins here are HARD ceilings on top of the soft budgets the base file
+# already sets (`NODE_OPTIONS --max-old-space-size=768`, `GOMEMLIMIT=512MiB`,
+# `shared_buffers=256MB`). Soft budgets keep a runtime tidy; a hard ceiling is
+# what stops one container taking the box down with the other three on it.
+#
+# Sized for 2 vCPU / 3.7 GiB usable: 1024 + 768 + 768 + 96 ≈ 2.6 G, leaving
+# roughly 1.1 G for the kernel, the host and page cache. Swap (4 G) is a safety
+# net for the build peak, not part of this budget.
+
+services:
+  api:
+    mem_limit: 1024m
+    memswap_limit: 1536m
+
+  db:
+    mem_limit: 768m
+    memswap_limit: 1024m
+
+  minio:
+    mem_limit: 768m
+    memswap_limit: 1024m
+
+  nginx:
+    mem_limit: 96m
+    memswap_limit: 128m
+
+  # One-shot; it exits immediately after creating buckets and policies.
+  minio-init:
+    mem_limit: 64m
+
+  certbot:
+    mem_limit: 128m

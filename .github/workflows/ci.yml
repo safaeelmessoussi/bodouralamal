@@ -43,6 +43,8 @@ jobs:
         run: bash scripts/ci/check-progress-css.sh
       - name: Shared page-header and button layout invariants
         run: bash scripts/ci/check-shared-layout.sh
+      - name: Every Nginx header set carries HSTS
+        run: bash scripts/ci/check-security-headers.sh
       - name: Association terminology remains consistent
         run: bash scripts/ci/check-association-terminology.sh
       - name: Arabic UI uses Western numerals
