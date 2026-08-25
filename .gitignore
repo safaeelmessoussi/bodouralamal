@@ -24,3 +24,6 @@ backend/src/generated/
 /favicon.png
 /intro-video.mp4
 /landing_Image.png
+
+# Generated on a deployed host by scripts/deploy/enable-tls.sh (never committed).
+nginx/conf.d/tls.conf
