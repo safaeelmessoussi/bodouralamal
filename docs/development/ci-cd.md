@@ -170,6 +170,44 @@ the ledger** rather than drive-by additions:
 - Container-image publication; the backend/frontend jobs verify application production builds
   but do not publish deployable images
 
+## The release flow (binding — Document Owner, 2026-08-25)
+
+**One commit travels the whole way, and nothing overtakes it.**
+
+```
+feature branch
+  → local implementation + local tests + local browser verification
+  → merge to develop
+  → CI on a CLEAN CHECKOUT
+  → deploy that exact develop commit to Staging
+  → automated Staging E2E / acceptance
+  → Staging approval
+```
+
+Once Production exists it extends by one step, and only one:
+
+```
+  → deploy that exact Staging-approved commit to Production
+  → production smoke verification
+```
+
+> **No change reaches Production without passing Local, CI and Staging on the same commit.**
+
+Each gate exists because the one before it cannot see what it sees:
+
+| Gate | Catches what the previous gate structurally cannot |
+|---|---|
+| Local | Everything a developer can reproduce at will |
+| **CI on a clean checkout** | Anything an existing `node_modules`, a generated Prisma client or a stale container hides. Both defects that broke this build were exactly this shape — invisible locally, fatal on a clean tree |
+| **Staging** | TLS, real headers on the wire, container memory ceilings, worker registration, the storage boundary as the internet sees it. HSTS was configured and never sent, and only a `curl -I` against real TLS could have found it |
+| Production smoke | That this deployment, of this commit, on this host, is actually serving |
+
+**Commit-to-Staging traceability is part of the flow, not an extra.** The deployed commit is
+recorded on the host at `/opt/bodour/DEPLOYED_COMMIT` and the host tracks `develop` rather
+than a branch of its own, so *what is running* is answerable without guessing.
+
+**A red gate stops promotion.** It is not a signal to be read later and worked around.
+
 ## Deployment
 
 There is **no automatic deployment to production.** The pipeline is
