@@ -22,6 +22,8 @@ import { SearchInput, SelectField, TextField } from '../../components/ui/field.j
 import { useSession } from '../../contexts/session.js';
 import { useActiveRole } from '../../contexts/active-role.js';
 import { t } from '../../i18n/index.js';
+import { isDirty } from '../../lib/form-dirty.js';
+import { useUnsavedGuard } from '../../lib/use-unsaved-guard.js';
 import { ApiError } from '../../lib/api.js';
 import { Feedback } from '../../components/ui/feedback.js';
 
@@ -428,14 +430,32 @@ function ProfileDialog({
   onSave: (input: { name_arabic: string; nickname: string | null; phone: string | null }) => void;
   onCancel: () => void;
 }): ReactNode {
-  const [name, setName] = useState(user.name_arabic);
-  const [nickname, setNickname] = useState(user.nickname ?? '');
-  const [phone, setPhone] = useState(user.phone ?? '');
+  /** Hydration from the persisted record IS the baseline — opening an edit
+   *  form must never make it dirty. */
+  const pristine = {
+    name: user.name_arabic,
+    nickname: user.nickname ?? '',
+    phone: user.phone ?? '',
+  };
+  const [name, setName] = useState(pristine.name);
+  const [nickname, setNickname] = useState(pristine.nickname);
+  const [phone, setPhone] = useState(pristine.phone);
   const [touched, setTouched] = useState(false);
+  const profileGuard = useUnsavedGuard({
+    open: true,
+    dirty: isDirty({ name, nickname, phone }, pristine),
+    onCancel: onCancel,
+  });
   const error = name.trim() === '' ? t('common.required') : null;
 
   return (
-    <Dialog open onClose={onCancel} title={t('admin.users.editTitle')}>
+    <Dialog
+      open
+      onClose={profileGuard.requestClose}
+      dismissible={profileGuard.dismissible}
+      title={t('admin.users.editTitle')}
+    >
+      {profileGuard.confirmation}
       <div className="form">
         <TextField
           label={t('admin.users.colName')}
@@ -513,12 +533,28 @@ function RolesDialog({
   );
   const duplicate = rows.some((r) => r.role === role && r.branch_id === (branchId || null));
 
+  /**
+   * Two kinds of unsaved work here: a staged change to the assignment list, and
+   * a half-filled add row. Both are the person's typing and both are lost by a
+   * stray backdrop click, so both count.
+   */
+  const rolesGuard = useUnsavedGuard({
+    open: true,
+    dirty:
+      isDirty(rows, user.roles.map((r) => ({ role: r.role, branch_id: r.branch_id }))) ||
+      role !== '' ||
+      branchId !== '',
+    onCancel: onCancel,
+  });
+
   return (
     <Dialog
       open
-      onClose={onCancel}
+      onClose={rolesGuard.requestClose}
+      dismissible={rolesGuard.dismissible}
       title={t('admin.users.rolesTitle').replace('{name}', user.name_arabic)}
     >
+      {rolesGuard.confirmation}
       <div className="form">
         {rows.length === 0 ? (
           // Not an empty box: an account with no assignment can sign in and

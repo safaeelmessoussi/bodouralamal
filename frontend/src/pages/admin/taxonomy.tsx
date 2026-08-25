@@ -24,10 +24,11 @@ import {
   type SortState,
   type TableStatus,
 } from '../../components/ui/data-table.js';
-import { Dialog } from '../../components/ui/dialog.js';
 import { TextField } from '../../components/ui/field.js';
 import { useSession } from '../../contexts/session.js';
 import { useActiveRole } from '../../contexts/active-role.js';
+import { FormDialog } from '../../components/ui/form-dialog.js';
+import { isDirty } from '../../lib/form-dirty.js';
 import { t } from '../../i18n/index.js';
 import { ApiError } from '../../lib/api.js';
 import { Feedback } from '../../components/ui/feedback.js';
@@ -352,45 +353,42 @@ function TaxonomyFormDialog({
   onSave: (input: TaxonomyInput) => void;
   onCancel: () => void;
 }): ReactNode {
-  const [name, setName] = useState(initial?.name ?? '');
+  const pristine = initial?.name ?? '';
+  const [name, setName] = useState(pristine);
   const [touched, setTouched] = useState(false);
   const error = name.trim() === '' ? t('common.required') : null;
+  // Only user-modified data is dirty; a validation error is not a change.
+  const dirty = isDirty(name, pristine);
+
+  function submit(): void {
+    setTouched(true);
+    if (error) return;
+    /* **`display_order` is not sent** (R76.8). The form no longer offers it, so
+       sending anything would be inventing a value: an edit would overwrite a
+       position the administrator set by dragging, and a create would claim a
+       place in a sequence nobody chose. Omitted, an edit preserves the stored
+       position and a new row arrives with NULL — which sorts last, so it
+       appears at the end and is dragged from there. */
+    onSave({ name: name.trim() });
+  }
 
   return (
-    <Dialog open onClose={onCancel} title={title}>
-      <div className="form">
-        <TextField
-          label={t('admin.taxonomy.colName')}
-          value={name}
-          onChange={setName}
-          required
-          error={touched ? error : null}
-          {...(hint !== undefined ? { hint } : {})}
-        />
-        <div className="form__actions">
-          <Button variant="secondary" onClick={onCancel}>
-            {t('common.cancel')}
-          </Button>
-          <Button
-            variant="primary"
-            disabled={busy}
-            onClick={() => {
-              setTouched(true);
-              if (error) return;
-              /* **`display_order` is not sent** (R76.8). The form no longer
-                 offers it, so sending anything would be inventing a value: an
-                 edit would overwrite a position the administrator set by
-                 dragging, and a create would claim a place in a sequence nobody
-                 chose. Omitted, an edit preserves the stored position and a new
-                 row arrives with NULL — which sorts last, so it appears at the
-                 end and is dragged from there. */
-              onSave({ name: name.trim() });
-            }}
-          >
-            {t('common.save')}
-          </Button>
-        </div>
-      </div>
-    </Dialog>
+    <FormDialog
+      open
+      onCancel={onCancel}
+      onSubmit={submit}
+      title={title}
+      busy={busy}
+      dirty={dirty}
+    >
+      <TextField
+        label={t('admin.taxonomy.colName')}
+        value={name}
+        onChange={setName}
+        required
+        error={touched ? error : null}
+        {...(hint !== undefined ? { hint } : {})}
+      />
+    </FormDialog>
   );
 }

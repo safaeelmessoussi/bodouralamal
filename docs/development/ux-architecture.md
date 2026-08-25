@@ -1604,6 +1604,85 @@ it is the same defect wearing the fix**: `verify-calendar-filters.mjs` chooses a
 branch in the list, switches to the grid, and asserts the **grid's own request**
 carries `branch_id`.
 
+## AY · No Add/Edit form silently discards typing — and no pristine one nags
+
+**Owner decision, 2026-08-25.** Both halves are binding, because either alone is a defect:
+
+> **No Add/Edit form may silently discard user-entered unsaved changes.**
+> **No pristine Add/Edit form may show an unnecessary discard warning.**
+
+The second is not politeness. A form that questions somebody who changed nothing is how a
+reader learns to click through the question — which is what stops the first half working.
+
+### What was wrong
+
+The protection has existed since 2026-08-17 and was correct — but it lived **inside
+`FormDialog`**, so it reached exactly the dialogs built on that component. Six production
+dialogs are assembled from a bare `Dialog`. `＋إضافة مقر` is one: fill it in, click the
+backdrop, everything typed is gone without a word, while the identical gesture on
+`＋تسجيل مستفيدة` asks first.
+
+**The guard meant to prevent this scoped itself to *"files that render a `<FormDialog`, which
+is every form dialog on the platform"*.** The second half was untrue when it was written. A
+guard that only inspects `FormDialog` callers is structurally blind to the dialogs that opt
+out by not using it — and it had never failed.
+
+### The mechanism, in one place
+
+[`useUnsavedGuard`](../../frontend/src/lib/use-unsaved-guard.tsx) owns the behaviour and
+`FormDialog` is now one of its callers. A dialog of **any** shape adopts the same rule instead
+of cloning an approximation.
+
+| Way out | Holding changes | Pristine |
+|---|---|---|
+| Backdrop | ignored | closes |
+| `Escape` | asks | closes |
+| Close / إلغاء | asks | closes |
+
+The backdrop is **ignored rather than asked about**: a backdrop click is very often not an
+intention, and answering it with a question trains the reader to dismiss questions. `Escape`
+and the close button *are* intentions. The way out is never more than two clicks.
+
+**`dirty` is `isDirty(current, pristine)`, never a captured-on-open snapshot.** These dialogs
+hydrate in an effect that runs after the first render, so a captured baseline sees the
+*previous* record and the form reports itself dirty the instant it opens. Comparing against
+the record also makes *typed a change and undid it* correctly pristine again — which is
+asserted in the browser, not assumed.
+
+**Hydration, server-loaded values, applied defaults and validation errors are never dirty.**
+Only user-modified data is.
+
+### Platform audit, 2026-08-25
+
+| Dialog | Before | Now |
+|---|---|---|
+| `＋إضافة مقر` / branch edit (`branches.tsx`) | **bare `Dialog`, no protection** | `FormDialog` + `isDirty` |
+| Rooms list (`branches.tsx`) | bare `Dialog`, inline draft unprotected | `useUnsavedGuard` — it is a list with an inline field, not a single submit, so it stays a `Dialog` |
+| `taxonomy.tsx` | bare `Dialog` | `FormDialog` + `isDirty` |
+| `levels.tsx` | bare `Dialog` | `FormDialog` + `isDirty` |
+| `users.tsx` — profile, roles | bare `Dialog` ×2 | `useUnsavedGuard` ×2 (a staged role list plus a half-filled add row both count) |
+| `approvals.tsx` — staff, placement, child | bare `Dialog` ×3 | `useUnsavedGuard` ×3 — decision dialogs with several actions, so not `FormDialog` |
+| `session-materials-dialog.tsx` | bare `Dialog` | `useUnsavedGuard` — a picked-but-unlinked material is unsaved work |
+| `enrollments` · `groups` · `scheduling` · `level-subjects` · `level-surahs` · `teaching-structure` · `schedule-sessions` · `session-audience` · `teaching-profile` | already `FormDialog` + `dirty` | unchanged |
+
+A **search box is not unsaved work**, and `＋تسجيل مستفيدة` is right not to treat it as such:
+its `dirty` compares the values that would be saved. Typing a search term and walking away
+loses nothing.
+
+### Guarded, and the guards proven
+
+Two properties in `atomic-components.test.ts`, both of which **failed on the real defect
+before passing**:
+
+- **no bare `Dialog` holding user input lacks the shared guard** — it listed exactly the six
+  offenders above when written;
+- **every `useUnsavedGuard` renders its `confirmation`** — a guarded close with no question
+  rendered is *worse* than the original defect, because the dialog becomes impossible to
+  leave while dirty. One of the six did precisely that while this section was being written.
+
+Behaviour is pinned by `scripts/dev/browser/verify-unsaved-guard.sh` (**21/21**), which drives
+the reported scenario in a real browser and keeps `＋تسجيل مستفيدة` green as the reference.
+
 ## AX · A create/edit form contains every field that decides what is saved
 
 **Owner decision, 2026-08-25.**

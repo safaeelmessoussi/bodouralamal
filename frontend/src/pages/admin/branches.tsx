@@ -25,6 +25,9 @@ import {
   type TableStatus,
 } from '../../components/ui/data-table.js';
 import { Dialog } from '../../components/ui/dialog.js';
+import { FormDialog } from '../../components/ui/form-dialog.js';
+import { isDirty } from '../../lib/form-dirty.js';
+import { useUnsavedGuard } from '../../lib/use-unsaved-guard.js';
 import {
   DateField,
   SearchInput,
@@ -373,8 +376,27 @@ function RoomsDialog({
    *  way back short of the Trash runbook. A native `<dialog>` stacks in the top
    *  layer, so this confirms above the rooms dialog rather than replacing it. */
   const [confirming, setConfirming] = useState<Room | null>(null);
+
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  /**
+   * **The room name being typed is unsaved work too.**
+   *
+   * This dialog is a list with an inline add/rename field rather than a single
+   * submit, so it cannot become a `FormDialog` — but the rule is about typing,
+   * not about which component renders it. `useUnsavedGuard` is exactly why the
+   * behaviour was extracted: a dialog of a different shape adopts the same rule
+   * instead of cloning an approximation of it.
+   *
+   * A draft that is only whitespace is not a change worth protecting.
+   */
+  const guard = useUnsavedGuard({
+    open: true,
+    dirty: draft.trim() !== '',
+    busy,
+    onCancel: onClose,
+  });
 
   const load = useCallback(async () => {
     try {
@@ -436,7 +458,8 @@ function RoomsDialog({
   return (
     <Dialog
       open
-      onClose={onClose}
+      onClose={guard.requestClose}
+      dismissible={guard.dismissible}
       title={t('admin.branches.roomsTitle').replace('{branch}', branch.name)}
     >
       {notice ? (
@@ -515,6 +538,8 @@ function RoomsDialog({
         </>
       ) : null}
 
+      {guard.confirmation}
+
       <ConfirmDialog
         open={confirming !== null}
         title={t('admin.branches.roomDeleteTitle')}
@@ -552,7 +577,13 @@ function BranchFormDialog({
   onSave: (input: BranchInput) => void;
   onCancel: () => void;
 }): ReactNode {
-  const [form, setForm] = useState({
+  /**
+   * **The values this form opened with**, as their own expression so `isDirty`
+   * compares against the record rather than a captured moment. That is what
+   * makes *typed a change and undid it* correctly pristine again, and what
+   * stops an edit dialog reporting itself dirty the instant it hydrates.
+   */
+  const pristine = {
     name: branch?.name ?? '',
     address: branch?.address ?? '',
     phone: branch?.phone ?? '',
@@ -560,8 +591,11 @@ function BranchFormDialog({
     openingHours: branch?.opening_hours_ar ?? '',
     mapsUrl: branch?.google_maps_url ?? '',
     start: branch?.operational_start_date ?? '',
-  });
+  };
+  const [form, setForm] = useState(pristine);
   const [touched, setTouched] = useState(false);
+  // A validation error is not a change; only user-modified data is.
+  const dirty = isDirty(form, pristine);
 
   const set = <K extends keyof typeof form>(key: K) => (value: string) =>
     setForm((f) => ({ ...f, [key]: value }));
@@ -599,13 +633,18 @@ function BranchFormDialog({
   }
 
   return (
-    <Dialog
+    <FormDialog
       open
-      onClose={onCancel}
+      onCancel={onCancel}
+      onSubmit={submit}
       title={t(branch ? 'admin.branches.editTitle' : 'admin.branches.create')}
       wide
+      busy={busy}
+      // NOT `disabled={!valid}`: `submit` marks the form touched and surfaces
+      // which field is wrong. A disabled button would hide the reason.
+      dirty={dirty}
     >
-      <div className="form">
+      <>
         <TextField
           label={t('admin.branches.colName')}
           value={form.name}
@@ -654,16 +693,7 @@ function BranchFormDialog({
           onChange={set('start')}
           hint={t('admin.branches.startHint')}
         />
-
-        <div className="form__actions">
-          <Button variant="secondary" onClick={onCancel}>
-            {t('common.cancel')}
-          </Button>
-          <Button variant="primary" disabled={busy} onClick={submit}>
-            {t('common.save')}
-          </Button>
-        </div>
-      </div>
-    </Dialog>
+      </>
+    </FormDialog>
   );
 }

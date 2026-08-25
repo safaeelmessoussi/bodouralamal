@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { fetchSessionPage, type SessionContentRef } from '../../adapters/calendar.js';
 import { linkSessionContent, unlinkSessionContent } from '../../adapters/sessions.js';
 import { t } from '../../i18n/index.js';
+import { useUnsavedGuard } from '../../lib/use-unsaved-guard.js';
 import { api } from '../../lib/api.js';
 import { Button } from '../ui/button.js';
 import { Dialog } from '../ui/dialog.js';
@@ -118,13 +119,29 @@ export function SessionMaterialsDialog({
 
   const attached = new Set([...linked, ...recordings].map((c) => c.id));
 
+  /**
+   * A material picked but not yet linked is unsaved work.
+   *
+   * This dialog has several actions rather than one submit, so it stays a
+   * `Dialog` — but the rule is about typing, not about which component renders
+   * it, which is exactly why the guard was extracted from `FormDialog`.
+   */
+  const guard = useUnsavedGuard({
+    open: sessionId !== null,
+    dirty: choice !== '',
+    busy,
+    onCancel: onClose,
+  });
+
   return (
     <Dialog
       open={sessionId !== null}
-      onClose={onClose}
+      onClose={guard.requestClose}
+      dismissible={guard.dismissible}
       title={t('session.materialsTitle')}
       wide
     >
+      {guard.confirmation}
       {error ? (
         <p className="field__error" role="alert">
           {error}

@@ -1,10 +1,10 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { type ReactNode } from 'react';
 
 import { Button } from './button.js';
-import { ConfirmDialog } from './confirm-dialog.js';
 import { Dialog } from './dialog.js';
 import { t } from '../../i18n/index.js';
 import { Feedback } from './feedback.js';
+import { useUnsavedGuard } from '../../lib/use-unsaved-guard.js';
 
 /**
  * **The shape every form dialog in the back office shares.**
@@ -95,18 +95,16 @@ export function FormDialog({
   onCancel,
   children,
 }: FormDialogProps): ReactNode {
-  const [confirming, setConfirming] = useState(false);
-
-  // A dialog reopened must not inherit the previous instance's question.
-  useEffect(() => {
-    if (!open) setConfirming(false);
-  }, [open]);
-
-  /** Every deliberate way out routes through here, so the rule is stated once. */
-  const requestClose = (): void => {
-    if (dirty && !busy) setConfirming(true);
-    else onCancel();
-  };
+  /**
+   * **The behaviour is `useUnsavedGuard`'s now, not this component's.**
+   *
+   * It lived here, which meant it reached only the dialogs built on this
+   * component — and six production dialogs are assembled from a bare `Dialog`,
+   * `＋إضافة مقر` among them. Moving it to a hook lets a dialog of any shape
+   * adopt the same rule instead of cloning an approximation of it.
+   */
+  const guard = useUnsavedGuard({ open, dirty, busy, onCancel });
+  const { requestClose } = guard;
 
   return (
     <>
@@ -116,8 +114,8 @@ export function FormDialog({
         title={title}
         wide={wide}
         // A form with unsaved work is not dismissible by backdrop or Escape; the
-        // `Dialog` owns the mechanism and this owns the decision.
-        dismissible={!dirty}
+        // `Dialog` owns the mechanism and the guard owns the decision.
+        dismissible={guard.dismissible}
       >
         {notice ? (
           <Feedback>
@@ -139,25 +137,7 @@ export function FormDialog({
         </div>
       </Dialog>
 
-      {/* **The shared confirmation, not a second one.** `ConfirmDialog` is how
-          this platform asks *are you sure* everywhere, and a bespoke question
-          here would be the one place it looked different — on the surface where
-          a reader is already worried about losing work.
-
-          Not `danger`: discarding a draft is not destructive in the R59 sense —
-          nothing is deleted and nothing leaves the database. The red treatment is
-          reserved for what it means, or it stops meaning anything. */}
-      <ConfirmDialog
-        open={confirming}
-        title={t('common.discardTitle')}
-        body={t('common.discardBody')}
-        confirmLabel={t('common.discardConfirm')}
-        onConfirm={() => {
-          setConfirming(false);
-          onCancel();
-        }}
-        onCancel={() => setConfirming(false)}
-      />
+      {guard.confirmation}
     </>
   );
 }

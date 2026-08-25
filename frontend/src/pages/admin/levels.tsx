@@ -22,10 +22,11 @@ import {
   type SortState,
   type TableStatus,
 } from '../../components/ui/data-table.js';
-import { Dialog } from '../../components/ui/dialog.js';
 import { SelectField, TextField } from '../../components/ui/field.js';
 import { useSession } from '../../contexts/session.js';
 import { useActiveRole } from '../../contexts/active-role.js';
+import { FormDialog } from '../../components/ui/form-dialog.js';
+import { isDirty } from '../../lib/form-dirty.js';
 import { t } from '../../i18n/index.js';
 import { ApiError } from '../../lib/api.js';
 import { Feedback } from '../../components/ui/feedback.js';
@@ -324,12 +325,19 @@ function LevelFormDialog({
   onSave: (input: CreateLevelInput) => void;
   onCancel: () => void;
 }): ReactNode {
-  const [form, setForm] = useState({
+  /**
+   * What the form opened with. On an ADD form the automatically applied
+   * defaults — the first Category, `any` — are part of the baseline: the rule
+   * is that a *user* change makes a form dirty, and initialisation is not one.
+   */
+  const pristine = {
     name: level?.name ?? '',
     categoryId: level?.category_id ?? categories[0]?.id ?? '',
     gender: (level?.gender_restriction ?? 'any') as GenderRestriction,
-  });
+  };
+  const [form, setForm] = useState(pristine);
   const [touched, setTouched] = useState(false);
+  const dirty = isDirty(form, pristine);
 
   const errors = {
     name: form.name.trim() === '' ? t('common.required') : null,
@@ -337,13 +345,26 @@ function LevelFormDialog({
   };
   const valid = Object.values(errors).every((e) => e === null);
 
+  function submit(): void {
+    setTouched(true);
+    if (!valid) return;
+    onSave({
+      name: form.name.trim(),
+      category_id: form.categoryId,
+      gender_restriction: form.gender,
+    });
+  }
+
   return (
-    <Dialog
+    <FormDialog
       open
-      onClose={onCancel}
+      onCancel={onCancel}
+      onSubmit={submit}
       title={t(level ? 'admin.levels.editTitle' : 'admin.levels.create')}
+      busy={busy}
+      dirty={dirty}
     >
-      <div className="form">
+      <>
         <TextField
           label={t('admin.levels.colName')}
           value={form.name}
@@ -384,27 +405,7 @@ function LevelFormDialog({
             either was used. Omitting it on save preserves the stored position;
             a new Level arrives with NULL, which sorts last. */}
 
-        <div className="form__actions">
-          <Button variant="secondary" onClick={onCancel}>
-            {t('common.cancel')}
-          </Button>
-          <Button
-            variant="primary"
-            disabled={busy}
-            onClick={() => {
-              setTouched(true);
-              if (!valid) return;
-              onSave({
-                name: form.name.trim(),
-                category_id: form.categoryId,
-                gender_restriction: form.gender,
-              });
-            }}
-          >
-            {t('common.save')}
-          </Button>
-        </div>
-      </div>
-    </Dialog>
+      </>
+    </FormDialog>
   );
 }

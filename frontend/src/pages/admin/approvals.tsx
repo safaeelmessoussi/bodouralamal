@@ -40,6 +40,8 @@ import { listLevels, type Level } from '../../adapters/taxonomy.js';
 import { useSession } from '../../contexts/session.js';
 import { useActiveRole } from '../../contexts/active-role.js';
 import { t } from '../../i18n/index.js';
+import { isDirty } from '../../lib/form-dirty.js';
+import { useUnsavedGuard } from '../../lib/use-unsaved-guard.js';
 import { formatDate } from '../../lib/format-date.js';
 import { ApiError } from '../../lib/api.js';
 import { Feedback } from '../../components/ui/feedback.js';
@@ -465,18 +467,30 @@ function StaffApprovalDialog({
 }): ReactNode {
   const [role, setRole] = useState(row.requested_role ?? 'teacher');
   const [branchId, setBranchId] = useState<string>(row.branch?.id ?? '');
+  /** The requested role and branch are prefilled FROM THE REQUEST — that is
+   *  hydration, not a change, so it is the baseline. */
+  const staffGuard = useUnsavedGuard({
+    open: true,
+    dirty: isDirty(
+      { role, branchId },
+      { role: row.requested_role ?? 'teacher', branchId: row.branch?.id ?? '' },
+    ),
+    onCancel,
+  });
 
   const offered = ROLES.filter((r) => canGrantAdmin || (r !== 'admin' && r !== 'super_admin'));
 
   return (
     <Dialog
       open
-      onClose={onCancel}
+      onClose={staffGuard.requestClose}
+      dismissible={staffGuard.dismissible}
       title={t('admin.approvals.staffTitle').replace(
         '{names}',
         row.applicants.map((a) => a.name).join('، '),
       )}
     >
+      {staffGuard.confirmation}
       <div className="form">
         <p>
           {t('admin.approvals.staffBody').replace(
@@ -599,6 +613,15 @@ function PlacementDialog({
   /** §4.1 step 1 filters to the applicant's Category — and lets the approver
    *  leave it, because the applicant may have chosen the wrong stage. */
   const [categoryFilter, setCategoryFilter] = useState<string>(row.category?.id ?? '');
+  /** A placement chosen but not yet decided is unsaved work; the Category
+   *  prefilled from the request is not. */
+  const placementGuard = useUnsavedGuard({
+    open: true,
+    dirty:
+      isDirty(choice, null) ||
+      isDirty(categoryFilter, row.category?.id ?? ''),
+    onCancel,
+  });
 
   useEffect(() => {
     void (async () => {
@@ -674,7 +697,13 @@ function PlacementDialog({
   });
 
   return (
-    <Dialog open onClose={onCancel} title={title}>
+    <Dialog
+      open
+      onClose={placementGuard.requestClose}
+      dismissible={placementGuard.dismissible}
+      title={title}
+    >
+      {placementGuard.confirmation}
       <div className="form">
         <p>{t('admin.approvals.placeBody')}</p>
 
@@ -857,6 +886,12 @@ function ChildDecisionDialog({
   const pending = row.children.filter((child) => child.status === 'pending');
   const [outcome, setOutcome] = useState<Record<string, 'approve' | 'reject'>>({});
   const [reason, setReason] = useState<Record<string, ChildRejectionReason | ''>>({});
+  /** A rejection reason typed for any child is unsaved work. */
+  const childGuard = useUnsavedGuard({
+    open: true,
+    dirty: Object.values(reason).some((v) => v !== ''),
+    onCancel,
+  });
   const [placeFor, setPlaceFor] = useState<{ application_id: string; name: string }[] | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
 
@@ -925,7 +960,13 @@ function ChildDecisionDialog({
   }
 
   return (
-    <Dialog open onClose={onCancel} title={t('admin.approvals.childTitle')}>
+    <Dialog
+      open
+      onClose={childGuard.requestClose}
+      dismissible={childGuard.dismissible}
+      title={t('admin.approvals.childTitle')}
+    >
+      {childGuard.confirmation}
       <div className="form">
         <p>{t('admin.approvals.childBody')}</p>
         {failure ? (

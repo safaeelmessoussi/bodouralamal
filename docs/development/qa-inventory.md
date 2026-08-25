@@ -100,6 +100,7 @@ under the table.
 | `verify-enrolment-gender.sh` | 3 | R79 beneficiary identity across six person-shapes + R27/BR-21 Level narrowing | 17/17 |
 | `verify-calendar-header.sh` | 20 | **AJ/AK** — region geometry at 1440px and 390px on both calendars, title drift, the table note against its table | 17/17 |
 | `verify-library-recorder.sh` | 19 | The second recorder entry point, and the sort indicator | 16/16 |
+| `verify-unsaved-guard.sh` | 21 | Unsaved-changes protection on every dismissal path, plus the pristine half | 21/21 |
 | `verify-registration.sh` | 13 | The beneficiary registration journey end to end, plus the records it must and must not create | 13/13 |
 | `verify-content-visibility.sh` | 24 | §14.1's visibility selector, operated in a real browser: state, selection, the request body, and the replace dialog's absence of one | 24/24 |
 | `verify-grading.sh` | 14d, 16 | R81 — the exam's own maximum, empty ≠ zero, publish notifies and a draft is silent | 16/16 |

@@ -506,9 +506,19 @@ describe('unsaved form changes are protected by the shared dialog', () => {
    */
   const FORM_DIALOG = stripComments(RAW['/src/components/ui/form-dialog.tsx'] ?? '');
   const DIALOG = stripComments(RAW['/src/components/ui/dialog.tsx'] ?? '');
+  /**
+   * **The behaviour moved, so these assertions moved with it** (2026-08-25).
+   *
+   * They read `form-dialog.tsx` when the logic lived there. It now lives in
+   * `useUnsavedGuard`, so a dialog of ANY shape can adopt it — which is the
+   * whole point, since six production dialogs never used `FormDialog` at all.
+   * Restated at the new location rather than deleted: the property is the same
+   * one, and deleting a guard because the code moved is how a property is lost.
+   */
+  const GUARD = stripComments(RAW['/src/lib/use-unsaved-guard.tsx'] ?? '');
 
-  it('FormDialog makes a dirty form non-dismissible', () => {
-    expect(FORM_DIALOG).toContain('dismissible={!dirty}');
+  it('a dirty form is not dismissible by backdrop or Escape', () => {
+    expect(GUARD).toContain('dismissible: !dirty');
   });
 
   it('every deliberate way out routes through one guarded function', () => {
@@ -517,14 +527,20 @@ describe('unsaved form changes are protected by the shared dialog', () => {
     // the form that the other one prevents.
     expect(FORM_DIALOG).toContain('onClose={requestClose}');
     expect(FORM_DIALOG).toContain('onClick={requestClose}');
-    expect(FORM_DIALOG).toContain('if (dirty && !busy) setConfirming(true);');
+    expect(GUARD).toContain('if (dirty && !busy) setConfirming(true);');
   });
 
   it('asks with the shared ConfirmDialog, not a bespoke question', () => {
     // The surface where a reader is already worried about losing work is the
     // worst possible place for a dialog that looks unlike every other one.
-    expect(FORM_DIALOG).toContain('<ConfirmDialog');
-    expect(FORM_DIALOG).toContain('common.discardTitle');
+    expect(GUARD).toContain('<ConfirmDialog');
+    expect(GUARD).toContain('common.discardTitle');
+  });
+
+  it('FormDialog delegates to the shared guard rather than reimplementing it', () => {
+    expect(FORM_DIALOG).toContain('useUnsavedGuard(');
+    expect(FORM_DIALOG).toContain('dismissible={guard.dismissible}');
+    expect(FORM_DIALOG).toContain('{guard.confirmation}');
   });
 
   it('Dialog honours dismissible on BOTH the backdrop and Escape', () => {
@@ -561,6 +577,69 @@ describe('unsaved form changes are protected by the shared dialog', () => {
       const code = stripComments(f.text);
       if (f.path === 'components/ui/form-dialog.tsx') return false;
       return code.includes('<FormDialog') && !/\bdirty=\{/.test(code);
+    }).map((f) => f.path);
+    expect(offenders).toEqual([]);
+  });
+
+  /**
+   * **The hole the guard above could not see**, and the reason `＋إضافة مقر`
+   * lost typing to a backdrop click for months.
+   *
+   * That guard scoped itself to *"files that render a `<FormDialog`, which is
+   * every form dialog on the platform"*. The second half was untrue when it was
+   * written: six dialogs were assembled from a bare `Dialog` with their own
+   * fields and their own footer, and a guard that only looks at `FormDialog`
+   * callers is structurally blind to exactly the dialogs that opted out.
+   *
+   * **The tell was a guard that had never failed.** So the property is restated
+   * over the thing that actually matters: a dialog holding user input must
+   * protect it — either by being a `FormDialog`, or by using the shared guard.
+   * A dialog with no inputs holds nothing to lose and is not asked to.
+   */
+  it('no bare Dialog holds user input without the shared unsaved guard', () => {
+    const EXEMPT = new Set([
+      // The primitives themselves.
+      'components/ui/form-dialog.tsx',
+      'components/ui/dialog.tsx',
+      // A confirmation, not a form: its "inputs" are its two buttons.
+      'components/ui/confirm-dialog.tsx',
+      // A notice with a single acknowledgement checkbox that is not persisted
+      // from here — it gates the button beside it and is re-asked every time.
+      'components/consent-notice.tsx',
+    ]);
+
+    const offenders = FILES.filter((f) => {
+      if (EXEMPT.has(f.path) || f.path.includes('.test.')) return false;
+      const code = stripComments(f.text);
+      if (!code.includes('<Dialog')) return false;
+      // A dialog that carries fields carries typing worth protecting.
+      const holdsInput = /<(TextField|TextArea|SelectField|MultiSelectField|SearchableSelect)\b/.test(code);
+      if (!holdsInput) return false;
+      const protectedBy =
+        code.includes('<FormDialog') || code.includes('useUnsavedGuard(');
+      return !protectedBy;
+    }).map((f) => f.path);
+
+    expect(offenders).toEqual([]);
+  });
+
+  /**
+   * **A guarded close with no confirmation rendered is a trap, not a guard.**
+   *
+   * `requestClose` sets a flag that only `guard.confirmation` turns into a
+   * question. A dialog that wires the close but forgets to render the element
+   * becomes *impossible to leave* while dirty — strictly worse than the defect
+   * being fixed. One of the six did exactly that while this section was being
+   * written, which is why the property is pinned rather than assumed.
+   */
+  it('every useUnsavedGuard renders its confirmation', () => {
+    const offenders = FILES.filter((f) => {
+      if (f.path.includes('.test.') || f.path === 'lib/use-unsaved-guard.tsx') return false;
+      const code = stripComments(f.text);
+      const guards = (code.match(/useUnsavedGuard\(/g) ?? []).length;
+      if (guards === 0) return false;
+      const rendered = (code.match(/\.confirmation\}/g) ?? []).length;
+      return rendered < guards;
     }).map((f) => f.path);
     expect(offenders).toEqual([]);
   });
