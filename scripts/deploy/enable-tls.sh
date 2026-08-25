@@ -70,6 +70,13 @@ CONF
   echo "rewrote nginx/conf.d/default.conf as ACME + redirect"
 fi
 
+# RECREATE, never restart. `nginx/nginx.conf` is a SINGLE-FILE bind mount, and
+# Docker resolves those to the inode present at container start. `git pull` and
+# `git reset` REPLACE a file rather than editing it in place, so the container
+# keeps serving the old inode and a restart changes nothing — the host file and
+# the running config silently disagree. This cost one confusing
+# `unknown "hsts" variable` on a file that plainly contained the map.
+docker compose up -d --force-recreate --no-deps nginx
+sleep 2
 docker compose exec -T nginx nginx -t
-docker compose restart nginx
 echo "TLS active for $DOMAIN"
