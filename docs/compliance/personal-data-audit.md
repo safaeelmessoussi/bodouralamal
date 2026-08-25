@@ -143,8 +143,9 @@ from `data_processing` — the right structure.
 | Email / SMS | — | — | **[CODE] None exists.** No notification channel is built |
 | Third-party AI | — | — | **[CODE] None.** |
 
-**[SRS] §2.2 already requires Moroccan hosting** and states that non-Moroccan
-staging (Vercel) **must never contain real beneficiary data — fixture data
+**[SRS] §2.2 already requires Moroccan hosting** and states that every
+non-Moroccan tier — **Local Development, Preview (Vercel) and Staging** (§19.0,
+Revision 104) — **must never contain real beneficiary data: fixture data
 only**. This is a specified architectural control, not an aspiration.
 
 ---
@@ -313,9 +314,29 @@ mitigation and should be stated in the declaration.
 [CODE]** Verified absent. This is unusually clean and is worth *preserving as a
 rule*: any addition is a new processor and a new transfer question.
 
-**H.3 — Vercel staging. [SRS]** §2.2 already prohibits real data there. **[INFER]
-Recommend a technical control**, not only a rule — a staging build that cannot
-reach a production database.
+**H.3 — Non-Moroccan tiers. [SRS]** §2.2 prohibits real data in all of them.
+**Preview** (Vercel) stores nothing at all: it runs on MSW mocks and calls no
+backend, so there is no transfer to assess.
+
+**Staging** (Revision 104) is the one that changed, and it deserves naming
+plainly: since 2026-08-25 there is a **real PostgreSQL database and a real MinIO
+instance on a VPS in France**. That is a genuine non-Moroccan data store, and it
+is permissible **only** because the tier is fixture-only. Three controls hold
+that, and the first is mechanical:
+
+1. **The fixtures seed refuses to run under `NODE_ENV=production`** — the same
+   guard, in the other direction.
+2. **Production dumps never leave Moroccan infrastructure**, and **the
+   development database and its objects are never copied into Staging** — a
+   developer's database is not fixture data (§20 rule 18).
+3. Staging holds no credential that can reach a production database; it has its
+   own generated secrets and its own storage.
+
+**[INFER] The residual risk is procedural, not architectural**: nothing
+mechanically stops a human running `pg_restore` of a production dump onto the
+Staging VPS. The recommended control is unchanged in kind — a technical barrier
+rather than only a rule — and it is now worth more, because Staging has a
+database to restore *into*.
 
 **H.4 — Backups are specified and Morocco-resident.** **[SRS]**
 `operations/resilience.md` defines nightly `pg_dump` plus volume backups,

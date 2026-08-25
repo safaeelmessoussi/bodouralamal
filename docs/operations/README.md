@@ -27,17 +27,20 @@ restore procedure is drilled before launch rather than trusted.
 
 ## Three things that will bite you if you skip them
 
-**Never build images on the VPS.** The frontend build peaks near 2 GB and will exhaust a
-4 GB box already running PostgreSQL, MinIO, and Node. Emergency-only fallback: stack fully
-down, then build.
+**Never build images on the VPS while the stack is running.** The frontend build peaks near
+2 GB and will exhaust a 4 GB box already running PostgreSQL, MinIO, and Node. The intent is
+CI-built images, but **CI publishes none today and there is no registry**, so building on the
+host with the stack **fully down** is currently the procedure, not an emergency fallback
+([why](deployment.md#where-the-api-image-comes-from)).
 
 **Take a `pg_dump` immediately before applying migrations** on any existing deployment.
 Migrations are forward-only in production — the dump *is* the rollback point, and it must
 match the pre-migration state exactly.
 
 **Never weaken cookie attributes to make an environment work.** `HttpOnly; Secure;
-SameSite=Lax` is identical in every tier. Staging's cross-origin cookie behaviour is by
-design, not a bug ([why](environments.md#the-staging-authentication-boundary)).
+SameSite=Lax` is identical in every tier. **Preview's** cross-origin cookie behaviour is by
+design, not a bug ([why](environments.md#the-preview-authentication-boundary)); **Staging**
+is same-origin like Production, so the cookie flows there normally.
 
 ---
 

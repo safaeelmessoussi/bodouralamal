@@ -2,47 +2,86 @@
 
 # Environments
 
-Three tiers, and the boundary between them is a **legal** boundary as much as a technical
+Four tiers, and the boundary between them is a **legal** boundary as much as a technical
 one.
 
 | Tier | Frontend | Backend / DB / storage | Data | Residency |
 |---|---|---|---|---|
-| **Development** | Local Vite dev server | Developer's machine, inside the containerized stack — **the same images as production** | **Fixtures only** | Non-Moroccan hardware permitted, because no real data exists here |
-| **Staging** | **Vercel**, auto-deployed from `develop` | — **calls no real backend** | **Fixture mocks only** | Vercel is outside Morocco — acceptable *only* because staging never holds real data |
+| **Local Development** | Local Vite dev server | Developer's machine, inside the containerized stack — **the same images as production** | **Fixtures only** | Non-Moroccan hardware permitted, because no real data exists here |
+| **Preview** | **Vercel**, auto-deployed from `develop` | — **calls no real backend** | **Fixture mocks only**; stores nothing | Vercel is outside Morocco — acceptable *only* because it holds no data at all |
+| **Staging** | Served by Nginx from the staging VPS, **same origin as the API**, over HTTPS | Same VPS: the full production-shaped stack | **Fixtures and synthetic records only** | Currently OVH France. Outside Morocco — acceptable *only* because the tier is fixture-only |
 | **Production** | Served by Nginx from the **Moroccan VPS**, same origin as the API | Same VPS: the full stack | **Real data** | Law 09-08: all real data **and backups** on Moroccan infrastructure only |
+
+## Why "Preview" and "Staging" are two different words
+
+One word used to name both, and it hid a real gap. The Vercel deployment was called
+*Staging*, and it **calls no backend at all** — so nothing was ever staged on it. There was a
+name, and no tier behind the name, for the environment that actually rehearses the platform.
+
+Since [SRS Revision 104](../SRS.md) the Vercel tier is **Preview** — frontend and demo
+validation, nothing more — and **Staging** is a real, full-stack, production-shaped
+deployment with its own database and object storage.
+
+> **Staging is not a relaxed environment. It is Production with synthetic data.**
+
+HTTPS, the `HttpOnly; Secure; SameSite=Lax` refresh cookie on its R101 Path, the CSRF
+boundary, same-origin routing, the whole authorization matrix, and the B-01 public-storage
+database gate, B-02 placement invariant and B-03 immutable finalization are all **fully
+enabled there**. Weakening one to make something work in Staging is prohibited exactly as it
+is everywhere else.
+
+What Staging still does **not** replace is the dress rehearsal on the production VPS: it
+exercises neither Moroccan residency, nor TLS on the production domain, nor the backup
+pipeline.
 
 ## The residency firewall
 
 The hard rule, enforced as [`BR-18`](../reference/business-rules.md#br-18):
 
-> **No real beneficiary data ever enters development or staging. Fixture data only.**
+> **No real beneficiary data ever enters Local Development, Preview or Staging. Fixture
+> data only.**
 
-Three mechanisms hold it, not one:
+Four mechanisms hold it, not one:
 
 1. **The fixtures seed refuses to run when `NODE_ENV=production`.** The same guard that
    stops fixtures polluting production is the residency firewall in the other direction.
-2. **Production dumps are never copied to development or staging.** Not "discouraged" —
-   never.
-3. **The staging frontend build must not embed production URLs.**
+   It is also why Staging runs `NODE_ENV=development`: that value is what *permits* the
+   fixtures, and it changes no security behaviour — see below.
+2. **Production dumps are never copied to any other tier.** Not "discouraged" — never.
+3. **The development database and its MinIO objects are never copied into Staging.** A
+   developer's database is not fixture data: it accumulates real addresses and real
+   experiments, and it is exactly the thing that looks harmless to copy.
+4. **The Preview frontend build must not embed production URLs.**
+
+### `NODE_ENV` does not change security behaviour
+
+Worth stating because Staging depends on it. `NODE_ENV` gates exactly three things: the
+fixture guard, the production-only `BACKUP_TARGET_SSH` requirement, and the production ban
+on `LOG_LEVEL=debug`. **It does not gate error detail.** The error envelope is uniform in
+every environment and never returns a stack trace, an SQL fragment or an internal path —
+`middleware/request-context.ts` is unconditional, with no environment branch anywhere.
+
+The specification used to list *"error verbosity"* among what `NODE_ENV` controls. That
+described a branch which never existed, and [Revision 104](../SRS.md) corrects it.
 
 Production data, backups, and restores exist only on the **two Moroccan locations**.
 
 > Recorded as Risk R-10.
 
-## The staging authentication boundary
+## The Preview authentication boundary
 
 This is the part that looks broken and is not, so it is worth stating plainly.
 
-The Vercel origin and any local backend are **cross-origin**. The `SameSite=Lax` refresh
+The Vercel origin and any backend are **cross-origin**. The `SameSite=Lax` refresh
 cookie **will not flow between them** — **by design, and this is not a bug to fix.**
 
 Therefore:
 
-- **Authenticated flows are never tested through the Vercel origin.** Login, sessions,
-  cookie refresh, and end-to-end journeys run against the **local same-origin compose
-  stack** — which serves the identical built frontend through Nginx exactly as production
-  does — and against the production rehearsal.
-- **The Vercel deployment exists for UI and visual review against mocks only.** It calls no
+- **Authenticated flows are never tested through the Preview origin.** Login, sessions,
+  cookie refresh, and end-to-end journeys run against a **same-origin compose stack** —
+  Local Development, **Staging**, or the production rehearsal — each of which serves the
+  identical built frontend through Nginx exactly as production does.
+- **The Preview deployment exists for UI and visual review against mocks only.** It calls no
   real backend, which is what deletes the last CORS exception that would otherwise exist
   anywhere in the system.
 
@@ -120,11 +159,13 @@ volume mounted at `/var/lib/postgresql`, not `/var/lib/postgresql/data`.** Data 
 major-version subdirectory, which is what keeps `pg_upgrade --link` possible without
 mount-boundary issues. Mounting at `.../data` makes the container refuse to start outright.
 
-## The dress rehearsal runs on the real VPS
+## The dress rehearsal still runs on the real VPS
 
-The staging topology exercises **none** of the VPS realities — memory ceilings, TLS
-automation, the backup pipeline. So the integration dress rehearsal runs **on the production
-VPS itself**, through the real deployment pipeline, before launch.
+Staging exercises a great deal that Preview never could — TLS automation, the memory ceiling
+of a small box, the real deployment pipeline. It still does **not** exercise Moroccan
+residency, TLS on the production domain, or the backup pipeline. So the integration dress
+rehearsal runs **on the production VPS itself**, before launch, and Staging does not replace
+it.
 
 ---
 

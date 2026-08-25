@@ -22,8 +22,10 @@ cp .env.example .env          # fill every Required value
 cp infra.env.example infra.env # the Postgres password — must match DATABASE_URL
 #    SUPER_ADMIN_EMAIL is needed for the FIRST deployment only
 
-# 3  Pull images — BUILT IN CI, never built here
-docker pull <registry>/bodour-api:<tag>
+# 3  Obtain the API image.
+#    CI does NOT publish one today — see "Where the API image comes from" below.
+#    Until it does, build it here with the stack DOWN:
+docker compose build api
 
 # 4  Existing deployment: stop the legacy cookie issuer, then start data services
 #    R101's next migration invalidates every live refresh session. The old API
@@ -54,16 +56,38 @@ curl https://<domain>/healthz                # 200, all components green
 # 10 Smoke test: journey J1 · backup dry run · restore drill
 ```
 
-## Why images are built in CI, never on the server
+## Where the API image comes from
+
+**The intent is that images are built in CI and pulled**, never built on the server:
 
 > The frontend build peaks near **2 GB**, which will OOM or thrash a 4 GB box already running
 > PostgreSQL, MinIO, and Node.
 
-The emergency-only fallback is: bring the stack **fully down**, then build. Not with the
-stack running.
-
 This is also why the container memory pins have any headroom at all — the budget assumes no
 build ever competes with the running services.
+
+**As of 2026-08-25 that pipeline does not exist yet.** [CI](../development/ci-cd.md) runs
+lint, typecheck, tests and *verifies* the production builds, but it **publishes no container
+image and there is no registry** — the ci-cd page lists image publication among the things
+it deliberately does not do. This page previously instructed a `docker pull` from a registry
+that has never existed, which would fail on any first deployment.
+
+So until image publication ships, the documented fallback is the procedure:
+
+> **Bring the stack fully down, then build. Never with the stack running.**
+
+The frontend is built the same way and for the same reason. It is not committed, `nginx`
+bind-mounts `frontend/dist`, and it uses no `import.meta.env` at all — so **one artifact is
+valid for every environment** and nothing environment-specific is baked into it.
+
+Building it without installing Node on the host:
+
+```bash
+docker run --rm -v "$PWD/frontend":/app -w /app node:24.11.0-slim \
+  sh -c 'npm ci && npm run build'
+```
+
+On a 4 GB box, ensure swap exists first; the peak is what the warning above is about.
 
 ## Step 5 deserves its own paragraph
 
@@ -137,13 +161,34 @@ realistic data locally — which is exactly the split that keeps production clea
 | | First | Subsequent |
 |---|---|---|
 | `SUPER_ADMIN_EMAIL` | **Required** — the seed fails loudly by name without it | Ignored permanently; may be removed from `.env` |
+| `SUPER_ADMIN_SEX` | **Required** — `female` or `male`; the seed refuses without it (R80) | Ignored once the account exists |
 | `pg_dump` before migrating | Not applicable | **Mandatory** |
 | Restore drill | **Before go-live** | Periodically |
 
-## Staging
+## Preview and Staging
 
-Pushing to `develop` triggers an automatic Vercel build of the frontend, in a
+Two different environments since [SRS Revision 104](../SRS.md); see
+[Environments](environments.md).
+
+**Preview** — pushing to `develop` triggers an automatic Vercel build of the frontend, in a
 **fixture-pointing configuration only**. It calls no real backend.
+
+**Staging** — a real, full-stack, production-shaped deployment on its own VPS, currently
+`https://staging.bodouralamal.com`. It runs **this same pipeline**, with two differences and
+no others:
+
+| | Staging | Production |
+|---|---|---|
+| Data | §15.2 fixtures and synthetic records **only** | Real data |
+| `NODE_ENV` | `development` — the value that *permits* the fixture seed | `production` |
+| Everything else | identical | identical |
+
+`NODE_ENV=development` changes **no** security behaviour — see
+[Environments § `NODE_ENV`](environments.md#node_env-does-not-change-security-behaviour).
+Step 6 there is followed by `npm run seed:fixtures`, which is the only added step.
+
+**Never copy a development database or its MinIO objects into Staging.** A developer's
+database is not fixture data.
 
 ## The dress rehearsal
 
