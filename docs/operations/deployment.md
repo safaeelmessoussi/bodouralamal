@@ -132,6 +132,12 @@ everything else to TLS.
 **Renewal failure alerts at 21 days remaining** — never discovered as a browser error by a
 user.
 
+**Certbot writing a new certificate is not the same as serving it.** Nginx holds the
+certificate in memory and keeps serving the old one until it reloads, so a renewal loop on
+its own produces a current file on disk behind an expired certificate on the wire — a
+failure that looks like certbot's and is not. The `nginx` service therefore runs a six-hour
+`nginx -s reload` loop beside its worker, well inside the 30-day renewal window.
+
 ## What the seed does, and does not do
 
 **Does** (idempotently, safe to re-run):
