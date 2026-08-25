@@ -1,5 +1,46 @@
 # Tasks — بذور الأمل Platform
 
+## Defect — the Content Upload screen has no visibility selector (§14.1)
+
+**Found 2026-08-25 by an Owner performing a real upload on Staging and being unable to mark
+it private.**
+
+§14.1 specifies the node as:
+
+> **Content Upload (`/teacher/content`)** — … **visibility selection honoring Category
+> defaults and the consent gate** (consent-forced private state visible but not editable by
+> Teachers; Global scope unavailable to Teachers, §4.9).
+
+The selection does not exist. Everything around it does:
+
+| Layer | State |
+|---|---|
+| `initiateUpload` | **accepts** `meta.visibility`, falling back to the Category default |
+| `UploadMeta` (client type) | **declares** `visibility?: 'public' \| 'private' \| 'hidden'` |
+| `content.tsx` | renders visibility as a **read-only column** and never sets it |
+| i18n | `content.visibility.public/private/hidden` exist and are used — for the column |
+| `docs/openapi.json` | `content_meta` has **no declared properties at all**, so the contract
+  describes neither `visibility` nor `origin` nor `replaces_content_id` |
+
+So the platform silently always takes the Category default. On the staging fixtures that is
+`public` for الكبار, which is why an Owner asking for private content got public content and
+no control to change it.
+
+**This is rule P again — a complete capability with no reach — and it is the seventh
+instance.** The service, the client type and the copy were all built; the control was not.
+The empty `content_meta` schema is why no contract gate caught it.
+
+Bounded fix: add the selector to the shared content form, defaulted from the Category and
+disabled (not hidden) when `consent_forced_private` is true, per §14.1 and rule O. Give
+`content_meta` real properties in the generator so the contract stops under-describing the
+request. **Not done inside the staging slice** — it is product work, and the Owner's
+instruction was to determine intended behaviour and report rather than modify the product to
+satisfy a test.
+
+Private content remains reachable today without it: two of the three seeded Categories
+default to `private`, so uploading to a Level in one produces private content — which is also
+how automated staging E2E can cover the private path without any UI change.
+
 ## Next engineering cleanup — CI has been red on `develop` since before 2026-08-20
 
 **`prisma generate` never runs in the clean CI jobs.** The `backend` and `API contract` jobs
