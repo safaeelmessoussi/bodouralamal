@@ -693,15 +693,16 @@ export async function isResponsibleForEvent(
 }
 
 /**
- * **The Subject whose teaching authorises Quran progress (§4.5, R73.4).**
+ * **The حفظ القرآن Subject whose teaching authorises memorisation progress
+ * (§4.5, R73.4/R107).**
  *
  * `null` when no Subject is marked, which is a real state: the association may
  * not have configured it yet, and the honest consequence is that **no مؤطرة has
- * Quran scope** rather than that every مؤطرة does. Failing open here would
+ * memorisation scope** rather than that every مؤطرة does. Failing open here would
  * reinstate exactly the behaviour R73.3 was written to stop.
  */
 /**
- * **Does this person staff a Quran class at all?** (R87 §M.)
+ * **Does this person staff a حفظ القرآن class at all?** (R87 §M, R107.)
  *
  * The teaching menu shows «إدخال الحفظ» only to somebody who actually teaches
  * the Subject, and the Owner named exactly what that may NOT be derived from:
@@ -711,12 +712,12 @@ export async function isResponsibleForEvent(
  * student list already narrows by, asked as a yes/no.
  *
  * **Position-blind**, like every other teaching predicate here: an assistant on
- * a Quran class teaches Quran (R87 §G).
+ * a حفظ القرآن class teaches it (R87 §G).
  */
 export async function teachesQuran(
   prisma: PrismaClient,
   userId: string,
-  /** R91 — «إدخال الحفظ» answers *do I teach Quran now*, so the marker is about
+  /** R91/R107 — «إدخال الحفظ» answers *do I teach حفظ القرآن now*, so the marker is about
    *  today and about what is still ahead. */
   on: Date = new Date(),
 ): Promise<boolean> {
@@ -774,8 +775,8 @@ export async function quranSubjectId(
 }
 
 /**
- * **May this caller act on this مستفيدة's Quran progress?** (§4.5, TD-2 as
- * qualified by R73.3.)
+ * **May this caller act on this مستفيدة's Quran memorisation progress?**
+ * (§4.5, TD-2 as qualified by R73.3/R107.)
  *
  * The three roles resolve the way TD-2 qualifies each, and only the مؤطرة's arm
  * differs from `assertCanAccessStudent`:

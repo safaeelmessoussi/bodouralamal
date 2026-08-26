@@ -207,7 +207,7 @@ async function subjectNamed(name: string): Promise<string> {
   await prisma.levelSubject.create({ data: { levelId: level.id, subjectId: s.id } });
   return s.id;
 }
-const tafseer = await subjectNamed('تفسير');
+const tafseer = await subjectNamed('تفسير القرآن');
 const fiqh = await subjectNamed('فقه');
 const seerah = await subjectNamed('سيرة');
 const hadith = await subjectNamed('حديث');

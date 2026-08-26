@@ -131,7 +131,7 @@ const level = await prisma.level.create({
     genderRestriction: 'girls_only',
   },
 });
-const subject = await prisma.subject.create({ data: { name: `${TAG} تفسير` } });
+const subject = await prisma.subject.create({ data: { name: `${TAG} تفسير القرآن` } });
 await prisma.levelSubject.create({ data: { levelId: level.id, subjectId: subject.id } });
 const group = await prisma.administrativeGroup.create({
   data: { name: `${TAG} المجموعة 1`, levelId: level.id, branchId: branch.id },

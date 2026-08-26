@@ -4,6 +4,7 @@ import { issueAccessToken } from "../lib/access-token.js";
 import { loadConfig } from "../lib/config.js";
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from "../lib/prisma.js";
 import { httpCall } from "../test-support/http-client.js";
+import { requireMemorisationSubject } from "../test-support/quran-subject.js";
 
 /**
  * **Effective-dated teaching staffing (SRS Revision 91).**
@@ -115,7 +116,14 @@ async function clear(): Promise<void> {
   await prisma.userBranchRole.deleteMany({ where: { userId: { in: ids } } });
   await prisma.user.deleteMany({ where: { id: { in: ids } } });
 
-  await prisma.levelSubject.deleteMany({ where: { subject: { name: { startsWith: TAG } } } });
+  await prisma.levelSubject.deleteMany({
+    where: {
+      OR: [
+        { subject: { name: { startsWith: TAG } } },
+        { level: { name: { startsWith: TAG } } },
+      ],
+    },
+  });
   await prisma.teacherSubjectCapability.deleteMany({
     where: { subject: { name: { startsWith: TAG } } },
   });
@@ -174,12 +182,8 @@ beforeAll(async () => {
       data: { name: `${TAG} المستوى 1`, categoryId, genderRestriction: "any" },
     })
   ).id;
-  // The Subject tracks Quran, so §15's boundary is provable on the same fixture.
-  quranSubject = (
-    await prisma.subject.create({
-      data: { name: `${TAG} تفسير`, displayOrder: 97, tracksQuranProgress: true },
-    })
-  ).id;
+  // R107 — use the Production حفظ marker; the fixture owns only its Level join.
+  quranSubject = (await requireMemorisationSubject(prisma)).id;
   await prisma.levelSubject.create({ data: { levelId, subjectId: quranSubject } });
   yearId = (await prisma.academicYear.findFirstOrThrow()).id;
 

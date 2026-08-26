@@ -4,6 +4,7 @@ import { issueAccessToken } from "../lib/access-token.js";
 import { loadConfig } from "../lib/config.js";
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from "../lib/prisma.js";
 import { httpCall } from "../test-support/http-client.js";
+import { requireMemorisationSubject } from "../test-support/quran-subject.js";
 
 /**
  * **Notifications about Events and published grades (SRS Revision 82).**
@@ -625,17 +626,12 @@ describe("teaching Quran is an assignment, not a role (R87 §M/§G)", () => {
   let scheduleId: string;
 
   beforeAll(async () => {
-    // **Its own Subjects**, not whichever the database happens to hold: the
-    // marker is the whole point of the test, and a fixture that hunts finds a
-    // different answer on every machine.
-    quranSubject = (
-      await prisma.subject.create({
-        data: { name: `${TAG} حفظ`, displayOrder: 90, tracksQuranProgress: true },
-      })
-    ).id;
+    // R107 — consume the Production حفظ marker instead of violating its
+    // platform-wide partial unique index with a second fixture row.
+    quranSubject = (await requireMemorisationSubject(prisma)).id;
     otherSubject = (
       await prisma.subject.create({
-        data: { name: `${TAG} تفسير`, displayOrder: 91, tracksQuranProgress: false },
+        data: { name: `${TAG} تفسير القرآن`, displayOrder: 91, tracksQuranProgress: false },
       })
     ).id;
 

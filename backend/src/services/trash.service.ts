@@ -4,6 +4,7 @@ import { page, pageWindow, type Page, type PageParams } from '../lib/pagination.
 import * as scope from '../policies/branch-scope.js';
 import { assertFreshActive } from '../policies/freshness.policy.js';
 import * as audit from '../repositories/audit.repository.js';
+import { enqueue, JOB_QUEUES } from '../repositories/jobs.repository.js';
 import type { Actor } from '../policies/actor.js';
 
 /**
@@ -70,6 +71,32 @@ type PurgeModel =
   | 'levelSurah'
   | 'hijriMonthStart';
 
+/**
+ * Compile-time bridge from each declared owned-child delegate to its generated
+ * Prisma filter fields. Purge plans are necessarily dynamic, but their FK names
+ * must not be untyped strings: `SessionContent` maps the database column
+ * `educational_content_id` to the Prisma field `contentId`, and the former
+ * `educationalContentId` assumption made every content purge fail at runtime.
+ */
+interface ChildWhereByModel {
+  eventBranch: Prisma.EventBranchWhereInput;
+  eventCategory: Prisma.EventCategoryWhereInput;
+  eventLevel: Prisma.EventLevelWhereInput;
+  eventAdministrativeGroup: Prisma.EventAdministrativeGroupWhereInput;
+  levelSurah: Prisma.LevelSurahWhereInput;
+  studentTeachingGroup: Prisma.StudentTeachingGroupWhereInput;
+  sessionStaff: Prisma.SessionStaffWhereInput;
+  sessionContent: Prisma.SessionContentWhereInput;
+  examStaff: Prisma.ExamStaffWhereInput;
+}
+
+type DeclaredChild = {
+  [Model in keyof ChildWhereByModel]: {
+    model: Model;
+    fk: Extract<keyof ChildWhereByModel[Model], string>;
+  };
+}[keyof ChildWhereByModel];
+
 const RESTORABLE: Record<
   string,
   {
@@ -77,7 +104,7 @@ const RESTORABLE: Record<
     parent?: { field: string; model: ModelName };
     /** Rows soft-deleted WITH the record, un-deleted with it. Only where the
      *  reinstatement is a single well-defined statement (R59.3). */
-    children?: { model: PurgeModel; fk: string }[];
+    children?: DeclaredChild[];
   }
 > = {
   // No parent: nothing above them can be missing.
@@ -160,7 +187,7 @@ const BLOCKED_REASON: Record<string, string> = {
  * not lose. Account deletion needs its own decision about anonymisation versus
  * destruction, and that decision is R54's, not this one's.
  */
-const PURGEABLE: Record<string, { model: PurgeModel; children?: { model: PurgeModel; fk: string }[] }> = {
+const PURGEABLE: Record<string, { model: PurgeModel; children?: DeclaredChild[] }> = {
   // No owned children: a Branch's rooms, groups and schedules are all records of
   // their own, so a Branch with any of them left is refused rather than emptied.
   Branch: { model: 'branch', children: [{ model: 'eventBranch', fk: 'branchId' }] },
@@ -219,7 +246,7 @@ const PURGEABLE: Record<string, { model: PurgeModel; children?: { model: PurgeMo
   // caller, because they live outside the transaction (R59.1).
   EducationalContent: {
     model: 'educationalContent',
-    children: [{ model: 'sessionContent', fk: 'educationalContentId' }],
+    children: [{ model: 'sessionContent', fk: 'contentId' }],
   },
 
   // Join rows with nothing beneath them.
@@ -580,6 +607,7 @@ export async function purgeEntry(
       // which of the two happened rather than raising over a state that is not
       // an error.
       if (!row) {
+        await enqueueContentStorageRetirement(tx, entry.targetEntity, entry.targetId, entry.snapshot);
         await tx.trash.delete({ where: { id } });
         await audit.write(tx, {
           actorUserId: actor.userId,
@@ -598,6 +626,8 @@ export async function purgeEntry(
       if (row['deletedAt'] === null) {
         throw new AppError('STATE_CONFLICT', 'that record is not deleted', { reason: 'NOT_DELETED' });
       }
+
+      await enqueueContentStorageRetirement(tx, entry.targetEntity, entry.targetId, row);
 
       for (const child of plan.children ?? []) {
         const childDelegate = tx[child.model] as unknown as {
@@ -641,6 +671,46 @@ export async function purgeEntry(
     }
     throw error;
   }
+}
+
+/**
+ * Makes a content purge's database destruction and exact object-retirement
+ * obligation indivisible. Storage cannot join the transaction, so the durable
+ * pg-boss row is the committed promise; the worker performs idempotent deletes
+ * afterwards and must fail/retry on an ambiguous storage response.
+ *
+ * The snapshot fallback closes purges whose content row was already removed by
+ * an older/manual path. Missing or malformed coordinates fail the transaction
+ * closed: erasing the final Trash locator would otherwise recreate the orphan
+ * this obligation exists to prevent.
+ */
+async function enqueueContentStorageRetirement(
+  tx: Prisma.TransactionClient,
+  targetEntity: string,
+  contentId: string,
+  source: unknown,
+): Promise<void> {
+  if (targetEntity !== 'EducationalContent') return;
+  if (typeof source !== 'object' || source === null) {
+    throw new Error('EducationalContent purge has no storage snapshot');
+  }
+  const coordinate = source as Record<string, unknown>;
+  const bucket = coordinate['storageBucket'];
+  const storageKey = coordinate['storageKey'];
+  if (typeof bucket !== 'string' || typeof storageKey !== 'string') {
+    throw new Error('EducationalContent purge has no exact storage coordinate');
+  }
+  await enqueue(
+    tx,
+    JOB_QUEUES.contentQuarantinePurge,
+    {
+      operation: 'manual_permanent_delete',
+      content_id: contentId,
+      bucket,
+      storage_key: storageKey,
+    },
+    `manual-purge:${contentId}`,
+  );
 }
 
 /**

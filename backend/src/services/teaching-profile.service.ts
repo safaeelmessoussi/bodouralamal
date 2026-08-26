@@ -10,7 +10,7 @@ import * as audit from '../repositories/audit.repository.js';
  *
  * What a مؤطِّرة declares she can teach and when she is free, so the
  * administration can build the year's schedule. **It authorises nothing**: a
- * person who declares Quran and is assigned no Quran class reaches no
+ * person who declares حفظ القرآن and is assigned no حفظ class reaches no
  * beneficiary's memorisation, and one assigned a Subject she never declared
  * teaches it with full authority the moment the assignment exists. That
  * separation is the whole point of the entity, and it is asserted in the tests

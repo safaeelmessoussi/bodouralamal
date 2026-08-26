@@ -47,6 +47,16 @@ jobs:
         run: bash scripts/ci/check-security-headers.sh
       - name: The hero logo is a cleanly matted cut-out
         run: bash scripts/ci/check-logo-alpha.sh
+      # Guards are protection only if they can fail. Three shipped depending on
+      # ripgrep, and their prohibition checks passed silently where it is absent.
+      - name: CI guards search with POSIX grep, so none can fail open
+        run: bash scripts/ci/check-ci-portability.sh
+      - name: Every MinIO proxy path carries the defensive edge policy
+        run: bash scripts/ci/check-storage-edge.sh
+      - name: Backup tooling stays encrypted, resident and fail-closed
+        run: bash scripts/ci/check-backup-tooling.sh
+      - name: Storage retirement stays durable and automatic destruction stays disabled
+        run: bash scripts/ci/check-storage-lifecycle.sh
       - name: Association terminology remains consistent
         run: bash scripts/ci/check-association-terminology.sh
       - name: Arabic UI uses Western numerals

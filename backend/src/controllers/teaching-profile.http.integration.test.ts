@@ -4,6 +4,7 @@ import { issueAccessToken } from "../lib/access-token.js";
 import { loadConfig } from "../lib/config.js";
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from "../lib/prisma.js";
 import { httpCall } from "../test-support/http-client.js";
+import { requireMemorisationSubject } from "../test-support/quran-subject.js";
 
 /**
  * **The teaching profile (§E, SRS Revision 88).**
@@ -49,6 +50,9 @@ let teacherToken: string;
 let quranSubject: string;
 let tafseerSubject: string;
 let womenCategory: string;
+let levelId: string;
+let branchId: string;
+let roomId: string;
 
 async function clear(): Promise<void> {
   const users = await prisma.user.findMany({
@@ -56,19 +60,6 @@ async function clear(): Promise<void> {
     select: { id: true },
   });
   const ids = users.map((u) => u.id);
-  await prisma.teacherSubjectCapability.deleteMany({ where: { userId: { in: ids } } });
-  await prisma.teacherCategoryCapability.deleteMany({ where: { userId: { in: ids } } });
-  await prisma.teacherAvailability.deleteMany({ where: { userId: { in: ids } } });
-  await prisma.auditLog.deleteMany({ where: { actorUserId: { in: ids } } });
-  await prisma.auditLog.deleteMany({ where: { targetId: { in: ids } } });
-  await prisma.userBranchRole.deleteMany({ where: { userId: { in: ids } } });
-  await prisma.user.deleteMany({ where: { id: { in: ids } } });
-  await prisma.teacherSubjectCapability.deleteMany({
-    where: { subject: { name: { startsWith: TAG } } },
-  });
-  // The Subject is linked to a real Level by the last test; the join is
-  // RESTRICT, so it goes first.
-  await prisma.levelSubject.deleteMany({ where: { subject: { name: { startsWith: TAG } } } });
   const schedules = await prisma.recurringCourseSchedule.findMany({
     where: { title: { startsWith: TAG } },
     select: { id: true },
@@ -79,11 +70,32 @@ async function clear(): Promise<void> {
   await prisma.recurringCourseSchedule.deleteMany({
     where: { id: { in: schedules.map((x) => x.id) } },
   });
+  await prisma.teacherSubjectCapability.deleteMany({ where: { userId: { in: ids } } });
+  await prisma.teacherCategoryCapability.deleteMany({ where: { userId: { in: ids } } });
+  await prisma.teacherAvailability.deleteMany({ where: { userId: { in: ids } } });
+  await prisma.auditLog.deleteMany({ where: { actorUserId: { in: ids } } });
+  await prisma.auditLog.deleteMany({ where: { targetId: { in: ids } } });
+  await prisma.userBranchRole.deleteMany({ where: { userId: { in: ids } } });
+  await prisma.user.deleteMany({ where: { id: { in: ids } } });
+  await prisma.teacherSubjectCapability.deleteMany({
+    where: { subject: { name: { startsWith: TAG } } },
+  });
+  await prisma.levelSubject.deleteMany({
+    where: {
+      OR: [
+        { subject: { name: { startsWith: TAG } } },
+        { level: { name: { startsWith: TAG } } },
+      ],
+    },
+  });
   await prisma.subject.deleteMany({ where: { name: { startsWith: TAG } } });
   await prisma.teacherCategoryCapability.deleteMany({
     where: { category: { name: { startsWith: TAG } } },
   });
+  await prisma.room.deleteMany({ where: { name: { startsWith: TAG } } });
+  await prisma.level.deleteMany({ where: { name: { startsWith: TAG } } });
   await prisma.category.deleteMany({ where: { name: { startsWith: TAG } } });
+  await prisma.branch.deleteMany({ where: { name: { startsWith: TAG } } });
 }
 
 beforeAll(async () => {
@@ -91,18 +103,31 @@ beforeAll(async () => {
   if (!health || health.status !== 200) throw new Error("API not reachable");
   await clear();
 
-  // Its own reference data: the marker and the names are what the assertions
-  // turn on, and a fixture that hunts finds a different answer per machine.
-  quranSubject = (
-    await prisma.subject.create({
-      data: { name: `${TAG} حفظ القران`, displayOrder: 80, tracksQuranProgress: true },
-    })
-  ).id;
+  // R107 — the Production seed owns the one marker. This fixture owns the
+  // unmarked comparison Subject and its assignments, never the حفظ row.
+  quranSubject = (await requireMemorisationSubject(prisma)).id;
   tafseerSubject = (
-    await prisma.subject.create({ data: { name: `${TAG} تفسير`, displayOrder: 81 } })
+    await prisma.subject.create({ data: { name: `${TAG} تفسير القرآن`, displayOrder: 81 } })
   ).id;
   womenCategory = (
     await prisma.category.create({ data: { name: `${TAG} المرأة`, displayOrder: 80 } })
+  ).id;
+  levelId = (
+    await prisma.level.create({
+      data: {
+        name: `${TAG} المستوى`,
+        categoryId: womenCategory,
+        genderRestriction: "any",
+      },
+    })
+  ).id;
+  branchId = (
+    await prisma.branch.create({
+      data: { name: `${TAG} الفرع`, operationalStartDate: new Date("2020-01-01") },
+    })
+  ).id;
+  roomId = (
+    await prisma.room.create({ data: { name: `${TAG} القاعة`, branchId } })
   ).id;
 
   const admin = await prisma.user.create({
@@ -328,26 +353,15 @@ describe("capability grants NOTHING operationally (R88.3)", () => {
       availability: [],
     });
 
-    const level = await prisma.level.findFirstOrThrow({ where: { deletedAt: null } });
-    const branch = await prisma.branch.findFirstOrThrow({
-      where: { deletedAt: null, rooms: { some: { deletedAt: null } } },
-    });
-    const room = await prisma.room.findFirstOrThrow({ where: { branchId: branch.id } });
     const year = await prisma.academicYear.findFirstOrThrow();
-    await prisma.levelSubject.upsert({
-      where: { levelId_subjectId: { levelId: level.id, subjectId: quranSubject } },
-      create: { levelId: level.id, subjectId: quranSubject },
-      update: {},
-    });
-
     const schedule = await prisma.recurringCourseSchedule.create({
       data: {
         title: `${TAG} حلقة`,
         subjectId: quranSubject,
         teachingMode: "entire_level",
-        levelId: level.id,
-        branchId: branch.id,
-        roomId: room.id,
+        levelId,
+        branchId,
+        roomId,
         academicYearId: year.id,
         startTime: new Date("1970-01-01T09:00:00Z"),
         endTime: new Date("1970-01-01T10:00:00Z"),

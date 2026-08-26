@@ -14,8 +14,8 @@ Four layers, each testing something the others structurally cannot.
 **Coverage: ≥ 80 % on services and policies.** No coverage gate on generated or boilerplate
 code — a coverage number that counts generated clients measures nothing.
 
-Current default CI totals: **270 backend tests across 27 files · 727 frontend tests across 57
-files**. The repository also contains **82 backend integration files**, but the workflow does
+Current default CI totals: **276 backend tests across 28 files · 727 frontend tests across 57
+files**. The repository also contains **83 backend integration files**, but the workflow does
 not run them: they require an isolated real stack and database lifecycle that this CI slice
 does not yet provide.
 
@@ -38,6 +38,12 @@ PUT behavior, exact bucket-root denial with listing queries, and fail-closed dup
 path normalization. It never deletes the historical consent backlog: only tagged fixture jobs
 receive temporary priority and all tagged rows/objects are removed.
 
+The storage-proxy suite also checks the temporary P0.1 edge defence without reproducing the
+object-store vulnerability: an unsigned, credential-free, bodyless request carrying the
+vendor-named unsupported content-hash mode must receive the Nginx-only policy marker. The
+same suite then completes a real presigned PUT/GET round trip, so a broad filter that breaks
+legitimate SigV4 traffic cannot pass.
+
 ## Running them
 
 ```bash
@@ -45,13 +51,36 @@ receive temporary priority and all tagged rows/objects are removed.
 cd backend && npm run lint && npm run typecheck && npm test && npm run build
 cd frontend && npm run lint && npm run typecheck && npm test && npm run build
 
-# Repository and contract guards — all twenty are represented in CI
+# Repository and contract guards — all twenty-four are represented in CI
 for g in scripts/ci/check-*.sh; do bash "$g"; done
 
 # Integration — needs the stack up
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 bash scripts/dev/test-integration.sh
+
+# Destructive only to uniquely named disposable volumes and a local encrypted repository
+bash scripts/backup/verify-backup-restore.sh
 ```
+
+The backup drill is not a source-text assertion. It writes a PostgreSQL row and MinIO object,
+creates and verifies a real encrypted restic snapshot, destroys both disposable volumes,
+restores them into empty replacements, validates the portable dump catalog, and reads both
+values back. Fixture mode structurally
+refuses SFTP so the drill cannot send local data to an external target. Its local 33-second
+result proves the recovery mechanism and the `< 1 h` target at fixture scale; the selected
+Moroccan target and realistic Production volume still require the launch drill.
+
+The storage-lifecycle drill is destructive only to its uniquely named disposable PostgreSQL
+and MinIO volumes (`bash scripts/storage/verify-storage-lifecycle.sh`). It applies every
+migration, creates objects across the complete staging-prefix catalog, proves the strict
+48-hour boundary and bounded continuation, and verifies canonical objects survive. Its purge
+case removes the queue first to prove the content row/Trash deletion rolls back, then uses the
+real production worker with a deliberately lost first `DeleteObject` response: pg-boss retries,
+both exact old leftovers disappear, and a newer key under the same content UUID remains. It
+then delivers a stale quarantine job after the row is gone and proves the worker removes the
+late copy without targeting that newer key.
+Automatic `purge_after` destruction is asserted absent rather than simulated, because it still
+requires the Owner decision.
 
 Integration tests run **serially**, because the suites share one database.
 
@@ -849,26 +878,41 @@ scaleX()` was rejected. A guard that cannot tell prose from code fails on the
 documentation recording its own reason.
 
 
-### Only ONE fixture may hold the Quran marker at a time
+### Fixtures consume the one Production memorisation marker
 
 `Subject.tracks_quran_progress` has a **partial unique index** — at most one live
-Subject may carry it (R73.4), because two would make *which* teaching authorises
-a log ambiguous. `seed-quran-scenario.ts` and `seed-r91-scenario.ts` both create
-one, so:
+Subject may carry it (R73.4/R107–R108), because two would make *which* teaching authorises
+a log ambiguous. In Production it belongs only to حفظ القرآن. Quran integration
+and browser fixtures consume that seeded row through a shared fail-closed helper;
+they never create or delete the reference Subject. The R91 Tafsir fixture consumes
+the separate, unmarked تفسير القرآن row. This makes concurrent fixtures compatible
+with the uniqueness invariant and makes missing, duplicate, or wrongly named marker
+data fail with a legible R107/R108 setup error.
 
-* they can never run **concurrently**;
-* and a fixture leaked by an **interrupted** run blocks the other harness with a
-  raw `duplicate key value violates unique constraint` stack trace rather than a
-  legible message.
+The tagged-Subject cleanup remains in the older scenario scripts solely to recover
+residue created by pre-R107 versions of those fixtures. Current teardown removes only
+the fixture-owned joins and retains the Production Subjects.
 
-That is exactly what happened on 2026-08-20: a batch loop was SIGTERM'd while
-`verify-quran-entry` was running, its `trap cleanup EXIT` never completed, and
-`verify-effective-staffing` then failed to seed at all. **The recovery is
-`npx tsx scripts/seed-quran-scenario.ts --clean`**, which every harness also runs
-on exit.
+### The Production Subject seed has its own fresh-database drill
 
-**A harness killed mid-run leaves its fixture behind.** When one fails to seed,
-check for another scenario's residue before suspecting the product.
+Run `bash scripts/seed/verify-production-seed.sh`. It starts a disposable PostgreSQL 18
+volume, applies every migration, executes the **actual** Production seed entry point twice,
+and then checks the R107–R108 boundary through the real policy and Quran service. It also boots
+the real API/pg-boss catalog against disposable MinIO, runs all 18 integration files affected
+by the reconciliation, and round-trips all eight changed scenario seeds on that same stack:
+
+- the exact eight seeded Subjects exist once, with stable ids and timestamps across the second run;
+- القرآن الكريم, محو الأمية, the ambiguous bare تفسير, and separate ترتيل/تجويد synonyms are absent from a fresh seed;
+- Super-Admin additions, later Quran-domain Subjects, and historical rows survive a rerun unchanged and unmarked;
+- exactly one live marker exists and it is حفظ القرآن;
+- a teacher staffed on حفظ القرآن can log memorisation for the resolved audience;
+- teachers staffed only on أحكام القرآن, ترتيل وتجويد القرآن, تفسير القرآن, or a later
+  unmarked Quran-domain Subject for that same audience receive `NOT_FOUND`;
+- a conflicting Owner-managed marker aborts before Subjects or unrelated seed data change.
+
+The opt-in variable and unique database volume are deliberate. This proof owns its whole
+database and invokes the bootstrap seed, so it must never share a development or Owner
+database merely to make the test convenient.
 
 ### A contract change reaches the harnesses too
 
@@ -1027,6 +1071,37 @@ blocks in all thirty scripts — the injected comment contained apostrophes.
 with `git checkout -- scripts/dev/browser/` reverted *every* file in the
 directory, including C1 work that was correct and uncommitted. Restore the files
 you broke, never the directory they live in.
+
+### A guard that depends on an unasserted tool fails OPEN
+
+Three CI guards shipped written with `ripgrep`, their prohibition checks taking
+the form:
+
+```bash
+if rg -n 'forbidden-pattern' dir | grep -q .; then fail '...'; fi
+```
+
+Where `rg` is absent, the command writes `rg: command not found` to **stderr**
+and nothing to stdout, so the condition is simply **false** — the guard prints
+its success line and exits `0` **while the thing it forbids sits in the tree.**
+
+It was proven rather than argued: a real `proxy_pass $minio_upstream` bypass was
+injected into `nginx/snippets/`, and `check-storage-edge.sh` passed. The two
+checks made inert this way were precisely the ones protecting Owner decisions —
+that no Nginx path bypasses the storage edge filter, and that automatic
+quarantine destruction stays disabled. A third guard (`check-backup-tooling.sh`)
+failed *closed* instead, which is loud and safe but still wrong.
+
+**So: CI guards search with POSIX `grep`.** It exists on every runner and in
+every container this project uses. `check-ci-portability.sh` now fails the build
+if a guard reaches for `rg`, `fd`, `ag` or `ack`; if one ever genuinely needs a
+richer tool, it must assert the tool exists **first**, so a missing dependency is
+loud rather than silently permissive.
+
+This is the same rule as *"a guard must be able to read what it guards"* — the
+`?raw` CSS guard that passed for a whole commit while reading empty strings —
+seen from the other side. **The tell is identical: a guard that has never
+failed.**
 
 ### A guard that fails because the PRODUCT changed is restated, not deleted
 

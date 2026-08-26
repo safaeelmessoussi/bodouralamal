@@ -31,11 +31,11 @@ async function branchOf(groupId: string): Promise<string> {
  *
  *   Level 1  ── AdminGroup A (Amerchich) ── هدى · سارة
  *            └─ AdminGroup B (Targa)     ── ليلى
- *      Quran   → TG Quran-1 (هدى) · TG Quran-2 (سارة)
- *      Tajweed → TG Tajweed-1 (هدى · سارة)
+ *      Hifz   → TG Hifz-1 (هدى) · TG Hifz-2 (سارة)
+ *      Tartil → TG Tartil-1 (هدى · سارة)
  *      Tafsir  → no teaching groups; taught to the entire Level
  *
- * هدى therefore sits in AdminGroup A, Quran-1 **and** Tajweed-1 at once, which
+ * هدى therefore sits in AdminGroup A, Hifz-1 **and** Tartil-1 at once, which
  * is the independence between Subjects that BR-22's per-(subject, level)
  * uniqueness delivers.
  */
@@ -49,12 +49,12 @@ let amerchichId: string;
 let targaId: string;
 let groupAId: string;
 let groupBId: string;
-let quranId: string;
-let tajweedId: string;
+let hifzId: string;
+let tartilId: string;
 let tafsirId: string;
-let tgQuran1: string;
-let tgQuran2: string;
-let tgTajweed1: string;
+let tgHifz1: string;
+let tgHifz2: string;
+let tgTartil1: string;
 let academicYearId: string;
 
 let huda: string;
@@ -179,26 +179,26 @@ beforeAll(async () => {
     })
   ).id;
 
-  quranId = (await prisma.subject.create({ data: { name: `${TAG} القرآن` } }))
+  hifzId = (await prisma.subject.create({ data: { name: `${TAG} حفظ القرآن` } }))
     .id;
-  tajweedId = (await prisma.subject.create({ data: { name: `${TAG} تجويد` } }))
+  tartilId = (await prisma.subject.create({ data: { name: `${TAG} ترتيل وتجويد القرآن` } }))
     .id;
-  tafsirId = (await prisma.subject.create({ data: { name: `${TAG} تفسير` } }))
+  tafsirId = (await prisma.subject.create({ data: { name: `${TAG} تفسير القرآن` } }))
     .id;
 
-  tgQuran1 = (
+  tgHifz1 = (
     await prisma.teachingGroup.create({
-      data: { name: `${TAG} القرآن 1`, subjectId: quranId, levelId },
+      data: { name: `${TAG} حفظ القرآن 1`, subjectId: hifzId, levelId },
     })
   ).id;
-  tgQuran2 = (
+  tgHifz2 = (
     await prisma.teachingGroup.create({
-      data: { name: `${TAG} القرآن 2`, subjectId: quranId, levelId },
+      data: { name: `${TAG} حفظ القرآن 2`, subjectId: hifzId, levelId },
     })
   ).id;
-  tgTajweed1 = (
+  tgTartil1 = (
     await prisma.teachingGroup.create({
-      data: { name: `${TAG} تجويد 1`, subjectId: tajweedId, levelId },
+      data: { name: `${TAG} ترتيل وتجويد القرآن 1`, subjectId: tartilId, levelId },
     })
   ).id;
 
@@ -214,10 +214,10 @@ beforeAll(async () => {
   await enrol(sara, groupAId, levelId);
   await enrol(layla, groupBId, levelId);
 
-  await seat(huda, tgQuran1, quranId);
-  await seat(sara, tgQuran2, quranId);
-  await seat(huda, tgTajweed1, tajweedId);
-  await seat(sara, tgTajweed1, tajweedId);
+  await seat(huda, tgHifz1, hifzId);
+  await seat(sara, tgHifz2, hifzId);
+  await seat(huda, tgTartil1, tartilId);
+  await seat(sara, tgTartil1, tartilId);
 });
 
 afterAll(async () => {
@@ -275,9 +275,9 @@ describe("audienceWhere — the three teaching modes (§4.4c)", () => {
 
   it("teaching_group resolves to exactly that split, ignoring the administrative roster", async () => {
     const spec = await specOf(
-      await schedule(quranId, {
+      await schedule(hifzId, {
         teachingMode: "teaching_group",
-        teachingGroupId: tgQuran2,
+        teachingGroupId: tgHifz2,
         branchId: amerchichId,
       }),
     );
@@ -334,52 +334,52 @@ describe("independence between Subjects (BR-22)", () => {
         branchId: amerchichId,
       }),
     );
-    const quran1 = await specOf(
-      await schedule(quranId, {
+    const hifz1 = await specOf(
+      await schedule(hifzId, {
         teachingMode: "teaching_group",
-        teachingGroupId: tgQuran1,
+        teachingGroupId: tgHifz1,
         branchId: amerchichId,
       }),
     );
-    const tajweed1 = await specOf(
-      await schedule(tajweedId, {
+    const tartil1 = await specOf(
+      await schedule(tartilId, {
         teachingMode: "teaching_group",
-        teachingGroupId: tgTajweed1,
+        teachingGroupId: tgTartil1,
         branchId: amerchichId,
       }),
     );
 
     expect(ids(await resolveAudience(prisma, admin))).toContain(huda);
-    expect(ids(await resolveAudience(prisma, quran1))).toEqual([huda]);
-    expect(ids(await resolveAudience(prisma, tajweed1))).toEqual(
+    expect(ids(await resolveAudience(prisma, hifz1))).toEqual([huda]);
+    expect(ids(await resolveAudience(prisma, tartil1))).toEqual(
       [huda, sara].sort(),
     );
   });
 
-  it("the two subjects partition the SAME level differently — Quran 2-way, Tajweed 1-way", async () => {
+  it("the two subjects partition the SAME level differently — Hifz 2-way, Tartil 1-way", async () => {
     const q1 = await specOf(
-      await schedule(quranId, {
+      await schedule(hifzId, {
         teachingMode: "teaching_group",
-        teachingGroupId: tgQuran1,
+        teachingGroupId: tgHifz1,
         branchId: amerchichId,
       }),
     );
     const q2 = await specOf(
-      await schedule(quranId, {
+      await schedule(hifzId, {
         teachingMode: "teaching_group",
-        teachingGroupId: tgQuran2,
+        teachingGroupId: tgHifz2,
         branchId: amerchichId,
       }),
     );
     const t1 = await specOf(
-      await schedule(tajweedId, {
+      await schedule(tartilId, {
         teachingMode: "teaching_group",
-        teachingGroupId: tgTajweed1,
+        teachingGroupId: tgTartil1,
         branchId: amerchichId,
       }),
     );
 
-    // Quran splits هدى | سارة. Tajweed keeps them together. Nothing aligns the
+    // Hifz splits هدى | سارة. Tartil keeps them together. Nothing aligns the
     // two, and nothing should try to (§4.4c).
     expect(ids(await resolveAudience(prisma, q1))).toEqual([huda]);
     expect(ids(await resolveAudience(prisma, q2))).toEqual([sara]);
@@ -437,19 +437,19 @@ describe("the audience is live, never a snapshot (§20 rule 22)", () => {
 
   it("a soft-deleted teaching group empties its audience without touching seats", async () => {
     const spec = await specOf(
-      await schedule(quranId, {
+      await schedule(hifzId, {
         teachingMode: "teaching_group",
-        teachingGroupId: tgQuran2,
+        teachingGroupId: tgHifz2,
         branchId: amerchichId,
       }),
     );
     await prisma.teachingGroup.update({
-      where: { id: tgQuran2 },
+      where: { id: tgHifz2 },
       data: { deletedAt: new Date() },
     });
     expect(await resolveAudience(prisma, spec)).toEqual([]);
     await prisma.teachingGroup.update({
-      where: { id: tgQuran2 },
+      where: { id: tgHifz2 },
       data: { deletedAt: null },
     });
     expect(ids(await resolveAudience(prisma, spec))).toEqual([sara]);
@@ -473,9 +473,9 @@ describe("the audience is live, never a snapshot (§20 rule 22)", () => {
 describe("teacher scope resolves through CourseScheduleStaff (§4.4c, TD-2)", () => {
   it("a teacher reaches exactly the students of the schedules they staff", async () => {
     const zaynab = await person("الأستاذة زينب");
-    const s = await schedule(quranId, {
+    const s = await schedule(hifzId, {
       teachingMode: "teaching_group",
-      teachingGroupId: tgQuran1,
+      teachingGroupId: tgHifz1,
       branchId: amerchichId,
     });
     await prisma.courseScheduleStaff.create({
@@ -488,16 +488,16 @@ describe("teacher scope resolves through CourseScheduleStaff (§4.4c, TD-2)", ()
     );
 
     // هدى only: سارة is in the same Level and the same administrative group,
-    // but in a different Quran split, and this teacher staffs only that split.
+    // but in a different Hifz split, and this teacher staffs only that split.
     expect(reached).toEqual([huda]);
     expect(reached).not.toContain(sara);
   });
 
   it("an ASSISTANT has the same reach as the teacher — one table, one rule", async () => {
     const helper = await person("المساعدة");
-    const s = await schedule(tajweedId, {
+    const s = await schedule(tartilId, {
       teachingMode: "teaching_group",
-      teachingGroupId: tgTajweed1,
+      teachingGroupId: tgTartil1,
       branchId: amerchichId,
     });
     await prisma.courseScheduleStaff.create({
@@ -541,9 +541,9 @@ describe("teacher scope resolves through CourseScheduleStaff (§4.4c, TD-2)", ()
 
   it("revoking the staffing ends the reach on the NEXT call", async () => {
     const t = await person("أستاذة مؤقتة");
-    const s = await schedule(quranId, {
+    const s = await schedule(hifzId, {
       teachingMode: "teaching_group",
-      teachingGroupId: tgQuran1,
+      teachingGroupId: tgHifz1,
       branchId: amerchichId,
     });
     const staff = await prisma.courseScheduleStaff.create({

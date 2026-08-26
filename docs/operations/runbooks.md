@@ -9,6 +9,96 @@ Step-by-step procedures for things that will actually happen.
 
 ---
 
+## Creating and restoring a full recovery point
+
+The repository now has host-scoped recovery tooling for the current Compose data layout. It takes one coherent
+point by stopping every running service except PostgreSQL, producing a portable custom-format
+`pg_dump`, stopping PostgreSQL, and backing up that dump, the cleanly stopped Docker data
+volumes, TLS state and recovery configuration into one encrypted restic snapshot. The exact
+pre-backup service set is restarted even on failure. The restic image is immutable by digest;
+the password file is root-only and is never included in the snapshot.
+
+This is intentionally host-scoped. The API and its pg-boss workers are unprivileged
+containers; mounting the Docker socket into either would grant root-equivalent control of the
+VPS. The current executable tooling does not make that trade.
+
+### OWNER DECISION REQUIRED — BACKUP TARGET AND RETENTION
+
+Before Production, the Owner must provision an SFTP/SSH repository at a **second Moroccan
+location**, pin its host key in a dedicated `known_hosts`, escrow a strong restic password and
+SSH recovery key separately, and choose a retention schedule. Safe target categories are a
+second association-controlled Moroccan VPS or a contracted Moroccan-resident SFTP service;
+an overseas service is prohibited even when encrypted. The recommendation is a separately
+administered Moroccan SFTP target whose credentials cannot modify the primary VPS.
+
+The SRS fixes the nightly RPO and sub-hour RTO but does not set the destructive snapshot
+retention horizon. Until the Owner chooses one, the tooling runs no `forget` or `prune` at
+all. A reasonable decision set to evaluate is daily/weekly/monthly tiers (for example 7 daily,
+5 weekly and 12 monthly) versus a longer legal/operational horizon; cost, erasure obligations
+and the recovery window differ, so the repository does not pick between them.
+
+Create a Production recovery point from `/opt/bodour`:
+
+```bash
+sudo scripts/backup/create-recovery-point.sh \
+  --repository "$BACKUP_TARGET_SSH" \
+  --password-file /root/bodour-backup/restic-password \
+  --ssh-dir /root/bodour-backup/ssh \
+  --config-file /opt/bodour/.env \
+  --config-file /opt/bodour/infra.env
+```
+
+`BACKUP_TARGET_SSH` may be the TD-13 spelling `user@host:/path`; the tool normalizes it to
+restic's SFTP backend. Production refuses a local repository. Conversely,
+`--allow-fixtures` refuses SFTP, so a disposable drill cannot copy fixtures externally.
+The initial snapshot may take longer than incremental nights because all four volumes are
+new; measure the maintenance window on the production VPS before launch.
+
+Restore only onto fresh, empty named volumes. The tool refuses a running project, refuses a
+non-empty volume, requires an exact Production confirmation, verifies the logical dump's
+SHA-256, restores the raw volumes, writes the dump, manifest and recovered `.env`/`infra.env`
+into a new root-only directory for comparison, and deliberately leaves services stopped:
+
+```bash
+sudo scripts/backup/restore-recovery-point.sh \
+  --repository "$BACKUP_TARGET_SSH" \
+  --password-file /root/bodour-backup/restic-password \
+  --ssh-dir /root/bodour-backup/ssh \
+  --recovered-config-dir /root/bodour-recovered-config \
+  --confirm-production-restore RESTORE_TO_EMPTY_PRODUCTION_VOLUMES
+```
+
+Compare/install the recovered configuration, start the exact recorded commit, then verify
+PostgreSQL migrations and row counts, all object buckets, `/healthz`, worker readiness, signed
+private GET/PUT, the public exact-coordinate gate, and one application journey. Never restore
+a Production snapshot into Local, Preview or Staging.
+
+The custom-format PostgreSQL dump is portable. The raw PostgreSQL and object-store volume
+copies are deliberately the fast, exact same-version disaster path and are **not** a claim of
+cross-vendor object portability. After the Owner selects the supported object store, update
+the backed-up volume set/export format, then repeat the compatibility and restore suite before
+Production. Do not restore a MinIO volume under a different vendor or unverified release.
+
+The destructive disposable proof is:
+
+```bash
+bash scripts/backup/verify-backup-restore.sh
+```
+
+It creates uniquely named PostgreSQL/MinIO volumes and a local encrypted repository, records
+known database and object values, snapshots, destroys both volumes, restores into empty
+volumes, validates the portable dump catalog and reads both values back. The accepted run on
+2026-08-26 completed in **33 seconds**,
+inside the one-hour RTO. It proves the tooling; only a drill on the selected Moroccan target
+with realistic data volume proves Production's RTO.
+
+**Still open:** the nightly `backup.replicate` pg-boss automation, critical Admin-visible
+failure/staleness alert, remote Moroccan target, chosen retention, and production-host drill.
+Production remains blocked until those exist. Do not substitute an unmonitored host cron or a
+Docker-socket mount and call the job complete.
+
+---
+
 ## Restoring a soft-deleted record
 
 **Never run restoration SQL directly in `psql`.**
@@ -81,10 +171,19 @@ Two types have no destruction plan at all:
 | `User` | `ACCOUNTABILITY_RECORD` — a person's row is referenced by `AuditLog` and `Trash` themselves, so destroying it takes the record of who deleted what | The account stays soft-deleted with its fields anonymised. Erasure of a person's data is R54's decision, and it is about anonymisation, not row destruction |
 | `RecurringCourseSchedule` | `CASCADE_CHILDREN` — its Sessions are materialized rows other records reference, so destroying it destroys a timetable's history | Purge the Sessions that block it first, or leave it to BR-15 |
 
-> **BR-15's 90-day window is not enforced by anything.** Revisions 52 and 53 both state that
-> `content.quarantine-purge` (TD-7) closes it. **That job was never built** (R59.4):
-> `purge_after` is written on every tombstone and nothing has ever read it. Until it ships,
-> the only permanent deletion on this platform is the deliberate Super Admin action above.
+The deliberate action is storage-durable for `EducationalContent`: its transaction inserts an
+exact `content.quarantine-purge` obligation before deleting the content row and Trash locator.
+If the queue is absent the whole transaction rolls back; a storage outage or lost delete
+response retries under TD-7. Operators must not manually remove a failed job, because after
+the row is gone that payload is the durable record of the two possible object leftovers.
+
+> **OWNER DECISION REQUIRED — AUTOMATIC QUARANTINE DESTRUCTION.** Revisions 52 and 53 state
+> that `content.quarantine-purge` closes BR-15 after 90 days, while R59.4 reserves activating
+> automatic Production destruction to the Document Owner. The queue now processes explicit
+> replacement/deletion/manual-purge coordinates, but it is deliberately not scheduled against
+> `purge_after`; expired Trash remains until a Super Admin acts. Take the object-store and
+> backup/retention decisions and complete a Production-scale restore drill before authorising
+> the automatic arm.
 
 ---
 
@@ -366,6 +465,14 @@ still receives MinIO `403`, and that `/storage/public`, `/storage/public/` and e
 `?list-type=2` cannot return a bucket listing. Duplicate/encoded separator probes must either
 select the same denial or fail the exact-coordinate authorizer; none may fall through the
 generic `/storage/` proxy.
+
+For the temporary P0.1 object-store defence, `nginx -T` must also show the shared
+`STREAMING-UNSIGNED-PAYLOAD-TRAILER` rejection on every proxied storage location. The safe
+regression sends only that header on an unsigned, bodyless representative PUT: it must return
+`403` with `X-Bodour-Storage-Policy: unsigned-trailer-denied`, proving Nginx—not MinIO—made
+the decision. Do not construct a chunked payload or attempt to reproduce the vulnerability.
+The signed proxy round trip above must pass in the same run. This filter does not remove the
+[Owner-blocked supported-object-store requirement](../architecture/storage.md#owner-decision-required--object-store).
 
 ### B-03 rollout: let legacy direct PUT capabilities expire
 

@@ -309,7 +309,7 @@ export function createApp(
   guarded.get('/admin/trash', trash.list(prisma));
   guarded.post('/admin/trash/:id/restore', trash.restore(prisma));
   // R59.1 — the permanent delete Revision 52 forbade until a revision existed.
-  guarded.delete('/admin/trash/:id', trash.purge(prisma, storage));
+  guarded.delete('/admin/trash/:id', trash.purge(prisma));
 
   // R88 — the teaching profile: what a مؤطِّرة can teach and when. **Planning
   // data**, owned by the administration, granting no operational authority.

@@ -3,6 +3,7 @@ import {
   DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
+  ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
@@ -162,6 +163,55 @@ export interface ObjectStat {
   /** Server-written collision-resistant identity, when the object lifecycle
    *  records one. Never inferred from the ETag. */
   sha256: string | null;
+}
+
+/** One bounded S3 listing page. Callers own prefix selection and continuation;
+ * this primitive never broadens a lifecycle sweep to an entire bucket. */
+export interface ObjectListPage {
+  objects: readonly {
+    key: string;
+    lastModified: Date | null;
+  }[];
+  nextContinuationToken: string | null;
+}
+
+/**
+ * Lists at most one page beneath an exact prefix.
+ *
+ * Lifecycle work is deliberately page-shaped: a bucket can grow without
+ * turning one pg-boss execution into an unbounded scan, while the opaque S3
+ * continuation token can be handed to the next durable job.
+ */
+export async function listObjectsPage(
+  clients: StorageClients,
+  bucket: string,
+  prefix: string,
+  options: { continuationToken?: string; maxKeys: number },
+): Promise<ObjectListPage> {
+  if (!Number.isInteger(options.maxKeys) || options.maxKeys < 1 || options.maxKeys > 1_000) {
+    throw new Error('storage list maxKeys must be an integer from 1 to 1000');
+  }
+  const listed = await clients.internal.send(
+    new ListObjectsV2Command({
+      Bucket: bucket,
+      Prefix: prefix,
+      MaxKeys: options.maxKeys,
+      ...(options.continuationToken === undefined
+        ? {}
+        : { ContinuationToken: options.continuationToken }),
+    }),
+  );
+  return {
+    objects: (listed.Contents ?? []).flatMap((object) =>
+      object.Key === undefined
+        ? []
+        : [{ key: object.Key, lastModified: object.LastModified ?? null }],
+    ),
+    nextContinuationToken:
+      listed.IsTruncated === true && listed.NextContinuationToken
+        ? listed.NextContinuationToken
+        : null,
+  };
 }
 
 /**

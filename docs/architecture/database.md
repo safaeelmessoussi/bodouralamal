@@ -171,6 +171,27 @@ upsert.
 pair's latest log id — never as per-row cache reads plus per-row max lookups, which would be
 an N+1 wearing a cache costume.
 
+### `Subject.tracks_quran_progress` — authorization, not curriculum type
+
+SRS R107–R108 keeps the existing boolean and partial unique index, and narrows their meaning.
+The broad Quran domain القرآن الكريم has no Subject row; its atomic Subjects are scheduled
+normally. Only حفظ القرآن may carry the marker, and a current staffing assignment for that
+Subject authorises memorisation entry for its resolved audience.
+
+The database enforces **at most one live marker**. It deliberately cannot enforce “exactly
+one”: an empty database must exist before bootstrap, and absence is a valid fail-closed
+configuration. The Production seed establishes and asserts exactly one for launch. It
+refuses a different marked Subject or duplicate live حفظ القرآن rows rather than guessing
+or rewriting Owner-managed reference data.
+
+`LevelSurah` records the Level's حفظ القرآن Surah syllabus, which تفسير القرآن follows
+pedagogically. `QuranProgressLog` remains keyed by student and Surah with no Subject foreign
+key, because the marker answers *who may write* while the log answers *what was memorised*.
+Tafsir remains unmarked and does not participate in the coverage engine; أحكام القرآن,
+ترتيل وتجويد القرآن and any later unmarked Quran-domain Subject use ordinary
+`LevelSubject` curriculum. The eight-row Production seed is an additive baseline and does
+not constrain or rewrite later Super-Admin additions.
+
 ### `SessionRecording` → `EducationalContent` — a nullable UNIQUE that is the whole idempotency design (R99)
 
 One column, `session_recording.educational_content_id`: **nullable, unique, FK `RESTRICT`** —
@@ -548,9 +569,10 @@ Two paths, and only two:
   anything else that references the row is a record in its own right, and the `Restrict`
   foreign key makes PostgreSQL refuse. *The database is the authority on what still points
   at a row* — a hand-maintained list of blockers would be a second copy of the schema.
-* **The quarantine-purge job after 90 days** — except that **this job does not exist**
-  (R59.4). `purge_after` is written on every tombstone and nothing has ever read it, so
-  BR-15's window is documented, depended on by two revisions, and not in force.
+* **The quarantine-purge job after 90 days** — the queue now handles exact replacement,
+  deletion and deliberate manual-purge storage obligations, but its automatic age arm remains
+  intentionally absent (R59.4). `purge_after` is written on every tombstone and nothing reads
+  it, so BR-15's automatic window is still not in force pending the Owner decision.
 
 > **A `RESTRICT` violation is not `P2003`.** `P2003` is *foreign key constraint failed*,
 > PostgreSQL `23503`. A relation declared `onDelete: Restrict` — which is how essentially

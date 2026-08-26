@@ -35,10 +35,23 @@ const BASE = `${config.PUBLIC_BASE_URL}/api/v1`;
 const TAG = "[scenario]";
 const YEAR_LABEL = "2096-2097";
 
-/** The Monday the Owner named, and the fortnight around it. */
-const CANCELLED_DATE = "2026-08-24";
-const FROM = "2026-08-01";
-const TO = "2026-09-30";
+/** A future Monday and a stable query window around it. Keeping the Owner's
+ * scenario relative prevents this integration proof from silently expiring
+ * when its once-future 2026-08-24 occurrence moves behind materialization's
+ * today boundary. */
+const DAY_MS = 86_400_000;
+const today = new Date();
+const utcToday = new Date(
+  Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()),
+);
+const anchor = new Date(utcToday.getTime() + 14 * DAY_MS);
+const cancelled = new Date(
+  anchor.getTime() + ((8 - anchor.getUTCDay()) % 7) * DAY_MS,
+);
+const isoDate = (value: Date): string => value.toISOString().slice(0, 10);
+const CANCELLED_DATE = isoDate(cancelled);
+const FROM = isoDate(new Date(cancelled.getTime() - 21 * DAY_MS));
+const TO = isoDate(new Date(cancelled.getTime() + 42 * DAY_MS));
 
 interface Row {
   id: string;
@@ -247,7 +260,7 @@ describe("the scenario, step by step — each step through the API a screen uses
     levelId = createdId(level);
 
     const subject = await call("POST", "/admin/subjects", superAdmin, {
-      name: `${TAG} تفسير`,
+      name: `${TAG} تفسير القرآن`,
     });
     expect(subject.status).toBe(201);
     subjectId = createdId(subject);
@@ -445,7 +458,7 @@ describe("the scenario, step by step — each step through the API a screen uses
 describe("cancelling ONE Monday leaves the series alone", () => {
   let cancelledId: string;
 
-  it("cancels 2026-08-24 for «الأستاذة مريضة», and nothing else changes", async () => {
+  it("cancels one future Monday for «الأستاذة مريضة», and nothing else changes", async () => {
     const target = await prisma.session.findFirstOrThrow({
       where: { scheduleId, date: new Date(`${CANCELLED_DATE}T00:00:00.000Z`) },
       select: { id: true, version: true },

@@ -135,7 +135,7 @@ was hiding behind it: the run went green on the first attempt.
 - [x] `/CLAUDE.md`, `/AGENTS.md`, `docs/CHANGES.log` committed (§16.3)
 - [x] `.env.example` generated from TD-13 inventory; boot-time fail-fast validation for Required vars
 - [x] Version pins per §3.1a (Node 22 LTS image, PG 17, Prisma 6, React 19, Vite 6, Express 5, pg-boss 10)
-- [x] CI: all 20 committed guards, lint, exact typecheck, default test runners, backend/frontend production builds, and ordinary OpenAPI↔TD-3 conformance (§3.1). Integration/browser/coverage infrastructure and fatal `TD3_REQUIRE_COMPLETE=1` remain separate slices
+- [x] CI: all 24 committed guards, lint, exact typecheck, default test runners, backend/frontend production builds, and ordinary OpenAPI↔TD-3 conformance (§3.1). Integration/browser/coverage infrastructure and fatal `TD3_REQUIRE_COMPLETE=1` remain separate slices
 
 ## M1 — Infrastructure & Platform Core
 - [x] `docker-compose.yml`: api, db, minio, nginx (+certbot); TZ=Africa/Casablanca; tzdata pinned (TD-11)
@@ -145,7 +145,7 @@ was hiding behind it: the run went green on the first attempt.
 - [x] `schema.prisma` full §7 model incl. `version` columns on TD-15 entities; plain constraints in Prisma
 - [x] `RateLimitCounter` entity + unique `(user_id, bucket, window_start)` (§7/TD-6, Revision 14) — added by a forward-only follow-up migration (TD-6b)
 - [x] Hand-written SQL migrations via `migrate dev --create-only`: explicit `CREATE COLLATION "ar-x-icu"` registration, column collations, CHECKs (incl. bp score checks), partial unique indexes, cross-table ayah trigger (TD-6, TD-6a)
-- [x] Production seed, idempotent (§15.1): roles, categories/levels, subjects, academic year, 114 Surahs, SystemSetting defaults, Super Admin allow-list (via `pre_provisioned_email`, Revision 15 — no placeholder identity)
+- [x] Production seed, idempotent (§15.1): roles, categories/levels, R107–R108 extensible eight-Subject baseline with exactly one حفظ القرآن memorisation marker, academic year, 114 Surahs, SystemSetting defaults, Super Admin allow-list (via `pre_provisioned_email`, Revision 15 — no placeholder identity)
 - [x] Dev fixtures with `NODE_ENV` guard (§15.2)
 - [x] Google OAuth: state+PKCE (flow state in a short-lived signed HttpOnly callback-scoped cookie, TD-12 Revision 16), cryptographically verified Google ID token (RS256/provider key, exact issuer, configured audience, lifetime, subject, verified email), callback branches 4a/4b/4c, first binding guarded by the authoritative User lock/status re-read, onboarding token (10 min, `jti` + ConsumedToken replay guard) (§4.1b, TD-12)
 - [x] Step-4a routing complete: Active / Pending / (Rejected|Suspended|deleted_at → deactivated screen), never reactivation (§4.1b, Revision 16)
@@ -471,10 +471,10 @@ was hiding behind it: the run went green on the first attempt.
 
 **Schema & migrations (expand → migrate → contract, TD-6b — three deployments, never one)**
 - [x] *Expand:* `AdministrativeGroup` (+ the redundant `UNIQUE (id, level_id)` the composite FK needs), `TeachingGroup`, `StudentTeachingGroup`, `Enrollment`, `RecurringCourseSchedule`, `CourseScheduleStaff`, `Session`, `SessionContent`; `Room.capacity`; `EducationalContent.subject_id` required (§7)
-- [x] Hand-written SQL (TD-6a): **two** composite FKs (R43.2) — `(administrative_group_id, level_id) → AdministrativeGroup(id, level_id)` and `(teaching_group_id, subject_id, level_id) → TeachingGroup(id, subject_id, level_id)`; partial `UNIQUE (student_id, level_id)` and `UNIQUE (student_id, subject_id, level_id)`; the schedule mode/target and recurrence-shape CHECKs; time-order and cancellation-reason CHECKs; `UNIQUE (schedule_id, date)`; `ar-x-icu` on both new `name` columns
-  - ✓ **Proven, not assumed** — `prisma/verification/r43-constraints-proof.sql` applies both migrations to a scratch database from empty and attempts every row each constraint exists to refuse: **13 rejections fired on the named constraint, 5 legitimate rows accepted**
-  - ✓ **Independence between Subjects proven directly**: a Tajweed seat for a student already holding a Quran seat in the same Level is accepted; a second Quran seat is refused
-  - ⚠ **The proof run caught a defect in my own CHECK.** The cancellation-reason constraint was first written so that `btrim(NULL) <> ''` evaluated to `NULL`, which a CHECK treats as satisfied — it silently accepted the row it existed to refuse. Rewritten with an explicit `IS NOT NULL`, re-proven, and the reasoning left as a comment above it
+- [x] Hand-written SQL (TD-6a): **two** composite FKs (R43.2) — `(administrative_group_id, level_id) → AdministrativeGroup(id, level_id)` and `(teaching_group_id, subject_id, level_id) → TeachingGroup(id, subject_id, level_id)`; partial `UNIQUE (student_id, level_id)` and `UNIQUE (student_id, subject_id, level_id)`; the schedule mode/target and recurrence-shape CHECKs; time-order CHECK; `UNIQUE (schedule_id, date)`; `ar-x-icu` on both new `name` columns. R83.2 later retired the cancellation-reason CHECK and made the reason optional
+  - ✓ **Proven, not assumed** — `prisma/verification/r43-constraints-proof.sql` applies the full current migration history to a scratch database from empty and attempts every live constraint boundary: **12 rejections fired on the named constraint, 6 legitimate rows accepted**, including R83's reasonless cancellation
+  - ✓ **Independence between Subjects proven directly**: a ترتيل وتجويد seat for a student already holding a حفظ seat in the same Level is accepted; a second حفظ seat is refused
+  - ⚠ **Historical:** the original proof caught a defect in the then-required cancellation-reason CHECK: `btrim(NULL) <> ''` evaluated to `NULL`, which a CHECK treats as satisfied. It was rewritten with an explicit `IS NOT NULL`; R83.2 later dropped that constraint when the Owner made the reason optional
 - [ ] *Migrate:* backfill each existing `Group` into an `AdministrativeGroup` + one `RecurringCourseSchedule` carrying its slot; `StudentGroup` → `Enrollment`; `GroupTeacher` → `CourseScheduleStaff`; `EventGroup` → `EventAdministrativeGroup`; `Grade.group_id` → `administrative_group_id`
 - [x] *Contract (separate, later migration):* the retired tables and columns dropped, tagged with the contract-phase justification
   - ✓ **No data migrated, by Document Owner decision** — no production deployment exists, and a backfill would have had to invent the Subject the old model never recorded
@@ -524,7 +524,7 @@ was hiding behind it: the run went green on the first attempt.
   - ✓ Cancellation demands a reason and records the **audience size at that moment**; restore refused after the date
   - ✓ Content is **referenced, never owned** — unlinking leaves the file untouched, and one item may be referenced by many sessions
 - [ ] Approval assigns Levels and one Administrative Group each, in the approval transaction (TD-4.2, §4.1)
-- [ ] Quran as a schedulable Subject **with the BR-9 carve-out** — a Quran `LevelSubject` generates no grading components (§4.4b)
+- [ ] حفظ القرآن and تفسير القرآن as schedulable atomic Subjects **with the BR-9 carve-out** — their `LevelSubject` rows generate no generic grading components because both follow the LevelSurah selection; only حفظ is progress-tracked (§4.4b, R107); the postponed grading-template engine remains unbuilt
 - [x] Consent gate re-subjected to the session's resolved audience; `consent.reevaluate` payload `{ session_id }` (BR-2, TD-7)
 - [ ] Retire `CAPACITY_FULL` and the roster row-lock; `Room.capacity` informational (BR-23, TD-15.2)
 
@@ -1024,8 +1024,8 @@ was hiding behind it: the run went green on the first attempt.
 ### M4 — Quran Progress (2026-08-12)
 - [x] **R73 applied:** navigation node · `quranlog.create` · TD-2's Quran qualifier · `Subject.tracks_quran_progress` · TD-15.5's stale reason corrected
 - [x] **M4a:** BR-13 union (pure, tested against §4.5's own example) · synchronous recalculation · self-heal guard · Trash on delete · `/teacher/quran?student=`
-- [x] Authorization exactly as approved: Quran-teaching scope only; **teaching and assisting count equally**; Admin/Super Admin unchanged; **fails closed** when no Subject is marked
-- [x] Invariant: at most one live Subject may track Quran progress — partial unique index, proven to refuse a second
+- [x] Authorization exactly as approved: only the structurally marked حفظ القرآن teaching scope; **teaching and assisting count equally**; Admin/Super Admin unchanged; **fails closed** when no Subject is marked (R107)
+- [x] Invariant: at most one live Subject may carry the memorisation marker — partial unique index, proven to refuse a second; the Production seed establishes exactly one on حفظ القرآن
 - [x] **M4b — `/dashboard/student/quran`**, read-only. `GET /students/me/quran` carries no id: the subject comes from `childContext`, so a parent sees the child they act for and nobody else
 - [x] The read is split (`coverageFor`) and shared — the staff path and the student path differ only in how the subject was established
 - [x] **M4c — `LevelSurah` + BR-11.** Syllabus management (Super Admin writes, Admin reads) and completion read from the existing engine
@@ -1180,7 +1180,7 @@ was hiding behind it: the run went green on the first attempt.
 - [x] Structural guards: every soft-deleting service writes a snapshot; every read of a soft-deletable model filters `deletedAt` — folded into the guard that already existed rather than shipped beside it
 - [x] Fixed a silent half-restore: one timestamp per deletion, and the restore keys on the record's own tombstone rather than the Trash entry's
 - [x] ~~A branch created after Levels exist cannot be deleted~~ — **closed by R66**: TD-4.6d's backfill and `LAST_GROUP_IN_LEVEL` both retired, so a new branch gets no groups and deletes cleanly. Measured against the running stack with 20 Levels present
-- [ ] **`content.quarantine-purge` was never built** (R59.4) — BR-15's 90-day window is documented, depended on by two revisions, and not in force. Quarantine is currently permanent storage. Owner decision: switch on automatic destruction, or leave purging manual
+- [~] **`content.quarantine-purge` exact-operation worker is built; automatic retention is not** (R59.4) — replacement/deletion quarantine and deliberate R59.1 storage retirement are durable and retryable, while nothing reads `purge_after`. **OWNER DECISION REQUIRED — AUTOMATIC QUARANTINE DESTRUCTION:** switch on a tested 90-day record/object policy, or continue deliberate manual purging
 - [ ] `User` and `RecurringCourseSchedule` are not purgeable — `ACCOUNTABILITY_RECORD` and `CASCADE_CHILDREN`. The first is R54's decision and is about anonymisation, not row destruction
 
 ### R58 — physical exam scheduling (2026-08-09)
@@ -1255,15 +1255,53 @@ was hiding behind it: the run went green on the first attempt.
     **(4) No content rows exist** and `/uploads/*` is unbuilt, so there is nothing to display.
   - ⚠ Three points where the requested design and §5.2 differ, for the Owner to settle: §5.2 mandates a **Subject** tier and a **"Global / بدون فرع"** container at the top of the branch tier (the brief omits both), and pins the **current** academic year at top (the brief asks strict newest→oldest).
   - ✓ **Previews need no architectural change** — §14.6 already specifies them (PDF inline, `<audio>`, image lightbox, office download-only) and public content sits behind stable same-origin URLs the CSP already allows. The one open question is that private content is served via 10-minute presigned URLs, so a long video can expire mid-playback.
-- [ ] upload.gc + content.quarantine-purge cron jobs (TD-7)
+- [~] storage lifecycle jobs (TD-7): `upload.gc` is complete as a daily bounded 250-object
+  continuation chain over public/private browser staging and private server-finalization,
+  with strict `LastModified < 48 h` deletion. `content.quarantine-purge` is registered and
+  healthy for transactionally committed exact old-key quarantine transitions and deliberate
+  R59.1 permanent-delete retirement; storage failure retries and a missing queue rolls the
+  database purge back. **OWNER DECISION REQUIRED — AUTOMATIC QUARANTINE DESTRUCTION:** no
+  handler reads `purge_after` and no age-based destruction is scheduled until the Owner
+  authorises it after the object-store/backup decisions and Production-scale restore drill
 - [ ] §18 Content, Consent & Storage checklist green
 
 ## M7 — Hardening & Launch Data
+- [~] **P0.1 object-store security** — the affected final MinIO OSS pin is launch-blocking;
+  Nginx now applies the vendor-advised unsigned-trailer defence at every storage proxy path
+  without weakening valid presigned GET/PUT. **OWNER DECISION REQUIRED — OBJECT STORE:** select
+  and fund a maintained patched replacement, then run the full compatibility/safeguarding/
+  retention/backup regression listed in [Storage](architecture/storage.md#owner-decision-required--object-store)
 - [ ] TD-11a targets measured against ceiling-scale fixtures (§2.4); no N+1 / unbounded scans audit
 - [ ] Arabic RTL pass: complete ar catalog, error message_keys (fr/en post-MVP §10.1)
 - [ ] Nginx rate limits verified live (TD-13); presigned-URL permission audit
 - [ ] Locked CLI restore script (`npm run db:restore`) wrapping restore + cascades + audit in one transaction; executed once on fixtures (§4.10, TD-8)
-- [ ] backup.replicate job + restic offsite target; restore drill < 1 h RTO documented (§6)
+- [~] backup + restore — pinned encrypted restic recovery-point creation, empty-target restore,
+  portable `pg_dump`, raw data/TLS/config volumes, fail-safe service restart and destructive
+  disposable drill are complete (**33 s**, DB + object + config recovered). **OWNER DECISION
+  REQUIRED — BACKUP TARGET AND RETENTION:** provision the second Moroccan SFTP location,
+  escrow keys/password, and set retention. Still release-blocking: `backup.replicate` nightly
+  pg-boss automation, critical alert/staleness visibility, object-volume adaptation after the
+  P0.1 vendor decision, and realistic Production-host RTO drill
+- [~] **P0.3 permanent purge and staging lifecycle** — independently solvable safety work is
+  complete: exact replacement/deletion obligations are transactionally durable; manual content
+  purge cannot erase its last storage coordinates; retry after ambiguous delete is idempotent;
+  old-key work cannot touch a newer canonical key; and bounded `upload.gc` covers every browser
+  and server-finalization staging scope but not R100 provider staging. A disposable real
+  PostgreSQL/MinIO/pg-boss drill passes. **OWNER DECISION REQUIRED — AUTOMATIC QUARANTINE
+  DESTRUCTION:** select/approve the automatic 90-day record/object policy before scheduling any
+  `purge_after` scan
+- [x] **P1.1 Quran-domain Production seed (R107–R108)** — القرآن الكريم is the domain, not
+  a Subject. The additive initial baseline is أحكام القرآن, حفظ القرآن,
+  ترتيل وتجويد القرآن, تفسير القرآن, فقه, السيرة النبوية, العقيدة, الأذكار; محو الأمية is
+  not seeded fresh. Only حفظ carries `tracks_quran_progress`; runtime authorization resolves
+  that marker rather than a name, so every other initial or later Quran-domain Subject remains
+  ordinary unmarked curriculum. The seed preflights duplicate حفظ rows and conflicting live
+  markers, asserts its exactly-one launch postcondition, and never deletes, renames or rewrites
+  Super-Admin additions or historical rows. تفسير follows the Level's مقرر الحفظ Surahs but
+  remains outside memorisation authorization and coverage. The disposable fresh-stack drill
+  applies every migration, runs the actual Production seed twice, proves exact/stable baseline
+  data plus additive preservation and fail-closed conflicts, and exercises marked-versus-unmarked
+  teacher authorization through the real Quran policy/service before running the affected suites
 - [ ] Manual launch-data entry session(s) with coordinator: branches, rooms, groups, roster (R-5, §15.1)
 - [ ] No-PII log audit pass (TD-14)
 - [ ] §18 Data, Admin & Audit checklist green

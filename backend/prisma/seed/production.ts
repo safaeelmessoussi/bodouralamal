@@ -66,12 +66,23 @@ const LEVEL_GENDER: Record<string, GenderRestriction> = {
   الطفل: GenderRestriction.any,
 };
 
-/** §15.1 subjects — the Quran is deliberately NOT a Subject (§4.4b). */
+/**
+ * §15.1/R107–R108 atomic Subjects. القرآن الكريم is the broader curriculum
+ * domain, never a row. This is an additive launch baseline rather than a closed
+ * enumeration; only حفظ القرآن authorises §4.5 memorisation entry.
+ */
 const SUBJECTS = [
-  { name: 'تفسير', displayOrder: 1 },
-  { name: 'فقه', displayOrder: 2 },
-  { name: 'محو الأمية', displayOrder: 3 },
+  { name: 'أحكام القرآن', displayOrder: 1, tracksQuranProgress: false },
+  { name: 'حفظ القرآن', displayOrder: 2, tracksQuranProgress: true },
+  { name: 'ترتيل وتجويد القرآن', displayOrder: 3, tracksQuranProgress: false },
+  { name: 'تفسير القرآن', displayOrder: 4, tracksQuranProgress: false },
+  { name: 'فقه', displayOrder: 5, tracksQuranProgress: false },
+  { name: 'السيرة النبوية', displayOrder: 6, tracksQuranProgress: false },
+  { name: 'العقيدة', displayOrder: 7, tracksQuranProgress: false },
+  { name: 'الأذكار', displayOrder: 8, tracksQuranProgress: false },
 ] as const;
+
+const MEMORISATION_SUBJECT = SUBJECTS[1];
 
 const ACADEMIC_YEAR = '2026-2027';
 
@@ -135,14 +146,62 @@ async function seedCategoriesAndLevels(): Promise<Map<string, string>> {
 }
 
 async function seedSubjects(): Promise<void> {
-  for (const subject of SUBJECTS) {
-    const existing = await prisma.subject.findFirst({
-      where: { name: subject.name, deletedAt: null },
+  await prisma.$transaction(async (tx) => {
+    // Fail before writing if existing Owner-managed reference data is
+    // ambiguous. The seed may complete a correctly named حفظ القرآن row by
+    // attaching its structural marker, but it never guesses among duplicates
+    // or silently moves a marker from another Subject.
+    const liveMemorisationSubjects = await tx.subject.findMany({
+      where: { name: MEMORISATION_SUBJECT.name, deletedAt: null },
+      select: { id: true, tracksQuranProgress: true },
     });
-    if (!existing) {
-      await prisma.subject.create({ data: subject });
+    if (liveMemorisationSubjects.length > 1) {
+      throw new Error(
+        `Production seed requires exactly one live ${MEMORISATION_SUBJECT.name} Subject; found ${liveMemorisationSubjects.length}`,
+      );
     }
-  }
+
+    const liveTrackers = await tx.subject.findMany({
+      where: { tracksQuranProgress: true, deletedAt: null },
+      select: { id: true, name: true },
+    });
+    const existingMemorisationSubject = liveMemorisationSubjects[0];
+    const conflictingTracker = liveTrackers.find(
+      (subject) => subject.id !== existingMemorisationSubject?.id,
+    );
+    if (conflictingTracker) {
+      throw new Error(
+        `Production seed cannot move tracks_quran_progress from live Subject ${conflictingTracker.name}; Owner reconciliation is required`,
+      );
+    }
+
+    for (const subject of SUBJECTS) {
+      const existing = await tx.subject.findFirst({
+        where: { name: subject.name, deletedAt: null },
+      });
+      if (!existing) {
+        await tx.subject.create({ data: subject });
+      } else if (subject.tracksQuranProgress && !existing.tracksQuranProgress) {
+        await tx.subject.update({
+          where: { id: existing.id },
+          data: { tracksQuranProgress: true },
+        });
+      }
+    }
+
+    const seededTracker = await tx.subject.findMany({
+      where: { tracksQuranProgress: true, deletedAt: null },
+      select: { name: true },
+    });
+    if (
+      seededTracker.length !== 1 ||
+      seededTracker[0]?.name !== MEMORISATION_SUBJECT.name
+    ) {
+      throw new Error(
+        `Production seed must leave exactly one live tracks_quran_progress Subject named ${MEMORISATION_SUBJECT.name}`,
+      );
+    }
+  });
   console.log(`  subjects: ${SUBJECTS.length}`);
 }
 
@@ -224,9 +283,12 @@ async function seedSystemSettings(categoryIds: Map<string, string>): Promise<voi
 async function main(): Promise<void> {
   console.log('Production seed (§15.1) — idempotent\n');
 
+  // R107 ambiguity is a deployment stop, so validate/seed Subjects before any
+  // other reference-data write. An Owner must never discover a conflicting
+  // memorisation marker after this same invocation has changed unrelated data.
+  await seedSubjects();
   await seedRoles();
   const categoryIds = await seedCategoriesAndLevels();
-  await seedSubjects();
   await seedAcademicYear();
   await seedQuranSurahs();
   await seedSystemSettings(categoryIds);
