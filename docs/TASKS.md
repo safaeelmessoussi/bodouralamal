@@ -135,7 +135,7 @@ was hiding behind it: the run went green on the first attempt.
 - [x] `/CLAUDE.md`, `/AGENTS.md`, `docs/CHANGES.log` committed (§16.3)
 - [x] `.env.example` generated from TD-13 inventory; boot-time fail-fast validation for Required vars
 - [x] Version pins per §3.1a (Node 22 LTS image, PG 17, Prisma 6, React 19, Vite 6, Express 5, pg-boss 10)
-- [x] CI: all 23 committed guards, lint, exact typecheck, default test runners, backend/frontend production builds, and ordinary OpenAPI↔TD-3 conformance (§3.1). Integration/browser/coverage infrastructure and fatal `TD3_REQUIRE_COMPLETE=1` remain separate slices
+- [x] CI: all 24 committed guards, lint, exact typecheck, default test runners, backend/frontend production builds, and ordinary OpenAPI↔TD-3 conformance (§3.1). Integration/browser/coverage infrastructure and fatal `TD3_REQUIRE_COMPLETE=1` remain separate slices
 
 ## M1 — Infrastructure & Platform Core
 - [x] `docker-compose.yml`: api, db, minio, nginx (+certbot); TZ=Africa/Casablanca; tzdata pinned (TD-11)
@@ -1180,7 +1180,7 @@ was hiding behind it: the run went green on the first attempt.
 - [x] Structural guards: every soft-deleting service writes a snapshot; every read of a soft-deletable model filters `deletedAt` — folded into the guard that already existed rather than shipped beside it
 - [x] Fixed a silent half-restore: one timestamp per deletion, and the restore keys on the record's own tombstone rather than the Trash entry's
 - [x] ~~A branch created after Levels exist cannot be deleted~~ — **closed by R66**: TD-4.6d's backfill and `LAST_GROUP_IN_LEVEL` both retired, so a new branch gets no groups and deletes cleanly. Measured against the running stack with 20 Levels present
-- [ ] **`content.quarantine-purge` was never built** (R59.4) — BR-15's 90-day window is documented, depended on by two revisions, and not in force. Quarantine is currently permanent storage. Owner decision: switch on automatic destruction, or leave purging manual
+- [~] **`content.quarantine-purge` exact-operation worker is built; automatic retention is not** (R59.4) — replacement/deletion quarantine and deliberate R59.1 storage retirement are durable and retryable, while nothing reads `purge_after`. **OWNER DECISION REQUIRED — AUTOMATIC QUARANTINE DESTRUCTION:** switch on a tested 90-day record/object policy, or continue deliberate manual purging
 - [ ] `User` and `RecurringCourseSchedule` are not purgeable — `ACCOUNTABILITY_RECORD` and `CASCADE_CHILDREN`. The first is R54's decision and is about anonymisation, not row destruction
 
 ### R58 — physical exam scheduling (2026-08-09)
@@ -1255,7 +1255,14 @@ was hiding behind it: the run went green on the first attempt.
     **(4) No content rows exist** and `/uploads/*` is unbuilt, so there is nothing to display.
   - ⚠ Three points where the requested design and §5.2 differ, for the Owner to settle: §5.2 mandates a **Subject** tier and a **"Global / بدون فرع"** container at the top of the branch tier (the brief omits both), and pins the **current** academic year at top (the brief asks strict newest→oldest).
   - ✓ **Previews need no architectural change** — §14.6 already specifies them (PDF inline, `<audio>`, image lightbox, office download-only) and public content sits behind stable same-origin URLs the CSP already allows. The one open question is that private content is served via 10-minute presigned URLs, so a long video can expire mid-playback.
-- [ ] upload.gc + content.quarantine-purge cron jobs (TD-7)
+- [~] storage lifecycle jobs (TD-7): `upload.gc` is complete as a daily bounded 250-object
+  continuation chain over public/private browser staging and private server-finalization,
+  with strict `LastModified < 48 h` deletion. `content.quarantine-purge` is registered and
+  healthy for transactionally committed exact old-key quarantine transitions and deliberate
+  R59.1 permanent-delete retirement; storage failure retries and a missing queue rolls the
+  database purge back. **OWNER DECISION REQUIRED — AUTOMATIC QUARANTINE DESTRUCTION:** no
+  handler reads `purge_after` and no age-based destruction is scheduled until the Owner
+  authorises it after the object-store/backup decisions and Production-scale restore drill
 - [ ] §18 Content, Consent & Storage checklist green
 
 ## M7 — Hardening & Launch Data
@@ -1275,6 +1282,14 @@ was hiding behind it: the run went green on the first attempt.
   escrow keys/password, and set retention. Still release-blocking: `backup.replicate` nightly
   pg-boss automation, critical alert/staleness visibility, object-volume adaptation after the
   P0.1 vendor decision, and realistic Production-host RTO drill
+- [~] **P0.3 permanent purge and staging lifecycle** — independently solvable safety work is
+  complete: exact replacement/deletion obligations are transactionally durable; manual content
+  purge cannot erase its last storage coordinates; retry after ambiguous delete is idempotent;
+  old-key work cannot touch a newer canonical key; and bounded `upload.gc` covers every browser
+  and server-finalization staging scope but not R100 provider staging. A disposable real
+  PostgreSQL/MinIO/pg-boss drill passes. **OWNER DECISION REQUIRED — AUTOMATIC QUARANTINE
+  DESTRUCTION:** select/approve the automatic 90-day record/object policy before scheduling any
+  `purge_after` scan
 - [ ] Manual launch-data entry session(s) with coordinator: branches, rooms, groups, roster (R-5, §15.1)
 - [ ] No-PII log audit pass (TD-14)
 - [ ] §18 Data, Admin & Audit checklist green

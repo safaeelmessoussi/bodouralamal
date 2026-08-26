@@ -49,6 +49,8 @@ jobs:
         run: bash scripts/ci/check-storage-edge.sh
       - name: Backup tooling stays encrypted, resident and fail-closed
         run: bash scripts/ci/check-backup-tooling.sh
+      - name: Storage retirement stays durable and automatic destruction stays disabled
+        run: bash scripts/ci/check-storage-lifecycle.sh
       - name: Association terminology remains consistent
         run: bash scripts/ci/check-association-terminology.sh
       - name: Arabic UI uses Western numerals

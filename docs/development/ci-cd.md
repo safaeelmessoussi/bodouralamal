@@ -12,7 +12,7 @@ backend     lint · exact typecheck · default tests · production build
 frontend    lint · exact typecheck · tests · production build
 ```
 
-The contract job runs the remaining two guard scripts, so **all twenty-three committed
+The contract job runs the remaining two guard scripts, so **all twenty-four committed
 `scripts/ci/check-*.sh` checks execute in CI**. They stay in the contract job because both
 operate on the generated OpenAPI artifact and that job already installs the backend
 dependencies needed to regenerate it.

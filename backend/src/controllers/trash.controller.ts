@@ -3,8 +3,6 @@ import { z } from 'zod';
 
 import type { PrismaClient } from '../generated/prisma/client.js';
 import { requireActor } from '../middleware/authenticate.js';
-import type { StorageClients } from '../lib/storage.js';
-import { purgeQuarantinedObject } from '../services/content.service.js';
 import { listTrash, purgeEntry, restoreEntry } from '../services/trash.service.js';
 import { pageOf, trashEntryDto } from './dto.js';
 import { idParam, parse } from './parse.js';
@@ -67,35 +65,12 @@ export function restore(prisma: PrismaClient) {
  * `DELETE /admin/trash/{id}` — destroys a soft-deleted record permanently
  * (R59.1). Super Admin only, asserted in the service.
  *
- * **The object reaping happens after the transaction commits.** An S3 call
- * cannot join a database transaction, and this ordering is the safe one: a
- * destroyed row beside a surviving object is a reapable leftover, while the
- * reverse would be a record pointing at bytes that no longer exist.
+ * EducationalContent storage retirement is enqueued in the same transaction as
+ * destruction; this HTTP handler never owns a best-effort object side effect.
  */
-export function purge(prisma: PrismaClient, storage: StorageClients) {
+export function purge(prisma: PrismaClient) {
   return async (req: Request, res: Response): Promise<void> => {
-    const id = idParam(req, 'id');
-
-    // Read BEFORE the purge: the snapshot is the only place the storage key
-    // still exists once both the row and the entry are gone.
-    const entry = await prisma.trash.findUnique({ where: { id } });
-    const snapshot = (entry?.snapshot ?? null) as Record<string, unknown> | null;
-
-    const result = await purgeEntry(prisma, requireActor(req), id);
-
-    if (
-      result.targetEntity === 'EducationalContent' &&
-      typeof snapshot?.['storageBucket'] === 'string' &&
-      typeof snapshot['storageKey'] === 'string'
-    ) {
-      await purgeQuarantinedObject(
-        storage,
-        result.targetId,
-        snapshot['storageBucket'],
-        snapshot['storageKey'],
-      );
-    }
-
+    await purgeEntry(prisma, requireActor(req), idParam(req, 'id'));
     res.status(204).end();
   };
 }

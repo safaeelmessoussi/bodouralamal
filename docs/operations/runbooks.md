@@ -171,10 +171,19 @@ Two types have no destruction plan at all:
 | `User` | `ACCOUNTABILITY_RECORD` — a person's row is referenced by `AuditLog` and `Trash` themselves, so destroying it takes the record of who deleted what | The account stays soft-deleted with its fields anonymised. Erasure of a person's data is R54's decision, and it is about anonymisation, not row destruction |
 | `RecurringCourseSchedule` | `CASCADE_CHILDREN` — its Sessions are materialized rows other records reference, so destroying it destroys a timetable's history | Purge the Sessions that block it first, or leave it to BR-15 |
 
-> **BR-15's 90-day window is not enforced by anything.** Revisions 52 and 53 both state that
-> `content.quarantine-purge` (TD-7) closes it. **That job was never built** (R59.4):
-> `purge_after` is written on every tombstone and nothing has ever read it. Until it ships,
-> the only permanent deletion on this platform is the deliberate Super Admin action above.
+The deliberate action is storage-durable for `EducationalContent`: its transaction inserts an
+exact `content.quarantine-purge` obligation before deleting the content row and Trash locator.
+If the queue is absent the whole transaction rolls back; a storage outage or lost delete
+response retries under TD-7. Operators must not manually remove a failed job, because after
+the row is gone that payload is the durable record of the two possible object leftovers.
+
+> **OWNER DECISION REQUIRED — AUTOMATIC QUARANTINE DESTRUCTION.** Revisions 52 and 53 state
+> that `content.quarantine-purge` closes BR-15 after 90 days, while R59.4 reserves activating
+> automatic Production destruction to the Document Owner. The queue now processes explicit
+> replacement/deletion/manual-purge coordinates, but it is deliberately not scheduled against
+> `purge_after`; expired Trash remains until a Super Admin acts. Take the object-store and
+> backup/retention decisions and complete a Production-scale restore drill before authorising
+> the automatic arm.
 
 ---
 

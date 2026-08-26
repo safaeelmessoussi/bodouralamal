@@ -548,9 +548,10 @@ Two paths, and only two:
   anything else that references the row is a record in its own right, and the `Restrict`
   foreign key makes PostgreSQL refuse. *The database is the authority on what still points
   at a row* — a hand-maintained list of blockers would be a second copy of the schema.
-* **The quarantine-purge job after 90 days** — except that **this job does not exist**
-  (R59.4). `purge_after` is written on every tombstone and nothing has ever read it, so
-  BR-15's window is documented, depended on by two revisions, and not in force.
+* **The quarantine-purge job after 90 days** — the queue now handles exact replacement,
+  deletion and deliberate manual-purge storage obligations, but its automatic age arm remains
+  intentionally absent (R59.4). `purge_after` is written on every tombstone and nothing reads
+  it, so BR-15's automatic window is still not in force pending the Owner decision.
 
 > **A `RESTRICT` violation is not `P2003`.** `P2003` is *foreign key constraint failed*,
 > PostgreSQL `23503`. A relation declared `onDelete: Restrict` — which is how essentially
