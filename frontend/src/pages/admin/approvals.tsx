@@ -130,7 +130,12 @@ export function ApprovalsPage(): ReactNode {
     } catch {
       setStatus('error');
     }
-  }, [accessToken, page, typeFilter, branchFilter]);
+  // **`sort` belongs here** (NEW C). Without it the header updated the state and
+  // announced the direction while `load` was never recreated — so the request
+  // was never re-sent and the rows never moved. Server-side sorting fails
+  // SILENTLY this way: the control looks alive and the table simply does not
+  // change, which is exactly how the Owner reported it.
+  }, [accessToken, page, typeFilter, branchFilter, sort]);
 
   useEffect(() => {
     void load();
