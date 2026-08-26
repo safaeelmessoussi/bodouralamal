@@ -82,8 +82,15 @@ export function StudentDashboard(): ReactNode {
             <>
               {/* **R86 — the Category, Level and Branch moved to حسابي.** They
                   are facts about her account, not about her day, and the Owner
-                  asked that this page show nothing until it is designed. */}
-              <p className="muted">{t('studentDashboard.landing')}</p>
+                  asked that this page show nothing until it is designed.
+              
+                  **The lede is NOT repeated here (§7).** When R86 emptied this
+                  branch it left `studentDashboard.landing` behind as filler —
+                  but `StudentLayout` already renders that exact sentence as the
+                  page's `lede`, so a مستفيدة met it twice, three lines apart.
+                  The layout is its home: the lede is the shared page-header
+                  slot every portal page uses, and a body paragraph repeating it
+                  is the copy, not the original. */}
               {/* **Deliberately nothing else here** (R85).
                   «حصص اليوم والقادمة» is removed: those occurrences are in
                   تقويمي, and showing them twice makes one of the two the wrong
