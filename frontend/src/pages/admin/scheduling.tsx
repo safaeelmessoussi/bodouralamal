@@ -869,7 +869,22 @@ export function SchedulingDialog({
   const [responsibleId, setResponsibleId] = useState(
     item?.ids.staff.find((x) => x.position === 'responsible')?.user_id ?? '',
   );
-  const [visibility, setVisibility] = useState('public');
+  /**
+   * **Hydrated from the stored row on Edit** (NEW B §A).
+   *
+   * This was `useState('public')` for edit as well as create — and the pristine
+   * baseline below hardcoded `'public'` to match it. Three things then combined
+   * into a widening nobody chose: the form never showed the real tier, `dirty`
+   * stayed false because both halves agreed, and the save payload sends
+   * `visibility` on update as well as create. So opening a **private** or
+   * **hidden** نشاط, changing its title, and saving reset it to عام, silently,
+   * with no prompt from the unsaved-changes guard.
+   *
+   * `'public'` remains the CREATE default (Owner decision 00) — which is
+   * precisely what made the bug invisible: the wrong value and the intended
+   * default are the same string.
+   */
+  const [visibility, setVisibility] = useState(item?.visibility ?? 'public');
   // R72 — a Teacher may scope an event to their own groups and nothing else
   // (TD-2, §4.9), so `global` would be a default the server refuses.
   const [scopeKind, setScopeKind] = useState(canAssignStaff ? 'global' : 'group');
@@ -932,7 +947,9 @@ export function SchedulingDialog({
     examMode: 'physical',
     supervisorId: item?.ids.staff.find((x) => x.position === 'supervisor')?.user_id ?? '',
     responsibleId: item?.ids.staff.find((x) => x.position === 'responsible')?.user_id ?? '',
-    visibility: 'public',
+    // Mirrors the state initialiser exactly — a pristine baseline that
+    // disagreed with it is what kept `dirty` false while the value was wrong.
+    visibility: item?.visibility ?? 'public',
     scopeKind: canAssignStaff ? 'global' : 'group',
     scopeId: '',
   };

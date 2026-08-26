@@ -83,6 +83,15 @@ export interface SchedulingItem {
   branchName: string | null;
   roomName: string | null;
   audienceLabel: string | null;
+  /**
+   * **The stored visibility tier, carried so Edit can hydrate it** (NEW B §A).
+   *
+   * `null` for the kinds that do not yet own one — a class and an exam gain
+   * theirs in NEW B §C. `null` is *"this kind has no tier"*, which is a
+   * different fact from any of the three tiers and must not be confused with
+   * the creation default.
+   */
+  visibility: string | null;
   staffCount: number | null;
   version: number;
   /** @see SchedulingIds */
@@ -191,6 +200,9 @@ export function fromSchedule(row: CourseSchedule): SchedulingItem {
     // R57 — the schedule's own name. The Subject is still shown, in its own
     // column: it identifies the class, the title names it.
     title: row.title,
+    // A class owns no tier yet — NEW B §C gives RecurringCourseSchedule and its
+    // materialized Sessions one. `null` is «this kind has no tier», never a value.
+    visibility: null,
     description: row.description,
     startDate: row.anchor_date,
     endDate: null,
@@ -228,11 +240,17 @@ export function fromSchedule(row: CourseSchedule): SchedulingItem {
   };
 }
 
-function fromEvent(row: EventDefinitionWire): SchedulingItem {
+/**
+ * **Exported for its own test.** The mapping is pure and it is where a stored
+ * `visibility` either reaches the edit form or is silently dropped — which it
+ * was, turning every edit of a private نشاط into a widening (NEW B §A).
+ */
+export function fromEvent(row: EventDefinitionWire): SchedulingItem {
   return {
     type: 'activity',
     id: row.id,
     title: row.title,
+    visibility: row.visibility,
     description: row.description,
     startDate: row.start_date,
     endDate: row.end_date,
@@ -276,6 +294,8 @@ function fromExam(row: Exam): SchedulingItem {
     type: 'exam',
     id: row.id,
     title: row.title,
+    // §4.6 gives an exam no tier of its own today; NEW B §C changes that.
+    visibility: null,
     description: row.description,
     startDate: row.date,
     endDate: null,
