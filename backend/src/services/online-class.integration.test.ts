@@ -282,7 +282,7 @@ beforeEach(async () => {
     })
   ).level.id;
   roomId = (await prisma.room.create({ data: { name: `${TAG} قاعة 5`, branchId: branchA } })).id;
-  subjectId = (await prisma.subject.create({ data: { name: `${TAG} تفسير` } })).id;
+  subjectId = (await prisma.subject.create({ data: { name: `${TAG} تفسير القرآن` } })).id;
   await prisma.levelSubject.create({ data: { levelId, subjectId } });
   academicYearId = (
     await prisma.academicYear.findFirstOrThrow({ select: { id: true } })

@@ -175,8 +175,9 @@ configuration:
 **This closes nothing for Production.** A VM snapshot is not the specified backup: §6 requires
 a **second Moroccan location**, a tested restore, and an RTO the drill has actually met. A
 snapshot of the wrong country would not satisfy Law 09-08 even if it were tested, and it has
-not been. `backup.replicate` remains unbuilt and production backup/restore remains an open
-readiness item.
+not been. Host-scoped encrypted [recovery tooling](runbooks.md#creating-and-restoring-a-full-recovery-point)
+now exists and passes a disposable restore, but `backup.replicate`, the actual Moroccan target,
+retention decision, critical alert and Production-volume drill remain open readiness items.
 
 For Staging specifically, losing the VM costs nothing that cannot be rebuilt: it holds only
 fixtures, and the deployment is reproducible from Git plus regenerated secrets.

@@ -179,7 +179,11 @@ async function main(): Promise<void> {
   // model recorded no Subject for a slot, so any conversion would have had to
   // invent curriculum data.
   const days = [DayOfWeek.monday, DayOfWeek.wednesday, DayOfWeek.saturday];
-  const subjects = await prisma.subject.findMany({ where: { deletedAt: null }, take: 3 });
+  const subjects = await prisma.subject.findMany({
+    where: { deletedAt: null },
+    orderBy: [{ displayOrder: 'asc' }, { id: 'asc' }],
+    take: 3,
+  });
 
   const groups = [];
   for (const branch of branches) {

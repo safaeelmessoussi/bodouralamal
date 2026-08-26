@@ -13,6 +13,7 @@
 import { loadConfig } from '../src/lib/config.js';
 import { createPrismaClient } from '../src/lib/prisma.js';
 import { createCourseSchedule } from '../src/services/course-schedule.service.js';
+import { requireSeededSubject } from '../src/test-support/quran-subject.js';
 
 const config = loadConfig();
 const prisma = createPrismaClient(config.DATABASE_URL);
@@ -52,7 +53,14 @@ async function wipe(): Promise<void> {
   await prisma.userBranchRole.deleteMany({ where: { userId: { in: uids } } });
   await prisma.user.deleteMany({ where: { id: { in: uids } } });
 
-  await prisma.levelSubject.deleteMany({ where: { subject: { name: { startsWith: TAG } } } });
+  await prisma.levelSubject.deleteMany({
+    where: {
+      OR: [
+        { subject: { name: { startsWith: TAG } } },
+        { level: { name: { startsWith: TAG } } },
+      ],
+    },
+  });
   await prisma.subject.deleteMany({ where: { name: { startsWith: TAG } } });
   await prisma.room.deleteMany({ where: { name: { startsWith: TAG } } });
   await prisma.level.deleteMany({ where: { name: { startsWith: TAG } } });
@@ -73,10 +81,8 @@ const category = await prisma.category.create({
 const level = await prisma.level.create({
   data: { name: `${TAG} المستوى 1`, categoryId: category.id, genderRestriction: 'any' },
 });
-// Marked as a Quran Subject, so §15's boundary is visible on the same fixture.
-const subject = await prisma.subject.create({
-  data: { name: `${TAG} تفسير`, displayOrder: 98, tracksQuranProgress: true },
-});
+// R107: Tafsir is an ordinary atomic Subject, separate from memorisation.
+const subject = await requireSeededSubject(prisma, 'تفسير القرآن');
 await prisma.levelSubject.create({ data: { levelId: level.id, subjectId: subject.id } });
 const room = await prisma.room.create({
   data: { name: `${TAG} قاعة`, branchId: branch.id, capacity: 20 },

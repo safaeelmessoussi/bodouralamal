@@ -20,6 +20,10 @@
 import { loadConfig } from '../src/lib/config.js';
 import { createPrismaClient } from '../src/lib/prisma.js';
 import { createCourseSchedule } from '../src/services/course-schedule.service.js';
+import {
+  requireMemorisationSubject,
+  requireSeededSubject,
+} from '../src/test-support/quran-subject.js';
 
 const config = loadConfig();
 const prisma = createPrismaClient(config.DATABASE_URL);
@@ -119,15 +123,10 @@ const levelTwo = await prisma.level.create({
   data: { name: `${TAG} المستوى 2`, categoryId: category.id, genderRestriction: 'any' },
 });
 
-/**
- * **R73's structural marker.** At most one live Subject may carry it, so this
- * fixture owns the only one while it runs and `--clean` returns the database to
- * having none. The name is irrelevant to authorization and deliberately so.
- */
-const quran = await prisma.subject.create({
-  data: { name: `${TAG} حفظ القرآن`, displayOrder: 97, tracksQuranProgress: true },
-});
-const tafseer = await prisma.subject.create({ data: { name: `${TAG} تفسير`, displayOrder: 98 } });
+/** R107 reference data: only حفظ القرآن carries the structural marker; Tafsir
+ * is a separate atomic Subject and must not authorise memorisation entry. */
+const quran = await requireMemorisationSubject(prisma);
+const tafseer = await requireSeededSubject(prisma, 'تفسير القرآن');
 for (const levelId of [levelOne.id, levelTwo.id]) {
   await prisma.levelSubject.createMany({
     data: [

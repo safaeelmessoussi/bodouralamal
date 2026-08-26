@@ -79,7 +79,9 @@ const category = await prisma.category.create({
 const level = await prisma.level.create({
   data: { name: `${TAG} المستوى 1`, categoryId: category.id, genderRestriction: 'any' },
 });
-const subject = await prisma.subject.create({ data: { name: `${TAG} تفسير`, displayOrder: 99 } });
+const subject = await prisma.subject.create({
+  data: { name: `${TAG} تفسير القرآن`, displayOrder: 99 },
+});
 await prisma.levelSubject.create({ data: { levelId: level.id, subjectId: subject.id } });
 const room = await prisma.room.create({
   data: { name: `${TAG} قاعة`, branchId: targa.id, capacity: 30 },

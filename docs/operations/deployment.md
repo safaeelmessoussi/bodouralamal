@@ -118,10 +118,12 @@ the new cookie.
 
 ```bash
 docker compose down
-# restore the latest pg_dump per the documented procedure
+# restore the latest complete recovery point per the runbook
 ```
 
 Migrations are forward-only. There is no down-migration path, by policy.
+The [recovery-point runbook](runbooks.md#creating-and-restoring-a-full-recovery-point) restores
+only into empty volumes and leaves services stopped for configuration verification.
 
 ## TLS
 
@@ -147,7 +149,12 @@ failure that looks like certbot's and is not. The `nginx` service therefore runs
 - Categories: الكبار / اليافعون / الطفل, as **generic educational stages**
 - Levels, with **real sex restrictions** rather than a blanket permissive value — which is
   what makes availability a fact a query can read
-- Subjects: تفسير, فقه, محو الأمية — **the Quran is deliberately not a Subject**
+- Initial atomic Subject baseline: أحكام القرآن, حفظ القرآن, ترتيل وتجويد القرآن,
+  تفسير القرآن, فقه, السيرة النبوية, العقيدة, الأذكار. The broad Quran domain
+  القرآن الكريم is not a row, محو الأمية is not seeded on a fresh deployment,
+  and only حفظ القرآن carries `tracks_quran_progress` (SRS R107–R108). This is
+  additive reference data, not a closed list: later Super-Admin additions and
+  historical Subjects survive every rerun unchanged.
 - The academic year, with exactly one marked current
 - All **114 Surahs** from a verified static dataset in the repository
 - Settings defaults, including the grading scale

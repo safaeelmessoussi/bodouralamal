@@ -91,7 +91,7 @@ export function unassignSubject(prisma: PrismaClient) {
   };
 }
 
-/** `GET /admin/levels/{id}/surahs` — the Level's Quran syllabus (§4.5, BR-11). */
+/** `GET /admin/levels/{id}/surahs` — the Level's حفظ القرآن syllabus (§4.5, BR-11, R107). */
 export function levelSurahs(prisma: PrismaClient) {
   return async (req: Request, res: Response): Promise<void> => {
     res.json({ data: await listLevelSurahs(prisma, requireActor(req), idParam(req, 'levelId')) });

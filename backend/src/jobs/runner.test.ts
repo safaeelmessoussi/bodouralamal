@@ -78,6 +78,8 @@ describe('job runner startup readiness', () => {
       QUEUES.auditPurge,
       QUEUES.consentReevaluate,
       QUEUES.contentBucketMigrate,
+      QUEUES.contentQuarantinePurge,
+      QUEUES.uploadGc,
       QUEUES.sessionMaterialize,
       QUEUES.sessionRecordingIngest,
     ]);
@@ -104,6 +106,8 @@ describe('job runner startup readiness', () => {
     );
     expect(registered).toContain(QUEUES.consentReevaluate);
     expect(registered).toContain(QUEUES.contentBucketMigrate);
+    expect(registered).toContain(QUEUES.contentQuarantinePurge);
+    expect(registered).toContain(QUEUES.uploadGc);
 
     // CREATE IF ABSENT is not a policy update. Every implemented queue is
     // reconciled before the rollout sweep, and no worker can consume until the
@@ -123,6 +127,11 @@ describe('job runner startup readiness', () => {
     const firstWorker = boss.work.mock.invocationCallOrder[0];
     expect(sweepRead).toBeGreaterThan(lastQueueUpdate);
     expect(firstWorker).toBeGreaterThan(sweepRead ?? 0);
+    expect(boss.schedule).toHaveBeenCalledWith(QUEUES.uploadGc, '30 3 * * *');
+    expect(boss.schedule).not.toHaveBeenCalledWith(
+      QUEUES.contentQuarantinePurge,
+      expect.anything(),
+    );
   });
 
   it('marks the subsystem failed when pg-boss startup rejects', async () => {
@@ -173,7 +182,7 @@ describe('job runner startup readiness', () => {
     expect(readiness.snapshot()).toMatchObject({
       state: 'down',
       reason: 'startup_failed',
-      expected_workers: 7,
+      expected_workers: 9,
       registered_workers: 2,
       active_workers: 2,
     });

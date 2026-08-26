@@ -4,6 +4,7 @@ import { issueAccessToken } from "../lib/access-token.js";
 import { loadConfig } from "../lib/config.js";
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from "../lib/prisma.js";
 import { httpCall } from "../test-support/http-client.js";
+import { requireMemorisationSubject } from "../test-support/quran-subject.js";
 
 /**
  * **Cross-branch occurrence audiences (SRS Revision 92).**
@@ -122,7 +123,12 @@ async function clear(): Promise<void> {
   await prisma.user.deleteMany({ where: { id: { in: uids } } });
 
   await prisma.levelSubject.deleteMany({
-    where: { subject: { name: { startsWith: TAG } } },
+    where: {
+      OR: [
+        { subject: { name: { startsWith: TAG } } },
+        { level: { name: { startsWith: TAG } } },
+      ],
+    },
   });
   await prisma.subject.deleteMany({ where: { name: { startsWith: TAG } } });
   await prisma.level.deleteMany({ where: { name: { startsWith: TAG } } });
@@ -259,15 +265,7 @@ beforeAll(async () => {
       },
     })
   ).id;
-  subjectId = (
-    await prisma.subject.create({
-      data: {
-        name: `${TAG} تفسير`,
-        displayOrder: 99,
-        tracksQuranProgress: true,
-      },
-    })
-  ).id;
+  subjectId = (await requireMemorisationSubject(prisma)).id;
   await prisma.levelSubject.create({ data: { levelId, subjectId } });
   yearId = (await prisma.academicYear.findFirstOrThrow()).id;
 

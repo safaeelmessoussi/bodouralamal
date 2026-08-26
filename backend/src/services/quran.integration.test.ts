@@ -4,6 +4,7 @@ import { loadConfig } from "../lib/config.js";
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from "../lib/prisma.js";
 import type { Actor } from "../policies/actor.js";
 import type { RoleScope } from "../policies/branch-scope.js";
+import { requireMemorisationSubject } from "../test-support/quran-subject.js";
 import {
   correctLog,
   deleteLog,
@@ -189,12 +190,20 @@ beforeEach(async () => {
     })
   ).id;
 
-  // R73.4 — the marker, not the name. At most one live Subject may carry it.
-  quranSubject = (
-    await prisma.subject.create({
-      data: { name: `${TAG} قرآن`, tracksQuranProgress: true },
-    })
-  ).id;
+  // R107 — fixtures consume the one Production marker rather than creating a
+  // second one. Resetting it also repairs the deliberate fail-closed case from
+  // the previous test before the next case starts.
+  const seededMemorisationSubject = await prisma.subject.findFirstOrThrow({
+    where: { name: 'حفظ القرآن', deletedAt: null },
+    select: { id: true, tracksQuranProgress: true },
+  });
+  if (!seededMemorisationSubject.tracksQuranProgress) {
+    await prisma.subject.update({
+      where: { id: seededMemorisationSubject.id },
+      data: { tracksQuranProgress: true },
+    });
+  }
+  quranSubject = (await requireMemorisationSubject(prisma)).id;
   fiqhSubject = (await prisma.subject.create({ data: { name: `${TAG} فقه` } }))
     .id;
 

@@ -232,17 +232,18 @@ export async function unassignSubjectFromLevel(
 }
 
 /**
- * **`LevelSurah` — which Surahs a Level's Quran curriculum covers (§4.5, §7,
- * BR-11; M4c).**
+ * **`LevelSurah` — which Surahs a Level's حفظ القرآن memorisation curriculum
+ * covers (§4.5, §7, BR-11; M4c, R107).**
  *
- * The **Quran-side curriculum join**, and R43 is explicit that it stays that:
- * *"`LevelSurah` remains the Quran-side curriculum join"* while the Quran is a
- * Subject **for scheduling only**. It is therefore beside `LevelSubject` here —
- * the same shape, the same authorization, the same file — rather than in a
- * Quran service, because it is curriculum structure and not progress.
+ * The **memorisation-side curriculum join**. It is beside `LevelSubject` — the
+ * same shape, authorization, and file — rather than in the progress service,
+ * because it configures the حفظ syllabus rather than storing progress. تفسير
+ * القرآن follows the same per-Level Surah selection pedagogically but remains
+ * unmarked and outside the progress engine; أحكام القرآن and ترتيل وتجويد القرآن use
+ * ordinary LevelSubject curriculum.
  *
  * **Super Admin writes, Admin reads**, exactly as `LevelSubject` does (R26's
- * reference-versus-operational split): a Level's Quran syllabus is configuration
+ * reference-versus-operational split): a Level's حفظ syllabus is configuration
  * that defines the organisation, and BR-11 reads it to decide completion.
  */
 export interface LevelSurahRef {
@@ -304,7 +305,7 @@ export async function listLevelSurahs(
   }));
 }
 
-/** Adds a Surah to a Level's Quran curriculum. Idempotent by revival, because
+/** Adds a Surah to a Level's حفظ القرآن curriculum. Idempotent by revival, because
  *  `@@unique([levelId, surahId])` is not filtered on `deleted_at`. */
 export async function assignSurahToLevel(
   prisma: PrismaClient,

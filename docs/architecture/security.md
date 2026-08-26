@@ -208,6 +208,9 @@ so clients handle one shape.
   other method is refused by Nginx, and both public bucket-root spellings are denied before
   query parameters can become listing/control operations. Public staging admits only signed
   PUT and is never readable.
+- Every published object-store proxy path also rejects the unsupported unsigned streaming-
+  trailer content-hash mode at Nginx. This is defence in depth, not a vendor patch: Production
+  remains blocked on the [supported object-store decision](storage.md#owner-decision-required--object-store).
 - Declared content type is not trusted. Size comes from object metadata and magic bytes from
   the conditional ranged read; mismatch creates no record.
 - Storage keys are **immutable**; a replacement mints a new key. Visibility is **never

@@ -36,6 +36,7 @@ import { assertSubjectTaughtAtLevel } from '../policies/curriculum.js';
 import { assertFreshActive } from '../policies/freshness.policy.js';
 import { teacherBranchIds } from '../policies/roster-resolution.js';
 import * as audit from '../repositories/audit.repository.js';
+import { enqueue, JOB_QUEUES } from '../repositories/jobs.repository.js';
 import { snapshot } from '../repositories/trash.repository.js';
 import { visibleContentIds } from './library.service.js';
 import {
@@ -1094,6 +1095,13 @@ async function replaceContentFile(
       }
       await enqueueConsentPublicRetirement(tx, claims.cid, existing.storageKey);
       await enqueueConsentContentMigration(tx, claims.cid, canonicalKey);
+    } else {
+      await enqueueQuarantineTransition(
+        tx,
+        claims.cid,
+        existing.storageBucket,
+        existing.storageKey,
+      );
     }
     return {
       published: true,
@@ -1101,6 +1109,30 @@ async function replaceContentFile(
       retireOldPublic,
     };
   });
+}
+
+async function enqueueQuarantineTransition(
+  tx: Prisma.TransactionClient,
+  contentId: string,
+  bucket: string,
+  storageKey: string,
+): Promise<boolean> {
+  const coordinateHash = createHash('sha256')
+    .update(bucket)
+    .update('\0')
+    .update(storageKey)
+    .digest('hex');
+  return enqueue(
+    tx,
+    JOB_QUEUES.contentQuarantinePurge,
+    {
+      operation: 'quarantine_retired_object',
+      content_id: contentId,
+      bucket,
+      storage_key: storageKey,
+    },
+    `quarantine:${contentId}:${coordinateHash}`,
+  );
 }
 
 async function quarantineObject(
@@ -1117,10 +1149,9 @@ async function quarantineObject(
     await copyObject(clients, { bucket, key }, { bucket, key: target });
     await deleteObject(clients, bucket, key);
   } catch {
-    // The row is already updated and the audit written; an object left in place
-    // is reaped by `content.quarantine-purge` (TD-7) rather than lost. Failing
-    // the request here would tell the caller their replacement did not happen
-    // when it did.
+    // The row, audit and exact-key TD-7 obligation are already committed.
+    // Failing the request here would lie about publication; the worker retries
+    // the same copy-before-delete transition and never derives a current key.
   }
 }
 
@@ -1193,6 +1224,13 @@ export async function deleteContent(
     });
     if (retireForConsent) {
       await enqueueConsentPublicRetirement(tx, contentId, existing.storageKey);
+    } else {
+      await enqueueQuarantineTransition(
+        tx,
+        contentId,
+        existing.storageBucket,
+        existing.storageKey,
+      );
     }
     return retireForConsent;
   });
@@ -1206,38 +1244,6 @@ export async function deleteContent(
     }
   } else {
     await quarantineObject(clients, existing.storageBucket, existing.storageKey, contentId);
-  }
-}
-
-/**
- * **Reaps the quarantined object of a permanently deleted content row** (R59.1).
- *
- * A purge that destroyed the database row and left the bytes would not be a
- * deletion — it would be an orphan nobody can find, reach or account for, in the
- * one entity where the data is largest.
- *
- * Called **after** the purge transaction commits, never inside it: an S3 call
- * cannot participate in a database transaction, and holding one open across a
- * network round trip is how a lock outlives its usefulness. The ordering is the
- * safe one — if this fails, the row is gone and the object remains, which is a
- * reapable leftover rather than a record pointing at nothing.
- */
-export async function purgeQuarantinedObject(
-  clients: StorageClients,
-  contentId: string,
-  bucket: string,
-  storageKey: string,
-): Promise<void> {
-  // Both keys, because `deleteContent` quarantines and a failure there leaves
-  // the original in place — the delete is idempotent, so asking twice is free.
-  for (const key of [quarantineKeyFor(contentId, storageKey), storageKey]) {
-    try {
-      await deleteObject(clients, bucket, key);
-    } catch {
-      // Already gone, or the bucket refused. The row is destroyed either way and
-      // failing the request would report a purge that did happen as one that did
-      // not.
-    }
   }
 }
 

@@ -12,7 +12,7 @@ import * as audit from '../repositories/audit.repository.js';
 import * as trash from '../repositories/trash.repository.js';
 
 /**
- * **Quran memorization tracking (§4.5, BR-11, BR-13; M4a, SRS Revision 73).**
+ * **Quran memorization tracking (§4.5, BR-11, BR-13; M4a, SRS R73/R107).**
  *
  * ## Coverage is derived, never accumulated
  *
@@ -51,8 +51,9 @@ import * as trash from '../repositories/trash.repository.js';
  * ## Authorization
  *
  * `assertCanManageQuranProgress` (R73.3) — a مؤطرة reaches only the students
- * whose **Quran** she teaches, which §4.4c's subject-blind *own students* does
- * not express. Teaching and assisting count equally. Out of scope answers 404.
+ * whose **حفظ القرآن** she teaches, which §4.4c's subject-blind *own students*
+ * does not express. Teaching and assisting count equally. Out of scope answers
+ * 404.
  */
 
 export interface QuranLogInput {

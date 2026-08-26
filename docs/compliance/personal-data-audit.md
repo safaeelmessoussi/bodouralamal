@@ -358,7 +358,7 @@ how backup retention interacts with an erasure obligation.
 | # | Gap | Severity | Recommendation |
 |---|---|---|---|
 | **I.1** | `siblingsCount`, `fatherProfession`, `motherProfession` — **verified stored and returned, never read by any logic** **[CODE]**; plus `User.notes` free text collected about children | **High** | Delete the three; give `notes` a stated purpose or remove it from the child form |
-| **I.2** | **No retention job runs.** R59.4 established that `content.quarantine-purge` **was never built**; `purge_after` is written and never read **[CODE]** | **High** | Nothing is ever deleted. Retention is documented and not in force |
+| **I.2** | **No automatic retention job runs.** `content.quarantine-purge` now processes transactionally committed exact replacement/deletion/manual-purge coordinates, but R59.4 keeps automatic destruction Owner-gated; `purge_after` is still written and never read **[CODE]** | **High** | Deliberate Super Admin purge is durable; automatic 90-day retention is documented and not in force |
 | **I.3** | **No privacy notice exists** in the product **[CODE]** | **High** | Required before R62 widens collection |
 | **I.4** | **No data-subject access/export path** | Medium | A parent cannot obtain their child's record |
 | **I.5** | Backup **retention** period unset — an erased record may survive in backups indefinitely | Medium | See H.4. The policy itself exists and is sound |

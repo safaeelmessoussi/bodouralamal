@@ -2,6 +2,7 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 
 import { loadConfig } from "../lib/config.js";
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from "../lib/prisma.js";
+import { requireMemorisationSubject } from "../test-support/quran-subject.js";
 import type { Actor } from "../policies/actor.js";
 import type { RoleScope } from "../policies/branch-scope.js";
 import {
@@ -296,14 +297,11 @@ beforeEach(async () => {
     })
   ).id;
 
-  // R73.4 — the marker, never the name.
-  quranSubject = (
-    await prisma.subject.create({
-      data: { name: `${TAG} قرآن`, tracksQuranProgress: true },
-    })
-  ).id;
+  // R107 — the Production seed owns the one live marker; this fixture borrows
+  // the reference row and removes only its own Level joins during teardown.
+  quranSubject = (await requireMemorisationSubject(prisma)).id;
   tafseerSubject = (
-    await prisma.subject.create({ data: { name: `${TAG} تفسير` } })
+    await prisma.subject.create({ data: { name: `${TAG} تفسير القرآن` } })
   ).id;
 
   circle = (
