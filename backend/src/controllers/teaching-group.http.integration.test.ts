@@ -235,10 +235,10 @@ beforeAll(async () => {
   ).id;
 
   subjectSplit = (
-    await prisma.subject.create({ data: { name: `${TAG} قرآن` } })
+    await prisma.subject.create({ data: { name: `${TAG} حفظ القرآن` } })
   ).id;
   subjectWhole = (
-    await prisma.subject.create({ data: { name: `${TAG} تجويد` } })
+    await prisma.subject.create({ data: { name: `${TAG} ترتيل القرآن` } })
   ).id;
   subjectElsewhere = (
     await prisma.subject.create({ data: { name: `${TAG} خارج` } })
@@ -711,14 +711,14 @@ describe("at most one seat per (student, Subject, Level) — §4.4c", () => {
   });
 
   it("the splits are independent between Subjects", async () => {
-    // One student sits in an Administrative Group, a Quran split and a Tajweed
+    // One student sits in an Administrative Group, a Hifz split and a Tartil
     // split at once — uniqueness is per (student, subject, level), never per
     // student, and nothing may quietly narrow it.
     await prisma.levelSubject.create({
       data: { levelId, subjectId: subjectElsewhere },
     });
-    const inQuran = await call("POST", collection(subjectSplit), superAdmin, {
-      name: `${TAG} فوج قرآن`,
+    const inHifz = await call("POST", collection(subjectSplit), superAdmin, {
+      name: `${TAG} فوج حفظ القرآن`,
     });
     const inOther = await call(
       "POST",
@@ -733,7 +733,7 @@ describe("at most one seat per (student, Subject, Level) — §4.4c", () => {
       (
         await call(
           "POST",
-          `/admin/teaching-groups/${inQuran.body.id}/members`,
+          `/admin/teaching-groups/${inHifz.body.id}/members`,
           superAdmin,
           {
             student_id: studentA,
@@ -756,7 +756,7 @@ describe("at most one seat per (student, Subject, Level) — §4.4c", () => {
 
     await call(
       "DELETE",
-      `/admin/teaching-groups/${inQuran.body.id}/members/${studentA}`,
+      `/admin/teaching-groups/${inHifz.body.id}/members/${studentA}`,
       superAdmin,
     );
     await call(

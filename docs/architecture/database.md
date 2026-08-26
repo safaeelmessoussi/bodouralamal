@@ -171,6 +171,25 @@ upsert.
 pair's latest log id — never as per-row cache reads plus per-row max lookups, which would be
 an N+1 wearing a cache costume.
 
+### `Subject.tracks_quran_progress` — authorization, not curriculum type
+
+SRS R107 keeps the existing boolean and partial unique index, and narrows their meaning.
+The broad Quran domain القرآن الكريم has no Subject row; its atomic Subjects are scheduled
+normally. Only حفظ القرآن may carry the marker, and a current staffing assignment for that
+Subject authorises memorisation entry for its resolved audience.
+
+The database enforces **at most one live marker**. It deliberately cannot enforce “exactly
+one”: an empty database must exist before bootstrap, and absence is a valid fail-closed
+configuration. The Production seed establishes and asserts exactly one for launch. It
+refuses a different marked Subject or duplicate live حفظ القرآن rows rather than guessing
+or rewriting Owner-managed reference data.
+
+`LevelSurah` records the Level's حفظ القرآن Surah syllabus, which تفسير القرآن follows
+pedagogically. `QuranProgressLog` remains keyed by student and Surah with no Subject foreign
+key, because the marker answers *who may write* while the log answers *what was memorised*.
+Tafsir remains unmarked and does not participate in the coverage engine; أحكام القرآن and
+ترتيل القرآن use ordinary `LevelSubject` curriculum.
+
 ### `SessionRecording` → `EducationalContent` — a nullable UNIQUE that is the whole idempotency design (R99)
 
 One column, `session_recording.educational_content_id`: **nullable, unique, FK `RESTRICT`** —

@@ -15,8 +15,8 @@ INSERT INTO level (id, name, category_id, gender_restriction, created_at, update
 INSERT INTO branch (id, name, operational_start_date, created_at, updated_at)
   VALUES ('33333333-3333-3333-3333-333333333333', 'أمرشيش', '2026-01-01', now(), now());
 INSERT INTO subject (id, name, created_at, updated_at)
-  VALUES ('44444444-4444-4444-4444-444444444444', 'القرآن الكريم', now(), now()),
-         ('44444444-4444-4444-4444-444444444445', 'تجويد', now(), now());
+  VALUES ('44444444-4444-4444-4444-444444444444', 'حفظ القرآن', now(), now()),
+         ('44444444-4444-4444-4444-444444444445', 'ترتيل القرآن', now(), now());
 INSERT INTO "user" (id, name_arabic, account_status, created_at, updated_at)
   VALUES ('55555555-5555-5555-5555-555555555555', 'خديجة بنعلي', 'active', now(), now());
 INSERT INTO administrative_group (id, name, level_id, branch_id, created_at, updated_at)
@@ -24,10 +24,10 @@ INSERT INTO administrative_group (id, name, level_id, branch_id, created_at, upd
           '22222222-2222-2222-2222-222222222222',
           '33333333-3333-3333-3333-333333333333', now(), now());
 INSERT INTO teaching_group (id, name, subject_id, level_id, created_at, updated_at)
-  VALUES ('77777777-7777-7777-7777-777777777777', 'مجموعة القرآن 1',
+  VALUES ('77777777-7777-7777-7777-777777777777', 'مجموعة حفظ القرآن 1',
           '44444444-4444-4444-4444-444444444444',
           '22222222-2222-2222-2222-222222222222', now(), now()),
-         ('77777777-7777-7777-7777-777777777778', 'مجموعة التجويد 1',
+         ('77777777-7777-7777-7777-777777777778', 'مجموعة ترتيل القرآن 1',
           '44444444-4444-4444-4444-444444444445',
           '22222222-2222-2222-2222-222222222222', now(), now());
 COMMIT;
@@ -50,21 +50,21 @@ INSERT INTO enrollment (id, student_id, administrative_group_id, level_id)
           '66666666-6666-6666-6666-666666666666',
           '22222222-2222-2222-2222-222222222222');
 
-\echo '--- 4. teaching group: Quran seat succeeds'
+\echo '--- 4. teaching group: Hifz seat succeeds'
 INSERT INTO student_teaching_group (id, student_id, teaching_group_id, subject_id, level_id)
   VALUES (gen_random_uuid(), '55555555-5555-5555-5555-555555555555',
           '77777777-7777-7777-7777-777777777777',
           '44444444-4444-4444-4444-444444444444',
           '22222222-2222-2222-2222-222222222222');
 
-\echo '--- 5. INDEPENDENCE: a Tajweed seat for the SAME student and level must SUCCEED'
+\echo '--- 5. INDEPENDENCE: a Tartil seat for the SAME student and level must SUCCEED'
 INSERT INTO student_teaching_group (id, student_id, teaching_group_id, subject_id, level_id)
   VALUES (gen_random_uuid(), '55555555-5555-5555-5555-555555555555',
           '77777777-7777-7777-7777-777777777778',
           '44444444-4444-4444-4444-444444444445',
           '22222222-2222-2222-2222-222222222222');
 
-\echo '--- 6. a SECOND Quran seat for that student MUST fail (BR-22)'
+\echo '--- 6. a SECOND Hifz seat for that student MUST fail (BR-22)'
 INSERT INTO student_teaching_group (id, student_id, teaching_group_id, subject_id, level_id)
   VALUES (gen_random_uuid(), '55555555-5555-5555-5555-555555555555',
           '77777777-7777-7777-7777-777777777777',

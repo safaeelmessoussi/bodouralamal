@@ -145,7 +145,7 @@ was hiding behind it: the run went green on the first attempt.
 - [x] `schema.prisma` full §7 model incl. `version` columns on TD-15 entities; plain constraints in Prisma
 - [x] `RateLimitCounter` entity + unique `(user_id, bucket, window_start)` (§7/TD-6, Revision 14) — added by a forward-only follow-up migration (TD-6b)
 - [x] Hand-written SQL migrations via `migrate dev --create-only`: explicit `CREATE COLLATION "ar-x-icu"` registration, column collations, CHECKs (incl. bp score checks), partial unique indexes, cross-table ayah trigger (TD-6, TD-6a)
-- [x] Production seed, idempotent (§15.1): roles, categories/levels, subjects, academic year, 114 Surahs, SystemSetting defaults, Super Admin allow-list (via `pre_provisioned_email`, Revision 15 — no placeholder identity)
+- [x] Production seed, idempotent (§15.1): roles, categories/levels, R107 atomic Subjects with exactly one حفظ القرآن memorisation marker, academic year, 114 Surahs, SystemSetting defaults, Super Admin allow-list (via `pre_provisioned_email`, Revision 15 — no placeholder identity)
 - [x] Dev fixtures with `NODE_ENV` guard (§15.2)
 - [x] Google OAuth: state+PKCE (flow state in a short-lived signed HttpOnly callback-scoped cookie, TD-12 Revision 16), cryptographically verified Google ID token (RS256/provider key, exact issuer, configured audience, lifetime, subject, verified email), callback branches 4a/4b/4c, first binding guarded by the authoritative User lock/status re-read, onboarding token (10 min, `jti` + ConsumedToken replay guard) (§4.1b, TD-12)
 - [x] Step-4a routing complete: Active / Pending / (Rejected|Suspended|deleted_at → deactivated screen), never reactivation (§4.1b, Revision 16)
@@ -524,7 +524,7 @@ was hiding behind it: the run went green on the first attempt.
   - ✓ Cancellation demands a reason and records the **audience size at that moment**; restore refused after the date
   - ✓ Content is **referenced, never owned** — unlinking leaves the file untouched, and one item may be referenced by many sessions
 - [ ] Approval assigns Levels and one Administrative Group each, in the approval transaction (TD-4.2, §4.1)
-- [ ] Quran as a schedulable Subject **with the BR-9 carve-out** — a Quran `LevelSubject` generates no grading components (§4.4b)
+- [ ] حفظ القرآن and تفسير القرآن as schedulable atomic Subjects **with the BR-9 carve-out** — their `LevelSubject` rows generate no generic grading components because both follow the LevelSurah selection; only حفظ is progress-tracked (§4.4b, R107); the postponed grading-template engine remains unbuilt
 - [x] Consent gate re-subjected to the session's resolved audience; `consent.reevaluate` payload `{ session_id }` (BR-2, TD-7)
 - [ ] Retire `CAPACITY_FULL` and the roster row-lock; `Room.capacity` informational (BR-23, TD-15.2)
 
@@ -1024,8 +1024,8 @@ was hiding behind it: the run went green on the first attempt.
 ### M4 — Quran Progress (2026-08-12)
 - [x] **R73 applied:** navigation node · `quranlog.create` · TD-2's Quran qualifier · `Subject.tracks_quran_progress` · TD-15.5's stale reason corrected
 - [x] **M4a:** BR-13 union (pure, tested against §4.5's own example) · synchronous recalculation · self-heal guard · Trash on delete · `/teacher/quran?student=`
-- [x] Authorization exactly as approved: Quran-teaching scope only; **teaching and assisting count equally**; Admin/Super Admin unchanged; **fails closed** when no Subject is marked
-- [x] Invariant: at most one live Subject may track Quran progress — partial unique index, proven to refuse a second
+- [x] Authorization exactly as approved: only the structurally marked حفظ القرآن teaching scope; **teaching and assisting count equally**; Admin/Super Admin unchanged; **fails closed** when no Subject is marked (R107)
+- [x] Invariant: at most one live Subject may carry the memorisation marker — partial unique index, proven to refuse a second; the Production seed establishes exactly one on حفظ القرآن
 - [x] **M4b — `/dashboard/student/quran`**, read-only. `GET /students/me/quran` carries no id: the subject comes from `childContext`, so a parent sees the child they act for and nobody else
 - [x] The read is split (`coverageFor`) and shared — the staff path and the student path differ only in how the subject was established
 - [x] **M4c — `LevelSurah` + BR-11.** Syllabus management (Super Admin writes, Admin reads) and completion read from the existing engine
@@ -1290,6 +1290,18 @@ was hiding behind it: the run went green on the first attempt.
   PostgreSQL/MinIO/pg-boss drill passes. **OWNER DECISION REQUIRED — AUTOMATIC QUARANTINE
   DESTRUCTION:** select/approve the automatic 90-day record/object policy before scheduling any
   `purge_after` scan
+- [x] **P1.1 Quran-domain Production seed (R107)** — reconciled the old Quran-as-one-Subject
+  clauses with the Owner's atomic curriculum: أحكام القرآن, حفظ القرآن, ترتيل القرآن, and
+  تفسير القرآن are separate Subjects; القرآن الكريم is not a row; only حفظ القرآن carries
+  `tracks_quran_progress`. The transactional seed preflights duplicate حفظ rows and conflicting
+  live markers, never rewrites Owner-managed alternatives, and asserts its exactly-one launch
+  postcondition. تجويد is the same curriculum Subject as ترتيل القرآن and is not seeded as a
+  duplicate row; existing historical runtime rows remain untouched. تفسير القرآن follows the
+  Level's مقرر الحفظ Surahs but remains unmarked. A disposable fresh PostgreSQL drill applies
+  all 51 migrations, runs the actual seed twice without changing Subject ids/timestamps, and
+  proves through the real Quran service that حفظ staffing authorises memorisation while تفسير
+  staffing for the same student does not; the final expanded drill passed 479 assertions and all
+  eight affected scenario seeds
 - [ ] Manual launch-data entry session(s) with coordinator: branches, rooms, groups, roster (R-5, §15.1)
 - [ ] No-PII log audit pass (TD-14)
 - [ ] §18 Data, Admin & Audit checklist green

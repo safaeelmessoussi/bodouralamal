@@ -3,7 +3,7 @@
 # Quran progress — one engine, three surfaces
 
 **The page for every question about حفظ.** It cites [`docs/SRS.md`](../SRS.md)
-§4.5, BR-11, BR-13 and Revisions 43, 73, 88, 91 and 92 rather than restating
+§4.5, BR-11, BR-13 and Revisions 43, 73, 88, 91, 92, 95 and 107 rather than restating
 them; where a rule below has an SRS home, the SRS wins.
 
 ---
@@ -15,11 +15,31 @@ them; where a rule below has an SRS home, the SRS wins.
 | `QuranSurah` | the 114 seeded rows; `total_ayahs` is *the definitive denominator* (§4.5) | reference |
 | `QuranProgressLog` | discrete closed ayah ranges, tagged `category` | **yes** |
 | `StudentSurahProgress` | self-healing coverage cache, O(1) reads | **never** — see §4.5 |
-| `LevelSurah` | which Surahs a Level's curriculum teaches | reference |
+| `LevelSurah` | which Surahs a Level's حفظ القرآن memorisation syllabus teaches; تفسير القرآن follows the same selection without entering the progress engine | reference |
 
 Section C added **no table, no column and no migration**. The audit that opened
 it found the model already expressed the requirement; what was missing was
 reach, a curriculum-aware form, and one category rule.
+
+### The marker identifies حفظ القرآن, not the Quran domain
+
+القرآن الكريم is the broader curriculum/domain, not a Subject row (R107). The
+atomic schedulable Subjects are أحكام القرآن, حفظ القرآن, ترتيل القرآن, and
+تفسير القرآن. `tracks_quran_progress` belongs only to حفظ القرآن and means one
+thing: a current staffing assignment for that Subject authorises memorisation
+entry for its resolved audience. It does not classify every Quran-domain
+Subject, configure coverage, or become a foreign key on the log.
+
+The partial unique index enforces **at most one** live marker. Absence remains a
+valid fail-closed pre-bootstrap state; the Production seed establishes and
+asserts exactly one for launch. It refuses ambiguity instead of name-matching or
+silently moving a marker from Owner-managed reference data.
+
+تفسير القرآن follows the Surahs selected for each Level's مقرر الحفظ, but this is
+curriculum alignment rather than progress tracking. Tafsir staff gain no حفظ
+authority, Tafsir work never changes BR-13 coverage, and the log remains a
+student + Surah memorisation fact. The postponed grading-template engine will
+derive the paired per-Surah memorisation and Tafsir components from `LevelSurah`.
 
 ### Why `QuranProgressLog` carries no `level_id`
 
@@ -66,7 +86,7 @@ Revision is not discarded. `revision_log_count` and `last_revised_at` come back
 with every coverage row, and the log itself is preserved and displayed — *has
 this been revised, and when last* is the question revision actually answers.
 
-## `LevelSurah` is normative for ENTRY
+## `LevelSurah` is the حفظ القرآن syllabus and is normative for ENTRY
 
 A Surah may be logged against a Level only when both hold:
 
@@ -94,6 +114,10 @@ corrected one consumer and widened none:
 | **Super Admin** | every **beneficiary** — a live enrolment plus R79's `is_beneficiary` |
 | **Admin** | the same, bounded by their managed branches |
 | **مؤطِّرة / assistant** | the beneficiaries whose **Quran** she teaches, on **today** |
+
+Here “Quran” means the marked حفظ القرآن Subject. Staffing أحكام القرآن,
+ترتيل القرآن, or تفسير القرآن for the same beneficiary does not authorise a
+memorisation write.
 
 **Beneficiaries, never Users.** The Super Admin arm read `{ deletedAt: null }` —
 every account on the platform — so the selector offered parents, مؤطِّرات and
@@ -148,6 +172,7 @@ could not tell what remained.
 | [`policies/quran-coverage.test.ts`](../../backend/src/policies/quran-coverage.test.ts) | BR-13's worked example · adjacency · re-logging never inflating |
 | [`services/quran.integration.test.ts`](../../backend/src/services/quran.integration.test.ts) | the engine, R73's subject narrowing, the self-heal guard, BR-11 completion |
 | [`services/quran-entry.integration.test.ts`](../../backend/src/services/quran-entry.integration.test.ts) | whole-Level · Group · Circle · assistant parity · unrelated Subject · R88 grants nothing · R91 dated authority and the one-off cover · R92 combined and NOT widened · beneficiaries not Users · multi-Level · `LevelSurah` refusals · ayah bounds · **revision never inflating** · audit actor and level |
+| [`services/production-seed.integration.test.ts`](../../backend/src/services/production-seed.integration.test.ts) | fresh Production seed twice · R107 atomic Subject set · exactly one حفظ marker · real حفظ-versus-تفسير authorization |
 | [`components/quran/quran-entry.test.ts`](../../frontend/src/components/quran/quran-entry.test.ts) | one workspace and one writer · the curriculum drives the Surah list · no 114 · no `level_ids[0]` · error ≠ empty · the ARIA meter contract · no second progress meter · Level grouping |
 | [`scripts/ci/check-progress-css.sh`](../../scripts/ci/check-progress-css.sh) | the meter fills by **logical** size, clips its track, and honours `prefers-reduced-motion` — in `scripts/ci/` because `?raw` on a `.css` file yields `''` under vitest and such a guard passes while reading nothing |
 | [`scripts/dev/browser/verify-quran-entry.mjs`](../../scripts/dev/browser/verify-quran-entry.mjs) | the whole matrix driven as ten identities: Admin, مؤطِّرة, assistant, Group, Circle, Tafseer-only, R91's pair, and two beneficiaries reading حفظي |

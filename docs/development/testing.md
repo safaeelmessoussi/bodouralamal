@@ -873,26 +873,39 @@ scaleX()` was rejected. A guard that cannot tell prose from code fails on the
 documentation recording its own reason.
 
 
-### Only ONE fixture may hold the Quran marker at a time
+### Fixtures consume the one Production memorisation marker
 
 `Subject.tracks_quran_progress` has a **partial unique index** — at most one live
-Subject may carry it (R73.4), because two would make *which* teaching authorises
-a log ambiguous. `seed-quran-scenario.ts` and `seed-r91-scenario.ts` both create
-one, so:
+Subject may carry it (R73.4/R107), because two would make *which* teaching authorises
+a log ambiguous. In Production it belongs only to حفظ القرآن. Quran integration
+and browser fixtures consume that seeded row through a shared fail-closed helper;
+they never create or delete the reference Subject. The R91 Tafsir fixture consumes
+the separate, unmarked تفسير القرآن row. This makes concurrent fixtures compatible
+with the uniqueness invariant and makes missing, duplicate, or wrongly named marker
+data fail with a legible R107 setup error.
 
-* they can never run **concurrently**;
-* and a fixture leaked by an **interrupted** run blocks the other harness with a
-  raw `duplicate key value violates unique constraint` stack trace rather than a
-  legible message.
+The tagged-Subject cleanup remains in the older scenario scripts solely to recover
+residue created by pre-R107 versions of those fixtures. Current teardown removes only
+the fixture-owned joins and retains the Production Subjects.
 
-That is exactly what happened on 2026-08-20: a batch loop was SIGTERM'd while
-`verify-quran-entry` was running, its `trap cleanup EXIT` never completed, and
-`verify-effective-staffing` then failed to seed at all. **The recovery is
-`npx tsx scripts/seed-quran-scenario.ts --clean`**, which every harness also runs
-on exit.
+### The Production Subject seed has its own fresh-database drill
 
-**A harness killed mid-run leaves its fixture behind.** When one fails to seed,
-check for another scenario's residue before suspecting the product.
+Run `bash scripts/seed/verify-production-seed.sh`. It starts a disposable PostgreSQL 18
+volume, applies every migration, executes the **actual** Production seed entry point twice,
+and then checks the R107 boundary through the real policy and Quran service. It also boots
+the real API/pg-boss catalog against disposable MinIO, runs all 18 integration files affected
+by the reconciliation, and round-trips all eight changed scenario seeds on that same stack:
+
+- the six seeded atomic Subjects exist once, with stable ids and timestamps across the second run;
+- القرآن الكريم, the ambiguous bare تفسير, and the duplicate تجويد synonym are not created as substitute rows;
+- exactly one live marker exists and it is حفظ القرآن;
+- a teacher staffed on حفظ القرآن can log memorisation for the resolved audience;
+- a teacher staffed on تفسير القرآن for that same audience receives `NOT_FOUND`;
+- a conflicting Owner-managed marker aborts before Subjects or unrelated seed data change.
+
+The opt-in variable and unique database volume are deliberate. This proof owns its whole
+database and invokes the bootstrap seed, so it must never share a development or Owner
+database merely to make the test convenient.
 
 ### A contract change reaches the harnesses too
 

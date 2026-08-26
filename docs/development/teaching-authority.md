@@ -3,7 +3,7 @@
 # Teaching authority — who may act on whom, and when
 
 **One page for the question every teaching feature asks.** It cites
-[`docs/SRS.md`](../SRS.md) §4.4c and Revisions 73, 87, 88, 90 and 91 rather than
+[`docs/SRS.md`](../SRS.md) §4.4c and Revisions 73, 87, 88, 90, 91 and 107 rather than
 restating them; where a rule below has an SRS home, the SRS wins.
 
 ---
@@ -12,7 +12,7 @@ restating them; where a rule below has an SRS home, the SRS wins.
 
 | Fact | Where it lives | May it authorise? |
 |---|---|---|
-| **Capability / availability** — *«I can teach Quran», «I am free Thursdays»* | `TeacherSubjectCapability` · `TeacherCategoryCapability` · `TeacherAvailability` (R88) | **never** |
+| **Capability / availability** — *«I can teach حفظ القرآن», «I am free Thursdays»* | `TeacherSubjectCapability` · `TeacherCategoryCapability` · `TeacherAvailability` (R88) | **never** |
 | **Effective assignment** — *she staffs this class from X to Y* | `CourseScheduleStaff` with `effective_from` / `effective_until` (R91) | **yes**, on dates inside the period |
 | **Occurrence staffing** — *she took this lesson* | `SessionStaff` (R43.4) | **yes**, for that occurrence — and it **overrides** the schedule |
 

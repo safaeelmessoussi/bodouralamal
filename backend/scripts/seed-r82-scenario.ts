@@ -8,6 +8,7 @@
  * features. It prints the ids the harness needs and `--clean` removes them.
  */
 import { createPrismaClient } from '../src/lib/prisma.js';
+import { requireMemorisationSubject } from '../src/test-support/quran-subject.js';
 
 const TAG = '[r82-browser]';
 const url = process.env['DATABASE_URL'];
@@ -51,8 +52,9 @@ async function wipe(): Promise<void> {
   await prisma.recurringCourseSchedule.deleteMany({ where: { id: { in: scheduleIds } } });
   await prisma.levelSubject.deleteMany({ where: { level: { name: { startsWith: TAG } } } });
   await prisma.room.deleteMany({ where: { name: { startsWith: TAG } } });
-  // The Quran Subject this scenario owns. Everything that RESTRICTs it — the
-  // schedule, the level join, any declared capability — is already gone above.
+  // Remove residue from the pre-R107 fixture, which owned a tagged marker.
+  // Current fixtures consume the Production حفظ القرآن Subject and never
+  // delete it; everything that RESTRICTs old tagged rows is already gone.
   await prisma.teacherSubjectCapability.deleteMany({
     where: { subject: { name: { startsWith: TAG } } },
   });
@@ -218,22 +220,9 @@ await prisma.notification.create({
  * notification row inserted directly, which would prove only that the table
  * accepts writes.
  */
-/**
- * **Its OWN Quran Subject, marked as one.**
- *
- * This read `findFirstOrThrow({ deletedAt: null })` — *whichever Subject happens
- * to sort first in the development database* — and named the schedule «حلقة
- * الحفظ» on the strength of it. The dev DB's first Subject is called «حفظ
- * القران» and carries `tracks_quran_progress: false`, so R87 §M correctly hid
- * «إدخال الحفظ» from a مؤطرة who staffs no Quran class, and `verify-portals`
- * read that correct behaviour as a defect. **A fixture that borrows whichever
- * row sorts first asserts something nobody chose.**
- */
-const subject =
-  (await prisma.subject.findFirst({ where: { name: `${TAG} حفظ القرآن` } })) ??
-  (await prisma.subject.create({
-    data: { name: `${TAG} حفظ القرآن`, tracksQuranProgress: true },
-  }));
+/** R107's exact structural Subject. The fixture fails clearly when Production
+ * reference data is absent or ambiguous instead of inventing another marker. */
+const subject = await requireMemorisationSubject(prisma);
 await prisma.levelSubject.upsert({
   where: { levelId_subjectId: { levelId: levelA.id, subjectId: subject.id } },
   create: { levelId: levelA.id, subjectId: subject.id },

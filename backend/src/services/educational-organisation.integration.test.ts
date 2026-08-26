@@ -518,11 +518,11 @@ describe("moving a student is one action (§5.6)", () => {
       levelId,
       branchId: amerchich,
     });
-    const quran = await subject("القرآن", levelId);
+    const hifz = await subject("حفظ القرآن", levelId);
     const tg = await createTeachingGroup(prisma, superAdmin(), {
       levelId,
-      subjectId: quran,
-      name: `${TAG} القرآن 1`,
+      subjectId: hifz,
+      name: `${TAG} حفظ القرآن 1`,
     });
     const s = await student("هدى");
     await enrolStudent(prisma, superAdmin(), firstGroupId, s);
@@ -558,11 +558,11 @@ describe("moving a student is one action (§5.6)", () => {
 describe("un-enrolment (TD-5)", () => {
   it("removes the Teaching Group seats for that Level, and nothing else", async () => {
     const { levelId, firstGroupId } = await level("المستوى 1", amerchich);
-    const quran = await subject("القرآن", levelId);
+    const hifz = await subject("حفظ القرآن", levelId);
     const tg = await createTeachingGroup(prisma, superAdmin(), {
       levelId,
-      subjectId: quran,
-      name: `${TAG} القرآن 1`,
+      subjectId: hifz,
+      name: `${TAG} حفظ القرآن 1`,
     });
     const s = await student("هدى");
     await enrolStudent(prisma, superAdmin(), firstGroupId, s);
@@ -715,12 +715,12 @@ describe("branch scope on Administrative Groups", () => {
 describe("Revision 43.3 — Teaching Group authority is split", () => {
   it("an Admin may NOT create a teaching group", async () => {
     const { levelId } = await level("المستوى 1", amerchich);
-    const quran = await subject("القرآن", levelId);
+    const hifz = await subject("حفظ القرآن", levelId);
     const err = await failure(() =>
       createTeachingGroup(prisma, admin([amerchich]), {
         levelId,
-        subjectId: quran,
-        name: `${TAG} القرآن 1`,
+        subjectId: hifz,
+        name: `${TAG} حفظ القرآن 1`,
       }),
     );
     // A Teaching Group has no branch, so "within your scope" has no referent —
@@ -730,11 +730,11 @@ describe("Revision 43.3 — Teaching Group authority is split", () => {
 
   it("an Admin MAY place their own branch’s students into one", async () => {
     const { levelId, firstGroupId } = await level("المستوى 1", amerchich);
-    const quran = await subject("القرآن", levelId);
+    const hifz = await subject("حفظ القرآن", levelId);
     const tg = await createTeachingGroup(prisma, superAdmin(), {
       levelId,
-      subjectId: quran,
-      name: `${TAG} القرآن 1`,
+      subjectId: hifz,
+      name: `${TAG} حفظ القرآن 1`,
     });
     const s = await student("هدى");
     await enrolStudent(prisma, superAdmin(), firstGroupId, s);
@@ -746,11 +746,11 @@ describe("Revision 43.3 — Teaching Group authority is split", () => {
 
   it("an Admin may NOT place a student enrolled at another branch", async () => {
     const { levelId, firstGroupId } = await level("المستوى 1", amerchich);
-    const quran = await subject("القرآن", levelId);
+    const hifz = await subject("حفظ القرآن", levelId);
     const tg = await createTeachingGroup(prisma, superAdmin(), {
       levelId,
-      subjectId: quran,
-      name: `${TAG} القرآن 1`,
+      subjectId: hifz,
+      name: `${TAG} حفظ القرآن 1`,
     });
     const s = await student("هدى");
     await enrolStudent(prisma, superAdmin(), firstGroupId, s);
@@ -764,11 +764,11 @@ describe("Revision 43.3 — Teaching Group authority is split", () => {
 
   it("refuses placing a student who is not enrolled in the level at all", async () => {
     const { levelId } = await level("المستوى 1", amerchich);
-    const quran = await subject("القرآن", levelId);
+    const hifz = await subject("حفظ القرآن", levelId);
     const tg = await createTeachingGroup(prisma, superAdmin(), {
       levelId,
-      subjectId: quran,
-      name: `${TAG} القرآن 1`,
+      subjectId: hifz,
+      name: `${TAG} حفظ القرآن 1`,
     });
     const stranger = await student("غريبة");
     const err = await failure(() =>
@@ -796,17 +796,17 @@ describe("Revision 43.3 — Teaching Group authority is split", () => {
 describe("BR-22 — splits are per-Subject, and an unplaced student is never silent", () => {
   it("one student sits in two different subjects’ splits at once", async () => {
     const { levelId, firstGroupId } = await level("المستوى 1", amerchich);
-    const quran = await subject("القرآن", levelId);
-    const tajweed = await subject("تجويد", levelId);
+    const hifz = await subject("حفظ القرآن", levelId);
+    const tartil = await subject("ترتيل القرآن", levelId);
     const q1 = await createTeachingGroup(prisma, superAdmin(), {
       levelId,
-      subjectId: quran,
-      name: `${TAG} القرآن 1`,
+      subjectId: hifz,
+      name: `${TAG} حفظ القرآن 1`,
     });
     const t1 = await createTeachingGroup(prisma, superAdmin(), {
       levelId,
-      subjectId: tajweed,
-      name: `${TAG} تجويد 1`,
+      subjectId: tartil,
+      name: `${TAG} ترتيل القرآن 1`,
     });
     const s = await student("هدى");
     await enrolStudent(prisma, superAdmin(), firstGroupId, s);
@@ -821,16 +821,16 @@ describe("BR-22 — splits are per-Subject, and an unplaced student is never sil
 
   it("refuses a SECOND split of the SAME subject, naming the one they are in", async () => {
     const { levelId, firstGroupId } = await level("المستوى 1", amerchich);
-    const quran = await subject("القرآن", levelId);
+    const hifz = await subject("حفظ القرآن", levelId);
     const q1 = await createTeachingGroup(prisma, superAdmin(), {
       levelId,
-      subjectId: quran,
-      name: `${TAG} القرآن 1`,
+      subjectId: hifz,
+      name: `${TAG} حفظ القرآن 1`,
     });
     const q2 = await createTeachingGroup(prisma, superAdmin(), {
       levelId,
-      subjectId: quran,
-      name: `${TAG} القرآن 2`,
+      subjectId: hifz,
+      name: `${TAG} حفظ القرآن 2`,
     });
     const s = await student("هدى");
     await enrolStudent(prisma, superAdmin(), firstGroupId, s);
@@ -844,18 +844,18 @@ describe("BR-22 — splits are per-Subject, and an unplaced student is never sil
 
   it("lists an enrolled but unplaced student for a SPLIT subject", async () => {
     const { levelId, firstGroupId } = await level("المستوى 1", amerchich);
-    const quran = await subject("القرآن", levelId);
+    const hifz = await subject("حفظ القرآن", levelId);
     await createTeachingGroup(prisma, superAdmin(), {
       levelId,
-      subjectId: quran,
-      name: `${TAG} القرآن 1`,
+      subjectId: hifz,
+      name: `${TAG} حفظ القرآن 1`,
     });
     const placed = await student("هدى");
     const unplaced = await student("سارة");
     await enrolStudent(prisma, superAdmin(), firstGroupId, placed);
     await enrolStudent(prisma, superAdmin(), firstGroupId, unplaced);
     const q1 = await prisma.teachingGroup.findFirstOrThrow({
-      where: { subjectId: quran },
+      where: { subjectId: hifz },
     });
     await addMember(prisma, superAdmin(), q1.id, placed);
 
@@ -863,7 +863,7 @@ describe("BR-22 — splits are per-Subject, and an unplaced student is never sil
       prisma,
       superAdmin(),
       levelId,
-      quran,
+      hifz,
     );
     expect(result.split).toBe(true);
     expect(result.unassigned.map((u) => u.studentId)).toEqual([unplaced]);
@@ -871,7 +871,7 @@ describe("BR-22 — splits are per-Subject, and an unplaced student is never sil
 
   it("reports split=false and an EMPTY list when the subject is not split at all", async () => {
     const { levelId, firstGroupId } = await level("المستوى 1", amerchich);
-    const tafsir = await subject("تفسير", levelId);
+    const tafsir = await subject("تفسير القرآن", levelId);
     await enrolStudent(
       prisma,
       superAdmin(),
@@ -892,22 +892,22 @@ describe("BR-22 — splits are per-Subject, and an unplaced student is never sil
 
   it("returns a student to the unassigned list when their group is deleted", async () => {
     const { levelId, firstGroupId } = await level("المستوى 1", amerchich);
-    const quran = await subject("القرآن", levelId);
+    const hifz = await subject("حفظ القرآن", levelId);
     const q1 = await createTeachingGroup(prisma, superAdmin(), {
       levelId,
-      subjectId: quran,
-      name: `${TAG} القرآن 1`,
+      subjectId: hifz,
+      name: `${TAG} حفظ القرآن 1`,
     });
     await createTeachingGroup(prisma, superAdmin(), {
       levelId,
-      subjectId: quran,
-      name: `${TAG} القرآن 2`,
+      subjectId: hifz,
+      name: `${TAG} حفظ القرآن 2`,
     });
     const s = await student("هدى");
     await enrolStudent(prisma, superAdmin(), firstGroupId, s);
     await addMember(prisma, superAdmin(), q1.id, s);
     expect(
-      (await listUnassignedStudents(prisma, superAdmin(), levelId, quran))
+      (await listUnassignedStudents(prisma, superAdmin(), levelId, hifz))
         .unassigned,
     ).toEqual([]);
 
@@ -921,18 +921,18 @@ describe("BR-22 — splits are per-Subject, and an unplaced student is never sil
     // They return to the list rather than vanishing from it (BR-22, TD-5).
     expect(
       (
-        await listUnassignedStudents(prisma, superAdmin(), levelId, quran)
+        await listUnassignedStudents(prisma, superAdmin(), levelId, hifz)
       ).unassigned.map((u) => u.studentId),
     ).toEqual([s]);
   });
 
   it("returns a student to the list when they are removed from a split", async () => {
     const { levelId, firstGroupId } = await level("المستوى 1", amerchich);
-    const quran = await subject("القرآن", levelId);
+    const hifz = await subject("حفظ القرآن", levelId);
     const q1 = await createTeachingGroup(prisma, superAdmin(), {
       levelId,
-      subjectId: quran,
-      name: `${TAG} القرآن 1`,
+      subjectId: hifz,
+      name: `${TAG} حفظ القرآن 1`,
     });
     const s = await student("هدى");
     await enrolStudent(prisma, superAdmin(), firstGroupId, s);
@@ -942,7 +942,7 @@ describe("BR-22 — splits are per-Subject, and an unplaced student is never sil
 
     expect(
       (
-        await listUnassignedStudents(prisma, superAdmin(), levelId, quran)
+        await listUnassignedStudents(prisma, superAdmin(), levelId, hifz)
       ).unassigned.map((u) => u.studentId),
     ).toEqual([s]);
   });
@@ -954,11 +954,11 @@ describe("BR-22 — splits are per-Subject, and an unplaced student is never sil
       levelId,
       branchId: targa,
     });
-    const quran = await subject("القرآن", levelId);
+    const hifz = await subject("حفظ القرآن", levelId);
     await createTeachingGroup(prisma, superAdmin(), {
       levelId,
-      subjectId: quran,
-      name: `${TAG} القرآن 1`,
+      subjectId: hifz,
+      name: `${TAG} حفظ القرآن 1`,
     });
     const here = await student("هدى");
     const there = await student("ليلى");
@@ -969,7 +969,7 @@ describe("BR-22 — splits are per-Subject, and an unplaced student is never sil
       prisma,
       admin([amerchich]),
       levelId,
-      quran,
+      hifz,
     );
     // An admin may place only the students they are responsible for (R43.3).
     expect(mine.unassigned.map((u) => u.studentId)).toEqual([here]);
@@ -978,7 +978,7 @@ describe("BR-22 — splits are per-Subject, and an unplaced student is never sil
       prisma,
       superAdmin(),
       levelId,
-      quran,
+      hifz,
     );
     expect(all.unassigned.map((u) => u.studentId).sort()).toEqual(
       [here, there].sort(),
@@ -1345,7 +1345,7 @@ describe("R74 follow-up — an enrolment can be changed and ended", () => {
   it("reports a student’s circles on her enrolment row, scoped to that Level", async () => {
     const { levelId, firstGroupId } = await level("مستوى للعرض", amerchich);
     const subject = await prisma.subject.create({
-      data: { name: `${TAG} تفسير` },
+      data: { name: `${TAG} تفسير القرآن` },
     });
     await prisma.levelSubject.create({
       data: { levelId, subjectId: subject.id },

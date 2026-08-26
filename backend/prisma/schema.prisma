@@ -855,17 +855,19 @@ model Level {
   @@map("level")
 }
 
-/// Curriculum subject (§4.4b). Revision 43: this INCLUDES the Quran, **for
-/// scheduling only** — memorization is still tracked exclusively by the §4.5
-/// engine as Surah + ayah ranges (BR-13, §20 rule 23), and a Quran
-/// `LevelSubject` auto-creates NO grading components (BR-9 carve-out).
+/// Atomic curriculum subject (§4.4b, R107). The broad Quran domain القرآن
+/// الكريم is not a row: أحكام القرآن, حفظ القرآن, ترتيل القرآن, and تفسير
+/// القرآن are separate schedulable Subjects; تجويد is represented by ترتيل
+/// القرآن rather than a second row. Memorisation stays exclusively in the §4.5
+/// Surah + ayah-range engine (BR-13, §20 rule 23).
 model Subject {
   id                  String                     @id @default(uuid()) @db.Uuid
   teacherCapabilities TeacherSubjectCapability[]
   name                String                     @db.VarChar(120)
   displayOrder        Int?                       @map("display_order")
 
-  /// R73 — **which Subject's teaching authorises Quran progress** (§4.5, TD-2).
+  /// R73/R107 — **which Subject's teaching authorises Quran memorisation**
+  /// (§4.5, TD-2). It belongs only to حفظ القرآن.
   ///
   /// §4.4c's *own students* is subject-blind, so without this a مؤطرة teaching
   /// only Fiqh could log a مستفيدة's memorization. Matching on the NAME is
@@ -874,9 +876,10 @@ model Subject {
   ///
   /// **At most one LIVE Subject may carry it** — a partial unique index in SQL,
   /// because §4.5's engine is singular and two would make *which* teaching
-  /// authorises a log ambiguous. It configures nothing else: no tracking mode,
-  /// no second engine, and no `subject_id` on `QuranProgressLog` (still a
-  /// defect per §7).
+  /// authorises a log ambiguous. The Production seed establishes exactly one;
+  /// absence remains representable and fails closed before bootstrap. It
+  /// configures nothing else: no tracking mode, no second engine, and no
+  /// `subject_id` on `QuranProgressLog`.
   tracksQuranProgress Boolean @default(false) @map("tracks_quran_progress")
 
   version Int @default(0)
@@ -915,8 +918,11 @@ model LevelSubject {
   @@map("level_subject")
 }
 
-/// Creating a row for a Women's level auto-generates the two draft components
-/// `[Surah] Memorization` and `[Surah] Tafsir` (§4.6, BR-9).
+/// The Surahs selected per Level for حفظ القرآن memorisation (R107); the
+/// separate, unmarked تفسير القرآن curriculum follows the same selection.
+/// Only حفظ uses these rows for §4.5 progress and BR-11 completion. When the
+/// postponed grading-template engine is built, a Women's-level row generates
+/// `[Surah] Memorization` and `[Surah] Tafsir` components (§4.6, BR-9).
 model LevelSurah {
   id      String     @id @default(uuid()) @db.Uuid
   levelId String     @map("level_id") @db.Uuid
@@ -1008,7 +1014,7 @@ model AdministrativeGroup {
 /// Level; creating these is not a prerequisite for teaching.
 ///
 /// Splits are INDEPENDENT BETWEEN SUBJECTS — one student may sit in
-/// Administrative Group 1, Quran Group 2 and Tajweed Group 1 at once. That
+/// Administrative Group 1, حفظ القرآن Group 2 and ترتيل القرآن Group 1 at once. That
 /// independence comes from the per-(subject, level) uniqueness on the
 /// membership join below, not from anything here.
 model TeachingGroup {
@@ -1044,7 +1050,7 @@ model TeachingGroup {
 ///
 /// **At most one row per (student, subject, level)** among non-deleted rows —
 /// this is what makes the splits INDEPENDENT BETWEEN SUBJECTS: the uniqueness
-/// is per subject, so one student sits in Quran Group 2 and Tajweed Group 1 at
+/// is per subject, so one student sits in حفظ القرآن Group 2 and ترتيل القرآن Group 1 at
 /// once without either constraining the other.
 ///
 /// `subjectId` and `levelId` are denormalized from the teaching group for

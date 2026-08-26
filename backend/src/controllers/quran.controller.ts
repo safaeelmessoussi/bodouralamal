@@ -16,7 +16,7 @@ import {
 import { idParam, parse } from './parse.js';
 
 /**
- * Quran memorization tracking (§4.5, TD-3; M4a, SRS Revision 73).
+ * Quran memorization tracking (§4.5, TD-3; M4a, SRS R73/R107).
  *
  * **The ayah bounds are checked in three places and that is deliberate**: the
  * schema's `CHECK` for `start <= end`, a database **trigger** for

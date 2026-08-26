@@ -107,13 +107,13 @@ describe("who may open the Trash (TD-2)", () => {
 describe("what the list says about each row", () => {
   it("reads a label from the snapshot rather than joining a row that may be gone", async () => {
     const subject = await prisma.subject.create({
-      data: { name: `${TAG} القرآن`, deletedAt: new Date() },
+      data: { name: `${TAG} حفظ القرآن`, deletedAt: new Date() },
     });
-    await bin("Subject", subject.id, { id: subject.id, name: `${TAG} القرآن` });
+    await bin("Subject", subject.id, { id: subject.id, name: `${TAG} حفظ القرآن` });
 
     const page = await listTrash(prisma, superAdmin(), { entity: "Subject" });
     const row = page.data.find((r) => r.targetId === subject.id)!;
-    expect(row.label).toBe(`${TAG} القرآن`);
+    expect(row.label).toBe(`${TAG} حفظ القرآن`);
     expect(row.deletedByName).toBe(`${TAG} مديرة`);
     expect(row.purgeAfter).toBeInstanceOf(Date);
   });
