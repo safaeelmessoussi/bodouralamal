@@ -1290,6 +1290,21 @@ was hiding behind it: the run went green on the first attempt.
   PostgreSQL/MinIO/pg-boss drill passes. **OWNER DECISION REQUIRED — AUTOMATIC QUARANTINE
   DESTRUCTION:** select/approve the automatic 90-day record/object policy before scheduling any
   `purge_after` scan
+- [ ] **P1.2 TEST-ISOLATION DEFECT — the integration sweep destroys Local Development fixture
+  staffing.** Measured, not inferred: `course_schedule_staff` holds **2** rows before
+  `scripts/dev/test-integration.sh`, the sweep passes **1714** tests, and the table holds **0**
+  after. Consequence: every مؤطِّرة screen on localhost seeds empty for a reason that looks
+  exactly like an application defect — §4.4c derives her whole scope from staffing, so the
+  screens are *correctly* empty and the cause is invisible. **Not root-caused.** Every
+  `courseScheduleStaff.deleteMany` teardown in the suite is tag-scoped, and the six suites that
+  share R107's memorisation Subject were each run in isolation without touching the rows, so the
+  responsible suite is **not** identified — stated rather than guessed. **Re-running
+  `fixtures.ts` is the interim remedy and is explicitly NOT the fix** (Owner, 2026-08-26). Same
+  family as the leaked `[email-owner-test]` Categories that blocked the fixture seed: shared
+  development data is collateral of integration teardown, and both must be closed before
+  Production readiness is considered complete. Likely shapes to investigate first: a teardown
+  scoped by *branch* or *level* rather than by tag, and any suite whose `clear()` runs against
+  rows it did not create.
 - [x] **P1.1 Quran-domain Production seed (R107–R108)** — القرآن الكريم is the domain, not
   a Subject. The additive initial baseline is أحكام القرآن, حفظ القرآن,
   ترتيل وتجويد القرآن, تفسير القرآن, فقه, السيرة النبوية, العقيدة, الأذكار; محو الأمية is
