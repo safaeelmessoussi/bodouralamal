@@ -1306,6 +1306,74 @@ was hiding behind it: the run went green on the first attempt.
   scoped by *branch* or *level* rather than by tag, and any suite whose `clear()` runs against
   rows it did not create.
 
+## NEXT BATCH — planned 2026-08-26, ready to execute after reset
+
+**Order is dependency-safe. Do not reorder without re-reading the reasons.**
+
+| # | section | kind | why here |
+|---|---|---|---|
+| 1 | **NEW B §C** backend visibility | feature + migration | design ratified; precondition audit below |
+| 2 | **NEW H** scheduling-type catalogue | reconciliation → feature | **must precede §D** — `＋إضافة عنصر` is where both land; building §D's form twice is the waste |
+| 3 | **NEW B §D** frontend Add/Edit + scope prompt | feature | needs 1 and 2 |
+| 4 | **NEW B §E** full authorization matrix | tests | closes NEW B |
+| 5 | **NEW D** Teacher content-library lookups | **defect (backend authz)** | standalone; unblocks Teacher content work |
+| 6 | **NEW E** الملف التدريسي false dirty | **defect** | folded into §9A–D/F acceptance |
+| 7 | **§8** table columns audit | feature | needs NEW I fields to exist first |
+| 8 | **NEW I/J/K/L** reference-data baseline | data + small schema | Branch needs one column (below) |
+| 9 | **§9A–D/F** edit-form audit | feature | includes NEW E and NEW F |
+| 10 | **NEW F** availability page gains capabilities | feature | §5 follow-up; same entities as §9 work |
+| 11 | **§10** Rule AX carry-forwards | feature | recorder dialog + session materials |
+| 12 | **NEW M** Teacher baseline import | **data, Production only** | after §9 so the profile form is correct |
+| 13 | **NEW G** حسابي redesign | UX | independent; after structure settles |
+| 14 | **NEW N** شركاء الجمعية | UX | smallest; independent |
+
+### Findings that change the work (established, not assumed)
+
+* **NEW C — DONE this session.** Root cause was **not** the three-source union: `sort` was
+  missing from `approvals.tsx`'s loader dependency array, so the header updated state and
+  never re-requested. Fixed, with `sorted-pages-refetch.test.ts` covering all four
+  server-sorted pages. **Browser confirmation of the reorder is still owed** — fold into the
+  first §6 follow-up sweep.
+* **NEW D — the incorrect layer is the SHARED HOOK, not the page.** `useScopeOptions` calls
+  `listLevels`, `listSubjects`, `listAcademicYears` — all `403` for a Teacher (R93.4) — while
+  `listBranches` correctly returns `200` (branch.service admits teachers). R93.4 already set
+  the precedent and the mechanism: **`GET /me/event-scope-options`** answers *what may I
+  address this to* without widening any admin endpoint. **Do the same for content scope; do
+  not grant Teachers the admin reads.** Fix is backend + hook, not per-page.
+* **NEW H — there is NO `EventType` table.** The catalogue lives in
+  `frontend/src/adapters/scheduling-types.ts` as `SCHEDULING_TYPE_SPECS`, a frontend registry.
+  The five Owner types map onto three entities: **حصة دراسية → RecurringCourseSchedule ·
+  اختبار → Exam · محاضرة/حفل/عطلة → Event**. `حضور اجباري` is a real property with nowhere
+  to live today. **Decide before §D**: seeded reference table vs. extending the registry.
+  Recommend a **seeded reference table** — the Owner calls the order canonical, and a
+  frontend constant cannot be seeded or ordered by an administrator.
+* **NEW I — Branch is missing exactly one column.** `address`, `phone`, `email`,
+  `openingHoursAr`, `googleMapsUrl` all exist; there is **no second phone**. One additive
+  nullable column (`phone_secondary`), plus §8/§9 surfacing. Do not overload `phone`.
+* **NEW M — "all branches" is already structural.** `UserBranchRole.branch_id IS NULL` means
+  every branch (`branch-scope.ts`). **Never encode «الكل» as a Branch row.**
+
+### Real-data / environment policy (binding)
+
+* **NEW I, J, K, L** = Production **reference** data → `prisma/seed/production.ts`, additive
+  and idempotent, matching R107's fail-closed style. Safe in Local Development.
+* **NEW M (30 named real people)** = **Production only.** R104 forbids real person data in
+  Staging and the Owner has **not** superseded it. **Never seed into fixtures, never into
+  Staging.** Recommend an **Owner-controlled import file + a one-shot import script**, not a
+  migration: a migration would replay real personal data into every environment that runs it.
+* Keep `production.ts` (reference) and `fixtures.ts` (synthetic) strictly separate — the
+  §15.2 firewall already exists; do not blur it.
+* Phone/email for Teachers are unknown. **Do not invent placeholders.**
+
+### Needs Owner decision before its section starts
+
+1. **NEW H** — reference table vs frontend registry, and whether `عطلة` (a holiday) is
+   schedulable-with-attendance at all.
+2. **NEW N** — static content vs Super-Admin-managed reference data.
+3. **NEW L** — existing Level names differ in spelling from the baseline; the same
+   orthography question as the Subject normalization. Audit before touching.
+4. **NEW G** — confirm which fields a beneficiary may see about her own guardian.
+
 - [ ] **NEW B §C — scheduling visibility (schema + migration + recurrence integration).** Design
   ratified in §B; **not started** — the capacity checkpoint refused it at 19% session remaining.
   **Precondition audit COMPLETE (Owner question 3b), and it changes the design:**
