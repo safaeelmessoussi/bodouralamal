@@ -1306,6 +1306,55 @@ was hiding behind it: the run went green on the first attempt.
   scoped by *branch* or *level* rather than by tag, and any suite whose `clear()` runs against
   rows it did not create.
 
+## OWNER RATIFICATIONS OD-01 … OD-07 — 2026-08-26 · all answered, none open
+
+**OD-01 · Catalogue management — Admin AND Super Admin.** Admin may manage ordinary
+operational/reference catalogues **subject to the Admin's branch/scope where the catalogue is
+scoped**. Platform-wide security, authorization, compliance and destructive-retention
+configuration stays Super-Admin-only. **The UI is never the authorization boundary.** Applies
+to the activity-type catalogue and Partners rather than hardcoding either.
+
+> ⚠ **This SUPERSEDES part of R61 and must be written as a supersession, not slipped in.**
+> R61 (Owner, 2026-08-12) deliberately moved الفئات · المستويات · المواد · مواد المستوى ·
+> مقرر الحفظ · الفروع والقاعات into الإدارة and made them **Super-Admin-only by placement**,
+> with R26 keeping writes Super-Admin. OD-01 reverses that for the operational half.
+> **Two things the implementing session must settle inside that revision:**
+> **(i)** which catalogues are *scoped* (Branches/Rooms are branch-scoped; Categories, Levels,
+> Subjects, Level Subjects, مقرر الحفظ are **global curriculum** with no branch axis, so
+> "scoped Admin" has no meaning there — either Admin manages them platform-wide or they stay
+> Super-Admin-only, and that is the sub-decision to surface);
+> **(ii)** R105's rule that *a section exists only where the heading states a fact about
+> permission* — if الإدارة's nodes stop being Super-Admin-only, the section's meaning changes
+> and §14.1 needs reconciling with it. **Do not silently re-shuffle the menu.**
+
+**OD-02 · Parent edits preserve occurrence overrides.** `overridden = true` continues to
+protect an individually-changed occurrence from a later parent update; *this and following*
+keeps R50's split. Already the built behaviour — no change, now ratified for visibility too.
+
+**OD-03 · عطلة is an ordinary Event**, `attendance_required = false`, schedulable and shown on
+the calendar like any other. **Concrete §D requirement:** attendance-specific controls are
+**not presented** when the chosen type does not require attendance — the catalogue's
+`attendance_required` drives the form, which is why it is a stored column and not display text.
+
+**OD-04 · Level orthography — the Subjects procedure, authorized.** Read-only semantic
+reconciliation → in-place normalization only where identity is unambiguous → same id, all
+relationships preserved → never a duplicate → **stop and ask on any genuinely ambiguous row.**
+
+**OD-05 · حسابي shows no guardian personal or contact data by default.** The existence, type
+and status of the relationship may be shown where useful; private guardian fields may not.
+
+**OD-06 · Account retention — NO blanket decision.** NEW O's 35-relationship classification
+comes first (DELETE · ANONYMIZE · PRESERVE · TRANSFER/REASSIGN · BLOCK). **Safeguarding,
+consent and audit evidence are not physically deleted** merely because an account is, pending
+an established legal/operational retention rule. The account may disappear while the necessary
+historical record survives anonymized or retained.
+
+**OD-07 · Re-registration.** During the 3-day window the identity/email gets **no new account**
+— the original is in a recoverable deletion state, and restoration restores **that** account
+rather than creating another. After permanent purge a genuinely new registration is allowed,
+subject to whatever preserved/anonymized records remain. Consistent with §4.1's *"never
+silently re-register or reactivate"*.
+
 ## READINESS AUDIT — 2026-08-26 (final planning pass)
 
 ### Supersessions the next session must write (all four are NEW B §C's first commit)
