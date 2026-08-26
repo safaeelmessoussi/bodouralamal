@@ -7092,6 +7092,98 @@
         }
       }
     },
+    "/me/teaching-profile": {
+      "get": {
+        "summary": "Read my own teaching profile",
+        "description": "§4.4c, R88, **R106**. Her own profile, read by her: the Subjects and Categories the administration has recorded she can teach, and the availability ranges she may edit herself. **The whole profile, not only the editable half** — availability entered with no sight of what it is availability FOR is a form asking a question out of context. R88.2 reserved teacher self-service as *\"a separate decision the Owner has not taken\"*; R106 takes it, and takes it narrowly. Not public: what a person says she can do is hers rather than the platform's to publish.",
+        "responses": {
+          "200": {
+            "description": "Her declared Subjects, Categories and availability ranges."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN for an account without the teaching role.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/teaching-profile/availability": {
+      "put": {
+        "summary": "Replace my own availability",
+        "description": "§4.4c, R88, **R106**. **Availability ONLY, and the path says so.** `TeacherSubjectCapability` and `TeacherCategoryCapability` are neither read nor written here — what a مؤطِّرة may TEACH stays the administration's record of her (R88.2), while *when she is free* is a statement only she can make. The body is `.strict()` and carries `availability` alone, so a request naming `subject_ids` is **refused rather than ignored** — a silently dropped field plus a response echoing the profile would look exactly like a successful rewrite of what she is authorised to teach. **Replaced whole**, like the administrative writer, because *these are my ranges now* is the statement being made. **The same rules, from the same code**: wall-clock `HH:MM` (TD-11); overlapping ranges on one day REFUSED with `OVERLAPPING_AVAILABILITY` naming the clash; exactly touching ranges accepted (R88.6). **This grants nothing** (R88.3) — availability reaches no beneficiary, no memorisation, no grade, no content and no occurrence, and R88.4 keeps a mismatch a warning an administrator may override. That is precisely why R106 is safe where creating a Recurring Course Schedule is not (TD-2 `⊘`, R71.0/R94.2): one is planning data, the other is authority. Audited (TD-8) with **`self_service: true`**, because R88.2's open question was whether the administration may rely on a self-asserted range, and that is answerable only if the record says who asserted it.",
+        "responses": {
+          "200": {
+            "description": "The stored profile, availability included."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — an inverted or overlapping range, or any key other than availability.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN for an account without the teaching role.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/admin/teaching-candidates": {
       "get": {
         "summary": "Appraise مؤطِّرات against a class being planned",

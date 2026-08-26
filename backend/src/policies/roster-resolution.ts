@@ -933,6 +933,114 @@ export async function assertExamInTeacherScope(
 }
 
 /**
+ * **The exams a Teacher may SEE — the list counterpart of the assertion above.**
+ *
+ * ## The defect this exists for
+ *
+ * `listExams` scoped every caller with
+ * `reachableBranches(actor.roleScopes, ['admin'])`. A مؤطِّرة holds no `admin`
+ * role, so that resolved to the **empty set** and the filter became
+ * `branchId: { in: [] }` — she was served **zero exams, always**, past and
+ * future alike, with a `200` and an empty table. `assertCanManage` had admitted
+ * her since R70.4 and `assertExamInTeacherScope` guarded her writes; the read
+ * simply never grew its half, and the comment beside it — *"an Admin is bound
+ * by branch, a Teacher by §4.4c"* — described an intention rather than the code.
+ *
+ * ## It lives beside the assertion ON PURPOSE
+ *
+ * These two answer one question in two grammars: *may she organise this one*
+ * and *which ones are hers*. Written apart they drift, and the drift is
+ * invisible — a list that shows one exam too many looks like a list. The table
+ * in `assertExamInTeacherScope`'s docstring governs both, and the mapping is
+ * exact:
+ *
+ * | Named by the exam | This filter |
+ * |---|---|
+ * | branch · (level, subject) | taken from each schedule she staffs |
+ * | **no group — the whole Level** | only from an `entire_level` schedule |
+ * | a named group | only groups `teacherEventScope` reaches |
+ *
+ * ## Why the date window is per assignment and not "today"
+ *
+ * R91 judges an exam's authority **on the exam's own date**. Resolving her
+ * scope as of *now* would hide every exam she taught under an assignment that
+ * has since ended — her whole past — and every exam under one that has not
+ * begun. So each staffing row contributes its own `effective_from..until`
+ * window, and an exam matches when its date falls inside the window of an
+ * assignment that covers it. That is what makes **past and future** both
+ * appear, which is the symptom that was reported.
+ */
+export async function examScopeWhereForTeacher(
+  prisma: PrismaClient,
+  teacherId: string,
+): Promise<Prisma.ExamWhereInput> {
+  const staffed = await prisma.courseScheduleStaff.findMany({
+    where: { userId: teacherId, deletedAt: null, schedule: { deletedAt: null } },
+    select: {
+      effectiveFrom: true,
+      effectiveUntil: true,
+      schedule: {
+        select: {
+          branchId: true,
+          subjectId: true,
+          teachingMode: true,
+          levelId: true,
+          administrativeGroup: { select: { levelId: true } },
+          teachingGroup: { select: { levelId: true } },
+        },
+      },
+    },
+  });
+
+  if (staffed.length === 0) {
+    // **Stated rather than left to `OR: []`.** An empty disjunction reads as
+    // "no constraint" to anybody skimming, and the difference between *no
+    // exams* and *every exam* is the whole of this function.
+    return { id: { in: [] } };
+  }
+
+  const groups = await teacherEventScope(prisma, teacherId);
+
+  const clauses: Prisma.ExamWhereInput[] = [];
+  for (const row of staffed) {
+    const s = row.schedule;
+    const levelId =
+      s.levelId ?? s.administrativeGroup?.levelId ?? s.teachingGroup?.levelId ?? null;
+    if (levelId === null || s.subjectId === null) continue;
+
+    const window: Prisma.ExamWhereInput =
+      row.effectiveFrom || row.effectiveUntil
+        ? {
+            date: {
+              ...(row.effectiveFrom ? { gte: row.effectiveFrom } : {}),
+              ...(row.effectiveUntil ? { lte: row.effectiveUntil } : {}),
+            },
+          }
+        : {};
+
+    const base: Prisma.ExamWhereInput = {
+      branchId: s.branchId,
+      subjectId: s.subjectId,
+      levelId,
+      ...window,
+    };
+
+    clauses.push(
+      s.teachingMode === "entire_level"
+        ? // She teaches the whole Level, so every target within it is hers —
+          // the whole-Level sitting and any group carved out of it alike.
+          base
+        : // She teaches a subset, so the whole-Level sitting is NOT hers
+          // (authority over everyone is held, never inferred from authority
+          // over some) and a named group must be one this filter reaches.
+          { ...base, administrativeGroupId: { in: groups.administrativeGroupIds } },
+    );
+  }
+
+  return clauses.length === 0 ? { id: { in: [] } } : { OR: clauses };
+}
+
+/**
  * **Whether a teacher may act on this student (§4.4c, TD-2, BR-16).**
  *
  * Replaces `teachesStudent`, which resolved through `GroupTeacher`. One query

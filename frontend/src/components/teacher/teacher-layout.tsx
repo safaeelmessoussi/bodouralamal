@@ -7,7 +7,6 @@ import {
   canAccess,
   teacherModuleForPath,
   visibleTeacherModules,
-  TEACHER_SECTIONS,
   type TeacherModule,
 } from '../../lib/teacher-modules.js';
 import { NavItem } from '../portal/nav-item.js';
@@ -53,19 +52,19 @@ export function TeacherLayout({
 }
 
 /**
- * **Grouped, like the back office** (2026-08-17).
+ * **One flat list (SRS Revision 106).**
  *
- * It was a flat list — the comment above said §14.1 *"groups the back office
- * into five sections, and the teaching branch is a short flat set"*, which is
- * true of §14.1 and was the wrong conclusion for the reader: a مؤطرة met the
- * same concepts under different words *and* in a different shape, so nothing
- * told her the two portals were one platform. The grouping is **presentation
- * only**; the modules, their roles and the server's scope resolution are
- * unchanged.
+ * It was grouped into `التدريس`, `الجدولة` and `المحتوى` from 2026-08-17, to
+ * make the two portals read alike. R105 then removed the back office's
+ * decorative headings on a rule this menu failed just as plainly — **a section
+ * exists only where the heading states a fact about permission** — and R106
+ * applied it here. The two portals still read alike; they now do it with six
+ * entries and no headings rather than with three groups that gated nothing.
  *
- * A section whose every module is hidden by role renders nothing, exactly as the
- * back-office sidebar does — an empty group heading states that a section exists
- * and is empty, which is not what *"you may not see this"* means.
+ * The grouping loop is **deleted rather than left running over an empty list**:
+ * dead code that renders nothing still ships, and `t(\`teacher.section.${x}\`)`
+ * kept a computed key alive against a namespace the catalogue no longer has —
+ * which `i18n/resolves.test.ts` caught, exactly as it is meant to.
  */
 function TeacherSidebar({
   roles,
@@ -79,32 +78,14 @@ function TeacherSidebar({
   // **R87 §M** — what she actually teaches, as the server computed it. Without
   // it every capability-gated entry stays hidden, which is the safe direction.
   const modules = visibleTeacherModules(roles, { teachesQuran: me?.teaches_quran === true });
-  const ungrouped = modules.filter((m) => m.section === null);
 
   return (
     <nav className="admin-nav" aria-label={t('teacher.nav.label')}>
-      {ungrouped.length > 0 ? (
-        <ul className="admin-nav__list">
-          {ungrouped.map((module) => (
-            <NavItem key={module.path} module={module} current={current} />
-          ))}
-        </ul>
-      ) : null}
-
-      {TEACHER_SECTIONS.map((section) => {
-        const inSection = modules.filter((m) => m.section === section);
-        if (inSection.length === 0) return null;
-        return (
-          <div key={section} className="admin-nav__group">
-            <h2 className="admin-nav__group-title">{t(`teacher.section.${section}`)}</h2>
-            <ul className="admin-nav__list">
-              {inSection.map((module) => (
-                <NavItem key={module.path} module={module} current={current} />
-              ))}
-            </ul>
-          </div>
-        );
-      })}
+      <ul className="admin-nav__list">
+        {modules.map((module) => (
+          <NavItem key={module.path} module={module} current={current} />
+        ))}
+      </ul>
     </nav>
   );
 }

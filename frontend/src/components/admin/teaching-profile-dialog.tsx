@@ -6,15 +6,14 @@ import {
   type AvailabilityRange,
 } from '../../adapters/teaching-profile.js';
 import { t } from '../../i18n/index.js';
-import { Button } from '../ui/button.js';
+import { AvailabilityEditor } from '../teaching/availability-editor.js';
 import { FormDialog } from '../ui/form-dialog.js';
 import { MultiSelectField } from '../ui/multi-select.js';
-import { SelectField, TextField } from '../ui/field.js';
 
 /**
  * **الملف التدريسي — what she can teach, and when** (R88).
  *
- * **Opened from إدارة المؤطِّرات**, and from nowhere else. It shipped as a row
+ * **Opened from المؤطِّرات**, and from nowhere else. It shipped as a row
  * action on المستخدمون — "the person is where the administration already goes"
  * — and that reasoning was wrong about *which* people: المستخدمون administers
  * every account, so a guardian, a minor and an administrator were each offered
@@ -28,16 +27,6 @@ import { SelectField, TextField } from '../ui/field.js';
  * distinction is invisible otherwise — a form that lists Subjects and Quran
  * looks exactly like a permissions form.
  */
-const WEEKDAYS = [
-  'monday',
-  'tuesday',
-  'wednesday',
-  'thursday',
-  'friday',
-  'saturday',
-  'sunday',
-] as const;
-
 export function TeachingProfileDialog({
   userId,
   userName,
@@ -137,69 +126,11 @@ export function TeachingProfileDialog({
         onChange={setCategoryIds}
       />
 
-      <fieldset className="form__group">
-        <legend>{t('admin.teachingProfile.availability')}</legend>
-        {ranges.length === 0 ? (
-          <p className="muted">{t('admin.teachingProfile.noAvailability')}</p>
-        ) : null}
-
-        {ranges.map((range, index) => (
-          // Keyed by POSITION deliberately: a range has no id until it is saved,
-          // and keying by its values would remount the row on every keystroke.
-          <div className="form__row" key={`range-${index}`}>
-            <SelectField
-              label={t('admin.teachingProfile.weekday')}
-              value={range.weekday}
-              onChange={(v) => update(index, { weekday: v })}
-              // **`scheduling.weekday`, which is where the labels actually
-              //   live.** This read `calendar.weekday` and rendered seven raw
-              //   keys on screen: a computed key's namespace was never checked,
-              //   which `resolves.test.ts` now does.
-              options={WEEKDAYS.map((d) => ({ value: d, label: t(`scheduling.weekday.${d}`) }))}
-            />
-            {/* **The platform's wall-clock input, not a second one.** A
-                24-hour `TextField` with the scheduling hint is what
-                `RecurrenceEditor` uses for exactly this value, and TD-11 times
-                are stored as the string the reader typed — a native
-                `type="time"` would hand the two screens different locale
-                behaviour for one concept. The hint is `scheduling.timeHint`
-                rather than a hard-coded «HH:MM»: an Arabic sentence the reader
-                understands, written once, and it sits on the pair rather than
-                on each field. */}
-            <TextField
-              label={t('admin.teachingProfile.from')}
-              value={range.start_time}
-              onChange={(v) => update(index, { start_time: v })}
-              hint={t('scheduling.timeHint')}
-            />
-            <TextField
-              label={t('admin.teachingProfile.to')}
-              value={range.end_time}
-              onChange={(v) => update(index, { end_time: v })}
-            />
-            <Button
-              variant="danger"
-              className="row-action"
-              onClick={() => setRanges(ranges.filter((_, i) => i !== index))}
-            >
-              {t('common.delete')}
-            </Button>
-          </div>
-        ))}
-
-        <Button
-          variant="add"
-          onClick={() =>
-            setRanges([...ranges, { weekday: 'monday', start_time: '09:00', end_time: '12:00' }])
-          }
-        >
-          {t('admin.teachingProfile.addRange')}
-        </Button>
-      </fieldset>
+      {/* **The shared editor** (R106). It was written out here, and the
+          moment a مؤطِّرة could edit her own ranges there would have been two
+          copies of R88's subtleties — one of which would drift. */}
+      <AvailabilityEditor ranges={ranges} onChange={setRanges} />
     </FormDialog>
   );
 
-  function update(index: number, patch: Partial<AvailabilityRange>): void {
-    setRanges(ranges.map((r, i) => (i === index ? { ...r, ...patch } : r)));
-  }
 }

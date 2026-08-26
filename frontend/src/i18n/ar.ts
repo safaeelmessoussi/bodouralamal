@@ -626,20 +626,39 @@ export const ar = {
       // authorization.
       schedules: 'الجدولة',
       content: 'مكتبة المحتوى',
-      exams: 'نقاط الامتحانات',
+      // R106 — «إدخال»: she enters marks here. «نقاط الامتحانات» alone named a
+      // report; the verb is what every other entry in this menu carries.
+      exams: 'إدخال نقاط الامتحانات',
       // R85 — «إدخال الحفظ»: the Owner's word, and the operational one. «تتبع»
       // describes watching; this screen is where a مؤطرة RECORDS what was
       // memorised, which is what she comes to it to do.
-      quran: 'إدخال الحفظ',
+      // R106 — «المستفيدات» added: WHOSE memorisation. Hers is not what is
+      // being recorded, and the bare noun left that open.
+      quran: 'إدخال حفظ المستفيدات',
+      // R106 — she states her own availability (the question R88.2 reserved).
+      availability: 'إدخال متى أنا متاحة',
       calendar: 'تقويمي',
     },
-    /** §14.1's grouping, applied to the teaching branch — the same headings the
-     *  back-office sidebar uses, so the two portals read alike. */
-    section: {
-      teaching: 'التدريس',
-      scheduling: 'الجدولة',
-      content: 'المحتوى',
+    /** R106 — «إدخال متى أنا متاحة»: her own availability page. */
+    availability: {
+      lede: 'سجّلي الأوقات التي تناسبك أسبوعياً. تساعد هذه الأوقات الإدارة على اختيار الإسناد.',
+      // **Said on the screen, not only in the specification.** R88.3 is the
+      // reason this grant is safe, and a مؤطِّرة entering ranges must not
+      // believe she has just claimed classes or given herself a timetable.
+      planningOnly:
+        'هذه بيانات تخطيط: لا تمنح بذاتها أيّ صلاحية ولا تُسند إليك حصة. الإسناد تقرّره الإدارة.',
+      // R88.2/R106.2 — what she may teach is the administration's record of
+      // her, shown here so the ranges have context, and not editable.
+      capabilities: 'ما سجّلته الإدارة أنك تدرّسينه',
+      noCapabilities: 'لم تسجّل الإدارة مواد بعد.',
+      saved: 'حُفظت أوقاتك.',
+      saveFailed: 'تعذّر الحفظ. تحقّقي من الفترات: لا يجوز تداخل فترتين في اليوم نفسه.',
+      loadFailed: 'تعذّر تحميل أوقاتك.',
     },
+    // **R106 — this menu has no groups.** «التدريس», «الجدولة» and «المحتوى»
+    // were removed with the headings themselves, on R105's rule: a heading
+    // exists only where it states a fact about permission, and these gated
+    // nothing. See `teacher-modules.ts`.
     // Each names WHAT is missing. The schedules entry names a specification gap
     // rather than unbuilt UI, because that is the honest reason.
     quran: {

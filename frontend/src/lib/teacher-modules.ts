@@ -25,38 +25,34 @@ import {
  * is why there is no Levels or Branches entry here and must not be one.
  */
 /**
- * §14.1's grouping, applied to the teaching branch (2026-08-17).
+ * **This menu has no groups (SRS Revision 106).**
  *
- * The sidebar was a **flat list**, so a مؤطرة met «حصصي» and «المحتوى التعليمي»
- * as four unrelated entries while the same concepts sat under «الجدولة» and
- * «المحتوى» in the back office — one platform with two vocabularies and two
- * shapes for one thing. Grouping is a *presentation* change and grants nothing:
- * the paths, the roles and the server's §4.4c scope resolution are untouched.
- *
- * `teaching` is this branch's own — it collects what she does with the students
- * she teaches (marking, Quran progress) and has no back-office counterpart,
- * because the back office is not organised around one person's caseload.
+ * It had three — `التدريس`, `الجدولة`, `المحتوى` — added in 2026-08-17 to make
+ * the two portals read alike. R105 removed the back office's decorative
+ * headings on a rule this menu fails just as plainly: **a section exists only
+ * where the heading states a fact about permission.** These three gated
+ * nothing, and a menu of six entries needs no finding aids. The type is kept as
+ * `never` rather than deleted so that a module reintroducing a section fails to
+ * compile, which is a clearer signal than a heading quietly reappearing.
  */
-export type TeacherSection = 'teaching' | 'scheduling' | 'content';
+export type TeacherSection = never;
 
-/** Rendered in exactly this order, like `ADMIN_SECTIONS`. */
-export const TEACHER_SECTIONS: readonly TeacherSection[] = ['teaching', 'scheduling', 'content'];
+/** No groups (R106). Kept so the layout's loop has something to read. */
+export const TEACHER_SECTIONS: readonly TeacherSection[] = [];
 
 export interface TeacherModule extends PortalModule {
-  /** `null` sits above the groups, like the back office's dashboard. */
+  /** Always `null` now — see `TeacherSection`. */
   section: TeacherSection | null;
 }
 
 const TEACHER = ['teacher'] as const;
 
 /**
- * §14.1's teaching nodes, in its order.
+ * §14.1's teaching nodes, **in the Document Owner's order** (R106).
  *
- * `/teacher/schedules` is live: the Document Owner decided (2026-08-05) that
- * `GET /admin/course-schedules` is **role-scoped on one endpoint** rather than
- * duplicated per audience, so the teacher portal consumes the same route and
- * receives the schedules they staff. The rest stay `blocked` with specific
- * reasons rather than "coming soon".
+ * The order is the menu, exactly as `ADMIN_MODULES` is — pinned literally in
+ * `teacher-modules.test.ts`, because §14.1's *"no reshuffling"* can only be
+ * honoured by a generated menu if reordering this array fails a test.
  */
 export const TEACHER_MODULES: readonly TeacherModule[] = [
   {
@@ -70,16 +66,38 @@ export const TEACHER_MODULES: readonly TeacherModule[] = [
   },
   {
     /**
-     * **إدخال الحفظ** — recording a beneficiary's memorisation (§4.5, R73).
+     * **إدخال متى أنا متاحة — R106, and the question R88 deliberately left open.**
+     *
+     * R88.2 refused it in terms: *"a مؤطِّرة may not edit her own, because who
+     * may assert their own availability, and whether the administration may
+     * then rely on it, is a separate decision the Owner has not taken."* The
+     * Owner has now taken it, narrowly — **`TeacherAvailability` only**. What
+     * she may *teach* stays the administration's record of her.
+     *
+     * **No capability condition, and that is deliberate.** Unlike the Quran
+     * node below, availability is meaningful for every مؤطِّرة whatever she
+     * teaches — including one who currently staffs nothing, whose availability
+     * is exactly what the administration needs in order to give her a class.
+     */
+    path: '/teacher/availability',
+    labelKey: 'teacher.nav.availability',
+    section: null,
+    roles: TEACHER,
+    status: 'ready',
+  },
+  {
+    /**
+     * **إدخال حفظ المستفيدات** — recording a beneficiary's memorisation
+     * (§4.5, R73). Renamed by R106: *whose* memorisation, said plainly — hers
+     * is not what is being recorded.
      *
      * The page and the router case have existed since M4; **the registry entry
      * had not**, so the capability was complete and unreachable — rule P's
-     * defect for the seventh time. Nothing about the screen changes here; it
-     * gains the menu entry it never had.
+     * defect for the seventh time. Nothing about the screen changed then either.
      */
     path: '/teacher/quran',
     labelKey: 'teacher.nav.quran',
-    section: 'teaching',
+    section: null,
     roles: TEACHER,
     status: 'ready',
     /**
@@ -87,6 +105,13 @@ export const TEACHER_MODULES: readonly TeacherModule[] = [
      * teaching only Tafseer holds the same role and must not see this entry;
      * the condition is staffing a schedule whose Subject carries R73's marker,
      * never the role, a declared capability or the Subject's name.
+     *
+     * **Kept by R106, which lists the node unconditionally in §14.1.** The two
+     * do not conflict: the sitemap states what the menu contains, and this
+     * states who is shown it. It mirrors a rule the SERVER already enforces —
+     * without it the entry opens a screen `assertCanManageQuranProgress` will
+     * empty — so it is a menu agreeing with the boundary, never standing in
+     * for one.
      */
     requiresCapability: 'teachesQuran',
   },
@@ -94,9 +119,12 @@ export const TEACHER_MODULES: readonly TeacherModule[] = [
     // R70 — unblocked for **grading**. §4.6's online paper builder is still
     // declared and refused, so what this node opens is the grade sheet, which
     // is the same component `/admin/exam-grades` renders (R70.1).
+    //
+    // Renamed **إدخال نقاط الامتحانات** by R106: she enters marks here rather
+    // than browsing a report, and the verb is what the other entries carry.
     path: '/teacher/exams',
     labelKey: 'teacher.nav.exams',
-    section: 'teaching',
+    section: null,
     roles: TEACHER,
     status: 'ready',
   },
@@ -104,13 +132,14 @@ export const TEACHER_MODULES: readonly TeacherModule[] = [
     /**
      * §14.1: *"Course Schedules … /teacher/schedules (teacher view)"*; §5.6 line
      * 753 defines its content — the schedules this teacher staffs, with their
-     * co-staff and roster access. R72 added Activity authoring in her own scope.
+     * co-staff and roster access. R72 added Activity authoring in her own scope
+     * and R94 added Exam authoring beside it.
      *
-     * **Labelled «الجدولة», the back office's own word** (2026-08-17). It read
-     * «حصصي», which named the same concept differently in the two portals. **No
-     * access changed**: the path is the same, the role is the same, and the
-     * schedules she receives are still exactly those §4.4c resolves from the
-     * ones she staffs — the server decides that, not this registry.
+     * **R106 adds the occurrences beneath it** — `/teacher/schedules/{id}/sessions`
+     * — which TD-2 has granted since R43 (*"CRUD Sessions ✔ (only sessions they
+     * staff)"*) and no screen had ever offered. It is a parameterised view and
+     * not a menu node, exactly like `/admin/schedules/{id}/sessions`: the path
+     * carries an id, so nothing can link to it from a menu.
      *
      * **`/admin/schedules` is deliberately NOT offered to her.** That screen is
      * every branch's scheduling, and putting it in this menu would be widening
@@ -118,7 +147,7 @@ export const TEACHER_MODULES: readonly TeacherModule[] = [
      */
     path: '/teacher/schedules',
     labelKey: 'teacher.nav.schedules',
-    section: 'scheduling',
+    section: null,
     roles: TEACHER,
     status: 'ready',
   },
@@ -128,17 +157,13 @@ export const TEACHER_MODULES: readonly TeacherModule[] = [
      * Category default, and **no Global scope** — the server enforces all three
      * (§4.9), and the screen renders its refusals rather than reimplementing them.
      *
-     * **Labelled «مكتبة المحتوى»**, for the same reason as the schedules node.
-     * §14.1 lists this path as *Upload / Record* and `/admin/content` as
-     * *Content Library*; the two are the same library seen from two authorities,
-     * and calling one «المحتوى التعليمي» made a مؤطرة believe she was looking at
-     * a different feature. **`/admin/content` is NOT offered to her** — that is
-     * the staff-wide library, and pointing her at it would be an authorization
-     * change dressed as a rename.
+     * **`/admin/content` is NOT offered to her** — that is the staff-wide
+     * library, and pointing her at it would be an authorization change dressed
+     * as a rename. R106 leaves this node untouched in every respect.
      */
     path: '/teacher/content',
     labelKey: 'teacher.nav.content',
-    section: 'content',
+    section: null,
     roles: TEACHER,
     status: 'ready',
   },

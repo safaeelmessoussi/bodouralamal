@@ -8,6 +8,8 @@ import { teacherModuleForPath } from '../../lib/teacher-modules.js';
 import { ContentPage } from '../content.js';
 import { TeacherExamsPage } from './exams.js';
 import { TeacherQuranPage } from './quran.js';
+import { ScheduleSessionsPage } from '../admin/schedule-sessions.js';
+import { TeacherAvailabilityPage } from './availability.js';
 import { TeacherSchedulesPage } from './schedules.js';
 
 /**
@@ -26,7 +28,26 @@ import { TeacherSchedulesPage } from './schedules.js';
  * `GET /admin/course-schedules` internally rather than add a teacher route
  * returning the identical representation.
  */
+/**
+ * `/teacher/schedules/{id}/sessions` — the occurrences of a class she staffs
+ * (R106).
+ *
+ * Matched by pattern rather than by a registry entry, exactly as
+ * `/admin/schedules/{id}/sessions` is: the path carries an id, so nothing can
+ * link to it from a menu and §14.1 lists it beneath `الجدولة` rather than as a
+ * node of its own.
+ */
+const TEACHER_SESSIONS = /^\/teacher\/schedules\/([^/]+)\/sessions\/?$/;
+
 export function TeacherRouter(): ReactNode {
+  const sessions = TEACHER_SESSIONS.exec(window.location.pathname);
+  if (sessions) {
+    // **The same page the back office renders**, in her chrome and with TD-2's
+    // teacher verbs (R106.6a). One capability, two ways in — the R70.1 rule
+    // that put one grade sheet behind two menus.
+    return <ScheduleSessionsPage scheduleId={sessions[1]!} portal="teacher" />;
+  }
+
   const module = teacherModuleForPath(window.location.pathname);
   if (!module) return <TeacherNotFound />;
 
@@ -46,6 +67,10 @@ export function TeacherRouter(): ReactNode {
       case '/teacher/calendar':
       case '/teacher/schedules':
         return <TeacherSchedulesPage />;
+      case '/teacher/availability':
+        // R106 — «إدخال متى أنا متاحة». The question R88.2 reserved, now taken:
+        // her own `TeacherAvailability` ranges, and nothing else.
+        return <TeacherAvailabilityPage />;
       case '/teacher/quran':
         // R73.1 — `?student=` is the deep link, not a second node.
         return (

@@ -4,7 +4,10 @@ import { page, pageWindow, type Page, type PageParams } from '../lib/pagination.
 import type { Actor } from '../policies/actor.js';
 import * as scope from '../policies/branch-scope.js';
 import { assertSubjectTaughtAtLevel } from '../policies/curriculum.js';
-import { assertExamInTeacherScope } from '../policies/roster-resolution.js';
+import {
+  assertExamInTeacherScope,
+  examScopeWhereForTeacher,
+} from '../policies/roster-resolution.js';
 import * as audit from '../repositories/audit.repository.js';
 import * as trash from '../repositories/trash.repository.js';
 
@@ -481,7 +484,29 @@ export async function listExams(
   filters: { branchId?: string; levelId?: string; from?: Date; to?: Date } & PageParams,
 ): Promise<Page<ExamRow>> {
   assertCanManage(actor);
-  const reachable = scope.reachableBranches(actor.roleScopes, [MANAGING_ROLE]);
+
+  /**
+   * **The two authorities take two different scope paths, and this read only
+   * ever implemented one of them.**
+   *
+   * It applied `reachableBranches(roleScopes, ['admin'])` to every caller. A
+   * مؤطِّرة holds no `admin` role, so that resolved to the empty set, the filter
+   * became `branchId: { in: [] }`, and she was served **zero exams — always**,
+   * past and future alike, with a `200` and an empty table that looked like
+   * *there are none*. `assertCanManage` has admitted her since R70.4 and
+   * `assertExamInTeacherScope` has guarded her writes just as long; the read's
+   * §4.4c half was never written, and the comment below described the intention
+   * rather than the code.
+   *
+   * `examScopeWhereForTeacher` is that half, and it lives next to the
+   * assertion so the two grammars of one question cannot drift.
+   */
+  const scoped: Prisma.ExamWhereInput = isAdminish(actor)
+    ? (() => {
+        const reachable = scope.reachableBranches(actor.roleScopes, [MANAGING_ROLE]);
+        return reachable === null ? {} : { branchId: { in: reachable } };
+      })()
+    : await examScopeWhereForTeacher(prisma, actor.userId);
 
   const where: Prisma.ExamWhereInput = {
     deletedAt: null,
@@ -497,7 +522,10 @@ export async function listExams(
       : {}),
     // Applied last, so an explicit filter narrows a scoped caller and never
     // widens them — the discipline every other list in the platform uses.
-    ...(reachable === null ? {} : { branchId: { in: reachable } }),
+    // **`AND`, not a spread**: the teacher branch contributes an `OR` of its
+    // own, and spreading it beside a `branchId` filter would let one key
+    // overwrite the other.
+    AND: [scoped],
   };
 
   const window = pageWindow(filters);

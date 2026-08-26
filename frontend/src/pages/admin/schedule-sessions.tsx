@@ -13,6 +13,7 @@ import {
 import { listBranches, listRooms } from '../../adapters/branches-admin.js';
 import { searchUsers, type UserSummary } from '../../adapters/users.js';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
+import { TeacherLayout } from '../../components/teacher/teacher-layout.js';
 import { SessionMaterialsDialog } from '../../components/content/session-materials-dialog.js';
 import { Button } from '../../components/ui/button.js';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
@@ -65,9 +66,41 @@ import { Feedback } from '../../components/ui/feedback.js';
  * carries an id, so nothing links to it from a menu (§14.1 lists no such node) —
  * the same relationship `/admin/groups/{id}/roster` has to its module.
  */
-export function ScheduleSessionsPage({ scheduleId }: { scheduleId: string }): ReactNode {
+export function ScheduleSessionsPage({
+  scheduleId,
+  portal = 'admin',
+}: {
+  scheduleId: string;
+  /**
+   * **Which chrome, and which verbs** (R106).
+   *
+   * The `ContentPage` precedent, applied to occurrences: one capability, two
+   * ways in, never two implementations. TD-2 has granted a Teacher
+   * *"CRUD Sessions — cancel, reschedule, change room, notes ✔ (only sessions
+   * they staff)"* since R43, and `staffsSession` has enforced exactly that just
+   * as long — **no screen ever offered it.** Rule P, the tenth instance.
+   *
+   * The two differ in the verbs offered, and the difference is TD-2's rather
+   * than this component's judgement: **per-occurrence staffing (R91 §11) and
+   * the R92 audience override are administrative acts** and are not on the
+   * teacher's list. Both would fail anyway — the staff picker reads
+   * `GET /admin/users`, which answers 403 for her (R93.4) — but they are
+   * withheld because TD-2 does not grant them, not because a request would
+   * fail. **The server decides either way**; this keeps a control off the
+   * screen of somebody it would refuse, which §14.2 asks for and which is never
+   * the enforcement.
+   */
+  portal?: 'admin' | 'teacher';
+}): ReactNode {
   const { accessToken } = useSession();
   const { activeRoles } = useActiveRole();
+  const isTeacherPortal = portal === 'teacher';
+  /**
+   * The portal's own shell — its sidebar, its role gate, its breadcrumb. The
+   * two components take the same props, which is what makes one page render in
+   * either without a branch anywhere below this line.
+   */
+  const Layout = isTeacherPortal ? TeacherLayout : AdminLayout;
   /**
    * **Who may attach materials to a class, may record for it** (R75.3): the
    * recorder inherits the session's own link authority and TD-2 gains no row.
@@ -244,8 +277,14 @@ export function ScheduleSessionsPage({ scheduleId }: { scheduleId: string }): Re
       // **R91 §11 — a one-off cover.** The schedule answers *who is assigned
       // for this period*; this answers *who took this lesson*, which is a fact
       // about one date and lives on the occurrence (R43.4).
+      //
+      // **Administrative** — deciding who else answers for a lesson is not
+      // among TD-2's four teacher session verbs, and R71.4's reasoning applies
+      // unchanged: being answerable for something is not authority to decide
+      // who else is.
       label: t('admin.sessions.staffAction'),
       onSelect: (r) => setStaffingFor(r),
+      available: () => !isTeacherPortal,
     },
     {
       label: t('session.materialsAction'),
@@ -261,7 +300,9 @@ export function ScheduleSessionsPage({ scheduleId }: { scheduleId: string }): Re
       // it. An action that can only be refused is not offered (§14.4).
       label: t('admin.sessions.audienceAction'),
       onSelect: (r) => setAudienceFor(r),
-      available: () => klass?.teachingMode === 'entire_level',
+      // Administrative, like the staffing action beside it: R92's cross-branch
+      // audience is the association deciding who a lesson is delivered to.
+      available: () => !isTeacherPortal && klass?.teachingMode === 'entire_level',
     },
     {
       label: t('admin.sessions.cancel'),
@@ -381,11 +422,16 @@ export function ScheduleSessionsPage({ scheduleId }: { scheduleId: string }): Re
   }
 
   return (
-    <AdminLayout
+    <Layout
       title={t('admin.sessions.title')}
       lede={t('admin.sessions.lede')}
       actions={
-        <Button variant="secondary" onClick={() => (window.location.href = '/admin/schedules')}>
+        <Button
+          variant="secondary"
+          onClick={() =>
+            (window.location.href = isTeacherPortal ? '/teacher/schedules' : '/admin/schedules')
+          }
+        >
           {t('admin.sessions.backToSchedules')}
         </Button>
       }
@@ -539,7 +585,7 @@ export function ScheduleSessionsPage({ scheduleId }: { scheduleId: string }): Re
           onClose={() => setMaterialsFor(null)}
         />
       ) : null}
-    </AdminLayout>
+    </Layout>
   );
 }
 

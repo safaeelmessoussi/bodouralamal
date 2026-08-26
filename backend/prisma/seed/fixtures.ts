@@ -346,15 +346,44 @@ async function main(): Promise<void> {
   /** **Beneficiary with ZERO enrolments** — accepted, not yet placed (R79.4). */
   const unplacedBeneficiary = await upsertPerson('سلمى بلا تسجيل', { beneficiary: true });
 
-  // Revision 43: teacher scope resolves through `CourseScheduleStaff` (§4.4c) —
-  // a teacher reaches students through the courses they staff, not through a
-  // group assignment.
-  for (const group of groups.slice(0, 2)) {
-    const schedule = await prisma.recurringCourseSchedule.findFirst({
-      where: { administrativeGroupId: group.id, deletedAt: null },
-      select: { id: true },
-    });
-    if (!schedule) continue;
+  /**
+   * Revision 43: teacher scope resolves through `CourseScheduleStaff` (§4.4c) —
+   * a teacher reaches students through the courses they staff, not through a
+   * group assignment.
+   *
+   * **This silently staffed NOBODY, and that made the whole teacher portal look
+   * broken** (found 2026-08-26, §5). It iterated `groups.slice(0, 2)` and looked
+   * up a schedule for each, with `if (!schedule) continue;` — so when the first
+   * two groups happened to have no schedule, the loop created **zero** staffing
+   * rows and said nothing. The Owner's development database held 15 course
+   * schedules and **0** `course_schedule_staff` rows, which is why a مؤطِّرة saw
+   * an empty الجدولة, an empty exam list and no إدخال حفظ المستفيدات entry at
+   * all: with no assignment, §4.4c resolves an empty scope and every one of
+   * those screens is *correctly* empty.
+   *
+   * **The fix is to iterate what must exist rather than what might.** Schedules
+   * are seeded above, so staffing is derived from THEM — the entity the
+   * assignment actually needs — and the result is asserted rather than assumed,
+   * because a fixture that quietly produces nothing is worse than one that
+   * fails: it sends somebody looking for a bug in the application.
+   */
+  const staffable = await prisma.recurringCourseSchedule.findMany({
+    where: {
+      deletedAt: null,
+      administrativeGroupId: { in: groups.map((g) => g.id) },
+    },
+    select: { id: true },
+    orderBy: { id: 'asc' },
+    take: 2,
+  });
+  if (staffable.length === 0) {
+    throw new Error(
+      'fixtures: no seeded course schedule to staff — a مؤطِّرة with no assignment ' +
+        'has no §4.4c scope, so her whole portal would seed empty. Fix the schedule ' +
+        'fixtures above rather than skipping this.',
+    );
+  }
+  for (const schedule of staffable) {
     const link = await prisma.courseScheduleStaff.findFirst({
       where: { scheduleId: schedule.id, userId: teacher.id, deletedAt: null },
     });

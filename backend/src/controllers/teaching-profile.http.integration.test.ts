@@ -256,8 +256,8 @@ describe("the planning data is validated where it is written", () => {
 
 /* ── who owns it ────────────────────────────────────────────────────────── */
 
-describe("the administration owns planning data (R88.2)", () => {
-  it("refuses the مؤطِّرة editing her own profile — not supported in this slice", async () => {
+describe("the administration owns the ADMIN route, still (R88.2, R106)", () => {
+  it("refuses the مؤطِّرة the administrative endpoint even now she has her own", async () => {
     const res = await call(
       "PUT",
       `/admin/users/${teacherId}/teaching-profile`,
@@ -366,5 +366,139 @@ describe("capability grants NOTHING operationally (R88.3)", () => {
 
     await prisma.courseScheduleStaff.deleteMany({ where: { scheduleId: schedule.id } });
     await prisma.recurringCourseSchedule.delete({ where: { id: schedule.id } });
+  });
+});
+
+/* ── R106: she states her OWN availability, and only that ────────────────── */
+
+/**
+ * **The question R88.2 reserved in terms**, and the shape of the answer.
+ *
+ * R88.2: *"a مؤطِّرة may not edit her own, because who may assert their own
+ * availability, and whether the administration may then rely on it, is a
+ * separate decision the Owner has not taken."* R106 takes it — **availability
+ * only** — and the tests that matter most here are the ones proving the
+ * narrowness, because a grant this small is exactly the kind that widens by
+ * accident: it would be one line to accept `subject_ids` and nobody would see
+ * it until a مؤطِّرة had rewritten what she is authorised to teach.
+ */
+describe("R106 — a مؤطِّرة states her own availability", () => {
+  it("reads her own WHOLE profile, capabilities included, so the ranges have context", async () => {
+    const res = await call("GET", "/me/teaching-profile", teacherToken);
+    expect(res.status).toBe(200);
+    const data = res.body.data as Record<string, unknown>;
+    expect(data["subjects"]).toBeDefined();
+    expect(data["categories"]).toBeDefined();
+    expect(data["availability"]).toBeDefined();
+  });
+
+  it("replaces her ranges, and the administration sees exactly what she wrote", async () => {
+    const written = await call("PUT", "/me/teaching-profile/availability", teacherToken, {
+      availability: [
+        { weekday: "tuesday", start_time: "14:00", end_time: "17:00" },
+        { weekday: "wednesday", start_time: "09:00", end_time: "11:00" },
+      ],
+    });
+    expect(written.status).toBe(200);
+
+    // **One model, not a parallel one** (R106.5): the administrative read is
+    // the same table, so what she asserted is what the administration plans
+    // against. A second store would make this assertion impossible.
+    const asAdmin = await call(
+      "GET",
+      `/admin/users/${teacherId}/teaching-profile`,
+      adminToken,
+    );
+    const ranges = (asAdmin.body.data as { availability: { weekday: string }[] }).availability;
+    expect(ranges.map((r) => r.weekday).sort()).toEqual(["tuesday", "wednesday"]);
+  });
+
+  it("REFUSES a body naming subject_ids rather than ignoring it (R106.5)", async () => {
+    // The assertion that keeps the grant narrow. Were the field merely dropped,
+    // the response — which echoes the profile — would look exactly like a
+    // successful rewrite of what she is authorised to teach.
+    const before = await call("GET", "/me/teaching-profile", teacherToken);
+    const subjectsBefore = (before.body.data as { subjects: unknown[] }).subjects;
+
+    const res = await call("PUT", "/me/teaching-profile/availability", teacherToken, {
+      availability: [{ weekday: "monday", start_time: "09:00", end_time: "10:00" }],
+      subject_ids: [],
+      category_ids: [],
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.error?.code).toBe("VALIDATION_FAILED");
+
+    const after = await call("GET", "/me/teaching-profile", teacherToken);
+    expect((after.body.data as { subjects: unknown[] }).subjects).toEqual(subjectsBefore);
+  });
+
+  it("leaves her declared Subjects untouched when she saves availability", async () => {
+    // The whole-object-PUT failure mode, asserted directly: a shared writer
+    // taking a partial profile would clear the half nobody sent.
+    //
+    // The capabilities are (re)written here rather than assumed from an earlier
+    // test — a test that depends on its neighbours' order is a test that will
+    // fail for a reason unrelated to its own property.
+    await call("PUT", `/admin/users/${teacherId}/teaching-profile`, adminToken, profile());
+
+    const before = await call("GET", "/me/teaching-profile", teacherToken);
+    const subjects = (before.body.data as { subjects: { id: string }[] }).subjects;
+    expect(subjects.length).toBeGreaterThan(0);
+
+    await call("PUT", "/me/teaching-profile/availability", teacherToken, {
+      availability: [{ weekday: "sunday", start_time: "08:00", end_time: "09:00" }],
+    });
+
+    const after = await call("GET", "/me/teaching-profile", teacherToken);
+    expect((after.body.data as { subjects: { id: string }[] }).subjects).toEqual(subjects);
+  });
+
+  it("applies R88.6 unchanged — overlapping refused, touching accepted", async () => {
+    // The SAME rule as the administrative writer, because it is the same code.
+    // Two statements of it would be two rules that agree until one is edited.
+    const overlap = await call("PUT", "/me/teaching-profile/availability", teacherToken, {
+      availability: [
+        { weekday: "monday", start_time: "09:00", end_time: "12:00" },
+        { weekday: "monday", start_time: "11:00", end_time: "13:00" },
+      ],
+    });
+    expect(overlap.status).toBe(400);
+    expect(overlap.body.error?.code).toBe("VALIDATION_FAILED");
+
+    const touching = await call("PUT", "/me/teaching-profile/availability", teacherToken, {
+      availability: [
+        { weekday: "monday", start_time: "09:00", end_time: "12:00" },
+        { weekday: "monday", start_time: "12:00", end_time: "15:00" },
+      ],
+    });
+    expect(touching.status).toBe(200);
+  });
+
+  it("refuses an account without the teaching role, and an anonymous caller", async () => {
+    // An Admin is not a مؤطِّرة: this route is about the caller's OWN ranges,
+    // and an administrator's availability is not a thing the platform records.
+    expect((await call("GET", "/me/teaching-profile", adminToken)).status).toBe(403);
+    expect(
+      (
+        await call("PUT", "/me/teaching-profile/availability", adminToken, {
+          availability: [],
+        })
+      ).status,
+    ).toBe(403);
+    expect((await call("GET", "/me/teaching-profile")).status).toBe(401);
+  });
+
+  it("grants NOTHING — R88.3 still holds after she asserts it herself", async () => {
+    // The reason R106 is a small decision. She has just declared availability
+    // covering every hour of Tuesday; she reaches no beneficiary by it.
+    await call("PUT", "/me/teaching-profile/availability", teacherToken, {
+      availability: [{ weekday: "tuesday", start_time: "00:00", end_time: "23:59" }],
+    });
+    const students = await call("GET", "/quran-students", teacherToken);
+    expect(students.status).toBe(200);
+    // `/quran-students` answers `{ students, levels }` since Section C.
+    expect(
+      (students.body.data as unknown as { students: unknown[] }).students,
+    ).toHaveLength(0);
   });
 });

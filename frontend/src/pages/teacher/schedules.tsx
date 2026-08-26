@@ -105,6 +105,24 @@ export function TeacherSchedulesPage(): ReactNode {
 
   const actions: RowAction<CourseSchedule>[] = [
     {
+      /**
+       * **حصص الحلقة — the occurrences, at last** (R106.6a).
+       *
+       * TD-2 has granted a مؤطِّرة *"CRUD Sessions — cancel, reschedule, change
+       * room, notes ✔ (only sessions they staff)"* since R43, and
+       * `staffsSession` has enforced exactly that ever since. This table listed
+       * her classes and offered no way into any of their dates, so the grant
+       * had **no reach at all** — rule P, the tenth instance on this project.
+       *
+       * The destination is the same page the back office uses, in her chrome
+       * and with her verbs (R70.1's "one implementation, two ways in").
+       */
+      label: t('admin.schedules.viewSessions'),
+      onSelect: (r) => {
+        window.location.href = `/teacher/schedules/${r.id}/sessions`;
+      },
+    },
+    {
       label: t('admin.schedules.viewRoster'),
       onSelect: (r) => {
         void (async () => {

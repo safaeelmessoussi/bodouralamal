@@ -24,29 +24,45 @@ const WEEKDAYS = [
   'sunday',
 ] as const;
 
+/**
+ * One availability range, defined once and used by both writers — the
+ * administration's whole-profile PUT and R106's self-service one. Restating it
+ * would be two shapes for one table that happen to agree today.
+ */
+const availabilityRange = z
+  .object({
+    weekday: z.enum(WEEKDAYS),
+    start_time: clock,
+    end_time: clock,
+  })
+  .strict()
+  // A range that ends before it starts is not a range — refused here as
+  // well as by the CHECK, so the caller gets a field error rather than a
+  // constraint violation.
+  .refine((r) => r.start_time < r.end_time, {
+    message: 'start_time must precede end_time',
+    path: ['end_time'],
+  });
+
 export const teachingProfileSchema = z
   .object({
     subject_ids: z.array(uuid).max(50),
     category_ids: z.array(uuid).max(20),
-    availability: z
-      .array(
-        z
-          .object({
-            weekday: z.enum(WEEKDAYS),
-            start_time: clock,
-            end_time: clock,
-          })
-          .strict()
-          // A range that ends before it starts is not a range — refused here as
-          // well as by the CHECK, so the caller gets a field error rather than a
-          // constraint violation.
-          .refine((r) => r.start_time < r.end_time, {
-            message: 'start_time must precede end_time',
-            path: ['end_time'],
-          }),
-      )
-      .max(50),
+    availability: z.array(availabilityRange).max(50),
   })
+  .strict();
+
+/**
+ * **R106 — what a مؤطِّرة may send about herself: her ranges, and nothing else.**
+ *
+ * `.strict()` is the guard, not a formality. Were `subject_ids` merely ignored
+ * rather than refused, a forged request would look like it had rewritten what
+ * she is authorised to teach, and the response — which returns the profile —
+ * would appear to confirm it. Refusing the field is what makes the narrowness
+ * of this grant legible at the boundary rather than only in the service.
+ */
+export const ownAvailabilitySchema = z
+  .object({ availability: z.array(availabilityRange).max(50) })
   .strict();
 
 /**

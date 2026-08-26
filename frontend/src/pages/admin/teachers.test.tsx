@@ -164,11 +164,27 @@ describe('the weekday labels are Arabic, and come from the catalogue', () => {
     }
   });
 
-  it('hard-codes no Arabic weekday in the dialog', () => {
-    const dialog = code('/src/components/admin/teaching-profile-dialog.tsx');
-    expect(dialog).toContain('scheduling.weekday');
+  it('hard-codes no Arabic weekday in the availability editor', () => {
+    // **Restated for R106, not weakened — the property FOLLOWED THE CODE.**
+    // The weekday selector moved out of the dialog into the shared
+    // `AvailabilityEditor` when a مؤطِّرة gained her own availability page, and
+    // this guard failed because it was still reading the old file. The rule it
+    // pins is unchanged: the labels come from the catalogue, never from seven
+    // literals somebody typed.
+    const editor = code('/src/components/teaching/availability-editor.tsx');
+    expect(editor).toContain('scheduling.weekday');
     for (const name of ['الاثنين', 'الثلاثاء', 'الأربعاء', 'الخميس']) {
-      expect(dialog).not.toContain(name);
+      expect(editor).not.toContain(name);
     }
+  });
+
+  it('keeps ONE availability editor — the dialog does not grow a second', () => {
+    // The reason the extraction happened at all. R88's rules are subtle enough
+    // (touching ranges legal, overlapping refused, never merged) that a second
+    // copy would be a real defect, and this project's record is that the copy
+    // which drifts still passes its own tests.
+    const dialog = code('/src/components/admin/teaching-profile-dialog.tsx');
+    expect(dialog).toContain('AvailabilityEditor');
+    expect(dialog).not.toContain('scheduling.weekday');
   });
 });

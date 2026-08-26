@@ -30,9 +30,14 @@ describe('the teacher registry matches §14.1', () => {
     // of the two held what she wanted. The MENU offers الجدولة alone; the old
     // PATH still renders the merged page, which is why the router test below
     // still names it and this one does not.
+    //
+    // **`/teacher/availability` joined on 2026-08-26 (R106)** — the question
+    // R88.2 reserved in terms and the Owner has now answered: she states her
+    // own availability, and only that.
     expect(TEACHER_MODULES.map((m) => m.path).sort()).toEqual(
       [
         '/teacher',
+        '/teacher/availability',
         '/teacher/content',
         '/teacher/exams',
         '/teacher/quran',
@@ -150,21 +155,27 @@ describe('the مؤطرة reaches her own scheduling and content, and nothing els
     }
   });
 
-  it('groups her nodes into the three teaching sections, in order', () => {
-    expect([...TEACHER_SECTIONS]).toEqual(['teaching', 'scheduling', 'content']);
-    const sectionOf = (path: string): string | null =>
-      TEACHER_MODULES.find((m) => m.path === path)?.section ?? null;
-    expect(sectionOf('/teacher/exams')).toBe('teaching');
-    expect(sectionOf('/teacher/schedules')).toBe('scheduling');
-    expect(sectionOf('/teacher/content')).toBe('content');
-    // The dashboard sits above the groups, like the back office's.
-    expect(sectionOf('/teacher')).toBeNull();
+  it('renders as ONE flat list, in the Document Owner’s order (R106)', () => {
+    // **Restated, not dropped.** This pinned three section headings and which
+    // node sat under each. R106 removed the headings on R105's rule — a section
+    // exists only where it states a fact about permission, and these gated
+    // nothing — so the property that replaces it is the one the Owner actually
+    // specified: the ORDER. Pinned literally, because §14.1's "no reshuffling"
+    // can only be honoured by a generated menu if reordering fails a test.
+    expect(TEACHER_MODULES.map((m) => m.path)).toEqual([
+      '/teacher', // مساحة التدريس
+      '/teacher/availability', // إدخال متى أنا متاحة
+      '/teacher/quran', // إدخال حفظ المستفيدات
+      '/teacher/exams', // إدخال نقاط الامتحانات
+      '/teacher/schedules', // الجدولة
+      '/teacher/content', // مكتبة المحتوى
+    ]);
   });
 
-  it('every section heading resolves to Arabic, never to the key', () => {
-    for (const section of TEACHER_SECTIONS) {
-      const key = `teacher.section.${section}`;
-      expect(t(key), key).not.toBe(key);
+  it('has no sections at all, and no heading can creep back in', () => {
+    expect([...TEACHER_SECTIONS]).toEqual([]);
+    for (const module of TEACHER_MODULES) {
+      expect(module.section, module.path).toBeNull();
     }
   });
 

@@ -118,6 +118,8 @@ POST /sessions/{id}/notify                    # R83.3; the same decision for one
 GET /me/calendar                              # R82.8; the caller's own occurrences; /calendar stays the public tier read
 GET /admin/users/{id}/teaching-profile        # R88; PLANNING data — declared Subjects/Categories/availability, grants nothing
 PUT /admin/users/{id}/teaching-profile        # R88; replaced whole; Admin-owned; capability is not authorization
+GET /me/teaching-profile                      # R106; her own, read by her; whole profile so the ranges have context
+PUT /me/teaching-profile/availability         # R106; AVAILABILITY ONLY — capabilities stay Admin-owned (R88.2); grants nothing (R88.3)
 GET /admin/teaching-candidates                # R90; the staff picker's planning appraisal — WARNINGS, never a filtered list
 GET /sessions/{id}/roster                     # R92; who is expected at ONE occurrence — venue and audience as separate facts
 PUT /sessions/{id}/audience-branches          # R92; this occurrence's audience branches; empty list clears the override

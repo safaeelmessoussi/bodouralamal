@@ -1418,6 +1418,42 @@ some rows would have left the same screen answering two unrelated questions, and
 (a suspended account cannot be suspended), not for an action that belongs to a
 different subject entirely.
 
+### A capability with no reach is this project's recurring defect — now ten (P)
+
+R106 added the **tenth** instance, and it is worth listing them because the
+shape never changes: the service is written, the authorization is enforced, the
+tests pass, and **no screen ever calls it.**
+
+| | Granted since | Offered from |
+|---|---|---|
+| `مواد المستوى` | R26 | R69 |
+| Grade entry | R43 | R70.1 |
+| Teacher activity authoring | R43 | R72 |
+| Enrolment (`المستفيدات`) | R66 | R74 |
+| `/teacher/quran` menu entry | M4 | R85 |
+| Teacher exam authoring | R70 | R94 |
+| `إدخال الحفظ` in the back office | R73 | §C4 |
+| `/admin/level-surahs` node | M4c | R105 |
+| `/admin/quran` node | R73 | R105 |
+| **Occurrence management for a مؤطِّرة** | **R43** | **R106** |
+
+The last one is the plainest: TD-2 has said *"CRUD Sessions — cancel,
+reschedule, change room, notes ✔ (only sessions they staff)"* since R43, and
+`staffsSession` has enforced exactly that ever since — while `/teacher/schedules`
+listed her classes and offered **no way into any of their dates**.
+
+**So the check is cheap and it is worth making by habit:** when a screen looks
+impossible, grep the service for the verb before concluding the capability does
+not exist. Nine times in ten on this project, it does.
+
+**And the corollary R106 added:** a capability can also be unreachable because
+the *fixtures* never exercised it. The seed's staffing loop iterated the first
+two groups and skipped silently when they had no schedule, so the development
+database held **15 course schedules and 0 staffing rows** — and a مؤطِّرة's
+whole portal seeded empty, correctly, for a reason that looked exactly like a
+bug. A fixture that quietly produces nothing is worse than one that fails: it
+sends somebody looking for a defect in the application. It now throws.
+
 ### The back office holds two populations, and they are not the same list
 
 | Screen | Population | What it decides |

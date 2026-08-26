@@ -55,19 +55,55 @@ function assertMayManage(actor: Actor): void {
 const time = (d: Date): string => d.toISOString().slice(11, 16);
 const asTime = (hhmm: string): Date => new Date(`1970-01-01T${hhmm}:00.000Z`);
 
-export async function readTeachingProfile(
-  prisma: PrismaClient,
-  actor: Actor,
-  userId: string,
-): Promise<TeachingProfile> {
-  assertMayManage(actor);
+/**
+ * **Who may enter her OWN availability** (SRS Revision 106).
+ *
+ * R88.2 reserved this question in terms — *"a مؤطِّرة may not edit her own,
+ * because who may assert their own availability, and whether the administration
+ * may then rely on it, is a separate decision the Owner has not taken."* The
+ * Owner has now taken it, and R106 grants **availability only**: what she can
+ * TEACH stays the administration's (R88.2), because a declaration of capability
+ * is the association's planning record of her, while a declaration of *when she
+ * is free* is a statement only she can make.
+ *
+ * **The grant is safe for a reason worth keeping in front of the next reader:**
+ * R88.3 makes availability planning data that grants nothing — no beneficiary,
+ * no memorisation, no grade, no content, no occurrence — and R88.4 makes a
+ * mismatch WARN rather than block. So unlike `CourseScheduleStaff`, which is
+ * authority, nothing here can widen her reach. That asymmetry is exactly why
+ * R106 is a small decision and why creating a Recurring Course Schedule
+ * (TD-2 `⊘`, R71.0/R94.2) remains a large one that is NOT granted.
+ */
+function assertIsTeacher(actor: Actor): void {
+  if (!scope.hasRole(actor.roleScopes, 'teacher')) {
+    throw new AppError('FORBIDDEN', 'entering your own availability requires the teaching role');
+  }
+}
 
-  const user = await prisma.user.findFirst({
-    where: { id: userId, deletedAt: null },
-    select: { id: true },
-  });
-  if (!user) throw new AppError('NOT_FOUND', 'no such user');
+/**
+ * **R88.6 — overlapping ranges on one day are refused; touching ranges are not.**
+ *
+ * Shared by the administrative writer and by R106's self-service one, because
+ * *what counts as a clash* is one rule about one model. Written twice it would
+ * be two rules that happen to agree today, and this project's own record says
+ * the copy that drifts still passes its own tests.
+ */
+function assertNoOverlap(availability: readonly AvailabilityInput[]): void {
+  const clash = firstOverlap(
+    availability.map((a) => ({ weekday: a.weekday, start: a.startTime, end: a.endTime })),
+  );
+  if (clash) {
+    throw new AppError('VALIDATION_FAILED', 'two availability ranges overlap', {
+      reason: 'OVERLAPPING_AVAILABILITY',
+      ranges: clash,
+    });
+  }
+}
 
+/** The profile itself, with no authorization of its own — every caller above
+ *  has already decided whose profile it may read, and doing it once is what
+ *  keeps the two readers returning the same shape. */
+async function loadProfile(prisma: PrismaClient, userId: string): Promise<TeachingProfile> {
   const [subjects, categories, availability] = await Promise.all([
     prisma.teacherSubjectCapability.findMany({
       where: { userId },
@@ -96,6 +132,39 @@ export async function readTeachingProfile(
       end_time: time(r.endTime),
     })),
   };
+}
+
+export async function readTeachingProfile(
+  prisma: PrismaClient,
+  actor: Actor,
+  userId: string,
+): Promise<TeachingProfile> {
+  assertMayManage(actor);
+
+  const user = await prisma.user.findFirst({
+    where: { id: userId, deletedAt: null },
+    select: { id: true },
+  });
+  if (!user) throw new AppError('NOT_FOUND', 'no such user');
+
+  return loadProfile(prisma, userId);
+}
+
+/**
+ * **Her own profile, read by her** (R106).
+ *
+ * The whole profile, not only the availability half: she is shown what the
+ * administration has recorded she can teach — read-only — beside the ranges she
+ * may edit. Showing only the editable half would leave her entering
+ * availability with no idea what it is availability *for*, and the declared
+ * Subjects are hers in the sense that they describe her.
+ */
+export async function readOwnTeachingProfile(
+  prisma: PrismaClient,
+  actor: Actor,
+): Promise<TeachingProfile> {
+  assertIsTeacher(actor);
+  return loadProfile(prisma, actor.userId);
 }
 
 /**
@@ -144,18 +213,7 @@ export async function replaceTeachingProfile(
     });
   }
 
-  const ranges = input.availability.map((a) => ({
-    weekday: a.weekday,
-    start: a.startTime,
-    end: a.endTime,
-  }));
-  const clash = firstOverlap(ranges);
-  if (clash) {
-    throw new AppError('VALIDATION_FAILED', 'two availability ranges overlap', {
-      reason: 'OVERLAPPING_AVAILABILITY',
-      ranges: clash,
-    });
-  }
+  assertNoOverlap(input.availability);
 
   await prisma.$transaction(async (tx) => {
     // Replaced whole: three `deleteMany`s and three inserts express *this is her
@@ -214,4 +272,69 @@ export async function replaceTeachingProfile(
    * clearer about what the answer describes.
    */
   return readTeachingProfile(prisma, actor, userId);
+}
+
+/**
+ * **`متى أنا متاحة` — she replaces her own availability, and nothing else**
+ * (R106).
+ *
+ * ## Availability only, deliberately
+ *
+ * `TeacherSubjectCapability` and `TeacherCategoryCapability` are **not
+ * touched** — not read, not written, not cleared. That is the difference
+ * between this and `replaceTeachingProfile`, and it is the reason this is a
+ * separate function rather than the same one with a looser guard: a shared
+ * writer taking a partial profile would clear her declared Subjects the first
+ * time a caller omitted them, which is precisely how a whole-object PUT
+ * destroys the half nobody sent.
+ *
+ * ## The same model, the same rule, the same trail
+ *
+ * One `TeacherAvailability` table, one `assertNoOverlap`, one `settings.change`
+ * audit row. R106 adds no parallel availability model, and the administration
+ * reads exactly what she wrote through the endpoint it already has.
+ *
+ * The audit detail records **`self_service: true`**, because R88.2's open
+ * question was *whether the administration may then rely on it* — and the
+ * honest answer to that is legible only if the record says who asserted it.
+ */
+export async function replaceOwnAvailability(
+  prisma: PrismaClient,
+  actor: Actor,
+  availability: readonly AvailabilityInput[],
+): Promise<TeachingProfile> {
+  assertIsTeacher(actor);
+  assertNoOverlap(availability);
+
+  await prisma.$transaction(async (tx) => {
+    // Replaced whole, like the administrative writer: *these are my ranges now*
+    // is the statement being made, and a diff would invite a half-applied one.
+    await tx.teacherAvailability.deleteMany({ where: { userId: actor.userId } });
+    if (availability.length > 0) {
+      await tx.teacherAvailability.createMany({
+        data: availability.map((a) => ({
+          userId: actor.userId,
+          weekday: a.weekday as never,
+          startTime: asTime(a.startTime),
+          endTime: asTime(a.endTime),
+        })),
+      });
+    }
+
+    await audit.write(tx as unknown as Prisma.TransactionClient, {
+      actorUserId: actor.userId,
+      activeRole: actor.activeRole,
+      actionType: 'settings.change',
+      targetEntity: 'User',
+      targetId: actor.userId,
+      detail: {
+        teaching_profile: { availability: availability.length },
+        // R88.2 asked whether the administration may rely on a self-asserted
+        // range. Recording WHO asserted it is what makes that answerable later.
+        self_service: true,
+      },
+    });
+  });
+
+  return loadProfile(prisma, actor.userId);
 }
