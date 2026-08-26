@@ -2,14 +2,49 @@
 
 # Storage
 
-MinIO, self-hosted in a container. Data residency rules out every managed object store, so
-S3-compatible storage runs on the same box as everything else.
+The current implementation uses MinIO OSS, self-hosted in a container. Production requires
+a maintained S3-compatible object store on Moroccan infrastructure; the final vendor/product
+selection is an Owner decision recorded below.
 
 > **Status:** the Nginx proxy, upload/replace/delete flow, permission-checked private mint,
 > recording ingestion, durable R99 staging cleanup, consent re-evaluation and the
 > consent-forced public → private `content.bucket-migrate` arm are built and tested. General
 > visibility editing and the retention jobs remain open and are called out below rather than
 > implied by the implemented safeguarding flow.
+
+## OWNER DECISION REQUIRED — OBJECT STORE
+
+The image is pinned to `minio/minio:RELEASE.2025-09-07T16-13-09Z`. MinIO's
+[GHSA-hv4r-mvr4-25vw advisory](https://github.com/minio/minio/security/advisories/GHSA-hv4r-mvr4-25vw)
+states that this final OSS line is affected and identifies a fix only in the maintained AIStor
+release line. Production **must not launch on the current pin**: an edge filter reduces one
+known request shape but cannot turn an unsupported, affected object-store release into a
+maintained production dependency.
+
+Safe replacement categories are:
+
+1. a currently patched, supported MinIO AIStor release;
+2. another maintained self-hosted S3-compatible object store deployed on approved Moroccan
+   infrastructure; or
+3. a maintained managed S3-compatible service only if the Owner and legal review establish
+   Moroccan data residency, backup location, contractual controls and acceptable cost.
+
+The lowest migration-risk recommendation is to evaluate the patched AIStor line first,
+subject to licensing/support approval. If that is unsuitable, compare maintained alternatives
+with a disposable compatibility proof before copying any real object. The replacement must
+support path-style SigV4 presigning through the same-origin `/storage` prefix (including an
+exact non-default Host port), ranged GET and HEAD, PUT, copy, delete, conditional reads/copies,
+object metadata, object-atomic writes, idempotent deletion, the three existing bucket policy
+shapes, the AWS SDK client, internal-only networking, health checks, and Moroccan primary and
+backup residency.
+
+After the Owner selects and pins a supported replacement, rerun: `nginx -t` and `nginx -T`;
+the real signed private PUT/GET proxy round trip; signed public-staging PUT plus unsigned-read
+denials; the canonical public exact-coordinate GET/HEAD and method/root denial matrix; the
+complete B-01 safeguarding suite; B-02 placement and B-03 immutable finalization/replacement;
+R99 recording ingestion; old-key retirement, deletion/replacement race and ambiguous-storage
+recovery cases; upload/quarantine retention jobs; object-store health/readiness; and the
+backup/restore drill. Do not approve Production from an API-compatibility claim alone.
 
 ## Two buckets, and the boundary between them
 
@@ -56,6 +91,13 @@ signature check, preserving current staging uploads and still-live pre-R103 cano
 capabilities until their one-hour expiry. Current code never mints a browser write to a
 canonical key, and legacy replacements are still refused at completion when their ticket
 lacks the required compare-and-swap version.
+
+As temporary defence in depth for the blocked current pin, every Nginx path that can proxy to
+the object store shares one filter rejecting the advisory-named
+`STREAMING-UNSIGNED-PAYLOAD-TRAILER` content-hash mode before upstream. It does not match the
+signed streaming mode or ordinary presigned GET/PUT requests. This is not a substitute for a
+supported patched object store, and verification deliberately asserts the defensive boundary
+without constructing or replaying an exploit.
 
 `/storage/public` and `/storage/public/` are bucket coordinates, not object coordinates, and
 are denied by exact Nginx locations with or without query parameters. They are never

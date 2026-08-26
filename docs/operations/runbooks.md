@@ -349,6 +349,14 @@ still receives MinIO `403`, and that `/storage/public`, `/storage/public/` and e
 select the same denial or fail the exact-coordinate authorizer; none may fall through the
 generic `/storage/` proxy.
 
+For the temporary P0.1 object-store defence, `nginx -T` must also show the shared
+`STREAMING-UNSIGNED-PAYLOAD-TRAILER` rejection on every proxied storage location. The safe
+regression sends only that header on an unsigned, bodyless representative PUT: it must return
+`403` with `X-Bodour-Storage-Policy: unsigned-trailer-denied`, proving Nginx—not MinIO—made
+the decision. Do not construct a chunked payload or attempt to reproduce the vulnerability.
+The signed proxy round trip above must pass in the same run. This filter does not remove the
+[Owner-blocked supported-object-store requirement](../architecture/storage.md#owner-decision-required--object-store).
+
 ### B-03 rollout: let legacy direct PUT capabilities expire
 
 The R103 application release accepts outstanding non-replacement upload tickets through the

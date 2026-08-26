@@ -50,6 +50,33 @@ beforeAll(async () => {
 });
 
 describe("signed PUT + signed GET round-trip through the Nginx /storage proxy (§3.1, §18)", () => {
+  it("stops the unsupported unsigned streaming-trailer mode at Nginx", async () => {
+    // This is a defensive boundary assertion, not a vulnerability
+    // reproduction: it sends neither credentials nor a streaming/chunked
+    // payload. The response marker exists only on Nginx's internal denial
+    // location, so a MinIO-generated 403 cannot make this test pass.
+    const representativePaths = [
+      `${BUCKETS.public}/staging/content/edge-filter.bin`,
+      `${BUCKETS.private}/edge-filter.bin`,
+    ];
+
+    for (const path of representativePaths) {
+      const res = await fetch(`${config.STORAGE_BASE_URL}/${path}`, {
+        method: "PUT",
+        headers: {
+          "X-Amz-Content-Sha256": "STREAMING-UNSIGNED-PAYLOAD-TRAILER",
+        },
+        redirect: "manual",
+      });
+
+      expect(res.status).toBe(403);
+      expect(res.headers.get("x-bodour-storage-policy")).toBe(
+        "unsigned-trailer-denied",
+      );
+      expect((await res.text()).toLowerCase()).not.toContain("<error>");
+    }
+  });
+
   it("round-trips a private-bucket object without SignatureDoesNotMatch", async () => {
     const key = `test/roundtrip-${randomBytes(6).toString("hex")}.bin`;
     const payload = randomBytes(2048);
@@ -77,6 +104,21 @@ describe("signed PUT + signed GET round-trip through the Nginx /storage proxy (�
 
     const roundTripped = Buffer.from(await getRes.arrayBuffer());
     expect(roundTripped.equals(payload)).toBe(true);
+  });
+
+  it("preserves a signed public-staging PUT through the shared filter", async () => {
+    const key = `staging/content/edge-valid-${randomBytes(6).toString("hex")}.bin`;
+    const putUrl = await presignPutUrl(clients, BUCKETS.public, key);
+    const res = await fetch(putUrl, {
+      method: "PUT",
+      body: randomBytes(128),
+    });
+    const body = res.ok ? "" : await res.text();
+
+    expect(
+      res.ok,
+      `signed public-staging PUT through the proxy failed: ${res.status} ${body}`,
+    ).toBe(true);
   });
 
   it("serves the private bucket ONLY through a signature — never a stable URL (§20 rule 4)", async () => {
