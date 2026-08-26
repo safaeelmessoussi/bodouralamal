@@ -51,13 +51,24 @@ legitimate SigV4 traffic cannot pass.
 cd backend && npm run lint && npm run typecheck && npm test && npm run build
 cd frontend && npm run lint && npm run typecheck && npm test && npm run build
 
-# Repository and contract guards — all twenty-two are represented in CI
+# Repository and contract guards — all twenty-three are represented in CI
 for g in scripts/ci/check-*.sh; do bash "$g"; done
 
 # Integration — needs the stack up
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 bash scripts/dev/test-integration.sh
+
+# Destructive only to uniquely named disposable volumes and a local encrypted repository
+bash scripts/backup/verify-backup-restore.sh
 ```
+
+The backup drill is not a source-text assertion. It writes a PostgreSQL row and MinIO object,
+creates and verifies a real encrypted restic snapshot, destroys both disposable volumes,
+restores them into empty replacements, validates the portable dump catalog, and reads both
+values back. Fixture mode structurally
+refuses SFTP so the drill cannot send local data to an external target. Its local 33-second
+result proves the recovery mechanism and the `< 1 h` target at fixture scale; the selected
+Moroccan target and realistic Production volume still require the launch drill.
 
 Integration tests run **serially**, because the suites share one database.
 

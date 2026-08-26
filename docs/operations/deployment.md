@@ -118,10 +118,12 @@ the new cookie.
 
 ```bash
 docker compose down
-# restore the latest pg_dump per the documented procedure
+# restore the latest complete recovery point per the runbook
 ```
 
 Migrations are forward-only. There is no down-migration path, by policy.
+The [recovery-point runbook](runbooks.md#creating-and-restoring-a-full-recovery-point) restores
+only into empty volumes and leaves services stopped for configuration verification.
 
 ## TLS
 
