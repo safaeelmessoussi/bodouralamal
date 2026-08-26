@@ -16,6 +16,7 @@ import {
   updateExamSchema,
 } from '../validators/exam.validators.js';
 import { examDto, pageOf } from './dto.js';
+import { sortParamsFrom } from '../lib/sorting.js';
 import { idParam, parse } from './parse.js';
 
 /**
@@ -100,6 +101,7 @@ export function list(prisma: PrismaClient) {
       ...(q.from !== undefined ? { from: q.from } : {}),
       ...(q.to !== undefined ? { to: q.to } : {}),
       ...pageParamsFrom(req.query),
+      ...sortParamsFrom(req.query),
     });
     res.json(pageOf(result, examDto));
   };

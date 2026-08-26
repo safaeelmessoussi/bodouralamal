@@ -7,9 +7,10 @@ import { GradeSheetView } from '../../components/grading/grade-sheet.js';
 import { LevelSelect, levelLabel } from '../../components/scope/level-select.js';
 import { Button, ButtonLink } from '../../components/ui/button.js';
 import {
-  DataTable,
   type Column,
+  DataTable,
   type RowAction,
+  type SortState,
   type TableStatus,
 } from '../../components/ui/data-table.js';
 import { SearchInput } from '../../components/ui/field.js';
@@ -58,8 +59,14 @@ import { formatDate } from '../../lib/format-date.js';
  * which is a real relationship inside this page.
  */
 export function ExamGradesPage({ examId }: { examId: string | null }): ReactNode {
+  /**
+   * R76 — the **exam list** sorts; the grade sheet below it never does.
+   * The sheet holds per-row draft scores, and reordering rows under a مؤطِّرة
+   * mid-entry would move her own unsaved work (Owner, 2026-08-26).
+   */
   const { accessToken } = useSession();
   const [exams, setExams] = useState<Exam[]>([]);
+  const [sort, setSort] = useState<SortState | null>(null);
   const [levels, setLevels] = useState<Level[]>([]);
   const [status, setStatus] = useState<TableStatus>('loading');
   const [query, setQuery] = useState('');
@@ -74,7 +81,7 @@ export function ExamGradesPage({ examId }: { examId: string | null }): ReactNode
       // The same role-scoped list the scheduling screen reads: an Admin sees
       // their branches' exams, a Super Admin every one. No second contract.
       const [examPage, levelList] = await Promise.all([
-        listExams(accessToken),
+        listExams(accessToken, {}, 100, sort),
         listLevels(accessToken).catch(() => [] as Level[]),
       ]);
       setExams(examPage.data);
@@ -83,7 +90,7 @@ export function ExamGradesPage({ examId }: { examId: string | null }): ReactNode
     } catch {
       setStatus('error');
     }
-  }, [accessToken]);
+  }, [accessToken, sort]);
 
   useEffect(() => {
     void load();
@@ -110,10 +117,11 @@ export function ExamGradesPage({ examId }: { examId: string | null }): ReactNode
   }, [exams, query, levelFilter]);
 
   const columns: Column<Exam>[] = [
-    { key: 'title', header: t('admin.grades.exam'), cell: (e) => e.title },
-    { key: 'date', header: t('admin.grades.colDate'), cell: (e) => formatDate(e.date) },
+    { key: 'title', sortKey: 'title', header: t('admin.grades.exam'), cell: (e) => e.title },
+    { key: 'date', sortKey: 'date', header: t('admin.grades.colDate'), cell: (e) => formatDate(e.date) },
     {
       key: 'level',
+      sortKey: 'level',
       // The shared label — `{Category} — {Level}` — so a Level reads the same
       // here as in every selector (§4.4b: names are not unique across
       // Categories).
@@ -131,6 +139,7 @@ export function ExamGradesPage({ examId }: { examId: string | null }): ReactNode
     },
     {
       key: 'subject',
+      sortKey: 'subject',
       header: t('admin.schedules.subject'),
       secondary: true,
       cell: (e) => e.subject_name ?? '—',
@@ -196,6 +205,8 @@ export function ExamGradesPage({ examId }: { examId: string | null }): ReactNode
           caption={t('admin.grades.caption')}
           columns={columns}
           rows={visible}
+          sort={sort}
+          onSort={setSort}
           rowKey={(e) => e.id}
           status={status}
           actions={actions}

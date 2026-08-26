@@ -5,6 +5,7 @@ import type { PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
 import { requireActor } from '../middleware/authenticate.js';
 import { approvalDto, pageOf } from './dto.js';
+import { sortParamsFrom } from '../lib/sorting.js';
 import { decide, listApprovals, type ApprovalType } from '../services/approval.service.js';
 
 /**
@@ -79,6 +80,9 @@ const listSchema = z.object({
   branch_id: z.uuid().optional(),
   page: z.coerce.number().int().min(1).optional(),
   page_size: z.coerce.number().int().min(1).max(100).optional(),
+  // R76 — refused against the service's own allow-list, not here.
+  sort_by: z.string().optional(),
+  sort_dir: z.string().optional(),
 });
 
 /** `GET /admin/approvals` (TD-3.2, §5.6). */
@@ -91,6 +95,7 @@ export function list(prisma: PrismaClient) {
       ...(parsed.data.branch_id ? { branchId: parsed.data.branch_id } : {}),
       ...(parsed.data.page ? { page: parsed.data.page } : {}),
       ...(parsed.data.page_size ? { pageSize: parsed.data.page_size } : {}),
+      ...sortParamsFrom(req.query),
     });
     res.json(pageOf(result, approvalDto));
   };

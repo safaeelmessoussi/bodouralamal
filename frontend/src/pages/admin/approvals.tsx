@@ -23,9 +23,10 @@ import {
 } from '../../components/ui/approval-card.js';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
 import {
-  DataTable,
   type Column,
+  DataTable,
   type RowAction,
+  type SortState,
   type TableStatus,
 } from '../../components/ui/data-table.js';
 import { Button } from '../../components/ui/button.js';
@@ -85,6 +86,12 @@ export function ApprovalsPage(): ReactNode {
   const [rows, setRows] = useState<Approval[]>([]);
   const [status, setStatus] = useState<TableStatus>('loading');
   const [page, setPage] = useState(1);
+  /**
+   * R76 — server-side. **This queue is a union of three independently
+   * paginated sources**, so the sort orders each of them by the same field;
+   * with a type filter active it is exact. See `approvalOrder` in the service.
+   */
+  const [sort, setSort] = useState<SortState | null>(null);
   const [total, setTotal] = useState(0);
   const [typeFilter, setTypeFilter] = useState<'' | ApprovalType>('');
   const [branchFilter, setBranchFilter] = useState<string | null>(null);
@@ -112,6 +119,7 @@ export function ApprovalsPage(): ReactNode {
       // rows already fetched. A queue is paginated over the full set, so
       // filtering client-side would hide matches on later pages.
       const result = await listApprovals(accessToken, {
+        ...(sort ? { sort } : {}),
         page,
         ...(typeFilter ? { type: typeFilter } : {}),
         ...(branchFilter ? { branchId: branchFilter } : {}),
@@ -145,6 +153,7 @@ export function ApprovalsPage(): ReactNode {
   const columns: Column<Approval>[] = [
     {
       key: 'applicants',
+      sortKey: 'applicants',
       header: t('admin.approvals.colApplicants'),
       cell: (r) => <ApplicantList applicants={r.applicants} />,
     },
@@ -183,6 +192,8 @@ export function ApprovalsPage(): ReactNode {
     },
     {
       key: 'submitted',
+      // A timestamp — chronological, never lexicographic.
+      sortKey: 'submitted',
       header: t('admin.approvals.colSubmitted'),
       secondary: true,
       // The instant is rendered as a date for reading, with the full value in
@@ -342,6 +353,8 @@ export function ApprovalsPage(): ReactNode {
             />
           </>
         }
+        sort={sort}
+        onSort={setSort}
         pagination={{ page, pageSize: 25, total, onPage: setPage }}
       />
 

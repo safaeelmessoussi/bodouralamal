@@ -1,3 +1,5 @@
+import { applySort } from './reorder.js';
+import type { SortState } from '../components/ui/data-table.js';
 import { api } from '../lib/api.js';
 
 /**
@@ -92,9 +94,16 @@ export interface DecisionResult {
 
 export async function listApprovals(
   token: string | null,
-  options: { page?: number; type?: ApprovalType; branchId?: string } = {},
+  options: {
+    page?: number;
+    type?: ApprovalType;
+    branchId?: string;
+    /** R76 — server-side, per source; see `approvalOrder` in the service. */
+    sort?: SortState | null;
+  } = {},
 ): Promise<Page<Approval>> {
   const params = new URLSearchParams({ page: String(options.page ?? 1), page_size: '25' });
+  applySort(params, options.sort ?? null);
   if (options.type) params.set('type', options.type);
   if (options.branchId) params.set('branch_id', options.branchId);
   return api<Page<Approval>>(`/admin/approvals?${params.toString()}`, { token });

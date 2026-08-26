@@ -10,7 +10,12 @@ import { listCategories } from '../../adapters/taxonomy.js';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
 import { TeachingProfileDialog } from '../../components/admin/teaching-profile-dialog.js';
 import { Badge } from '../../components/ui/badge.js';
-import { DataTable, type RowAction, type TableStatus } from '../../components/ui/data-table.js';
+import {
+  DataTable,
+  type RowAction,
+  type SortState,
+  type TableStatus,
+} from '../../components/ui/data-table.js';
 import { SearchInput, SelectField } from '../../components/ui/field.js';
 import { Feedback } from '../../components/ui/feedback.js';
 import { useSession } from '../../contexts/session.js';
@@ -46,6 +51,16 @@ export function TeachersPage(): ReactNode {
 
   const [rows, setRows] = useState<UserSummary[]>([]);
   const [status, setStatus] = useState<TableStatus>('loading');
+  /**
+   * R76 — server-side on `name`, the one column `/admin/users` owns.
+   *
+   * **Subjects, Categories and availability are deliberately NOT sortable.**
+   * They are not on the list contract at all: each is fetched per row after
+   * the page arrives (see the profile loop below), so sorting by one would
+   * order the 25 rows this page happens to hold and present it as the
+   * collection's order — exactly the defect R76 exists to prevent.
+   */
+  const [sort, setSort] = useState<SortState | null>(null);
   const [query, setQuery] = useState('');
   const [subjectFilter, setSubjectFilter] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
@@ -69,7 +84,7 @@ export function TeachersPage(): ReactNode {
       const page = await searchUsers(accessToken, {
         role: 'teacher',
         ...(trimmed.length >= 2 ? { q: trimmed } : {}),
-      });
+      }, 1, sort);
       setRows(page.data);
       setStatus('ready');
 
@@ -87,7 +102,7 @@ export function TeachersPage(): ReactNode {
     } catch {
       setStatus('error');
     }
-  }, [accessToken, query]);
+  }, [accessToken, query, sort]);
 
   useEffect(() => {
     void load();
@@ -147,8 +162,15 @@ export function TeachersPage(): ReactNode {
 
       <DataTable
         caption={t('admin.teachers.caption')}
+        sort={sort}
+        onSort={setSort}
         columns={[
-          { key: 'name', header: t('admin.users.colName'), cell: (r: UserSummary) => r.name_arabic },
+          {
+            key: 'name',
+            header: t('admin.users.colName'),
+            sortKey: 'name',
+            cell: (r: UserSummary) => r.name_arabic,
+          },
           {
             key: 'subjects',
             header: t('admin.teachers.colSubjects'),

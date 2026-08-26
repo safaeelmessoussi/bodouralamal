@@ -16,7 +16,8 @@ import { t } from '../../i18n/index.js';
 import { ApiError } from '../../lib/api.js';
 import { Button } from '../ui/button.js';
 import { ConfirmDialog } from '../ui/confirm-dialog.js';
-import { DataTable } from '../ui/data-table.js';
+import { DataTable, type SortState } from '../ui/data-table.js';
+import { sortRows } from '../../lib/sort-rows.js';
 import { Feedback } from '../ui/feedback.js';
 import { SearchInput, SelectField, TextField } from '../ui/field.js';
 import { ProgressBar } from '../ui/progress-bar.js';
@@ -75,6 +76,7 @@ export function QuranWorkspace({
 
   const [notice, setNotice] = useState<string | null>(null);
   const [query, setQuery] = useState('');
+  const [rosterSort, setRosterSort] = useState<SortState | null>(null);
   const [busy, setBusy] = useState(false);
   const [removing, setRemoving] = useState<QuranLogRow | null>(null);
 
@@ -225,8 +227,26 @@ export function QuranWorkspace({
         {notice ? <Feedback>{notice}</Feedback> : null}
         <DataTable
           caption={t('quran.rosterCaption')}
-          columns={[{ key: 'name', header: t('quran.colStudent'), cell: (s) => s.name_arabic }]}
-          rows={visible}
+          columns={[
+            {
+              key: 'name',
+              header: t('quran.colStudent'),
+              sortKey: 'name',
+              cell: (s) => s.name_arabic,
+            },
+          ]}
+          /**
+           * R76 — **the roster, and only the roster.** `/quran-students`
+           * answers the whole scope unpaginated and this screen already filters
+           * it in memory, so ordering what it holds IS ordering the collection.
+           *
+           * The memorisation sheet below never sorts: it holds per-row draft
+           * state, and reordering rows under a مؤطِّرة mid-entry would move her
+           * own unsaved work (Owner, 2026-08-26).
+           */
+          rows={sortRows(visible, rosterSort, { name: (s) => s.name_arabic })}
+          sort={rosterSort}
+          onSort={setRosterSort}
           rowKey={(s) => s.id}
           status={scopeState === 'loading' ? 'loading' : 'ready'}
           actions={[

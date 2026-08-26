@@ -1,3 +1,5 @@
+import { applySort } from './reorder.js';
+import type { SortState } from '../components/ui/data-table.js';
 import { api } from '../lib/api.js';
 
 /**
@@ -83,11 +85,15 @@ export async function listExams(
   token: string | null,
   filters: ExamFilters = {},
   pageSize = 100,
+  /** R76 — the server orders; `resolveSort` refuses a field outside the
+   *  endpoint's allow-list rather than ignoring it. */
+  sort: SortState | null = null,
 ): Promise<{ data: Exam[]; meta: { total: number } }> {
   const params = new URLSearchParams({ page_size: String(pageSize) });
   for (const [key, value] of Object.entries(filters)) {
     if (value) params.set(key, value);
   }
+  applySort(params, sort);
   return api<{ data: Exam[]; meta: { total: number } }>(`/exams?${params.toString()}`, { token });
 }
 

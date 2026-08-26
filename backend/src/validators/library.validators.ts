@@ -16,4 +16,8 @@ export const listLibraryQuerySchema = z.object({
   level_id: uuid.optional(),
   academic_year_id: uuid.optional(),
   subject_id: uuid.optional(),
+  // R76 — validated against the endpoint's own allow-list in the service, which
+  // refuses an unknown field rather than ignoring it.
+  sort_by: z.string().optional(),
+  sort_dir: z.string().optional(),
 });

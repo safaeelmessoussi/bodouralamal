@@ -7,7 +7,13 @@ import { AudioRecorder } from '../components/content/audio-recorder.js';
 import { ContentUploadForm } from '../components/content/content-upload-form.js';
 import { TeacherLayout } from '../components/teacher/teacher-layout.js';
 import { ConfirmDialog } from '../components/ui/confirm-dialog.js';
-import { DataTable, type Column, type RowAction, type TableStatus } from '../components/ui/data-table.js';
+import {
+  DataTable,
+  type Column,
+  type RowAction,
+  type SortState,
+  type TableStatus,
+} from '../components/ui/data-table.js';
 import { Button } from '../components/ui/button.js';
 import { Dialog } from '../components/ui/dialog.js';
 import { ScopeSelectors } from '../components/scope/scope-selectors.js';
@@ -16,6 +22,7 @@ import { useSession } from '../contexts/session.js';
 import { useActiveRole } from '../contexts/active-role.js';
 import { t } from '../i18n/index.js';
 import { formatDate } from '../lib/format-date.js';
+import { applySort } from '../adapters/reorder.js';
 import { api } from '../lib/api.js';
 import { Feedback } from '../components/ui/feedback.js';
 
@@ -101,6 +108,8 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
   const { levelId, subjectId, academicYearId, branchId } = scope.value;
 
   const [rows, setRows] = useState<LibraryRow[]>([]);
+  /** R76 — server-side: this list is paginated, so the DATABASE orders it. */
+  const [sort, setSort] = useState<SortState | null>(null);
   const [status, setStatus] = useState<TableStatus>('loading');
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
@@ -119,6 +128,7 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
   const load = useCallback(async () => {
     setStatus('loading');
     const params = new URLSearchParams({ page: String(page), page_size: '25' });
+    applySort(params, sort);
     if (levelId) params.set('level_id', levelId);
     if (subjectId) params.set('subject_id', subjectId);
     if (academicYearId) params.set('academic_year_id', academicYearId);
@@ -149,7 +159,7 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
     } catch {
       setStatus('error');
     }
-  }, [accessToken, levelId, subjectId, academicYearId, branchId, page]);
+  }, [accessToken, levelId, subjectId, academicYearId, branchId, page, sort]);
 
   useEffect(() => {
     void load();
@@ -224,7 +234,7 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
         : null;
 
   const columns: Column<LibraryRow>[] = [
-    { key: 'title', header: t('content.col.title'), cell: (r) => r.title },
+    { key: 'title', sortKey: 'title', header: t('content.col.title'), cell: (r) => r.title },
     {
       key: 'kind',
       header: t('content.col.kind'),
@@ -237,6 +247,7 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
     },
     {
       key: 'branch',
+      sortKey: 'branch',
       header: t('content.col.branch'),
       secondary: true,
       // `null` is Global, a real scope — never "unknown" (§4.9, BR-20).
@@ -244,12 +255,17 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
     },
     {
       key: 'size',
+      // `size_bytes`, not the humanised label: ordering «٩ ميغابايت»
+      // as a STRING would put 9 MB after 10 MB.
+      sortKey: 'size',
       header: t('content.col.size'),
       secondary: true,
       cell: (r) => formatSize(r.size_bytes),
     },
     {
       key: 'created',
+      // A timestamp, so it orders chronologically.
+      sortKey: 'published',
       header: t('content.col.published'),
       secondary: true,
       cell: (r) => <time dateTime={r.created_at}>{formatDate(r.created_at)}</time>,
@@ -334,6 +350,8 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
             />
           </>
         }
+        sort={sort}
+        onSort={setSort}
         pagination={{ page, pageSize: 25, total, onPage: setPage }}
       />
 

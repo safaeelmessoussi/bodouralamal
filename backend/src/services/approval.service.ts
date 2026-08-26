@@ -92,6 +92,70 @@ export interface ApprovalItem {
   }[];
 }
 
+/**
+ * What طلبات الانضمام may be sorted by (R76.1).
+ *
+ * **This queue is a UNION of three independently-paginated sources** —
+ * registrations, family links and child applications — and it always was: each
+ * branch below runs its own `count` and its own `skip`/`take`, so a page is
+ * *up to N of each type*, never N of the whole. The sort is therefore applied
+ * to **all three** `orderBy` clauses so every source is ordered by the same
+ * field in the same direction; it does not, and does not claim to, interleave
+ * the types into one global order.
+ *
+ * **With the type filter active it IS exact**, which is the case an approver
+ * sorting a queue is usually in. That is stated in the page's own comment too,
+ * so nobody later reads the header as a promise the union cannot keep.
+ *
+ * `submitted` is a timestamp and orders chronologically; `applicants` is a
+ * natively `ar-x-icu` collated name column (TD-6a). **`bundle` is absent**: it
+ * is a derived count of what a request contains, and ordering by it means
+ * nothing to an approver.
+ */
+export const APPROVAL_SORT_FIELDS = ['submitted', 'applicants'] as const;
+export type ApprovalSortField = (typeof APPROVAL_SORT_FIELDS)[number];
+
+/** Resolves the request's sort into the `orderBy` every source shares. */
+function approvalOrder(
+  sortBy: string | undefined,
+  sortDir: string | undefined,
+  /**
+   * How THIS source reaches the applicant's name. The three differ — a
+   * registration carries it directly, a family link and a child application
+   * reach it through a relation — so each passes its own path rather than a
+   * bare column name that only one of them could use.
+   */
+  byName: (dir: 'asc' | 'desc') => Record<string, unknown>,
+): Record<string, unknown>[] {
+  if (sortDir !== undefined && sortDir !== 'asc' && sortDir !== 'desc') {
+    throw new AppError('VALIDATION_FAILED', 'sort_dir must be asc or desc', {
+      issues: [{ path: 'sort_dir', message: "expected 'asc' or 'desc'" }],
+    });
+  }
+  const dir = sortDir === 'desc' ? 'desc' : 'asc';
+  if (sortBy === undefined) {
+    if (sortDir !== undefined) {
+      throw new AppError('VALIDATION_FAILED', 'sort_dir requires sort_by', {
+        issues: [{ path: 'sort_by', message: 'required when sort_dir is given' }],
+      });
+    }
+    // The queue's own reading order: oldest waiting first.
+    return [{ createdAt: 'asc' }, { id: 'asc' }];
+  }
+  if (!(APPROVAL_SORT_FIELDS as readonly string[]).includes(sortBy)) {
+    throw new AppError('VALIDATION_FAILED', `cannot sort by ${sortBy}`, {
+      issues: [
+        { path: 'sort_by', message: `expected one of: ${APPROVAL_SORT_FIELDS.join(', ')}` },
+      ],
+    });
+  }
+  // `id` last, always: offset pagination needs a unique tie-break or a row can
+  // appear on two pages or on neither (`lib/sorting.ts`).
+  return sortBy === 'submitted'
+    ? [{ createdAt: dir }, { id: 'asc' }]
+    : [byName(dir), { id: 'asc' }];
+}
+
 export async function listApprovals(
   prisma: PrismaClient,
   /**
@@ -102,7 +166,14 @@ export async function listApprovals(
    * drifting apart, which is why the id alone is no longer enough.
    */
   caller: Actor,
-  options: { type?: ApprovalType; branchId?: string; page?: number; pageSize?: number } = {},
+  options: {
+    type?: ApprovalType;
+    branchId?: string;
+    page?: number;
+    pageSize?: number;
+    sortBy?: string | undefined;
+    sortDir?: string | undefined;
+  } = {},
 ): Promise<Page<ApprovalItem>> {
   // TD-12: approvals are a high-risk surface, so even listing re-asserts the
   // caller's live status rather than trusting the token.
@@ -153,7 +224,7 @@ export async function listApprovals(
         // Only what the DTO publishes (§16.2), never the whole row.
         intendedCategory: { select: { id: true, name: true } },
       },
-      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      orderBy: approvalOrder(options.sortBy, options.sortDir, (dir) => ({ nameArabic: dir })),
       skip,
       take,
     });
@@ -211,7 +282,9 @@ export async function listApprovals(
     const links = await prisma.familyLink.findMany({
       where,
       include: { parent: true, student: true },
-      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      orderBy: approvalOrder(options.sortBy, options.sortDir, (dir) => ({
+        student: { nameArabic: dir },
+      })) as never,
       skip,
       take,
     });
@@ -275,7 +348,9 @@ export async function listApprovals(
         // reach a child-registration request at all.
         requestedBranch: { select: { id: true, name: true } },
       },
-      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
+      orderBy: approvalOrder(options.sortBy, options.sortDir, (dir) => ({
+        parent: { nameArabic: dir },
+      })) as never,
     });
 
     // Grouped in memory rather than by a second query: a request holds a

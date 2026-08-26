@@ -8,6 +8,7 @@ import {
   assertExamInTeacherScope,
   examScopeWhereForTeacher,
 } from '../policies/roster-resolution.js';
+import { resolveSort, type SortableFields, type SortParams } from '../lib/sorting.js';
 import * as audit from '../repositories/audit.repository.js';
 import * as trash from '../repositories/trash.repository.js';
 
@@ -478,10 +479,34 @@ const EXAM_INCLUDE = {
 
 export type ExamRow = Prisma.ExamGetPayload<{ include: typeof EXAM_INCLUDE }>;
 
+/**
+ * What `/exams` may be sorted by (R76.1) — **this endpoint's own allow-list**.
+ *
+ * `date` is the column an exam list is actually read by, and it orders
+ * **chronologically** because it is a `date` column: the `startTime` companion
+ * keeps two sittings on one day in clock order rather than in insertion order.
+ * `title`, `level` and `subject` are the identity columns the نقاط الامتحانات
+ * table shows.
+ *
+ * **`audience` is deliberately absent.** It is a derived description, not a
+ * field, and R76's test applies — *a column is sortable when its ordering means
+ * something, not when the data happens to permit one.*
+ */
+export const EXAM_SORT_FIELDS: SortableFields = {
+  date: (dir) => [{ date: dir }, { startTime: dir }],
+  title: (dir) => [{ title: dir }],
+  level: (dir) => [{ level: { name: dir } }],
+  subject: (dir) => [{ subject: { name: dir } }],
+};
+
+/** The reading order an unparameterised call keeps — soonest first. */
+const EXAM_DEFAULT_ORDER = [{ date: 'asc' }, { startTime: 'asc' }];
+
 export async function listExams(
   prisma: PrismaClient,
   actor: Actor,
-  filters: { branchId?: string; levelId?: string; from?: Date; to?: Date } & PageParams,
+  filters: { branchId?: string; levelId?: string; from?: Date; to?: Date } & PageParams &
+    SortParams,
 ): Promise<Page<ExamRow>> {
   assertCanManage(actor);
 
@@ -534,7 +559,7 @@ export async function listExams(
       where,
       skip: window.skip,
       take: window.take,
-      orderBy: [{ date: 'asc' }, { startTime: 'asc' }, { id: 'asc' }],
+      orderBy: resolveSort(EXAM_SORT_FIELDS, filters, EXAM_DEFAULT_ORDER) as never,
       include: EXAM_INCLUDE,
     }),
     prisma.exam.count({ where }),

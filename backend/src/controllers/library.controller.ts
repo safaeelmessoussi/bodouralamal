@@ -5,6 +5,7 @@ import { pageParamsFrom } from '../lib/pagination.js';
 import * as library from '../services/library.service.js';
 import { libraryItemDto, pageOf } from './dto.js';
 import { parse } from './parse.js';
+import { sortParamsFrom } from '../lib/sorting.js';
 import { listLibraryQuerySchema } from '../validators/library.validators.js';
 
 /**
@@ -40,6 +41,7 @@ export function list(prisma: PrismaClient) {
         : {}),
       ...(filters.subject_id !== undefined ? { subjectId: filters.subject_id } : {}),
       ...pageParamsFrom(req.query),
+      ...sortParamsFrom(req.query),
     });
     res.json({
       ...pageOf(result, libraryItemDto),

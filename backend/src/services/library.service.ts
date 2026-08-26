@@ -1,4 +1,5 @@
 import { Prisma, type PrismaClient } from '../generated/prisma/client.js';
+import { AppError } from '../lib/errors.js';
 import { page, pageWindow, type Page, type PageParams } from '../lib/pagination.js';
 import { localDateIso, nextRecordingName } from '../lib/recording-name.js';
 import * as scope from '../policies/branch-scope.js';
@@ -61,6 +62,74 @@ export interface LibraryFilters extends PageParams {
   levelId?: string;
   academicYearId?: string;
   subjectId?: string;
+  sortBy?: string | undefined;
+  sortDir?: string | undefined;
+}
+
+/**
+ * What مكتبة المحتوى may be sorted by (R76.1), as **`Prisma.sql` fragments**.
+ *
+ * This list is the only path from a query string to an ORDER BY, and the value
+ * is never interpolated: an unknown name is refused by `librarySortOrder`
+ * below, so there is no sanitised-column-name path here — there is an *absent*
+ * one, which is the version that survives refactoring (`lib/sorting.ts`).
+ *
+ * **The types order by their own semantics, not by their rendered label:**
+ * `size` is `size_bytes`, so it orders **numerically** rather than by the
+ * humanised «١٢ ميغابايت» the cell shows; `published` is a timestamp, so it
+ * orders **chronologically**; `title` and `branch` are natively `ar-x-icu`
+ * collated columns (TD-6a), so Arabic orders correctly with no per-query
+ * COLLATE (§20 rule 13).
+ *
+ * **`kind` and `visibility` are absent deliberately.** Both are enums whose
+ * alphabetical order is not their meaningful one — the same reasoning that kept
+ * `account_status` off المستخدمون — and both already have a filter, which is
+ * the control a reader actually wants.
+ */
+const LIBRARY_SORT_COLUMNS: Record<string, Prisma.Sql> = {
+  title: Prisma.sql`c."title"`,
+  published: Prisma.sql`c."created_at"`,
+  size: Prisma.sql`c."size_bytes"`,
+  branch: Prisma.sql`b."name"`,
+};
+
+/**
+ * Resolves the request's sort into an ORDER BY fragment.
+ *
+ * **NULLS LAST in both directions**, deliberately: a Global item has no branch
+ * and an absent value is not «smallest», so rows with nothing to order by sit
+ * at the end whichever way the reader is looking. The `id` tie-break is what
+ * keeps offset pagination deterministic — without it two rows sharing a value
+ * have no defined relative position and one can appear on two pages or none.
+ */
+function librarySortOrder(filters: LibraryFilters): Prisma.Sql {
+  const { sortBy, sortDir } = filters;
+  if (sortDir !== undefined && sortDir !== 'asc' && sortDir !== 'desc') {
+    throw new AppError('VALIDATION_FAILED', 'sort_dir must be asc or desc', {
+      issues: [{ path: 'sort_dir', message: "expected 'asc' or 'desc'" }],
+    });
+  }
+  if (sortBy === undefined) {
+    if (sortDir !== undefined) {
+      throw new AppError('VALIDATION_FAILED', 'sort_dir requires sort_by', {
+        issues: [{ path: 'sort_by', message: 'required when sort_dir is given' }],
+      });
+    }
+    return Prisma.sql``;
+  }
+  const column = Object.prototype.hasOwnProperty.call(LIBRARY_SORT_COLUMNS, sortBy)
+    ? LIBRARY_SORT_COLUMNS[sortBy]
+    : undefined;
+  if (column === undefined) {
+    throw new AppError('VALIDATION_FAILED', `cannot sort by ${sortBy}`, {
+      issues: [
+        { path: 'sort_by', message: `expected one of: ${Object.keys(LIBRARY_SORT_COLUMNS).join(', ')}` },
+      ],
+    });
+  }
+  return sortDir === 'desc'
+    ? Prisma.sql`${column} DESC NULLS LAST, c."id" ASC,`
+    : Prisma.sql`${column} ASC NULLS LAST, c."id" ASC,`;
 }
 
 export interface LibraryItem {
@@ -323,9 +392,13 @@ export async function listLibrary(
       JOIN "academic_year" y  ON y."id"  = c."academic_year_id"
       LEFT JOIN "branch" b    ON b."id"  = c."branch_id"
       ${where}
-      -- Newest first within each bucket; the title is the tie-break and is
+      -- **The reader's sort comes FIRST, then the bucket.** R76's ordering is
+      -- what she asked for; the bucket is the default grouping she gets when
+      -- she asked for nothing. Leaving the bucket ahead of it would make every
+      -- header click look broken — the rows would regroup and barely move.
+      -- Newest first within each bucket otherwise; the title tie-break is
       -- natively ar-x-icu collated (TD-6a), so no per-query COLLATE (§20 r13).
-      ORDER BY ${bucket} ASC, c."created_at" DESC, c."title" ASC
+      ORDER BY ${librarySortOrder(filters)} ${bucket} ASC, c."created_at" DESC, c."title" ASC
       LIMIT ${window.take} OFFSET ${window.skip}`,
     prisma.$queryRaw<{ total: bigint }[]>`
       SELECT COUNT(*)::bigint AS "total" FROM "educational_content" c ${where}`,

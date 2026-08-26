@@ -253,11 +253,25 @@ the current set:
 | حلقات المواد | `name` · `level` · `subject` (R78) |
 | المستخدمون | `name` · `created_at` |
 | المستفيدات | `student` · `level` · `branch` |
+| **المؤطِّرات** *(§6)* | `name` — the one column `/admin/users` owns |
+| **طلبات الانضمام** *(§6)* | `applicants` · `submitted` |
+| **الجدولة** *(§6)* | `type` · `title` · `when` · `branch` — **client-side** |
+| **مكتبة المحتوى** *(§6)* | `title` · `branch` · `size` · `published` |
+| **نقاط الامتحانات** *(§6)* | `title` · `date` · `level` · `subject` — the exam LIST |
+| **إدخال الحفظ** *(§6)* | `name` — the roster, **client-side** |
 
 **Deliberately not sortable, and the reason matters more than the list.** A
 grade sheet, a Quran log editor and the Hijri month editor hold **live form
 controls bound to per-row draft state** — reordering them mid-edit would move a
-reader's own unsaved work under them. A Level's surahs and a Level's subjects are
+reader's own unsaved work under them.
+
+> **§6 narrowed this, and the narrowing is the rule now (Owner, 2026-08-26).**
+> *«Sorting must not reorder draft-bearing rows underneath the user while she is
+> actively editing them»* — which is **not** a general exemption for any table
+> that happens to contain controls. Both `نقاط الامتحانات` and `إدخال الحفظ`
+> carry a **selection table beside an editor**: the selection table now sorts,
+> the editor still does not. A table with controls but no per-row draft state
+> has no claim on this exclusion. A Level's surahs and a Level's subjects are
 **assignment screens** whose order is the curriculum's, not a reader's. And a
 student's own grades and progress are read in the order the domain gives them.
 
@@ -266,6 +280,20 @@ order (`active`, `pending`, `suspended`) is not its meaningful one, so the colum
 would look ordered and be arbitrary — the status **filter** already answers the
 question a reader actually has. That is the general test: **a column is sortable
 when its ordering means something, not when the data happens to permit one.**
+
+**Server-side or client-side is decided by the DATASET, not by convenience.**
+Anything the server paginates sorts on the server — `lib/sorting.ts`, whose
+allow-list refuses an unknown field and whose resolved order always ends in `id`
+so offset pagination stays deterministic. Two lists are genuinely the client's:
+`الجدولة` is a **merge of three sources** assembled in `adapters/scheduling.ts`
+with no single endpoint to order, and the `إدخال الحفظ` roster is answered
+whole and unpaginated. Those use `lib/sort-rows.ts`, which is the same rule
+expressed client-side — typed accessors so a date sorts chronologically and a
+size numerically rather than by its rendered label, `Intl.Collator('ar')` as the
+counterpart of the database's native `ar-x-icu`, absent values last in **both**
+directions, and a stable sort so ties keep the list's own order. **It must never
+be used to reorder a page of a paginated collection** — that is sorting one page
+and presenting it as the collection's order.
 
 > [`SRS R76`] · `components/ui/reorderable.ts` (the rules, as pure functions,
 > because this project's component tests have no layout engine) ·

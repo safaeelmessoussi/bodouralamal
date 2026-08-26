@@ -49,9 +49,10 @@ import {
 import { Button } from '../../components/ui/button.js';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
 import {
-  DataTable,
   type Column,
+  DataTable,
   type RowAction,
+  type SortState,
   type TableStatus,
 } from '../../components/ui/data-table.js';
 import { FormDialog } from '../../components/ui/form-dialog.js';
@@ -63,6 +64,7 @@ import type { StaffingPeriod } from '../../components/scheduling/staffing-period
 import { SelectField } from '../../components/ui/field.js';
 import { useTeachingCandidates } from '../../hooks/use-teaching-candidates.js';
 import { t } from '../../i18n/index.js';
+import { sortRows } from '../../lib/sort-rows.js';
 import { ApiError } from '../../lib/api.js';
 import { Feedback } from '../../components/ui/feedback.js';
 
@@ -180,6 +182,14 @@ export function SchedulingPage(): ReactNode {
 
 
   const [items, setItems] = useState<SchedulingItem[]>([]);
+  /**
+   * R76 — **client-side, and that is the architecture rather than a shortcut.**
+   * `listSchedulingItems` MERGES three sources (classes, events, exams) and
+   * already orders the result here; there is no single endpoint to sort. The
+   * merge is bounded and the table is not server-paginated, so ordering what
+   * the page holds IS ordering the collection.
+   */
+  const [sort, setSort] = useState<SortState | null>(null);
   const [truncated, setTruncated] = useState(false);
   const [status, setStatus] = useState<TableStatus>('loading');
   const [notice, setNotice] = useState<string | null>(null);
@@ -292,6 +302,7 @@ export function SchedulingPage(): ReactNode {
   const columns: Column<SchedulingItem>[] = [
     {
       key: 'type',
+      sortKey: 'type',
       header: t('scheduling.itemType'),
       // The badge carries the same colour the calendar chip does, from the same
       // token — an exam is recognisable at a glance on either surface.
@@ -299,6 +310,7 @@ export function SchedulingPage(): ReactNode {
     },
     {
       key: 'title',
+      sortKey: 'title',
       header: t('scheduling.title'),
       // A class is named by its Subject and an activity by its title; either can
       // be absent, and the fallback is a localized word rather than a blank cell
@@ -318,6 +330,8 @@ export function SchedulingPage(): ReactNode {
     },
     {
       key: 'when',
+      // The date/time VALUE, composed below — never the rendered label.
+      sortKey: 'when',
       header: t('admin.schedules.time'),
       cell: (r) =>
         r.startTime && r.endTime ? (
@@ -334,6 +348,7 @@ export function SchedulingPage(): ReactNode {
     },
     {
       key: 'branch',
+      sortKey: 'branch',
       header: t('admin.schedules.branch'),
       secondary: true,
       cell: (r) => r.branchName ?? <span className="muted">—</span>,
@@ -418,7 +433,18 @@ export function SchedulingPage(): ReactNode {
           <DataTable
             caption={t('admin.nav.scheduling')}
             columns={columns}
-            rows={items}
+            rows={sortRows(items, sort, {
+              // **Semantic values, never the rendered Arabic label.** `when`
+              // composes date + wall-clock time so two items on one day order
+              // by the clock; a null time is an all-day item and sorts by the
+              // date alone rather than being treated as absent.
+              type: (i) => i.type,
+              title: (i) => i.title,
+              when: (i) => (i.startDate === null ? null : `${i.startDate}T${i.startTime ?? '00:00'}`),
+              branch: (i) => i.branchName,
+            })}
+            sort={sort}
+            onSort={setSort}
             rowKey={(r) => `${r.type}:${r.id}`}
             status={status}
             actions={actions}

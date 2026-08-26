@@ -680,3 +680,49 @@ describe("an exam is restorable, and comes back whole (R59.3)", () => {
     expect(row?.deletedAt).not.toBeNull();
   });
 });
+
+/**
+ * **§6 — the exam list sorts on the server, against its own allow-list** (R76).
+ *
+ * The list is what نقاط الامتحانات selects from; the grade sheet beneath it is
+ * never reordered, because it holds per-row draft scores.
+ */
+describe("GET /exams — R76 sorting", () => {
+  it("orders by date chronologically, and reverses", async () => {
+    const early = await createExam({ date: "2099-03-01" });
+    const late = await createExam({ date: "2099-09-01" });
+
+    const asc = await call("GET", "/exams?sort_by=date&sort_dir=asc&page_size=100", superAdmin);
+    const ascIds = (asc.body.data ?? []).map((r) => r["id"]);
+    expect(ascIds.indexOf(early)).toBeLessThan(ascIds.indexOf(late));
+
+    const desc = await call("GET", "/exams?sort_by=date&sort_dir=desc&page_size=100", superAdmin);
+    const descIds = (desc.body.data ?? []).map((r) => r["id"]);
+    expect(descIds.indexOf(late)).toBeLessThan(descIds.indexOf(early));
+  });
+
+  it("REFUSES a field outside the allow-list rather than ignoring it", async () => {
+    // Silently falling back would make a typo look like a working sort, and
+    // would hide a client sending a column name it should not know.
+    const res = await call("GET", "/exams?sort_by=max_grade", superAdmin);
+    expect(res.status).toBe(400);
+    expect(res.body.error?.code).toBe("VALIDATION_FAILED");
+  });
+
+  it("refuses a direction with nothing to apply it to", async () => {
+    const res = await call("GET", "/exams?sort_dir=asc", superAdmin);
+    expect(res.status).toBe(400);
+  });
+
+  it("does not widen scope — a sort is an ORDER, never a permission", async () => {
+    // The branch filter still narrows exactly as it did unsorted.
+    const sorted = await call(
+      "GET",
+      `/exams?branch_id=${branchA}&sort_by=title&sort_dir=desc&page_size=100`,
+      superAdmin,
+    );
+    const ids = (sorted.body.data ?? []).map((r) => r["id"]);
+    const elsewhere = await createExam({ date: "2099-05-11", branch_id: branchB, room_id: roomB });
+    expect(ids).not.toContain(elsewhere);
+  });
+});

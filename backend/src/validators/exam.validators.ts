@@ -101,4 +101,9 @@ export const listExamsQuerySchema = z.object({
   level_id: uuid.optional(),
   from: z.coerce.date().optional(),
   to: z.coerce.date().optional(),
+  // R76 — the sort is validated against the endpoint's own allow-list in
+  // `resolveSort`, which refuses an unknown field rather than ignoring it. The
+  // schema only has to let the two names through.
+  sort_by: z.string().optional(),
+  sort_dir: z.string().optional(),
 });
