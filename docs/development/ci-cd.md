@@ -6,13 +6,13 @@ GitHub Actions, four parallel jobs, on every push to `develop`/`main` and on eve
 request.
 
 ```
-guards      nineteen dependency-free guard scripts — mechanically checkable repository rules
+guards      twenty dependency-free guard scripts — mechanically checkable repository rules
 contract    regenerate the OpenAPI document, fail on drift, check conformance
 backend     lint · exact typecheck · default tests · production build
 frontend    lint · exact typecheck · tests · production build
 ```
 
-The contract job runs the remaining two guard scripts, so **all twenty-one committed
+The contract job runs the remaining two guard scripts, so **all twenty-two committed
 `scripts/ci/check-*.sh` checks execute in CI**. They stay in the contract job because both
 operate on the generated OpenAPI artifact and that job already installs the backend
 dependencies needed to regenerate it.
@@ -34,6 +34,7 @@ Each exists because something went wrong, or would plausibly go wrong silently. 
 | `check-dialog-hidden-when-closed.sh` | A mounted native dialog whose author CSS defeats the browser rule hiding it while closed |
 | `check-progress-css.sh` | A progress fill using physical/direction-blind sizing, missing clipping or reduced-motion support, or an unloaded stylesheet |
 | `check-shared-layout.sh` | The shared page header redefined per page, a second button system in CSS, or the header losing its two-column grid |
+| `check-logo-alpha.sh` | A hero logo matted on white — semi-transparent edges near-white, so it halos on the tinted hero panel — or with too little anti-aliasing to avoid jagged edges at hero size |
 | `check-security-headers.sh` | An Nginx location declaring its own header set but dropping HSTS — `add_header` does not inherit, so the header is silently absent on the wire while the configuration still reads as if it were set |
 | `check-association-terminology.sh` | Superseded Arabic role/person vocabulary returning to the user-facing catalogue |
 | `check-western-digits.sh` | Arabic-Indic digit conversion or rendered literals where the interface requires Western numerals |

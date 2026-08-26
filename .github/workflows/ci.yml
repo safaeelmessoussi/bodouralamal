@@ -45,6 +45,8 @@ jobs:
         run: bash scripts/ci/check-shared-layout.sh
       - name: Every Nginx header set carries HSTS
         run: bash scripts/ci/check-security-headers.sh
+      - name: The hero logo is a cleanly matted cut-out
+        run: bash scripts/ci/check-logo-alpha.sh
       - name: Association terminology remains consistent
         run: bash scripts/ci/check-association-terminology.sh
       - name: Arabic UI uses Western numerals

@@ -112,10 +112,13 @@
 }
 .hero__badge img {
   /* **Fills the circle without distorting.** `contain` is what guarantees the
-     second half: the logo is portrait and the badge is square, so any rule that
-     set both dimensions would stretch it. The image keeps its ratio and takes
-     whichever axis runs out first — the height, here — so the artwork reaches
-     the circle's edge with the padding as its only margin. */
+     second half: any rule setting both dimensions would stretch the artwork.
+     The image keeps its ratio and takes whichever axis runs out first, so it
+     reaches the circle's edge with the padding as its only margin.
+
+     The asset is square as of §3 (it was portrait), so both axes now run out
+     together — `contain` is no longer load-bearing for THIS file, and stays
+     because the rule is about not distorting whatever asset is placed here. */
   inline-size: 100%;
   block-size: 100%;
   object-fit: contain;

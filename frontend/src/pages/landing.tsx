@@ -113,8 +113,9 @@ function Hero(): ReactNode {
           <div className="hero__badge" aria-hidden="true">
             {/* The intrinsic size matches the asset, so the browser reserves the
                 right box before it loads and the hero does not shift (CLS). It
-                changed when the logo was cropped to its own artwork. */}
-            <img src="/logo-large.png" alt="" width={390} height={444} />
+                changed again when the artwork was replaced with a correctly
+                matted cut-out (§3) — square now, where it used to be portrait. */}
+            <img src="/logo-large.png" alt="" width={500} height={500} />
           </div>
         </div>
       </Container>
