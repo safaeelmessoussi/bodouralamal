@@ -1306,6 +1306,41 @@ was hiding behind it: the run went green on the first attempt.
   scoped by *branch* or *level* rather than by tag, and any suite whose `clear()` runs against
   rows it did not create.
 
+  **NARROWED by §E's before/after measurement (2026-08-26).** A fourteen-counter snapshot of
+  shared state taken either side of a full sweep now says exactly what the sweep destroys:
+
+  ```
+  4c4
+  < course_schedule_staff=2
+  > course_schedule_staff=0
+  ```
+
+  **One counter. Everything else — schedules, sessions, events, exams, branches, levels,
+  subjects, categories, content, users, the scheduling-type catalogue and every schedule's
+  visibility — is byte-identical.** That is a far smaller search than *"the sweep clears the
+  fixtures"*, and it is now a repeatable measurement rather than something noticed by accident:
+  `scripts/dev/` + the snapshot query in §E's report.
+
+  **It is an INTERACTION, not one suite.** The three suites that delete `course_schedule_staff`
+  by `userId` rather than by schedule were each run alone against seeded fixtures and each left
+  the two rows intact (`branch` 2→2, `consent` 2→2, `social-profile` 2→2). So the destruction
+  depends on state an earlier file leaves behind, which is exactly why it has survived several
+  passes.
+
+  **Two concrete mechanisms to rule in or out first**, both real in the current code:
+
+  1. `branch.integration.test.ts` deletes with `where: { userId: actorUserId ?? undefined }`, and
+     **Prisma treats an `undefined` filter value as *no filter at all*** — so if `clear()` ever
+     runs before `actorUserId` is assigned, that call is `deleteMany({})` against the whole
+     table. Running the file alone does not reach that state; running it after another file may.
+  2. `clearTeachingContext(prisma, tag)` deletes `courseScheduleStaff` by
+     `schedule.subject.name startsWith tag`. A caller passing an empty or over-broad tag sweeps
+     rows it never created.
+
+  **The fix belongs to its own section** and should include a guard, because the class has now
+  produced four incidents in one batch: this one, R110's whole-set reorder, §D's harness
+  splitting a development schedule, and the stray catalogue row a harness created through the UI.
+
 ## OWNER RATIFICATIONS OD-01 … OD-07 — 2026-08-26 · all answered, none open
 
 **OD-01 · Catalogue management — Admin AND Super Admin.** Admin may manage ordinary
@@ -1527,7 +1562,7 @@ manual Production launch data · no-PII audit · §18/M8 rehearsal. **Production
 | 1 | **NEW B §C** backend visibility | feature + migration | design ratified; precondition audit below |
 | 2 | ~~**NEW H** scheduling-type catalogue~~ **DONE (R110)** | reconciliation → feature | precedes §D, as planned — §D now builds on a picker that already reads the catalogue |
 | 3 | ~~**NEW B §D** frontend Add/Edit + scope prompt~~ **DONE 2026-08-26** | feature | R50's scope prompt already shipped, so the tier joined the fields those three scopes already carry — no second recurrence mechanism |
-| 4 | **NEW B §E** full authorization matrix | tests | closes NEW B |
+| 4 | ~~**NEW B §E** full authorization matrix~~ **DONE 2026-08-26 — NEW B is CLOSED** | tests | 35 HTTP assertions; proven against four reintroduced defects; shared dev state measured identical before/after |
 | 5 | **NEW D** Teacher content-library lookups | **defect (backend authz)** | standalone; unblocks Teacher content work |
 | 6 | **NEW E** الملف التدريسي false dirty | **defect** | folded into §9A–D/F acceptance |
 | 7 | **§8** table columns audit | feature | needs NEW I fields to exist first |
