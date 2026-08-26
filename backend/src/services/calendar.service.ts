@@ -26,6 +26,11 @@ import {
   eventsStaffedBy,
   teacherEventScope,
 } from "../policies/roster-resolution.js";
+import {
+  eventResponsibleWhere,
+  examTierWhere,
+  sessionTierWhere,
+} from "../policies/scheduling-visibility.js";
 
 /**
  * Calendar read (SRS §4.4, TD-3.4, TD-11, §19.2).
@@ -217,17 +222,28 @@ const isTeacher = (a: CalendarActor | null) =>
   a !== null && scope.hasRole(a.roleScopes, "teacher");
 
 /**
- * Builds the §4.4 visibility filter for Events.
+ * Builds the visibility filter for Events.
  *
- * The tiers are deliberately not symmetrical, and the asymmetries are the
- * SRS's own accepted decisions rather than oversights:
+ * **The `hidden` arm is R109's and lives in `policies/scheduling-visibility.ts`**
+ * — one rule for all three kinds of scheduling item, so a class, an activity and
+ * a sitting cannot drift apart on who owns a hidden one. Everything else here is
+ * §4.4's, unchanged.
+ *
+ * The remaining asymmetries are the SRS's own accepted decisions rather than
+ * oversights:
  *
  *   - **Private is NOT filtered by a Student's own branch or group** (§4.4
  *     records this as a deliberate trade-off, Risk R-6).
- *   - **Hidden is visible to ALL Admins regardless of branch scope**, while
- *     Private is limited to staff within their scope.
+ *   - Private is limited to staff within their scope, so a scoped Admin sees
+ *     *less* private material than any approved beneficiary does. Accepted,
+ *     and unchanged by R109.
  *   - A **Pending** user sees the public tier only, exactly like an anonymous
  *     visitor — the account exists but grants nothing (TD-1).
+ *
+ * **What R109 REMOVED:** *"Hidden is visible to ALL Admins regardless of branch
+ * scope"*. A hidden Event is now read by the person responsible for it and by
+ * Super Admins, and by nobody else. This is the one place in the revision where
+ * somebody loses reach they have today, and it is deliberate.
  */
 async function visibilityFilter(
   prisma: PrismaClient,
@@ -242,21 +258,25 @@ async function visibilityFilter(
 
   if (isAdmin(actor)) {
     const reachable = scope.reachableBranches(actor.roleScopes, ["admin"]);
-    if (reachable === null) return {};
     return {
       OR: [
         { visibility: "public" },
-        // Hidden: all Admins, regardless of branch scope (§4.4, accepted).
-        { visibility: "hidden" },
+        // **R109 — hidden is the responsible person's, not every Admin's.**
+        // An all-branches Admin used to fall out of this function with `{}`,
+        // which returned every hidden Event in the platform; she now reads the
+        // hidden ones she answers for, exactly as a branch-scoped Admin does.
+        eventResponsibleWhere(actor),
         // Private: staff within their branch scope. A global event (no branch
         // rows at all) is in scope for everyone by construction.
-        {
-          visibility: "private",
-          OR: [
-            { branchScopes: { some: { branchId: { in: reachable } } } },
-            { branchScopes: { none: {} } },
-          ],
-        },
+        reachable === null
+          ? { visibility: "private" }
+          : {
+              visibility: "private",
+              OR: [
+                { branchScopes: { some: { branchId: { in: reachable } } } },
+                { branchScopes: { none: {} } },
+              ],
+            },
       ],
     };
   }
@@ -274,7 +294,7 @@ async function visibilityFilter(
       administrativeGroupIds: groupIds,
     } = await teacherEventScope(prisma, actor.userId);
 
-    // §4.4: a Teacher sees Hidden events whose scope intersects their teaching
+    // §4.4: a Teacher sees Private events whose scope intersects their teaching
     // scope — one of their Administrative Groups, or the level, category or
     // branch of anything they teach, or a global event — and never one
     // belonging exclusively to groups they do not teach.
@@ -282,6 +302,8 @@ async function visibilityFilter(
     // or not her teaching scope reaches it: an assistant at a celebration for
     // another branch's group must still find it in her own calendar. **Both
     // positions see; only `responsible` may edit** (R71.3, `event.service.ts`).
+    // **R109 narrowed the HIDDEN tier out of this union entirely** — scope
+    // intersection no longer reaches a hidden event, ownership does.
     const staffed = [...(await eventsStaffedBy(prisma, actor.userId)).keys()];
 
     const intersects = {
@@ -311,7 +333,7 @@ async function visibilityFilter(
       OR: [
         { visibility: "public" },
         { visibility: "private", ...intersects },
-        { visibility: "hidden", ...intersects },
+        eventResponsibleWhere(actor),
       ],
     };
   }
@@ -418,7 +440,9 @@ function sessionOccurrence(
     date: iso(session.date),
     startTime: hhmm(session.startTime),
     endTime: hhmm(session.endTime),
-    visibility: null,
+    // R109 — the occurrence's OWN tier, snapshotted at materialization. It was
+    // `null` because a حصة had no tier at all; it is never `null` now.
+    visibility: session.visibility,
     branchId: sch.branchId,
     // A Session has no description of its own; the audience label that used to
     // be smuggled in here now has its own field.
@@ -796,6 +820,10 @@ export async function readCalendar(
             deletedAt: null,
             mode: "physical",
             date: { gte: from, lte: query.to },
+            // R109 — the same tier model the Events above pass, at the caller's
+            // own tier. An anonymous visitor reads public sittings and nothing
+            // else.
+            ...examTierWhere(actor),
             ...(query.branchId ? { branchId: query.branchId } : {}),
             ...(query.levelId ? { levelId: query.levelId } : {}),
             ...(query.subjectId ? { subjectId: query.subjectId } : {}),
@@ -834,9 +862,10 @@ export async function readCalendar(
       date: iso(exam.date),
       startTime: hhmm(exam.startTime),
       endTime: hhmm(exam.endTime),
-      // An exam has no visibility tier of its own (§4.6): it is staff-scheduled
-      // and appears to the audience that can see the level it belongs to.
-      visibility: null,
+      // **R109 supersedes §4.6's *"an exam has no visibility tier of its
+      // own"***. That clause described the audience — who the paper is for —
+      // and answered nothing about whether the sitting is announced.
+      visibility: exam.visibility,
       branchId: exam.branchId,
       description: exam.description,
       // Not a recurrence — one sitting, one date. `null` rather than `'none'`,
@@ -882,9 +911,12 @@ export async function readCalendar(
   //    after the schedule changed hands. Reading the schedule's staff here
   //    would have silently rewritten history on every calendar load.
   //
-  // **Sessions are PUBLIC (§4.4, Revision 43)** — anonymous visitors browse the
-  // timetable. That reverses the retired rule, under which a Group timetable was
-  // visible only to signed-in users.
+  // **Sessions WERE unconditionally public (§4.4, Revision 43)** — anonymous
+  // visitors browse the timetable. **R109 supersedes that**: a حصة now carries a
+  // tier of its own, and every occurrence that existed before the revision was
+  // backfilled `public`, so the browsable timetable is unchanged in fact and
+  // becomes a decision an administrator can take rather than a property of the
+  // model.
   // R84 — asking for activities alone means no class occurrence belongs in the
   // answer. Skipping the query beats filtering its result: the rows are never
   // read at all.
@@ -893,6 +925,10 @@ export async function readCalendar(
       where: {
         deletedAt: null,
         date: { gte: from, lte: query.to },
+        // R109 — at the caller's tier, exactly as the Events and Exams above.
+        // The tier still applies on a personal calendar: being enrolled in the
+        // class does not widen what she may see of it.
+        ...sessionTierWhere(actor),
         // **R83.1** — the ordinary projection is what is ON. A history screen
         // passes `include_cancelled` and gets them back; nothing else does.
         ...(query.includeCancelled === true
@@ -1154,10 +1190,13 @@ export interface SessionPage {
  *   library list and the session page apply. A caller who may not see the item
  *   receives `404`, never an empty list: an empty list would confirm the id
  *   exists (§20 rule 17).
- * * **The sessions** are the public timetable. R43 made occurrences browsable by
- *   anonymous visitors, and this returns the same `sessionOccurrence` projection
- *   `GET /calendar` and the session page already return — so it exposes nothing
- *   a caller could not read by opening the calendar.
+ * * **The sessions** pass R109's tier — `sessionTierWhere`, the same fragment
+ *   `GET /calendar` composes — so this returns exactly the occurrences the
+ *   caller could already have read by opening the calendar, and no more. Before
+ *   R109 a حصة had no tier and the sentence here was *"the sessions are the
+ *   public timetable"*; a hidden occurrence would have leaked through this
+ *   projection the moment the tier existed, which is why the gate is added in
+ *   the same revision that adds the column.
  *
  * That asymmetry is the specification's, not this function's: *"an anonymous
  * visitor sees a public session's existence and details, never its private
@@ -1184,7 +1223,14 @@ export async function listSessionsForContent(
     where: {
       contentId,
       deletedAt: null,
-      session: { deletedAt: null, schedule: { deletedAt: null } },
+      session: {
+        deletedAt: null,
+        schedule: { deletedAt: null },
+        // R109 — a hidden occurrence is not named here to a caller who may not
+        // see it. Naming it would report that it exists (§20 rule 17), which is
+        // precisely what the tier exists to prevent.
+        ...sessionTierWhere(actor),
+      },
     },
     select: { session: { include: SESSION_OCCURRENCE_INCLUDE } },
     // Most recent first: a reader asking *where was this used* is usually asking
@@ -1209,7 +1255,17 @@ export async function readSessionPage(
   sessionId: string,
 ): Promise<SessionPage> {
   const session = await prisma.session.findFirst({
-    where: { id: sessionId, deletedAt: null, schedule: { deletedAt: null } },
+    where: {
+      id: sessionId,
+      deletedAt: null,
+      schedule: { deletedAt: null },
+      // **R109 — the tier is part of the lookup, not a check after it.** A
+      // caller who may not read this occurrence gets the same `404` a
+      // nonexistent id gets: a distinguishable `403` would confirm that the
+      // hidden class exists, which §20 rule 17 forbids and which is the whole
+      // point of the tier.
+      ...sessionTierWhere(actor),
+    },
     include: SESSION_OCCURRENCE_INCLUDE,
   });
   if (!session) throw new AppError("NOT_FOUND", "no such session");

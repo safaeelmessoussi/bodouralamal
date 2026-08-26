@@ -40,6 +40,10 @@ const SESSION_KEYS = [
   "start_time",
   "status",
   "version",
+  // **R109 — this occurrence's OWN visibility tier**, on exactly the footing
+  // `delivery_mode` above has: snapshotted at materialization and decidable for
+  // one date. The list is sorted, so it belongs after `version`.
+  "visibility",
 ];
 const LINK_KEYS = ["educational_content_id", "id", "session_id"];
 

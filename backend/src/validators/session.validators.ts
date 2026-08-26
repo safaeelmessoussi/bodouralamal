@@ -6,6 +6,7 @@ import {
   checkDelivery,
   deliveryMode,
   onlineMediaMode,
+  visibility,
   wallClock,
 } from "./course-schedule.validators.js";
 
@@ -48,6 +49,17 @@ export const overrideSessionSchema = z
      */
     delivery_mode: deliveryMode.optional(),
     online_media_mode: onlineMediaMode.nullable().optional(),
+    /**
+     * **R109 — this occurrence's own tier**, on exactly the footing `room_id`
+     * has. Supplying it decides this date and nothing else, and the `overridden`
+     * flag `session.override` already sets is what protects it from the next
+     * resync. There is no separate "hide one occurrence" endpoint, because this
+     * one represents it.
+     *
+     * The same shared enum the schedule boundary uses — one vocabulary, one
+     * copy, so an occurrence can never reach a tier a schedule could not.
+     */
+    visibility: visibility.optional(),
     /**
      * Supplying this **replaces** this occurrence's staffing snapshot; omitting
      * it leaves the snapshot untouched. An empty array is therefore a real

@@ -31,6 +31,12 @@ jobs:
       # deploy. See docs/architecture/database.md.
       - name: Migration ordering (TD-6a)
         run: bash scripts/ci/check-migration-order.sh
+      # A guard that has never failed is indistinguishable from no guard. This
+      # one was restated in R109 after a false positive, so it now carries a
+      # self-test that reconstructs the R36.1 defect and requires the guard to
+      # report it — and requires it NOT to report the correctly ordered pair.
+      - name: Migration-ordering guard proves itself against R36.1
+        run: bash scripts/ci/check-migration-order.selftest.sh
       - name: Prisma mass-write filter guard
         run: bash scripts/ci/check-prisma-mass-write.sh
       - name: Header navigation exclusivity (burger vs horizontal nav)

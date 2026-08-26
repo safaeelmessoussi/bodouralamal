@@ -118,6 +118,14 @@ const staff = z
 export const deliveryMode = z.enum(["in_person", "online"]);
 export const onlineMediaMode = z.enum(["audio_video", "audio_only"]);
 
+/**
+ * **R109 — the shared visibility vocabulary** (§4.4), one enum for every
+ * scheduling kind. `Event`, `RecurringCourseSchedule`, `Session` and `Exam` all
+ * take the same three values, so they take the same schema: a fourth spelling
+ * of the same list is the drift this project has paid for every time.
+ */
+export const visibility = z.enum(["public", "private", "hidden"]);
+
 export interface DeliveryFields {
   delivery_mode?: "in_person" | "online" | undefined;
   online_media_mode?: "audio_video" | "audio_only" | null | undefined;
@@ -187,6 +195,10 @@ export const createCourseScheduleSchema = z
      *  what every class the association has ever scheduled actually was. */
     delivery_mode: deliveryMode.optional(),
     online_media_mode: onlineMediaMode.nullable().optional(),
+    /** R109 — the DEFAULT tier for the Sessions this schedule materializes.
+     *  Optional and `public` when absent, which is the column's default and what
+     *  every class the association has ever scheduled actually was. */
+    visibility: visibility.optional(),
     start_time: wallClock,
     end_time: wallClock,
     recurrence,
@@ -234,6 +246,10 @@ export const updateCourseScheduleSchema = z
      *  through the ordinary resync. The past keeps what it was delivered as. */
     delivery_mode: deliveryMode.optional(),
     online_media_mode: onlineMediaMode.nullable().optional(),
+    /** R109 — editable, and it rewrites the FUTURE un-protected occurrences
+     *  through the ordinary resync. The past keeps the tier it was materialized
+     *  with. **Omitting it leaves the tier alone**; it is never a reset. */
+    visibility: visibility.optional(),
     start_time: wallClock.optional(),
     end_time: wallClock.optional(),
     recurrence: recurrence.optional(),

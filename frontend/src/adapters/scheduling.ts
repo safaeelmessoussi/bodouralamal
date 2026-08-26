@@ -86,10 +86,13 @@ export interface SchedulingItem {
   /**
    * **The stored visibility tier, carried so Edit can hydrate it** (NEW B §A).
    *
-   * `null` for the kinds that do not yet own one — a class and an exam gain
-   * theirs in NEW B §C. `null` is *"this kind has no tier"*, which is a
-   * different fact from any of the three tiers and must not be confused with
-   * the creation default.
+   * **`null` here now means *not yet SURFACED*, not *no tier*.** R109 (NEW B §C)
+   * gave a class and a sitting a real tier on the server; **NEW B §D** is what
+   * maps it here and adds the control. Until then `null` is still the honest
+   * value for those two kinds, and it is safe: `saveSchedulingItem` sends
+   * `visibility` on the **Event payload only**, so a class or an exam cannot be
+   * republished by an edit that never mentioned its tier — which is precisely
+   * the widening §A found on the نشاط form.
    */
   visibility: string | null;
   staffCount: number | null;
@@ -200,8 +203,9 @@ export function fromSchedule(row: CourseSchedule): SchedulingItem {
     // R57 — the schedule's own name. The Subject is still shown, in its own
     // column: it identifies the class, the title names it.
     title: row.title,
-    // A class owns no tier yet — NEW B §C gives RecurringCourseSchedule and its
-    // materialized Sessions one. `null` is «this kind has no tier», never a value.
+    // R109 gave the schedule and its Sessions a real tier; **NEW B §D** maps it
+    // and adds the control. `null` is «not surfaced here yet», and the write path
+    // omits the key for this kind, so nothing is silently republished meanwhile.
     visibility: null,
     description: row.description,
     startDate: row.anchor_date,
@@ -294,7 +298,8 @@ function fromExam(row: Exam): SchedulingItem {
     type: 'exam',
     id: row.id,
     title: row.title,
-    // §4.6 gives an exam no tier of its own today; NEW B §C changes that.
+    // R109 gave a sitting a tier of its own, superseding §4.6; **NEW B §D** maps
+    // it and adds the control. Same reasoning as the class above.
     visibility: null,
     description: row.description,
     startDate: row.date,

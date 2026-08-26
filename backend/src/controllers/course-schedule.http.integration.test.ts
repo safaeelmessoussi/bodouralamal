@@ -60,6 +60,10 @@ const SCHEDULE_KEYS = [
   "teaching_mode",
   "title",
   "version",
+  // **R109 — the schedule's DEFAULT tier for the Sessions it materializes**,
+  // on exactly the footing `delivery_mode` above has. Listed deliberately: this
+  // set is asserted exactly, so a field cannot join the contract by accident.
+  "visibility",
   "weekdays",
 ];
 /** A write nests the schedule beside what it did to the timetable. */

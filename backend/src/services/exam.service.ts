@@ -114,6 +114,17 @@ export interface PhysicalExamInput {
   roomId: string;
   /** `null` is **the whole Level** (R58), never "no target". */
   administrativeGroupId?: string | null;
+  /**
+   * **R109 — the sitting's own visibility tier**, superseding §4.6's *"an exam
+   * has no visibility tier of its own"*. That clause described the **audience**
+   * — who the paper is for — and answered nothing about whether the arrangement
+   * is announced. Absent is `public`, the column's default and what every exam
+   * on this platform has been.
+   *
+   * One column and no snapshot: a sitting materializes nothing (§4.6, R58), so
+   * there is no template/occurrence pair to keep in step.
+   */
+  visibility?: 'public' | 'private' | 'hidden';
   staff?: ExamStaffInput[];
 }
 
@@ -218,6 +229,9 @@ export async function createPhysicalExam(
         branchId: input.branchId,
         roomId: input.roomId,
         administrativeGroupId: input.administrativeGroupId ?? null,
+        // R109 — absent is the column's default, so the key is omitted rather
+        // than written as a literal: one place decides what "unchosen" means.
+        ...(input.visibility === undefined ? {} : { visibility: input.visibility }),
         // §4.6's question array belongs to the ONLINE mode. A physical sitting's
         // paper is not in the platform, so this stays empty rather than holding
         // a placeholder that would read as an exam somebody forgot to write.
@@ -238,7 +252,14 @@ export async function createPhysicalExam(
       actionType: 'exam.create',
       targetEntity: 'Exam',
       targetId: exam.id,
-      detail: { mode: 'physical', branch_id: input.branchId, date: input.date.toISOString() },
+      detail: {
+        mode: 'physical',
+        branch_id: input.branchId,
+        date: input.date.toISOString(),
+        // R109 — who may see this sitting is an access decision, and the record
+        // has to be able to answer *when, and on whose word*.
+        visibility: input.visibility ?? 'public',
+      },
     });
 
     return { id: exam.id };
@@ -345,6 +366,12 @@ export async function updatePhysicalExam(
         ...(input.administrativeGroupId === undefined
           ? {}
           : { administrativeGroupId: input.administrativeGroupId }),
+        // R109 — absent means *leave the tier as it is*, never *reset it to the
+        // default*. Collapsing those two would silently publish a hidden sitting
+        // on any unrelated edit — the shape NEW B §A found on the نشاط form,
+        // where the wrong value and the intended default are the same string and
+        // the widening is therefore invisible.
+        ...(input.visibility === undefined ? {} : { visibility: input.visibility }),
         version: { increment: 1 },
       },
     });

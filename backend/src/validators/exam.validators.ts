@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { uuid, version } from './common.js';
+import { visibility } from './course-schedule.validators.js';
 
 /**
  * The exam write boundary (§4.6 as amended by SRS Revision 58).
@@ -64,6 +65,12 @@ export const createExamSchema = z
     room_id: uuid,
     /** Absent or null is **the whole Level** (R58), never "no target". */
     administrative_group_id: uuid.nullable().optional(),
+    /**
+     * **R109 — the sitting's own tier**, superseding §4.6's *"an exam has no
+     * visibility tier of its own"*. The shared vocabulary, imported rather than
+     * respelled. Absent is `public`.
+     */
+    visibility: visibility.optional(),
     staff: staff.optional(),
   })
   .strict();
@@ -91,6 +98,8 @@ export const updateExamSchema = z
     end_time: wallClock.optional(),
     room_id: uuid.optional(),
     administrative_group_id: uuid.nullable().optional(),
+    /** R109 — editable. **Omitting it leaves the tier alone**, never resets it. */
+    visibility: visibility.optional(),
     staff: staff.optional(),
   })
   .strict();

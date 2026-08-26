@@ -3,6 +3,7 @@ import type {
   PrismaClient,
   RecurringCourseSchedule,
   TeachingMode,
+  Visibility,
 } from "../generated/prisma/client.js";
 import { AppError } from "../lib/errors.js";
 import {
@@ -265,6 +266,12 @@ export interface CourseScheduleInput {
    *  scheduled before this revision actually was. */
   deliveryMode?: Delivery["deliveryMode"] | undefined;
   onlineMediaMode?: Delivery["onlineMediaMode"] | undefined;
+  /**
+   * **R109 — the DEFAULT tier for every Session this schedule materializes.**
+   * Absent is `public`, which is the column's default and what every class the
+   * association has ever scheduled actually was.
+   */
+  visibility?: Visibility | undefined;
   startTime: Date;
   endTime: Date;
   recurrence: string;
@@ -646,6 +653,11 @@ export async function createCourseSchedule(
         roomId: delivery.roomId,
         deliveryMode: delivery.deliveryMode,
         onlineMediaMode: delivery.onlineMediaMode,
+        // R109 — absent is the column's default, so the key is omitted rather
+        // than written as a literal: one place decides what "unchosen" means.
+        ...(input.visibility === undefined
+          ? {}
+          : { visibility: input.visibility }),
         startTime: input.startTime,
         endTime: input.endTime,
         recurrence: input.recurrence as never,
@@ -714,6 +726,9 @@ export async function createCourseSchedule(
         room_id: delivery.roomId,
         delivery_mode: delivery.deliveryMode,
         online_media_mode: delivery.onlineMediaMode,
+        // R109 — who may see this class is an access decision, so the record has
+        // to be able to answer *when did it become hidden, and on whose word*.
+        visibility: input.visibility ?? "public",
         recurrence: input.recurrence,
         staff: staff.map((s) => ({ user_id: s.userId, position: s.position })),
         sessions_created: materialized.created,
@@ -773,6 +788,13 @@ export async function updateCourseSchedule(
     /** R97 — delivery moves as a unit; `policies/delivery.ts` resolves it. */
     deliveryMode?: Delivery["deliveryMode"] | undefined;
     onlineMediaMode?: Delivery["onlineMediaMode"] | undefined;
+    /**
+     * **R109 — editable, and it rewrites the FUTURE un-protected occurrences**
+     * through the ordinary resync, exactly as `deliveryMode` does. The past
+     * keeps the tier it was materialized with: publishing a class in June must
+     * not retroactively claim March's occurrences were public.
+     */
+    visibility?: Visibility | undefined;
     /** Required by `this_and_future` — the occurrence the split begins at. */
     fromDate?: Date;
   },
@@ -807,6 +829,10 @@ export async function updateCourseSchedule(
       // already online must not silently make it in-person.
       deliveryMode: true,
       onlineMediaMode: true,
+      // R109 — read so the audit row can say what the tier moved FROM. A
+      // visibility change is an access decision and *«it was public until
+      // Tuesday»* has to be answerable afterwards.
+      visibility: true,
       startTime: true,
       endTime: true,
       recurrence: true,
@@ -912,6 +938,13 @@ export async function updateCourseSchedule(
         roomId: delivery.roomId,
         deliveryMode: delivery.deliveryMode,
         onlineMediaMode: delivery.onlineMediaMode,
+        // R109 — absent means *leave the tier as it is*, never *reset it to the
+        // default*. That distinction is exactly the one NEW B §A found broken on
+        // the Event form, where the wrong value and the intended default were
+        // the same string and the widening was therefore invisible.
+        ...(data.visibility === undefined
+          ? {}
+          : { visibility: data.visibility }),
         ...(data.startTime === undefined ? {} : { startTime: data.startTime }),
         ...(data.endTime === undefined ? {} : { endTime: data.endTime }),
         ...(data.recurrence === undefined
@@ -1010,6 +1043,15 @@ export async function updateCourseSchedule(
         delivery_mode: delivery.deliveryMode,
         online_media_mode: delivery.onlineMediaMode,
         room_id: delivery.roomId,
+        // R109 — old→new, and only when it actually moved. A row that records
+        // the tier on every edit would bury the one edit that changed it.
+        ...(data.visibility !== undefined &&
+        data.visibility !== existing.visibility
+          ? {
+              visibility_from: existing.visibility,
+              visibility_to: data.visibility,
+            }
+          : {}),
       },
     });
 
@@ -1067,6 +1109,8 @@ async function splitCourseSchedule(
     effectiveUntil?: Date | null;
     deliveryMode?: Delivery["deliveryMode"] | undefined;
     onlineMediaMode?: Delivery["onlineMediaMode"] | undefined;
+    /** R109 — the successor's tier: this edit's, or the predecessor's. */
+    visibility?: Visibility | undefined;
     version: number;
   },
   now: Date,
@@ -1091,6 +1135,10 @@ async function splitCourseSchedule(
       // delivered unless this edit says otherwise.
       deliveryMode: true,
       onlineMediaMode: true,
+      // R109 — same reasoning, same sentence: the successor IS the same class.
+      // A split that did not carry the tier would silently publish the tail of
+      // a hidden series, which is a widening nobody asked for.
+      visibility: true,
       startTime: true,
       endTime: true,
       recurrence: true,
@@ -1169,6 +1217,7 @@ async function splitCourseSchedule(
       roomId: successorDelivery.roomId,
       deliveryMode: successorDelivery.deliveryMode,
       onlineMediaMode: successorDelivery.onlineMediaMode,
+      visibility: data.visibility ?? existing.visibility,
       startTime: data.startTime ?? existing.startTime,
       endTime: data.endTime ?? existing.endTime,
       // Cast to the Prisma enums: the caller's values are already validated by
@@ -1289,6 +1338,8 @@ async function splitCourseSchedule(
         // other scheduling write reports (§4.4).
         sessions_released: removable.length,
         sessions_left_alone: future.length - removable.length,
+        // R109 — the tier the tail of the series runs at from the split date on.
+        visibility: successorValues.visibility,
       },
     });
 
@@ -1447,6 +1498,9 @@ export async function listScheduleSessions(
         roomId: true,
         deliveryMode: true,
         onlineMediaMode: true,
+        // R109 — the occurrence's own tier, so the timetable can show which
+        // dates of a series were decided about individually.
+        visibility: true,
         version: true,
         // **`SessionStaff` carries NO period** (R91). The snapshot IS the
         // occurrence's own truth — who took this class — so a date on it would
@@ -1486,6 +1540,9 @@ export interface ScheduleSessionRow {
    *  occurrence editor opens on. */
   deliveryMode: string;
   onlineMediaMode: string | null;
+  /** R109 — this occurrence's own tier, snapshotted at materialization and
+   *  decidable for one date through `session.override`. */
+  visibility: string;
   status: string;
   /** R43.4 — *a human decided about this occurrence*, not *differs from the
    *  schedule*. What "this session only" leaves behind. */

@@ -56,6 +56,12 @@ export function override(prisma: PrismaClient) {
         ...(body.online_media_mode !== undefined
           ? { onlineMediaMode: body.online_media_mode }
           : {}),
+        // R109 — this occurrence's own tier. Absent leaves it untouched; the
+        // override still sets `overridden`, because the flag records that a
+        // human decided about this date at all.
+        ...(body.visibility !== undefined
+          ? { visibility: body.visibility }
+          : {}),
         // Absent leaves the snapshot untouched; an empty array is a real
         // instruction — *this session has no staff* — so the two must not
         // collapse into one another here.

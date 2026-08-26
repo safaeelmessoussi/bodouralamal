@@ -57,6 +57,16 @@ export interface MaterializableSchedule extends ScheduleRecurrence {
    */
   deliveryMode: "in_person" | "online";
   onlineMediaMode: "audio_video" | "audio_only" | null;
+  /**
+   * **R109 — the schedule's DEFAULT visibility tier**, snapshotted onto every
+   * occurrence this run creates or resyncs, on exactly the footing `roomId` and
+   * `deliveryMode` already have.
+   *
+   * A default is not history: a class hidden in November leaves October's
+   * occurrences saying what October actually was, and an occurrence somebody
+   * decided about individually is `overridden` and is never reached here at all.
+   */
+  visibility: "public" | "private" | "hidden";
   academicYearId: string;
   /**
    * Snapshot onto every future session this run touches (Revision 43.4).
@@ -190,6 +200,7 @@ export async function materializeSchedule(
         roomId: schedule.roomId,
         deliveryMode: schedule.deliveryMode,
         onlineMediaMode: schedule.onlineMediaMode,
+        visibility: schedule.visibility,
         status: "scheduled",
         overridden: false,
       },
@@ -221,6 +232,11 @@ export async function materializeSchedule(
         // one Thursday is in person»* survives an edit to the schedule.
         deliveryMode: schedule.deliveryMode,
         onlineMediaMode: schedule.onlineMediaMode,
+        // **R109 — future, un-protected occurrences follow the new tier**, and
+        // the `overridden` one never reaches this line: it is in `protectedIds`
+        // and was skipped above, which is precisely how *«this one Thursday
+        // stays hidden»* survives an edit that publishes the series.
+        visibility: schedule.visibility,
       },
     });
     // **The occurrence's own date decides, not the edit's** (R91). Resyncing
@@ -341,6 +357,9 @@ export async function loadSchedule(
       // and every occurrence of an online class would materialize in-person.
       deliveryMode: true,
       onlineMediaMode: true,
+      // R109 — without this the snapshot would fall back to the column default
+      // and every occurrence of a hidden class would materialize public.
+      visibility: true,
       academicYearId: true,
       recurrence: true,
       weekdays: true,

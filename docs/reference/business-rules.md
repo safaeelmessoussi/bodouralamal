@@ -141,8 +141,11 @@ wrongly signal level completion.
 ## Content and data
 
 ### BR-14
-**Visibility tiers.** Content and events have exactly three visibility states — public,
-private, hidden. **Consent gating can force non-public regardless of the chosen tier.**
+**Visibility tiers.** Content and **every kind of scheduling item** — نشاط, حصة and امتحان
+(R109) — have exactly three visibility states: public, private, hidden. **Consent gating can
+force non-public regardless of the chosen tier.** Who reads each tier, and why `hidden` means
+*the responsible person plus Super Admins* rather than *all Admins*, is
+[Calendar and Hijri → Three visibility tiers](../architecture/calendar-and-hijri.md#three-visibility-tiers--on-all-three-kinds-r109).
 
 ### BR-15
 **Nothing is destroyed silently.** All deletions are soft, with a restorable snapshot and a

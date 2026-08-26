@@ -184,6 +184,24 @@ describe("GET /calendar — public access", () => {
     expect(rows.map((r) => r.visibility).sort()).toEqual(["private", "public"]);
   });
 
+  /**
+   * **R109 over real HTTP — the one place the revision REMOVES reach.**
+   *
+   * §4.4 read *"and to ALL Admins regardless of branch scope"*, and the filter
+   * short-circuited an all-branches Admin to `{}` — every hidden Event in the
+   * platform. This assertion fails on that filter, which is what makes it a test
+   * of the change rather than of the code around it.
+   */
+  it("R109: an Admin no longer sees a hidden activity she is not responsible for", async () => {
+    const admin = bearer(await person("إدارية"), ["admin"]);
+    const rows = mine((await call(`/calendar?${RANGE}`, admin)).body);
+
+    expect(rows.map((r) => r.visibility)).not.toContain("hidden");
+    // The private tier is untouched by R109 — asserted so a future change that
+    // over-narrows is caught here rather than reported as a missing activity.
+    expect(rows.map((r) => r.visibility).sort()).toEqual(["private", "public"]);
+  });
+
   it("a Super Admin sees every tier", async () => {
     const su = bearer(await person("مشرف عام"), ["super_admin"]);
     const rows = mine((await call(`/calendar?${RANGE}`, su)).body);

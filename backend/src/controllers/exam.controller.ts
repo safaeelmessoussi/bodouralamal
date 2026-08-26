@@ -52,6 +52,8 @@ export function create(prisma: PrismaClient) {
       academicYearId: b.academic_year_id,
       branchId: b.branch_id,
       roomId: b.room_id,
+      // R109 — absent is the column's default, decided in the service.
+      ...(b.visibility !== undefined ? { visibility: b.visibility } : {}),
       ...(b.administrative_group_id !== undefined
         ? { administrativeGroupId: b.administrative_group_id }
         : {}),
@@ -76,6 +78,10 @@ export function update(prisma: PrismaClient) {
       // key the update never maps answers 204, bumps the version and changes
       // nothing — which is what this line was missing for one commit.
       ...(b.max_grade !== undefined ? { maxGrade: b.max_grade } : {}),
+      // R109 — absent leaves the tier alone. **The same shape as the line
+      // above**: a validator that accepts a key an update never maps answers
+      // 204, bumps the version and changes nothing.
+      ...(b.visibility !== undefined ? { visibility: b.visibility } : {}),
       ...(b.administrative_group_id !== undefined
         ? { administrativeGroupId: b.administrative_group_id }
         : {}),

@@ -87,6 +87,10 @@ let academicYearId: string;
 let sessionId: string;
 let studentToken: string;
 let teacherToken: string;
+/** The مؤطِّرة who actually staffs the occurrence — distinct from
+ *  `teacherToken`, which belongs to an unrelated teacher used for the §4.9
+ *  content tiers. R109 turns that distinction into a real one. */
+let staffingTeacherToken: string;
 const content = {
   publicPdf: "",
   privateAudio: "",
@@ -243,6 +247,9 @@ beforeAll(async () => {
   ).id;
 
   const teacherId = await makeUser("أستاذ");
+  staffingTeacherToken = bearer(teacherId, [
+    { role: "teacher", branches: [branchA] },
+  ]);
   const schedule = await prisma.recurringCourseSchedule.create({
     data: {
       title: `${TAG} حلقة`,
@@ -489,6 +496,50 @@ describe("lookup failures", () => {
       "not-a-real-token",
     );
     expect(res.status).toBe(200);
+  });
+
+  /**
+   * **R109 over real HTTP — the direct-access boundary, not the UI.**
+   *
+   * The tier is a read gate on a public route, so the only honest place to prove
+   * it is a request that carries no session at all. Asserting `404` rather than
+   * `403` is the substance: a distinguishable refusal would confirm that the
+   * hidden class exists (§20 rule 17), which is exactly what the tier prevents.
+   *
+   * The row is hidden and restored inside the test so the rest of this suite —
+   * which is about content tiers, not occurrence tiers — is untouched.
+   */
+  it("R109: a hidden occurrence answers 404 to a caller who may not read it", async () => {
+    await prisma.session.update({
+      where: { id: sessionId },
+      data: { visibility: "hidden" },
+    });
+    try {
+      const anonymous = await call(`/calendar/sessions/${sessionId}`);
+      expect(anonymous.status).toBe(404);
+      expect(anonymous.body.error?.code).toBe("NOT_FOUND");
+
+      // The same id, the same request, one difference: this caller is the
+      // occurrence's own main teacher. Without this half the assertion above
+      // would also pass on a route that was simply broken.
+      const hers = await call(
+        `/calendar/sessions/${sessionId}`,
+        staffingTeacherToken,
+      );
+
+      // The negative half that makes it mean something: another teacher, at the
+      // same branch, holding the same role, is refused. Scope does not reach a
+      // hidden item under R109 — ownership does.
+      const other = await call(`/calendar/sessions/${sessionId}`, teacherToken);
+      expect(other.status).toBe(404);
+      expect(hers.status).toBe(200);
+      expect(hers.body.occurrence!["visibility"]).toBe("hidden");
+    } finally {
+      await prisma.session.update({
+        where: { id: sessionId },
+        data: { visibility: "public" },
+      });
+    }
   });
 });
 

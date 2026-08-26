@@ -525,6 +525,13 @@ export interface CourseScheduleDto {
    */
   delivery_mode: string;
   online_media_mode: string | null;
+  /**
+   * **R109 — the visibility tier.** `public` | `private` | `hidden`, the same
+   * three §4.4 gives an `Event`. Published so a client can render *«من يرى
+   * هذا؟»* without a second request, and so an edit form can hydrate from the
+   * row rather than from a hardcoded default — the defect NEW B §A found.
+   */
+  visibility: string;
   /** TD-11 wall-clock, `HH:MM`. */
   start_time: string;
   end_time: string;
@@ -587,6 +594,8 @@ export function courseScheduleDto(row: {
   /** R97 — the schedule's DEFAULT delivery for the Sessions it materializes. */
   deliveryMode: string;
   onlineMediaMode: string | null;
+  /** R109 — the schedule's DEFAULT tier for the Sessions it materializes. */
+  visibility: string;
   startTime: Date;
   endTime: Date;
   recurrence: string;
@@ -646,6 +655,7 @@ export function courseScheduleDto(row: {
     room_name: row.room?.name ?? null,
     delivery_mode: row.deliveryMode,
     online_media_mode: row.onlineMediaMode,
+    visibility: String(row.visibility),
     start_time: timeOnly(row.startTime),
     end_time: timeOnly(row.endTime),
     recurrence: row.recurrence,
@@ -806,6 +816,13 @@ export interface SessionDto {
    */
   delivery_mode: string;
   online_media_mode: string | null;
+  /**
+   * **R109 — the visibility tier.** `public` | `private` | `hidden`, the same
+   * three §4.4 gives an `Event`. Published so a client can render *«من يرى
+   * هذا؟»* without a second request, and so an edit form can hydrate from the
+   * row rather than from a hardcoded default — the defect NEW B §A found.
+   */
+  visibility: string;
   /** TD-1 lifecycle. Moved only by `/cancel` and `/restore`, never by `PATCH`. */
   status: string;
   /**
@@ -841,6 +858,8 @@ export function sessionDto(row: {
   /** R97 — this occurrence's OWN delivery, snapshotted at materialization. */
   deliveryMode: string;
   onlineMediaMode: string | null;
+  /** R109 — this occurrence's OWN tier, snapshotted at materialization. */
+  visibility: string;
   status: string;
   overridden: boolean;
   cancellationReason: string | null;
@@ -855,6 +874,7 @@ export function sessionDto(row: {
     room_id: row.roomId,
     delivery_mode: row.deliveryMode,
     online_media_mode: row.onlineMediaMode,
+    visibility: String(row.visibility),
     status: row.status,
     overridden: row.overridden,
     cancellation_reason: row.cancellationReason,
@@ -1488,6 +1508,13 @@ export interface ScheduleSessionDto {
    */
   delivery_mode: string;
   online_media_mode: string | null;
+  /**
+   * **R109 — the visibility tier.** `public` | `private` | `hidden`, the same
+   * three §4.4 gives an `Event`. Published so a client can render *«من يرى
+   * هذا؟»* without a second request, and so an edit form can hydrate from the
+   * row rather than from a hardcoded default — the defect NEW B §A found.
+   */
+  visibility: string;
   /** TD-15: sent back on a "this session only" edit. */
   version: number;
   staff: { user_id: string; position: string }[];
@@ -1504,6 +1531,7 @@ export function scheduleSessionDto(row: {
   roomId: string | null;
   deliveryMode: string;
   onlineMediaMode: string | null;
+  visibility: string;
   version: number;
   staff: { userId: string; position: string }[];
   protectedReasons: string[];
@@ -1518,6 +1546,7 @@ export function scheduleSessionDto(row: {
     room_id: row.roomId,
     delivery_mode: row.deliveryMode,
     online_media_mode: row.onlineMediaMode,
+    visibility: String(row.visibility),
     version: row.version,
     staff: row.staff.map((s) => ({ user_id: s.userId, position: s.position })),
     protected_reasons: row.protectedReasons,
@@ -1707,6 +1736,13 @@ export interface ExamDto {
    * have to ask a second endpoint what the 20 is.
    */
   max_grade: number;
+  /**
+   * **R109 — the visibility tier.** `public` | `private` | `hidden`, the same
+   * three §4.4 gives an `Event`. Published so a client can render *«من يرى
+   * هذا؟»* without a second request, and so an edit form can hydrate from the
+   * row rather than from a hardcoded default — the defect NEW B §A found.
+   */
+  visibility: string;
   staff: { user_id: string; position: string }[];
   version: number;
 }
@@ -1731,6 +1767,7 @@ export function examDto(row: {
   administrativeGroupId: string | null;
   administrativeGroup?: { name: string } | null;
   maxGrade: Prisma.Decimal;
+  visibility: string;
   staff: { userId: string; position: string }[];
   version: number;
 }): ExamDto {
@@ -1754,6 +1791,7 @@ export function examDto(row: {
     administrative_group_id: row.administrativeGroupId,
     administrative_group_name: row.administrativeGroup?.name ?? null,
     max_grade: toNumber(row.maxGrade),
+    visibility: String(row.visibility),
     staff: row.staff.map((s) => ({
       user_id: s.userId,
       position: String(s.position),

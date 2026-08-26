@@ -424,49 +424,98 @@ describe("§4.4 — three-tier visibility", () => {
     expect(titles(rows)).toContain(`${TAG} private`);
   });
 
-  it("a TEACHER sees hidden events intersecting their groups, not others", async () => {
+  /**
+   * **RESTATED for R109 — the property moved, so the assertion moved with it.**
+   *
+   * These three cases pinned §4.4's *"Teachers whose scope intersects … and ALL
+   * Admins regardless of branch scope"*. R109 supersedes both arms: `hidden` is
+   * now **ownership** — the responsible person plus Super Admins. The tests are
+   * not deleted, because the question they ask (*who reads a hidden activity?*)
+   * is still exactly the right question; only the answer changed.
+   */
+  it("R109: teaching scope no longer reaches a hidden activity — ownership does", async () => {
     const branchId = await makeBranch("مراكش");
     const mine = await makeAdminGroup(branchId);
     const theirs = await makeAdminGroup(branchId);
     const t = await teacherUser("معلمة");
     await staffSchedule(prisma, contexts.get(mine)!, t);
 
-    await makeEvent("hidden", { groupIds: [mine] });
+    // Scoped to a group she teaches — which used to be enough and no longer is.
+    const byScope = await makeEvent("hidden", { groupIds: [mine] });
     const otherHidden = await prisma.event.findUnique({
       where: { id: await makeEvent("hidden", { groupIds: [theirs] }) },
+    });
+    // The one she actually answers for (R71.3).
+    const hers = await makeEvent("hidden", { groupIds: [theirs] });
+    await prisma.eventStaff.create({
+      data: { eventId: hers, userId: t, position: "responsible" },
     });
 
     const rows = await readCalendar(prisma, viewer(t, ["teacher"]), range);
     const ids = scoped(rows).map((r) => r.id);
+
+    // Exactly one hidden activity, and it is the one she is responsible for —
+    // note that it is scoped to a group she does NOT teach, which is what makes
+    // this a test of ownership rather than of scope by another name.
+    expect(ids).toContain(hers);
+    expect(ids).not.toContain(byScope);
     expect(ids).not.toContain(otherHidden!.id);
     expect(scoped(rows).filter((r) => r.visibility === "hidden")).toHaveLength(
       1,
     );
   });
 
-  it("a teacher sees a hidden event scoped to their group's LEVEL", async () => {
+  it("R109: a hidden activity scoped to her group's LEVEL no longer reaches her", async () => {
     const branchId = await makeBranch("مراكش");
     const mine = await makeAdminGroup(branchId);
     const t = await teacherUser("معلمة");
     await staffSchedule(prisma, contexts.get(mine)!, t);
     await makeEvent("hidden", { levelIds: [levelId] });
 
-    // §4.4: the group itself, its level, category, branch, or a global event.
+    // §4.4 listed the group, its level, category, branch and a global event.
+    // R109 withdrew that whole arm: none of them is ownership.
     const rows = await readCalendar(prisma, viewer(t, ["teacher"]), range);
-    expect(scoped(rows).some((r) => r.visibility === "hidden")).toBe(true);
+    expect(scoped(rows).some((r) => r.visibility === "hidden")).toBe(false);
   });
 
-  it("§4.4 accepted decision: ALL admins see hidden, regardless of branch scope", async () => {
+  it("R109 SUPERSEDES §4.4: an Admin no longer sees every hidden activity", async () => {
     const mine = await makeBranch("مراكش");
     const elsewhere = await makeBranch("الدار البيضاء");
-    await makeEvent("hidden", { branchIds: [elsewhere] });
+    const hidden = await makeEvent("hidden", { branchIds: [elsewhere] });
 
-    const rows = await readCalendar(
-      prisma,
-      viewer(await person("مشرفة"), ["admin"], [mine]),
-      range,
-    );
-    expect(scoped(rows).some((r) => r.visibility === "hidden")).toBe(true);
+    // Out of her branch scope — and, since R109, that is no longer the reason.
+    const scopedAdmin = await person("مشرفة");
+    expect(
+      scoped(
+        await readCalendar(
+          prisma,
+          viewer(scopedAdmin, ["admin"], [mine]),
+          range,
+        ),
+      ).some((r) => r.visibility === "hidden"),
+    ).toBe(false);
+
+    // An ALL-BRANCHES Admin is the case the old filter short-circuited to `{}`,
+    // handing back every hidden activity in the platform. Pinned separately,
+    // because it was a different code path and not merely a wider scope.
+    expect(
+      scoped(
+        await readCalendar(prisma, viewer(await person("مديرة"), ["admin"]), range),
+      ).some((r) => r.visibility === "hidden"),
+    ).toBe(false);
+
+    // The positive half: the person responsible for it does read it. Without
+    // this the two assertions above would also pass on a filter that had simply
+    // stopped returning hidden activities to anyone.
+    const owner = await person("مسؤولة");
+    await prisma.eventStaff.create({
+      data: { eventId: hidden, userId: owner, position: "responsible" },
+    });
+    expect(
+      scoped(
+        await readCalendar(prisma, viewer(owner, ["teacher"]), range),
+      ).map((r) => r.id),
+    ).toContain(hidden);
   });
 
   it("a branch admin's PRIVATE tier IS limited to their scope", async () => {

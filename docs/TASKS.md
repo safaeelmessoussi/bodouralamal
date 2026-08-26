@@ -1575,7 +1575,23 @@ manual Production launch data · no-PII audit · §18/M8 rehearsal. **Production
    orthography question as the Subject normalization. Audit before touching.
 4. **NEW G** — confirm which fields a beneficiary may see about her own guardian.
 
-- [ ] **NEW B §C — scheduling visibility (schema + migration + recurrence integration).** Design
+- [x] **NEW B §C — scheduling visibility — DONE 2026-08-26 (R109).** Shipped: `visibility` on
+  `RecurringCourseSchedule` (template), `Session` (snapshot), `Exam` (one column, no snapshot);
+  `event.visibility` default `private` → `public` for new rows only; hand-written migration
+  `20260826120000_r109_scheduling_visibility` backfilling every legacy row `public`, verified in
+  the dev database (775 / 15 / 6 rows, events unchanged at 8/2/4). `hidden` narrowed from scope
+  to **ownership** — responsible party + Super Admin — in one policy,
+  `policies/scheduling-visibility.ts`, for all three kinds. The precondition below was honoured
+  as designed: **`SessionStaff` is the resolution**, because it IS `CourseScheduleStaff`
+  effective on the occurrence's own date, materialized. Tier gates publication
+  (`/calendar`, `/me/calendar`, the §5.2 page, content→sessions), **not** the management lists.
+  23 new integration assertions, **proven against the pre-R109 behaviour** (9 fail on it), plus
+  HTTP-level assertions in the calendar and session-page suites. Three superseded §4.4 guards
+  **restated, not deleted**. `docs/SRS-PROPOSAL-R109.md` written for the Owner — SRS.md untouched.
+  **Still owed by §D:** the frontend adapter maps `null` for a class and a sitting, so the tier
+  is settable only through the API until §D adds the control (safe: the write path omits the key
+  for those kinds).
+- [ ] ~~**NEW B §C — scheduling visibility (schema + migration + recurrence integration).**~~ Design
   ratified in §B; **not started** — the capacity checkpoint refused it at 19% session remaining.
   **Precondition audit COMPLETE (Owner question 3b), and it changes the design:**
   `@@unique([scheduleId, userId])` was withdrawn by R91, so a schedule may hold **several**

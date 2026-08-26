@@ -82,6 +82,11 @@ export function create(prisma: PrismaClient) {
         ...(body.online_media_mode !== undefined
           ? { onlineMediaMode: body.online_media_mode }
           : {}),
+        // R109 — absent means *unchosen* on create and *leave it alone* on
+        // update. The service, not this layer, decides what each means.
+        ...(body.visibility !== undefined
+          ? { visibility: body.visibility }
+          : {}),
         ...(body.weekdays !== undefined ? { weekdays: body.weekdays } : {}),
         ...(body.day_of_month !== undefined
           ? { dayOfMonth: body.day_of_month }
@@ -130,6 +135,11 @@ export function update(prisma: PrismaClient) {
           : {}),
         ...(body.online_media_mode !== undefined
           ? { onlineMediaMode: body.online_media_mode }
+          : {}),
+        // R109 — absent means *unchosen* on create and *leave it alone* on
+        // update. The service, not this layer, decides what each means.
+        ...(body.visibility !== undefined
+          ? { visibility: body.visibility }
           : {}),
         ...(body.start_time !== undefined
           ? { startTime: body.start_time }

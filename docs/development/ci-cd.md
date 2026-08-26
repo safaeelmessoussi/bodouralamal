@@ -46,7 +46,8 @@ Each exists because something went wrong, or would plausibly go wrong silently. 
 | `check-openapi-td3.sh` | An endpoint that contradicts the specification, is implemented undocumented, or is documented but absent from the router |
 | `check-openapi-current.sh` | `docs/openapi.json` describing an API that is no longer the one served — a served endpoint with no generator mapping, a mapping the router does not serve, or a document that reconciles but was never regenerated |
 | `check-doc-links.sh` | A broken relative link or missing anchor in the documentation (SRS §16.4, listed in §19.2) |
-| `check-migration-order.sh` | A migration referencing a column that a **later-named** migration adds — fine on every existing database, fatal on an empty one, so it would surface exactly once: at the first production deploy (TD-6a) |
+| `check-migration-order.sh` | A migration referencing a column that a **later-named** migration adds — fine on every existing database, fatal on an empty one, so it would surface exactly once: at the first production deploy (TD-6a). **Restated per-table in R109**, after a false positive proved it had been reading column names in one flat set and had never recognised an enum-typed declaration at all |
+| `check-migration-order.selftest.sh` | The guard above, aimed at the R36.1 defect it exists for: it must fail on a CHECK that precedes its `ADD COLUMN`, pass on the same pair correctly ordered, and not flag a column name reused on another table. **A guard that has never failed is indistinguishable from no guard** — this project has shipped three of those |
 | `check-contract-dto.sh` | A controller handing a service result straight to `res.json` · a spread inside `dto.ts` that turns an allow-list back into "everything" (SRS §16.2, Revision 38) |
 
 Run them all locally:

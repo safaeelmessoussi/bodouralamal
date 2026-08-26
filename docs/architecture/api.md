@@ -321,7 +321,7 @@ Three routes are anonymous, and each was a deliberate decision about what may be
 
 | Route | Exposes | Decision recorded |
 |---|---|---|
-| `GET /calendar` | Public-tier occurrences | The visibility tier decides what a caller receives |
+| `GET /calendar` | Public-tier occurrences | The visibility tier decides what a caller receives — and since R109 that is true of **all three kinds**, not نشاط alone ([tiers](calendar-and-hijri.md#three-visibility-tiers--on-all-three-kinds-r109)) |
 | `GET /calendar/bootstrap` | Reference data for the calendar chrome | Bounded by the rule above |
 | `GET /branches` | Name, address, phone, email, opening hours, map link | Revision 35 |
 

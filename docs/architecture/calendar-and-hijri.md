@@ -112,26 +112,117 @@ Backfill stays an **Admin** capability even though branches are Super-Admin-mana
 reference data, because it is *operational* work — populating events when a branch
 activates — not reference management.
 
-## Three visibility tiers
+## Three visibility tiers — on all three kinds (R109)
 
-Stored as an enum, never a boolean.
+Stored as an enum, never a boolean, and since **Revision 109** it is carried by every kind of
+scheduling item rather than by نشاط alone:
+
+| Kind | Column | Notes |
+|---|---|---|
+| نشاط `Event` | `event.visibility` | Since it shipped. **The default moved `private` → `public`** for new rows only |
+| حصة `RecurringCourseSchedule` | `.visibility` | The **template** — the default for the Sessions it materializes |
+| حصة `Session` | `.visibility` | The **snapshot**, written at materialization |
+| امتحان `Exam` | `.visibility` | One column, no snapshot: a sitting materializes nothing |
+
+Before R109 a class was unconditionally public (§4.4 — *"Sessions are PUBLIC"*) and a sitting
+had no tier at all (§4.6 — *"it appears to the audience that can see the level it belongs
+to"*, which describes the **audience** and answers nothing about publication). The
+association could therefore announce a celebration and not a class, and could not arrange a
+sitting quietly at all.
+
+**Every row that existed before the revision was backfilled `public`**, so the browsable
+timetable is unchanged in fact; what changes is that it becomes a decision somebody takes
+rather than a property of the model.
 
 | Tier | Who sees it |
 |---|---|
 | **Public** | Unauthenticated visitors and every approved user |
 | **Private** | Any logged-in approved **Student** — deliberately *not* filtered by their own branch or group — Parents in a linked student's context, and Staff within branch scope |
-| **Hidden** | **Teachers only for events whose scope intersects their assigned groups**; all Admins regardless of branch; Super Admins. Invisible to students and parents entirely |
+| **Hidden** | **The responsible person for that item, plus Super Admins. Nobody else.** Invisible to students and parents entirely |
+
+### `hidden` is OWNERSHIP, and R109 narrowed it
+
+§4.4 read *"Teachers whose scope intersects … and **all Admins regardless of branch scope**"*.
+R109 replaces both arms with one question — *who answers for this item?* — which each kind
+already records:
+
+| Kind | Responsible | Dated? |
+|---|---|---|
+| نشاط | `EventStaff.position = 'responsible'` (R71.3) | no |
+| حصة | `SessionStaff.position = 'teacher'` | **yes** |
+| امتحان | `ExamStaff.position = 'supervisor'` | no |
+
+**This removes reach somebody has today** — every Admin currently sees every hidden نشاط —
+and that is the Owner's decision rather than a side effect. It is the one place in the
+revision where the rule takes access away.
+
+**An assistant does not read a hidden item.** R87 §G — *an assistant IS the main teacher for
+operational authorization* — is about **acting on** a class she staffs. `hidden` is not an
+operation on the class; it is who the item belongs to, and each kind's responsible position
+is named explicitly. `EventStaff` already draws exactly this line: both positions see, only
+`responsible` may edit.
+
+### One main teacher per DATE, not per series
+
+R91 withdrew `@@unique([scheduleId, userId])`, so one schedule holds several
+`position = 'teacher'` rows with different effective periods. *"At most one main on any given
+date"* is an enforced invariant (`OVERLAPPING_MAIN_TEACHER`); *"one main for the series"* is
+not true at all.
+
+So a hidden occurrence's owner is resolved **on that occurrence's own date**. Resolving it as
+of *now* would strip a replaced مؤطِّرة of the occurrences she actually taught and hand her ones
+she did not — the same defect caught in R106's exam scope.
+
+`SessionStaff` is how that resolution is spelled, and it is not a shortcut:
+`session.materialize` writes the snapshot from `CourseScheduleStaff` effective on that
+occurrence's own date, so the rule holds by construction; where the two can differ at all — a
+past, overridden or otherwise protected occurrence — the snapshot is *the correct answer*, in
+R91's own words (*"schedule staffing answers who is assigned for this period; `SessionStaff`
+answers who took this class"*). It is also the only form expressible as a query filter, since
+no `where` can compare a parent row's `date` against a related row's effective range.
+
+### Where the tier applies — and where it must not
+
+The tier gates **calendar and public occurrence reads**: `GET /calendar`, `GET /me/calendar`,
+the §5.2 session page, and the sessions a content item is used by. A caller who may not read
+an occurrence receives **`404`, never `403`** — a distinguishable refusal would confirm that
+the hidden class exists (§20 rule 17).
+
+It is **not** applied to the management lists (`GET /admin/events`, `/admin/course-schedules`,
+`/admin/exams`), which stay governed by role plus branch scope. `hidden` is a *publication*
+tier, not an administration one: an Admin who could no longer see a hidden class in the
+management list could no longer un-hide it, so applying the tier there would make hidden
+items **unadministrable** rather than confidential.
 
 Two accepted trade-offs are recorded rather than hidden:
 
 - **Cross-branch private visibility** (Risk R-6): any logged-in student sees every private
   event across all branches. Accepted deliberately; revisit if branches request isolation.
+  A consequence worth naming: a **branch-scoped Admin sees less private material than any
+  approved beneficiary does**, because §4.4 bounds staff by branch and does not bound
+  students at all. Unchanged by R109.
 - **Hidden-event existence leaks through conflict detection** (Risk R-7): a room-conflict
   check against a hidden event reveals that *something* occupies that slot. Accepted
-  consciously.
+  consciously — and it now applies to a hidden حصة for the same reason.
 
 `Pending` users see the public tier only, which is effectively nothing beyond the public
 calendar.
+
+### The tier travels schedule → occurrence
+
+Exactly as `room_id` (R43.4) and `delivery_mode` (R97) do, through the mechanism that already
+exists rather than a second one:
+
+1. `RecurringCourseSchedule.visibility` is the **default**.
+2. `session.materialize` **snapshots** it onto each occurrence it creates, and **resyncs**
+   future, un-protected occurrences when the schedule is edited.
+3. `session.overridden` **protects** a per-occurrence decision from that resync — so *«this
+   one Thursday stays hidden»* survives an edit that publishes the series.
+
+There is deliberately **no `visibility_overridden` column**: a second override marker would
+give *«did a human decide about this occurrence?»* two answers that drift. An R50 split
+carries the tier onto the successor and may change it, which is what lets the scope prompt
+express *«hide it from here on»*.
 
 ---
 

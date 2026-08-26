@@ -163,6 +163,17 @@ export interface SessionOverride {
    */
   deliveryMode?: "in_person" | "online" | undefined;
   onlineMediaMode?: "audio_video" | "audio_only" | null | undefined;
+  /**
+   * **R109 — this occurrence's own visibility tier.**
+   *
+   * The same footing `roomId` and `deliveryMode` have: it changes THIS date and
+   * nothing else, and the `overridden` flag this function always sets is what
+   * keeps the next schedule edit from resyncing it away. *«This one Thursday is
+   * not announced»* needs no new endpoint and no second marker —
+   * `PATCH /sessions/{id}` already means *decide about one occurrence*, and who
+   * may see it is one of the things there is to decide.
+   */
+  visibility?: "public" | "private" | "hidden" | undefined;
   /** The occurrence's own staffing (Revision 43.4). Supplying it REPLACES the
    *  snapshot for this session; omitting it leaves the snapshot untouched. */
   staff?: { userId: string; position: "teacher" | "assistant" }[];
@@ -263,6 +274,9 @@ export async function overrideSession(
     session.onlineMediaMode,
     delivery.onlineMediaMode,
   );
+  // R109 — *who could see this occurrence, and from when* is an access fact the
+  // record has to keep.
+  track("visibility", session.visibility, data.visibility);
 
   return prisma.$transaction(async (tx) => {
     const updated = await updateWithVersion<Session>({
@@ -278,6 +292,13 @@ export async function overrideSession(
         roomId: delivery.roomId,
         deliveryMode: delivery.deliveryMode,
         onlineMediaMode: delivery.onlineMediaMode,
+        // R109 — absent leaves this occurrence's tier alone. It is NOT resolved
+        // against the schedule: an override is a decision about one date, and
+        // re-reading the template here would undo a previous override that this
+        // edit never mentioned.
+        ...(data.visibility === undefined
+          ? {}
+          : { visibility: data.visibility }),
         overridden: true,
       },
     });

@@ -1189,6 +1189,20 @@ model RecurringCourseSchedule {
   startTime DateTime @map("start_time") @db.Time(0)
   endTime   DateTime @map("end_time") @db.Time(0)
 
+  /// **R109 — the DEFAULT visibility for every Session this schedule
+  /// materializes.**
+  ///
+  /// A default, not the occurrence's truth: `session.materialize` snapshots it
+  /// onto each occurrence exactly as it snapshots `room_id` (R43.4) and
+  /// `delivery_mode` (R97), and changing it later rewrites only the future,
+  /// un-protected occurrences. A class hidden in November leaves October's
+  /// occurrences saying what October actually was.
+  ///
+  /// `public` is the default because R43 made the timetable browsable by
+  /// anonymous visitors, and every schedule that existed before this revision
+  /// was public in fact.
+  visibility Visibility @default(public)
+
   /// Shared vocabulary (§4.4). `none` is PROHIBITED here (CHECK) — a
   /// non-recurring occurrence is an Event.
   recurrence RecurrenceType
@@ -1362,6 +1376,16 @@ model Session {
   /// makes room-collision detection ignore it without a special case.
   onlineMediaMode OnlineMediaMode? @map("online_media_mode")
 
+  /// **R109 — this occurrence's OWN visibility tier.**
+  ///
+  /// Snapshot at materialization, on the same footing as `room_id` (R43.4) and
+  /// `delivery_mode` (R97), and for the same reason: a class hidden for one
+  /// week must stay hidden for that week after the schedule goes public again.
+  /// An occurrence-only change is an ordinary `session.override`, so it sets
+  /// `overridden` and is thereafter protected from resync — there is **no
+  /// second override marker**, because the platform already has one.
+  visibility Visibility @default(public)
+
   status SessionStatus @default(scheduled)
 
   /// Distinguishes a human's deliberate change from a `session.materialize`
@@ -1397,6 +1421,9 @@ model Session {
   // side is indexed on `SessionStaff` below.
   @@index([roomId, date])
   @@index([date, status])
+  /// R109 — the calendar reads a date window at a tier, exactly as `Event`'s
+  /// `[start_date, visibility]` does.
+  @@index([date, visibility])
   @@map("session")
 }
 
@@ -1915,7 +1942,15 @@ model Event {
   id          String     @id @default(uuid()) @db.Uuid
   title       String     @db.VarChar(120)
   description String?    @db.VarChar(2000)
-  visibility  Visibility @default(private)
+  /// **R109 — the default is `public`, for NEW rows only.**
+  ///
+  /// It was `private`, which made *«an activity nobody outside the office can
+  /// see»* the thing an administrator got by not choosing. The association's
+  /// activities are announcements far more often than they are secrets, so the
+  /// unchosen value is now the announcing one. **Existing rows keep whatever
+  /// they hold** — a default governs inserts, and rewriting stored tiers would
+  /// have published things somebody deliberately hid.
+  visibility  Visibility @default(public)
 
   /// Local wall-clock date/time fields (TD-11) — never UTC instants.
   startDate DateTime  @map("start_date") @db.Date
@@ -2127,6 +2162,16 @@ model Exam {
   /// exact decimal has no rounding site at all.
   maxGrade Decimal @map("max_grade") @db.Decimal(6, 2)
 
+  /// **R109 — an exam has a visibility tier of its own**, superseding §4.6's
+  /// *"it appears to the audience that can see the level it belongs to"*. A
+  /// sitting is an arrangement the association may announce, keep to its
+  /// members, or keep to the supervisor; nothing about the Level answered that.
+  ///
+  /// One column and no snapshot: an exam is one dated occurrence that
+  /// materializes nothing (§4.6, R58), so there is no template/occurrence pair
+  /// to keep in step.
+  visibility Visibility @default(public)
+
   questions Json @db.JsonB
 
   isPublished Boolean   @default(false) @map("is_published")
@@ -2149,6 +2194,9 @@ model Exam {
   /// R58 — a physical sitting is read by *when and where*: the calendar asks
   /// for a date window at a branch, and the scheduling list asks the same.
   @@index([branchId, date])
+  /// R109 — the calendar reads a date window at a tier, as `Session` and
+  /// `Event` do.
+  @@index([date, visibility])
   @@map("exam")
 }
 

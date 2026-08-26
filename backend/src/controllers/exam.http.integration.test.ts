@@ -55,6 +55,10 @@ const EXAM_KEYS = [
   "subject_name",
   "title",
   "version",
+  // **R109 — the sitting's own visibility tier**, superseding §4.6's "an exam
+  // has no visibility tier of its own". Listed deliberately: this set is
+  // asserted exactly, so a field cannot join the contract by accident.
+  "visibility",
 ];
 
 interface Res {
