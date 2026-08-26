@@ -1305,6 +1305,24 @@ was hiding behind it: the run went green on the first attempt.
   Production readiness is considered complete. Likely shapes to investigate first: a teardown
   scoped by *branch* or *level* rather than by tag, and any suite whose `clear()` runs against
   rows it did not create.
+
+- [ ] **NEW B §C — scheduling visibility (schema + migration + recurrence integration).** Design
+  ratified in §B; **not started** — the capacity checkpoint refused it at 19% session remaining.
+  **Precondition audit COMPLETE (Owner question 3b), and it changes the design:**
+  `@@unique([scheduleId, userId])` was withdrawn by R91, so a schedule may hold **several**
+  `position = 'teacher'` rows — but *"at most one main مؤطِّرة active on any date"* is an
+  **enforced invariant**, not an assumption: `course-schedule.service.ts` refuses overlapping
+  mains with `OVERLAPPING_MAIN_TEACHER`, and `effective-staffing.ts` resolves `main` as a single
+  `find`. **So the responsible party is unambiguous on any given DATE and ambiguous across the
+  series.** The consequence for §C: hidden visibility of a **Session** must resolve its
+  responsible teacher **effective on that occurrence's own date** (R91), never as of *now* —
+  resolving as of today would strip a replaced مؤطِّرة of the occurrences she actually taught and
+  hand her ones she did not. **This is the exact defect Codex caught in R106's exam scope**, so it
+  is written down here rather than rediscovered. For an امتحان the responsible party is
+  `ExamStaff.position = 'supervisor'`, which carries no effective dating and is therefore
+  date-independent.
+  Entry points: `course-schedule.service.ts` (`splitCourseSchedule`, `regenerateSessions`),
+  `session.service.ts` (`overrideSession`), `calendar.service.ts` (`visibilityFilter`).
   **A second symptom of the same family, observed 2026-08-26:**
   `consent-safeguarding.integration.test.ts` passes **19/19 in isolation** and failed once inside a
   full sweep on `expected { state: 'completed' }` — a **pg-boss job-state timing assertion** under
