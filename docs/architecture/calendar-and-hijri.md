@@ -288,6 +288,28 @@ give *«did a human decide about this occurrence?»* two answers that drift. An 
 carries the tier onto the successor and may change it, which is what lets the scope prompt
 express *«hide it from here on»*.
 
+### On the screen (§D)
+
+**One control, `VisibilityField`, everywhere the tier is decided** — the scheduling form for
+all three kinds, and the occurrence editor. It lived inside `ActivitySection` while نشاط was
+the only kind that had a tier; leaving it there would have meant the same three options
+written out four times, which on this project has always drifted.
+
+**The form hydrates from the row, never from the default.** `fromSchedule` and `fromExam`
+carry the stored tier for the same reason `fromEvent` does since §A: the state initialiser
+reads `item?.visibility ?? 'public'`, so a mapper returning `null` republishes a hidden class
+on an unrelated edit — silently, because `dirty` stays false while both halves of the
+comparison agree with each other and neither agrees with the record.
+
+**An occurrence edit uses R50's existing prompt and nothing new.** The three scopes already
+route to the three endpoints that own them, so the tier joins the fields they already carry:
+
+| scope | reaches | effect on the tier |
+|---|---|---|
+| هذه الحصة فقط | `PATCH /sessions/{id}` | this occurrence only, and it becomes `overridden` |
+| هذه الحصة وكل ما بعدها | the R50 split | the successor's tier; earlier occurrences untouched |
+| كل الحصص | `PATCH /admin/course-schedules/{id}` | the rule, resyncing future un-protected occurrences |
+
 ---
 
 ## The Hijri overlay

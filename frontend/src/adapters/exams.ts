@@ -30,6 +30,12 @@ export interface Exam {
   mode: ExamMode;
   title: string;
   description: string | null;
+  /**
+   * **R109 — the sitting's own tier**, superseding §4.6's *"an exam has no
+   * visibility tier of its own"* (that clause described the AUDIENCE). The edit
+   * form hydrates from this rather than from a default.
+   */
+  visibility: string;
   /** TD-11 calendar date and wall-clock times — never instants. */
   date: string;
   start_time: string | null;
@@ -60,6 +66,9 @@ export interface ExamInput {
   mode: ExamMode;
   title: string;
   description?: string | null;
+  /** R109 — the sitting's own tier. Declared rather than spread, for the reason
+   *  `CourseScheduleInput.visibility` records. */
+  visibility?: string;
   date: string;
   start_time: string;
   end_time: string;

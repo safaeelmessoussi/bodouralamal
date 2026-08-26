@@ -86,13 +86,12 @@ export interface SchedulingItem {
   /**
    * **The stored visibility tier, carried so Edit can hydrate it** (NEW B §A).
    *
-   * **`null` here now means *not yet SURFACED*, not *no tier*.** R109 (NEW B §C)
-   * gave a class and a sitting a real tier on the server; **NEW B §D** is what
-   * maps it here and adds the control. Until then `null` is still the honest
-   * value for those two kinds, and it is safe: `saveSchedulingItem` sends
-   * `visibility` on the **Event payload only**, so a class or an exam cannot be
-   * republished by an edit that never mentioned its tier — which is precisely
-   * the widening §A found on the نشاط form.
+   * **Every kind carries one now** (R109, §C/§D), each mapped from its own row.
+   * A hardcoded fallback here is what let an edit re-publish a private نشاط in
+   * §A: the wrong value and the intended default were the same string, so
+   * `dirty` stayed false while neither half of the comparison described the
+   * record. It stays nullable only because the type is shared with rows the
+   * server may not have projected.
    */
   visibility: string | null;
   staffCount: number | null;
@@ -219,10 +218,17 @@ export function fromSchedule(row: CourseSchedule): SchedulingItem {
     // R57 — the schedule's own name. The Subject is still shown, in its own
     // column: it identifies the class, the title names it.
     title: row.title,
-    // R109 gave the schedule and its Sessions a real tier; **NEW B §D** maps it
-    // and adds the control. `null` is «not surfaced here yet», and the write path
-    // omits the key for this kind, so nothing is silently republished meanwhile.
-    visibility: null,
+    /**
+     * **R109 — the schedule's own tier, hydrated** (NEW B §D).
+     *
+     * It was `null` while §C shipped the column and §D the control. `null` would
+     * now be a lie about a row that has a real value — and worse, the edit form
+     * seeds `item?.visibility ?? 'public'`, so a hidden class opened for an
+     * unrelated edit would save back as عام. **That is exactly the widening §A
+     * found on the نشاط form**, which is why the mapper and the control ship
+     * together rather than a revision apart.
+     */
+    visibility: row.visibility,
     description: row.description,
     startDate: row.anchor_date,
     endDate: null,
@@ -319,9 +325,9 @@ function fromExam(row: Exam): SchedulingItem {
     type: 'exam',
     id: row.id,
     title: row.title,
-    // R109 gave a sitting a tier of its own, superseding §4.6; **NEW B §D** maps
-    // it and adds the control. Same reasoning as the class above.
-    visibility: null,
+    // R109 gave a sitting a tier of its own, superseding §4.6 — hydrated for the
+    // same reason as the class above, and it is the same defect if it is not.
+    visibility: row.visibility,
     description: row.description,
     startDate: row.date,
     endDate: null,
@@ -587,6 +593,11 @@ export async function saveSchedulingItem(
           // existing class was impossible through the only screen that offers
           // it. Past occurrences are not rewritten — the server resyncs future
           // un-overridden sessions only (R43.4).
+          // **R109 — the tier travels on every kind now** (§D). Sent whether or
+          // not it changed: it is resolved from the row on open, so re-sending
+          // the value the class already has is a no-op, while omitting it would
+          // make *«leave it alone»* and *«I did not look»* the same request.
+          ...(input.visibility !== undefined ? { visibility: input.visibility } : {}),
           ...(input.staff ? { staff: input.staff } : {}),
         },
         token,
@@ -615,6 +626,9 @@ export async function saveSchedulingItem(
               online_media_mode: input.onlineMediaMode ?? null,
             }
           : {}),
+        // R109 (§D) — the class's own tier, chosen on the form. Absent means
+        // the column's default, which is `public`.
+        ...(input.visibility !== undefined ? { visibility: input.visibility } : {}),
         ...(input.staff ? { staff: input.staff } : {}),
       },
       token,
@@ -641,6 +655,8 @@ export async function saveSchedulingItem(
           // Editable after creation, unlike the identity fields: the server
           // refuses a maximum below a mark already recorded (R81).
           ...(input.examMaxGrade == null ? {} : { max_grade: input.examMaxGrade }),
+          // R109 (§D) — the sitting's tier, on the same footing as the class's.
+          ...(input.visibility !== undefined ? { visibility: input.visibility } : {}),
         },
         token,
       );
@@ -665,6 +681,7 @@ export async function saveSchedulingItem(
         administrative_group_id: input.examGroupId ?? null,
         ...(input.examStaff ? { staff: input.examStaff } : {}),
         max_grade: input.examMaxGrade!,
+        ...(input.visibility !== undefined ? { visibility: input.visibility } : {}),
       },
       token,
     );

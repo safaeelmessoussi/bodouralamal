@@ -36,6 +36,7 @@ import { t } from '../../i18n/index.js';
 import { formatDate } from '../../lib/format-date.js';
 import { ApiError } from '../../lib/api.js';
 import { Feedback } from '../../components/ui/feedback.js';
+import { VisibilityField } from '../../components/scheduling/visibility-field.js';
 
 /**
  * `/admin/schedules/{id}/sessions` — the occurrences of one recurring class,
@@ -371,6 +372,7 @@ export function ScheduleSessionsPage({
       room_id: string | null;
       delivery_mode: DeliveryMode;
       online_media_mode: OnlineMediaMode | null;
+      visibility: string;
     },
   ): Promise<void> {
     if (scope === 'this_session') {
@@ -398,12 +400,17 @@ export function ScheduleSessionsPage({
     // a class عن بُعد from next week onward is a change to how the class is
     // delivered, and the server resyncs the future un-protected occurrences
     // while leaving the past exactly as it happened.
+    // **R109 — the tier IS a rule-level fact**, on the same footing as delivery
+    // and for the same reason: hiding a class from next week onward is a change
+    // to the class, and the server resyncs the future un-protected occurrences
+    // while leaving the past exactly as it happened (R43.4).
     const scheduleEdit = {
       start_time: edit.start_time,
       end_time: edit.end_time,
       room_id: edit.room_id,
       delivery_mode: edit.delivery_mode,
       online_media_mode: edit.online_media_mode,
+      visibility: edit.visibility,
     };
     await run(
       () =>
@@ -623,6 +630,9 @@ function ScopeDialog({
       room_id: string | null;
       delivery_mode: DeliveryMode;
       online_media_mode: OnlineMediaMode | null;
+      /** R109 (§D) — where the tier goes depends on the scope chosen, exactly
+       *  as delivery already does. */
+      visibility: string;
     },
   ) => void;
   onCancel: () => void;
@@ -643,6 +653,13 @@ function ScopeDialog({
     session.online_media_mode === 'audio_only' ? 'audio_only' : 'audio_video',
   );
   const [roomId, setRoomId] = useState(session.room_id ?? '');
+  /**
+   * **R109 — opened on what this OCCURRENCE is**, never on the schedule's
+   * default, for the reason stated above `delivery`: after an override the two
+   * differ, and hydrating from the schedule would let an unrelated edit silently
+   * republish an occurrence somebody had deliberately hidden.
+   */
+  const [visibility, setVisibility] = useState(session.visibility);
 
   return (
     <Dialog open onClose={onCancel} title={t('admin.sessions.editTitle')} wide>
@@ -679,6 +696,11 @@ function ScopeDialog({
             .replace('{date}', session.date)
             .replace('{total}', String(total))}
         </Feedback>
+
+        {/* **R109 — the same control the scheduling form uses** (§D). Where the
+            change LANDS is the scope's decision, not this field's: one
+            occurrence, the successor of a split, or the rule itself. */}
+        <VisibilityField value={visibility} onChange={setVisibility} />
 
         {scope === 'this_session' ? (
           <DateField label={t('admin.sessions.colDate')} value={date} onChange={setDate} />
@@ -733,6 +755,7 @@ function ScopeDialog({
                 room_id: delivery === 'online' ? null : roomId || null,
                 delivery_mode: delivery,
                 online_media_mode: delivery === 'online' ? mediaMode : null,
+                visibility,
               })
             }
           >

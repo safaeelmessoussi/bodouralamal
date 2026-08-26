@@ -1526,7 +1526,7 @@ manual Production launch data · no-PII audit · §18/M8 rehearsal. **Production
 |---|---|---|---|
 | 1 | **NEW B §C** backend visibility | feature + migration | design ratified; precondition audit below |
 | 2 | ~~**NEW H** scheduling-type catalogue~~ **DONE (R110)** | reconciliation → feature | precedes §D, as planned — §D now builds on a picker that already reads the catalogue |
-| 3 | **NEW B §D** frontend Add/Edit + scope prompt | feature | needs 1 and 2 |
+| 3 | ~~**NEW B §D** frontend Add/Edit + scope prompt~~ **DONE 2026-08-26** | feature | R50's scope prompt already shipped, so the tier joined the fields those three scopes already carry — no second recurrence mechanism |
 | 4 | **NEW B §E** full authorization matrix | tests | closes NEW B |
 | 5 | **NEW D** Teacher content-library lookups | **defect (backend authz)** | standalone; unblocks Teacher content work |
 | 6 | **NEW E** الملف التدريسي false dirty | **defect** | folded into §9A–D/F acceptance |
@@ -1606,9 +1606,10 @@ manual Production launch data · no-PII audit · §18/M8 rehearsal. **Production
   23 new integration assertions, **proven against the pre-R109 behaviour** (9 fail on it), plus
   HTTP-level assertions in the calendar and session-page suites. Three superseded §4.4 guards
   **restated, not deleted**. `docs/SRS-PROPOSAL-R109.md` written for the Owner — SRS.md untouched.
-  **Still owed by §D:** the frontend adapter maps `null` for a class and a sitting, so the tier
-  is settable only through the API until §D adds the control (safe: the write path omits the key
-  for those kinds).
+  ~~**Still owed by §D:** the frontend adapter maps `null` for a class and a sitting.~~
+  **CLOSED by §D (2026-08-26):** both mappers hydrate, one shared `VisibilityField` renders for
+  every kind and in the occurrence editor, and the three R50 scopes carry the tier to the
+  endpoints they already owned. 19/19 in the browser.
 - [ ] ~~**NEW B §C — scheduling visibility (schema + migration + recurrence integration).**~~ Design
   ratified in §B; **not started** — the capacity checkpoint refused it at 19% session remaining.
   **Precondition audit COMPLETE (Owner question 3b), and it changes the design:**

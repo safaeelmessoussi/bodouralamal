@@ -45,6 +45,14 @@ export interface ScheduleSession {
    */
   delivery_mode: string;
   online_media_mode: string | null;
+  /**
+   * **R109 — this occurrence's OWN tier**, snapshotted at materialization and
+   * decidable for one date. The editor opens on THIS value, not on the
+   * schedule's: after an override the two differ, and seeding from the schedule
+   * would let a reader re-save an unrelated field and silently undo the
+   * override — the same trap `delivery_mode` documents above.
+   */
+  visibility: string;
   /** TD-15: sent back on a single-occurrence edit. */
   version: number;
   staff: { user_id: string; position: string }[];
@@ -98,6 +106,14 @@ export interface SessionEdit {
    * with one possible value.
    */
   staff?: { user_id: string; position: 'teacher' | 'assistant' }[];
+  /**
+   * **R109 — this occurrence's own tier** (§D). On exactly the footing
+   * `room_id` has: it decides this date and nothing else, and the `overridden`
+   * flag the server always sets is what protects it from the next resync.
+   *
+   * There is no separate hide-one-occurrence endpoint, because this is it.
+   */
+  visibility?: string;
 }
 
 /**

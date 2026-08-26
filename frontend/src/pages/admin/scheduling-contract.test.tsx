@@ -25,6 +25,9 @@ const WIRE: CourseSchedule = {
   // R57 — the class's own name, distinct from the Subject that identifies it.
   title: 'حلقة تحفيظ المتقدمين',
   description: null,
+  // R109 (§D) — every kind carries a tier; the fixture states one rather
+  // than letting the mapper fall back to a default.
+  visibility: 'private',
   subject_id: '00000000-0000-4000-8000-000000000002',
   // R55.1 — resolved labels, so a timetable can be read without ids.
   subject_name: 'تفسير',
@@ -87,6 +90,9 @@ describe('the adapter type matches the wire contract', () => {
       'teaching_mode',
       'title',
       'version',
+      // R109 (§D) — the schedule's DEFAULT tier for the Sessions it
+      // materializes. Pinned so it cannot join the contract by accident.
+      'visibility',
       'weekdays',
     ]);
   });

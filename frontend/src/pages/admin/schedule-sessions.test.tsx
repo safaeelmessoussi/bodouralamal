@@ -18,6 +18,9 @@ const WIRE: ScheduleSession = {
   // R97 — the occurrence's own delivery, snapshotted from its schedule.
   delivery_mode: 'in_person',
   online_media_mode: null,
+  // R109 (§D) — the occurrence carries its own tier; the fixture states one so
+  // the editor cannot be seen to hydrate from a default.
+  visibility: 'public',
   version: 0,
   staff: [{ user_id: '00000000-0000-4000-8000-000000000002', position: 'teacher' }],
   protected_reasons: [],
@@ -40,6 +43,11 @@ describe('the adapter type matches the wire contract', () => {
       'start_time',
       'status',
       'version',
+      // R109 (§D) — this occurrence's OWN tier, on exactly the footing
+      // `delivery_mode` above has: snapshotted at materialization and decidable
+      // for one date. Pinned so it cannot join the contract by accident.
+      'visibility',
+
     ]);
   });
 

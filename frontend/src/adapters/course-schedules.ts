@@ -33,6 +33,12 @@ export interface CourseSchedule {
   /** R57 — what the class is CALLED. A label, never an identifier. */
   title: string;
   description: string | null;
+  /**
+   * **R109 — the schedule's DEFAULT tier for the Sessions it materializes.**
+   * `public | private | hidden`. The edit form hydrates from this; a client that
+   * fell back to a default would re-publish a hidden class on an unrelated edit.
+   */
+  visibility: string;
   subject_id: string;
   /**
    * **Labels, never identifiers** — resolved server-side so a timetable can be
@@ -174,6 +180,18 @@ export async function deleteCourseSchedule(
 export interface CourseScheduleInput {
   title: string;
   description?: string | null;
+  /**
+   * **R109 — the DEFAULT tier for the Sessions this schedule materializes.**
+   *
+   * Declared here rather than merely spread at the call site: TypeScript does
+   * **not** excess-check a spread, so a key absent from this interface travels
+   * on the wire while the contract says nothing about it — silent drift of
+   * exactly the kind the DTO guard exists to prevent on the other side.
+   *
+   * Omitted on an update leaves the tier alone; omitted on a create takes the
+   * column default, `public`.
+   */
+  visibility?: string;
   subject_id: string;
   teaching_mode: string;
   /** Exactly one target, of the kind the mode names (§4.4c). */

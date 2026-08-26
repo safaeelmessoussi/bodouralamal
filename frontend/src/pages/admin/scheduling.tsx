@@ -1396,6 +1396,10 @@ export function SchedulingDialog({
         catalogue={catalogue}
         schedulingTypeId={schedulingTypeId}
         onSchedulingTypeChange={(row) => setSchedulingTypeId(row.id)}
+        // R109 (§D) — every kind carries a tier now, so the shell owns the
+        // control and the sections no longer each keep one.
+        visibility={visibility}
+        onVisibility={setVisibility}
         title={title}
         onTitle={setTitle}
         // **R57 — every schedulable item is named by something a person typed.**
@@ -1497,8 +1501,6 @@ export function SchedulingDialog({
           </>
         ) : (
           <ActivitySection
-            visibility={visibility}
-            onVisibility={setVisibility}
             scopeKind={scopeKind}
             onScopeKind={setScopeKind}
             scopeId={scopeId}

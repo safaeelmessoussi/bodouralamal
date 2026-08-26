@@ -188,9 +188,14 @@ export const TEACHER_SCOPE_KINDS = [
   { value: 'group', labelKey: 'admin.calendar.scopeGroup' },
 ] as const;
 
+/**
+ * **R109/NEW B §D — the tier moved OUT of this section.**
+ *
+ * It lived here because نشاط was the only kind that had one. R109 gave a حصة and
+ * an امتحان a tier too, so it now renders once in `SchedulingForm` for every
+ * kind — one control rather than three that would drift.
+ */
 export function ActivitySection({
-  visibility,
-  onVisibility,
   scopeKind,
   onScopeKind,
   scopeId,
@@ -208,8 +213,6 @@ export function ActivitySection({
   disabled,
   scopeKinds = ALL_SCOPE_KINDS,
 }: {
-  visibility: string;
-  onVisibility: (v: string) => void;
   scopeKind: string;
   onScopeKind: (v: string) => void;
   scopeId: string;
@@ -244,20 +247,6 @@ export function ActivitySection({
 }): ReactNode {
   return (
     <>
-      <SelectField
-        label={t('admin.calendar.colVisibility')}
-        value={visibility}
-        onChange={onVisibility}
-        hint={t('admin.calendar.visibilityHint')}
-        // The catalog the events screen already uses — one word per tier
-        // platform-wide, rather than a second set of labels for one concept.
-        options={[
-          { value: 'public', label: t('calendar.visibilityPublic') },
-          { value: 'private', label: t('calendar.visibilityPrivate') },
-          { value: 'hidden', label: t('calendar.visibilityHidden') },
-        ]}
-      />
-
       {locked ? (
         <p className="muted">{t('admin.calendar.scopeFixed')}</p>
       ) : (

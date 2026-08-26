@@ -28,6 +28,9 @@ const WIRE: Exam = {
   // R81 — the exam's own maximum; there is no platform scale to inherit one.
   max_grade: 20,
   description: 'تفتح القاعة قبل ربع ساعة',
+  // R109 (§D) — every kind carries a tier; the fixture states one rather
+  // than letting the mapper fall back to a default.
+  visibility: 'private',
   date: '2026-09-14',
   start_time: '09:00',
   end_time: '11:00',
@@ -72,6 +75,9 @@ describe('the adapter type matches the wire contract', () => {
       'subject_name',
       'title',
       'version',
+      // R109 (§D) — the sitting's own tier, superseding §4.6's "no tier of its
+      // own". Pinned so it cannot join the contract by accident.
+      'visibility',
     ]);
   });
 

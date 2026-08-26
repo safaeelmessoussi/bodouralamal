@@ -7,6 +7,7 @@ import { t } from '../../i18n/index.js';
 import { SCHEDULING_TYPES, type SchedulingType } from '../../adapters/scheduling.js';
 import type { SchedulingTypeRow } from '../../adapters/scheduling-catalogue.js';
 import { Feedback } from '../ui/feedback.js';
+import { VisibilityField } from './visibility-field.js';
 
 /**
  * **The generic scheduling shell** (SRS Revision 56).
@@ -61,6 +62,17 @@ export interface SchedulingFormProps {
    * server is the authority — a forged `scheduling_type_id` is refused there.
    */
   catalogue?: readonly SchedulingTypeRow[];
+
+  /**
+   * **R109 (NEW B §D) — the visibility tier, for EVERY kind.**
+   *
+   * It used to be a field of `ActivitySection`, because نشاط was the only kind
+   * that had one. R109 gave a حصة and an امتحان a tier of their own, so it
+   * belongs to the generic shell: one control, rendered once, rather than three
+   * sections each growing their own copy of the same three options.
+   */
+  visibility: string;
+  onVisibility: (v: string) => void;
   /** Which catalogue row is chosen. `null` on a legacy activity, whose type was
    *  never recorded (R56 told administrators to write it in the title). */
   schedulingTypeId?: string | null;
@@ -116,6 +128,8 @@ export function SchedulingForm({
   catalogue = [],
   schedulingTypeId = null,
   onSchedulingTypeChange,
+  visibility,
+  onVisibility,
   title,
   onTitle,
   showTitle,
@@ -149,6 +163,11 @@ export function SchedulingForm({
         onTypeChange={onTypeChange}
         {...(onSchedulingTypeChange ? { onSchedulingTypeChange } : {})}
       />
+
+      {/* Beside the type, because both answer *what is this and who sees it* —
+          and before the details, so the decision is taken rather than met at
+          the bottom of a long form. */}
+      <VisibilityField value={visibility} onChange={onVisibility} />
 
       {showTitle ? (
         <TextField

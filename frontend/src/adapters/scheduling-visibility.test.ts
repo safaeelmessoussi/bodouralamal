@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
-import { fromEvent } from './scheduling.js';
+import { fromEvent, fromSchedule } from './scheduling.js';
+import type { CourseSchedule } from './course-schedules.js';
 import { isDirty } from '../lib/form-dirty.js';
 
 /**
@@ -95,5 +96,98 @@ describe('opening, editing and changing — the three states', () => {
   it('creation still defaults to public (Owner decision 00)', () => {
     expect(pristineFor(null).visibility).toBe('public');
     expect(isDirty(state('public'), pristineFor(null))).toBe(false);
+  });
+});
+
+
+/**
+ * **NEW B §D — a class and a sitting carry theirs too.**
+ *
+ * §C gave `RecurringCourseSchedule`, `Session` and `Exam` a real tier on the
+ * server, and the mappers still returned `null`. That was safe only for as long
+ * as the write path omitted the key for those kinds — the moment §D sends it,
+ * `null` becomes **exactly the §A defect on two more screens**: the form seeds
+ * `item?.visibility ?? 'public'`, so a hidden class opened for an unrelated edit
+ * would save back as عام, with `dirty` false because both halves of the
+ * comparison agreed with each other and neither agreed with the record.
+ *
+ * That is why the mapper and the control ship in the same section, and why this
+ * is asserted for each kind rather than assumed from the نشاط case.
+ */
+const scheduleRow = (visibility: string) =>
+  ({
+    id: 's1',
+    title: 'حلقة',
+    description: null,
+    visibility,
+    subject_id: 'sub1',
+    subject_name: 'حفظ القرآن',
+    teaching_mode: 'entire_level',
+    target_id: 'lvl1',
+    target_name: 'نور الأمل',
+    level_id: 'lvl1',
+    branch_id: 'b1',
+    branch_name: 'مقر',
+    room_id: null,
+    room_name: null,
+    delivery_mode: 'in_person',
+    online_media_mode: null,
+    start_time: '09:00',
+    end_time: '10:00',
+    recurrence: 'weekly',
+    weekdays: ['monday'],
+    day_of_month: null,
+    month_of_year: null,
+    anchor_date: '2026-09-01',
+    effective_until: null,
+    academic_year_id: 'y1',
+    staff: [],
+    version: 0,
+  }) as unknown as CourseSchedule;
+
+describe('a حصة carries its stored visibility into the edit form (§D)', () => {
+  it('hydrates hidden rather than reporting the creation default', () => {
+    expect(fromSchedule(scheduleRow('hidden')).visibility).toBe('hidden');
+  });
+
+  it('hydrates private', () => {
+    expect(fromSchedule(scheduleRow('private')).visibility).toBe('private');
+  });
+
+  it('carries public unchanged', () => {
+    expect(fromSchedule(scheduleRow('public')).visibility).toBe('public');
+  });
+
+  it('never returns null — that was the §C-era placeholder, and it is a widening now', () => {
+    // The specific regression this file exists to prevent: a `null` here meets
+    // `?? 'public'` in the form and republishes a hidden class on any edit.
+    expect(fromSchedule(scheduleRow('hidden')).visibility).not.toBeNull();
+  });
+});
+
+describe('the §A dirty semantics hold for a حصة as well (§D)', () => {
+  const openOn = (visibility: string) => {
+    const item = fromSchedule(scheduleRow(visibility));
+    const pristine = { title: item.title, visibility: item.visibility ?? 'public' };
+    return { item, pristine };
+  };
+
+  it('opening a hidden حصة is PRISTINE, not dirty', () => {
+    const { pristine } = openOn('hidden');
+    expect(isDirty({ ...pristine }, pristine)).toBe(false);
+  });
+
+  it('an unrelated edit leaves the tier untouched at hidden', () => {
+    const { pristine } = openOn('hidden');
+    const current = { ...pristine, title: 'حلقة معدّلة' };
+    expect(isDirty(current, pristine)).toBe(true);
+    // The point of the assertion: dirty because the TITLE changed, with the
+    // tier still exactly what the row holds.
+    expect(current.visibility).toBe('hidden');
+  });
+
+  it('changing the tier explicitly makes it dirty', () => {
+    const { pristine } = openOn('hidden');
+    expect(isDirty({ ...pristine, visibility: 'public' }, pristine)).toBe(true);
   });
 });
