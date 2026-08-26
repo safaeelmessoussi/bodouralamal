@@ -45,6 +45,8 @@ jobs:
         run: bash scripts/ci/check-shared-layout.sh
       - name: Every Nginx header set carries HSTS
         run: bash scripts/ci/check-security-headers.sh
+      - name: Every MinIO proxy path carries the defensive edge policy
+        run: bash scripts/ci/check-storage-edge.sh
       - name: Association terminology remains consistent
         run: bash scripts/ci/check-association-terminology.sh
       - name: Arabic UI uses Western numerals

@@ -38,6 +38,12 @@ PUT behavior, exact bucket-root denial with listing queries, and fail-closed dup
 path normalization. It never deletes the historical consent backlog: only tagged fixture jobs
 receive temporary priority and all tagged rows/objects are removed.
 
+The storage-proxy suite also checks the temporary P0.1 edge defence without reproducing the
+object-store vulnerability: an unsigned, credential-free, bodyless request carrying the
+vendor-named unsupported content-hash mode must receive the Nginx-only policy marker. The
+same suite then completes a real presigned PUT/GET round trip, so a broad filter that breaks
+legitimate SigV4 traffic cannot pass.
+
 ## Running them
 
 ```bash
@@ -45,7 +51,7 @@ receive temporary priority and all tagged rows/objects are removed.
 cd backend && npm run lint && npm run typecheck && npm test && npm run build
 cd frontend && npm run lint && npm run typecheck && npm test && npm run build
 
-# Repository and contract guards — all twenty are represented in CI
+# Repository and contract guards — all twenty-two are represented in CI
 for g in scripts/ci/check-*.sh; do bash "$g"; done
 
 # Integration — needs the stack up

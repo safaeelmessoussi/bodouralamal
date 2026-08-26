@@ -135,7 +135,7 @@ was hiding behind it: the run went green on the first attempt.
 - [x] `/CLAUDE.md`, `/AGENTS.md`, `docs/CHANGES.log` committed (§16.3)
 - [x] `.env.example` generated from TD-13 inventory; boot-time fail-fast validation for Required vars
 - [x] Version pins per §3.1a (Node 22 LTS image, PG 17, Prisma 6, React 19, Vite 6, Express 5, pg-boss 10)
-- [x] CI: all 20 committed guards, lint, exact typecheck, default test runners, backend/frontend production builds, and ordinary OpenAPI↔TD-3 conformance (§3.1). Integration/browser/coverage infrastructure and fatal `TD3_REQUIRE_COMPLETE=1` remain separate slices
+- [x] CI: all 22 committed guards, lint, exact typecheck, default test runners, backend/frontend production builds, and ordinary OpenAPI↔TD-3 conformance (§3.1). Integration/browser/coverage infrastructure and fatal `TD3_REQUIRE_COMPLETE=1` remain separate slices
 
 ## M1 — Infrastructure & Platform Core
 - [x] `docker-compose.yml`: api, db, minio, nginx (+certbot); TZ=Africa/Casablanca; tzdata pinned (TD-11)
@@ -1259,6 +1259,11 @@ was hiding behind it: the run went green on the first attempt.
 - [ ] §18 Content, Consent & Storage checklist green
 
 ## M7 — Hardening & Launch Data
+- [~] **P0.1 object-store security** — the affected final MinIO OSS pin is launch-blocking;
+  Nginx now applies the vendor-advised unsigned-trailer defence at every storage proxy path
+  without weakening valid presigned GET/PUT. **OWNER DECISION REQUIRED — OBJECT STORE:** select
+  and fund a maintained patched replacement, then run the full compatibility/safeguarding/
+  retention/backup regression listed in [Storage](architecture/storage.md#owner-decision-required--object-store)
 - [ ] TD-11a targets measured against ceiling-scale fixtures (§2.4); no N+1 / unbounded scans audit
 - [ ] Arabic RTL pass: complete ar catalog, error message_keys (fr/en post-MVP §10.1)
 - [ ] Nginx rate limits verified live (TD-13); presigned-URL permission audit
