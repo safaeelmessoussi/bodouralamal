@@ -376,10 +376,11 @@ effective `CourseScheduleStaff`/`SessionStaff` assignments and each assignment's
 audience. A teacher teaching Level 1 in Marrakesh and Level 2 in Casablanca is expressed by
 two schedule assignments, because delivery carries both level audience and branch.
 
-Quran memorisation adds one narrow Subject filter (SRS R107): the schedule must carry the
+Quran memorisation adds one narrow Subject filter (SRS R107–R108): the schedule must carry the
 single live `tracks_quran_progress` marker, which belongs only to حفظ القرآن. أحكام القرآن,
-ترتيل القرآن, and تفسير القرآن are ordinary Subjects and never authorise memorisation.
-The marker is structural rather than an Arabic-name comparison, and absence fails closed.
+ترتيل وتجويد القرآن, تفسير القرآن, and any later unmarked Quran-domain Subject are ordinary
+Subjects and never authorise memorisation. The marker is structural rather than an
+Arabic-name comparison, and absence fails closed.
 
 ### The permission matrix
 

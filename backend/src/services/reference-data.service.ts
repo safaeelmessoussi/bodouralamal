@@ -239,7 +239,7 @@ export async function unassignSubjectFromLevel(
  * same shape, authorization, and file — rather than in the progress service,
  * because it configures the حفظ syllabus rather than storing progress. تفسير
  * القرآن follows the same per-Level Surah selection pedagogically but remains
- * unmarked and outside the progress engine; أحكام القرآن and ترتيل القرآن use
+ * unmarked and outside the progress engine; أحكام القرآن and ترتيل وتجويد القرآن use
  * ordinary LevelSubject curriculum.
  *
  * **Super Admin writes, Admin reads**, exactly as `LevelSubject` does (R26's

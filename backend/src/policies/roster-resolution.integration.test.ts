@@ -181,7 +181,7 @@ beforeAll(async () => {
 
   hifzId = (await prisma.subject.create({ data: { name: `${TAG} حفظ القرآن` } }))
     .id;
-  tartilId = (await prisma.subject.create({ data: { name: `${TAG} ترتيل القرآن` } }))
+  tartilId = (await prisma.subject.create({ data: { name: `${TAG} ترتيل وتجويد القرآن` } }))
     .id;
   tafsirId = (await prisma.subject.create({ data: { name: `${TAG} تفسير القرآن` } }))
     .id;
@@ -198,7 +198,7 @@ beforeAll(async () => {
   ).id;
   tgTartil1 = (
     await prisma.teachingGroup.create({
-      data: { name: `${TAG} ترتيل القرآن 1`, subjectId: tartilId, levelId },
+      data: { name: `${TAG} ترتيل وتجويد القرآن 1`, subjectId: tartilId, levelId },
     })
   ).id;
 

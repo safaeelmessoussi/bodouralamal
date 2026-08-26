@@ -67,16 +67,19 @@ const LEVEL_GENDER: Record<string, GenderRestriction> = {
 };
 
 /**
- * §15.1/R107 atomic Subjects. القرآن الكريم is the broader curriculum domain,
- * never a row. Only حفظ القرآن authorises §4.5 memorisation entry.
+ * §15.1/R107–R108 atomic Subjects. القرآن الكريم is the broader curriculum
+ * domain, never a row. This is an additive launch baseline rather than a closed
+ * enumeration; only حفظ القرآن authorises §4.5 memorisation entry.
  */
 const SUBJECTS = [
   { name: 'أحكام القرآن', displayOrder: 1, tracksQuranProgress: false },
   { name: 'حفظ القرآن', displayOrder: 2, tracksQuranProgress: true },
-  { name: 'ترتيل القرآن', displayOrder: 3, tracksQuranProgress: false },
+  { name: 'ترتيل وتجويد القرآن', displayOrder: 3, tracksQuranProgress: false },
   { name: 'تفسير القرآن', displayOrder: 4, tracksQuranProgress: false },
   { name: 'فقه', displayOrder: 5, tracksQuranProgress: false },
-  { name: 'محو الأمية', displayOrder: 6, tracksQuranProgress: false },
+  { name: 'السيرة النبوية', displayOrder: 6, tracksQuranProgress: false },
+  { name: 'العقيدة', displayOrder: 7, tracksQuranProgress: false },
+  { name: 'الأذكار', displayOrder: 8, tracksQuranProgress: false },
 ] as const;
 
 const MEMORISATION_SUBJECT = SUBJECTS[1];

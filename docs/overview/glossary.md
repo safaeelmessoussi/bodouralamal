@@ -14,8 +14,8 @@
 | **Event** | حدث | A one-off or exception calendar item — holiday, activity, exam — layered on top of groups' fixed schedules |
 | **Round** | الدورة | A grading period, roughly a semester. Manually selected, not calendar-bound; a sorting label, not a restriction |
 | **Instructor** | مؤطِّرة | A teacher. Scoped to assigned groups |
-| **Quran domain** | القرآن الكريم | The broader curriculum, not a Subject row. It is delivered through atomic Subjects such as أحكام القرآن, حفظ القرآن, ترتيل القرآن, and تفسير القرآن |
-| **Subject** | مادة | An atomic schedulable curriculum item. Only حفظ القرآن carries the structural marker that makes its current teaching assignment authorise Quran memorisation entry; the other Quran-domain Subjects are ordinary Subjects (SRS R107) |
+| **Quran domain** | القرآن الكريم | The broader curriculum, not a Subject row. Its initial atomic Subjects are أحكام القرآن, حفظ القرآن, ترتيل وتجويد القرآن, and تفسير القرآن; more may be added later |
+| **Subject** | مادة | An extensible atomic schedulable curriculum item. Only حفظ القرآن carries the structural marker that makes its current teaching assignment authorise Quran memorisation entry; every unmarked Quran-domain Subject is ordinary curriculum (SRS R107–R108) |
 | **Committee** | لجنة | A cross-cutting organisational tag. Postponed to post-MVP; its tables are not pre-created |
 | **Follow-up** | — | The informal process of an Admin noticing a student's dropping engagement and checking in. **Not an automated system action** |
 | **Global / no branch** | بدون فرع | Content or events mapped to no specific branch, appearing across all of them. Restricted to Admins |

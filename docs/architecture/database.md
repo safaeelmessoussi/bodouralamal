@@ -173,7 +173,7 @@ an N+1 wearing a cache costume.
 
 ### `Subject.tracks_quran_progress` — authorization, not curriculum type
 
-SRS R107 keeps the existing boolean and partial unique index, and narrows their meaning.
+SRS R107–R108 keeps the existing boolean and partial unique index, and narrows their meaning.
 The broad Quran domain القرآن الكريم has no Subject row; its atomic Subjects are scheduled
 normally. Only حفظ القرآن may carry the marker, and a current staffing assignment for that
 Subject authorises memorisation entry for its resolved audience.
@@ -187,8 +187,10 @@ or rewriting Owner-managed reference data.
 `LevelSurah` records the Level's حفظ القرآن Surah syllabus, which تفسير القرآن follows
 pedagogically. `QuranProgressLog` remains keyed by student and Surah with no Subject foreign
 key, because the marker answers *who may write* while the log answers *what was memorised*.
-Tafsir remains unmarked and does not participate in the coverage engine; أحكام القرآن and
-ترتيل القرآن use ordinary `LevelSubject` curriculum.
+Tafsir remains unmarked and does not participate in the coverage engine; أحكام القرآن,
+ترتيل وتجويد القرآن and any later unmarked Quran-domain Subject use ordinary
+`LevelSubject` curriculum. The eight-row Production seed is an additive baseline and does
+not constrain or rewrite later Super-Admin additions.
 
 ### `SessionRecording` → `EducationalContent` — a nullable UNIQUE that is the whole idempotency design (R99)
 

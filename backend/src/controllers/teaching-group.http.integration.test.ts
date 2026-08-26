@@ -238,7 +238,7 @@ beforeAll(async () => {
     await prisma.subject.create({ data: { name: `${TAG} حفظ القرآن` } })
   ).id;
   subjectWhole = (
-    await prisma.subject.create({ data: { name: `${TAG} ترتيل القرآن` } })
+    await prisma.subject.create({ data: { name: `${TAG} ترتيل وتجويد القرآن` } })
   ).id;
   subjectElsewhere = (
     await prisma.subject.create({ data: { name: `${TAG} خارج` } })
