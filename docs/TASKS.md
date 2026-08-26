@@ -1434,7 +1434,23 @@ TD-5 blocked-delete + `BlockedNotice`, Trash/restore. No parallel management arc
 | Quran Surahs (114) | ✖ read-only | **deliberately excluded** — religious canon, not association data |
 | Roles (5) | ✖ | **deliberately excluded** — §7: *roles are seeded, no CRUD in the MVP* |
 
-### NEW H — catalogue becomes a seeded reference MODEL + management
+### NEW H — DONE 2026-08-26 (R110)
+
+Shipped as designed. `SchedulingType` is a seeded reference entity — `name`,
+`structural_kind`, `attendance_required`, `display_order`, TD-15 `version`, TD-5 soft delete —
+with a Super-Admin screen **أنواع الجدولة** (a NEW الإدارة node, not a reshuffle of R105's
+order; two order guards restated). Five rows, three entities, no fifth model:
+`class` → `RecurringCourseSchedule`, `activity` → `Event`, `exam` → `Exam`, **stored** and never
+read off the Arabic name. `Event.scheduling_type_id` is nullable + required at the boundary
+(R35) with `ON DELETE RESTRICT` and a blocked delete. Read = any staff who may schedule
+(مؤطِّرة included, R93/R94); write = Super Admin only (OD-01). The **open question is answered**:
+a seeded reference table, and OD-03's *"stored column, not display text"* is what settled it.
+**R56 is exercised, not contradicted** — it named `attendance_required`'s exact condition — and
+its other half stands: a holiday cancels no class. `docs/SRS-PROPOSAL-R110.md` is written for
+the Owner; `SRS.md` untouched. Frontend registry **split, not deleted**: the catalogue is server
+data, `STRUCTURAL_KIND_SPECS` keeps only what an entity can express.
+
+### NEW H (original plan) — catalogue becomes a seeded reference MODEL + management
 
 Five rows, each carrying **`attendance_required`** and **`structural_kind`**
 (`RecurringCourseSchedule` | `Exam` | `Event`) — the kind is **stored, never inferred from the
@@ -1509,7 +1525,7 @@ manual Production launch data · no-PII audit · §18/M8 rehearsal. **Production
 | # | section | kind | why here |
 |---|---|---|---|
 | 1 | **NEW B §C** backend visibility | feature + migration | design ratified; precondition audit below |
-| 2 | **NEW H** scheduling-type catalogue | reconciliation → feature | **must precede §D** — `＋إضافة عنصر` is where both land; building §D's form twice is the waste |
+| 2 | ~~**NEW H** scheduling-type catalogue~~ **DONE (R110)** | reconciliation → feature | precedes §D, as planned — §D now builds on a picker that already reads the catalogue |
 | 3 | **NEW B §D** frontend Add/Edit + scope prompt | feature | needs 1 and 2 |
 | 4 | **NEW B §E** full authorization matrix | tests | closes NEW B |
 | 5 | **NEW D** Teacher content-library lookups | **defect (backend authz)** | standalone; unblocks Teacher content work |
@@ -1568,8 +1584,10 @@ manual Production launch data · no-PII audit · §18/M8 rehearsal. **Production
 
 ### Needs Owner decision before its section starts
 
-1. **NEW H** — reference table vs frontend registry, and whether `عطلة` (a holiday) is
-   schedulable-with-attendance at all.
+1. ~~**NEW H** — reference table vs frontend registry, and whether `عطلة` is
+   schedulable-with-attendance.~~ **ANSWERED and shipped (R110).** OD-03 settled both:
+   `attendance_required` is *"a stored column and not display text"*, which requires a table;
+   and عطلة is an ordinary schedulable Event with `attendance_required = false`.
 2. **NEW N** — static content vs Super-Admin-managed reference data.
 3. **NEW L** — existing Level names differ in spelling from the baseline; the same
    orthography question as the Subject normalization. Audit before touching.

@@ -24,6 +24,7 @@ import * as recordingCtl from './controllers/session-recording.controller.js';
 import * as libraryCtl from './controllers/library.controller.js';
 import * as referenceData from './controllers/reference-data.controller.js';
 import * as taxonomy from './controllers/taxonomy.controller.js';
+import * as schedulingTypes from './controllers/scheduling-type.controller.js';
 import * as trash from './controllers/trash.controller.js';
 import * as contentCtl from './controllers/content.controller.js';
 import * as enrollments from './controllers/enrollment.controller.js';
@@ -518,6 +519,20 @@ export function createApp(
     '/admin/levels/:levelId/subjects/:subjectId',
     referenceData.unassignSubject(prisma),
   );
+
+  /**
+   * **R110 — the scheduling-type catalogue** (NEW H).
+   *
+   * `/order` is declared BEFORE `/:id`, or Express matches the literal path
+   * against the parameter route and a reorder arrives as an update to a
+   * schedule type whose id is the word "order" — the ordering every other
+   * reorder route on this app already observes.
+   */
+  guarded.get('/admin/scheduling-types', schedulingTypes.list(prisma));
+  guarded.post('/admin/scheduling-types', schedulingTypes.create(prisma));
+  guarded.patch('/admin/scheduling-types/order', schedulingTypes.reorder(prisma));
+  guarded.patch('/admin/scheduling-types/:id', schedulingTypes.update(prisma));
+  guarded.delete('/admin/scheduling-types/:id', schedulingTypes.remove(prisma));
 
   // Curriculum taxonomy CRUD (§5.6 "Categories & Subjects" + "Levels", §14.1).
   // Admin reads, Super Admin writes (TD-2 R26) — enforced in the services, never

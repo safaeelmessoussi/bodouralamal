@@ -181,6 +181,17 @@ DELETE /admin/levels/{levelId}/subjects/{subjectId}  # TD-3 extension; TD-5; ref
 #    admitted the Branch and Room routes above.
 #    Read: Admin+ (TD-2 R26). Write: Super Admin (TD-2 R26). SRS wording is
 #    drafted in docs/SRS-PROPOSAL-R47.md and awaits the Document Owner.
+# R110 (NEW H) — the scheduling-type catalogue. Recorded here on the same footing
+# as /admin/quran and /admin/level-surahs: the CAPABILITY is the Owner's (the
+# 2026-08-26 addendum requires a management path for any business/reference data
+# the platform shows, and OD-03 makes attendance_required a stored column so the
+# form can read it), and the wording reaches the SRS through SRS-PROPOSAL-R110.
+GET /admin/scheduling-types                   # R110; any staff who may schedule (R93/R94)
+POST /admin/scheduling-types                  # R110; Super Admin only (OD-01)
+PATCH /admin/scheduling-types/{id}            # R110; TD-15 optimistic locking; structural_kind refused
+DELETE /admin/scheduling-types/{id}           # R110; TD-5, refused while an activity names it
+PATCH /admin/scheduling-types/order           # R76.4; the sequence; refused unless the exact live set
+
 GET /admin/categories                         # §5.6 "Categories & Subjects", §14.2 screen standard
 POST /admin/categories                        # §5.6; Super Admin only (reference data, TD-2 R26)
 PATCH /admin/categories/{id}                  # §5.6; TD-15 optimistic locking

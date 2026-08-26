@@ -4,7 +4,9 @@ import { RecurrenceEditor, SchedulingTimes, type RecurrenceValue } from './recur
 import { SelectField, TextArea, TextField } from '../ui/field.js';
 import { DateField } from '../ui/field.js';
 import { t } from '../../i18n/index.js';
-import { AVAILABLE_TYPES, SCHEDULING_TYPES, type SchedulingType } from '../../adapters/scheduling.js';
+import { SCHEDULING_TYPES, type SchedulingType } from '../../adapters/scheduling.js';
+import type { SchedulingTypeRow } from '../../adapters/scheduling-catalogue.js';
+import { Feedback } from '../ui/feedback.js';
 
 /**
  * **The generic scheduling shell** (SRS Revision 56).
@@ -45,6 +47,24 @@ export interface SchedulingFormProps {
    *  kind TD-2 grants them, so the form offers no option the server refuses;
    *  the back office passes nothing and gets §4.4's full set. */
   types?: readonly SchedulingType[];
+
+  /**
+   * **R110 — the type picker's options, from the server** (NEW H).
+   *
+   * The five named types are reference data an administrator manages, so this
+   * component renders what it is handed and decides nothing about the list.
+   * Narrowed by `types` above: a caller who may author only activities is
+   * offered only the catalogue rows delivered as activities, which is the same
+   * rule the old picker applied to structural kinds.
+   *
+   * **Rule O:** the caller passes the permitted set, this renders it, and the
+   * server is the authority — a forged `scheduling_type_id` is refused there.
+   */
+  catalogue?: readonly SchedulingTypeRow[];
+  /** Which catalogue row is chosen. `null` on a legacy activity, whose type was
+   *  never recorded (R56 told administrators to write it in the title). */
+  schedulingTypeId?: string | null;
+  onSchedulingTypeChange?: (row: SchedulingTypeRow) => void;
 
   title: string;
   onTitle: (v: string) => void;
@@ -93,6 +113,9 @@ export function SchedulingForm({
   onTypeChange,
   typeLocked,
   types = SCHEDULING_TYPES,
+  catalogue = [],
+  schedulingTypeId = null,
+  onSchedulingTypeChange,
   title,
   onTitle,
   showTitle,
@@ -117,24 +140,14 @@ export function SchedulingForm({
 }: SchedulingFormProps): ReactNode {
   return (
     <>
-      <SelectField
-        label={t('scheduling.itemType')}
-        value={type}
-        onChange={(v) => onTypeChange(v as SchedulingType)}
-        // §4.4: the kind decides which entity stores the item, so changing it
-        // after creation would mean moving a row between tables. It is a
-        // creation-time decision, and the form says so rather than failing.
-        disabled={typeLocked}
-        hint={typeLocked ? t('scheduling.typeFixed') : undefined}
-        options={types.map((k) => ({
-          value: k,
-          // §14.4: a blocked capability states its reason instead of vanishing.
-          // `exam` is real (§4.6) and arrives with M5, and hiding it would make
-          // the roadmap invisible exactly where somebody looks for it.
-          label: AVAILABLE_TYPES.includes(k)
-            ? t(`scheduling.type.${k}`)
-            : `${t(`scheduling.type.${k}`)} — ${t('scheduling.typeSoon')}`,
-        }))}
+      <TypePicker
+        type={type}
+        typeLocked={typeLocked}
+        kinds={types}
+        catalogue={catalogue}
+        schedulingTypeId={schedulingTypeId}
+        onTypeChange={onTypeChange}
+        {...(onSchedulingTypeChange ? { onSchedulingTypeChange } : {})}
       />
 
       {showTitle ? (
@@ -189,6 +202,107 @@ export function SchedulingForm({
       ) : null}
 
       {children}
+    </>
+  );
+}
+
+
+/**
+ * **The type picker — one option per CATALOGUE row** (R110, NEW H).
+ *
+ * ## Why this is not the old picker with a longer list
+ *
+ * The old one offered three options because the frontend registry had three
+ * entries, and those three were the *entities*. An administrator does not think
+ * *«I am creating an Event»*; she thinks *«I am scheduling a حفل»* — and حفل,
+ * محاضرة and عطلة were indistinguishable, because the only place the difference
+ * lived was whatever she typed in the title (R56).
+ *
+ * So the options are the catalogue's rows, and the entity is **derived** from
+ * the chosen row's `structural_kind`. Both callbacks fire: the page needs the
+ * row (to send `scheduling_type_id`) and the kind (to shape the rest of the
+ * form).
+ *
+ * ## The legacy row, and why there is no invented option
+ *
+ * An activity created before R110 has no type. The picker is locked on edit
+ * anyway — the kind decides which entity stores the item, so it is a
+ * creation-time decision — and where the row names no catalogue entry it falls
+ * back to the entity's own label rather than guessing which of محاضرة, حفل or
+ * عطلة it was. Guessing from the title is exactly the name-matching §4.4b
+ * forbids.
+ *
+ * ## Attendance
+ *
+ * `attendance_required` is a fact about the type, so it is stated where the type
+ * is chosen (OD-03). **Attendance-specific controls render only where it is
+ * true** — there are none yet, and this notice is the seam they attach to;
+ * putting the flag anywhere else would leave the next person to build them
+ * hunting for it.
+ */
+function TypePicker({
+  type,
+  typeLocked,
+  kinds,
+  catalogue,
+  schedulingTypeId,
+  onTypeChange,
+  onSchedulingTypeChange,
+}: {
+  type: SchedulingType;
+  typeLocked: boolean;
+  kinds: readonly SchedulingType[];
+  catalogue: readonly SchedulingTypeRow[];
+  schedulingTypeId: string | null;
+  onTypeChange: (next: SchedulingType) => void;
+  onSchedulingTypeChange?: (row: SchedulingTypeRow) => void;
+}): ReactNode {
+  // Narrowed to what this caller may author (R72). A مؤطِّرة is offered the
+  // activity rows and nothing else, because that is what the server grants her.
+  const offered = catalogue.filter((r) => kinds.includes(r.structural_kind));
+  const selected = offered.find((r) => r.id === schedulingTypeId) ?? null;
+
+  /**
+   * **The fallback is the entity's label, never a guessed catalogue name.**
+   *
+   * Reached in two states, both real: the catalogue has not loaded yet, and a
+   * legacy activity whose type nobody recorded.
+   */
+  if (offered.length === 0 || (typeLocked && selected === null)) {
+    return (
+      <SelectField
+        label={t('scheduling.itemType')}
+        value={type}
+        onChange={(v) => onTypeChange(v as SchedulingType)}
+        disabled={typeLocked}
+        hint={typeLocked ? t('scheduling.typeFixed') : undefined}
+        options={kinds.map((k) => ({ value: k, label: t(`scheduling.type.${k}`) }))}
+      />
+    );
+  }
+
+  return (
+    <>
+      <SelectField
+        label={t('scheduling.itemType')}
+        value={selected?.id ?? ''}
+        onChange={(v) => {
+          const row = offered.find((r) => r.id === v);
+          if (!row) return;
+          onSchedulingTypeChange?.(row);
+          // The entity follows the row — derived, never chosen twice.
+          onTypeChange(row.structural_kind);
+        }}
+        // §4.4: the kind decides which entity stores the item, so changing it
+        // after creation would mean moving a row between tables. It is a
+        // creation-time decision, and the form says so rather than failing.
+        disabled={typeLocked}
+        hint={typeLocked ? t('scheduling.typeFixed') : undefined}
+        options={offered.map((r) => ({ value: r.id, label: r.name }))}
+      />
+      {selected?.attendance_required ? (
+        <Feedback>{t('scheduling.attendanceTaken')}</Feedback>
+      ) : null}
     </>
   );
 }

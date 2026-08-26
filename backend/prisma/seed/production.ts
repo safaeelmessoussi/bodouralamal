@@ -84,6 +84,33 @@ const SUBJECTS = [
 
 const MEMORISATION_SUBJECT = SUBJECTS[1];
 
+/**
+ * **R110 — the authoritative initial scheduling-type catalogue** (Owner,
+ * 2026-08-26).
+ *
+ * Five rows, three entities. R56 settled the routing and R110 stores it, so
+ * `structuralKind` is data on the row rather than something read off the Arabic
+ * name — §4.4b forbids that, and a catalogue whose behaviour depended on its
+ * label could never be renamed.
+ *
+ * **`attendanceRequired` is the Owner's column, verbatim**: نعم for حصة دراسية
+ * and اختبار, لا for the other three. It is not derivable — اختبار takes
+ * attendance and محاضرة does not, and nothing about either word says so.
+ *
+ * **عطلة is an ordinary schedulable Event** (OD-03), shown on the calendar like
+ * any other, with `attendanceRequired: false`. It is not a suppression
+ * mechanism: BR-17 keeps non-teaching activity out of the timetable and §4.4(6)
+ * makes a cancellation an edit to a Session row, so **a holiday cancels no
+ * class**.
+ */
+const SCHEDULING_TYPES = [
+  { name: 'حصة دراسية', structuralKind: 'class', attendanceRequired: true, displayOrder: 1 },
+  { name: 'اختبار', structuralKind: 'exam', attendanceRequired: true, displayOrder: 2 },
+  { name: 'محاضرة', structuralKind: 'activity', attendanceRequired: false, displayOrder: 3 },
+  { name: 'حفل', structuralKind: 'activity', attendanceRequired: false, displayOrder: 4 },
+  { name: 'عطلة', structuralKind: 'activity', attendanceRequired: false, displayOrder: 5 },
+] as const;
+
 const ACADEMIC_YEAR = '2026-2027';
 
 interface SurahRow {
@@ -205,6 +232,78 @@ async function seedSubjects(): Promise<void> {
   console.log(`  subjects: ${SUBJECTS.length}`);
 }
 
+/**
+ * The scheduling-type catalogue — **additive and idempotent, and it never
+ * overwrites an Owner-managed change** (R110, NEW H).
+ *
+ * *Seeded does not mean immutable*: the seed establishes the initial state and
+ * is not a whitelist. So the rule is **find by live name, else create**, and on
+ * a second run it changes nothing at all:
+ *
+ * * a **renamed** row is not found by name and is therefore not restored — it
+ *   was renamed on purpose, and re-creating the old name would leave the
+ *   administrator with two;
+ * * a **reordered** catalogue keeps its order — `displayOrder` is written only
+ *   on the create, so the Owner's arrangement survives;
+ * * a **re-flagged** row keeps its flag — `attendanceRequired` is hers to
+ *   decide once the row exists, which is the whole point of it being a column;
+ * * a **soft-deleted** row stays deleted, and its name is free for a fresh one.
+ *
+ * **One preflight, and it is a real ambiguity rather than a tidiness check.**
+ * The live-name unique index makes duplicates unrepresentable going forward, so
+ * the only way to meet two is a database that predates it — and guessing which
+ * of them the seed means is exactly what R107's preflight refuses to do.
+ */
+async function seedSchedulingTypes(): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    for (const type of SCHEDULING_TYPES) {
+      const live = await tx.schedulingType.findMany({
+        where: { name: type.name, deletedAt: null },
+        select: { id: true },
+      });
+      if (live.length > 1) {
+        throw new Error(
+          `Production seed requires at most one live scheduling type named ${type.name}; found ${live.length}`,
+        );
+      }
+      if (live.length === 0) {
+        await tx.schedulingType.create({
+          data: {
+            name: type.name,
+            structuralKind: type.structuralKind,
+            attendanceRequired: type.attendanceRequired,
+            displayOrder: type.displayOrder,
+          },
+        });
+      }
+    }
+
+    /**
+     * **The postcondition, asserted rather than assumed.** A launch-ready
+     * installation must be able to schedule all three kinds of thing, and a
+     * catalogue that lost its only `class` row would leave الجدولة unable to
+     * create a class at all — with no error anywhere, because every write path
+     * would simply never be reached.
+     */
+    const kinds = new Set(
+      (
+        await tx.schedulingType.findMany({
+          where: { deletedAt: null },
+          select: { structuralKind: true },
+        })
+      ).map((r) => r.structuralKind),
+    );
+    for (const required of ['class', 'activity', 'exam'] as const) {
+      if (!kinds.has(required)) {
+        throw new Error(
+          `Production seed must leave at least one live scheduling type of kind ${required}`,
+        );
+      }
+    }
+  });
+  console.log(`  scheduling types: ${SCHEDULING_TYPES.length} (additive; renames and order preserved)`);
+}
+
 async function seedAcademicYear(): Promise<void> {
   await prisma.academicYear.upsert({
     where: { label: ACADEMIC_YEAR },
@@ -289,6 +388,7 @@ async function main(): Promise<void> {
   await seedSubjects();
   await seedRoles();
   const categoryIds = await seedCategoriesAndLevels();
+  await seedSchedulingTypes();
   await seedAcademicYear();
   await seedQuranSurahs();
   await seedSystemSettings(categoryIds);

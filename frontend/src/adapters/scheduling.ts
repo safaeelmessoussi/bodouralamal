@@ -15,7 +15,7 @@ import {
 } from './events.js';
 import { createExam, deleteExam, listExams, updateExam, type Exam } from './exams.js';
 import { WEEKDAYS } from '../components/scheduling/recurrence-editor.js';
-import { SCHEDULING_TYPE_SPECS } from './scheduling-types.js';
+import { STRUCTURAL_KIND_SPECS } from './scheduling-types.js';
 
 /**
  * **The one place that knows there are separate models** (SRS Revision 56).
@@ -54,7 +54,7 @@ export const SCHEDULING_TYPES: readonly SchedulingType[] = ['class', 'activity',
 /** Derived from the registry, so a kind becomes available by flipping one flag
  *  beside its declaration rather than by editing a second list here. */
 export const AVAILABLE_TYPES: readonly SchedulingType[] = SCHEDULING_TYPES.filter(
-  (k) => SCHEDULING_TYPE_SPECS[k].available,
+  (k) => STRUCTURAL_KIND_SPECS[k].available,
 );
 
 /**
@@ -115,6 +115,19 @@ export interface SchedulingItem {
  * opened with them blank would erase them on save.
  */
 export interface SchedulingIds {
+  /**
+   * **R110 — which catalogue type the item is** (محاضرة, حفل, عطلة).
+   *
+   * Carried so Edit can hydrate the picker from the row rather than from a
+   * default — the same defect NEW B §A found on `visibility`, where the wrong
+   * value and the intended default were the same string and the widening was
+   * therefore invisible.
+   *
+   * `null` for a class and a sitting, whose type is implied by the entity, and
+   * for an activity created before R110, which recorded its type nowhere a
+   * query can reach (R56 told administrators to write it in the title).
+   */
+  schedulingTypeId: string | null;
   branchId: string | null;
   roomId: string | null;
   /** **R97 — طريقة الحضور**, so an edit form opens on what the class IS. `null`
@@ -158,6 +171,8 @@ interface EventDefinitionWire {
   id: string;
   title: string;
   description: string | null;
+  /** R110 — `null` for an activity created before the catalogue existed. */
+  scheduling_type_id: string | null;
   visibility: string;
   start_date: string;
   end_date: string | null;
@@ -179,6 +194,7 @@ interface EventDefinitionWire {
 }
 
 const EMPTY_IDS: SchedulingIds = {
+  schedulingTypeId: null,
   branchId: null,
   roomId: null,
   deliveryMode: null,
@@ -221,6 +237,10 @@ export function fromSchedule(row: CourseSchedule): SchedulingItem {
     staffCount: row.staff.length,
     version: row.version,
     ids: {
+      // R110 — a class and a sitting are typed by the ENTITY they are; a
+      // catalogue row adds nothing they do not already state. `null` is "this
+      // kind needs no catalogue row", not a missing value.
+      schedulingTypeId: null,
       branchId: row.branch_id,
       roomId: row.room_id,
       deliveryMode: row.delivery_mode,
@@ -275,6 +295,7 @@ export function fromEvent(row: EventDefinitionWire): SchedulingItem {
     // gave it**: an event now has somebody answerable for it.
     ids: {
       ...EMPTY_IDS,
+      schedulingTypeId: row.scheduling_type_id ?? null,
       staff: row.staff.map((x) => ({
         user_id: x.user_id,
         position: x.position,
@@ -316,6 +337,10 @@ function fromExam(row: Exam): SchedulingItem {
     staffCount: row.staff.length,
     version: row.version,
     ids: {
+      // R110 — a class and a sitting are typed by the ENTITY they are; a
+      // catalogue row adds nothing they do not already state. `null` is "this
+      // kind needs no catalogue row", not a missing value.
+      schedulingTypeId: null,
       branchId: row.branch_id,
       roomId: row.room_id,
       // R97 — an Exam sitting is physical by §4.6 and carries no delivery
@@ -440,6 +465,9 @@ export interface SchedulingInput {
   repeatUntil: string | null;
   /** Activity only. */
   visibility?: string;
+  /** R110 — the catalogue row the picker chose. Sent on the Event payload only:
+   *  a class and a sitting are typed by the entity they are. */
+  schedulingTypeId?: string | null;
   /** §4.4's four-way scope. **`groupIds` was missing until R72**, and it is the
    *  ONLY kind a Teacher may use (TD-2, §4.9) — so the form could offer them
    *  nothing the server would accept. */
@@ -646,6 +674,10 @@ export async function saveSchedulingItem(
   const payload: EventInput = {
     title: input.title,
     description: input.description,
+    // R110 — required by the server on create, and carried on update so an edit
+    // can re-type an activity. `input.schedulingTypeId` is what the picker
+    // chose; the form refuses to submit without one.
+    scheduling_type_id: input.schedulingTypeId ?? '',
     visibility: (input.visibility ?? 'public') as EventInput['visibility'],
     start_date: input.startDate,
     end_date: input.endDate,

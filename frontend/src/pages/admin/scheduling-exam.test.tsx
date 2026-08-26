@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import type { Exam } from '../../adapters/exams.js';
 import type { Occurrence } from '../../adapters/calendar.js';
 import { OCCURRENCE_KIND_BADGE, OCCURRENCE_KIND_LABEL } from '../../adapters/calendar.js';
-import { AVAILABLE_TYPES, specOfType } from '../../adapters/scheduling-types.js';
+import { AVAILABLE_TYPES, specOfKind } from '../../adapters/scheduling-types.js';
 import { examStaffOf } from '../../components/scheduling/exam-section.js';
 import { t } from '../../i18n/index.js';
 
@@ -93,7 +93,7 @@ describe('R56 promised a third arm, not a second scheduling experience', () => {
   });
 
   it('declares what an exam IS rather than letting the form infer it', () => {
-    const spec = specOfType('exam');
+    const spec = specOfKind('exam');
     // One dated sitting: `once` is the only honest pattern, and offering
     // *weekly* would describe something the model cannot represent.
     expect(spec.allowsOnce).toBe(true);

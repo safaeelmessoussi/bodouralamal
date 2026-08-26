@@ -1553,6 +1553,58 @@ export function scheduleSessionDto(row: {
   };
 }
 
+/* ── The scheduling-type catalogue (R110, NEW H) ─────────────────────────── */
+
+export interface SchedulingTypeDto {
+  id: string;
+  /** The administrator-facing label — «حصة دراسية», «عطلة». */
+  name: string;
+  /**
+   * **Which entity this type routes to** — `class` | `activity` | `exam`.
+   *
+   * Published because the client has to know which form to open, and R56 settled
+   * that those three branches are the ones that mean something. **Stored, never
+   * inferred from `name`**: §4.4b forbids reading a rule off a label, and a
+   * catalogue whose behaviour depended on its wording could not be renamed.
+   */
+  structural_kind: string;
+  /**
+   * **Whether attendance is taken for this type** (OD-03).
+   *
+   * The form presents attendance-specific controls only where this is true, so
+   * it travels on the contract rather than being re-decided per client — which
+   * is what makes it a column and not display text.
+   */
+  attendance_required: boolean;
+  /** The Owner's canonical order, changed through `PATCH .../order` (R76). */
+  display_order: number;
+  /** Live activities already using it — what makes a blocked deletion legible
+   *  before the administrator meets it (rule AZ.1). */
+  event_count: number;
+  /** TD-15: the editor sends it back; a stale one is a `409`. */
+  version: number;
+}
+
+export function schedulingTypeDto(row: {
+  id: string;
+  name: string;
+  structuralKind: string;
+  attendanceRequired: boolean;
+  displayOrder: number;
+  eventCount: number;
+  version: number;
+}): SchedulingTypeDto {
+  return {
+    id: row.id,
+    name: row.name,
+    structural_kind: String(row.structuralKind),
+    attendance_required: row.attendanceRequired,
+    display_order: row.displayOrder,
+    event_count: row.eventCount,
+    version: row.version,
+  };
+}
+
 /* ── Trash (§7, TD-5, BR-15, Revision 52) ────────────────────────────────── */
 
 export interface TrashEntryDto {
@@ -1641,6 +1693,15 @@ export interface EventDefinitionDto {
   id: string;
   title: string;
   description: string | null;
+  /**
+   * **R110 — which catalogue type this activity is** (محاضرة, حفل, عطلة).
+   *
+   * `null` for every activity created before R110: R56 told administrators to
+   * write عطلة in the title, so those rows record their type nowhere a query can
+   * reach. `null` is *"nobody recorded one"* — a real state, and deliberately
+   * not the same as any type.
+   */
+  scheduling_type_id: string | null;
   visibility: string;
   /** TD-11 calendar dates and wall-clock times — never instants. `null` times
    *  mean an ALL-DAY event, which is a real state and not a missing value. */
@@ -1665,6 +1726,7 @@ export function eventDefinitionDto(row: {
   id: string;
   title: string;
   description: string | null;
+  schedulingTypeId: string | null;
   visibility: string;
   startDate: Date;
   endDate: Date | null;
@@ -1680,6 +1742,7 @@ export function eventDefinitionDto(row: {
     id: row.id,
     title: row.title,
     description: row.description,
+    scheduling_type_id: row.schedulingTypeId,
     visibility: String(row.visibility),
     start_date: dateOnly(row.startDate)!,
     end_date: dateOnly(row.endDate),

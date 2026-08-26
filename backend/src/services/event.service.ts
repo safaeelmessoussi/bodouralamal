@@ -8,6 +8,7 @@ import { notifyEventStaffAssigned } from './notification.service.js';
 import { updateWithVersion } from '../repositories/optimistic-lock.js';
 import * as trash from '../repositories/trash.repository.js';
 import type { Actor } from '../policies/actor.js';
+import { assertActivityType } from './scheduling-type.service.js';
 
 /**
  * Events — the exception/special-activity layer (SRS §4.4, §7, TD-2, TD-5, TD-11).
@@ -50,6 +51,21 @@ export interface EventScopes {
 export interface EventInput extends EventScopes {
   title: string;
   description?: string | null;
+  /**
+   * **R110 — which catalogue type this activity is** (محاضرة, حفل, عطلة).
+   *
+   * Optional on the TYPE and required by the FORM, which is §7's standing
+   * division (R35): every activity created before R110 has its type recorded
+   * nowhere a query can reach — R56 told administrators to write عطلة in the
+   * title — and inferring one from that title would be the name-matching §4.4b
+   * forbids. So the column tolerates the past and the boundary demands a value
+   * where a real one can be asked for.
+   *
+   * Refused unless it names a **live type whose `structural_kind` is
+   * `activity`**: an `Event` typed حصة دراسية would be a row the calendar
+   * renders as an activity and the catalogue calls a class.
+   */
+  schedulingTypeId?: string | null;
   visibility: 'public' | 'private' | 'hidden';
   startDate: Date;
   endDate?: Date | null;
@@ -159,10 +175,15 @@ export async function createEvent(
       if (reachable !== null) branchIds = branchIds.filter((b) => reachable.includes(b));
     }
 
+    // R110 — checked before the row is written, so a bad type is a coded
+    // refusal rather than a foreign-key violation surfacing as a 500.
+    if (input.schedulingTypeId) await assertActivityType(tx, input.schedulingTypeId);
+
     const event = await tx.event.create({
       data: {
         title: input.title,
         description: input.description ?? null,
+        schedulingTypeId: input.schedulingTypeId ?? null,
         visibility: input.visibility as never,
         startDate: input.startDate,
         endDate: input.endDate ?? null,
@@ -348,6 +369,13 @@ export async function updateEvent(
     const merged: EventInput = {
       title: patch.title ?? existing.title,
       description: patch.description === undefined ? existing.description : patch.description,
+      // R110 — absent leaves the type alone; `null` is a real instruction to
+      // clear it, the same `undefined` / `null` distinction every PATCH on this
+      // platform makes.
+      schedulingTypeId:
+        patch.schedulingTypeId === undefined
+          ? existing.schedulingTypeId
+          : patch.schedulingTypeId,
       visibility: (patch.visibility ?? existing.visibility) as EventInput['visibility'],
       startDate: patch.startDate ?? existing.startDate,
       endDate: patch.endDate === undefined ? existing.endDate : patch.endDate,
@@ -358,6 +386,9 @@ export async function updateEvent(
         patch.recurrenceEndDate === undefined ? existing.recurrenceEndDate : patch.recurrenceEndDate,
     };
     assertValidDates(merged);
+    // R110 — re-checked on the MERGED value, so an edit cannot move an activity
+    // onto a type that routes somewhere else.
+    if (merged.schedulingTypeId) await assertActivityType(tx, merged.schedulingTypeId);
 
     // TD-15.1: conditional UPDATE on `version` — a stale version is a coded 409,
     // never a silent overwrite of a colleague's edit.
@@ -369,6 +400,7 @@ export async function updateEvent(
       data: {
         title: merged.title,
         description: merged.description ?? null,
+        schedulingTypeId: merged.schedulingTypeId ?? null,
         visibility: merged.visibility as never,
         startDate: merged.startDate,
         endDate: merged.endDate ?? null,

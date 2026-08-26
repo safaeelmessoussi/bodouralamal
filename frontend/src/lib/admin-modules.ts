@@ -372,6 +372,27 @@ export const ADMIN_MODULES: readonly AdminModule[] = [
   },
   {
     /**
+     * **R110 (NEW H) — أنواع الجدولة, the scheduling-type catalogue.**
+     *
+     * A NEW node rather than a reshuffle: R105 fixed the order of the existing
+     * الإدارة entries and OD-01 says not to rearrange them silently, so this is
+     * appended after the reference-data nodes and before the platform ones,
+     * where a catalogue belongs.
+     *
+     * **Super Admin only**, which is OD-01's final sub-decision — scheduling
+     * types stay undelegated until an Owner decision says otherwise — and which
+     * is what keeps R105's الإدارة heading a fact about permission rather than a
+     * label. The node's visibility is NOT the control: the service refuses an
+     * Admin every write regardless of what the menu shows.
+     */
+    path: '/admin/scheduling-types',
+    labelKey: 'admin.nav.schedulingTypes',
+    section: 'administration',
+    roles: SUPER_ONLY,
+    status: 'ready',
+  },
+  {
+    /**
      * §7/BR-15 (R52) — Super Admin only: the list spans every entity regardless
      * of branch, which no other surface allows.
      *

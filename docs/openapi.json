@@ -3124,6 +3124,277 @@
         }
       }
     },
+    "/admin/scheduling-types": {
+      "get": {
+        "summary": "List scheduling types",
+        "description": "R110 (NEW H), §5.6, §14.1 — **the scheduling-type catalogue**: the five types an administrator picks from on الجدولة — حصة دراسية, اختبار, محاضرة, حفل, عطلة. They were a hardcoded frontend constant, so nobody could add one, rename one, reorder them, or record which of them takes attendance; **seeded does not mean immutable** (Owner addendum) and the seed is an initial state, never a whitelist. **Five rows, THREE entities**: `structural_kind` is `class` → `RecurringCourseSchedule`, `activity` → `Event`, `exam` → `Exam`, which is R56's own settled routing — *the type selector's branches are exactly the ones that mean something*. **Stored, never inferred from the Arabic name** (§4.4b). `attendance_required` drives the form (OD-03): attendance-specific controls are presented only where it is true, which is why it is a column and not display text. **Reading is any staff who may schedule**, a مؤطِّرة included (R93/R94) — a picker that refused her would be a form she cannot open — while **writing is Super Admin only** (OD-01, until an Owner decision delegates it). `/admin/` is a routing namespace, not an authorization boundary; both are asserted in the service. Ordered by `display_order` and **not paginated**: a picker that offers a second page is lying about the choice available, and the set is five rows. `event_count` is the live activities using each row — what makes a blocked deletion legible before an administrator meets it.",
+        "responses": {
+          "200": {
+            "description": "The catalogue, in display order."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN for a caller who is not staff.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create a scheduling type",
+        "description": "R110, **Super Admin only**. Body: `{ name, structural_kind, attendance_required }` — **strictly** those keys. `display_order` is deliberately absent: R76 settled that ordering is expressed as a whole sequence through `PATCH /admin/scheduling-types/order`, and accepting a position here would be a second mechanism the two would disagree over. A create **appends**. `attendance_required` is required and not defaulted — whether a type takes attendance is a decision about what it MEANS, and a default would let one be created without anybody making it.",
+        "responses": {
+          "201": {
+            "description": "The created type."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a missing key, an unknown one, or an unknown structural_kind.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN for anyone but a Super Admin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/scheduling-types/order": {
+      "patch": {
+        "summary": "Reorder scheduling types",
+        "description": "R76.4 — the الإدارة → أنواع الجدولة screen orders its rows by dragging one, and the Owner calls this order canonical. Body is `{ ids }`: **the sequence itself, not per-row numbers**, so duplicate and gapped positions are impossible rather than validated against. The sequence must be the **whole live set**, naming which ids were duplicated, missing or foreign. Idempotent. **Super Admin only** (R110/OD-01).",
+        "responses": {
+          "200": {
+            "description": "`{ data: { ids } }` — the resulting order."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED naming duplicated, missing or foreign ids.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN for anyone but a Super Admin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/scheduling-types/{id}": {
+      "patch": {
+        "summary": "Rename or re-flag a scheduling type",
+        "description": "R110, **Super Admin only**, TD-15 optimistic locking. Body: `{ version, name?, attendance_required? }` — **strictly** those keys. **`structural_kind` is refused, not ignored**: it decides which entity the type routes to, so changing it would re-point every activity already recorded against the row at a model that cannot represent them — the reasoning §4.4 applies to a course schedule's subject and target, and §4.6 to an exam's level. A type that routes somewhere else is a new type. Omitting a key leaves that value alone; it is never reset to a default.",
+        "responses": {
+          "200": {
+            "description": "Updated."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a missing version, or an attempt to change structural_kind.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN for anyone but a Super Admin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an unknown type.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). VERSION_CONFLICT.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Delete a scheduling type",
+        "description": "R110, **Super Admin only**; TD-5 soft delete with a Trash snapshot and an audit row. **Refused while any activity still names this type** (`409 STATE_CONFLICT` with `blocked_by`), because `event.scheduling_type_id` is `ON DELETE RESTRICT`: a retired type must stay resolvable by the activities that used it, or tidying the catalogue destroys the record of what an activity WAS. Soft, so the name stays in the record — and the unique index on the name is partial over live rows, so the name is free for a fresh type.",
+        "responses": {
+          "204": {
+            "description": "Soft-deleted."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN for anyone but a Super Admin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND for an unknown type.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT with blocked_by.events when an activity still names it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/admin/categories/order": {
       "patch": {
         "summary": "Reorder categories",

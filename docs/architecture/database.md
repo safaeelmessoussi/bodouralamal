@@ -441,6 +441,7 @@ SQL, and flags every `DROP`/`RENAME` for human review with its contract-phase ju
 20260823190000_r102_rejection_revocation_reason
 20260823210000_normalized_email_ownership_lock
 20260826120000_r109_scheduling_visibility
+20260826140000_r110_scheduling_type_catalogue
 ```
 
 Note the pattern: schema changes and their hand-written constraints are **separate

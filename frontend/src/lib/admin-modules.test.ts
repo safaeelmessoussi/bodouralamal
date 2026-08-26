@@ -65,6 +65,18 @@ describe('the registry matches §14.1', () => {
         // R56 — one node for everything on the calendar. `/admin/calendar` is
         // gone: the type is a field on the form, not a navigation decision.
         '/admin/schedules',
+        /**
+         * **R110 (NEW H) — أنواع الجدولة is not in §14.1 either**, and is
+         * recorded here for the same reason `/admin/quran` and
+         * `/admin/level-surahs` are.
+         *
+         * The CAPABILITY is the Owner's: *«if the platform presents
+         * business/reference data to users, there must be a management path»*
+         * (addendum, 2026-08-26), and OD-03 makes `attendance_required` a stored
+         * column precisely so the form can read it. The five types were a
+         * hardcoded frontend constant with no screen at all.
+         */
+        '/admin/scheduling-types',
         // R55 — §14.1's single "Categories & Subjects" node became two, on the
         // Owner's instruction. One implementation still serves both.
         '/admin/categories',
@@ -319,7 +331,16 @@ describe('§14.1 renders exactly the order the Document Owner specified (R105)',
     '/admin/content', // مكتبة المحتوى
   ] as const;
 
-  /** الإدارة, top to bottom — the dependency chain, then the standalone nodes. */
+  /**
+   * الإدارة, top to bottom — the dependency chain, then the standalone nodes.
+   *
+   * **R110 (NEW H) added `/admin/scheduling-types`, and this guard is RESTATED
+   * rather than relaxed.** R105 fixed the sequence and OD-01 says the menu is
+   * not rearranged silently, so the assertion still pins an exact order — it
+   * pins the order that now includes a node the Owner asked for. The new entry
+   * sits after the reference-data chain and before the platform nodes, because
+   * that is what it is: a catalogue.
+   */
   const ADMINISTRATION_ORDER = [
     '/admin/categories', // الفئات
     '/admin/levels', // المستويات
@@ -327,6 +348,7 @@ describe('§14.1 renders exactly the order the Document Owner specified (R105)',
     '/admin/level-subjects', // مواد المستوى
     '/admin/level-surahs', // مقرر الحفظ
     '/admin/branches', // الفروع والقاعات
+    '/admin/scheduling-types', // أنواع الجدولة (R110)
     '/admin/trash', // سلة المحذوفات
     '/superadmin/hijri-calendar', // التقويم الهجري
     '/superadmin/settings', // إعدادات المنصة

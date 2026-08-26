@@ -94,6 +94,9 @@ async function clear(): Promise<void> {
   // R82 — notices RESTRICT the event they are about; teardown clears them first.
   await prisma.notification.deleteMany({ where: { event: { id: { in: ids } } } });
   await prisma.event.deleteMany({ where: { id: { in: ids } } });
+  // R110 — after the activities that name it: `scheduling_type_id` is RESTRICT,
+  // exactly like every other reference this suite unwinds in dependency order.
+  await prisma.schedulingType.deleteMany({ where: { name: { startsWith: TAG } } });
 
   const users = await prisma.user.findMany({
     where: { nameArabic: { startsWith: TAG } },
@@ -130,6 +133,18 @@ beforeAll(async () => {
 
 beforeEach(async () => {
   await clear();
+  activityTypeId = (
+    await prisma.schedulingType.create({
+      data: {
+        name: `${TAG} نوع`,
+        structuralKind: "activity",
+        // The three activity types the Owner seeded all take no attendance
+        // (OD-03); this fixture matches, and nothing here depends on the flag.
+        attendanceRequired: false,
+        displayOrder: 900,
+      },
+    })
+  ).id;
   superToken = bearer(await withRole("مشرف عام", "super_admin"), [
     "super_admin",
   ]);
@@ -141,12 +156,75 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 
+/**
+ * **R110 — every activity states which catalogue type it is.**
+ *
+ * `scheduling_type_id` is required at this boundary, which is §7's standing
+ * division (R35): the column is nullable for the rows that predate R110 — R56
+ * told administrators to write عطلة in the title — and the form can be asked for
+ * a real value. Every body here therefore names a type, and the suite seeds one
+ * of its own rather than depending on the production catalogue, which a
+ * developer database may have renamed.
+ */
+let activityTypeId = "";
+
 const payload = (over: Record<string, unknown> = {}) => ({
   title: `${TAG} نشاط`,
+  scheduling_type_id: activityTypeId,
   visibility: "private",
   start_date: "2026-06-15",
   recurrence_type: "none",
   ...over,
+});
+
+describe("POST /events — R110's type, over real HTTP", () => {
+  it("refuses a body that names no scheduling type", async () => {
+    // Required at the boundary (R35). Without this the form could keep writing
+    // activities whose type is recorded nowhere a query can reach — the exact
+    // state R110 exists to end.
+    const body = payload();
+    delete (body as Record<string, unknown>)["scheduling_type_id"];
+    const res = await call("POST", "/events", superToken, body);
+
+    expect(res.status).toBe(400);
+    expect(res.body.error?.code).toBe("VALIDATION_FAILED");
+  });
+
+  it("refuses a type that routes somewhere else — the FORGED body case", async () => {
+    // Rule AF: identity is refused by the server, not hidden by the form. The
+    // client offers only activity rows; this proves that a request bypassing the
+    // client cannot write an Event the catalogue calls a class.
+    const classType = await prisma.schedulingType.create({
+      data: {
+        name: `${TAG} حصة`,
+        structuralKind: "class",
+        attendanceRequired: true,
+        displayOrder: 901,
+      },
+    });
+    const res = await call(
+      "POST",
+      "/events",
+      superToken,
+      payload({ scheduling_type_id: classType.id }),
+    );
+
+    expect(res.status).toBe(400);
+    expect(res.body.error?.code).toBe("VALIDATION_FAILED");
+  });
+
+  it("records the type, and publishes it back so an edit can hydrate", async () => {
+    const created = await call("POST", "/events", superToken, payload());
+    expect(created.status).toBe(201);
+
+    // The definitions list is what the edit form reads. A field that reached the
+    // database but not the contract would leave the form hydrating from a
+    // default — the shape NEW B §A found on `visibility`.
+    const list = await call("GET", "/events", superToken);
+    const rows = (list.body.data ?? []) as unknown as Record<string, unknown>[];
+    const row = rows.find((e) => e["id"] === created.body.id);
+    expect(row?.["scheduling_type_id"]).toBe(activityTypeId);
+  });
 });
 
 describe("POST /events", () => {

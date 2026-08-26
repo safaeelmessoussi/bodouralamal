@@ -219,6 +219,16 @@ to **correct Arabic alphabetical order — never codepoint order.**
 *Enforced:* columns are natively collated, so correct ordering is the default in every query.
 **Never add a per-query collation workaround; fix the column.**
 
+### BR-20
+**Seeded does not mean immutable** (Owner addendum, 2026-08-26). Any business or reference
+catalogue the platform shows to users has an Admin/Super Admin management path, subject to
+authorization: **the seed is the initial state, never a whitelist.** A seed run is additive and
+idempotent, and it preserves every rename, reorder and re-flag an administrator has made — it
+finds by live name and creates only what is absent.
+
+*Enforced:* the scheduling-type catalogue (R110) is the worked example —
+[Calendar and Hijri → The scheduling-type catalogue](../architecture/calendar-and-hijri.md#the-scheduling-type-catalogue-r110).
+
 ---
 
 ## Quick index
@@ -244,6 +254,7 @@ to **correct Arabic alphabetical order — never codepoint order.**
 | [BR-17](#br-17) | Schedule-driven teaching | Scheduling |
 | [BR-18](#br-18) | Data residency | Legal |
 | [BR-19](#br-19) | Ordering is intentional | Localization |
+| [BR-20](#br-20) | Seeded does not mean immutable | Content and data |
 | [BR-20](#br-20) | Global reach is a privilege | Content |
 | [BR-21](#br-21) | One organisational group per level | Scheduling |
 | [BR-22](#br-22) | Split is optional; unplaced is never silent | Scheduling |

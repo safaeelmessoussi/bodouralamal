@@ -1,7 +1,26 @@
 import type { SchedulingType } from './scheduling.js';
 
 /**
- * **What each schedulable kind is, declared once** (SRS Revision 56).
+ * **What each schedulable ENTITY can express, declared once** (SRS Revision 56).
+ *
+ * ## This is NOT the catalogue any more (R110, NEW H)
+ *
+ * It used to be both, and that was the defect. The five types an administrator
+ * picks from — حصة دراسية, اختبار, محاضرة, حفل, عطلة — are **reference data she
+ * manages**, and they now live in the database and arrive through
+ * `adapters/scheduling-catalogue.ts`.
+ *
+ * What stays here is a different question with a different answer:
+ *
+ * | question | answered by |
+ * |---|---|
+ * | *which types exist, what are they called, in what order, which take attendance* | the **catalogue**, from the server |
+ * | *what can this entity express — all-day, an end date, `once`, drillable occurrences* | **this file**, in code |
+ *
+ * The second is not administrable and must never become so: no amount of
+ * managing reference data can make an `Event` have materialized occurrences, or
+ * let a `RecurringCourseSchedule` recur `none` — the database refuses it. A row's
+ * `structural_kind` is the join between the two.
  *
  * ## Why a registry rather than conditions
  *
@@ -57,7 +76,7 @@ export interface SchedulingTypeSpec {
   hasOccurrences: boolean;
 }
 
-export const SCHEDULING_TYPE_SPECS: Record<SchedulingType, SchedulingTypeSpec> = {
+export const STRUCTURAL_KIND_SPECS: Record<SchedulingType, SchedulingTypeSpec> = {
   class: {
     available: true,
     hasTitle: true,
@@ -102,12 +121,15 @@ export const SCHEDULING_TYPE_SPECS: Record<SchedulingType, SchedulingTypeSpec> =
   },
 };
 
-/** The kinds an administrator can actually create today, in picker order.
+/** The entities an administrator can actually create against today.
  *  Derived, so a filter or a picker can never fall behind the registry. */
 export const AVAILABLE_TYPES: SchedulingType[] = (
-  Object.keys(SCHEDULING_TYPE_SPECS) as SchedulingType[]
-).filter((k) => SCHEDULING_TYPE_SPECS[k].available);
+  Object.keys(STRUCTURAL_KIND_SPECS) as SchedulingType[]
+).filter((k) => STRUCTURAL_KIND_SPECS[k].available);
 
-export function specOfType(type: SchedulingType): SchedulingTypeSpec {
-  return SCHEDULING_TYPE_SPECS[type];
+/** What the entity behind a catalogue row can express. Named for what it takes
+ *  — a **structural kind**, not a catalogue type — so the two cannot be
+ *  confused at a call site. */
+export function specOfKind(kind: SchedulingType): SchedulingTypeSpec {
+  return STRUCTURAL_KIND_SPECS[kind];
 }

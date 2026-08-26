@@ -13,7 +13,11 @@ import {
   listEventStaffOptions,
   notifyEventChange,
 } from '../../adapters/events.js';
-import { AVAILABLE_TYPES, specOfType } from '../../adapters/scheduling-types.js';
+import { AVAILABLE_TYPES, specOfKind } from '../../adapters/scheduling-types.js';
+import {
+  listSchedulingTypes,
+  type SchedulingTypeRow,
+} from '../../adapters/scheduling-catalogue.js';
 import {
   deleteSchedulingItem,
   listSchedulingItems,
@@ -364,7 +368,7 @@ export function SchedulingPage(): ReactNode {
       },
       // R50's scopes act on materialized rows; a kind whose occurrences are
       // computed on read has nothing to open (§4.4).
-      available: (r) => specOfType(r.type).hasOccurrences,
+      available: (r) => specOfKind(r.type).hasOccurrences,
     },
     { label: t('common.edit'), onSelect: (r) => setEditing(r) },
     { label: t('common.delete'), danger: true, onSelect: (r) => setDeleting(r) },
@@ -885,6 +889,18 @@ export function SchedulingDialog({
    * default are the same string.
    */
   const [visibility, setVisibility] = useState(item?.visibility ?? 'public');
+  /**
+   * **R110 — the catalogue row this activity is** (NEW H).
+   *
+   * Hydrated from the row, exactly as `visibility` now is: a state initialiser
+   * that ignored the record and a pristine baseline that agreed with it is what
+   * made §A's silent widening invisible. `null` is a real state — an activity
+   * created before the catalogue existed recorded no type.
+   */
+  const [schedulingTypeId, setSchedulingTypeId] = useState<string | null>(
+    item?.ids.schedulingTypeId ?? null,
+  );
+  const [catalogue, setCatalogue] = useState<SchedulingTypeRow[]>([]);
   // R72 — a Teacher may scope an event to their own groups and nothing else
   // (TD-2, §4.9), so `global` would be a default the server refuses.
   const [scopeKind, setScopeKind] = useState(canAssignStaff ? 'global' : 'group');
@@ -950,12 +966,15 @@ export function SchedulingDialog({
     // Mirrors the state initialiser exactly — a pristine baseline that
     // disagreed with it is what kept `dirty` false while the value was wrong.
     visibility: item?.visibility ?? 'public',
+    // Mirrors the initialiser above — the pair §A proved has to agree.
+    schedulingTypeId: item?.ids.schedulingTypeId ?? null,
     scopeKind: canAssignStaff ? 'global' : 'group',
     scopeId: '',
   };
   const dirty = isDirty(
     {
       type,
+      schedulingTypeId,
       title,
       description,
       allDay,
@@ -992,6 +1011,32 @@ export function SchedulingDialog({
    * Runs once per opened row — the selectors own the value afterwards.
    */
   const seeded = useRef<string | null>(null);
+  /**
+   * **R110 — the type picker's options come from the server** (NEW H).
+   *
+   * Readable by anyone who may schedule, a مؤطِّرة included (R93/R94), so this
+   * runs for every caller who can open the dialog rather than being gated on a
+   * role here — the server decides, and a client-side gate would be a second
+   * answer to the same question.
+   *
+   * A failure leaves the list empty, and `TypePicker` falls back to the entity
+   * labels rather than rendering an empty selector: a picker with no options is
+   * a form nobody can submit.
+   */
+  useEffect(() => {
+    let live = true;
+    void listSchedulingTypes(token)
+      .then((rows) => {
+        if (live) setCatalogue(rows);
+      })
+      .catch(() => {
+        if (live) setCatalogue([]);
+      });
+    return () => {
+      live = false;
+    };
+  }, [token]);
+
   useEffect(() => {
     if (item === null || seeded.current === item.id) return;
     seeded.current = item.id;
@@ -1004,7 +1049,7 @@ export function SchedulingDialog({
     });
   }, [item, scope]);
   /** Everything the interface needs to know about this kind, declared once. */
-  const spec = specOfType(type);
+  const spec = specOfKind(type);
 
   useEffect(() => {
     /**
@@ -1095,6 +1140,19 @@ export function SchedulingDialog({
   function validationError(): string | null {
     // R57 — required for every kind, so it is checked before anything specific.
     if (title.trim() === '') return t('scheduling.invalid.title');
+    /**
+     * **R110 — an activity states which type it is.**
+     *
+     * Required by the server on create, so refusing here names the field
+     * instead of surfacing a `400` about a key the reader never saw. Only
+     * checked while the catalogue actually loaded: if the read failed the
+     * picker fell back to entity labels, and demanding a row nobody was offered
+     * would be a gate on the platform's own blindness — the shape R94 already
+     * corrected once.
+     */
+    if (type === 'activity' && catalogue.length > 0 && schedulingTypeId === null) {
+      return t('scheduling.invalid.itemType');
+    }
     if (recurrence.startDate === '') return t('scheduling.invalid.startDate');
     if (type === 'exam') {
       // The mode is refused by the server too; saying so here is the courtesy,
@@ -1195,6 +1253,9 @@ export function SchedulingDialog({
           weekdays: recurrence.weekdays,
           repeatUntil: recurrence.endDate || null,
           visibility,
+          // R110 — the catalogue row the picker chose. Sent for an activity
+          // only; a class and a sitting are typed by the entity they are.
+          schedulingTypeId,
           /**
            * **An unchosen scope is not an empty id** (2026-08-20).
            *
@@ -1331,6 +1392,10 @@ export function SchedulingDialog({
         // one option would ask a question with one answer.
         typeLocked={editing || types.length === 1}
         types={types}
+        // R110 — the catalogue, narrowed by the kinds this caller may author.
+        catalogue={catalogue}
+        schedulingTypeId={schedulingTypeId}
+        onSchedulingTypeChange={(row) => setSchedulingTypeId(row.id)}
         title={title}
         onTitle={setTitle}
         // **R57 — every schedulable item is named by something a person typed.**

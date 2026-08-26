@@ -121,6 +121,7 @@ under the table.
 | `verify-schedule-edit.sh` | 10, 11 | «تعديل العنصر» — R50's scopes through the real dialog | 12/12 |
 | `verify-student-flows.sh` | 22 | The beneficiary's own portal: calendar, library, memorisation, grades, account | 11/11 |
 | `verify-calendar-filters.sh` | 20 | **AL** — a filter chosen in one view survives the switch, in the controls, in the URL **and in the other view's request** | 11/11 |
+| `verify-scheduling-types.sh` | 10 | R110 — the scheduling-type catalogue on أنواع الجدولة and the الجدولة picker | 10/10 |
 | `verify-circles-reorder.sh` | 9 | R78.1 — ordering حلقات المواد within a `(level, subject)` pairing | 9/9 |
 | `measure-page-header.sh` | shared UI | Header layout measured in a browser at nine widths | 9/9 widths |
 

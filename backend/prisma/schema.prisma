@@ -169,6 +169,31 @@ enum ConsentMethod {
 }
 
 /// BR-14 three-tier visibility. Never a boolean (§4.4, §4.9).
+/// **R110 — which ENTITY a scheduling type is delivered by.**
+///
+/// The five catalogue rows an administrator sees map onto **three** entities,
+/// and R56 settled which: *"the type selector's branches are exactly the ones
+/// that mean something — the three that route to different entities."* This
+/// enum is that routing, **stored on the row and never inferred from the Arabic
+/// name** — §4.4b already forbids reading a rule off a name, and a catalogue
+/// whose behaviour depended on its label could not be renamed.
+///
+/// | value | entity |
+/// |---|---|
+/// | `class` | `RecurringCourseSchedule` |
+/// | `activity` | `Event` |
+/// | `exam` | `Exam` |
+///
+/// The vocabulary is the client's existing one, deliberately: one word for one
+/// concept across the seam, rather than a translation table nobody maintains.
+enum SchedulingStructuralKind {
+  class
+  activity
+  exam
+
+  @@map("scheduling_structural_kind")
+}
+
 enum Visibility {
   public
   private
@@ -1938,6 +1963,66 @@ model StudentSocialProfile {
 // Calendar — the exception layer over Groups' fixed weekly schedules (§4.4)
 // ---------------------------------------------------------------------------
 
+/// **R110 — the scheduling-type catalogue: seeded reference data, not a
+/// frontend constant.**
+///
+/// The five types lived in `frontend/src/adapters/scheduling-types.ts` as a
+/// hardcoded registry, so the Owner could not add one, rename one, reorder them
+/// or say which of them takes attendance. **Seeded does not mean immutable**
+/// (Owner addendum, 2026-08-26): the seed is the initial state, never a
+/// whitelist.
+///
+/// ## R56 refused this column, and named the condition for adding it
+///
+/// R56 declined `Event.type` because *"the category would drive no rule, no
+/// job, no report"* — and said in terms that *"it may be added when filtering or
+/// reporting by category becomes a real requirement."* `attendance_required` is
+/// that requirement: it drives the form (OD-03). The condition R56 set is met,
+/// so this is the clause being exercised rather than contradicted.
+///
+/// ## Deletion is refused, never cascaded
+///
+/// A historical Event must still resolve its type after the type is retired, so
+/// `Event.scheduling_type_id` is `Restrict` and deletion is TD-5 soft with a
+/// blocked-delete check (`assertNoBlockingReferences`). A hard delete would
+/// orphan the record of what an activity WAS.
+model SchedulingType {
+  id String @id @default(uuid()) @db.Uuid
+
+  /// The administrator-facing name — «حصة دراسية», «عطلة». Collated `ar-x-icu`
+  /// in SQL (TD-6a), and **unique among live rows** (partial index): two types
+  /// with one name is a picker with two identical options.
+  name String @db.VarChar(60)
+
+  /// Which entity it routes to. Stored, never inferred (see the enum).
+  structuralKind SchedulingStructuralKind @map("structural_kind")
+
+  /// **Whether attendance is taken for this type.** Structural data: the form
+  /// presents attendance-specific controls only where this is true (OD-03), so
+  /// it is a column and not display text. It is not derivable from the name —
+  /// اختبار takes attendance and محاضرة does not, and nothing about either word
+  /// says so.
+  attendanceRequired Boolean @map("attendance_required")
+
+  /// The Owner calls the order canonical, so it is a column an administrator
+  /// can change — not the order the rows happen to have been inserted in.
+  /// `NOT NULL` here, unlike `Subject.display_order`: this catalogue is seeded
+  /// complete and ordered, so *unordered* is not a state it ever has.
+  displayOrder Int @map("display_order")
+
+  version Int @default(0)
+
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  deletedById String?   @map("deleted_by") @db.Uuid
+
+  events Event[]
+
+  @@index([displayOrder])
+  @@map("scheduling_type")
+}
+
 model Event {
   id          String     @id @default(uuid()) @db.Uuid
   title       String     @db.VarChar(120)
@@ -1967,6 +2052,21 @@ model Event {
   updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
   deletedById String?   @map("deleted_by") @db.Uuid
+
+  /// **R110 — which catalogue type this activity is** (محاضرة, حفل, عطلة).
+  ///
+  /// **Nullable, and it stays nullable**: R56 told administrators to write عطلة
+  /// in the title, so every event created before this revision has a type
+  /// recorded nowhere a query can reach. Inferring one from the title would be
+  /// exactly the name-matching §4.4b forbids, and NEW L's normalization protocol
+  /// refuses to invent data. **Required at the write boundary**, which is §7's
+  /// standing division (R35) — nullable in the database for rows that predate
+  /// the requirement, demanded where a real value can be asked for.
+  ///
+  /// `Restrict`: a retired type must still be resolvable by the activities that
+  /// used it.
+  schedulingTypeId String?         @map("scheduling_type_id") @db.Uuid
+  schedulingType   SchedulingType? @relation(fields: [schedulingTypeId], references: [id], onDelete: Restrict)
 
   /// R71 — who is responsible for it, and who assists. An event had an
   /// audience and nobody answerable for it, which left a مؤطرة running a

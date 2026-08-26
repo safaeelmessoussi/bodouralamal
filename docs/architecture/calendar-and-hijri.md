@@ -112,6 +112,70 @@ Backfill stays an **Admin** capability even though branches are Super-Admin-mana
 reference data, because it is *operational* work — populating events when a branch
 activates — not reference management.
 
+## The scheduling-type catalogue (R110)
+
+**What an administrator picks from is reference data she manages**, not a
+constant in the client. Five rows, and the Owner calls their order canonical:
+
+| # | Type | حضور إجباري | `structural_kind` | entity |
+|---|---|---|---|---|
+| 1 | حصة دراسية | نعم | `class` | `RecurringCourseSchedule` |
+| 2 | اختبار | نعم | `exam` | `Exam` |
+| 3 | محاضرة | لا | `activity` | `Event` |
+| 4 | حفل | لا | `activity` | `Event` |
+| 5 | عطلة | لا | `activity` | `Event` |
+
+**Five types, three entities — and no fifth scheduling model.** R56 settled that
+*"the type selector's branches are exactly the ones that mean something — the
+three that route to different entities"*, and R110 **stores** that routing rather
+than re-deciding it. Three of the five are the same entity, which is precisely
+why the catalogue has to exist as data: an `Event` could not previously say which
+of حفل, محاضرة and عطلة it was, because the only place that difference lived was
+whatever an administrator typed in the title.
+
+### R56 refused this column, and named the condition for adding it
+
+R56 declined `Event.type` because *"the category would drive no rule, no job, no
+report"* — and said in terms that *"it may be added when filtering or reporting by
+category becomes a real requirement."* **`attendance_required` is that
+requirement** (OD-03): it drives the form, which is why it is a stored column and
+not display text. So this exercises R56's own clause. **Its other half stands: a
+holiday still cancels no class** — BR-17 keeps non-teaching activity out of the
+timetable and §4.4(6) makes a cancellation an edit to a `Session` row. عطلة is an
+ordinary schedulable activity (OD-03), not a suppression mechanism.
+
+### Two things share a name, and keeping them apart is the design
+
+| question | answered by |
+|---|---|
+| which types exist, their names, their order, which take attendance | **the catalogue**, from the server |
+| what an entity can express — all-day, an end date, `once`, drillable occurrences | **`adapters/scheduling-types.ts`**, in code |
+
+The second is not administrable and must never become so: no amount of managing
+reference data can make an `Event` have materialized occurrences, or let a
+`RecurringCourseSchedule` recur `none` — the database refuses it. A row's
+`structural_kind` is the join between the two.
+
+### Rules that hold
+
+* **`structural_kind` is never inferred from the name** (§4.4b) and is **fixed
+  after creation**: changing it would re-point every activity recorded against
+  the row at a model that cannot represent them.
+* **`Event.scheduling_type_id` is nullable and required at the boundary** (R35).
+  Activities created before R110 record their type nowhere a query can reach, and
+  guessing one from the title is exactly the name-matching §4.4b forbids.
+* **Deletion is refused while an activity names the type** — `ON DELETE RESTRICT`
+  plus a TD-5 blocked-delete check, so a retired type stays resolvable by the
+  activities that used it.
+* **Read: any staff who may schedule**, a مؤطِّرة included (R93/R94). **Write:
+  Super Admin only** (OD-01), which keeps R105's الإدارة heading a fact about
+  permission. The menu node is never the control.
+* **Seeded does not mean immutable.** The seed finds by live name and creates
+  only when absent, so a rename, a reorder, a re-flag and an addition all survive
+  the next run.
+
+---
+
 ## Three visibility tiers — on all three kinds (R109)
 
 Stored as an enum, never a boolean, and since **Revision 109** it is carried by every kind of

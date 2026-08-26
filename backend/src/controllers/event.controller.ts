@@ -46,6 +46,20 @@ const createSchema = z
   .object({
     title: z.string().trim().min(1).max(120),
     description: z.string().trim().max(2000).nullable().optional(),
+    /**
+     * **R110 — which catalogue type this activity is** (محاضرة, حفل, عطلة).
+     *
+     * **Required here and nullable in the column**, which is §7's standing
+     * division (R35): a form can be asked for a real value, and the rows that
+     * predate R110 cannot. R56 told administrators to write عطلة in the title,
+     * so those rows record their type nowhere a query can reach — and inferring
+     * one from that title is the name-matching §4.4b forbids.
+     *
+     * The server refuses a type whose `structural_kind` is not `activity`
+     * (`STRUCTURAL_KIND_MISMATCH`), so a forged body naming حصة دراسية cannot
+     * write an Event the catalogue calls a class.
+     */
+    scheduling_type_id: z.uuid(),
     visibility: z.enum(['public', 'private', 'hidden']),
     start_date: calendarDate,
     end_date: calendarDate.nullable().optional(),
@@ -76,6 +90,9 @@ const patchSchema = z
     version: z.number().int().min(0),
     title: z.string().trim().min(1).max(120).optional(),
     description: z.string().trim().max(2000).nullable().optional(),
+    /** R110 — editable. Absent leaves the type alone; it is never cleared by
+     *  an edit that does not mention it. */
+    scheduling_type_id: z.uuid().optional(),
     visibility: z.enum(['public', 'private', 'hidden']).optional(),
     start_date: calendarDate.optional(),
     end_date: calendarDate.nullable().optional(),
@@ -118,6 +135,7 @@ export function create(prisma: PrismaClient) {
     const result = await createEvent(prisma, actorOf(req), {
       title: b.title,
       ...(b.description !== undefined ? { description: b.description } : {}),
+      schedulingTypeId: b.scheduling_type_id,
       visibility: b.visibility,
       startDate: b.start_date,
       ...(b.end_date !== undefined ? { endDate: b.end_date } : {}),
@@ -155,6 +173,9 @@ export function update(prisma: PrismaClient) {
     const event = await updateEvent(prisma, actorOf(req), id, version, {
       ...(b.title !== undefined ? { title: b.title } : {}),
       ...(b.description !== undefined ? { description: b.description } : {}),
+      ...(b.scheduling_type_id !== undefined
+        ? { schedulingTypeId: b.scheduling_type_id }
+        : {}),
       ...(b.visibility !== undefined ? { visibility: b.visibility } : {}),
       ...(b.start_date !== undefined ? { startDate: b.start_date } : {}),
       ...(b.end_date !== undefined ? { endDate: b.end_date } : {}),

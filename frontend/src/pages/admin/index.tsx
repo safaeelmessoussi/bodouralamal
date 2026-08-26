@@ -24,6 +24,7 @@ import { SchedulingPage } from './scheduling.js';
 import { SettingsPage } from './settings.js';
 import { TeachingStructurePage } from './teaching-structure.js';
 import { TaxonomyPage } from './taxonomy.js';
+import { SchedulingTypesPage } from './scheduling-types.js';
 import { TrashPage } from './trash.js';
 import { UsersPage } from './users.js';
 
@@ -65,6 +66,8 @@ export const IMPLEMENTED_ADMIN_PATHS: readonly string[] = [
   '/admin/subjects',
   '/admin/users',
   '/admin/content',
+  // R110 (NEW H) — the scheduling-type catalogue.
+  '/admin/scheduling-types',
   '/admin/trash',
   '/superadmin/hijri-calendar',
   '/superadmin/settings',
@@ -214,6 +217,10 @@ export function AdminRouter(): ReactNode {
       return <TaxonomyPage kind="category" />;
     case '/admin/subjects':
       return <TaxonomyPage kind="subject" />;
+    // R110 (NEW H) — the catalogue the الجدولة type picker reads. Reference
+    // data an administrator manages, not a constant in the client.
+    case '/admin/scheduling-types':
+      return <SchedulingTypesPage />;
     case '/admin/users':
       return <UsersPage />;
     case '/admin/content':

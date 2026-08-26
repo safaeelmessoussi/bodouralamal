@@ -26,6 +26,16 @@ export type EventVisibility = 'public' | 'private' | 'hidden';
 export interface EventInput {
   title: string;
   description?: string | null;
+  /**
+   * **R110 — which catalogue type this activity is** (محاضرة, حفل, عطلة).
+   *
+   * **Required on create**, which is §7's standing division (R35): a form can be
+   * asked for a real value even though the column tolerates the rows that
+   * predate it. The server refuses a type whose `structural_kind` is not
+   * `activity` (`STRUCTURAL_KIND_MISMATCH`), so this is not a control hidden by
+   * the form — a forged body naming حصة دراسية is refused there (rule AF).
+   */
+  scheduling_type_id: string;
   visibility: EventVisibility;
   /** TD-11 calendar dates and wall-clock times, never instants. */
   start_date: string;
