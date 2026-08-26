@@ -1306,6 +1306,96 @@ was hiding behind it: the run went green on the first attempt.
   scoped by *branch* or *level* rather than by tag, and any suite whose `clear()` runs against
   rows it did not create.
 
+## OWNER ADDENDUM — 2026-08-26 · manageable reference data, account deletion, legal pages
+
+### Global rule (binding)
+
+**Seeded does not mean immutable.** Any business/reference catalogue shown to users must have
+an Admin/Super Admin management path; the seed is the initial state, never a whitelist, and a
+seed rerun must preserve Owner-created rows. **Excluded**: internal ids, security policy, audit
+records, tokens/hashes, migration metadata, authorization internals, immutable historical
+evidence. **Reuse existing primitives** — `DataTable`, `FormDialog`, R76 ordering/reorder,
+TD-5 blocked-delete + `BlockedNotice`, Trash/restore. No parallel management architecture.
+
+### Management audit — result
+
+| catalogue | managed today | action |
+|---|---|---|
+| Branches · Rooms · Categories · Subjects · Level Subjects · مقرر الحفظ | ✔ node + CRUD | none |
+| **Academic Years** | ✖ **seeded, user-visible in scheduling/content forms, NO screen** | **new finding — add to plan** |
+| **Scheduling types** | ✖ frontend constant `SCHEDULING_TYPE_SPECS` | NEW H |
+| **Partners** | ✖ model does not exist | NEW N |
+| Quran Surahs (114) | ✖ read-only | **deliberately excluded** — religious canon, not association data |
+| Roles (5) | ✖ | **deliberately excluded** — §7: *roles are seeded, no CRUD in the MVP* |
+
+### NEW H — catalogue becomes a seeded reference MODEL + management
+
+Five rows, each carrying **`attendance_required`** and **`structural_kind`**
+(`RecurringCourseSchedule` | `Exam` | `Event`) — the kind is **stored, never inferred from the
+Arabic name**. Order is a column, not a UI constant. Super Admin manages; **whether Admin may
+write is an open question** — reference-taxonomy writes are Super-Admin-only today (R26/R61),
+so granting Admin would widen an existing permission and needs ratification.
+Historical scheduling rows must still resolve their type after it is deactivated/deleted →
+use TD-5 blocked-delete + soft delete, never a hard delete. **Precedes §D.**
+
+### NEW L — normalization protocol (same standard as the Subjects)
+
+Inspect row + all relationships → verify no canonical duplicate → normalize **in place**,
+same id, all relationships → never delete/recreate for spelling → never leave a near-duplicate
+beside the historical row → **stop and report** any row whose semantic identity is uncertain.
+
+### NEW G — privacy constraints (binding on the redesign)
+
+Show: her own profile · registrations · enrolment (Category/Level/Branch) · teaching groups ·
+account relationship/status. **Never by default**: guardian email, guardian phone, internal
+account ids, identity/provider data, audit data, administrative notes, unrelated guardian
+fields. A guardian field required by a business rule is **reported, not assumed**.
+
+### NEW N — `Partner` model + landing section
+
+New reference entity: `name`, `display_order`, active/visible state, soft delete. Four seeded
+rows. **No logos, URLs, descriptions or contacts invented.** Landing reads from the database
+and **renders no section at all when zero partners are visible.** Seed must not clobber
+Owner-created rows.
+
+### NEW O — self-service account deletion · **DESIGN SECTION FIRST, NO SCHEMA**
+
+**Scale, measured: 35 foreign keys reference `"user"`** — audit_log, child_application (×4),
+consent_record (×3), course_schedule_staff, enrollment, event_staff, exam_staff, family_link
+(×2), grade, notification, quran_progress_log (×2), rate_limit_counter, refresh_session,
+refresh_token, session_recording (×2), session_staff, student_exam_submission,
+student_social_profile, student_surah_progress, student_teaching_group, teacher_availability,
+teacher_category_capability, teacher_subject_capability, trash.deleted_by, user.deleted_by,
+user_branch_role, user_identity.
+
+Every one must be classified: **delete · detach · anonymize · preserve as institutional record
+· block purge until reassigned.** Deleting a login must **not** destroy grades, Quran progress,
+attendance, safeguarding evidence or audit history. **Never `CASCADE DELETE User`.**
+
+Already available to reuse: R102 revokes every session on rejection (same mechanism needed
+here) · TD-5 Trash + `purge_after` · the pg-boss `content.quarantine-purge` worker is the
+**exact template** for a durable, idempotent, retryable 3-day purge · `assertFreshActive`
+already fails closed on suspended/deleted accounts.
+
+**Known tension to resolve in design**: hidden scheduling items are owned by a *responsible
+person* (NEW B §3). A deleted responsible principal must not orphan a hidden item →
+likely category 5 (block until reassigned).
+
+### NEW P — legal pages · **must follow NEW O**
+
+`/privacy` and `/terms` **do not exist**. The policy must describe what the platform actually
+does, so it cannot be drafted before the retention model is settled. Anything not supplied by
+the Owner — registration numbers, legal entity, addresses, CNDP references, governing law —
+is marked **OWNER/LEGAL INPUT REQUIRED**, never invented. Verify Google's current OAuth
+requirements against Google's own documentation, not repository notes. **Do not submit
+verification.**
+
+### Production blockers — STILL OPEN, not closed by this batch
+
+object-store replacement · backup target/retention · backup automation/alerting · Production
+RTO drill · automatic quarantine destruction · **P1.2 test isolation (two symptoms)** ·
+manual Production launch data · no-PII audit · §18/M8 rehearsal. **Production undeployed.**
+
 ## NEXT BATCH — planned 2026-08-26, ready to execute after reset
 
 **Order is dependency-safe. Do not reorder without re-reading the reasons.**
@@ -1324,8 +1414,13 @@ was hiding behind it: the run went green on the first attempt.
 | 10 | **NEW F** availability page gains capabilities | feature | §5 follow-up; same entities as §9 work |
 | 11 | **§10** Rule AX carry-forwards | feature | recorder dialog + session materials |
 | 12 | **NEW M** Teacher baseline import | **data, Production only** | after §9 so the profile form is correct |
-| 13 | **NEW G** حسابي redesign | UX | independent; after structure settles |
-| 14 | **NEW N** شركاء الجمعية | UX | smallest; independent |
+| 13 | **NEW O** account deletion — **design only** | reconciliation | 35 FKs to classify before any schema |
+| 14 | **NEW O** implementation | feature + migration | only after its retention model is ratified |
+| 15 | **NEW M** Teacher import | data, **Production only** | R104 — never Staging |
+| 16 | **NEW G** حسابي redesign | UX | independent |
+| 17 | **NEW N** Partner model + landing | feature | reference CRUD + public section |
+| 18 | **NEW P** privacy/terms + OAuth readiness | docs + UX | **must follow NEW O** |
+| — | **Academic Years management** | feature | fold into #8 (reference-data batch) |
 
 ### Findings that change the work (established, not assumed)
 
