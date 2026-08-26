@@ -2,6 +2,8 @@ import type { ReactNode } from 'react';
 
 import { t } from '../i18n/index.js';
 import { Button } from './ui/button.js';
+import { ErrorPanel } from './ui/error-panel.js';
+import { ApiError } from '../lib/api.js';
 
 /**
  * The §14.4 mandatory UI states, built once and reused (§14.3 forbids
@@ -31,27 +33,43 @@ export function EmptyState({ action }: { action?: ReactNode }): ReactNode {
   );
 }
 
-export function ErrorState({ requestId, onRetry }: { requestId?: string; onRetry?: () => void }): ReactNode {
+export function ErrorState({
+  error,
+  requestId,
+  onRetry,
+}: {
+  /**
+   * The failure itself, when the caller has it.
+   *
+   * Supplying it is what turns *«حدث خطأ»* into the right sentence and the
+   * right next action — a 403 and a dropped connection need different words and
+   * different buttons. A caller that genuinely has no error object still gets
+   * the branded panel and a quotable reference; it simply cannot be told which
+   * kind of failure it was.
+   */
+  error?: unknown;
+  /** Legacy: a bare `request_id` from a caller that discarded the error. */
+  requestId?: string;
+  onRetry?: () => void;
+}): ReactNode {
+  /**
+   * **One appearance for every failure**, so a reader meets the same thing
+   * everywhere and support gets the same identifiers every time. This used to
+   * render its own paragraph with no code, no class and no next step, which is
+   * why nine screens had grown their own «فشل» strings around it.
+   */
   return (
-    <div className="state" role="alert">
-      <p>{t('states.error')}</p>
-      {/* §14.4: the request_id is shown discreetly so a user can quote it and
-          it can be traced end to end (TD-14). */}
-      {requestId ? (
-        <p className="request-id">
-          {t('states.requestId')}: <code>{requestId}</code>
-        </p>
-      ) : null}
-      {onRetry ? (
-        // The shared button, not a bare element. These states are the platform's
-        // most-seen surfaces and were the only ones rendering an unstyled
-        // browser control — which is what made them look like a different
-        // product from the screens around them.
-        <Button variant="secondary" onClick={onRetry}>
-          {t('states.offlineRetry')}
-        </Button>
-      ) : null}
-    </div>
+    <ErrorPanel
+      error={error ?? (requestId ? new ApiError(500, {
+        code: 'INTERNAL',
+        message_key: 'errors.internal',
+        message: '',
+        details: {},
+        request_id: requestId,
+      }) : undefined)}
+      variant="region"
+      {...(onRetry ? { onRetry } : {})}
+    />
   );
 }
 

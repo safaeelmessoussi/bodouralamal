@@ -58,3 +58,76 @@
   gap: var(--space-3);
   justify-content: center;
 }
+
+/* ── The branded error state (§2, Owner decision 2026-08-26) ─────────────────
+   One appearance for every failure the platform can show a person. It replaced
+   nine screens' worth of ad-hoc «حدث خطأ» paragraphs, a bare state with no code
+   and no next step, and — at worst — a TD-3.8 envelope rendered as JSON.
+
+   Built from tokens only: no raw colour, so it inherits the platform's light
+   and dark treatment like everything else. */
+.error-panel {
+  border: 1px solid var(--color-border);
+  border-inline-start: 5px solid var(--color-danger);
+  background: var(--color-surface);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  text-align: start;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+/* A page-level failure is the content of the screen, so it takes the reading
+   measure and centres — an inline one sits in the flow of the form it belongs
+   to and must not reflow the controls around it. */
+.error-panel--page {
+  width: min(100% - 2rem, var(--measure));
+  margin-inline: auto;
+  margin-block: clamp(2rem, 8vw, 4rem);
+}
+.error-panel--region,
+.error-panel--inline {
+  margin-block: var(--space-3);
+}
+.error-panel__title {
+  font-weight: 600;
+  font-size: 1.125rem;
+  color: var(--color-text);
+  margin: 0;
+}
+/* `p` takes `max-width: var(--measure)` platform-wide (rule AK), which is right
+   for prose and wrong for a short line inside a panel that already has its own
+   measure — it would wrap early against the panel edge. */
+.error-panel__body,
+.error-panel__code,
+.error-panel__reference,
+.error-panel__hint {
+  max-width: none;
+  margin: 0;
+}
+.error-panel__body {
+  color: var(--color-text);
+}
+.error-panel__code,
+.error-panel__reference {
+  font-size: 0.85rem;
+  color: var(--color-text-muted);
+}
+.error-panel__code code,
+.error-panel__reference code {
+  /* Latin identifiers inside RTL prose: pinned LTR so a code is never
+     re-ordered by the bidi algorithm and copied down wrong. */
+  direction: ltr;
+  unicode-bidi: isolate;
+  font-family: var(--font-mono, monospace);
+}
+.error-panel__hint {
+  font-size: 0.8rem;
+  color: var(--color-text-muted);
+}
+.error-panel__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-block-start: var(--space-2);
+}

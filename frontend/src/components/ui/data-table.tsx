@@ -76,6 +76,10 @@ export interface DataTableProps<T> {
   rowKey: (row: T) => string;
   status: TableStatus;
   actions?: RowAction<T>[];
+  /** The failure behind `status="error"`, so the table can say WHICH kind it
+   *  was rather than a generic «حدث خطأ». Optional: a table that discarded it
+   *  still gets the branded state, just without the class-specific wording. */
+  error?: unknown;
   onRetry?: () => void;
   /** True when a filter or search is active, which is what makes "no results"
    *  the right empty state rather than "nothing here yet" (§14.4). */
@@ -160,6 +164,7 @@ export function DataTable<T>({
   rowKey,
   status,
   actions = [],
+  error,
   onRetry,
   filtered = false,
   onClearFilters,
@@ -182,7 +187,10 @@ export function DataTable<T>({
       {toolbar ? <div className="datatable__toolbar">{toolbar}</div> : null}
 
       {status === 'error' ? (
-        <ErrorState {...(onRetry ? { onRetry } : {})} />
+        <ErrorState
+          {...(error !== undefined ? { error } : {})}
+          {...(onRetry ? { onRetry } : {})}
+        />
       ) : status === 'loading' ? (
         <TableSkeleton columns={columns.length + (hasActions ? 1 : 0) + (showGrip ? 1 : 0)} />
       ) : rows.length === 0 ? (

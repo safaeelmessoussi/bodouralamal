@@ -1604,6 +1604,74 @@ it is the same defect wearing the fix**: `verify-calendar-filters.mjs` chooses a
 branch in the list, switches to the grid, and asserts the **grid's own request**
 carries `branch_id`.
 
+## AZ · One error experience, and expected responses are not errors
+
+**Owner decision, 2026-08-26.** A failure a person meets is a designed state, not a leftover.
+
+### The three kinds, and the rule that they are different
+
+| Kind | Treatment | Example |
+|---|---|---|
+| **Page / region** | replaces the content that could not load | a table whose fetch failed, an unknown route |
+| **Inline** | sits beside the controls of the action that failed | a save refused inside a dialog |
+| **Expected control flow** | **shown as nothing at all** | the anonymous `/auth/refresh` 401 at startup |
+
+The third is the one that caused this section. The SPA calls refresh on every page load; on an
+anonymous page there is no session, so **401 is the correct answer and not a failure**. It is
+handled where it happens — `refreshAccessToken` returns `null` — and never reaches the error
+architecture. **Not every API error is a page**, and turning that one into a visible error
+would be a regression, not a fix.
+
+### What a person is shown
+
+| Shown | Never shown |
+|---|---|
+| What happened, in Arabic | a stack trace |
+| What to do next | SQL, a table or column name |
+| A **stable public code** — `BA-403`, `BA-NET` | a filesystem path |
+| The server's `request_id`, **byte for byte** | an exception class or message |
+| The server's own TD-3.8 `code`, when there is one | a secret, a token, an internal id |
+
+The stable code is derived from the **class**, not from the server's `code`, so it does not
+change when a message is reworded — somebody who writes it down and reports it a week later is
+still describing the same situation. Both are shown: one says *which kind of problem*, the
+other *which rule*.
+
+### Two references, and never one pretending to be the other
+
+A `request_id` exists **only** when the request reached the server. When it did not — offline,
+DNS, a dropped connection — **no identifier is invented**: a fabricated one sends somebody
+hunting through logs for a request that was never there. A clearly-labelled local *report*
+reference is shown instead, deliberately unlike a `request_id` in shape, with a line saying
+what it is. That line appears **only** when the network genuinely failed; a caller that simply
+had no error object still gets a quotable reference but is told nothing about the network.
+
+### Retry is offered only where retrying could work
+
+`offline`, `server`, `conflict`, `rate_limited`. Never `forbidden`, `not_found` or
+`unauthenticated` — a button that will keep refusing is worse than no button. `401` offers
+signing in; a page-level failure offers a way home; an inline one offers neither, because
+navigating away from a half-filled form is not a kindness.
+
+### Audit, 2026-08-26
+
+| Surface | Before | Now |
+|---|---|---|
+| `ErrorState` (13 call sites, incl. every `DataTable`) | one generic sentence, no code, no class, no next step | the branded panel; `DataTable` forwards the real error so it can say *which* failure |
+| Unknown route | already a named 404 | unchanged, now sharing the panel's copy |
+| OAuth entry and callback | **already correct** — failures redirect to `/login?error=<key>` and never emit the envelope | unchanged |
+| `/content-unavailable` | already a friendly page for a stale public link (B-01) | unchanged; `CONTENT_UNAVAILABLE` also classifies to *unavailable* in-app |
+| Anonymous `/auth/refresh` 401 | already silent | unchanged, and now **pinned by a regression** |
+| Nine ad-hoc `t('…Failed')` strings | per-screen wording | left inline **on purpose** — they are action failures beside their controls, and §2 says not to replace a screen because one save failed |
+
+**Intentionally still inline rather than page-level:** save/delete/upload refusals inside a
+dialog or beside a table row. Replacing the whole screen there is more disruptive than the
+failure, and the dialog already holds the context the message refers to.
+
+> Rendered assertions for all nine classes live in `error-panel.test.tsx`; what only a browser
+> can answer — that real failures reach the state and the expected one does not — is
+> `scripts/dev/browser/verify-error-experience.sh`.
+
 ## AY · No Add/Edit form silently discards typing — and no pristine one nags
 
 **Owner decision, 2026-08-25.** Both halves are binding, because either alone is a defect:
