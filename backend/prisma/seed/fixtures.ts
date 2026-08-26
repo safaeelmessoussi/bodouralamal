@@ -94,10 +94,26 @@ async function main(): Promise<void> {
   await assertNonProduction();
   console.log(`Development fixtures (§15.2) — NODE_ENV=${config.NODE_ENV}\n`);
 
-  // Fixtures build on the §15.1 production seed (roles, categories, levels,
-  // subjects, academic year, surahs) rather than duplicating it.
+  /**
+   * Fixtures build on the §15.1 production seed (roles, categories, levels,
+   * subjects, academic year, surahs) rather than duplicating it.
+   *
+   * **The first Category that actually HAS Levels, not simply the first**
+   * (2026-08-26). This read `findFirst` ordered by `displayOrder` and then threw
+   * *"no levels found for the category"* — on a development database whose
+   * §15.1 data was entirely intact. The cause was **leaked integration-test
+   * residue**: a suite that hard-deletes its own Category in teardown leaks one
+   * every time that teardown fails, and six such empty Categories had
+   * accumulated at the lowest display orders, ahead of the association's own.
+   *
+   * Choosing by the property the fixture actually needs makes the seed immune
+   * to residue instead of hostage to it, and **changes nothing on a clean
+   * database**, where the first Category is a seeded one with Levels. The
+   * error below now means what it says — the production seed has not been run —
+   * rather than *something unrelated sorted ahead of it.*
+   */
   const category = await prisma.category.findFirst({
-    where: { deletedAt: null },
+    where: { deletedAt: null, levels: { some: { deletedAt: null } } },
     orderBy: { displayOrder: 'asc' },
   });
   const academicYear = await prisma.academicYear.findFirst({ where: { isCurrent: true } });
