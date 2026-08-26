@@ -154,10 +154,17 @@ describe('role gating (TD-2)', () => {
     // Subdivision is operational work: an Admin creates Administrative Groups
     // and places students, and places students into circles (R43.3 — a
     // circle's STRUCTURE is Super Admin, and that screen gates it internally).
+    //
+    // **Restated for R105, not weakened.** The property was written as
+    // `section === 'academic'`, and R105 deleted that section — but the section
+    // was never the point: what matters is that these screens are OUTSIDE
+    // الإدارة, because placement there is what makes a node Super-Admin-only
+    // (R61). `section: null` says exactly that, and now says it for eleven
+    // nodes instead of six.
     for (const path of ['/admin/groups', '/admin/teaching-groups']) {
       const module = ADMIN_MODULES.find((m) => m.path === path)!;
       expect(canAccess(module, ['admin']), path).toBe(true);
-      expect(module.section, path).toBe('academic');
+      expect(module.section, path).toBeNull();
     }
   });
 });
@@ -282,13 +289,95 @@ describe('every nav label a module declares actually exists', () => {
   });
 });
 
-describe('نقاط الامتحانات sits at the end of الشؤون التعليمية', () => {
-  it('is the last academic node', () => {
-    const academic = ADMIN_MODULES.filter((m) => m.section === 'academic').map((m) => m.path);
-    expect(academic[academic.length - 1]).toBe('/admin/exam-grades');
+/**
+ * **The whole menu order is a Document Owner decision now** (§4, Revision 105).
+ *
+ * This replaces `'نقاط الامتحانات sits at the end of الشؤون التعليمية'`, which
+ * pinned that node as the last `academic` entry. R105 deleted the section and
+ * gave the Owner's own sequence instead, in which نقاط الامتحانات is ninth of
+ * eleven and الجدولة and مكتبة المحتوى follow it. **The old assertion was
+ * superseded by a later decision on the same question — it did not stop
+ * describing a property, so it is restated at full width rather than dropped.**
+ *
+ * Pinned as a **literal sequence** because the defect is a reshuffle, which no
+ * set-comparison can see: §14.1 says "no reshuffling", and the only way a
+ * generated menu can honour that is if reordering the registry fails a test.
+ */
+describe('§14.1 renders exactly the order the Document Owner specified (R105)', () => {
+  /** The main list, top to bottom, exactly as §4 states it. */
+  const MAIN_NAV_ORDER = [
+    '/admin', // لوحة التحكم
+    '/admin/approvals', // طلبات الانضمام
+    '/admin/users', // المستخدمون
+    '/admin/teachers', // المؤطِّرات
+    '/admin/enrollments', // المستفيدات
+    '/admin/groups', // مجموعات المستويات
+    '/admin/teaching-groups', // حلقات المواد
+    '/admin/quran', // إدخال الحفظ
+    '/admin/exam-grades', // نقاط الامتحانات
+    '/admin/schedules', // الجدولة
+    '/admin/content', // مكتبة المحتوى
+  ] as const;
+
+  /** الإدارة, top to bottom — the dependency chain, then the standalone nodes. */
+  const ADMINISTRATION_ORDER = [
+    '/admin/categories', // الفئات
+    '/admin/levels', // المستويات
+    '/admin/subjects', // المواد
+    '/admin/level-subjects', // مواد المستوى
+    '/admin/level-surahs', // مقرر الحفظ
+    '/admin/branches', // الفروع والقاعات
+    '/admin/trash', // سلة المحذوفات
+    '/superadmin/hijri-calendar', // التقويم الهجري
+    '/superadmin/settings', // إعدادات المنصة
+  ] as const;
+
+  it('lists the main navigation in the Owner\'s exact sequence', () => {
+    const main = ADMIN_MODULES.filter((m) => m.section === null).map((m) => m.path);
+    expect(main).toEqual([...MAIN_NAV_ORDER]);
+  });
+
+  it('lists الإدارة in the Owner\'s exact sequence', () => {
+    const administration = ADMIN_MODULES.filter((m) => m.section === 'administration').map(
+      (m) => m.path,
+    );
+    expect(administration).toEqual([...ADMINISTRATION_ORDER]);
+  });
+
+  it('puts الإدارة last, so the section heading is never stranded mid-menu', () => {
+    // The sidebar renders the ungrouped list and THEN the sections, so a node
+    // that lost its `section` would silently jump above the heading.
+    const paths = ADMIN_MODULES.map((m) => m.path);
+    expect(paths).toEqual([...MAIN_NAV_ORDER, ...ADMINISTRATION_ORDER]);
+  });
+
+  it('has exactly one section, and it is the one that gates', () => {
+    // R105's rule: a heading exists only where it states a fact about
+    // permission. `academic`, `people`, `scheduling` and `content` gated
+    // nothing, and one of the two `Administration` headings held a single node.
+    expect([...ADMIN_SECTIONS]).toEqual(['administration']);
+    // Compared as a set: `[null, 'administration'].sort()` is not what it
+    // looks like, because the default comparator stringifies and `'null'`
+    // sorts after `'administration'`.
+    const sections = new Set(ADMIN_MODULES.map((m) => m.section));
+    expect(sections).toEqual(new Set([null, 'administration']));
+  });
+
+  it('gives the dashboard the same order as the sidebar, minus itself', async () => {
+    // The launcher and the menu are ONE list by construction (§4). This is the
+    // assertion that would have caught the `section !== null` filter R105
+    // invalidated — under it a Super Admin saw nine cards and an Admin saw none.
+    const { dashboardCards } = await import('../pages/admin/index.js');
+    expect(dashboardCards(['super_admin']).map((m) => m.path)).toEqual(
+      [...MAIN_NAV_ORDER, ...ADMINISTRATION_ORDER].filter((p) => p !== '/admin'),
+    );
+    expect(dashboardCards(['admin']).map((m) => m.path)).toEqual(
+      [...MAIN_NAV_ORDER].filter((p) => p !== '/admin'),
+    );
   });
 });
 
+/**
 /**
  * **The الإدارة order is a Document Owner decision, so it is pinned** (2026-08-17).
  *

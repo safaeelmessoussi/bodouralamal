@@ -1014,10 +1014,16 @@ export const ar = {
       groups: 'مجموعات المستويات',
       // R69 — each of the two subject screens gets its own node; they were
       // reachable only through row actions borrowed by unrelated screens.
-      enrollments: 'التسجيلات',
+      // R105 — was «التسجيلات», which named the ROWS. The menu names the
+      // population everywhere else, and an administrator opens this looking
+      // for a beneficiary rather than for a record of one.
+      enrollments: 'المستفيدات',
       // R88 correction — التسجيلات places the people being taught; this
       // manages the people doing the teaching. Both belong to الشؤون التعليمية.
-      teachers: 'إدارة المؤطِّرات',
+      // R105 — was «إدارة المؤطِّرات». No sibling names its own verb
+      // («المستخدمون», not «إدارة المستخدمين»), so one entry in eleven
+      // announced it was a management screen when every entry is one.
+      teachers: 'المؤطِّرات',
       examGrades: 'نقاط الامتحانات',
       levelSubjects: 'مواد المستوى',
       levelSurahs: 'مقرر الحفظ',
@@ -1037,13 +1043,12 @@ export const ar = {
       hijri: 'التقويم الهجري',
       settings: 'إعدادات المنصة',
     },
-    // §14.1's groups, rendered in its order.
+    // **§14.1 has one group now (R105).** `academic`, `people`, `scheduling`
+    // and `content` were removed with the headings themselves: they sorted
+    // eleven destinations into buckets that gated nothing. الإدارة stays
+    // because its heading IS a fact about authority — every node under it is
+    // Super-Admin-only by placement (R61). See `admin-modules.ts`.
     section: {
-      academic: 'الشؤون التعليمية',
-      people: 'الأشخاص',
-      // R51 — واحدة تجمع الأنشطة والحصص: كلاهما ما يُجدول.
-      scheduling: 'الجدولة',
-      content: 'المحتوى',
       administration: 'الإدارة',
     },
     // Each names WHAT is missing — "coming soon" tells nobody whether the wait

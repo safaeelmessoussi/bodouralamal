@@ -33,36 +33,59 @@ import {
  * rather than in the shared layer.
  */
 export interface AdminModule extends PortalModule {
-  /** §14.1's grouping. `null` sits above the groups, like the dashboard. */
+  /** §14.1's grouping. `null` is the main list, which is now most of the menu. */
   section: AdminSection | null;
 }
 
 export type { ModuleStatus };
 
-/** §14.1's groups. `scheduling` replaced `calendar` in Revision 51: an
- *  administrator groups Events and Sessions by *things that are scheduled*,
- *  which is the question they are asking, rather than by which model they are. */
-export type AdminSection = 'academic' | 'people' | 'scheduling' | 'content' | 'administration';
+/**
+ * **§14.1 has ONE group now — الإدارة (Revision 105).**
+ *
+ * It used to have five: `academic`, `people`, `scheduling`, `content` and
+ * `administration`. The Document Owner collapsed the first four into a single
+ * flat list, and the reason is worth keeping, because it is the argument
+ * against re-introducing them:
+ *
+ * **الإدارة is the only group that MEANS anything.** Every node inside it is
+ * Super-Admin-only *by placement* (R61), so the heading is a statement about
+ * authority that a reader can act on. The other four headings sorted eleven
+ * destinations into buckets that carried no such consequence — `الأشخاص` and
+ * `الشؤون التعليمية` gate nothing, and a menu of eleven items does not need
+ * finding aids. Worse, `Administration` appeared **twice** in the §14.1 tree
+ * (once holding Trash, once holding the configuration nodes), which is what a
+ * grouping looks like when it has stopped describing anything.
+ *
+ * So the rule is now: **a section exists only where the heading is a fact about
+ * permission.** Adding a decorative group back is a change to §14.1, not a
+ * layout preference.
+ */
+export type AdminSection = 'administration';
 
-/** §14.1's group order, which the sidebar renders in exactly this sequence. */
-export const ADMIN_SECTIONS: readonly AdminSection[] = [
-  'academic',
-  'people',
-  'scheduling',
-  'content',
-  'administration',
-];
+/** §14.1's group order — one group, rendered after the main list. */
+export const ADMIN_SECTIONS: readonly AdminSection[] = ['administration'];
 
 const STAFF = ['admin', 'super_admin'] as const;
 const SUPER_ONLY = ['super_admin'] as const;
 
 /**
- * Every back-office node §14.1 defines, in its order.
+ * Every back-office node §14.1 defines, **in the Document Owner's order**
+ * (Revision 105).
  *
- * Reference-data modules list **both** roles because §14.1 marks them
- * *"read: Admin · write: Super Admin"* (Revision 26) — an Admin may open them.
- * The write controls inside are gated separately, and the server enforces the
- * matrix regardless: the URL prefix is never the permission boundary.
+ * **This array's order IS the navigation order and IS the dashboard order.**
+ * The sidebar renders it as it stands and the dashboard launcher maps the same
+ * list, so the two cannot disagree — which is the whole reason the registry
+ * exists. `admin-modules.test.ts` pins both sequences literally, so a
+ * well-meant reshuffle fails a test instead of quietly changing §14.1.
+ *
+ * Reference-data modules list **both** roles where §14.1 marks them *"read:
+ * Admin · write: Super Admin"* (Revision 26) — but every node in الإدارة is
+ * `SUPER_ONLY` because R61 makes the SECTION the gate. The distinction that
+ * survives is between the SCREEN and the ENDPOINT: `GET /admin/levels`,
+ * `/admin/categories`, `/admin/subjects` and `/admin/branches` stay
+ * Admin-readable, because scheduling, enrolment and every scope selector feed
+ * from them (R61.2). **The menu is never the boundary** — the server enforces
+ * TD-2 on every request, and R105 changed no permission at all.
  */
 export const ADMIN_MODULES: readonly AdminModule[] = [
   {
@@ -73,109 +96,135 @@ export const ADMIN_MODULES: readonly AdminModule[] = [
     status: 'ready',
   },
 
-  // ── Academic ──────────────────────────────────────────────────────────────
+  // ── The main list (Revision 105) ──────────────────────────────────────────
   //
-  // **Ordered general → specific, along the dependency chain** (R43's own
-  // model): a Category contains Levels, a Level offers Subjects, a Level is
-  // divided into Administrative Groups, and a Subject within a Level is
-  // divided into Teaching Groups. Reading the menu top to bottom is reading
-  // that hierarchy, so a person meets a concept only after the one it hangs
-  // off. Nothing about authorization changes — the order is presentation.
+  // **Ordered by the working day, not by the data model.** The previous order
+  // was the dependency chain — Category contains Level contains Group — which
+  // is how the platform is BUILT and not how it is USED; and the configuration
+  // half of that chain has since moved to الإدارة anyway, so the operational
+  // half was left reading like the remains of a hierarchy.
   //
-  // **The last two rungs are parameterised screens, not menu nodes.** Assigning
-  // a Subject to a Level and managing its Teaching Groups live at
-  // `/admin/levels/{id}/subjects/{subjectId}`, which cannot be linked without
-  // an id; §14.1 lists them under Levels for exactly that reason, and the
-  // Levels table's subject count is the way in (§20 rule 16 — no invented
-  // navigation).
+  // What the Owner ordered instead is the sequence an administrator actually
+  // moves through: someone applies (طلبات الانضمام), becomes an account
+  // (المستخدمون), the people who teach are set up (المؤطِّرات) and the people
+  // taught are placed (المستفيدات), those two populations are divided
+  // (مجموعات المستويات, حلقات المواد), what happens in class is recorded
+  // (إدخال الحفظ, نقاط الامتحانات), and the supporting surfaces close the list
+  // (الجدولة, مكتبة المحتوى).
   {
-    // R55: الفئات and المواد are two navigation nodes. They were one screen with
-    // two tables; the Owner separated the navigation, and the **implementation
-    // stays single** — `taxonomy.tsx` takes the entity as a parameter, so the
-    // two cannot drift apart the way duplicated CRUD always has here.
-    path: '/admin/categories',
-    labelKey: 'admin.nav.categories',
-    /**
-     * **Moved to الإدارة by the Owner (2026-08-12), and Super-Admin-only with
-     * it** — R61's section rule is structural, so placement decides authority
-     * and the test over `section: 'administration'` enforces it.
-     *
-     * The reason is what الإدارة already collects: **stable configuration**. The
-     * three Categories and the Subject list are curriculum *structure*, changed
-     * rarely and by one person, not operational data an Admin works with daily.
-     * Writes were already Super-Admin-only (R26/R55); this moves the screen to
-     * match.
-     *
-     * **The READ endpoint stays Admin-accessible**, exactly as R61 decided for
-     * `GET /admin/branches`: Levels, scheduling and the roster feed selectors
-     * from it, and gating the data rather than the screen would break them.
-     */
-    section: 'administration',
-    roles: SUPER_ONLY,
+    path: '/admin/approvals',
+    labelKey: 'admin.nav.approvals',
+    section: null,
+    roles: STAFF,
     status: 'ready',
   },
   {
-    path: '/admin/levels',
-    labelKey: 'admin.nav.levels',
-    /**
-     * **R69 — curriculum structure, so it sits with the other configuration.**
-     * Its writes have always been Super Admin, and R66 removed the last
-     * operational thing it did (creating a Level's first group). It answers
-     * *which Levels exist, in which Category* and nothing else now.
-     *
-     * The READ endpoint stays Admin-accessible: scheduling, the approval
-     * queue's placement dialog and the groups screen all feed selectors from
-     * it. Gating the DATA rather than the screen would break an Admin's daily
-     * work — the rule R61 set for `GET /admin/branches`.
-     */
-    section: 'administration',
-    roles: SUPER_ONLY,
-    status: 'ready',
-  },
-  {
-    path: '/admin/subjects',
-    labelKey: 'admin.nav.subjects',
-    /** With الفئات, and for the same reason — see the note there. */
-    section: 'administration',
-    roles: SUPER_ONLY,
-    status: 'ready',
-  },
-  {
-    /**
-     * R74 — enrolment had no node. R66 made the group optional and gave the
-     * service `enrolInLevel`, but only the approval path called it, so a Level
-     * nobody had subdivided could not be enrolled into afterwards. Listed
-     * FIRST in this section because §7 (R66) makes the Level enrolment the
-     * primary fact and the group an optional subdivision of it.
-     */
-    path: '/admin/enrollments',
-    labelKey: 'admin.nav.enrollments',
-    section: 'academic',
+    path: '/admin/users',
+    labelKey: 'admin.nav.users',
+    section: null,
     roles: STAFF,
     status: 'ready',
   },
   {
     /**
-     * **إدارة المؤطِّرات — the teaching side of الشؤون التعليمية** (R88).
+     * **المؤطِّرات — the people who TEACH** (R88; renamed by R105).
      *
-     * The section holds the two operational populations, and they are parallel:
-     * التسجيلات places **the people being taught**, and this manages **the
-     * people doing the teaching**. The teaching profile lived as a row action on
-     * المستخدمون, which offered it for guardians, minors and administrators
-     * alike — a generic account screen answering a question it does not own.
+     * It was `إدارة المؤطِّرات`. The word *إدارة* named the screen's verb rather
+     * than its subject, and no sibling did that — `المستخدمون` is not
+     * *«إدارة المستخدمين»* — so one entry in eleven announced that it was a
+     * management screen when every entry in the menu is one.
      *
-     * Placed immediately after التسجيلات so the two read as a pair.
+     * Its R88 teaching profile lives here: declared Subjects, declared
+     * Categories, declared availability. **Planning data only; it grants
+     * nothing** (R88.3, §4.4c) — authority comes from an assignment.
+     *
+     * Immediately BEFORE المستفيدات, by the Owner: the two remain a pair —
+     * the people who teach, then the people taught.
      */
     path: '/admin/teachers',
     labelKey: 'admin.nav.teachers',
-    section: 'academic',
+    section: null,
     roles: STAFF,
     status: 'ready',
   },
   {
+    /**
+     * **المستفيدات — enrolment** (R74; renamed by R105).
+     *
+     * It was `التسجيلات`, which named the *rows* — enrolment records. The menu
+     * everywhere else names the **population** a screen is about
+     * (`المستخدمون`, `المؤطِّرات`), and an administrator opening this comes
+     * looking for a beneficiary, not for a record of one.
+     *
+     * **The model is untouched**: this is still Level enrolment with an
+     * optional Group (R66/R74), and the group roster remains the per-group view
+     * of the same rows. Only the word changed.
+     */
+    path: '/admin/enrollments',
+    labelKey: 'admin.nav.enrollments',
+    section: null,
+    roles: STAFF,
+    status: 'ready',
+  },
+  {
+    // How a LEVEL is subdivided, and who is in each group. Touches no Subject
+    // (R69.5).
     path: '/admin/groups',
     labelKey: 'admin.nav.groups',
-    section: 'academic',
+    section: null,
+    roles: STAFF,
+    status: 'ready',
+  },
+  {
+    /**
+     * How a SUBJECT within a Level is subdivided, and who attends (R69).
+     *
+     * Structure is Super Admin and MEMBERSHIP is Admin, branch-scoped (R43.3) —
+     * the screen gates its own write controls and the server decides. That
+     * split is why it is an operational node and not a configuration one, and
+     * R105 does not disturb it.
+     */
+    path: '/admin/teaching-groups',
+    labelKey: 'admin.nav.teachingGroups',
+    section: null,
+    roles: STAFF,
+    status: 'ready',
+  },
+  {
+    /**
+     * **§C4 — إدخال الحفظ had no back-office node at all** (2026-08-20).
+     *
+     * `assertCanManageQuranProgress` has granted an Admin their branches'
+     * beneficiaries and a Super Admin everyone **since R73**, and
+     * `POST /quran-logs` has enforced it — but §14.1 listed the capability
+     * nowhere in the back office, so nobody could use it. Rule **P**, and the
+     * seventh instance of it on this project.
+     *
+     * **Operational, so it is in the main list** — an act on a beneficiary's
+     * record, the same kind of thing as grade entry beside it, not the
+     * configuration of a curriculum. `مقرّر الحفظ` (`/admin/level-surahs`) is
+     * the configuration half and stays in الإدارة; this consumes it.
+     *
+     * `STAFF` because both Admin and Super Admin enter progress, each within
+     * the reach TD-2 gives them. The server decides which; the node does not.
+     */
+    path: '/admin/quran',
+    labelKey: 'admin.nav.quran',
+    section: null,
+    roles: STAFF,
+    status: 'ready',
+  },
+  {
+    /**
+     * R70.1 — grade entry had no node at all: §14.1 listed grading under
+     * `/teacher/exams` while R56/R58 put exam scheduling on `/admin/schedules`,
+     * so an Admin could reach no sheet. `?exam=` is the deep link, the pattern
+     * `/resources` set and R69 applied twice — a second path segment would be a
+     * node §14.1 does not list.
+     */
+    path: '/admin/exam-grades',
+    labelKey: 'admin.nav.examGrades',
+    section: null,
     roles: STAFF,
     status: 'ready',
   },
@@ -187,11 +236,81 @@ export const ADMIN_MODULES: readonly AdminModule[] = [
     // asked, and when.
     path: '/admin/schedules',
     labelKey: 'admin.nav.scheduling',
-    section: 'scheduling',
+    section: null,
+    roles: STAFF,
+    status: 'ready',
+  },
+  {
+    path: '/admin/content',
+    labelKey: 'admin.nav.content',
+    section: null,
     roles: STAFF,
     status: 'ready',
   },
 
+  // ── الإدارة ───────────────────────────────────────────────────────────────
+  //
+  // **Super Admin only, as a SECTION** (R61). Every node here carries
+  // `SUPER_ONLY`, and `admin-modules.test.ts` asserts it over the section rather
+  // than per module — written as nine independent decisions, the tenth module
+  // added here would inherit nothing and the divergence would return silently,
+  // which is precisely how `/admin/branches` came to be the odd one out.
+  //
+  // **Ordered along the dependency chain** (R69), which is the right order for
+  // configuration even though it was the wrong one for the operational list:
+  // الفئات → المستويات → المواد → مواد المستوى → مقرر الحفظ, then the three
+  // standalone configuration nodes and سلة المحذوفات. Reading it top to bottom
+  // is reading the curriculum's structure, so a person meets a concept only
+  // after the one it hangs off.
+  {
+    /**
+     * R55: الفئات and المواد are two navigation nodes. They were one screen with
+     * two tables; the Owner separated the navigation, and the **implementation
+     * stays single** — `taxonomy.tsx` takes the entity as a parameter, so the
+     * two cannot drift apart the way duplicated CRUD always has here.
+     *
+     * **Moved to الإدارة by the Owner (2026-08-12), and Super-Admin-only with
+     * it** — R61's section rule is structural, so placement decides authority.
+     * الإدارة collects **stable configuration**: the three Categories and the
+     * Subject list are curriculum *structure*, changed rarely and by one person,
+     * not operational data an Admin works with daily.
+     *
+     * **The READ endpoint stays Admin-accessible**, exactly as R61 decided for
+     * `GET /admin/branches`: Levels, scheduling and the roster feed selectors
+     * from it, and gating the data rather than the screen would break them.
+     */
+    path: '/admin/categories',
+    labelKey: 'admin.nav.categories',
+    section: 'administration',
+    roles: SUPER_ONLY,
+    status: 'ready',
+  },
+  {
+    /**
+     * **R69 — curriculum structure, so it sits with the other configuration.**
+     * Its writes have always been Super Admin, and R66 removed the last
+     * operational thing it did (creating a Level's first group). It answers
+     * *which Levels exist, in which Category* and nothing else now.
+     *
+     * The READ endpoint stays Admin-accessible: scheduling, the approval
+     * queue's placement dialog and the groups screen all feed selectors from
+     * it. Gating the DATA rather than the screen would break an Admin's daily
+     * work — the rule R61 set for `GET /admin/branches`.
+     */
+    path: '/admin/levels',
+    labelKey: 'admin.nav.levels',
+    section: 'administration',
+    roles: SUPER_ONLY,
+    status: 'ready',
+  },
+  {
+    /** With الفئات, and for the same reason — see the note there. */
+    path: '/admin/subjects',
+    labelKey: 'admin.nav.subjects',
+    section: 'administration',
+    roles: SUPER_ONLY,
+    status: 'ready',
+  },
   {
     /**
      * **R69 — a node at last.** The screen existed and worked, but its path
@@ -210,21 +329,17 @@ export const ADMIN_MODULES: readonly AdminModule[] = [
     /**
      * M4c — the Quran-side curriculum join (§4.5, §7, BR-11).
      *
-     * **Ordered AFTER `مواد المستوى`, by the Document Owner (2026-08-17).**
-     * الإدارة is ordered along the dependency chain (R69) and this completes it:
-     * الفئات → المستويات → المواد → **مواد المستوى** (which Subjects a Level
-     * teaches) → **مقرر الحفظ** (the Quran syllabus layer on top of them). It
-     * used to sit between المواد and مواد المستوى, so the menu read the
-     * curriculum out of order — and §14.1's own Administration order already
-     * names the first four in exactly this sequence.
+     * **Ordered AFTER `مواد المستوى`, by the Document Owner (2026-08-17), and
+     * kept there by R105.** It completes the dependency chain: الفئات →
+     * المستويات → المواد → **مواد المستوى** (which Subjects a Level teaches) →
+     * **مقرر الحفظ** (the Quran syllabus layer on top of them).
      *
      * It carries the same authorization as `مواد المستوى` because it is the same
      * kind of fact: Super Admin writes, Admin reads (R26).
      *
      * **Recorded: `/admin/level-surahs` is not in §14.1.** M4c shipped it with
-     * "no SRS change", so the sitemap has no line for it. Its placement here is
-     * the dependency order §14.1 states for its neighbours, and the gap is
-     * reported rather than papered over.
+     * "no SRS change", so the sitemap had no line for it; **R105 adds one**, and
+     * the gap is closed rather than carried further.
      */
     path: '/admin/level-surahs',
     labelKey: 'admin.nav.levelSurahs',
@@ -236,93 +351,6 @@ export const ADMIN_MODULES: readonly AdminModule[] = [
     roles: SUPER_ONLY,
     status: 'ready',
   },
-  {
-    /**
-     * **§C4 — إدخال الحفظ had no back-office node at all** (2026-08-20).
-     *
-     * `assertCanManageQuranProgress` has granted an Admin their branches'
-     * beneficiaries and a Super Admin everyone **since R73**, and
-     * `POST /quran-logs` has enforced it — but §14.1 listed the capability
-     * nowhere in the back office, so nobody could use it. Rule **P**, and the
-     * seventh instance of it on this project.
-     *
-     * **`academic`, not `administration`.** It is an operational act on a
-     * beneficiary's record — the same kind of thing as grade entry, which sits
-     * beside it — not the configuration of a curriculum. `مقرّر الحفظ`
-     * (`/admin/level-surahs`) is the configuration half and stays in الإدارة;
-     * this consumes it.
-     *
-     * `STAFF` because both Admin and Super Admin enter progress, each within
-     * the reach TD-2 gives them. The server decides which; the node does not.
-     */
-    path: '/admin/quran',
-    labelKey: 'admin.nav.quran',
-    section: 'academic',
-    roles: STAFF,
-    status: 'ready',
-  },
-  {
-    /**
-     * **R69 — operational, and its own node.** Subdividing a Subject inside a
-     * Level and placing students into the circles. Structure is Super Admin and
-     * membership is Admin, branch-scoped (R43.3) — the screen gates its own
-     * write controls, which is why it belongs in the operational section rather
-     * than beside the configuration.
-     */
-    path: '/admin/teaching-groups',
-    labelKey: 'admin.nav.teachingGroups',
-    section: 'academic',
-    roles: STAFF,
-    status: 'ready',
-  },
-  {
-    /**
-     * R70.1 — grade entry had no node at all: §14.1 listed grading under
-     * `/teacher/exams` while R56/R58 put exam scheduling on `/admin/schedules`,
-     * so an Admin could reach no sheet. `?exam=` is the deep link, the pattern
-     * `/resources` set and R69 applied twice — a second path segment would be a
-     * node §14.1 does not list.
-     */
-    path: '/admin/exam-grades',
-    labelKey: 'admin.nav.examGrades',
-    section: 'academic',
-    roles: STAFF,
-    status: 'ready',
-  },
-
-  // ── People ────────────────────────────────────────────────────────────────
-  {
-    path: '/admin/users',
-    labelKey: 'admin.nav.users',
-    section: 'people',
-    roles: STAFF,
-    status: 'ready',
-  },
-  {
-    path: '/admin/approvals',
-    labelKey: 'admin.nav.approvals',
-    section: 'people',
-    roles: STAFF,
-    status: 'ready',
-  },
-
-
-  // ── Content ───────────────────────────────────────────────────────────────
-  {
-    path: '/admin/content',
-    labelKey: 'admin.nav.content',
-    section: 'content',
-    roles: STAFF,
-    status: 'ready',
-  },
-
-  // ── Administration ────────────────────────────────────────────────────────
-  //
-  // **Super Admin only, as a SECTION** (R61). Every node here carries
-  // `SUPER_ONLY`, and `admin-modules.test.ts` asserts it — written as four
-  // independent decisions, the fifth module added here would inherit nothing and
-  // the divergence would return silently, which is precisely how
-  // `/admin/branches` came to be the odd one out.
   {
     /**
      * R61 — was `STAFF`, because Revision 26 let an Admin *read* this screen.
@@ -343,8 +371,14 @@ export const ADMIN_MODULES: readonly AdminModule[] = [
     status: 'ready',
   },
   {
-    // §7/BR-15 (R52) — Super Admin only: the list spans every entity regardless
-    // of branch, which no other surface allows.
+    /**
+     * §7/BR-15 (R52) — Super Admin only: the list spans every entity regardless
+     * of branch, which no other surface allows.
+     *
+     * **R105 moves it into الإدارة**, where it always belonged. §14.1 carried
+     * two separate `Administration` groups, one holding only this node — a
+     * grouping that had stopped describing anything.
+     */
     path: '/admin/trash',
     labelKey: 'admin.nav.trash',
     section: 'administration',

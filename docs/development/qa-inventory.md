@@ -46,8 +46,8 @@ rather than summarised.
 | 14b | Event audience | scope → recipients (R82.7) | ✓ | ✓ within `notification-targets` (27) | ✓ within 37/37 | Level · Branch+Category · Category-wide · global · deleted Event Trash snapshot |
 | 14c | Personal calendar | `GET /me/calendar` (R82.8) | ✓ | ✓ within `notification-targets` (27) | ✓ within 37/37 | asked as each of three people |
 | 14d | Grade published | publish → notice (R82.4) | ✓ | ✓ `notification-targets` | ✓ within `verify-grading` | draft is silent; republish idempotent |
-| 15 | Teaching profile | «الملف التدريسي» on **إدارة المؤطِّرات** (R88) | ✓ | ✓ `teaching-profile` (15) | ✓ 13/13 `verify-teaching-profile` | **planning data**; the screen says it grants nothing. Moved off `المستخدمون` 2026-08-19 — see 15b |
-| 15b | إدارة المؤطِّرات | `/admin/teachers` | ✓ `teachers.test.tsx` (14) | ✓ `user-management` R88 block (5) | ✓ within 13/13 | population = live `teacher` role; a مؤطِّرة who also studies is listed, a beneficiary who does not teach is not |
+| 15 | Teaching profile | «الملف التدريسي» on **المؤطِّرات** (R88; renamed by R105) | ✓ | ✓ `teaching-profile` (15) | ✓ 13/13 `verify-teaching-profile` | **planning data**; the screen says it grants nothing. Moved off `المستخدمون` 2026-08-19 — see 15b |
+| 15b | المؤطِّرات | `/admin/teachers` | ✓ `teachers.test.tsx` (14) | ✓ `user-management` R88 block (5) | ✓ within 13/13 | population = live `teacher` role; a مؤطِّرة who also studies is listed, a beneficiary who does not teach is not |
 | 15c | Staff-picker warnings | the scheduling form's مؤطِّرة + assistants (R90) | ✓ `staff-picker.test.ts` (18) | ✓ `teaching-candidates` (23) | ✓ 13/13 `verify-staff-picker` | four appraisals; **warnings never block**; assignment is the only authority |
 | 15d | Class staffing on EDIT | `PATCH /admin/course-schedules/{id}` | ✓ | ✓ within the 23 | ✓ within 13/13 | **fixed 2026-08-19** — the form offered the controls and the server refused the key |
 | 15e | Effective-dated staffing | `CourseScheduleStaff.effective_from/until` (R91) | ✓ `effective-staffing.test.ts` (14) | ✓ `effective-staffing` (24) | ✓ 13/13 `verify-effective-staffing` | **history is never rewritten**; one main per date; many assistants |
@@ -104,6 +104,7 @@ under the table.
 | `verify-unsaved-guard.sh` | 21 | Unsaved-changes protection on every dismissal path, plus the pristine half | 21/21 |
 | `verify-registration.sh` | 13 | The beneficiary registration journey end to end, plus the records it must and must not create | 13/13 |
 | `verify-content-visibility.sh` | 24 | §14.1's visibility selector, operated in a real browser: state, selection, the request body, and the replace dialog's absence of one | 24/24 |
+| `verify-admin-navigation.sh` | 4 | **R105's two menu orders as they RENDER**, both roles, plus the dashboard cards · an Admin typing each الإدارة URL · and the boundary a menu check cannot see: the same nine asked of the **server** with a real Admin bearer token | 31/31 |
 | `verify-grading.sh` | 14d, 16 | R81 — the exam's own maximum, empty ≠ zero, publish notifies and a draft is silent | 16/16 |
 | `verify-teaching-profile.sh` | 15, 15b | **AQ/X** — ownership of «الملف التدريسي», the population, Arabic weekdays, a range that survives a reload | 13/13 |
 | `verify-guardian-child.sh` | 26 | **R96.1** — a parent-only account driven through the account switcher: her own QR, two linked children in turn each showing that child's own `user_qr_ref`, back to her own, plus a forged unrelated child and a revoked FamilyLink both refused | 12/12 |

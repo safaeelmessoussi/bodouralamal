@@ -252,7 +252,7 @@ the current set:
 | الفروع · الفئات · المواد · المستويات · المجموعات الإدارية | R76's original five |
 | حلقات المواد | `name` · `level` · `subject` (R78) |
 | المستخدمون | `name` · `created_at` |
-| التسجيلات | `student` · `level` · `branch` |
+| المستفيدات | `student` · `level` · `branch` |
 
 **Deliberately not sortable, and the reason matters more than the list.** A
 grade sheet, a Quran log editor and the Hijri month editor hold **live form
@@ -1418,12 +1418,12 @@ some rows would have left the same screen answering two unrelated questions, and
 (a suspended account cannot be suspended), not for an action that belongs to a
 different subject entirely.
 
-### الشؤون التعليمية holds two populations, and they are not the same list
+### The back office holds two populations, and they are not the same list
 
 | Screen | Population | What it decides |
 |---|---|---|
-| `التسجيلات` — `/admin/enrollments` | the people being **taught** | which Level, in which branch, optionally which Group |
-| `إدارة المؤطِّرات` — `/admin/teachers` | the people **doing the teaching** | what each can teach, for which Categories, and when she is free |
+| `المستفيدات` — `/admin/enrollments` | the people being **taught** | which Level, in which branch, optionally which Group |
+| `المؤطِّرات` — `/admin/teachers` | the people **doing the teaching** | what each can teach, for which Categories, and when she is free |
 | `المستخدمون` — `/admin/users` | **every account** | identity, roles, branch scope, whether the account may sign in |
 
 **Neither teaching list is derivable from the other.** R79 made *beneficiary* a
@@ -1851,7 +1851,7 @@ system's internals, break on every restyle, and catch nothing.
 |---|---|
 | [`ui/atomic-components.test.tsx`](../../frontend/src/components/ui/atomic-components.test.tsx) | one Button (both class vocabularies, and no second system in CSS) · the `＋` convention, in code and in the catalogue · one table, with reasoned exceptions · one Level label · no engineering reference in a user-facing string · no data gate in the copy · no pass/fail on the sheet · no account creation on `المستخدمون`, **in code and in the catalogue** · **the dirty-state wiring, and that no form omits `dirty`** · **AH — one action message, and that it still announces politely** · **AJ — only the shared header composes the calendar atoms** · **AL — one calendar filter state, read from the URL in one place** |
 | [`i18n/resolves.test.ts`](../../frontend/src/i18n/resolves.test.ts) | **every literal `t()` key resolves** — and that `t()` still returns the key on a miss, which is the behaviour the guard exists to police |
-| [`lib/admin-modules.test.ts`](../../frontend/src/lib/admin-modules.test.ts) | §14.1's sitemap · R61's section rule · **the الإدارة curriculum order** · every label resolves |
+| [`lib/admin-modules.test.ts`](../../frontend/src/lib/admin-modules.test.ts) | §14.1's sitemap · R61's section rule · **both R105 menu orders, pinned literally** · the الإدارة curriculum order · **the dashboard cards ARE the menu** (asserted against `dashboardCards`, not a copy) · every label resolves |
 | [`lib/teacher-modules.test.ts`](../../frontend/src/lib/teacher-modules.test.ts) | the teaching nodes, their sections, and **no `/admin/*` path in her menu** |
 | [`pages/admin/teaching-structure.test.ts`](../../frontend/src/pages/admin/teaching-structure.test.ts) | the circles page reads unconditionally · R69.3's deep links are focus, not gates · BR-22 survives · R43.3 authorization |
 | [`components/grading/grade-sheet.test.ts`](../../frontend/src/components/grading/grade-sheet.test.ts) | empty ≠ zero · the scale is the server's · **no verdict, and the override still shown** |

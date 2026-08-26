@@ -48,19 +48,27 @@ describe('the teaching profile left the generic account screen', () => {
   });
 });
 
-describe('إدارة المؤطِّرات is a node of its own', () => {
-  it('appears in the registry under الشؤون التعليمية, for staff', () => {
+describe('المؤطِّرات is a node of its own', () => {
+  it('is an OPERATIONAL node — outside الإدارة, and open to an Admin', () => {
     const node = ADMIN_MODULES.find((m) => m.path === '/admin/teachers');
     expect(node).toBeDefined();
-    expect(node?.section).toBe('academic');
+    // **Restated for R105, not weakened.** This read `section === 'academic'`,
+    // and R105 deleted that section — but the section was never the property.
+    // What matters is that the node is NOT in الإدارة, because placement there
+    // is what makes a node Super-Admin-only (R61). `null` states exactly that.
+    expect(node?.section).toBeNull();
     // Not Super-Admin-only: choosing who teaches what is operational Admin work.
     expect(node?.roles).toContain('admin');
     expect(node?.status).toBe('ready');
   });
 
-  it('sits beside التسجيلات — the two populations of the same section', () => {
+  it('sits beside المستفيدات — the two populations, adjacent, teachers first', () => {
+    // The pair is the property and it survives R105; the ORDER within it is
+    // what the Owner changed — المؤطِّرات now precedes المستفيدات, so the menu
+    // reads "the people who teach, then the people taught". Asserted as
+    // adjacency plus direction, so either half failing names which one.
     const paths = ADMIN_MODULES.map((m) => m.path);
-    expect(paths.indexOf('/admin/teachers')).toBe(paths.indexOf('/admin/enrollments') + 1);
+    expect(paths.indexOf('/admin/enrollments')).toBe(paths.indexOf('/admin/teachers') + 1);
   });
 
   it('is routed, not merely listed', () => {
@@ -72,7 +80,10 @@ describe('إدارة المؤطِّرات is a node of its own', () => {
   });
 
   it('names itself in Arabic, in both the menu and the page', () => {
-    expect(ar.admin.nav.teachers).toBe('إدارة المؤطِّرات');
+    // R105 — «إدارة المؤطِّرات» named the screen's VERB. No sibling does that
+    // («المستخدمون», not «إدارة المستخدمين»), and every entry in this menu is a
+    // management screen, so the word distinguished nothing.
+    expect(ar.admin.nav.teachers).toBe('المؤطِّرات');
     expect(ar.admin.teachers.lede.length).toBeGreaterThan(0);
   });
 });

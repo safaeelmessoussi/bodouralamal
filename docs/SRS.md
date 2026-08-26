@@ -756,6 +756,8 @@ The registration/login entry is **OAuth-first**: the registration form is never 
 
 ### 4.8 In-App Notifications (Postponed — Revision 6; narrowed by Revision 77)
 
+**Revision 105 (Document Owner decision — the back-office sidebar is one flat list plus الإدارة, and two nodes are renamed, 2026-08-26):** **(1) §14.1's back-office grouping is replaced by ONE ordered list and ONE section.** The five groups — `الشؤون التعليمية`, `الأشخاص`, `الجدولة`, `المحتوى` and `Administration` — become a flat main list of eleven destinations followed by a single `الإدارة` section, in the exact order §14.1 now states. **The principle this establishes, and the one that governs any future proposal to re-introduce a heading: a section exists only where the heading states a fact about PERMISSION.** `الإدارة` qualifies, because R61 makes placement in it the thing that renders a node Super-Admin-only; the other four gated nothing and sorted eleven items into buckets that answered no question a person was asking. The sitemap had also drifted into listing `Administration` **twice** — once holding only Trash, once holding the configuration nodes — which is what a grouping looks like once it has stopped describing anything; R105 merges them, Trash included. Ordering the main list follows **the working day rather than the data model**: an applicant arrives, becomes an account, the people who teach and the people taught are set up, both populations are divided, what happens in class is recorded, and the supporting surfaces close the list. The former dependency-chain ordering (R43/R69) is **retained inside `الإدارة`**, where it is still the right order, because that section is curriculum structure. **(2) Two nodes are renamed, and nothing else about them changes.** `إدارة المؤطِّرات` → **`المؤطِّرات`**: no sibling names its own verb (`المستخدمون`, never *«إدارة المستخدمين»*), so one entry in eleven announced that it was a management screen when every entry in the menu is one. `التسجيلات` → **`المستفيدات`**: it named the *rows* — enrolment records — where every other entry names the **population** the screen is about, and an administrator opening it is looking for a beneficiary rather than for a record of one. **The R74 enrolment model is untouched** — Level enrolment with an optional Group (R66), the group roster still the per-group view of the same rows — as is the R88/R89 teaching profile, which remains planning data that **grants nothing** (R88.3, §4.4c). **(3) The dashboard launcher and the sidebar are ONE list, in one order.** §5.6's staff home is a launcher, not a statistics screen (no endpoint serves the counts, and inventing one would be worse than omitting it), so its cards are exactly this menu minus the launcher itself. Stating it normatively is what stops the two orders being maintained separately and disagreeing. **(4) THIS REVISION CHANGES NO PERMISSION, AND THE MENU IS NEVER THE BOUNDARY.** Every role grant, every TD-2 matrix row and every server-side check is exactly as it was. Hiding a node is a UX act; the server refuses the request. In particular the R61.2 distinction stands unaltered: the SCREENS in `الإدارة` are Super-Admin-only while `GET /admin/levels`, `/admin/categories`, `/admin/subjects`, `/admin/branches` and `/admin/levels/{id}/surahs` remain **Admin-readable**, because scheduling, enrolment, the approval queue's placement dialog and every scope selector feed from them — withdrawing the data rather than the screen would leave a branch Admin unable to work, with empty selectors and no error saying why. An agent "simplifying" the menu must never narrow an endpoint to match it, and must never widen one to make a screen work. **(5) Two nodes this sitemap had never listed are now listed, closing gaps rather than granting anything.** `/admin/quran` (إدخال الحفظ) and `/admin/level-surahs` (مقرر الحفظ) both shipped with "no SRS change" and were reported as gaps at the time. The capabilities are long-standing and normative — TD-2 as qualified by R73 for Quran progress, R26/R43.3 for curriculum structure — so listing the nodes adds no permission and no requirement; it makes §14.1 describe the platform that exists. **(6) Deliberately unchanged.** The PUBLIC tree; `/classroom/{sessionId}` (R98); the role-specific dashboards and R62/R63's parent home; `/profile` and `/profile/register-child` (R65); the teacher portal's own navigation, which §14.1 does not govern; the status interstitials, which remain redirect targets and not navigation nodes (Revision 16); TD-12's prohibition on a session-management node; and §20 rule 16 — **this revision is the Document Owner exercising the sitemap's authority, and it is not licence for an agent to reshuffle §14.1 on its own judgement.**
+
 **Revision 104 (Document Owner decision — the environment model becomes four named tiers, and «Staging» names the full-stack fixture environment, 2026-08-25):** **(1) One word named two different things, and removing that ambiguity is the whole of this revision.** Revision 6's §19.0 called the **Vercel** deployment «Staging», while Revision 12 reduced that deployment to *«UI/visual review against MSW mocks only — it calls no real backend»*. A deployment that calls no backend cannot be the environment a release is staged on, so §19.0 carried a name with no tier behind it for the thing that actually rehearses the platform. The topology is therefore **four named tiers — Local Development · Preview · Staging · Production** — and every other occurrence of «staging» in this specification is to be read against these names. **(2) PREVIEW is the former Vercel «Staging», renamed and otherwise unchanged.** Frontend and demo validation only, auto-deployed from `develop`, running against **MSW fixture mocks**, **calling no real backend**, with **nothing CORS-allow-listed anywhere, in any environment** (Revisions 10 and 12, carried forward without alteration). Revision 10's authentication boundary belongs to **Preview**: the Vercel origin and any backend are cross-origin, the `SameSite=Lax` refresh cookie will not flow between them **by design**, and authenticated flows are never exercised there. **(3) STAGING is a first-class full-stack environment, production-shaped in every particular.** It runs the same `docker-compose` architecture Production runs — Nginx as the only externally published HTTP boundary, with the API, PostgreSQL, MinIO and the TD-7 pg-boss workers reachable only on the internal network — serving the identical built frontend from **one origin** over **HTTPS**. **Production security behaviour remains enabled there without exception**: TLS, the `HttpOnly; Secure; SameSite=Lax` refresh cookie on its R101 Path, TD-12's CSRF boundary, §3.1 same-origin routing, the full TD-2 authorization matrix, and the B-01 public-storage database gate, B-02 visibility/bucket placement and B-03 immutable upload finalization. **Staging is not a relaxed environment; it is Production with synthetic data**, and weakening any control to make something work there is prohibited exactly as it is everywhere else (§19.0). **(4) STAGING IS FIXTURE-ONLY, AND THAT IS THE ENTIRE BASIS ON WHICH IT MAY SIT OUTSIDE MOROCCO.** Real beneficiary, association and Owner data is **prohibited**; **the development database and its MinIO objects must never be copied there**; production dumps never leave Moroccan infrastructure (§6, BR-18, R-10 — unchanged). Only §15.2 fixtures and deliberately synthetic records may exist, and §15.2's guard — fixtures refuse to run under `NODE_ENV=production` — remains the mechanical half of that firewall. **This clause grants Production nothing**: Law 09-08 residency for real data and backups is untouched, and a Staging deployment outside Morocco is never a precedent for a Production one. **(5) `NODE_ENV` does not gate error detail, and must never gate it — a narrow correction this revision cannot omit.** TD-13's inventory row and Revision 13 both list *«error verbosity»* among what `NODE_ENV` controls. The implementation has never had such a branch: TD-3.8's envelope is uniform in every environment and no stack trace, SQL fragment or internal path is returned anywhere. The correction belongs **here rather than in a revision of its own**, because clause (3) requires production security behaviour in Staging while clause (4) requires `NODE_ENV != production` there — so a specification claiming that value loosens error detail would contradict this revision on its own terms. `NODE_ENV` gates exactly three things: the §15.2 fixture firewall, the production-only `BACKUP_TARGET_SSH` requirement, and the production ban on `LOG_LEVEL=debug`. This **removes a latitude the specification appeared to grant and adds none**; error detail is not environment-conditional and must not become so. **(6) Deliberately unchanged.** §19.1's deployment pipeline and its Moroccan-VPS wording; the Week-8 dress rehearsal **on the production VPS itself** (§8), which Staging does not replace because it exercises neither Moroccan residency, nor R-8 TLS on the production domain, nor the §6 backup pipeline; every Production control; §15.1's prohibition on seeding branches, rooms, groups or rosters into production; the prohibition on environment-conditional cookie or CORS downgrades in **any** tier; and every clause of Revisions 6, 10, 12 and 13 not renamed above.
 
 **Revision 103 (Document Owner decision — collision-resistant immutable browser-upload finalization, 2026-08-24):** **(1) TD-9's former eight-hex random canonical version segment is superseded for browser/client-uploaded `EducationalContent`.** Initiation grants the client a unique `staging/content/...` PUT only; no canonical `content/...` key is ever client-writable. Completion opens one staging-object read, validates the permitted MIME essence and magic prefix, enforces the declared size and TD-9 cap, and computes SHA-256 over the complete byte stream accepted into private server-controlled finalization staging. MinIO/S3 ETag may remain an ordinary conditional-read optimization, but it is not collision-resistant identity and no correctness or key decision may treat it as one. **(2) The validated bytes are the canonical bytes.** Canonical publication reads only that server-owned accepted object, re-computes the full SHA-256 while streaming the canonical PUT, and refuses publication unless size and digest reproduce exactly; the database row and mandatory audit commit only after that PUT succeeds. Client mutation after the source read opens therefore either leaves that read on one stable storage snapshot or causes refusal — it can never validate A and publish B. Browser-upload files remain within TD-9's existing 50/100 MB caps and are streamed with bounded memory, never buffered whole. **(3) Canonical version identity is deterministic and collision-resistant.** The key keeps TD-9's layout and uses a 32-hex version segment: the first 128 bits of `SHA-256("upload-finalization-sha256-v1" || NUL || signed_finalization_id || NUL || full_content_sha256)`. The full content SHA-256 is retained in mandatory publication audit detail and canonical object metadata. Truncating the domain-separated key component to 128 bits gives negligible collision probability at this application's scale; the full digest remains the authority when an existing candidate is checked. Retry of the same accepted upload converges on the same key; unrelated finalizations cannot collide in any practically relevant way. **(4) Publication remains single-winner and idempotent.** Same-ticket completions may read the same or different stable staging snapshots, but exactly one row/version and one mandatory publication audit become authoritative; a losing distinct canonical candidate is removed only after the winning audit identifies a different key. New replacement tickets continue to compare-and-swap the exact `version`, bucket and key observed at initiation. **(5) Legacy replacement completion is fail-closed.** A pre-B-03 replacement ticket carrying `replaces` but no `replaces_version` is refused with a stable version conflict, its unreferenced upload object is discarded where safe, the existing content row/object remains untouched, and the user initiates a new replacement. The server must not substitute the current version. This deliberate incompatibility affects only temporary signed completion tickets, not accepted content or the business API. **(6) Rollout and exclusions.** Stop the old issuer and preserve the one-hour drain before relying on immutability for any former direct canonical PUT capability; the repository-wide maximum PUT TTL remains one hour. No two-hour completion-ticket wait is needed because unsafe legacy replacements fail closed immediately. Existing canonical rows/objects are not rewritten. R99/R100 provider ingestion keeps its existing eight-hex recording identity, storage-side copy and no-client-staging threat model; its separate verification-to-copy source-pinning observation is not changed by this revision. General `upload.gc`, quarantine purge, consent, visibility migration and other upload/security work remain separate.
@@ -1872,68 +1874,13 @@ PUBLIC (no auth)
 ├── /calendar/sessions/{id} ........... Session page (R43 — public tier by visibility, §5.2)
 └── /content-unavailable .............. Stale-link friendly error
 
-AUTHENTICATED (role-gated; header: account switcher incl. child context, language switcher)
+AUTHENTICATED — CROSS-ROLE (header: account switcher incl. child context, language switcher)
 ├── /classroom/{sessionId} ............ the online classroom (R98) — ONE surface for every role,
 │                                       adapting to the credential's media mode and role; never a
 │                                       redirect to a provider's own page
 ├── Dashboard ......................... role-specific home (/dashboard/student, /teacher, /admin);
 │                                       a parent's home is their child's dashboard (R62.9, corrected by R63)
-├── الشؤون التعليمية / Academic *(operational Admin — subdivision, only when needed; R69)*
-│   ├── التسجيلات ..................... /admin/enrollments (staff, R74) — مستفيدة → Level,
-│   │   with an optional Group. The PRIMARY enrolment fact; the group roster
-│   │   below remains the per-group view of the same rows
-│   ├── إدارة المؤطِّرات ............... /admin/teachers (staff, R89) — the people who TEACH,
-│   │   and their R88 teaching profile: declared Subjects, declared Categories,
-│   │   declared availability. Planning data only; it grants nothing (R88.3).
-│   │   Beside التسجيلات deliberately: that node places the people being TAUGHT
-│   ├── مجموعات المستويات ............. /admin/groups (staff, R43) · /admin/groups/{id}/roster
-│   │   How a LEVEL is subdivided, and who is in each group. Touches no Subject (R69.5)
-│   │   (Course Schedules moved to الجدولة / Scheduling — Revision 51; /teacher/schedules is unchanged)
-│   ├── حلقات المواد .................. /admin/teaching-groups (?level=&subject= — R69)
-│   │   How a SUBJECT within a Level is subdivided, and who attends. Structure is
-│   │   Super Admin, MEMBERSHIP is Admin and branch-scoped (R43.3, unchanged).
-│   │   ~~/admin/levels/{id}/subjects/{subjectId}~~ redirects here (R69.3)
-│   ├── Exams ......................... /teacher/exams (author/grade) · /dashboard/student/grades (take/view)
-│   ├── Grade sheet ................... /admin/exam-grades (+ ?exam=) — Revision 70; /teacher/exams reaches THE SAME screen
-│   └── Quran Progress ................ /teacher/quran (+ ?student= — R73) · /dashboard/student/quran
-├── People
-│   ├── Users ......................... /admin/users
-│   ├── Approvals ..................... /admin/approvals
-│   └── Family ........................ role switcher → ولي الأمر → child (R62; /dashboard/parent removed)
-├── الجدولة / Scheduling *(R51, unified into one node by R56)*
-│   ├── Scheduling .................... /admin/schedules — ALL types (class, activity, later exam),
-│   │                                   with a List view (definitions) and a Calendar view
-│   │                                   (occurrences); /teacher/schedules is the teacher view
-│   │                                   — read-only for classes, and **authoring for Activities**
-│   │                                   in the teacher's own scope (R72)
-│   │   └── Occurrences ............... /admin/schedules/{id}/sessions (the R50 scope dialog;
-│   │                                   per-occurrence «مؤطّرة هذه الحصة» — R91 §11 — and
-│   │                                   «الحضور من الفروع» — R92's cross-branch audience)
-│   └── Student view .................. /dashboard/student/calendar (view)
-├── Administration
-│   └── Trash ......................... /admin/trash (Super Admin — R52/R59; restore per entity type, permanent delete per entity type)
-├── Content
-│   ├── Resources ..................... /resources (all roles)
-│   ├── Upload / Record ............... /teacher/content
-│   └── Content Library ............... /admin/content
-├── Administration  *(Super Admin only, as a section — R61; stable configuration, in dependency order — R69)*
-│   ├── الفئات / Categories ............ /admin/categories
-│   ├── المستويات / Levels ............. /admin/levels — WHICH LEVELS EXIST, in which Category.
-│   │                                   Moved here by R69: curriculum structure, Super-Admin
-│   │                                   writes throughout, and R66 removed the last
-│   │                                   operational thing it did. Assigns no Subjects.
-│   │                                   **The READ endpoint stays Admin-accessible** — scheduling,
-│   │                                   the placement dialog and the groups screen feed selectors
-│   │                                   from it (the R61 `GET /admin/branches` rule, applied again)
-│   ├── المواد / Subjects .............. /admin/subjects (R55 — its own node)
-│   ├── مواد المستوى / Level Subjects .. /admin/level-subjects (?level= — R69). WHICH SUBJECTS a
-│   │                                   Level teaches. Its own node at last: the path used to carry
-│   │                                   an id, so no menu could reach it and unrelated screens grew
-│   │                                   borrowed row actions instead.
-│   │                                   ~~/admin/levels/{id}/subjects~~ redirects here (R69.3)
-│   ├── Branches & Rooms .............. /admin/branches (Super Admin only — R61)
-│   ├── System Settings ............... /superadmin/settings (Super Admin only)
-│   └── Hijri Calendar Management ..... /superadmin/hijri-calendar (Super Admin only, Revision 31)
+├── Family ............................ role switcher → ولي الأمر → child (R62; /dashboard/parent removed)
 └── Profile / الحساب ................. /profile — THE PERSONAL SECTION (§5.2 Shared / Cross-Role, R65).
     │                                   Role-INDEPENDENT: reached from the account menu by every
     │                                   authenticated account whatever its active role
@@ -1941,6 +1888,95 @@ AUTHENTICATED (role-gated; header: account switcher incl. child context, languag
                                         dashboard by R64.3) — ANY account: a مؤطِّرة registering her
                                         own child is the case that made the role-shaped node wrong.
                                         Same fields and rules as /register's child section
+
+BACK OFFICE (Admin / Super Admin) — THE SIDEBAR, IN THIS EXACT ORDER (Revision 105)
+│
+│   The main list is FLAT and carries no headings: R105 removed `الشؤون التعليمية`,
+│   `الأشخاص`, `الجدولة` and `المحتوى` as groups. They sorted eleven destinations
+│   into buckets that gated nothing, while `Administration` appeared TWICE in this
+│   tree — once holding only Trash. A heading in this sidebar now exists only where
+│   it states a fact about PERMISSION, which is true of الإدارة and was true of none
+│   of the others. Ordered by the working day, not by the data model.
+│
+├── لوحة التحكم ....................... /admin — the staff home (§5.6). A LAUNCHER, not a
+│                                       statistics dashboard: its cards are exactly this menu,
+│                                       in this order, minus itself
+├── طلبات الانضمام .................... /admin/approvals
+├── المستخدمون ........................ /admin/users
+├── المؤطِّرات ......................... /admin/teachers (staff, R89) — the people who TEACH,
+│                                       and their R88 teaching profile: declared Subjects,
+│                                       declared Categories, declared availability. Planning data
+│                                       only; it grants nothing (R88.3, §4.4c).
+│                                       ~~إدارة المؤطِّرات~~ renamed by R105: no sibling names its
+│                                       own verb, and every entry in this menu is a management screen
+├── المستفيدات ........................ /admin/enrollments (staff, R74) — مستفيدة → Level, with an
+│                                       optional Group. The PRIMARY enrolment fact; the group roster
+│                                       remains the per-group view of the same rows.
+│                                       ~~التسجيلات~~ renamed by R105: it named the ROWS, where every
+│                                       other entry names the POPULATION the screen is about
+├── مجموعات المستويات ................. /admin/groups · /admin/groups/{id}/roster
+│                                       How a LEVEL is subdivided, and who is in each group.
+│                                       Touches no Subject (R69.5)
+├── حلقات المواد ...................... /admin/teaching-groups (?level=&subject= — R69)
+│                                       How a SUBJECT within a Level is subdivided, and who attends.
+│                                       Structure is Super Admin, MEMBERSHIP is Admin and
+│                                       branch-scoped (R43.3, unchanged).
+│                                       ~~/admin/levels/{id}/subjects/{subjectId}~~ redirects here (R69.3)
+├── إدخال الحفظ ....................... /admin/quran (+ ?student=) — the back-office half of Quran
+│                                       progress entry, added with R105's sitemap reconciliation.
+│                                       The CAPABILITY is long-standing (TD-2 as qualified by R73;
+│                                       `POST /quran-logs` has enforced it since M4a) and this
+│                                       sitemap simply never listed a node for it — rule P.
+│                                       /teacher/quran is the teaching view of the same capability;
+│                                       /dashboard/student/quran is the beneficiary's own view
+├── نقاط الامتحانات ................... /admin/exam-grades (+ ?exam=) — Revision 70; /teacher/exams
+│                                       reaches THE SAME screen. Exam authoring and grading remain
+│                                       /teacher/exams; /dashboard/student/grades is the taking/viewing view
+├── الجدولة ........................... /admin/schedules — ALL types (class, activity, later exam),
+│   │                                   with a List view (definitions) and a Calendar view
+│   │                                   (occurrences); /teacher/schedules is the teacher view
+│   │                                   — read-only for classes, and **authoring for Activities**
+│   │                                   in the teacher's own scope (R72);
+│   │                                   /dashboard/student/calendar is the student view
+│   └── Occurrences ................... /admin/schedules/{id}/sessions (the R50 scope dialog;
+│                                       per-occurrence «مؤطّرة هذه الحصة» — R91 §11 — and
+│                                       «الحضور من الفروع» — R92's cross-branch audience)
+├── مكتبة المحتوى ..................... /admin/content — the Content Library. /teacher/content is the
+│                                       upload/record view and /resources the all-roles library
+│
+└── الإدارة  *(Super Admin only, AS A SECTION — R61; stable configuration, in dependency order — R69)*
+    │                                   **The only heading in this sidebar, because it is the only
+    │                                   one that means something**: placement here is what makes a
+    │                                   node Super-Admin-only. Adding a node here withdraws it from
+    │                                   Admin by that fact alone — and the SERVER enforces TD-2
+    │                                   regardless, on every request. The menu is never the boundary
+    ├── الفئات / Categories ............ /admin/categories (R55 — its own node)
+    ├── المستويات / Levels ............. /admin/levels — WHICH LEVELS EXIST, in which Category.
+    │                                   Moved here by R69: curriculum structure, Super-Admin
+    │                                   writes throughout, and R66 removed the last
+    │                                   operational thing it did. Assigns no Subjects.
+    │                                   **The READ endpoint stays Admin-accessible** — scheduling,
+    │                                   the placement dialog and the groups screen feed selectors
+    │                                   from it (the R61 `GET /admin/branches` rule, applied again)
+    ├── المواد / Subjects .............. /admin/subjects (R55 — its own node)
+    ├── مواد المستوى / Level Subjects .. /admin/level-subjects (?level= — R69). WHICH SUBJECTS a
+    │                                   Level teaches. Its own node at last: the path used to carry
+    │                                   an id, so no menu could reach it and unrelated screens grew
+    │                                   borrowed row actions instead.
+    │                                   ~~/admin/levels/{id}/subjects~~ redirects here (R69.3)
+    ├── مقرر الحفظ / Level Surahs ...... /admin/level-surahs (?level=) — the Quran-side curriculum
+    │                                   join (§4.5, §7, BR-11; M4c), the syllabus layer on top of
+    │                                   the Level↔Subject pairing. **Listed here by R105**: M4c
+    │                                   shipped it with "no SRS change", so this sitemap named it
+    │                                   nowhere. Super Admin writes, Admin reads (R26)
+    ├── الفروع والقاعات / Branches & Rooms  /admin/branches (Super Admin only — R61; the READ endpoint
+    │                                   stays Admin-accessible, R61.2)
+    ├── سلة المحذوفات / Trash .......... /admin/trash (Super Admin — R52/R59; restore per entity type,
+    │                                   permanent delete per entity type). **Moved into this section
+    │                                   by R105**, from the second `Administration` group that held
+    │                                   nothing else
+    ├── التقويم الهجري / Hijri Calendar  /superadmin/hijri-calendar (Super Admin only, Revision 31)
+    └── إعدادات المنصة / System Settings /superadmin/settings (Super Admin only)
 ```
 (Removed from the MVP sitemap by Revision 6: `/notifications`, `/admin/data`, `/admin/trash` — they return with their features post-MVP, §10.1.)
 

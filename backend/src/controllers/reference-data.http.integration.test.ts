@@ -66,6 +66,10 @@ async function clear(): Promise<void> {
   await prisma.levelSubject.deleteMany({
     where: { levelId: { in: levelIds } },
   });
+  // `LevelSurah.level` is `onDelete: Restrict` (not Cascade, like most joins
+  // here), so a syllabus row left behind does not vanish with its Level — it
+  // makes the Level undeletable and this teardown fails from the second run on.
+  await prisma.levelSurah.deleteMany({ where: { levelId: { in: levelIds } } });
   await prisma.level.deleteMany({ where: { id: { in: levelIds } } });
   await prisma.category.deleteMany({ where: { name: { startsWith: TAG } } });
   await prisma.subject.deleteMany({ where: { name: { startsWith: TAG } } });
@@ -373,5 +377,80 @@ describe("assigning a Subject to a Level", () => {
         )
       ).status,
     ).toBe(403);
+  });
+});
+
+/**
+ * **مقرر الحفظ — the one الإدارة node whose server-side gate nothing asserted.**
+ *
+ * Found while implementing §4/R105. The service has gated these four verbs with
+ * `assertCanManageCurriculum` since M4c — *"curriculum structure is Super Admin
+ * only (R26, R43.3)"* — and `/admin/levels/{id}/surahs` had **no HTTP test at
+ * all**, so the refusal was a code comment rather than a proven property. Its
+ * sibling `/admin/levels/{id}/subjects` has carried one all along.
+ *
+ * That matters more than usual right now: R105 moved this node into a section
+ * whose heading *claims* Super-Admin-only, and the Owner's standing rule is that
+ * hiding a link is never the security control. A claim about authority with no
+ * test behind it is the thing that rule is aimed at.
+ */
+describe("مقرر الحفظ is Super Admin to write and Admin to read (R26, M4c)", () => {
+  // Al-Fatiha — seeded reference data (§4.5's 114), so no fixture is needed and
+  // nothing here has to be cleaned up beyond the join rows `clear()` cascades.
+  const SURAH = 1;
+
+  it("lets a Super Admin build a Level's syllabus", async () => {
+    const assigned = await call2(
+      "PUT",
+      `/admin/levels/${levelId}/surahs/${SURAH}`,
+      superAdmin,
+    );
+    expect(assigned.status).toBe(204);
+    const listed = await call(`/admin/levels/${levelId}/surahs`, superAdmin);
+    expect(listed.status).toBe(200);
+    expect(listed.body.data?.map((row) => row["surah_id"])).toContain(SURAH);
+  });
+
+  it("REFUSES an Admin the write, and leaves the syllabus exactly as it was", async () => {
+    // The assertion that matters is the second one. A 403 that had already
+    // written the row would still be a 403.
+    const before = await call(`/admin/levels/${levelId}/surahs`, superAdmin);
+
+    expect(
+      (await call2("PUT", `/admin/levels/${levelId}/surahs/2`, admin)).status,
+    ).toBe(403);
+    expect(
+      (await call2("DELETE", `/admin/levels/${levelId}/surahs/${SURAH}`, admin))
+        .status,
+    ).toBe(403);
+
+    const after = await call(`/admin/levels/${levelId}/surahs`, superAdmin);
+    expect(after.body.data).toEqual(before.body.data);
+  });
+
+  it("KEEPS the read open to an Admin — R61.2, the half a tightening would break", async () => {
+    // Deliberate, and the reason it is asserted: the fix for the line above is
+    // never "make the whole node Super Admin". An Admin reads reference data
+    // because operational work feeds selectors from it (R26), and R61.2 is the
+    // precedent — withdrawing `GET /admin/branches` would have left a branch
+    // Admin unable to schedule a class, with empty selectors and no error.
+    expect((await call(`/admin/levels/${levelId}/surahs`, admin)).status).toBe(
+      200,
+    );
+  });
+
+  it("refuses a Teacher outright (Revision 30)", async () => {
+    expect(
+      (await call(`/admin/levels/${levelId}/surahs`, teacher)).status,
+    ).toBe(403);
+    expect(
+      (await call2("PUT", `/admin/levels/${levelId}/surahs/3`, teacher)).status,
+    ).toBe(403);
+  });
+
+  it("refuses an anonymous caller with the TD-3.8 envelope", async () => {
+    const res = await call2("PUT", `/admin/levels/${levelId}/surahs/4`);
+    expect(res.status).toBe(401);
+    expect(res.body.error?.code).toBe("AUTH_REQUIRED");
   });
 });

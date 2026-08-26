@@ -172,7 +172,13 @@ describe('the مؤطرة reaches her own scheduling and content, and nothing els
     // The defect was two vocabularies for one platform. Asserted against the
     // ADMIN catalogue rather than against literals, so the two cannot drift apart
     // again — which is the whole property.
-    expect(t('teacher.nav.schedules')).toBe(t('admin.section.scheduling'));
+    //
+    // **Restated for R105**: this read `admin.section.scheduling`, and R105
+    // removed that heading with the four decorative sections. The word it was
+    // reaching for is the back office's NAV entry — the same thing the line
+    // below already compares against — so the guard now asks the question it
+    // meant to ask, and asks it the same way twice.
+    expect(t('teacher.nav.schedules')).toBe(t('admin.nav.scheduling'));
     expect(t('teacher.nav.content')).toBe(t('admin.nav.content'));
   });
 });

@@ -6,7 +6,7 @@ import { ModulePending } from '../../components/portal/nav-item.js';
 import { useActiveRole } from '../../contexts/active-role.js';
 import { Button, ButtonLink } from '../../components/ui/button.js';
 import { t } from '../../i18n/index.js';
-import { moduleForPath, visibleModules } from '../../lib/admin-modules.js';
+import { moduleForPath, visibleModules, type AdminModule } from '../../lib/admin-modules.js';
 import { ApprovalsPage } from './approvals.js';
 import { BranchesPage } from './branches.js';
 import { ContentPage } from '../content.js';
@@ -241,6 +241,30 @@ export function AdminRouter(): ReactNode {
 }
 
 /**
+ * **The cards this dashboard shows, for a given active role.**
+ *
+ * Exported so the order guard asserts the *code the page runs* rather than a
+ * second copy of the rule — the failure mode `admin-modules.test.ts` exists to
+ * prevent is two lists agreeing with each other and neither agreeing with
+ * §14.1.
+ *
+ * **Every module the session may open, except this page itself.**
+ *
+ * It used to filter on `section !== null`, which excluded the dashboard because
+ * the dashboard was the only ungrouped node. R105 made most of the menu
+ * ungrouped, so that test would now hide eleven cards from a Super Admin and
+ * **every** card from an Admin — a launcher that launches nothing. Excluding
+ * this page BY PATH says what was always meant: a launcher does not link to
+ * itself.
+ *
+ * The order is the registry's, so the cards and the sidebar are the same
+ * sequence by construction rather than by two lists agreeing (§4, R105).
+ */
+export function dashboardCards(roles: readonly string[]): AdminModule[] {
+  return visibleModules(roles).filter((m) => m.path !== '/admin');
+}
+
+/**
  * The staff home (§5.6).
  *
  * Deliberately **not** a statistics dashboard: §5.6 asks for pending-approval
@@ -253,9 +277,8 @@ function AdminDashboard(): ReactNode {
   const { activeRole } = useActiveRole();
   // The role being worked as, not every role held: a Super Admin acting as
   // مؤطِّرة is offered the مؤطِّرة's modules.
-  const modules = visibleModules(activeRole === null ? [] : [activeRole]).filter(
-    (m) => m.section !== null,
-  );
+  // See `dashboardCards` — the selection is exported so a test can assert it.
+  const modules = dashboardCards(activeRole === null ? [] : [activeRole]);
 
   return (
     <AdminLayout title={t('admin.dashboard.title')} lede={t('admin.dashboard.lede')}>

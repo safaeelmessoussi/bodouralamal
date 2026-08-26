@@ -1098,6 +1098,40 @@ eye**. Three failures become impossible by construction:
 Adding a module is **one entry**. A test asserts the registry's paths against §14.1's list, so
 inventing a route fails the build rather than passing review.
 
+### A section exists only where the heading states a fact about permission (R105)
+
+The sidebar used to carry five headings — `الشؤون التعليمية`, `الأشخاص`, `الجدولة`, `المحتوى`
+and `الإدارة`. Revision 105 removed the first four and kept the last, and the rule it left
+behind is the reason, not the outcome:
+
+**`الإدارة` means something.** R61 makes *placement in that section* the thing that renders a
+node Super-Admin-only, so the heading is a statement about authority a reader can act on, and
+`admin-modules.test.ts` asserts it **over the section** rather than per module — written as
+nine independent decisions, the tenth node added there would inherit nothing, which is exactly
+how `/admin/branches` once came to be the odd one out.
+
+The other four gated nothing. They sorted eleven destinations into buckets that answered no
+question anybody was asking, and §14.1 had drifted into listing `Administration` **twice** —
+once holding a single node. So: **a decorative group is a change to §14.1, not a layout
+preference.** Adding one back needs the Document Owner.
+
+### The registry's ORDER is the navigation and the dashboard, in one list
+
+The sidebar renders `ADMIN_MODULES` as it stands, and `dashboardCards()` — exported from
+`pages/admin/index.tsx` for exactly this reason — maps the same array minus `/admin` itself.
+The launcher and the menu therefore cannot disagree, because there is nothing to disagree
+*with*: they are one list read twice.
+
+`dashboardCards` is exported so the guard asserts **the code the page runs** rather than a
+second copy of the rule. That is not hypothetical here. The filter was `section !== null`,
+which excluded the dashboard back when the dashboard was the only ungrouped node; R105 made
+eleven nodes ungrouped, and the same line would have shown a Super Admin nine cards and an
+Admin **none** — a launcher that launches nothing. Filtering by path says what was always
+meant: a launcher does not link to itself.
+
+Both sequences are pinned **literally** in `admin-modules.test.ts`, because the defect §14.1's
+*"no reshuffling"* guards against is a reorder, and no set comparison can see one.
+
 ### `status` is part of the contract
 
 A module whose endpoints do not exist renders a **named** "not built" state saying *what* is
