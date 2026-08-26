@@ -1482,6 +1482,48 @@ whole portal seeded empty, correctly, for a reason that looked exactly like a
 bug. A fixture that quietly produces nothing is worse than one that fails: it
 sends somebody looking for a defect in the application. It now throws.
 
+### AZ.1 · A refused deletion is not a stale-state conflict, and must not say «refresh»
+
+`409` carries **two different situations**, and TD-5 gives them the same code
+family while the platform gave them the same sentence:
+
+| situation | code | is refreshing the answer? |
+|---|---|---|
+| optimistic staleness — somebody else saved first | `VERSION_CONFLICT` | **yes** |
+| deletion blocked by references | `STATE_CONFLICT` + `details.blocked_by` | **no, and it never will be** |
+
+The Owner reported deleting a Branch as *«appears to do nothing»*. The API was
+answering accurately — `blocked_by: { groups: 1, course_schedules: 1 }` — under
+the generic message *«…يرجى تحديث الصفحة»*. She refreshed, nothing changed, and
+the action read as broken.
+
+**The envelope already distinguishes them, so no contract change was needed.**
+`details.blocked_by` is present on exactly one of the two, which is a stable
+discriminator; `lib/blocked-by.ts` classifies on it and returns `null` for
+everything else, so a genuine version conflict keeps the advice that helps.
+
+Three rules came out of it:
+
+1. **The dialog stays open and becomes the explanation.** It used to close onto
+   a notice at the top of the page — which is why nothing appeared to happen.
+   The destructive button is **withdrawn**, not disabled: a greyed button
+   invites the reader to keep pressing what cannot work.
+2. **Product words, never table keys.** `groups` and `course_schedules` are
+   names for tables. `states.err.blockedBy.*` translates every label the five
+   call sites can emit, in one place — the per-page sentence had already drifted
+   into guessing *«قاعات أو حلقات»* while the real blockers were a group and a
+   schedule, and it named no counts.
+3. **The refusal keeps its `request_id`.** It is a real response, and the one
+   case somebody reports must not be the one case nobody can trace.
+
+**It is five screens, not one.** `assertNoBlockingReferences` is raised by
+Category, Subject, Level, Branch and Room, so `BlockedNotice` serves all of
+them; a per-screen fix would have been the sixth place to drift.
+
+**Reported, not taken:** the server's own `message` still advises refreshing for
+this case. Correcting it needs a distinct `message_key`, which is a change to
+TD-3.8's envelope and therefore the Document Owner's decision.
+
 ### The back office holds two populations, and they are not the same list
 
 | Screen | Population | What it decides |

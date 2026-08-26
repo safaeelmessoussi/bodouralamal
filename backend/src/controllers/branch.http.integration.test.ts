@@ -47,7 +47,8 @@ interface Res {
   body: Record<string, unknown> & {
     // TD-3.8 — a refusal carries a `details` bag beside its code, and these
     // tests read it. Omitting it here made `npm run typecheck` red.
-    error?: { code?: string; details?: Record<string, unknown> };
+    // `request_id` too: NEW A asserts a refusal stays traceable for support.
+    error?: { code?: string; details?: Record<string, unknown>; request_id?: string };
     data?: Record<string, unknown>[];
   };
 }
@@ -496,5 +497,94 @@ describe("R76 — reordering takes the sequence, not per-row numbers", () => {
       ids: await ids(),
     });
     expect(res.status).not.toBe(404);
+  });
+});
+
+/**
+ * **NEW A — a deletion refused because something still USES the branch.**
+ *
+ * The Owner reported deleting a Branch as *«appears to do nothing»*. The API was
+ * in fact answering `409 STATE_CONFLICT` with `blocked_by: { groups: 1,
+ * course_schedules: 1 }` — accurate, and carrying a message that tells the
+ * reader to refresh, which cannot resolve a structural reference.
+ *
+ * These assert the SERVER half of the fix: the refusal is precise, it deletes
+ * nothing, it is distinguishable from a stale-version conflict, and it keeps a
+ * traceable `request_id`.
+ */
+describe("deleting a Branch that is still referenced (TD-5)", () => {
+  it("deletes a branch nothing references", async () => {
+    const created = await call("POST", "/admin/branches", superAdmin, {
+      name: `${TAG} مقر قابل للحذف`,
+    });
+    expect(created.status).toBe(201);
+    const id = (created.body['id'] as string);
+
+    // Nothing references it: the R43.1 backfill gives المجموعة 1 only to Levels
+    // that lack one, so a new Branch in a seeded database owns nothing.
+    const deleted = await call("DELETE", `/admin/branches/${id}`, superAdmin);
+    expect(deleted.status).toBe(204);
+    expect(await prisma.branch.findFirst({ where: { id, deletedAt: null } })).toBeNull();
+  });
+
+  it("REFUSES a referenced branch, names what blocks it, and deletes NOTHING", async () => {
+    const created = await call("POST", "/admin/branches", superAdmin, {
+      name: `${TAG} مقر مستخدم`,
+    });
+    const id = (created.body['id'] as string);
+
+    // **A reference has to be created, because a fresh Branch has none.** The
+    // R43.1 backfill gives المجموعة 1 only to Levels that lack one, so a new
+    // Branch in a seeded database owns nothing — which is exactly why the first
+    // test above can delete one. A Room is the smallest real blocker.
+    const room = await call("POST", `/admin/branches/${id}/rooms`, superAdmin, {
+      name: `${TAG} قاعة`,
+    });
+    expect(room.status).toBe(201);
+    const roomsBefore = await prisma.room.count({ where: { branchId: id, deletedAt: null } });
+    expect(roomsBefore).toBe(1);
+
+    const refused = await call("DELETE", `/admin/branches/${id}`, superAdmin);
+    expect(refused.status).toBe(409);
+    expect(refused.body.error?.code).toBe("STATE_CONFLICT");
+
+    // The dependency information the UI turns into Arabic. Counts, not a flag:
+    // «قاعات (1)» is what makes the refusal actionable.
+    const blocking = refused.body.error?.details?.["blocked_by"] as Record<string, number>;
+    expect(blocking).toBeDefined();
+    expect(blocking["rooms"]).toBe(roomsBefore);
+
+    // **Nothing was deleted by the attempt** — the assertion that separates a
+    // refusal from a partial cascade.
+    expect(await prisma.branch.findFirst({ where: { id, deletedAt: null } })).not.toBeNull();
+    expect(await prisma.room.count({ where: { branchId: id, deletedAt: null } })).toBe(roomsBefore);
+  });
+
+  it("keeps a traceable request_id on the refusal", async () => {
+    const created = await call("POST", "/admin/branches", superAdmin, {
+      name: `${TAG} مقر للتتبع`,
+    });
+    const id = (created.body['id'] as string);
+    await call("POST", `/admin/branches/${id}/rooms`, superAdmin, { name: `${TAG} قاعة 2` });
+    const refused = await call("DELETE", `/admin/branches/${id}`, superAdmin);
+    expect(refused.status).toBe(409);
+    expect(refused.body.error?.request_id).toMatch(/^[0-9a-f]{8,}$/i);
+  });
+
+  it("is DISTINGUISHABLE from a stale-version conflict, which is a different code", async () => {
+    // The whole basis of the client-side classification: optimistic staleness
+    // is VERSION_CONFLICT and carries no `blocked_by`, so refreshing remains
+    // the right advice there and only there.
+    const created = await call("POST", "/admin/branches", superAdmin, {
+      name: `${TAG} مقر للنسخة`,
+    });
+    const id = (created.body['id'] as string);
+    const stale = await call("PATCH", `/admin/branches/${id}`, superAdmin, {
+      name: `${TAG} مقر للنسخة 2`,
+      version: 999,
+    });
+    expect(stale.status).toBe(409);
+    expect(stale.body.error?.code).toBe("VERSION_CONFLICT");
+    expect(stale.body.error?.details?.["blocked_by"]).toBeUndefined();
   });
 });

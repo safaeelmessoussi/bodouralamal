@@ -17,6 +17,8 @@ import { AdminLayout } from '../../components/admin/admin-layout.js';
 import { levelLabel } from '../../components/scope/level-select.js';
 import { Button } from '../../components/ui/button.js';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
+import { BlockedNotice } from '../../components/ui/blocked-notice.js';
+import { blockingDependencies } from '../../lib/blocked-by.js';
 import {
   DataTable,
   type Column,
@@ -194,6 +196,7 @@ export function TaxonomyPage({ kind }: { kind: TaxonomyKind }): ReactNode {
   const [rows, setRows] = useState<Row[]>([]);
   const [status, setStatus] = useState<TableStatus>('loading');
   const [notice, setNotice] = useState<string | null>(null);
+  const [blocked, setBlocked] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<Row | 'new' | null>(null);
   const [deleting, setDeleting] = useState<Row | null>(null);
@@ -249,8 +252,14 @@ export function TaxonomyPage({ kind }: { kind: TaxonomyKind }): ReactNode {
       // TD-5 refuses while anything still references it. Saying which kind of
       // reference blocks it is more useful than "failed" — the administrator's
       // next action differs completely.
-      const blocked = error instanceof ApiError && error.status === 409;
-      setNotice(t(blocked ? spec.blockedKey : 'common.deleteFailed'));
+      // TD-5 (NEW A) — the dialog stays open and names the dependencies rather
+      // than closing onto a guessed sentence at the top of the page.
+      if (blockingDependencies(error) !== null) {
+        setBlocked(error);
+        setBusy(false);
+        return;
+      }
+      setNotice(t('common.deleteFailed'));
     } finally {
       setBusy(false);
       setDeleting(null);
@@ -319,13 +328,17 @@ export function TaxonomyPage({ kind }: { kind: TaxonomyKind }): ReactNode {
 
       <ConfirmDialog
         open={deleting !== null}
+        {...(blocked ? { blocked: <BlockedNotice error={blocked} item={t('admin.levels.thisItem')} /> } : {})}
         title={t(spec.deleteTitleKey)}
         body={t(spec.deleteBodyKey).replace('{name}', deleting?.name ?? '')}
         confirmLabel={t('common.delete')}
         danger
         busy={busy}
         onConfirm={() => void remove(deleting!.id)}
-        onCancel={() => setDeleting(null)}
+        onCancel={() => {
+          setDeleting(null);
+          setBlocked(null);
+        }}
       />
     </AdminLayout>
   );

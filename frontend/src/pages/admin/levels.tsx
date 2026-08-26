@@ -15,6 +15,8 @@ import {
 import { AdminLayout } from '../../components/admin/admin-layout.js';
 import { Button } from '../../components/ui/button.js';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
+import { BlockedNotice } from '../../components/ui/blocked-notice.js';
+import { blockingDependencies } from '../../lib/blocked-by.js';
 import {
   DataTable,
   type Column,
@@ -69,6 +71,7 @@ export function LevelsPage(): ReactNode {
   const [editing, setEditing] = useState<Level | 'new' | null>(null);
   const [deleting, setDeleting] = useState<Level | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [blocked, setBlocked] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
   const [sort, setSort] = useState<SortState | null>(null);
 
@@ -208,9 +211,13 @@ export function LevelsPage(): ReactNode {
       setNotice(t('admin.levels.deleted'));
     } catch (error) {
       // TD-5 refuses while enrolments, groups, schedules, exams or content
-      // reference the Level.
-      const blocked = error instanceof ApiError && error.status === 409;
-      setNotice(t(blocked ? 'admin.levels.deleteBlocked' : 'common.deleteFailed'));
+      // reference the Level. The dialog stays open and names them (NEW A).
+      if (blockingDependencies(error) !== null) {
+        setBlocked(error);
+        setBusy(false);
+        return;
+      }
+      setNotice(t('common.deleteFailed'));
     } finally {
       setBusy(false);
       setDeleting(null);
@@ -286,6 +293,7 @@ export function LevelsPage(): ReactNode {
 
       <ConfirmDialog
         open={deleting !== null}
+        {...(blocked ? { blocked: <BlockedNotice error={blocked} item={t('admin.levels.thisLevel')} /> } : {})}
         title={t('admin.levels.deleteTitle')}
         body={t(
           (deleting?.enrollment_count ?? 0) > 0
@@ -298,7 +306,10 @@ export function LevelsPage(): ReactNode {
         danger
         busy={busy}
         onConfirm={() => void confirmDelete()}
-        onCancel={() => setDeleting(null)}
+        onCancel={() => {
+          setDeleting(null);
+          setBlocked(null);
+        }}
       />
     </AdminLayout>
   );

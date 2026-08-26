@@ -131,3 +131,16 @@
   gap: var(--space-2);
   margin-block-start: var(--space-2);
 }
+
+/* TD-5 — a deletion refused because something still uses the record.
+   Lives beside `.error-panel` because it is the same family: a refusal the
+   reader must be able to act on, inside the platform's own frame. */
+.confirm__blocked-list {
+  margin: var(--space-2) 0;
+  padding-inline-start: var(--space-4);
+  list-style: disc;
+}
+
+.confirm__blocked-list li {
+  margin-block: var(--space-1);
+}

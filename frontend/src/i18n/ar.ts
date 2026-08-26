@@ -1432,6 +1432,8 @@ export const ar = {
       deleteBody: 'سيتم حذف المستوى «{name}» ومجموعاته الفارغة معه.',
       deleteBodyEnrolled:
         'المستوى «{name}» يضم {n} مستفيدة مسجلة، ولا يمكن حذفه قبل نقلهن إلى مستوى آخر.',
+      thisLevel: 'هذا المستوى',
+      thisItem: 'هذا العنصر',
       deleteBlocked:
         'تعذّر الحذف: ما زالت هناك تسجيلات أو حلقات أو جداول أو امتحانات أو محتوى مرتبط بهذا المستوى.',
     },
@@ -1849,7 +1851,11 @@ export const ar = {
       deleteTitle: 'حذف المقر',
       deleteBody: 'سيتم حذف «{name}». يمكن استرجاعه خلال 90 يوماً.',
       // TD-5: deletion is prohibited while rooms or groups reference the branch.
-      deleteBlocked: 'لا يمكن حذف هذا المقر لأن قاعات أو حلقات ما زالت مرتبطة به.',
+      // **Superseded by the shared `BlockedNotice`** (NEW A): it guessed
+      // «قاعات أو حلقات» while the real blockers were a group and a schedule,
+      // and named no counts. The dependencies now come from `blocked_by`.
+      thisBranch: 'هذا المقر',
+      thisRoom: 'هذه القاعة',
       // القاعات خلف كل فرع لا كقائمة مستقلة: القاعة لا معنى لها خارج فرعها.
       rooms: 'القاعات',
       roomsTitle: 'قاعات {branch}',
@@ -2008,6 +2014,37 @@ export const ar = {
      * وهذه الواجهة لا تخترعها.
      */
     err: {
+      /**
+       * TD-5 — a deletion refused because something still USES the record.
+       *
+       * The association's own words for what `blocked_by` names as table keys;
+       * a reader must never meet «groups» or «course_schedules» on screen.
+       * Deliberately bare nouns: the list renders «مجموعات إدارية (1)», which
+       * sidesteps Arabic dual/plural agreement entirely and stays truthful for
+       * any count.
+       */
+      blockedBy: {
+        rooms: 'قاعات',
+        groups: 'مجموعات إدارية',
+        courseSchedules: 'جداول حصص',
+        sessions: 'حصص',
+        levels: 'مستويات',
+        subjects: 'مواد',
+        teachingGroups: 'حلقات مواد',
+        exams: 'امتحانات',
+        grades: 'نقاط مسجّلة',
+        content: 'محتوى تعليمي',
+        events: 'أنشطة',
+        enrollments: 'تسجيلات مستفيدات',
+        pendingRequests: 'طلبات قيد المراجعة',
+      },
+      /** `{item}` is the record's own word — «هذا المقر», «هذه القاعة». */
+      blockedLead: 'لا يمكن حذف {item} لأنه مستخدم حالياً.',
+      /** **Says plainly that refreshing is not the answer.** The server's
+       *  generic STATE_CONFLICT sentence advises exactly that, and following it
+       *  changes nothing — which is what made the action look broken. */
+      blockedHint: 'أزيلي الارتباطات التالية أولاً ثم أعيدي المحاولة. تحديث الصفحة لن يغيّر هذه الحالة.',
+      blockedClose: 'إغلاق',
       unauthenticatedTitle: 'انتهت الجلسة',
       unauthenticatedBody: 'لم تعد الجلسة صالحة. سجّلي الدخول من جديد للمتابعة.',
       forbiddenTitle: 'ليست لديك صلاحية',

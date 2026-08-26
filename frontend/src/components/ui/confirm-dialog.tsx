@@ -69,6 +69,19 @@ export function ConfirmDialog({
   reasonHint,
   reasonMin = CONSENT_REASON_MIN,
   reasonMax = CONSENT_REASON_MAX,
+  /**
+   * **The action was refused, and the dialog becomes the explanation** (TD-5).
+   *
+   * When set, the destructive button is withdrawn — there is nothing left to
+   * confirm — and the only way out is «إغلاق». The dialog **stays open** rather
+   * than closing onto a notice at the top of the page: that is what made a
+   * blocked Branch deletion read as *«nothing happened»*, since the confirm
+   * vanished and the explanation appeared somewhere the reader was not looking.
+   *
+   * Rule AH — a message belongs where its kind belongs, and this one belongs to
+   * the action the reader just took.
+   */
+  blocked,
   busy = false,
   onConfirm,
   onCancel,
@@ -77,6 +90,8 @@ export function ConfirmDialog({
   title: string;
   body: string;
   details?: ReactNode;
+  /** The refusal, rendered in place of the confirmation. */
+  blocked?: ReactNode;
   confirmLabel?: string;
   cancelLabel?: string;
   danger?: boolean;
@@ -104,11 +119,15 @@ export function ConfirmDialog({
   return (
     <Dialog open={open} onClose={onCancel} title={title}>
       <div className="confirm">
-        <p className="confirm__body">{body}</p>
+        {/* **Refused: the dialog explains instead of asking.** The question is
+            withdrawn along with the button, because there is no longer anything
+            to answer — and the reason for the answer stays where the reader
+            just acted. */}
+        {blocked ?? <p className="confirm__body">{body}</p>}
 
-        {details ?? null}
+        {blocked ? null : (details ?? null)}
 
-        {needsReason ? (
+        {blocked === undefined && needsReason ? (
           <TextArea
             label={reasonLabel}
             value={reason}
@@ -125,15 +144,20 @@ export function ConfirmDialog({
 
         <div className="confirm__actions">
           <Button variant="secondary" onClick={onCancel}>
-            {cancelLabel ?? t('common.cancel')}
+            {blocked ? t('states.err.blockedClose') : (cancelLabel ?? t('common.cancel'))}
           </Button>
-          <Button
-            variant={danger ? 'danger' : 'primary'}
-            disabled={busy || !reasonOk}
-            onClick={() => onConfirm(needsReason ? reason.trim() : undefined)}
-          >
-            {confirmLabel ?? t('common.confirm')}
-          </Button>
+          {/* Withdrawn entirely rather than disabled: a greyed destructive
+              button invites the reader to keep trying the thing that cannot
+              work, which is the same failure as telling her to refresh. */}
+          {blocked ? null : (
+            <Button
+              variant={danger ? 'danger' : 'primary'}
+              disabled={busy || !reasonOk}
+              onClick={() => onConfirm(needsReason ? reason.trim() : undefined)}
+            >
+              {confirmLabel ?? t('common.confirm')}
+            </Button>
+          )}
         </div>
       </div>
     </Dialog>

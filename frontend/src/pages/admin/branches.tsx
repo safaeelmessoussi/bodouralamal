@@ -17,6 +17,8 @@ import {
 import { AdminLayout } from '../../components/admin/admin-layout.js';
 import { Button } from '../../components/ui/button.js';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
+import { BlockedNotice } from '../../components/ui/blocked-notice.js';
+import { blockingDependencies } from '../../lib/blocked-by.js';
 import {
   DataTable,
   type Column,
@@ -73,6 +75,8 @@ export function BranchesPage(): ReactNode {
   const [deleting, setDeleting] = useState<Branch | null>(null);
   const [rooms, setRooms] = useState<Branch | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  /** The refusal that turns the confirm into an explanation (TD-5). */
+  const [blocked, setBlocked] = useState<unknown>(null);
   const [busy, setBusy] = useState(false);
 
   /**
@@ -245,11 +249,21 @@ export function BranchesPage(): ReactNode {
       await load();
       setNotice(t('common.deleted'));
     } catch (error) {
-      // TD-5: deletion is PROHIBITED while rooms or groups reference the branch.
-      // Saying which is more useful than "failed".
-      const blocked = error instanceof ApiError && error.status === 409;
-      setNotice(t(blocked ? 'admin.branches.deleteBlocked' : 'common.deleteFailed'));
-      setDeleting(null);
+      /**
+       * TD-5: deletion is PROHIBITED while anything still references the
+       * branch — and the dialog **stays open to say so**.
+       *
+       * It used to close and drop a one-line notice at the top of the page,
+       * guessing «قاعات أو حلقات» while the actual blockers were a group and a
+       * schedule. From the reader's seat the confirm simply vanished, which is
+       * why this was reported as *«deleting does nothing»*.
+       */
+      if (blockingDependencies(error) !== null) {
+        setBlocked(error);
+      } else {
+        setNotice(t('common.deleteFailed'));
+        setDeleting(null);
+      }
     } finally {
       setBusy(false);
     }
@@ -329,11 +343,17 @@ export function BranchesPage(): ReactNode {
         open={deleting !== null}
         title={t('admin.branches.deleteTitle')}
         body={t('admin.branches.deleteBody').replace('{name}', deleting?.name ?? '')}
+        {...(blocked
+          ? { blocked: <BlockedNotice error={blocked} item={t('admin.branches.thisBranch')} /> }
+          : {})}
         confirmLabel={t('common.delete')}
         danger
         busy={busy}
         onConfirm={() => void confirmDelete()}
-        onCancel={() => setDeleting(null)}
+        onCancel={() => {
+          setDeleting(null);
+          setBlocked(null);
+        }}
       />
     </AdminLayout>
   );
