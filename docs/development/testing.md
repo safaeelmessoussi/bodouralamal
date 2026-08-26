@@ -876,13 +876,13 @@ documentation recording its own reason.
 ### Fixtures consume the one Production memorisation marker
 
 `Subject.tracks_quran_progress` has a **partial unique index** — at most one live
-Subject may carry it (R73.4/R107), because two would make *which* teaching authorises
+Subject may carry it (R73.4/R107–R108), because two would make *which* teaching authorises
 a log ambiguous. In Production it belongs only to حفظ القرآن. Quran integration
 and browser fixtures consume that seeded row through a shared fail-closed helper;
 they never create or delete the reference Subject. The R91 Tafsir fixture consumes
 the separate, unmarked تفسير القرآن row. This makes concurrent fixtures compatible
 with the uniqueness invariant and makes missing, duplicate, or wrongly named marker
-data fail with a legible R107 setup error.
+data fail with a legible R107/R108 setup error.
 
 The tagged-Subject cleanup remains in the older scenario scripts solely to recover
 residue created by pre-R107 versions of those fixtures. Current teardown removes only
@@ -892,15 +892,17 @@ the fixture-owned joins and retains the Production Subjects.
 
 Run `bash scripts/seed/verify-production-seed.sh`. It starts a disposable PostgreSQL 18
 volume, applies every migration, executes the **actual** Production seed entry point twice,
-and then checks the R107 boundary through the real policy and Quran service. It also boots
+and then checks the R107–R108 boundary through the real policy and Quran service. It also boots
 the real API/pg-boss catalog against disposable MinIO, runs all 18 integration files affected
 by the reconciliation, and round-trips all eight changed scenario seeds on that same stack:
 
-- the six seeded atomic Subjects exist once, with stable ids and timestamps across the second run;
-- القرآن الكريم, the ambiguous bare تفسير, and the duplicate تجويد synonym are not created as substitute rows;
+- the exact eight seeded Subjects exist once, with stable ids and timestamps across the second run;
+- القرآن الكريم, محو الأمية, the ambiguous bare تفسير, and separate ترتيل/تجويد synonyms are absent from a fresh seed;
+- Super-Admin additions, later Quran-domain Subjects, and historical rows survive a rerun unchanged and unmarked;
 - exactly one live marker exists and it is حفظ القرآن;
 - a teacher staffed on حفظ القرآن can log memorisation for the resolved audience;
-- a teacher staffed on تفسير القرآن for that same audience receives `NOT_FOUND`;
+- teachers staffed only on أحكام القرآن, ترتيل وتجويد القرآن, تفسير القرآن, or a later
+  unmarked Quran-domain Subject for that same audience receive `NOT_FOUND`;
 - a conflicting Owner-managed marker aborts before Subjects or unrelated seed data change.
 
 The opt-in variable and unique database volume are deliberate. This proof owns its whole

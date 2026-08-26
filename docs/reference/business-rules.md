@@ -109,7 +109,7 @@ explicit publish action. Recalculated grades require explicit **re-publish**.
 ### BR-9
 **Curriculum drives grading components.** Assigning a Surah or Subject to a level
 automatically creates its draft grading components, so curriculum and grading configuration
-**cannot drift apart.** R107's carve-out covers حفظ القرآن and تفسير القرآن: their
+**cannot drift apart.** R107–R108's carve-out covers حفظ القرآن and تفسير القرآن: their
 `LevelSubject` rows create no generic component because `LevelSurah` is the shared per-Level
 Surah selection. A Surah assignment creates future memorisation and Tafsir components, but
 only حفظ participates in the memorisation progress engine.

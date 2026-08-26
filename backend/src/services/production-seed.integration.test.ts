@@ -12,9 +12,10 @@ import {
   teachesQuran,
 } from '../policies/roster-resolution.js';
 import { logProgress } from './quran.service.js';
+import { createSubject } from './taxonomy.service.js';
 
 /**
- * R107 Production-seed proof. The wrapper gives this file a migrated, empty,
+ * R107–R108 Production-seed proof. The wrapper gives this file a migrated, empty,
  * disposable PostgreSQL database and explicitly opts in. Running the actual
  * seed entry point twice is important: a local reconstruction of its writes
  * could pass while the deployment command remained wrong.
@@ -23,15 +24,17 @@ const enabled = process.env.PRODUCTION_SEED_DESTRUCTIVE_FIXTURE === '1';
 const config = loadConfig();
 const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);
 const run = promisify(execFile);
-const TAG = '[production-seed-r107]';
+const TAG = '[production-seed-r108]';
 
 const EXPECTED_SUBJECTS = [
   { name: 'أحكام القرآن', displayOrder: 1, tracksQuranProgress: false },
   { name: 'حفظ القرآن', displayOrder: 2, tracksQuranProgress: true },
-  { name: 'ترتيل القرآن', displayOrder: 3, tracksQuranProgress: false },
+  { name: 'ترتيل وتجويد القرآن', displayOrder: 3, tracksQuranProgress: false },
   { name: 'تفسير القرآن', displayOrder: 4, tracksQuranProgress: false },
   { name: 'فقه', displayOrder: 5, tracksQuranProgress: false },
-  { name: 'محو الأمية', displayOrder: 6, tracksQuranProgress: false },
+  { name: 'السيرة النبوية', displayOrder: 6, tracksQuranProgress: false },
+  { name: 'العقيدة', displayOrder: 7, tracksQuranProgress: false },
+  { name: 'الأذكار', displayOrder: 8, tracksQuranProgress: false },
 ] as const;
 
 type SubjectSnapshot = Awaited<ReturnType<typeof subjectSnapshot>>;
@@ -63,6 +66,12 @@ const teacher = (userId: string, branchId: string): Actor => ({
   userId,
   roles: ['teacher'],
   roleScopes: [{ role: 'teacher', branches: [branchId] }],
+});
+
+const superAdmin = (userId: string): Actor => ({
+  userId,
+  roles: ['super_admin'],
+  roleScopes: [{ role: 'super_admin', branches: null }],
 });
 
 async function person(name: string): Promise<string> {
@@ -106,7 +115,7 @@ async function staffedSchedule(
   });
 }
 
-describe.skipIf(!enabled)('R107 Production Quran-domain seed on fresh PostgreSQL', () => {
+describe.skipIf(!enabled)('R107/R108 Production Subject seed on fresh PostgreSQL', () => {
   let firstRun: SubjectSnapshot;
 
   beforeAll(async () => {
@@ -114,7 +123,7 @@ describe.skipIf(!enabled)('R107 Production Quran-domain seed on fresh PostgreSQL
     firstRun = await subjectSnapshot();
   });
 
-  it('seeds the six atomic Subjects and marks only حفظ القرآن', async () => {
+  it('seeds the exact eight-Subject baseline and marks only حفظ القرآن', async () => {
     expect(
       firstRun.map(({ name, displayOrder, tracksQuranProgress }) => ({
         name,
@@ -132,7 +141,16 @@ describe.skipIf(!enabled)('R107 Production Quran-domain seed on fresh PostgreSQL
       await prisma.subject.count({
         where: {
           deletedAt: null,
-          name: { in: ['القرآن الكريم', 'تفسير', 'تجويد'] },
+          name: {
+            in: [
+              'القرآن الكريم',
+              'تفسير',
+              'ترتيل القرآن',
+              'تجويد',
+              'تجويد القرآن',
+              'محو الأمية',
+            ],
+          },
         },
       }),
     ).toBe(0);
@@ -143,10 +161,59 @@ describe.skipIf(!enabled)('R107 Production Quran-domain seed on fresh PostgreSQL
     expect(await subjectSnapshot()).toEqual(firstRun);
   });
 
-  it('authorises memorisation through حفظ القرآن staffing, not تفسير القرآن', async () => {
+  it('preserves Super-Admin additions, extra Quran curriculum, and historical rows', async () => {
+    const actorId = await person('مديرة التوسعة');
+    const additions = await Promise.all([
+      createSubject(prisma, superAdmin(actorId), {
+        name: `${TAG} اللغة العربية`,
+        displayOrder: 90,
+      }),
+      createSubject(prisma, superAdmin(actorId), {
+        name: `${TAG} علوم القرآن`,
+        displayOrder: 91,
+      }),
+      createSubject(prisma, superAdmin(actorId), {
+        name: 'ترتيل القرآن',
+        displayOrder: 92,
+      }),
+      createSubject(prisma, superAdmin(actorId), {
+        name: 'محو الأمية',
+        displayOrder: 93,
+      }),
+    ]);
+    const before = await subjectSnapshot();
+
+    await runProductionSeed();
+
+    const after = await subjectSnapshot();
+    expect(after).toEqual(before);
+    expect(
+      after
+        .filter((subject) => additions.some((addition) => addition.id === subject.id))
+        .map((subject) => subject.tracksQuranProgress),
+    ).toEqual([false, false, false, false]);
+  });
+
+  it('authorises only حفظ staffing, never an unmarked Quran-domain Subject', async () => {
     const memorisation = firstRun.find((subject) => subject.name === 'حفظ القرآن');
+    const ahkam = firstRun.find((subject) => subject.name === 'أحكام القرآن');
+    const tartil = firstRun.find(
+      (subject) => subject.name === 'ترتيل وتجويد القرآن',
+    );
     const tafsir = firstRun.find((subject) => subject.name === 'تفسير القرآن');
-    if (!memorisation || !tafsir) throw new Error('R107 Subjects missing after seed');
+    const additionalQuranAdminId = await person('مديرة مادة قرآنية إضافية');
+    const additionalQuran = await createSubject(
+      prisma,
+      superAdmin(additionalQuranAdminId),
+      {
+        name: `${TAG} القراءات`,
+        displayOrder: 94,
+      },
+    );
+    if (!memorisation || !ahkam || !tartil || !tafsir) {
+      throw new Error('R107/R108 Quran Subjects missing after seed');
+    }
+    const unmarkedQuranSubjects = [ahkam, tartil, tafsir, additionalQuran];
 
     const level = await prisma.level.findFirstOrThrow({
       where: { deletedAt: null },
@@ -163,17 +230,22 @@ describe.skipIf(!enabled)('R107 Production Quran-domain seed on fresh PostgreSQL
       data: { name: `${TAG} مجموعة`, levelId: level.id, branchId: branch.id },
     });
     await prisma.levelSubject.createMany({
-      data: [
-        { levelId: level.id, subjectId: memorisation.id },
-        { levelId: level.id, subjectId: tafsir.id },
-      ],
+      data: [memorisation, ...unmarkedQuranSubjects].map((subject) => ({
+        levelId: level.id,
+        subjectId: subject.id,
+      })),
       skipDuplicates: true,
     });
     await prisma.levelSurah.create({ data: { levelId: level.id, surahId: 1 } });
 
     const studentId = await person('مستفيدة');
     const memorisationTeacherId = await person('مؤطرة الحفظ');
-    const tafsirTeacherId = await person('مؤطرة التفسير');
+    const unmarkedTeachers = await Promise.all(
+      unmarkedQuranSubjects.map(async (subject) => ({
+        subject,
+        userId: await person(`مؤطرة ${subject.name}`),
+      })),
+    );
     await prisma.enrollment.create({
       data: {
         studentId,
@@ -188,11 +260,15 @@ describe.skipIf(!enabled)('R107 Production Quran-domain seed on fresh PostgreSQL
       group.id,
       memorisationTeacherId,
     );
-    await staffedSchedule(tafsir.id, branch.id, group.id, tafsirTeacherId);
+    for (const { subject, userId } of unmarkedTeachers) {
+      await staffedSchedule(subject.id, branch.id, group.id, userId);
+    }
 
     expect(await quranSubjectId(prisma)).toBe(memorisation.id);
     expect(await teachesQuran(prisma, memorisationTeacherId)).toBe(true);
-    expect(await teachesQuran(prisma, tafsirTeacherId)).toBe(false);
+    for (const { userId } of unmarkedTeachers) {
+      expect(await teachesQuran(prisma, userId)).toBe(false);
+    }
 
     await expect(
       logProgress(prisma, teacher(memorisationTeacherId, branch.id), {
@@ -205,16 +281,18 @@ describe.skipIf(!enabled)('R107 Production Quran-domain seed on fresh PostgreSQL
       }),
     ).resolves.toMatchObject({ merged_ayah_count: 2 });
 
-    await expect(
-      logProgress(prisma, teacher(tafsirTeacherId, branch.id), {
-        studentId,
-        levelId: level.id,
-        surahId: 1,
-        startAyah: 3,
-        endAyah: 3,
-        category: 'new_memorization',
-      }),
-    ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    for (const { userId } of unmarkedTeachers) {
+      await expect(
+        logProgress(prisma, teacher(userId, branch.id), {
+          studentId,
+          levelId: level.id,
+          surahId: 1,
+          startAyah: 3,
+          endAyah: 3,
+          category: 'new_memorization',
+        }),
+      ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    }
   });
 
   it('fails before seed mutation when duplicate live حفظ القرآن rows exist', async () => {

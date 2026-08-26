@@ -141,7 +141,7 @@ person at* — the branch chosen at registration is a request, not a placement.
 exists **only** when a subject needs students divided differently from the administrative
 roster. تفسير القرآن may be taught to the whole level while حفظ القرآن runs in three
 parallel groups, and the splits are **independent between subjects**: one student may be in
-Administrative Group 1, حفظ القرآن Group 2 and ترتيل القرآن Group 1 at once.
+Administrative Group 1, حفظ القرآن Group 2 and ترتيل وتجويد القرآن Group 1 at once.
 
 **Recurring Course Schedule** — the unit of delivery. Subject, teaching mode, branch, room,
 teacher, assistants, times, recurrence. The **teaching mode** — entire level, one
@@ -236,16 +236,17 @@ provenance column already exist for exactly that.
 
 ## 5. Quran memorization tracking
 
-**القرآن الكريم is the curriculum domain, not a Subject** (SRS R107). The timetable uses
-the atomic Subjects أحكام القرآن, حفظ القرآن, ترتيل القرآن, and تفسير القرآن. Only
-حفظ القرآن carries `tracks_quran_progress`: staffing that Subject is the structural fact
-that authorises a مؤطرة to record memorisation for the schedule's current audience.
-Teaching any of the other three grants no memorisation authority.
+**القرآن الكريم is the curriculum domain, not a Subject** (SRS R107–R108). Its initial
+atomic Subjects are أحكام القرآن, حفظ القرآن, ترتيل وتجويد القرآن, and تفسير القرآن;
+the list is extensible. Only حفظ القرآن carries `tracks_quran_progress`: staffing the
+marked Subject is the structural fact that authorises a مؤطرة to record memorisation for
+the schedule's current audience. Teaching any unmarked Quran-domain Subject grants no
+memorisation authority.
 
 `LevelSurah` is the حفظ القرآن memorisation syllabus and the set BR-11 completion reads;
 تفسير القرآن follows those same Surahs per Level. It has no Subject foreign key because
 progress remains a student + Surah fact. Tafsir alignment does not grant memorisation
-authority or change coverage; أحكام and ترتيل use ordinary `LevelSubject` curriculum.
+authority or change coverage; أحكام and ترتيل وتجويد use ordinary `LevelSubject` curriculum.
 
 A teacher logs what a student has memorized as **ayah ranges** — Surah 2, ayahs 10 to 20 —
 tagged as new memorization or revision.

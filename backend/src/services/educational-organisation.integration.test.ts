@@ -797,7 +797,7 @@ describe("BR-22 — splits are per-Subject, and an unplaced student is never sil
   it("one student sits in two different subjects’ splits at once", async () => {
     const { levelId, firstGroupId } = await level("المستوى 1", amerchich);
     const hifz = await subject("حفظ القرآن", levelId);
-    const tartil = await subject("ترتيل القرآن", levelId);
+    const tartil = await subject("ترتيل وتجويد القرآن", levelId);
     const q1 = await createTeachingGroup(prisma, superAdmin(), {
       levelId,
       subjectId: hifz,
@@ -806,7 +806,7 @@ describe("BR-22 — splits are per-Subject, and an unplaced student is never sil
     const t1 = await createTeachingGroup(prisma, superAdmin(), {
       levelId,
       subjectId: tartil,
-      name: `${TAG} ترتيل القرآن 1`,
+      name: `${TAG} ترتيل وتجويد القرآن 1`,
     });
     const s = await student("هدى");
     await enrolStudent(prisma, superAdmin(), firstGroupId, s);

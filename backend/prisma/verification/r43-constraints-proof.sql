@@ -16,7 +16,7 @@ INSERT INTO branch (id, name, operational_start_date, created_at, updated_at)
   VALUES ('33333333-3333-3333-3333-333333333333', 'أمرشيش', '2026-01-01', now(), now());
 INSERT INTO subject (id, name, created_at, updated_at)
   VALUES ('44444444-4444-4444-4444-444444444444', 'حفظ القرآن', now(), now()),
-         ('44444444-4444-4444-4444-444444444445', 'ترتيل القرآن', now(), now());
+         ('44444444-4444-4444-4444-444444444445', 'ترتيل وتجويد القرآن', now(), now());
 INSERT INTO "user" (id, name_arabic, account_status, created_at, updated_at)
   VALUES ('55555555-5555-5555-5555-555555555555', 'خديجة بنعلي', 'active', now(), now());
 INSERT INTO administrative_group (id, name, level_id, branch_id, created_at, updated_at)
@@ -27,7 +27,7 @@ INSERT INTO teaching_group (id, name, subject_id, level_id, created_at, updated_
   VALUES ('77777777-7777-7777-7777-777777777777', 'مجموعة حفظ القرآن 1',
           '44444444-4444-4444-4444-444444444444',
           '22222222-2222-2222-2222-222222222222', now(), now()),
-         ('77777777-7777-7777-7777-777777777778', 'مجموعة ترتيل القرآن 1',
+         ('77777777-7777-7777-7777-777777777778', 'مجموعة ترتيل وتجويد القرآن 1',
           '44444444-4444-4444-4444-444444444445',
           '22222222-2222-2222-2222-222222222222', now(), now());
 COMMIT;
