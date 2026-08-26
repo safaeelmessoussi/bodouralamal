@@ -354,7 +354,7 @@ beforeEach(async () => {
       genderRestriction: "any",
     })
   ).level.id;
-  subjectVideo = (await prisma.subject.create({ data: { name: `${TAG} تفسير` } })).id;
+  subjectVideo = (await prisma.subject.create({ data: { name: `${TAG} تفسير القرآن` } })).id;
   subjectAudio = (await prisma.subject.create({ data: { name: `${TAG} سيرة` } })).id;
   await prisma.levelSubject.createMany({
     data: [

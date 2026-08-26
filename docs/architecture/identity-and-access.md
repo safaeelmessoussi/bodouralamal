@@ -368,12 +368,18 @@ Related and equally concrete: `branch_id IS NULL` was documented as "unscoped (S
 Admin)" while the implementation derived an *empty* scope list from it — so an Admin
 assigned to all branches could see **0 of 2**.
 
-### Teachers reach students through groups only
+### Teachers reach students through teaching assignments only
 
 A Teacher's role assignment carries the role, **not** their teaching reach. Exam authoring,
 Quran logging, content upload, and case-file access all resolve **exclusively** through
-group assignment. A teacher teaching Level 1 in Marrakesh and Level 2 in Casablanca is
-expressed by two group assignments, because a group carries both level and branch.
+effective `CourseScheduleStaff`/`SessionStaff` assignments and each assignment's resolved
+audience. A teacher teaching Level 1 in Marrakesh and Level 2 in Casablanca is expressed by
+two schedule assignments, because delivery carries both level audience and branch.
+
+Quran memorisation adds one narrow Subject filter (SRS R107): the schedule must carry the
+single live `tracks_quran_progress` marker, which belongs only to حفظ القرآن. أحكام القرآن,
+ترتيل القرآن, and تفسير القرآن are ordinary Subjects and never authorise memorisation.
+The marker is structural rather than an Arabic-name comparison, and absence fails closed.
 
 ### The permission matrix
 

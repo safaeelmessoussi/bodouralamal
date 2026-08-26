@@ -196,7 +196,7 @@ beforeEach(async () => {
   roomB = (
     await prisma.room.create({ data: { name: `${TAG} قاعة 6`, branchId } })
   ).id;
-  subjectId = (await prisma.subject.create({ data: { name: `${TAG} تفسير` } }))
+  subjectId = (await prisma.subject.create({ data: { name: `${TAG} تفسير القرآن` } }))
     .id;
   otherSubjectId = (
     await prisma.subject.create({ data: { name: `${TAG} فقه` } })

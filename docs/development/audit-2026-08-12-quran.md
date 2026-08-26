@@ -2,6 +2,11 @@
 
 # M4 — Quran Progress: current-state audit
 
+> **Historical document.** Revision 107 supersedes this audit's conclusion that
+> the broad Quran domain is a Subject. See [Quran progress](quran-progress.md):
+> atomic Subjects are scheduled separately and only حفظ القرآن carries the
+> memorisation marker. The text below is retained as the R73 audit record.
+
 **Status: audit only. Nothing implemented, no schema or SRS touched.**
 Decisions required from the Document Owner are listed at the end.
 

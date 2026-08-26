@@ -281,12 +281,12 @@ beforeAll(async () => {
   ).id;
   subjectId = (
     await prisma.subject.create({
-      data: { name: `${TAG} حفظ`, displayOrder: 90 },
+      data: { name: `${TAG} حفظ القرآن`, displayOrder: 90 },
     })
   ).id;
   otherSubjectId = (
     await prisma.subject.create({
-      data: { name: `${TAG} تفسير`, displayOrder: 91 },
+      data: { name: `${TAG} تفسير القرآن`, displayOrder: 91 },
     })
   ).id;
   yearId = (await prisma.academicYear.findFirstOrThrow()).id;

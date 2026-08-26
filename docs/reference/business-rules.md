@@ -109,14 +109,17 @@ explicit publish action. Recalculated grades require explicit **re-publish**.
 ### BR-9
 **Curriculum drives grading components.** Assigning a Surah or Subject to a level
 automatically creates its draft grading components, so curriculum and grading configuration
-**cannot drift apart.**
+**cannot drift apart.** R107's carve-out covers حفظ القرآن and تفسير القرآن: their
+`LevelSubject` rows create no generic component because `LevelSurah` is the shared per-Level
+Surah selection. A Surah assignment creates future memorisation and Tafsir components, but
+only حفظ participates in the memorisation progress engine.
 
 ### BR-10
 **Issued documents are immutable.** Certificates and transcripts snapshot exact values at
 generation; later formula edits never retroactively change an issued document.
 
 ### BR-11
-**Level completion.** 100 % Quran coverage, plus passing the level's final exam **only if one
+**Level completion.** 100 % Quran memorisation coverage, plus passing the level's final exam **only if one
 is configured.** No configured final exam → coverage alone completes the level.
 
 ### BR-12
@@ -124,8 +127,9 @@ is configured.** No configured final exam → coverage alone completes the level
 results and is **never clobbered by recalculation.**
 
 ### BR-13
-**Coverage is a union, always current.** Quran progress is the union of non-overlapping
-logged intervals per Surah; re-logging never inflates coverage. **Any change to the logs —
+**Coverage is a union, always current.** Quran memorisation progress is the union of
+non-overlapping `new_memorization` intervals per Surah; revision intervals never raise it
+(R95). Re-logging never inflates coverage. **Any change to the logs —
 including corrections and deletions — is reflected immediately and synchronously.**
 
 *Why synchronous:* coverage drives [BR-11](#br-11). A stale figure after a deletion could
