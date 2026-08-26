@@ -75,6 +75,7 @@ const day = (offset: number): Date => {
 let superAdmin: string;
 let teacherToken: string;
 let subsetTeacherToken: string;
+let endedTeacherToken: string;
 let branchId: string;
 let otherBranchId: string;
 let roomId: string;
@@ -251,6 +252,38 @@ beforeAll(async () => {
 
   // **The other مؤطِّرة teaches ONE GROUP of the same Level**, same Subject and
   // branch — the fixture that makes the whole-Level rule provable.
+  // **R106 correction fixture (2026-08-26).** A مؤطِّرة whose group assignment
+  // ENDED, with a group-scoped exam dated inside the window it covered. She
+  // must still see it: R91 judges authority on the exam's own date, so her
+  // history cannot evaporate the day an assignment lapses.
+  const endedTeacher = await person("مؤطرة انتهى إسنادها", "teacher");
+  endedTeacherToken = bearer(endedTeacher, [{ role: "teacher", branches: null }]);
+  const endedSchedule = await prisma.recurringCourseSchedule.create({
+    data: {
+      title: `${TAG} حصة انتهت`,
+      subjectId,
+      teachingMode: "administrative_group",
+      administrativeGroupId: groupId,
+      branchId,
+      academicYearId: yearId,
+      startTime: new Date("1970-01-01T08:00:00Z"),
+      endTime: new Date("1970-01-01T09:00:00Z"),
+      recurrence: "weekly",
+      weekdays: ["tuesday"],
+      anchorDate: day(-200),
+    },
+    select: { id: true },
+  });
+  await prisma.courseScheduleStaff.create({
+    data: {
+      scheduleId: endedSchedule.id,
+      userId: endedTeacher,
+      position: "teacher",
+      effectiveFrom: day(-200),
+      effectiveUntil: day(-100),
+    },
+  });
+
   const groupSchedule = await prisma.recurringCourseSchedule.create({
     data: {
       title: `${TAG} حصة المجموعة`,
@@ -280,6 +313,14 @@ beforeAll(async () => {
     branchId: otherBranchId,
     roomId: otherRoomId,
     subjectId,
+  });
+  // Inside the ended assignment's window, and scoped to her group.
+  await makeExam("pastGroupExam", {
+    date: day(-150),
+    branchId,
+    roomId,
+    subjectId,
+    administrativeGroupId: groupId,
   });
   await makeExam("forHerGroup", {
     date: day(0),
@@ -350,5 +391,38 @@ describe("and nothing else — the list agrees with assertExamInTeacherScope", (
     for (const key of ["pastMine", "futureMine", "beforeShe", "otherBranch"]) {
       expect(ids, key).toContain(exams[key]);
     }
+  });
+});
+
+/**
+ * **R106 correction — a group-scoped exam inside an assignment that has ENDED.**
+ *
+ * Reported by Codex while reviewing the branch, reproduced here before fixing.
+ *
+ * The first implementation resolved the date window **per assignment** (right)
+ * but took the group set from `teacherEventScope(prisma, teacherId)`, whose
+ * `on` parameter defaults to **today** (wrong). So for any schedule that is not
+ * `entire_level`, the clause read *"exams in this assignment's window, whose
+ * group is one I teach RIGHT NOW"* — and a مؤطِّرة whose assignment had lapsed
+ * lost her entire group-scoped history, which is exactly the symptom §5 set out
+ * to fix. The `entire_level` path masked it, because it carries no group
+ * constraint at all.
+ */
+describe("R106 — group scope follows the exam's date, not today's staffing", () => {
+  it("shows a past group-scoped exam to a مؤطِّرة whose assignment has since ENDED", async () => {
+    const ids = await idsFor(endedTeacherToken);
+    expect(ids).toContain(exams["pastGroupExam"]);
+  });
+
+  it("still refuses her an exam dated AFTER her assignment ended", async () => {
+    // The correction must not become "she sees everything for that group
+    // forever". `forHerGroup` is dated today, well past her effective window.
+    const ids = await idsFor(endedTeacherToken);
+    expect(ids).not.toContain(exams["forHerGroup"]);
+  });
+
+  it("still refuses her the whole-Level sitting she never taught", async () => {
+    const ids = await idsFor(endedTeacherToken);
+    expect(ids).not.toContain(exams["pastMine"]);
   });
 });

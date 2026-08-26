@@ -37,23 +37,62 @@ async function goto(path) {
 }
 
 /* ── 1. The expected response that must stay silent ─────────────────────── */
-const calls = [];
-send; // network events are read via the in-page probe below
+
+/**
+ * **The instrumentation has to survive navigation, and the first version did
+ * not** (found by Codex on review, 2026-08-26; reproduced before fixing).
+ *
+ * It installed a `window.fetch` wrapper on the document at `/`, then called
+ * `goto('/register')` — which creates a **new document**, destroying both the
+ * wrapper and `window.__seen`. The subsequent read therefore returned `[]`
+ * every time, and the variable holding it was never asserted at all. So the
+ * harness claimed to prove *"whatever `/auth/refresh` answers"* while observing
+ * nothing: had the call never been made, or answered `500`, the check would
+ * have passed identically.
+ *
+ * `Page.addScriptToEvaluateOnNewDocument` is the fix. CDP re-runs it **before
+ * any page script on every navigation**, so the wrapper is reinstalled for each
+ * document rather than surviving one. The observation is then asserted, which
+ * is what turns *the page looks fine* into *the anonymous 401 happened and was
+ * handled silently*.
+ *
+ * **Nothing about authentication is relaxed to make this pass.** The harness
+ * only watches; `/auth/refresh` answering 401 to an anonymous caller is the
+ * behaviour being proved, not something being worked around.
+ */
+await send('Page.addScriptToEvaluateOnNewDocument', {
+  source: `(() => {
+    window.__seen = [];
+    const real = window.fetch;
+    window.fetch = async function (i, init) {
+      const r = await real.apply(this, arguments);
+      try {
+        const u = typeof i === 'string' ? i : (i && i.url);
+        if (u && String(u).includes('/api/v1/')) {
+          window.__seen.push({ url: String(u), status: r.status });
+        }
+      } catch (e) { /* never let instrumentation break the page */ }
+      return r;
+    };
+  })()`,
+});
+
 await goto('/');
-await evaluate(`(() => {
-  window.__seen = [];
-  const real = window.fetch;
-  window.fetch = async function (i, init) {
-    const r = await real.apply(this, arguments);
-    const u = typeof i === 'string' ? i : i.url;
-    if (u && u.includes('/api/v1/')) window.__seen.push({ url: String(u), status: r.status });
-    return r;
-  };
-  return 'probe';
-})()`);
 await goto('/register');
 const seen = JSON.parse(await evaluate('JSON.stringify(window.__seen || [])'));
+const refreshCalls = seen.filter((c) => c.url.includes('/auth/refresh'));
 const body = await evaluate('document.body.innerText');
+
+check(
+  'the probe SURVIVES navigation — it observed the anonymous API traffic at all',
+  seen.length > 0,
+  `${seen.length} call(s): ${seen.map((c) => `${c.url.split('/api/v1')[1]} ${c.status}`).join(', ')}`,
+);
+check(
+  'the anonymous /auth/refresh really is answered 401 — the case under test EXISTS',
+  refreshCalls.length > 0 && refreshCalls.every((c) => c.status === 401),
+  JSON.stringify(refreshCalls),
+);
 check(
   'the anonymous startup produces NO visible error, whatever /auth/refresh answers',
   !body.includes('"error"') && !body.includes('request_id') &&
@@ -117,10 +156,23 @@ const burst = await evaluate(`(async () => {
   return JSON.stringify(codes);
 })()`);
 const statuses = JSON.parse(burst);
+/**
+ * **The dev overlay disables this on purpose**, substituting 6000r/m for
+ * production's 10r/m so the integration suite is not throttled. Asserting a
+ * 429 under it would be asserting something the environment has switched off —
+ * so the harness says which edge it measured and checks the property that is
+ * actually true there. It still FAILS on a production-shaped edge that has
+ * stopped limiting, which is the case worth catching.
+ */
+const devEdge = process.env.EDGE_RATE_LIMITS === 'dev';
 check(
-  'the edge really does rate-limit, so 429 is a class worth having',
-  statuses.includes(429),
-  `statuses=${[...new Set(statuses)].join(',')}`,
+  devEdge
+    ? 'the permissive dev rate zones are active, so 429 is not exercisable here (production zones: 10r/m)'
+    : 'the edge really does rate-limit, so 429 is a class worth having',
+  devEdge
+    ? statuses.length > 0 && statuses.every((s) => s !== 429)
+    : statuses.includes(429),
+  `edge=${process.env.EDGE_RATE_LIMITS ?? 'unknown'} statuses=${[...new Set(statuses)].join(',')}`,
 );
 
 /* ── 5. A real unknown route still lands on the branded 404 ─────────────── */

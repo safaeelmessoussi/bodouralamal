@@ -921,7 +921,13 @@ export async function assertExamInTeacherScope(
   // A named group: one they staff directly, or one whose students they teach
   // through a Teaching Group — the same union `teacherEventScope` resolves,
   // reused rather than restated.
-  const reachable = await teacherEventScope(prisma, teacherId);
+  // **`on`, not today.** This function already receives the date an exam's
+  // authority is judged on (R91) and then asked `teacherEventScope` a
+  // present-tense question, so a مؤطِّرة organising inside a replacement period
+  // — or correcting a past sitting — was appraised against staffing she may no
+  // longer hold. The list half had the identical defect; both are fixed here so
+  // the two grammars of one question keep agreeing.
+  const reachable = await teacherEventScope(prisma, teacherId, on);
   if (!reachable.administrativeGroupIds.includes(spec.administrativeGroupId)) {
     throw new AppError(
       "FORBIDDEN",
@@ -986,6 +992,8 @@ export async function examScopeWhereForTeacher(
           subjectId: true,
           teachingMode: true,
           levelId: true,
+          administrativeGroupId: true,
+          teachingGroupId: true,
           administrativeGroup: { select: { levelId: true } },
           teachingGroup: { select: { levelId: true } },
         },
@@ -1000,7 +1008,53 @@ export async function examScopeWhereForTeacher(
     return { id: { in: [] } };
   }
 
-  const groups = await teacherEventScope(prisma, teacherId);
+  /**
+   * **The groups each assignment reaches, resolved FROM THAT ASSIGNMENT.**
+   *
+   * This was `teacherEventScope(prisma, teacherId)` — whose `on` parameter
+   * **defaults to today**. The clause therefore read *"exams inside this
+   * assignment's window, whose group is one I teach RIGHT NOW"*, and a مؤطِّرة
+   * whose group assignment had lapsed lost her entire group-scoped history:
+   * precisely the symptom R106 set out to fix, reintroduced one line lower.
+   * The `entire_level` path masked it, carrying no group constraint at all.
+   *
+   * Taking the group from the schedule the staffing row points at makes the
+   * question date-correct **by construction** rather than by remembering to
+   * pass a date: the clause's window already bounds when that assignment was
+   * effective, so the group it names is the group she taught *then*.
+   *
+   * A `teaching_group` schedule still resolves through live student membership,
+   * exactly as `teacherEventScope` does — enrolment carries no history here, and
+   * inventing one would be a second answer to a question §4.4c already owns.
+   */
+  const teachingGroupIds = staffed
+    .map((row) => row.schedule.teachingGroupId)
+    .filter((id): id is string => id !== null);
+  const groupsBehindTeachingGroup = new Map<string, string[]>();
+  if (teachingGroupIds.length > 0) {
+    const seats = await prisma.studentTeachingGroup.findMany({
+      where: { teachingGroupId: { in: teachingGroupIds }, deletedAt: null },
+      select: {
+        teachingGroupId: true,
+        student: {
+          select: {
+            levelEnrollments: {
+              where: { deletedAt: null },
+              select: { administrativeGroupId: true },
+            },
+          },
+        },
+      },
+    });
+    for (const seat of seats) {
+      const reached = groupsBehindTeachingGroup.get(seat.teachingGroupId) ?? [];
+      for (const enrollment of seat.student.levelEnrollments) {
+        // R66 — a student in an unsubdivided Level has no group to add.
+        if (enrollment.administrativeGroupId) reached.push(enrollment.administrativeGroupId);
+      }
+      groupsBehindTeachingGroup.set(seat.teachingGroupId, reached);
+    }
+  }
 
   const clauses: Prisma.ExamWhereInput[] = [];
   for (const row of staffed) {
@@ -1026,16 +1080,24 @@ export async function examScopeWhereForTeacher(
       ...window,
     };
 
-    clauses.push(
-      s.teachingMode === "entire_level"
-        ? // She teaches the whole Level, so every target within it is hers —
-          // the whole-Level sitting and any group carved out of it alike.
-          base
-        : // She teaches a subset, so the whole-Level sitting is NOT hers
-          // (authority over everyone is held, never inferred from authority
-          // over some) and a named group must be one this filter reaches.
-          { ...base, administrativeGroupId: { in: groups.administrativeGroupIds } },
-    );
+    if (s.teachingMode === "entire_level") {
+      // She teaches the whole Level, so every target within it is hers — the
+      // whole-Level sitting and any group carved out of it alike.
+      clauses.push(base);
+      continue;
+    }
+
+    // She teaches a subset, so the whole-Level sitting is NOT hers (authority
+    // over everyone is held, never inferred from authority over some) and a
+    // named group must be one THIS assignment reaches.
+    const reachable =
+      s.administrativeGroupId !== null
+        ? [s.administrativeGroupId]
+        : s.teachingGroupId !== null
+          ? (groupsBehindTeachingGroup.get(s.teachingGroupId) ?? [])
+          : [];
+    if (reachable.length === 0) continue;
+    clauses.push({ ...base, administrativeGroupId: { in: [...new Set(reachable)] } });
   }
 
   return clauses.length === 0 ? { id: { in: [] } } : { OR: clauses };

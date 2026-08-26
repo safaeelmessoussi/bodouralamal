@@ -1072,6 +1072,36 @@ with `git checkout -- scripts/dev/browser/` reverted *every* file in the
 directory, including C1 work that was correct and uncommitted. Restore the files
 you broke, never the directory they live in.
 
+### In-page instrumentation must survive navigation, or it proves nothing
+
+`verify-error-experience.sh` installed a `window.fetch` wrapper by `evaluate`
+on the document at `/`, then navigated to `/register` — which creates a **new
+document**, destroying the wrapper and `window.__seen` with it. The read that
+followed returned `[]` every time, and the variable holding it was **never
+asserted at all**. The harness therefore claimed to prove *"whatever
+`/auth/refresh` answers"* while observing nothing: had the call never been made,
+or answered `500`, the checks would have passed identically.
+
+Use **`Page.addScriptToEvaluateOnNewDocument`**. CDP re-runs it before any page
+script on every navigation, so each document gets the instrumentation rather
+than one document keeping it. Then **assert the observation**, not only the
+absence of a symptom — the repaired harness checks that `/auth/refresh` was
+seen *and* answered `401`, which is what turns *the page looks fine* into *the
+expected 401 happened and was handled silently*.
+
+Proven by reintroduction: restoring the per-document install drops the probe to
+**0 observed calls** and fails both checks.
+
+### An assertion the environment has switched off is not an assertion
+
+The same harness asserted a `429` from a 25-request burst. Under
+`docker-compose.dev.yml` the auth zone is **6000r/m** against production's
+**10r/m**, deliberately, so the integration suite is not throttled — the burst
+cannot trip it and the check failed for a reason that had nothing to do with the
+product. The harness now **detects which edge it is running against** and
+asserts the property that is true there, while still failing on a
+production-shaped edge that has stopped limiting.
+
 ### A guard that depends on an unasserted tool fails OPEN
 
 Three CI guards shipped written with `ripgrep`, their prohibition checks taking
@@ -1203,6 +1233,22 @@ while looking like a refusal test that passed.
 The R98 fixture had exactly two beneficiaries and both were in the same Level,
 so C2's negative needed a **new** one in a different Level. **Check which axis
 the rule actually turns on before choosing the person who must be refused.**
+
+### A date-scoped rule needs the date threaded ALL the way through
+
+R106 scoped a مؤطِّرة's exam list per assignment window — correct — and then took
+the group set from `teacherEventScope(prisma, teacherId)`, whose `on` parameter
+**defaults to today**. The clause therefore read *"exams inside this
+assignment's window, whose group I teach RIGHT NOW"*, and a مؤطِّرة whose group
+assignment had lapsed lost her whole group-scoped history: the very symptom the
+revision existed to fix, reintroduced one line lower. The `entire_level` path
+masked it, because it carries no group constraint at all.
+
+Two lessons. **A default parameter is where a date silently becomes *now*** —
+`assertExamInTeacherScope` had the identical defect, receiving `on` and then not
+passing it. And **the durable fix was structural, not a threaded argument**: the
+group is now taken from the schedule the staffing row points at, so the answer
+is date-correct *by construction* rather than by remembering.
 
 ### A fixture's "today" must be the association's clock, not UTC's
 
