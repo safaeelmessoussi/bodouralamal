@@ -1314,18 +1314,34 @@ scoped**. Platform-wide security, authorization, compliance and destructive-rete
 configuration stays Super-Admin-only. **The UI is never the authorization boundary.** Applies
 to the activity-type catalogue and Partners rather than hardcoding either.
 
-> ⚠ **This SUPERSEDES part of R61 and must be written as a supersession, not slipped in.**
-> R61 (Owner, 2026-08-12) deliberately moved الفئات · المستويات · المواد · مواد المستوى ·
-> مقرر الحفظ · الفروع والقاعات into الإدارة and made them **Super-Admin-only by placement**,
-> with R26 keeping writes Super-Admin. OD-01 reverses that for the operational half.
-> **Two things the implementing session must settle inside that revision:**
-> **(i)** which catalogues are *scoped* (Branches/Rooms are branch-scoped; Categories, Levels,
-> Subjects, Level Subjects, مقرر الحفظ are **global curriculum** with no branch axis, so
-> "scoped Admin" has no meaning there — either Admin manages them platform-wide or they stay
-> Super-Admin-only, and that is the sub-decision to surface);
-> **(ii)** R105's rule that *a section exists only where the heading states a fact about
-> permission* — if الإدارة's nodes stop being Super-Admin-only, the section's meaning changes
-> and §14.1 needs reconciling with it. **Do not silently re-shuffle the menu.**
+> **OD-01 sub-decision (Owner, final): the split is by AXIS, not by visibility.**
+>
+> | catalogue | authority | vs R61 |
+> |---|---|---|
+> | الفئات · المستويات · المواد · مواد المستوى · مقرر الحفظ | **Super Admin only** | **unchanged** |
+> | global platform / security / compliance settings | **Super Admin only** | unchanged |
+> | scheduling types · Partners | **Super Admin only** until a later Owner decision | new — no supersession |
+> | genuinely operational/scoped catalogues | **Admin + Super Admin**, where the write can be scoped safely | see below |
+>
+> **So R61 survives almost entirely.** The reversal is narrow, and two consequences must be
+> settled inside the reconciling revision rather than assumed:
+>
+> **(1) Branch itself may not be scopable, and Rooms are.** The Owner's own criterion is
+> *"where the existing authorization model can scope the write safely"*. A **Room** belongs to
+> a Branch, so an Admin's branch scope bounds the write naturally. **Creating or deleting a
+> Branch is inherently platform-level** — there is no existing branch to scope it by, and
+> `GET /admin/branches` is Admin-*readable* precisely because selectors need it (R61.2), which
+> is not an argument about writes. Recommend: **Rooms → Admin; Branch create/delete → Super
+> Admin**; Branch *edit* is the genuinely open sub-case.
+>
+> **(2) R105's heading must stay truthful.** الإدارة means *Super-Admin-only by placement*. If
+> any node inside it becomes Admin-manageable, either that node **leaves الإدارة** (a menu
+> change the Owner must approve — **do not reshuffle silently**) or the heading stops being a
+> fact about permission, which is exactly what R105 forbids. The Owner's framing — *«a
+> truthful Super-Admin-only permission section for global curriculum/platform management»* —
+> points at the first option for Rooms if they are delegated.
+>
+> **Neither blocks NEW B §C.**
 
 **OD-02 · Parent edits preserve occurrence overrides.** `overridden = true` continues to
 protect an individually-changed occurrence from a later parent update; *this and following*
