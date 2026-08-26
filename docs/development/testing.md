@@ -1072,6 +1072,24 @@ with `git checkout -- scripts/dev/browser/` reverted *every* file in the
 directory, including C1 work that was correct and uncommitted. Restore the files
 you broke, never the directory they live in.
 
+### The full integration sweep clears development fixture staffing
+
+Measured, not inferred: `course_schedule_staff` holds **2** rows before
+`scripts/dev/test-integration.sh`, the sweep passes **1714** tests, and the
+table holds **0** after. Every individual teardown is tag-scoped, and the six
+suites that share R107's memorisation Subject were each run in isolation
+without touching it — so the responsible suite was **not** identified, and that
+is stated rather than guessed at.
+
+**The practical rule: re-run `prisma/seed/fixtures.ts` after any full sweep.**
+It is idempotent (proven — a second run changes nothing), it derives staffing
+from the schedules that exist, and without it every teacher screen on localhost
+is legitimately empty for a reason that looks exactly like a defect.
+
+This is the same family as the leaked `[email-owner-test]` Categories: **shared
+development data is collateral of integration teardown**, and a fixture seed is
+the cheap way back rather than something to debug in the application.
+
 ### In-page instrumentation must survive navigation, or it proves nothing
 
 `verify-error-experience.sh` installed a `window.fetch` wrapper by `evaluate`
