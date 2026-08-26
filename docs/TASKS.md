@@ -1305,6 +1305,11 @@ was hiding behind it: the run went green on the first attempt.
   Production readiness is considered complete. Likely shapes to investigate first: a teardown
   scoped by *branch* or *level* rather than by tag, and any suite whose `clear()` runs against
   rows it did not create.
+  **A second symptom of the same family, observed 2026-08-26:**
+  `consent-safeguarding.integration.test.ts` passes **19/19 in isolation** and failed once inside a
+  full sweep on `expected { state: 'completed' }` — a **pg-boss job-state timing assertion** under
+  concurrency, in a file §6 did not touch. Both symptoms say the suite is not isolated: one loses
+  shared fixture rows, the other races a background worker. **Fix them together.**
 - [x] **P1.1 Quran-domain Production seed (R107–R108)** — القرآن الكريم is the domain, not
   a Subject. The additive initial baseline is أحكام القرآن, حفظ القرآن,
   ترتيل وتجويد القرآن, تفسير القرآن, فقه, السيرة النبوية, العقيدة, الأذكار; محو الأمية is
