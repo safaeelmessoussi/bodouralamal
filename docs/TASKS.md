@@ -1306,6 +1306,47 @@ was hiding behind it: the run went green on the first attempt.
   scoped by *branch* or *level* rather than by tag, and any suite whose `clear()` runs against
   rows it did not create.
 
+## READINESS AUDIT — 2026-08-26 (final planning pass)
+
+### Supersessions the next session must write (all four are NEW B §C's first commit)
+
+`Visibility` already exists as `public | private | hidden`; the **next free revision number is
+109**. Four ratified clauses are contradicted by the Owner's NEW B decisions and must be
+superseded explicitly, not silently reconciled:
+
+| clause | says today | superseded by |
+|---|---|---|
+| **R43** | *"Sessions are PUBLIC — anonymous visitors browse the timetable"* | حصة gains a tier; legacy backfill `public` **preserves** this exact behaviour |
+| **§4.6** | *"An exam has no visibility tier of its own"* | امتحان gains one |
+| **§4.4** | `hidden` = staff + scope; **Admins see ALL hidden regardless of branch** | `hidden` = responsible + Super Admin — this **narrows** Admin reach |
+| **`Event.visibility` default** | `private` (schema) | `public` for new rows only |
+
+**§4.4's change is a NARROWING, not a widening** — today every Admin sees every hidden Event.
+Say so in the revision; it is the one place where the new rule removes access somebody has.
+
+### THE TWO RETENTION POLICIES ARE DIFFERENT — do not merge
+
+* **Trash today: `PURGE_WINDOW_DAYS` = 90** (`trash.repository.ts`), BR-15's default window.
+* **NEW O: 3 days**, for a **self-deleted account** only.
+* **Automatic quarantine destruction of Educational Content remains an OPEN Owner decision**
+  (R59.4) and is **not** authorised by the 3-day account rule.
+
+⇒ NEW O introduces a **second, shorter window for one entity type**. It must not change
+`PURGE_WINDOW_DAYS`, must not start the quarantine scanner, and must be visibly distinct in
+Trash so a Super Admin can tell a 3-day account from a 90-day record.
+
+### Resolved — do NOT re-ask
+
+visibility semantics · default `public` · `hidden` = responsible + Super Admin ·
+Event responsible = `EventStaff.responsible` (R71.3) · حصة responsible =
+`CourseScheduleStaff.position='teacher'` **effective on the occurrence's own date** ·
+امتحان responsible = `ExamStaff.supervisor` · legacy backfill `public` ·
+occurrence-only = `overrideSession` + `overridden=true` · this-and-following = R50 split,
+**no other mechanism authorised** · overridden rows protected from parent edits (already built,
+`protected_sessions`) · Event × Content independence (already built, *"the content gates, the
+sessions do not"*) · `الكل` = `UserBranchRole.branch_id IS NULL`, never a Branch row ·
+Teacher phone/email stay blank.
+
 ## OWNER ADDENDUM — 2026-08-26 · manageable reference data, account deletion, legal pages
 
 ### Global rule (binding)
