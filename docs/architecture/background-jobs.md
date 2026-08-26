@@ -99,6 +99,14 @@ handlers and are therefore part of readiness. Other TD-7 jobs whose implementati
 landed remain release-readiness gaps; health neither implements them nor invents running
 handlers for them.
 
+`backup.replicate` is still one of those gaps. The executable
+[backup/restore tooling](../operations/runbooks.md#creating-and-restoring-a-full-recovery-point)
+now produces a coherent encrypted recovery point and has passed a destructive disposable
+restore, but it is host-scoped because coherence requires draining the in-process workers and
+cleanly stopping data volumes. Giving the API Docker-socket authority merely to make the TD-7
+row look implemented would be a root-equivalent privilege escalation. The queue, nightly
+automation and critical alert remain release blockers; runtime readiness does not count them.
+
 > **`session-recording-ingest` was implemented before it was specified, and that sequence is
 > worth keeping visible.** R99 authorised the ingestion pipeline in terms (R99.13, R99.14) and
 > specified the TD-2, TD-3, TD-8 and TD-13 additions it needed, but **named no queue** — while
