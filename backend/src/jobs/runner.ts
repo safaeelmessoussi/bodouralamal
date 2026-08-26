@@ -8,6 +8,13 @@ import { purgeExpired as purgeExpiredRefreshTokens } from '../services/refresh-t
 import { runMaterialization } from '../services/session-materialize.service.js';
 import { ingestRecording } from '../services/session-recording-ingest.service.js';
 import {
+  collectAbandonedUploadPage,
+  quarantineRetiredContentObject,
+  retirePurgedContentObjects,
+  uploadGcContinuationSingletonKey,
+  type UploadGcPayload,
+} from '../services/storage-lifecycle.service.js';
+import {
   contentMigrationSingletonKey,
   enqueueConsentSafeguardingSweep,
   migrateConsentForcedContent,
@@ -15,7 +22,11 @@ import {
   retireConsentPublicObject,
 } from '../services/consent-reevaluation.service.js';
 import { JobRunnerReadiness } from './readiness.js';
-import { ensureDurableLegacyFollowup } from '../repositories/jobs.repository.js';
+import {
+  enqueue,
+  ensureDurableLegacyFollowup,
+  JOB_QUEUES,
+} from '../repositories/jobs.repository.js';
 
 /**
  * pg-boss bootstrap and job runner (SRS TD-7, §3.1, §20 rule 1).
@@ -46,6 +57,11 @@ export const QUEUES = {
   /** Minimum TD-7 placement worker used by BR-2 safeguarding. It moves only an
    * already consent-forced canonical object from public to private. */
   contentBucketMigrate: 'content.bucket-migrate',
+  /** R59.1 manual exact-coordinate retirement. Automatic `purge_after`
+   * destruction remains deliberately unscheduled pending the Owner decision. */
+  contentQuarantinePurge: 'content.quarantine-purge',
+  /** TD-7's bounded, paginated abandoned browser-upload collector. */
+  uploadGc: 'upload.gc',
 
   /**
    * `session.materialize` (TD-7, Revision 43) — turns a Recurring Course
@@ -238,6 +254,80 @@ export function createWorkerCatalog(
       },
     },
     {
+      name: QUEUES.contentQuarantinePurge,
+      handler: async ([job]) => {
+        const payload = (job?.data ?? {}) as {
+          operation?: string;
+          content_id?: string;
+          bucket?: string;
+          storage_key?: string;
+        };
+        if (!job || !payload.content_id || !payload.bucket || !payload.storage_key) {
+          throw new Error(
+            'content.quarantine-purge requires an exact content coordinate',
+          );
+        }
+        const coordinates = {
+          contentId: payload.content_id,
+          bucket: payload.bucket,
+          storageKey: payload.storage_key,
+        };
+        if (payload.operation === 'manual_permanent_delete') {
+          await retirePurgedContentObjects(storage, coordinates);
+        } else if (payload.operation === 'quarantine_retired_object') {
+          await quarantineRetiredContentObject(storage, coordinates);
+          // A pending quarantine move and a later manual purge may overlap.
+          // Re-read only the content identity after storage: if permanent purge
+          // has committed, make the destructive state monotonic by retiring
+          // both old coordinates again. If the row still exists (live after
+          // replacement, or soft-deleted), quarantine remains recoverable.
+          const retained = await prisma.educationalContent.findUnique({
+            where: { id: payload.content_id },
+            select: { id: true },
+          });
+          if (retained === null) {
+            await retirePurgedContentObjects(storage, coordinates);
+          }
+        } else {
+          throw new Error('content.quarantine-purge operation is unsupported');
+        }
+        log(QUEUES.contentQuarantinePurge, {
+          operation: payload.operation,
+          content_id: payload.content_id,
+          state: 'retired',
+        });
+      },
+    },
+    {
+      name: QUEUES.uploadGc,
+      handler: async ([job]) => {
+        if (!job) throw new Error('upload.gc requires a pg-boss job');
+        const result = await collectAbandonedUploadPage(
+          storage,
+          (job.data ?? {}) as UploadGcPayload,
+          job.id,
+        );
+        if (result.next) {
+          await prisma.$transaction(async (tx) => {
+            await enqueue(
+              tx,
+              JOB_QUEUES.uploadGc,
+              { ...result.next! },
+              uploadGcContinuationSingletonKey(result.next!),
+            );
+          });
+        }
+        log(QUEUES.uploadGc, {
+          bucket: result.bucket,
+          prefix: result.prefix,
+          scanned: result.scanned,
+          deleted: result.deleted,
+          retained: result.retained,
+          continuation_enqueued: result.next !== null,
+        });
+      },
+    },
+    {
       // Nightly rolling-horizon extension. An empty payload sweeps every active
       // schedule; per-schedule reconciliation uses the same handler.
       name: QUEUES.sessionMaterialize,
@@ -332,6 +422,9 @@ export async function startJobRunner(
     await boss.schedule(QUEUES.tokenPurge, DAILY_AT_0330);
     await boss.schedule(QUEUES.rateLimitPurge, DAILY_AT_0330);
     await boss.schedule(QUEUES.auditPurge, DAILY_AT_0330);
+    await boss.schedule(QUEUES.uploadGc, DAILY_AT_0330);
+    // R59.4: do NOT schedule content.quarantine-purge against `purge_after`
+    // until the Document Owner authorises automatic production destruction.
     readiness.ready();
   } catch (error) {
     readiness.failed();

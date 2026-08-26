@@ -61,8 +61,8 @@ duplicate concurrent runs.
 | `session.materialize` | Course-schedule create or edit · **nightly cron** | Singleton per schedule. Turns a recurring schedule into dated occurrences over a rolling horizon. See below |
 | `content.bucket-migrate` | Visibility change · consent forcing · exact old-public-key retirement after replacement/deletion | The consent arm pins the source key; copy–verify–delete and exact retirement are idempotent across replacement, deletion and ambiguous delete responses |
 | `backup.replicate` | Nightly cron | `pg_dump` + `restic` push to the second Moroccan location. Failure raises a **critical** Admin-visible alert |
-| `content.quarantine-purge` | Daily cron | Permanently removes storage objects past the 90-day trash window |
-| `upload.gc` | Daily cron | Deletes initiated-but-never-completed uploads **strictly older than 48 h** — never younger, or a slow upload in progress would be reaped |
+| `content.quarantine-purge` | Exact replacement/deletion obligation; deliberate R59.1 purge | Moves one immutable old key to quarantine or retires the two exact possible leftovers. The automatic daily `purge_after` scan remains unscheduled pending the R59.4 Owner decision |
+| `upload.gc` | Daily cron | Deletes browser/server-finalization staging **strictly older than 48 h** in bounded durable pages — never younger, and never provider recording staging |
 | `token.purge` | Daily cron | Removes consumed onboarding tokens past their horizon **and refresh tokens past expiry**. Refresh generations are discovered in bounded batches, then deleted in one transaction per `RefreshSession` while holding the same stable row refresh/logout use; a live successor is therefore never detached from logout's serialization boundary. An empty anchor is removed with its last token |
 | `ratelimit.purge` | Daily cron | Removes counters for elapsed windows. **Housekeeping only** — the quota decision is synchronous and never depends on this job |
 | `audit.purge` | Daily cron | The single sanctioned deletion path for audit rows. See below |
@@ -94,10 +94,31 @@ backlog gaps left by older trigger coverage. Queue policy updates change retry/b
 so pg-boss retention, expiry and deletion horizons—and historical jobs—remain intact.
 
 This runtime catalog is deliberately not the same thing as TD-7 release completeness.
-`consent.reevaluate` and the consent-forced arm of `content.bucket-migrate` now have real
-handlers and are therefore part of readiness. Other TD-7 jobs whose implementations have not
-landed remain release-readiness gaps; health neither implements them nor invents running
-handlers for them.
+`consent.reevaluate`, the consent-forced arm of `content.bucket-migrate`, bounded `upload.gc`,
+and the exact-operation arm of `content.quarantine-purge` have real handlers and are therefore
+part of readiness. Readiness for the last queue means committed replacement/deletion/manual
+purge obligations can drain; it does **not** claim that automatic age-based destruction is
+enabled. Other TD-7 jobs whose implementations have not landed remain release-readiness gaps;
+health neither implements them nor invents running handlers for them.
+
+### Storage lifecycle jobs — bounded sweep versus exact obligation
+
+`upload.gc` is the age-based collector. Each execution lists at most 250 objects under one of
+the fixed staging scopes, deletes only `LastModified < cutoff`, and enqueues the next opaque
+continuation transactionally. Retrying a page is safe because delete is idempotent. A provider
+recording never enters these prefixes and retains its R100 exact job instead.
+
+`content.quarantine-purge` currently accepts only two explicit operations. A replacement or
+soft deletion transaction enqueues `quarantine_retired_object` with its old bucket/key before
+the row can point elsewhere. A deliberate Super Admin permanent deletion enqueues
+`manual_permanent_delete` before the record and Trash locator disappear. Both validate the
+canonical `content/{content_id}/…` coordinate; the first copies to its deterministic
+quarantine key before deleting the old canonical object, while the second idempotently deletes
+both possible leftovers. After a quarantine move, the worker rechecks whether the content row
+still exists; if a concurrent permanent purge already committed, it immediately retires both
+old coordinates so a late stale quarantine job cannot recreate retained bytes. Storage
+exceptions escape the handler and consume the ordinary TD-7 retry budget. No scheduler or
+handler selects `Trash.purge_after`.
 
 `backup.replicate` is still one of those gaps. The executable
 [backup/restore tooling](../operations/runbooks.md#creating-and-restoring-a-full-recovery-point)

@@ -47,6 +47,12 @@ export const JOB_QUEUES = {
    * efficiency, not the guarantee.
    */
   sessionRecordingIngest: 'session-recording-ingest',
+  /** Manual R59.1 permanent-delete storage retirement. The same TD-7 queue is
+   * reserved for age-based BR-15 destruction, but automatic retention remains
+   * disabled until the Document Owner authorises it (R59.4). */
+  contentQuarantinePurge: 'content.quarantine-purge',
+  /** TD-7's bounded abandoned browser/server-finalization staging collector. */
+  uploadGc: 'upload.gc',
 } as const;
 
 /**

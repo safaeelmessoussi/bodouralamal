@@ -8,9 +8,10 @@ selection is an Owner decision recorded below.
 
 > **Status:** the Nginx proxy, upload/replace/delete flow, permission-checked private mint,
 > recording ingestion, durable R99 staging cleanup, consent re-evaluation and the
-> consent-forced public → private `content.bucket-migrate` arm are built and tested. General
-> visibility editing and the retention jobs remain open and are called out below rather than
-> implied by the implemented safeguarding flow.
+> consent-forced public → private `content.bucket-migrate` arm are built and tested. Bounded
+> abandoned-upload GC and exact replacement/deletion retirement are also implemented. General
+> visibility editing and automatic 90-day destruction remain open and are called out below
+> rather than implied by the implemented safeguarding flow.
 
 ## OWNER DECISION REQUIRED — OBJECT STORE
 
@@ -219,6 +220,14 @@ uploads can disagree with the bucket that holds them, creating a reconciliation 
 there was none. The ticket carries the state instead, and `upload.gc` (TD-7) then reaps
 *objects* older than 48 h that no content row claims — which is the thing that actually needs
 collecting, and is true whether or not any bookkeeping row ever existed.
+
+The daily collector scans exactly three scopes: browser staging in `public` and `private`, and
+server-finalization staging in `private`. One job reads at most 250 objects and transactionally
+enqueues the opaque continuation as another pg-boss job, so a large backlog converges without
+making one worker execution unbounded. The cutoff is fixed for the complete pagination run;
+an object exactly 48 hours old is retained, and a missing `LastModified` is retained rather
+than guessed. `recordings-staging` is deliberately excluded because R100 gives each provider
+object an exact ingestion retry rather than an age-based collector.
 
 **The ticket binds every authorization decision taken at `/initiate`** — caller, staging key,
 bucket, finalization identity, declared size and type, and the §4.9 scope fields. A replacement
@@ -430,20 +439,39 @@ The API location stays at `2m`. **Never raise the body limit globally to "fix" u
 `DELETE /content/{id}` (R53) soft-deletes the row, writes a `Trash` snapshot, and moves the
 object to a **quarantine prefix**, pending the 90-day window.
 
-**Two paths lead out of quarantine, and one of them does not exist yet.**
+Replacement and soft deletion commit an exact old-coordinate quarantine obligation in the
+same PostgreSQL transaction as the row/audit change. The request still attempts the
+copy-before-delete transition immediately, but that is only the fast path: storage failure or
+an ambiguous delete response leaves the pg-boss job to retry. The job derives no coordinate
+from the current row. It can therefore move only the immutable old key named at commit time,
+never a replacement's newer canonical bytes.
+
+**Two authorised paths lead out of quarantine, but only the deliberate one is active.**
 
 * **A Super Admin purge** (R59.1) — `DELETE /admin/trash/{id}` destroys the row and
-  **removes the quarantined object with it**, after the transaction commits. A destroyed
-  row beside surviving bytes is an orphan nobody can find, reach or account for, in the one
-  entity where the data is largest. The ordering is the safe one: if the object removal
-  fails, the row is gone and the bytes remain, which is a reapable leftover rather than a
-  record pointing at nothing.
-* **The daily `content.quarantine-purge` job** — which Revisions 52 and 53 both name as the
-  enforcement of BR-15's window, and which **was never built** (R59.4). Nothing reads
-  `purge_after`. Objects placed in quarantine stay there indefinitely.
+  commits an exact storage-retirement job **inside the same transaction**. The worker deletes
+  both possible leftovers — the derived quarantine key and exact old canonical key — and
+  propagates every storage failure so TD-7 retry/terminal observability applies. If the queue
+  is absent, database destruction rolls back. A duplicate or a retry after an ambiguous
+  response is safe because S3 deletion is idempotent and content UUID/version keys are never
+  reused. A quarantine worker that finishes after permanent deletion rechecks row existence
+  and retires both old coordinates again, so the stale job cannot leave a newly copied
+  quarantine object behind.
+* **The automatic `content.quarantine-purge` age arm** — which Revisions 52 and 53 both name as the
+  enforcement of BR-15's window. R59.4 requires an Owner decision before automatic
+  Production destruction. The queue and worker now exist for the exact non-destructive
+  quarantine transitions and deliberate R59.1 purges above, but **nothing reads
+  `purge_after` and the queue is not scheduled for age-based destruction**.
 
-That second point is worth stating plainly rather than leaving implied: **quarantine is
-currently permanent storage**, and its growth is unbounded until the job ships.
+### OWNER DECISION REQUIRED — AUTOMATIC QUARANTINE DESTRUCTION
+
+Decide whether to activate BR-15's automatic 90-day destruction, which entity plans it may
+apply, and the operational/legal approval gate. Until that decision, expired Trash rows and
+their quarantine objects remain retained unless a Super Admin invokes the existing audited
+manual purge. Recommendation: enable only after the supported object-store decision, the
+off-host backup target/retention decision, and a Production-scale restore drill are complete;
+then test exact due-date selection, dependency refusal, audit retention, crash/retry, and
+restore-versus-purge serialization before scheduling the destructive scan.
 
 **The object is moved rather than destroyed, and that is the whole point.** A deletion that
 removed the file immediately would make BR-15's window a promise the platform keeps for every
@@ -451,9 +479,10 @@ entity except the one where the data is largest and least reproducible — a ses
 cannot be re-made.
 
 **The copy precedes the delete**, so a failure between the two leaves a duplicate rather than
-nothing. And a quarantine failure does not fail the request: the row is already updated and the
-audit row already written, so reporting failure would tell the caller their deletion did not
-happen when it did. `content.quarantine-purge` sweeps whatever is left.
+nothing. A quarantine fast-path failure does not fail the already-committed request, but it is
+no longer swallowed as the only record of work: the exact job was committed first and retries
+the transition. Missing source after an ambiguous delete is converged success; a malformed or
+out-of-prefix coordinate is refused before storage.
 
 ## The third bucket: `recordings-staging` (R99)
 

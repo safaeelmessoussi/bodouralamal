@@ -14,8 +14,8 @@ Four layers, each testing something the others structurally cannot.
 **Coverage: ≥ 80 % on services and policies.** No coverage gate on generated or boilerplate
 code — a coverage number that counts generated clients measures nothing.
 
-Current default CI totals: **270 backend tests across 27 files · 727 frontend tests across 57
-files**. The repository also contains **82 backend integration files**, but the workflow does
+Current default CI totals: **276 backend tests across 28 files · 727 frontend tests across 57
+files**. The repository also contains **83 backend integration files**, but the workflow does
 not run them: they require an isolated real stack and database lifecycle that this CI slice
 does not yet provide.
 
@@ -51,7 +51,7 @@ legitimate SigV4 traffic cannot pass.
 cd backend && npm run lint && npm run typecheck && npm test && npm run build
 cd frontend && npm run lint && npm run typecheck && npm test && npm run build
 
-# Repository and contract guards — all twenty-three are represented in CI
+# Repository and contract guards — all twenty-four are represented in CI
 for g in scripts/ci/check-*.sh; do bash "$g"; done
 
 # Integration — needs the stack up
@@ -69,6 +69,18 @@ values back. Fixture mode structurally
 refuses SFTP so the drill cannot send local data to an external target. Its local 33-second
 result proves the recovery mechanism and the `< 1 h` target at fixture scale; the selected
 Moroccan target and realistic Production volume still require the launch drill.
+
+The storage-lifecycle drill is destructive only to its uniquely named disposable PostgreSQL
+and MinIO volumes (`bash scripts/storage/verify-storage-lifecycle.sh`). It applies every
+migration, creates objects across the complete staging-prefix catalog, proves the strict
+48-hour boundary and bounded continuation, and verifies canonical objects survive. Its purge
+case removes the queue first to prove the content row/Trash deletion rolls back, then uses the
+real production worker with a deliberately lost first `DeleteObject` response: pg-boss retries,
+both exact old leftovers disappear, and a newer key under the same content UUID remains. It
+then delivers a stale quarantine job after the row is gone and proves the worker removes the
+late copy without targeting that newer key.
+Automatic `purge_after` destruction is asserted absent rather than simulated, because it still
+requires the Owner decision.
 
 Integration tests run **serially**, because the suites share one database.
 
