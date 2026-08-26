@@ -25,8 +25,14 @@ rewrite_line="$(grep -nF 'rewrite ^/(?:_storage_public_read/)?storage/(.*)$ /$1 
 
 # Every external MinIO request must pass through the shared snippet. A direct
 # proxy_pass in another Nginx file could otherwise omit the defensive filter.
-if rg -n 'proxy_pass[[:space:]]+\$minio_upstream' "$repo_root/nginx" \
-  --glob '!**/storage-proxy.conf' | grep -q .; then
+#
+# **`grep -r`, not `rg`.** This check was written with ripgrep, which is not a
+# POSIX tool and is absent from many environments — and the failure was SILENT:
+# `if rg ... | grep -q .` evaluates to false when `rg` is missing, so the guard
+# printed success while a real bypass sat in the tree. Proven by injecting one.
+# A guard that cannot fail is not protection (see docs/development/testing.md).
+if grep -rnE --include='*.conf' 'proxy_pass[[:space:]]+\$minio_upstream' "$repo_root/nginx" \
+  | grep -v '/storage-proxy\.conf:' | grep -q .; then
   fail 'a MinIO proxy path bypasses the shared storage-proxy snippet'
 fi
 

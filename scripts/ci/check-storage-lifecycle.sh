@@ -19,7 +19,7 @@ done
 
 grep -Fq 'await boss.schedule(QUEUES.uploadGc, DAILY_AT_0330);' "$runner" ||
   fail 'upload.gc is not scheduled daily'
-if rg -n 'boss\.schedule\(QUEUES\.contentQuarantinePurge' "$runner" | grep -q .; then
+if grep -nE 'boss\.schedule\(QUEUES\.contentQuarantinePurge' "$runner" | grep -q .; then
   fail 'automatic quarantine destruction was enabled without the Owner decision'
 fi
 

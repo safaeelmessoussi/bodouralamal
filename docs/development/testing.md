@@ -1067,6 +1067,37 @@ with `git checkout -- scripts/dev/browser/` reverted *every* file in the
 directory, including C1 work that was correct and uncommitted. Restore the files
 you broke, never the directory they live in.
 
+### A guard that depends on an unasserted tool fails OPEN
+
+Three CI guards shipped written with `ripgrep`, their prohibition checks taking
+the form:
+
+```bash
+if rg -n 'forbidden-pattern' dir | grep -q .; then fail '...'; fi
+```
+
+Where `rg` is absent, the command writes `rg: command not found` to **stderr**
+and nothing to stdout, so the condition is simply **false** — the guard prints
+its success line and exits `0` **while the thing it forbids sits in the tree.**
+
+It was proven rather than argued: a real `proxy_pass $minio_upstream` bypass was
+injected into `nginx/snippets/`, and `check-storage-edge.sh` passed. The two
+checks made inert this way were precisely the ones protecting Owner decisions —
+that no Nginx path bypasses the storage edge filter, and that automatic
+quarantine destruction stays disabled. A third guard (`check-backup-tooling.sh`)
+failed *closed* instead, which is loud and safe but still wrong.
+
+**So: CI guards search with POSIX `grep`.** It exists on every runner and in
+every container this project uses. `check-ci-portability.sh` now fails the build
+if a guard reaches for `rg`, `fd`, `ag` or `ack`; if one ever genuinely needs a
+richer tool, it must assert the tool exists **first**, so a missing dependency is
+loud rather than silently permissive.
+
+This is the same rule as *"a guard must be able to read what it guards"* — the
+`?raw` CSS guard that passed for a whole commit while reading empty strings —
+seen from the other side. **The tell is identical: a guard that has never
+failed.**
+
 ### A guard that fails because the PRODUCT changed is restated, not deleted
 
 R98.18's frontend guard read *«mounts no recording affordance»* — true and

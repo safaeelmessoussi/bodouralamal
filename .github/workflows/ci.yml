@@ -45,6 +45,10 @@ jobs:
         run: bash scripts/ci/check-shared-layout.sh
       - name: Every Nginx header set carries HSTS
         run: bash scripts/ci/check-security-headers.sh
+      # Guards are protection only if they can fail. Three shipped depending on
+      # ripgrep, and their prohibition checks passed silently where it is absent.
+      - name: CI guards search with POSIX grep, so none can fail open
+        run: bash scripts/ci/check-ci-portability.sh
       - name: Every MinIO proxy path carries the defensive edge policy
         run: bash scripts/ci/check-storage-edge.sh
       - name: Backup tooling stays encrypted, resident and fail-closed
