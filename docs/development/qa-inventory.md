@@ -104,9 +104,9 @@ under the table.
 | `verify-error-experience.sh` | 5 | The error experience's live half: expected-401 silence, real offline, real 429, branded 404 | 7/7 |
 | `verify-unsaved-guard.sh` | 21 | Unsaved-changes protection on every dismissal path, plus the pristine half | 21/21 |
 | `verify-registration.sh` | 13 | The beneficiary registration journey end to end, plus the records it must and must not create | 13/13 |
-| `verify-content-visibility.sh` | 24 | §14.1's visibility selector, operated in a real browser: state, selection, the request body, and the replace dialog's absence of one | 24/24 |
+| `verify-content-visibility.sh` | 24 | §14.1's visibility selector, operated in a real browser: state, selection, the request body, and the replace dialog's absence of one. **Three of its checks had been failing as assumed fixture noise and were one real defect** — the upload dialog cleared the Subject its page filter had seeded (see §10 in `CHANGES.log`) | 24/24 |
 | `verify-admin-navigation.sh` | 4 | **R105's two menu orders as they RENDER**, both roles, plus the dashboard cards · an Admin typing each الإدارة URL · and the boundary a menu check cannot see: the same nine asked of the **server** with a real Admin bearer token | 31/31 |
-| `verify-teacher-portal.sh` | 5 | R106's teacher menu and `إدخال متى أنا متاحة`, plus allowed-vs-refused probed with a real Teacher token | 24/24 |
+| `verify-teacher-portal.sh` | 5 | R106's teacher menu and `إدخال متى أنا متاحة`, plus allowed-vs-refused probed with a real Teacher token | 25/25 |
 | `verify-sorting-headers.sh` | 6 | §6 header sorting clicked — text, numeric and date, plus the not-sortable audit | 19/19 |
 | `verify-grading.sh` | 14d, 16 | R81 — the exam's own maximum, empty ≠ zero, publish notifies and a draft is silent | 16/16 |
 | `verify-teaching-profile.sh` | 15, 15b | **AQ/X/AY** — ownership of «الملف التدريسي», the population, Arabic weekdays, a range that survives a reload, and **NEW E**: an untouched profile that already has content closes without asking to discard | 14/14 |
