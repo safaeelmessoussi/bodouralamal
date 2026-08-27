@@ -146,8 +146,15 @@ failure that looks like certbot's and is not. The `nginx` service therefore runs
 
 - Roles: super admin, admin, teacher, student, parent — **seeded here and not
   user-manageable**; no role CRUD exists or is to be built
-- Categories: الكبار / اليافعون / الطفل, as **generic educational stages**
-- Levels, with **real sex restrictions** rather than a blanket permissive value — which is
+- Categories: المرأة / اليافعات / الطفل, in that display order
+- Levels: **each Category's own named sequence** — وميض/نور/ضياء/بريق/شعاع/سراج/نجمات
+  الأمل for المرأة, نسيم/عبير/أريج/شذى الأمل + المستوى 5 + مسك الأمل for اليافعات,
+  كتاكيت/براعم/أشبال/أجيال/سواعد/أبطال/نجوم الأمل for الطفل, which additionally
+  carries an explicit **المستوى 0**. The names are not comparable across
+  Categories and the sequences are not the same length, which is why
+  **no logic may assume a Category has a level 0** and why every screen shows
+  `{Category} — {Level}` (UX rule D).
+- Levels carry **real sex restrictions** rather than a blanket permissive value — which is
   what makes availability a fact a query can read
 - Initial atomic Subject baseline: أحكام القرآن, حفظ القرآن, ترتيل وتجويد القرآن,
   تفسير القرآن, فقه, السيرة النبوية, العقيدة, الأذكار. The broad Quran domain
@@ -168,6 +175,35 @@ failure that looks like certbot's and is not. The `nginx` service therefore runs
 
 Development fixtures do carry two real branch premises so the landing page renders against
 realistic data locally — which is exactly the split that keeps production clean.
+
+### Reconciling an already-initialized installation
+
+The seeders above lay a baseline **once** and then never touch those tables again
+(each records a `seed.initialized.*` marker), because after initialization the rows
+belong to the Super Admin: a rerun must not recreate something intentionally deleted
+or undo an Owner edit. That is deliberate, and it means a **change to the canonical
+list does not reach an installation that is already initialized.**
+
+`backend/scripts/reconcile-reference-data.ts` is the deliberate, one-command pass that
+does reach it. It follows the protocol already approved for the Subjects:
+
+> read-only analysis → prove semantic identity → **normalize in place** → preserve the
+> id and every relationship → never create a near-duplicate beside the historical row →
+> **skip only the ambiguous row and report it**, rather than stopping the whole batch.
+
+It is idempotent, it never deletes an Owner row, and the one row it restores
+(الطفل's المستوى 0) it restores **by id** — an un-delete of that specific row, not a
+resurrection by name that would leave a second one beside the historical row.
+
+Run it explicitly; it is never part of deploy:
+
+```bash
+docker compose run --rm api npx tsx scripts/reconcile-reference-data.ts
+```
+
+Rooms are reconciled for the branches that exist, **matched through the Branch row by
+id** — never by position, which would attach a branch's rooms to whichever branch
+happened to sort first. Production still gets no seeded branches or rooms.
 
 ## First deployment versus subsequent ones
 

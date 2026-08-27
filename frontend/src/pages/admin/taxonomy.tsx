@@ -116,6 +116,26 @@ const KINDS: Record<TaxonomyKind, KindSpec> = {
         // administrator learns the constraint from the table, before the click.
         cell: (r) => ((r as Category).level_count ?? 0) as ReactNode,
       },
+      {
+        /**
+         * **§8 — §4.9's default content tier for this Category** (§15.1).
+         *
+         * It is already on the row and was rendered nowhere. It decides what
+         * an upload filed under any Level of this Category proposes, so a
+         * Super Admin comparing Categories could not see the one setting that
+         * distinguishes them.
+         */
+        key: 'default_visibility',
+        header: 'admin.taxonomy.colDefaultVisibility',
+        cell: (r) => {
+          const v = (r as Category).default_visibility;
+          return (v === undefined ? (
+            <span className="muted">—</span>
+          ) : (
+            t(`calendar.visibility${v.charAt(0).toUpperCase()}${v.slice(1)}`)
+          )) as ReactNode;
+        },
+      },
     ],
   },
   subject: {

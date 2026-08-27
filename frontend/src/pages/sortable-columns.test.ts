@@ -58,9 +58,21 @@ const PAGES: { label: string; path: string; sortable: string[]; never: string[] 
   {
     label: 'الجدولة',
     path: '/src/pages/admin/scheduling.tsx',
-    sortable: ['type', 'title', 'when', 'branch'],
-    // Both derived descriptions rather than fields.
-    never: ['audience', 'recurrence'],
+    /**
+     * **RESTATED for §8 — the date/time sort moved to the column that shows the
+     * date.**
+     *
+     * This table listed a clock window and no day at all, so it could not
+     * answer *when is this*. §8 gave it a `date` column, and the composed
+     * date/time `sortKey` went with it: sorting a timetable means ordering it
+     * by when things happen, and the reader now sees the value she is sorting.
+     * The sort is the same one; the column carrying it is the honest one.
+     */
+    sortable: ['type', 'title', 'date', 'branch'],
+    // Derived descriptions rather than fields — and `visibility` for the reason
+    // مكتبة المحتوى keeps it unsortable: an enum whose alphabetical order is
+    // not its meaningful one.
+    never: ['audience', 'recurrence', 'visibility', 'venue', 'staff'],
   },
   {
     label: 'مكتبة المحتوى',

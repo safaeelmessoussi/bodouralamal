@@ -333,9 +333,20 @@ export function SchedulingPage(): ReactNode {
       cell: (r) => r.audienceLabel ?? <span className="muted">—</span>,
     },
     {
-      key: 'when',
-      // The date/time VALUE, composed below — never the rendered label.
+      /**
+       * **§8 — the DATE, which this table did not show at all.**
+       *
+       * It listed the clock window and no day, so a timetable could not answer
+       * *when is this*. For a recurring class the anchor is where the series
+       * begins; the recurrence column beside it says how it repeats.
+       */
+      key: 'date',
       sortKey: 'when',
+      header: t('admin.schedules.date'),
+      cell: (r) => r.startDate ?? <span className="muted">—</span>,
+    },
+    {
+      key: 'when',
       header: t('admin.schedules.time'),
       cell: (r) =>
         r.startTime && r.endTime ? (
@@ -343,6 +354,13 @@ export function SchedulingPage(): ReactNode {
         ) : (
           <span className="muted">{t('scheduling.allDay')}</span>
         ),
+    },
+    {
+      // §8 — WHAT is taught, which the title is not: R57 gave a class its own
+      // name, so the two are different facts.
+      key: 'subject',
+      header: t('admin.schedules.subject'),
+      cell: (r) => r.subjectName ?? <span className="muted">—</span>,
     },
     {
       key: 'recurrence',
@@ -356,6 +374,43 @@ export function SchedulingPage(): ReactNode {
       header: t('admin.schedules.branch'),
       secondary: true,
       cell: (r) => r.branchName ?? <span className="muted">—</span>,
+    },
+    {
+      // §8 — where in the building, or that there is no building. R97 makes an
+      // online occurrence carry no room at all, so the two facts render as one
+      // cell rather than a room column that is blank for every online class.
+      key: 'venue',
+      header: t('admin.schedules.venue'),
+      secondary: true,
+      cell: (r) =>
+        r.ids.deliveryMode === 'online' ? (
+          t('delivery.online')
+        ) : (
+          (r.roomName ?? <span className="muted">—</span>)
+        ),
+    },
+    {
+      // §8 — who may see it (R109). A tier nobody can read on the list is a
+      // decision an administrator has to open each row to check.
+      key: 'visibility',
+      header: t('admin.calendar.colVisibility'),
+      secondary: true,
+      cell: (r) =>
+        r.visibility === null ? (
+          <span className="muted">—</span>
+        ) : (
+          t(`calendar.visibility${r.visibility.charAt(0).toUpperCase()}${r.visibility.slice(1)}`)
+        ),
+    },
+    {
+      // §8 — how many مؤطِّرات are assigned. `null` is *this kind has no
+      // staffing*, which is a different fact from *nobody is assigned*.
+      key: 'staff',
+      header: t('admin.schedules.staffCount'),
+      secondary: true,
+      numeric: true,
+      cell: (r) =>
+        r.staffCount === null ? <span className="muted">—</span> : String(r.staffCount),
     },
   ];
 

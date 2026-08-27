@@ -149,6 +149,43 @@ export function LevelsPage(): ReactNode {
       numeric: true,
       cell: (r) => r.enrollment_count as ReactNode,
     },
+    {
+      /**
+       * **§8 — how many circles split this Level's Subjects**, which the
+       * Levels table never showed. `group_count` and `subject_count` are
+       * already on the row: the screen was asking for them and rendering
+       * neither, so a Level that had been fully configured looked identical to
+       * one nobody had touched.
+       */
+      key: 'groups',
+      header: t('admin.levels.colGroups'),
+      numeric: true,
+      secondary: true,
+      cell: (r) => String(r.group_count),
+    },
+    {
+      key: 'subjects',
+      header: t('admin.levels.colSubjects'),
+      numeric: true,
+      secondary: true,
+      cell: (r) => String(r.subject_count),
+    },
+    {
+      // §4.9's default content tier for this Level, through its Category
+      // (§15.1). It decides what an upload here proposes, so a Super Admin
+      // choosing where to file material needs to see it.
+      key: 'default_visibility',
+      header: t('admin.levels.colDefaultVisibility'),
+      secondary: true,
+      cell: (r) =>
+        r.default_visibility === undefined ? (
+          <span className="muted">—</span>
+        ) : (
+          t(
+            `calendar.visibility${r.default_visibility.charAt(0).toUpperCase()}${r.default_visibility.slice(1)}`,
+          )
+        ),
+    },
   ];
 
   const actions: RowAction<Level>[] = [

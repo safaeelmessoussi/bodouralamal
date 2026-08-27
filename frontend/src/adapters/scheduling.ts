@@ -84,6 +84,16 @@ export interface SchedulingItem {
   roomName: string | null;
   audienceLabel: string | null;
   /**
+   * **§8 — the Subject the item is about**, which `title` is not.
+   *
+   * R57 gave a class its own name, so the title and the Subject are two
+   * different facts and a timetable that showed only the title could not say
+   * WHAT was being taught. `null` for an activity, which teaches nothing.
+   */
+  subjectName: string | null;
+  /** §8 — the Level, where the kind has one. `null` for an activity. */
+  levelName: string | null;
+  /**
    * **The stored visibility tier, carried so Edit can hydrate it** (NEW B §A).
    *
    * **Every kind carries one now** (R109, §C/§D), each mapped from its own row.
@@ -240,6 +250,12 @@ export function fromSchedule(row: CourseSchedule): SchedulingItem {
     branchName: row.branch_name,
     roomName: row.room_name,
     audienceLabel: row.target_name,
+    subjectName: row.subject_name,
+    // A class taught to a Group reaches its Level through the target, which the
+    // server has already resolved into `level_id`; the NAME is the target's own
+    // when the mode is `entire_level` and otherwise unavailable here, so the
+    // audience label carries it rather than a second guess.
+    levelName: row.teaching_mode === 'entire_level' ? row.target_name : null,
     staffCount: row.staff.length,
     version: row.version,
     ids: {
@@ -294,6 +310,10 @@ export function fromEvent(row: EventDefinitionWire): SchedulingItem {
     branchName: null,
     roomName: null,
     audienceLabel: null,
+    // An activity teaches nothing and belongs to no Level (§4.4) — absent
+    // rather than invented, the rule every other field here follows.
+    subjectName: null,
+    levelName: null,
     staffCount: null,
     version: row.version,
     // An Event genuinely has none of these columns (§4.4). Null is the truth
@@ -340,6 +360,8 @@ function fromExam(row: Exam): SchedulingItem {
     roomName: row.room_name,
     // Who sits it: the narrower group where one was chosen, the Level otherwise.
     audienceLabel: row.administrative_group_name ?? row.level_name,
+    subjectName: row.subject_name,
+    levelName: row.level_name,
     staffCount: row.staff.length,
     version: row.version,
     ids: {

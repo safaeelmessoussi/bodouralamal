@@ -5,7 +5,8 @@ import { t } from '../../i18n/index.js';
 import { SelectField } from '../ui/field.js';
 
 /**
- * Category filter — the three educational stages (الكبار / اليافعون / الطفل).
+ * Category filter — the platform's educational Categories (المرأة / اليافعات
+ * / الطفل at launch; the set is data, so it may differ).
  *
  * **The options come from the backend, never from a literal here.** Categories
  * are reference data a Super Admin owns, and §4.4b is explicit that clients

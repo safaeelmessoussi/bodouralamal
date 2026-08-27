@@ -36,33 +36,54 @@ const ROLES = ['super_admin', 'admin', 'teacher', 'student', 'parent'] as const;
  * and no duplicate categories are created.
  */
 const CATEGORIES = [
-  { name: 'الكبار', displayOrder: 1, defaultVisibility: Visibility.public },
-  { name: 'اليافعون', displayOrder: 2, defaultVisibility: Visibility.private },
+  { name: 'المرأة', displayOrder: 1, defaultVisibility: Visibility.public },
+  { name: 'اليافعات', displayOrder: 2, defaultVisibility: Visibility.private },
   { name: 'الطفل', displayOrder: 3, defaultVisibility: Visibility.private },
 ] as const;
 
 /**
- * §15.1/§4.4b levels. Numbering is deliberately NOT uniform across categories —
- * Women 0–7 (0 = literacy), Teens 1–6 (no level 0), Children 0–6. No logic may
- * assume every category has a level 0. `display_order` = the level number
- * within its category.
+ * §15.1/§4.4b levels (NEW L). Each Category has its **own named sequence** —
+ * the names are the programme's, not a number scheme, and they are not
+ * comparable across Categories, which is exactly why UX rule D requires
+ * `{Category} — {Level}` everywhere.
+ *
+ * Numbering is deliberately NOT uniform: الطفل additionally carries an explicit
+ * **المستوى 0**, and اليافعات has none. **No logic may assume every Category has
+ * a level 0**, nor that the sequences are the same length. `display_order` is
+ * the position within the Category (§2.2 scopes it there).
+ *
+ * Seeded here as the launch baseline only; afterwards these rows belong to the
+ * Super Admin like every other reference row.
  */
-const LEVELS: Record<string, number[]> = {
-  الكبار: [0, 1, 2, 3, 4, 5, 6, 7],
-  اليافعون: [1, 2, 3, 4, 5, 6],
-  الطفل: [0, 1, 2, 3, 4, 5, 6],
+const LEVEL_ZERO: Record<string, string> = {
+  الطفل: 'المستوى 0',
 };
 
-/**
- * §15.1 Revision 27: the MVP's intended availability, seeded as **data a query
- * can read** rather than implied by a category name. A (stage, sex) combination
- * is available precisely when a Level exists whose restriction admits that sex,
- * so opening Teen+Male or Adult+Male later is Super Admin data entry (R26) —
- * no rename, no schema change, no registration-flow change.
- */
+const LEVELS: Record<string, string[]> = {
+  المرأة: [
+    'وميض الأمل',
+    'نور الأمل',
+    'ضياء الأمل',
+    'بريق الأمل',
+    'شعاع الأمل',
+    'سراج الأمل',
+    'نجمات الأمل',
+  ],
+  اليافعات: ['نسيم الأمل', 'عبير الأمل', 'أريج الأمل', 'شذى الأمل', 'المستوى 5', 'مسك الأمل'],
+  الطفل: [
+    'كتاكيت الأمل',
+    'براعم الأمل',
+    'أشبال الأمل',
+    'أجيال الأمل',
+    'سواعد الأمل',
+    'أبطال الأمل',
+    'نجوم الأمل',
+  ],
+};
+
 const LEVEL_GENDER: Record<string, GenderRestriction> = {
-  الكبار: GenderRestriction.girls_only,
-  اليافعون: GenderRestriction.girls_only,
+  المرأة: GenderRestriction.girls_only,
+  اليافعات: GenderRestriction.girls_only,
   الطفل: GenderRestriction.any,
 };
 
@@ -230,8 +251,17 @@ async function seedCategoriesAndLevels(): Promise<Map<string, string>> {
       }));
     categoryIds.set(category.name, row.id);
 
-    for (const levelNumber of LEVELS[category.name] ?? []) {
-      const levelName = `المستوى ${levelNumber}`;
+    // The optional level 0 first, at display_order 0, so the named sequence
+    // below stays 1-based and contiguous within the Category (R76.6).
+    const zeroName = LEVEL_ZERO[category.name];
+    const named = LEVELS[category.name] ?? [];
+    const levelPlan: { name: string; displayOrder: number }[] = [
+      ...(zeroName ? [{ name: zeroName, displayOrder: 0 }] : []),
+      ...named.map((name, index) => ({ name, displayOrder: index + 1 })),
+    ];
+
+    for (const level of levelPlan) {
+      const levelName = level.name;
       const existingLevel = await prisma.level.findFirst({
         where: { name: levelName, categoryId: row.id, deletedAt: null },
       });
@@ -240,7 +270,7 @@ async function seedCategoriesAndLevels(): Promise<Map<string, string>> {
           data: {
             name: levelName,
             categoryId: row.id,
-            displayOrder: levelNumber,
+            displayOrder: level.displayOrder,
             // §4.4b/§15.1 Revision 27: the restriction lives HERE, not in the
             // category name, so a query can read it. A Super Admin may add
             // Levels with other restrictions to open further combinations.

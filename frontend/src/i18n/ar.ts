@@ -1107,6 +1107,8 @@ export const ar = {
       deleteBody: 'سيُحذف «{name}». الأنشطة المسجَّلة بهذا النوع تمنع الحذف حتى تُعاد تسميتها بنوع آخر.',
     },
     taxonomy: {
+      // §8 — كان الإعداد يصل من الخادم ولا يُعرض في أي مكان.
+      colDefaultVisibility: 'الظهور الافتراضي',
       lede: 'الفئات تجمع المستويات، والمواد هي ما تُدرَّس فيها. القراءة متاحة للمسؤولات، والتعديل للمديرة العامة وحدها.',
       categoriesTitle: 'الفئات',
       categoriesLede:
@@ -1422,6 +1424,11 @@ export const ar = {
       notFound: 'هذا المستخدم غير موجود أو خارج نطاقك.',
     },
     levels: {
+      // §8 — الأعداد كانت تُطلب من الخادم ولا تُعرض، فيبدو المستوى المُهيَّأ
+      // كالمستوى الفارغ تماماً.
+      colGroups: 'المجموعات',
+      colSubjects: 'المواد',
+      colDefaultVisibility: 'الظهور الافتراضي',
       // **Corrected 2026-08-17: the old text described behaviour that no longer
       // exists.** It promised that creating a Level also creates «المجموعة 1» in
       // a chosen branch — true before R66 made the Administrative Group optional,
@@ -1753,6 +1760,10 @@ export const ar = {
       notInLevel: 'هذه المادة غير مسندة إلى هذا المستوى.',
     },
     schedules: {
+      // §8 — الجدول كان يعرض التوقيت بلا تاريخ، فلا يجيب عن «متى؟».
+      date: 'التاريخ',
+      venue: 'المكان',
+      staffCount: 'المؤطِّرات',
       lede: 'جداول الحصص المتكرّرة: المادة، نمط التدريس وهدفه، الفرع والقاعة، الأوقات والتكرار.',
       caption: 'جداول الحصص',
       subject: 'المادة',
