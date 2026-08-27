@@ -80,6 +80,7 @@ export function ProfilePage(): ReactNode {
           ) : (
             <>
               <ProfileDetails profile={profile} onSaved={setProfile} />
+              <PlacementSection profile={profile} />
               <ChildSection applications={applications} />
             </>
           )}
@@ -202,6 +203,94 @@ function ProfileDetails({
           {busy ? t('common.saving') : t('common.save')}
         </Button>
       </div>
+    </section>
+  );
+}
+
+/**
+ * **NEW G — where she is placed**: her enrolments, her Subject circles, and who
+ * is responsible for her.
+ *
+ * ## Why this section exists
+ *
+ * حسابي could say who she is and not where she is. She could read her own name
+ * and not her own Level — the recurring shape rule P names, on the one screen
+ * that is entirely about her.
+ *
+ * ## What it deliberately does not show
+ *
+ * The binding constraint (NEW G) is a list of exclusions, and the projection is
+ * what enforces them rather than a filter here: **no guardian email, no guardian
+ * phone, no account ids, no identity or provider data, no audit data, no
+ * administrative notes, and no unrelated guardian field.** What the guardian
+ * block carries is a name and the relationship's status — a relationship with an
+ * unnamed party would tell her nothing, and nothing beyond the name is needed
+ * for her to recognise it.
+ *
+ * ## Empty is a fact
+ *
+ * A parent holds no enrolments of her own and an applicant awaiting approval
+ * holds none yet. Each list says so in words rather than rendering nothing,
+ * because a blank area reads as a page that failed to load.
+ */
+function PlacementSection({ profile }: { profile: OwnProfile }): ReactNode {
+  return (
+    <section className="card" aria-labelledby="placement-heading">
+      <h2 id="placement-heading">{t('profile.placementTitle')}</h2>
+
+      <h3>{t('profile.enrolmentsTitle')}</h3>
+      {profile.enrolments.length === 0 ? (
+        <p className="muted">{t('profile.noEnrolments')}</p>
+      ) : (
+        <ul className="detail-list">
+          {profile.enrolments.map((e) => (
+            <li key={e.id}>
+              {/* Rule D — `{Category} — {Level}`, because Level names are not
+                  unique across Categories (§4.4b) and a bare one identifies
+                  nothing. */}
+              <strong>
+                {e.category_name} — {e.level_name}
+              </strong>{' '}
+              <span className="muted">
+                {e.branch_name}
+                {e.group_name === null ? '' : ` · ${e.group_name}`}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      <h3>{t('profile.circlesTitle')}</h3>
+      {profile.circles.length === 0 ? (
+        <p className="muted">{t('profile.noCircles')}</p>
+      ) : (
+        <ul className="detail-list">
+          {profile.circles.map((c) => (
+            <li key={c.id}>
+              <strong>{c.name}</strong>{' '}
+              <span className="muted">
+                {c.subject_name} · {c.level_name}
+              </span>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {profile.guardians.length === 0 ? null : (
+        <>
+          <h3>{t('profile.guardiansTitle')}</h3>
+          <ul className="detail-list">
+            {profile.guardians.map((g) => (
+              <li key={g.id}>
+                {g.name}{' '}
+                <Badge tone={g.status === 'active' ? 'ok' : 'warn'}>
+                  {t(`profile.guardianStatus.${g.status}`)}
+                </Badge>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
     </section>
   );
 }

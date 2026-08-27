@@ -25,8 +25,43 @@ export interface OwnProfile {
   reference_code: string | null;
   /** R96 — this person's stable QR identity. Identifies; never authenticates. */
   qr: QrMatrix;
+  /**
+   * **NEW G — where she is placed.** Empty is a fact, not a gap: a parent holds
+   * no enrolments of her own, and an applicant awaiting approval holds none yet.
+   */
+  enrolments: OwnEnrolment[];
+  circles: OwnCircle[];
+  /**
+   * **The guardian relationship, and almost nothing about the guardian.** NEW G
+   * forbids guardian email, guardian phone and any unrelated guardian field by
+   * default, so the server sends a name and a status and nothing else — the
+   * absence is a projection, not something this client filters out.
+   */
+  guardians: OwnGuardianLink[];
   /** TD-15: loaded with the row, sent back on edit. A stale one is a `409`. */
   version: number;
+}
+
+export interface OwnEnrolment {
+  id: string;
+  category_name: string;
+  level_name: string;
+  branch_name: string;
+  /** `null` when she is enrolled in the Level itself rather than a group. */
+  group_name: string | null;
+}
+
+export interface OwnCircle {
+  id: string;
+  name: string;
+  subject_name: string;
+  level_name: string;
+}
+
+export interface OwnGuardianLink {
+  id: string;
+  name: string;
+  status: string;
 }
 
 export interface OwnProfileEdit {

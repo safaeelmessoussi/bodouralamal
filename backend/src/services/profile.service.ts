@@ -38,8 +38,53 @@ export interface OwnProfile {
    * silently swapping one for the other would print the wrong person's card.
    */
   qr: QrMatrix;
+  /**
+   * **NEW G — where she is placed**, which this screen could not previously
+   * say. She could read her name and not her Level: the recurring shape rule P
+   * names, on the one screen that is entirely about her.
+   *
+   * Empty is a **fact, not a gap** — a parent holds no enrolments of her own,
+   * and an applicant awaiting approval holds none yet.
+   */
+  enrolments: OwnEnrolment[];
+  /** §4.4c — the Subject circles she is a member of, with the Level they sit in. */
+  circles: OwnCircle[];
+  /**
+   * **NEW G — the guardian LINK, and deliberately almost nothing about the
+   * guardian.**
+   *
+   * The binding constraint is explicit: guardian email, guardian phone and any
+   * unrelated guardian field are **never shown by default**, and a guardian
+   * field a business rule requires is *reported, not assumed*. So this carries
+   * the relationship and the guardian's name — a relationship with an unnamed
+   * party tells her nothing — and no contact detail at all.
+   */
+  guardians: OwnGuardianLink[];
   /** TD-15: sent back on edit; a stale one is a `409`. */
   version: number;
+}
+
+export interface OwnEnrolment {
+  id: string;
+  categoryName: string;
+  levelName: string;
+  branchName: string;
+  /** `null` when she is enrolled in the Level itself rather than a group. */
+  groupName: string | null;
+}
+
+export interface OwnCircle {
+  id: string;
+  name: string;
+  subjectName: string;
+  levelName: string;
+}
+
+export interface OwnGuardianLink {
+  id: string;
+  name: string;
+  /** `pending | active | revoked` — the relationship's own state (§4.3). */
+  status: string;
 }
 
 export async function getOwnProfile(
@@ -61,6 +106,43 @@ export async function getOwnProfile(
       version: true,
       preProvisionedEmail: true,
       identities: { where: { isActive: true }, select: { email: true }, take: 1 },
+      // **Her own placement.** Loaded in the same read rather than through
+      // three more endpoints: this is one screen answering one question, and
+      // the authorization is the simplest there is — the subject is the JWT
+      // `sub`, so no scope rule applies and none is invented.
+      levelEnrollments: {
+        where: { deletedAt: null },
+        select: {
+          id: true,
+          level: { select: { name: true, category: { select: { name: true } } } },
+          branch: { select: { name: true } },
+          administrativeGroup: { select: { name: true } },
+        },
+      },
+      teachingGroupSeats: {
+        where: { deletedAt: null },
+        select: {
+          teachingGroup: {
+            select: {
+              id: true,
+              name: true,
+              subject: { select: { name: true } },
+              level: { select: { name: true } },
+            },
+          },
+        },
+      },
+      /**
+       * §4.3 — **who is responsible for HER**, which is `childLinks`: the links
+       * on which she is the student. `parentLinks` is the opposite direction —
+       * the children SHE is guardian of — and the page already lists those
+       * separately. Reading the wrong one would show a parent her own children
+       * under a heading saying they are her guardians.
+       */
+      childLinks: {
+        where: { deletedAt: null },
+        select: { id: true, status: true, parent: { select: { nameArabic: true } } },
+      },
     },
   });
   // Reachable when an account is soft-deleted mid-session; the guarded router
@@ -81,6 +163,26 @@ export async function getOwnProfile(
     accountStatus: user.accountStatus,
     referenceCode: user.referenceCode,
     qr: await qrMatrixFor(user.qrRef),
+    enrolments: user.levelEnrollments.map((e) => ({
+      id: e.id,
+      categoryName: e.level.category.name,
+      levelName: e.level.name,
+      branchName: e.branch.name,
+      groupName: e.administrativeGroup?.name ?? null,
+    })),
+    circles: user.teachingGroupSeats.map((m) => ({
+      id: m.teachingGroup.id,
+      name: m.teachingGroup.name,
+      subjectName: m.teachingGroup.subject.name,
+      levelName: m.teachingGroup.level.name,
+    })),
+    // The name and the status. **No email and no phone** — NEW G's constraint,
+    // enforced by the projection rather than by a filter applied afterwards.
+    guardians: user.childLinks.map((l) => ({
+      id: l.id,
+      name: l.parent.nameArabic,
+      status: l.status,
+    })),
     version: user.version,
   };
 }

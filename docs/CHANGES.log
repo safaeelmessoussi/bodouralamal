@@ -842,3 +842,45 @@ feature, and reassignment keeps its own authorization and audit.
 Implementation (#14) is unblocked. Still open and deliberately not taken here:
 how long the preserved records are kept (OD-06), and the copy shown to the person
 deleting.
+
+## NEW G — حسابي says where she is, not only who she is (2026-08-27)
+
+The page could show a beneficiary her own name and not her own Level. That is
+the recurring shape UX rule P names — a complete capability with no reach — on
+the one screen that is entirely about her.
+
+`GET /profile` now carries three things it did not, loaded in the **same read**
+because this is one screen answering one question and the authorization is the
+simplest there is: the subject is the JWT `sub`, so no scope rule applies and
+none was invented.
+
+- **`enrolments`** — Category, Level, Branch and group, rendered as
+  `{Category} — {Level}` (rule D), since Level names are not unique across
+  Categories.
+- **`circles`** — her §4.4c Subject circles.
+- **`guardians`** — **a name and the relationship's status, and nothing else.**
+
+### The privacy constraint, and where it is enforced
+
+NEW G's rule is a list of exclusions, and exclusions decay silently: nothing
+fails when a field is added, the screen just starts showing it. So the rule lives
+in the **server projection** — the guardian's contact details are never *loaded*,
+which is what keeps them from being one careless spread away from the response.
+A client-side filter would have been a second copy of the rule, and on this
+project the copy that drifts still passes its own tests.
+
+The open question *«which guardian fields may she see»* is answered by the
+constraint itself: it already excludes them by default and requires that a field
+a business rule needs be **reported, not assumed**. The conservative reading
+shipped; showing more is an additive decision against a screen that currently
+discloses nothing extra.
+
+### One defect caught while writing it
+
+`parentLinks` is the links on which a person is the **parent** — the children she
+is guardian *of*. Reading it here would have shown a parent her own children
+under a heading saying they were her guardians. The correct relation is
+`childLinks`, and the guard pins it, because the failure is entirely silent.
+
+The guard was proved by reintroducing a guardian-phone leak into the projection
+and watching it fail.

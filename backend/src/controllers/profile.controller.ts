@@ -51,6 +51,28 @@ function dto(profile: Awaited<ReturnType<typeof getOwnProfile>>) {
     // R96 — the account holder's own QR identity. Opaque: the payload carries a
     // version and one reference, and no name, contact detail or role.
     qr: profile.qr,
+    // NEW G — where she is placed. Empty arrays are a fact, not a gap: a parent
+    // holds no enrolments of her own and an applicant holds none yet.
+    enrolments: profile.enrolments.map((e) => ({
+      id: e.id,
+      category_name: e.categoryName,
+      level_name: e.levelName,
+      branch_name: e.branchName,
+      group_name: e.groupName,
+    })),
+    circles: profile.circles.map((c) => ({
+      id: c.id,
+      name: c.name,
+      subject_name: c.subjectName,
+      level_name: c.levelName,
+    })),
+    // **The relationship and the name — no email, no phone** (NEW G). The
+    // projection is the enforcement: there is nothing here to filter out later.
+    guardians: profile.guardians.map((g) => ({
+      id: g.id,
+      name: g.name,
+      status: g.status,
+    })),
     version: profile.version,
   };
 }

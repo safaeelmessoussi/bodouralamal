@@ -1653,7 +1653,7 @@ manual Production launch data · no-PII audit · §18/M8 rehearsal. **Production
 | 13 | ~~**NEW O** account deletion — design only~~ **DESIGN DELIVERED 2026-08-27** | reconciliation | `docs/SRS-PROPOSAL-R111.md` classifies all 35, enumerated from the **live database**. Central finding: 26 must survive, so deletion is the **de-identification of a row that continues to exist**. **All four questions ANSWERED by the Owner 2026-08-27** and folded into §7; implementation (#14) is unblocked |
 | 14 | **NEW O** implementation | feature + migration | **UNBLOCKED 2026-08-27** — R111's design is ratified. Self-deletion for every user including مؤطِّرات; admin-initiated deletion on the same 3-day window; tombstone «حساب محذوف»; BLOCK refuses **with an explanation naming what must be reassigned**, and does not reassign in the same action |
 | 15 | **NEW M** Teacher import | data, **Production only** | R104 — never Staging |
-| 16 | **NEW G** حسابي redesign | UX | independent |
+| 16 | ~~**NEW G** حسابي redesign~~ **DONE 2026-08-27** | UX | The page said who she is and not where she is. `GET /profile` now carries `enrolments`, `circles` and `guardians`; the guardian block is **a name and a status, enforced by the projection**. Guarded in `pages/profile/privacy.test.ts`, proved against a reintroduced phone leak |
 | 17 | **NEW N** Partner model + landing | feature | reference CRUD + public section |
 | 18 | **NEW P** privacy/terms + OAuth readiness | docs + UX | **must follow NEW O** |
 | — | **Academic Years management** | feature | fold into #8 (reference-data batch) |
@@ -1729,7 +1729,7 @@ actual values, which are Production reference data the Owner holds.
 2. **NEW N** — static content vs Super-Admin-managed reference data.
 3. **NEW L** — existing Level names differ in spelling from the baseline; the same
    orthography question as the Subject normalization. Audit before touching.
-4. **NEW G** — confirm which fields a beneficiary may see about her own guardian.
+4. ~~**NEW G** — which guardian fields may a beneficiary see?~~ **ANSWERED BY THE CONSTRAINT ITSELF, 2026-08-27.** The recorded rule already excludes guardian email, guardian phone and every unrelated guardian field *by default*, and requires that a field a business rule needs be **reported, not assumed**. So the conservative reading was implemented — **name and relationship status only** — and the projection is what enforces it. If the Owner wants more shown, that is an additive decision against a screen that currently discloses nothing extra.
 
 - [x] **NEW B §C — scheduling visibility — DONE 2026-08-26 (R109).** Shipped: `visibility` on
   `RecurringCourseSchedule` (template), `Session` (snapshot), `Exam` (one column, no snapshot);

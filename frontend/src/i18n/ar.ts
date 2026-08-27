@@ -63,6 +63,19 @@ export const ar = {
   // §5.2 (R65) — the personal section: role-independent, for every account.
   profile: {
     title: 'حسابي',
+    // NEW G — «أين أنا» بجانب «من أنا». الصفحة كانت تعرّف بالمستفيدة ولا تقول
+    // في أي مستوى هي.
+    placementTitle: 'مساري',
+    enrolmentsTitle: 'تسجيلاتي',
+    noEnrolments: 'لا تسجيلات بعد.',
+    circlesTitle: 'حلقاتي',
+    noCircles: 'لا حلقات بعد.',
+    guardiansTitle: 'وليّ الأمر',
+    guardianStatus: {
+      pending: 'قيد المراجعة',
+      active: 'مُفعَّل',
+      revoked: 'مُلغى',
+    },
     lede: 'بياناتك الشخصية وطلباتك. هذه الصفحة تخصّ شخصك، لا الدور الذي تعملين به.',
     detailsTitle: 'بياناتي',
     nameFrench: 'الاسم بالفرنسية',
