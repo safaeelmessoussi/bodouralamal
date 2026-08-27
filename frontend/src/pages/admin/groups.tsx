@@ -160,6 +160,13 @@ export function GroupsPage(): ReactNode {
   const columns: Column<AdministrativeGroup>[] = [
     { key: 'name', header: t('admin.groups.colName'), sortKey: 'name', cell: (r) => r.name },
     {
+      key: 'members',
+      header: t('admin.groups.colMembers'),
+      // Not sortable: the server sorts by stored columns (R76.1) and this one
+      // is derived, so offering it would sort a page rather than the set.
+      cell: (r) => String(r.member_count),
+    },
+    {
       key: 'level',
       header: t('admin.groups.colLevel'),
       // The shared label, so the column reads what the selector offers.

@@ -45,7 +45,10 @@ const PAGES: { label: string; path: string; sortable: string[]; never: string[] 
     sortable: ['name'],
     // Fetched per row AFTER the page arrives, so sorting by them would order
     // the 25 rows this page holds and present it as the collection's order.
-    never: ['subjects', 'categories', 'availability'],
+    // `branches` comes from the row itself, but a person may hold several
+    // assignments, so there is no single value to order by — the server sorts
+    // rows, not sets.
+    never: ['branches', 'subjects', 'categories', 'availability'],
   },
   {
     label: 'طلبات الانضمام',

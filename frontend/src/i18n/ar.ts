@@ -1657,6 +1657,9 @@ export const ar = {
       create: 'إضافة مجموعة',
       editTitle: 'تعديل المجموعة',
       colName: 'الاسم',
+      // Same concept and same word as حلقات المواد uses (§4.4c) — a group's
+      // members and a circle's members are both مستفيدات.
+      colMembers: 'المستفيدات',
       colLevel: 'المستوى',
       colBranch: 'الفرع',
       // States the consequence: these are re-creations, not edits.

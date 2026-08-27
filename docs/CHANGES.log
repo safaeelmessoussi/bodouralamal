@@ -633,3 +633,38 @@ defines both as carrying only `name` and `display_order` (plus
 `gender_restriction`) — the seed says so in a comment, deliberately. Storing the
 descriptions is a schema change against a normative §7 clause, so it is reported
 rather than taken.
+
+## §8 — every table shows the meaningful fields of what it manages (2026-08-27)
+
+The Owner's rule: *a table must show all meaningful fields of the element it
+represents* — while technical internals (ids, hashes, audit plumbing, timestamps
+used only internally) stay out, and actions stay actions rather than becoming
+data columns.
+
+The audit found the recurring shape UX rule P already names: **the fact was on
+the row and the screen was not showing it.**
+
+- **الجدولة** gained التاريخ, المادة, المكان, الظهور and عدد المؤطِّرات.
+- **حصص الجدول** gained المكان, الظهور and عدد المؤطِّرات — all three already on
+  the occurrence DTO. The tier shown is **the occurrence's own** (R109): after a
+  single-occurrence override it differs from the schedule's, and showing the
+  schedule's would hide the override.
+- **المستويات** gained المجموعات, المواد and الظهور الافتراضي; **الفئات** gained
+  الظهور الافتراضي.
+- **المجموعات الإدارية** gained المستفيدات — a new derived count, added to the
+  service, the DTO and both wire-contract pins. Derived per request, never
+  stored: a stored count drifts the moment an enrolment is made anywhere else.
+- **طاقم التأطير** gained الفروع, which المستخدمون already showed. The cell was
+  **extracted** into `components/admin/branch-scope-cell.tsx` rather than copied,
+  so R24's rule — `branch_id: null` is *all branches*, never *no branch* — is
+  stated once. Copying it is how an unscoped Super Admin ends up reading as
+  having no access at all.
+
+### A test that asserted a global fact about a shared table
+
+`registration.integration.test.ts`'s SIGKILL case asserted
+`consumedToken.count({ purpose: 'onboarding' }) === 0` — every other assertion
+around it is scoped to the test's own fixture. It passed only because the suite
+emptied the table in teardown, which is the P1.2 leak that was just removed. It
+now asserts what the test actually claims: **the crash spent nothing**, i.e. the
+count is unchanged from before the child was spawned.

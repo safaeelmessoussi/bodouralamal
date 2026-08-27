@@ -46,6 +46,7 @@ const GROUP_KEYS = [
   "display_order",
   "id",
   "level_id",
+  "member_count",
   "name",
   "version",
 ];

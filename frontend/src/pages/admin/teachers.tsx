@@ -8,6 +8,7 @@ import {
 import { listSubjects } from '../../adapters/reference-data.js';
 import { listCategories } from '../../adapters/taxonomy.js';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
+import { BranchScopeCell } from '../../components/admin/branch-scope-cell.js';
 import { TeachingProfileDialog } from '../../components/admin/teaching-profile-dialog.js';
 import { Badge } from '../../components/ui/badge.js';
 import {
@@ -170,6 +171,16 @@ export function TeachersPage(): ReactNode {
             header: t('admin.users.colName'),
             sortKey: 'name',
             cell: (r: UserSummary) => r.name_arabic,
+          },
+          {
+            // §8 — **where she teaches.** The row already carried it (every role
+            // assignment names its branch) and the screen was not showing it,
+            // which is the recurring shape UX rule P names: a fact present and
+            // unreachable. Rendered through the shared cell so the R24
+            // all-branches rule is stated once, not copied here.
+            key: 'branches',
+            header: t('admin.users.colBranches'),
+            cell: (r: UserSummary) => <BranchScopeCell roles={r.roles} />,
           },
           {
             key: 'subjects',

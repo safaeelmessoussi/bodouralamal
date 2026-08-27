@@ -235,6 +235,36 @@ export function ScheduleSessionsPage({
       },
     },
     {
+      // §8 — where the occurrence actually happens. An online occurrence has no
+      // room by construction, so it says so rather than showing an empty cell.
+      key: 'venue',
+      header: t('admin.schedules.venue'),
+      secondary: true,
+      cell: (r) => {
+        if (r.delivery_mode === 'online') return t('delivery.online');
+        if (r.room_id === null) return <span className="muted">—</span>;
+        return rooms.find((room) => room.id === r.room_id)?.name ?? <span className="muted">—</span>;
+      },
+    },
+    {
+      // §8/R109 — THIS occurrence's own tier, which after an override differs
+      // from the schedule's. Showing the schedule's here would hide the override.
+      key: 'visibility',
+      header: t('admin.calendar.colVisibility'),
+      secondary: true,
+      cell: (r) =>
+        t(`calendar.visibility${r.visibility.charAt(0).toUpperCase()}${r.visibility.slice(1)}`),
+    },
+    {
+      // §8 — how many مؤطِّرات are assigned to this occurrence. Staffing is
+      // per-date (R91/R43.4), so this is not the series' answer.
+      key: 'staff',
+      header: t('admin.schedules.staffCount'),
+      secondary: true,
+      numeric: true,
+      cell: (r) => String(r.staff.length),
+    },
+    {
       key: 'protection',
       header: t('admin.sessions.colProtection'),
       secondary: true,

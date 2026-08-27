@@ -14,6 +14,7 @@ import {
   type UserSummary,
 } from '../../adapters/users.js';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
+import { BranchScopeCell } from '../../components/admin/branch-scope-cell.js';
 import { Button } from '../../components/ui/button.js';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
 import { DataTable, type Column, type RowAction, type TableStatus } from '../../components/ui/data-table.js';
@@ -168,16 +169,7 @@ export function UsersPage(): ReactNode {
       // missing.** The data was already on every row — each assignment carries
       // its branch — so the screen was hiding the answer to *where does this
       // person work*, which is the question a scoped Admin opens the list with.
-      cell: (r) => {
-        if (r.roles.length === 0) return <span className="muted">{t('common.notSet')}</span>;
-        // `branch_id: null` is **all branches for that assignment** (§7, R24),
-        // never *no branch* — collapsing the two is how an unscoped Super Admin
-        // reads as having no access at all.
-        const names = [
-          ...new Set(r.roles.map((a) => a.branch_name ?? t('admin.users.allBranches'))),
-        ];
-        return names.join('، ');
-      },
+      cell: (r) => <BranchScopeCell roles={r.roles} />,
     },
     {
       key: 'status',

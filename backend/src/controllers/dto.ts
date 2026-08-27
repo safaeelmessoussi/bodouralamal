@@ -137,6 +137,12 @@ export interface AdministrativeGroupDto {
    */
   branch_id: string;
   display_order: number | null;
+  /**
+   * How many live enrolments the group holds — **derived per request, never
+   * stored.** A stored count drifts the moment an enrolment is added from
+   * anywhere else, and this one has a management table depending on it.
+   */
+  member_count: number;
   /** TD-15: the client sends this back on edit; a stale one is a `409`. */
   version: number;
 }
@@ -159,6 +165,7 @@ export function administrativeGroupDto(row: {
   branchId: string;
   displayOrder: number | null;
   version: number;
+  memberCount: number;
 }): AdministrativeGroupDto {
   return {
     id: row.id,
@@ -166,6 +173,7 @@ export function administrativeGroupDto(row: {
     level_id: row.levelId,
     branch_id: row.branchId,
     display_order: row.displayOrder,
+    member_count: row.memberCount,
     version: row.version,
   };
 }

@@ -54,6 +54,13 @@ function assertInScope(actor: Actor, branchId: string): void {
   scope.assertCanActOnBranch(actor.roleScopes, MANAGING_ROLE, branchId, 'no such group');
 }
 
+/**
+ * A group as the management table needs it: the row plus **how many مستفيدات are
+ * in it**. The count is derived, never stored — a stored one drifts the moment
+ * an enrolment is added anywhere else.
+ */
+export type AdministrativeGroupRow = AdministrativeGroup & { memberCount: number };
+
 export interface AdministrativeGroupInput {
   name: string;
   levelId: string;
@@ -71,7 +78,7 @@ export async function listAdministrativeGroups(
   prisma: PrismaClient,
   actor: Actor,
   filters: { levelId?: string; branchId?: string } & PageParams & SortParams,
-): Promise<Page<AdministrativeGroup>> {
+): Promise<Page<AdministrativeGroupRow>> {
   assertCanManage(actor);
 
   const branches = scope.branchesForRole(actor.roleScopes, MANAGING_ROLE);
@@ -94,17 +101,26 @@ export async function listAdministrativeGroups(
       // R76 — the caller's sort if given, else BR-19's, with `id` appended so
       // offset pagination stays deterministic.
       orderBy: resolveSort(GROUP_SORT_FIELDS, filters, GROUP_DEFAULT_ORDER) as never,
+      // **How many مستفيدات are in the group** — the field the management table
+      // most needs and the one it could not previously show. Counted in the
+      // same query rather than fetched per row, and filtered to live enrolments
+      // so a soft-deleted one (TD-5) does not inflate it.
+      include: { _count: { select: { enrollments: { where: { deletedAt: null } } } } },
     }),
     prisma.administrativeGroup.count({ where }),
   ]);
-  return page(rows, window, total);
+  return page(
+    rows.map(({ _count, ...row }) => ({ ...row, memberCount: _count.enrollments })),
+    window,
+    total,
+  );
 }
 
 export async function createAdministrativeGroup(
   prisma: PrismaClient,
   actor: Actor,
   input: AdministrativeGroupInput,
-): Promise<AdministrativeGroup> {
+): Promise<AdministrativeGroupRow> {
   assertCanManage(actor);
   assertInScope(actor, input.branchId);
 
@@ -138,7 +154,8 @@ export async function createAdministrativeGroup(
       targetId: group.id,
       detail: { name: group.name, level_id: group.levelId, branch_id: group.branchId },
     });
-    return group;
+    // A group is created empty; nothing can have enrolled into it yet.
+    return { ...group, memberCount: 0 };
   });
 }
 
@@ -147,7 +164,7 @@ export async function updateAdministrativeGroup(
   actor: Actor,
   id: string,
   data: { name?: string; displayOrder?: number | null; version: number },
-): Promise<AdministrativeGroup> {
+): Promise<AdministrativeGroupRow> {
   assertCanManage(actor);
 
   const existing = await prisma.administrativeGroup.findFirst({
@@ -182,7 +199,12 @@ export async function updateAdministrativeGroup(
       targetId: id,
       detail: { name: updated.name },
     });
-    return updated;
+    // Editing a group's name or position never changes who is enrolled in it,
+    // so the count is read alongside rather than recomputed from the write.
+    const memberCount = await tx.enrollment.count({
+      where: { administrativeGroupId: updated.id, deletedAt: null },
+    });
+    return { ...updated, memberCount };
   });
 }
 

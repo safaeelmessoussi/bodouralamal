@@ -29,6 +29,8 @@ export interface AdministrativeGroup {
    */
   branch_id: string;
   display_order: number | null;
+  /** How many مستفيدات are enrolled. Derived server-side per request. */
+  member_count: number;
   /** TD-15: loaded with the row, sent back on edit; a stale one is a `409`. */
   version: number;
 }

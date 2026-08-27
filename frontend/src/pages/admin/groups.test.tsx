@@ -19,6 +19,7 @@ const WIRE: AdministrativeGroup = {
   level_id: '00000000-0000-4000-8000-000000000002',
   branch_id: '00000000-0000-4000-8000-000000000003',
   display_order: 1,
+  member_count: 3,
   version: 0,
 };
 
@@ -30,12 +31,13 @@ const ROSTER: RosterEntry = {
 };
 
 describe('the adapter types match the wire contract', () => {
-  it('a group carries exactly the six documented keys', () => {
+  it('a group carries exactly the seven documented keys', () => {
     expect(Object.keys(WIRE).sort()).toEqual([
       'branch_id',
       'display_order',
       'id',
       'level_id',
+      'member_count',
       'name',
       'version',
     ]);

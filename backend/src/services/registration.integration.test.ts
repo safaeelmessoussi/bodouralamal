@@ -896,6 +896,14 @@ describe("§4.1b step 5 / TD-4.1 unified registration", () => {
       new URL("../test-support/registration-victim.ts", import.meta.url),
     );
 
+    // The victim mints its token inside its own process, so the parent never
+    // learns the jti. What this test actually claims is that the crash spent
+    // NOTHING — so the scoped form of the claim is that the set of consumed
+    // tokens is the same afterwards as before. Asserting a global count of zero
+    // instead would only pass on a database where nobody else has ever
+    // registered, which is how the old suite-wide `deleteMany` hid itself.
+    const consumedBefore = await prisma.consumedToken.count();
+
     const child = spawn(
       "npx",
       [
@@ -969,9 +977,7 @@ describe("§4.1b step 5 / TD-4.1 unified registration", () => {
     ).toBe(0);
     // And the applicant is not stranded: their single-use token survives the
     // crash unconsumed, so they can simply try again.
-    expect(
-      await prisma.consumedToken.count({ where: { purpose: "onboarding" } }),
-    ).toBe(0);
+    expect(await prisma.consumedToken.count()).toBe(consumedBefore);
   }, 90_000);
 
   it("RETRY: after a rolled-back attempt the SAME token still works", async () => {
