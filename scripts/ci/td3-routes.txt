@@ -59,7 +59,8 @@ GET /students/{id}/consents                   # §4.1a, BR-1; TD-2 "Record staff
 POST /students/{id}/consents                  # §4.1a staff_recorded; TD-2, TD-8 consent.grant/revoke, TD-7 consent.reevaluate
 GET /students/{id}/social-profile              # §4.10, BR-16, TD-2 Revision 28; §19.2 "assigned-teacher-only, API test"
 PUT /students/{id}/social-profile              # §4.10, TD-2 Revision 28 (SA / Admin in branch / Teacher own students)
-GET /admin/users                              # §5.6 /admin/users "search (fields: TD-10), filter, list"; §14.2 Users screen
+GET /admin/directory                          # R112; Admin-safe people surface — scoped rows, minimal projection, NO account management
+GET /admin/users                              # R112: SUPER ADMIN ONLY (§5.7); search (fields: TD-10), filter, list; §14.2 Users screen
 POST /admin/users                             # §5.6 /admin/users "create (staff pre-provisioning against a Google email)"; §4.1b step 4b; TD-2
 PATCH /admin/users/{id}                       # §5.6 /admin/users "edit"; §14.2 Users screen; TD-15
 POST /admin/users/{id}/suspend                # §5.6 "deactivate"; TD-1 Active→Suspended; TD-4.15 revokes sessions
