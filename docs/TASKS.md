@@ -1650,7 +1650,7 @@ manual Production launch data · no-PII audit · §18/M8 rehearsal. **Production
 | 10 | ~~**NEW F** availability page gains capabilities~~ **DELIVERED BY R106** | feature | `/teacher/availability` already shows her Subjects and Categories as **text**, and already compares `dirty` against the loaded record. Covered by `verify-teacher-portal.sh` (24/24). **Making them editable is not this item** — R88.2 refuses it in terms, so that would be a new Owner decision, not a carry-forward |
 | 11 | ~~**§10** Rule AX carry-forwards~~ **DONE 2026-08-27** | feature | Recorder dialog converted onto the **shared** `useContentScope`. `session-materials-dialog` deliberately untouched — the audit marks it *Borderline, Owner decision*, and changing it would pre-empt that. The conversion uncovered a real seeding race in `useScopeOptions` (see below) |
 | 12 | **NEW M** Teacher baseline import | **data, Production only** | after §9 so the profile form is correct |
-| 13 | **NEW O** account deletion — **design only** | reconciliation | 35 FKs to classify before any schema |
+| 13 | ~~**NEW O** account deletion — design only~~ **DESIGN DELIVERED 2026-08-27** | reconciliation | `docs/SRS-PROPOSAL-R111.md` classifies all 35, enumerated from the **live database**. Central finding: 26 must survive, so deletion is the **de-identification of a row that continues to exist**. **Four questions for the Owner at §7 — implementation (#14) is blocked on them** |
 | 14 | **NEW O** implementation | feature + migration | only after its retention model is ratified |
 | 15 | **NEW M** Teacher import | data, **Production only** | R104 — never Staging |
 | 16 | **NEW G** حسابي redesign | UX | independent |

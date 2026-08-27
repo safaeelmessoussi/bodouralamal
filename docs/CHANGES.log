@@ -766,3 +766,37 @@ Also: the first attempt mounted the recorder form unconditionally inside its
 `<Dialog>`, putting a second set of scope selectors in the document — anything
 reading the page by label found the hidden empty ones. Both content dialogs now
 mount their form only while open.
+
+## NEW O — the account-deletion design, all 35 relationships classified (2026-08-27)
+
+`docs/SRS-PROPOSAL-R111.md`. **Design only — no schema, no migration, no code**,
+as TASKS.md item 13 requires.
+
+The thirty-five foreign keys were enumerated **from the live database**, not from
+the schema file: a `RESTRICT` that exists only in a Prisma model is not the thing
+that refuses at runtime. The count matched the recorded 35, and the three
+`CASCADE`s turned out to be exactly the three rows carrying no institutional
+meaning — the schema already encodes the distinction this proposal makes
+normative.
+
+**The finding that decides the design: twenty-six of the thirty-five must survive
+the account.** A row cannot be deleted with twenty-six live references pointing
+at it, `CASCADE` is forbidden in terms, and nulling the columns would destroy the
+link that makes the surviving record meaningful — *a grade with no student* is
+corrupted, not preserved. So account deletion is the **de-identification of a
+`user` row that continues to exist**, which collapses thirty-five deletion
+decisions onto the columns of `user` itself plus nine satellite rows.
+
+Two things the enumeration settled that were open:
+
+- **The hidden-item tension** TASKS.md flagged is sharper than «orphaned». R109
+  resolves `hidden` to *the responsible person + Super Admin*, so deleting a
+  responsible principal would leave a hidden item visible to **nobody at all** —
+  it would disappear, not merely lose an owner. BLOCK.
+- **Staffing splits by time, not by table.** `session_staff`, `event_staff` and
+  `exam_staff` are PRESERVE for past occurrences and BLOCK for future ones,
+  because R43.4 and R91 already forbid rewriting who delivered a class.
+
+**Four questions are open at §7 and implementation is blocked on them** — chiefly
+whether a مؤطِّرة may self-delete at all, given the responsibilities §3.3 gives her
+that a beneficiary does not have.
