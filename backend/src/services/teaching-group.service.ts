@@ -7,7 +7,10 @@ import { assertSubjectTaughtAtLevel } from '../policies/curriculum.js';
 import * as scope from '../policies/branch-scope.js';
 import * as audit from '../repositories/audit.repository.js';
 import * as trash from '../repositories/trash.repository.js';
-import { updateWithVersion } from '../repositories/optimistic-lock.js';
+import {
+  assertNoBlockingReferences,
+  updateWithVersion,
+} from '../repositories/optimistic-lock.js';
 import { enqueueConsentReevaluationForStudent } from './enrollment.service.js';
 import type { Actor } from '../policies/actor.js';
 
@@ -374,15 +377,25 @@ export async function deleteTeachingGroup(
   if (!group) throw new AppError('NOT_FOUND', 'no such teaching group');
 
   return prisma.$transaction(async (tx) => {
+    /**
+     * **The platform's refusal shape** (2026-08-27).
+     *
+     * This threw `reason: 'SCHEDULES_EXIST'`, a vocabulary shared only with the
+     * Administrative Group service and understood by neither the shared client
+     * classifier nor any other screen. `blocked_by` is the one shape a blocked
+     * deletion has, which is what lets the dialog name the dependency and its
+     * count instead of falling through to *«يرجى تحديث الصفحة»* — advice that
+     * cannot resolve a schedule.
+     *
+     * The rule is unchanged: a circle a class is still delivered to is refused.
+     * Its **members** are not a blocker and never were — they are an owned link
+     * that follows the deletion below, with the consent re-evaluation enqueued
+     * first so the audience is still resolvable when the job reads it.
+     */
     const scheduled = await tx.recurringCourseSchedule.count({
       where: { teachingGroupId: id, deletedAt: null },
     });
-    if (scheduled > 0) {
-      throw new AppError('STATE_CONFLICT', 'teaching group is targeted by a course schedule', {
-        reason: 'SCHEDULES_EXIST',
-        schedules: scheduled,
-      });
-    }
+    await assertNoBlockingReferences([{ label: 'course_schedules', count: scheduled }]);
 
     const members = await tx.studentTeachingGroup.findMany({
       where: { teachingGroupId: id, deletedAt: null },

@@ -1671,6 +1671,9 @@ export const ar = {
       deleteTitle: 'حذف المجموعة',
       deleteBody: 'لا يمكن حذف مجموعة تضم مستفيدات أو يستهدفها جدول حصص.',
       // Each refusal names its own cause — "فشل الحفظ" would hide which.
+      // هاتان الرسالتان كانتا خاصّتين بهذه الشاشة وحدها، مقابل `details.reason`.
+      // صار الرفض يمرّ عبر `blocked_by` كبقيّة الحذوفات، فتُسمّى التبعيات بأسمائها
+      // وعددها في نفس الحوار بدل جملة عامة. أُبقيتا للتوافق مع أي نداء قديم.
       refused_ENROLMENTS_EXIST: 'لا يمكن الحذف: المجموعة تضم مستفيدات مسجّلات.',
       refused_SCHEDULES_EXIST: 'لا يمكن الحذف: يستهدف هذه المجموعة جدول حصص.',
       // R66 retired `LAST_GROUP_IN_LEVEL`; the server can no longer send it, so

@@ -593,7 +593,7 @@ describe("R66 — a Level MAY be left with no group", () => {
    * only one in its Level"* — so a group refused for one of the reasons below
    * was read as the retired rule still biting. These pin what actually refuses.
    */
-  it("a group holding students is refused — ENROLMENTS_EXIST", async () => {
+  it("a group holding students is refused, and NAMES the enrolments", async () => {
     const { levelId, firstGroupId } = await level("مستوى بمستفيدة", amerchich);
     const pupil = await student("مستفيدة تمنع الحذف");
     await enrolStudent(prisma, superAdmin(), firstGroupId, pupil);
@@ -602,7 +602,10 @@ describe("R66 — a Level MAY be left with no group", () => {
       deleteAdministrativeGroup(prisma, superAdmin(), firstGroupId),
     );
     expect(e.code).toBe("STATE_CONFLICT");
-    expect(e.details?.["reason"]).toBe("ENROLMENTS_EXIST");
+    // RESTATED 2026-08-27 — same rule, the platform's `blocked_by` shape, so the
+    // screen can name the dependency instead of advising a refresh that cannot
+    // resolve an enrolled student.
+    expect(e.details?.["blocked_by"]).toMatchObject({ enrollments: 1 });
     // And it is still there — a refusal that soft-deleted anyway would be worse
     // than one that let the delete through.
     expect(
@@ -612,7 +615,7 @@ describe("R66 — a Level MAY be left with no group", () => {
     ).toBe(1);
   });
 
-  it("a group a course schedule targets is refused — SCHEDULES_EXIST", async () => {
+  it("a group a course schedule targets is refused, and NAMES the schedule", async () => {
     // **The untested half.** This is the guard that actually refuses the oldest
     // live groups — the ones created before R66, which are also the ones a
     // timetable has had time to point at — and nothing asserted it until now.
@@ -641,7 +644,15 @@ describe("R66 — a Level MAY be left with no group", () => {
       deleteAdministrativeGroup(prisma, superAdmin(), firstGroupId),
     );
     expect(e.code).toBe("STATE_CONFLICT");
-    expect(e.details?.["reason"]).toBe("SCHEDULES_EXIST");
+    /**
+     * **RESTATED 2026-08-27 — same rule, the platform's shape.**
+     *
+     * `reason: 'SCHEDULES_EXIST'` was a refusal vocabulary only this service
+     * used, and the client keys a blocked deletion on `details.blocked_by` — so
+     * the groups screen could not name the dependency and fell through to
+     * *«يرجى تحديث الصفحة»*, which no amount of refreshing resolves.
+     */
+    expect(e.details?.["blocked_by"]).toMatchObject({ course_schedules: 1 });
     expect(
       await prisma.administrativeGroup.count({
         where: { levelId, deletedAt: null },
