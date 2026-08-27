@@ -92,7 +92,7 @@ under the table.
 | `verify-sorting.sh` | 2, 3, 4–9 | R76 sort contract across four tables: one directed header, the actions column never sortable, order survives paging | 39/39 |
 | `verify-approvals-sorting.sh` | 2, 3 | NEW C — طلبات الانضمام reorders on both its sortable columns, proved against three scenario-owned pending applicants whose name order and submission order are different lists | 7/7 |
 | `verify-reorder.sh` | 4–9 | R76 manual ordering on five screens; canonical order is the only state that offers the grip | 30/30 |
-| `verify-portals.sh` | 21, 22 | **AP** — three portals, one frame: each menu reaches what its role may reach and nothing else; R87 §M gates «إدخال الحفظ» on real staffing | 26/26 |
+| `verify-portals.sh` | 21, 22 | **AP** — three portals, one frame: each menu reaches what its role may reach and nothing else; R87 §M gates «إدخال حفظ المستفيدات» on real staffing. **The harness had kept the pre-R106 label and was failing quietly**; restated 2026-08-27 | 25/25 |
 | `verify-calendar-surfaces.sh` | 14c, 20 | **AO** — the five calendar surfaces against one contract matrix | 23/23 |
 | `verify-recorder.sh` | 19 | R75 through a real `MediaRecorder`: pause/resume produce one file, the beforeunload guard holds | 22/22 |
 | `verify-ux-slice.sh` | shared UI | **AG/AI/W** as rendered boxes — scroll ownership at two viewports, control geometry, sidebar `scrollTop` across a navigation | 22/22 |
@@ -120,7 +120,7 @@ under the table.
 | `verify-effective-staffing.sh` | 15e, 15f | **R91** — the replacement as four identities: dated rows, Safa twice, per-date occurrences, and a handover that leaves the past alone | 13/13 |
 | `verify-staff-picker.sh` | 15c, 10 | **AR** — five مؤطِّرات an administrator must tell apart; all offered, each marked **before** the choice and named after it, nothing disabled, the one with no profile assigned anyway | 13/13 |
 | `verify-schedule-edit.sh` | 10, 11 | «تعديل العنصر» — R50's scopes through the real dialog | 12/12 |
-| `verify-student-flows.sh` | 22 | The beneficiary's own portal: calendar, library, memorisation, grades, account | 11/11 |
+| `verify-student-flows.sh` | 22 | The beneficiary's own portal: calendar, library, memorisation, grades, account — including that **حسابي now carries her enrolments** (NEW G, check 10) | **10/11 — check 11 is fixture-coupled, not a defect.** Checks 1–3 cancel her class, and check 11 then needs a scheduled one to open. The diagnostic now lists the month's chips and reports **no class chip at all** — only أنشطة and one امتحان — so the calendar has nothing of that kind to open. Closing it properly needs the scenario to seed a second class the harness does not cancel |
 | `verify-calendar-filters.sh` | 20 | **AL** — a filter chosen in one view survives the switch, in the controls, in the URL **and in the other view's request** | 11/11 |
 | `verify-content-scope.sh` | 14 | NEW D — a مؤطِّرة's مكتبة المحتوى filters, and the admin reads still refused | 14/14 |
 | `verify-visibility-ui.sh` | 19 | NEW B §D — the visibility tier on the forms, and where each R50 scope lands | 19/19 |

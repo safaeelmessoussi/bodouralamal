@@ -884,3 +884,26 @@ under a heading saying they were her guardians. The correct relation is
 
 The guard was proved by reintroducing a guardian-phone leak into the projection
 and watching it fail.
+
+### Two more harnesses were failing quietly against renamed labels (2026-08-27)
+
+The same class as `verify-teaching-profile`'s R105 label, found by running the
+harnesses rather than trusting their recorded counts:
+
+- `verify-portals.sh` looked for «إدخال الحفظ», which **R106 renamed to «إدخال
+  حفظ المستفيدات»** — deliberately, to say *whose* memorisation is recorded.
+  Restated, not deleted: the property is that the entry is reachable, not what it
+  is called. Now 25/25.
+- `verify-student-flows.sh` check 11 is **fixture-coupled and is recorded as
+  such rather than papered over.** Checks 1–3 cancel the beneficiary's class and
+  check 11 then needs a scheduled one. Its diagnostic previously said only
+  `none-found`, which cannot distinguish *the calendar had no class* from *the
+  details did not say it was one* — the first is a fixture fact, the second a
+  defect. It now lists the month's chips, and they show **no class chip at all**.
+  Closing it properly needs the scenario to seed a second class the harness does
+  not cancel; that is real fixture work and is left open rather than claimed.
+
+**The pattern is worth stating once: a recorded «last run» count is evidence only
+of the day it was recorded.** Three harnesses have now been found green in the
+documentation and failing in reality, each because a label was deliberately
+renamed and the harness was not.

@@ -70,7 +70,12 @@ check(
  * so she had to know which of the two held what she wanted. Her calendar is now
  * the top of الجدولة — check 5 below opens it there.
  */
-for (const label of ['الجدولة', 'نقاط الامتحانات', 'مكتبة المحتوى', 'إدخال الحفظ']) {
+// **R106 renamed «إدخال الحفظ» to «إدخال حفظ المستفيدات»** — deliberately, to say
+// WHOSE memorisation is being recorded, since the bare noun left that open. The
+// harness kept the old label and had been failing quietly ever since; restated
+// 2026-08-27 rather than deleted, because the property is that the entry is
+// reachable, not what it happens to be called.
+for (const label of ['الجدولة', 'نقاط الامتحانات', 'مكتبة المحتوى', 'إدخال حفظ المستفيدات']) {
   check(
     `2 · her menu reaches «${label}»`,
     teacherHome.menu.some((m) => m.includes(label)),
@@ -99,7 +104,7 @@ check(
 await open('/teacher/quran');
 const teacherQuran = await shell();
 check(
-  '6 · إدخال الحفظ opens — the page existed and had no menu entry until now',
+  '6 · إدخال حفظ المستفيدات opens — the page existed and had no menu entry until now',
   teacherQuran.heading !== null && !teacherQuran.text.includes('قيد الإعداد'),
   JSON.stringify({ heading: teacherQuran.heading }),
 );

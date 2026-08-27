@@ -207,7 +207,16 @@ const popup = await evaluate(`(async () => {
   // recordings and materials, and the first attempt opened an activity — for
   // which the section correctly renders nothing.
   const chips = [...document.querySelectorAll('.cal-day .event-chip')];
-  const classChip = chips.find((c) => c.textContent.includes('حصة')) ?? chips[0];
+  /**
+   * **A class that is still scheduled.** Checks 1–3 above CANCEL a class, so a
+   * naive «first chip mentioning حصة» can land on the one this harness has just
+   * cancelled — and a cancelled occurrence renders no content section, which
+   * would read as the defect this check exists to catch.
+   */
+  const classChip =
+    chips.find((c) => c.textContent.includes('حصة') && !c.textContent.includes('ملغاة')) ??
+    chips.find((c) => c.textContent.includes('حصة')) ??
+    chips[0];
   const day = classChip ? classChip.closest('.cal-day').querySelector('.cal-day__select') : null;
   if (!day) return { noDay: true, days: document.querySelectorAll('.cal-day').length };
   day.click();
@@ -254,7 +263,16 @@ const popup = await evaluate(`(async () => {
     if (close) close.click();
     await new Promise((r) => setTimeout(r, 700));
   }
-  return { opened: total, kind: 'none-found' };
+  // Name what was on the page. «none-found» alone cannot distinguish *the
+  // calendar had no class* from *the details did not say it was one*, and the
+  // first is a fixture fact while the second is a defect.
+  return {
+    opened: total,
+    kind: 'none-found',
+    chips: [...document.querySelectorAll('.cal-day .event-chip')]
+      .map((c) => c.textContent.trim())
+      .slice(0, 8),
+  };
 })()`);
 
 check(
