@@ -6,6 +6,11 @@ import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { loadConfig } from "../lib/config.js";
 import { issueOnboardingToken } from "../lib/onboarding-token.js";
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from "../lib/prisma.js";
+import {
+  captureConsumedTokens,
+  clearConsumedTokensAddedSince,
+  type SavedConsumedTokens,
+} from '../test-support/consumed-tokens.js';
 import { registrationSchema } from "../validators/registration.validators.js";
 import { CONSENT_TEXT_VERSION_KEY, register } from "./registration.service.js";
 import {
@@ -29,6 +34,7 @@ const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);
  * test left behind, so by the end the suite would "restore" its own scratch
  * value rather than the developer's.
  */
+let savedConsumedTokens: SavedConsumedTokens | null = null;
 let savedConsentVersion: SavedConsentVersion | null = null;
 const KEY = config.ONBOARDING_TOKEN_KEY;
 const TAG = "[reg-test]";
@@ -151,7 +157,7 @@ async function clear(): Promise<void> {
   await prisma.userIdentity.deleteMany({ where: { userId: { in: ids } } });
   await prisma.userBranchRole.deleteMany({ where: { userId: { in: ids } } });
   await prisma.user.deleteMany({ where: { id: { in: ids } } });
-  await prisma.consumedToken.deleteMany({ where: { purpose: "onboarding" } });
+  await clearConsumedTokensAddedSince(prisma, savedConsumedTokens ?? { preExisting: new Set() });
   await prisma.normalizedEmailLock.deleteMany({ where: { email: { startsWith: "reg-" } } });
   // After the users, never before: `intended_branch_id` is ON DELETE RESTRICT,
   // so a branch still referenced by a registration refuses to go — which is the
@@ -164,6 +170,9 @@ async function clear(): Promise<void> {
 }
 
 beforeEach(async () => {
+  // Captured ONCE, for the reason recorded above: a per-run capture would save
+  // whatever the previous run left and make the teardown scope drift.
+  savedConsumedTokens ??= await captureConsumedTokens(prisma);
   savedConsentVersion ??= await captureConsentVersion(prisma);
   await clear();
   await prisma.systemSetting.upsert({

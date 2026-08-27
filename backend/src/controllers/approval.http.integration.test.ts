@@ -4,6 +4,11 @@ import { issueAccessToken } from "../lib/access-token.js";
 import { loadConfig } from "../lib/config.js";
 import { issueOnboardingToken } from "../lib/onboarding-token.js";
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from "../lib/prisma.js";
+import {
+  captureConsumedTokens,
+  clearConsumedTokensAddedSince,
+  type SavedConsumedTokens,
+} from '../test-support/consumed-tokens.js';
 import { httpCall } from "../test-support/http-client.js";
 import {
   clearPlacement,
@@ -40,6 +45,7 @@ const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);
  * test left behind, so by the end the suite would "restore" its own scratch
  * value rather than the developer's.
  */
+let savedConsumedTokens: SavedConsumedTokens;
 let savedConsentVersion: SavedConsentVersion | null = null;
 const BASE = `${config.PUBLIC_BASE_URL}/api/v1`;
 const TAG = "[http-appr-test]";
@@ -189,7 +195,7 @@ async function clear(): Promise<void> {
     },
   });
   await prisma.user.deleteMany({ where: { id: { in: ids } } });
-  await prisma.consumedToken.deleteMany({ where: { purpose: "onboarding" } });
+  await clearConsumedTokensAddedSince(prisma, savedConsumedTokens);
   await prisma.normalizedEmailLock.deleteMany({ where: { email: { startsWith: "httpappr-" } } });
   // After the users: `intended_branch_id` is ON DELETE RESTRICT.
   await prisma.branch.deleteMany({ where: { name: { startsWith: TAG } } });
@@ -213,6 +219,9 @@ let teacher: string;
 let placement: Placement;
 
 beforeAll(async () => {
+  // Capture BEFORE anything is created: the teardown removes only what this
+  // suite added, never a developer's own spent token (P1.2).
+  savedConsumedTokens = await captureConsumedTokens(prisma);
   savedConsentVersion ??= await captureConsentVersion(prisma);
   // Fail loudly rather than skipping (§19.2): a silently skipped wiring test is
   // indistinguishable from a passing one.

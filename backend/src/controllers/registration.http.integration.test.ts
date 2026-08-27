@@ -3,6 +3,11 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { loadConfig } from "../lib/config.js";
 import { issueOnboardingToken } from "../lib/onboarding-token.js";
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from "../lib/prisma.js";
+import {
+  captureConsumedTokens,
+  clearConsumedTokensAddedSince,
+  type SavedConsumedTokens,
+} from '../test-support/consumed-tokens.js';
 import { httpCall } from "../test-support/http-client.js";
 import {
   captureConsentVersion,
@@ -34,6 +39,7 @@ const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);
 const BASE = `${config.PUBLIC_BASE_URL}/api/v1`;
 const TAG = "[http-reg-test]";
 
+let savedConsumedTokens: SavedConsumedTokens;
 let savedConsentVersion: SavedConsentVersion | null = null;
 let branchId = "";
 /** Revision 49 — the applicant's educational stage travels with every
@@ -110,7 +116,7 @@ async function clear(): Promise<void> {
   });
   await prisma.userIdentity.deleteMany({ where: { userId: { in: ids } } });
   await prisma.user.deleteMany({ where: { id: { in: ids } } });
-  await prisma.consumedToken.deleteMany({ where: { purpose: "onboarding" } });
+  await clearConsumedTokensAddedSince(prisma, savedConsumedTokens);
   await prisma.normalizedEmailLock.deleteMany({ where: { email: { startsWith: "httpreg-" } } });
   await prisma.branch.deleteMany({ where: { name: { startsWith: TAG } } });
   // After the users too: `intended_category_id` is ON DELETE RESTRICT, for the
@@ -120,6 +126,9 @@ async function clear(): Promise<void> {
 }
 
 beforeAll(async () => {
+  // Capture BEFORE anything is created: the teardown removes only what this
+  // suite added, never a developer's own spent token (P1.2).
+  savedConsumedTokens = await captureConsumedTokens(prisma);
   const health = await fetch(`${config.PUBLIC_BASE_URL}/healthz`).catch(
     () => null,
   );
