@@ -1109,6 +1109,9 @@ export const ar = {
     taxonomy: {
       // §8 — كان الإعداد يصل من الخادم ولا يُعرض في أي مكان.
       colDefaultVisibility: 'الظهور الافتراضي',
+      // NEW K — وصف الفئة، بكلمات صاحبة القرار.
+      colDescription: 'الوصف',
+      descriptionHint: 'جملة قصيرة تُعرّف بالفئة — تظهر تحت الاسم. اختيارية.',
       lede: 'الفئات تجمع المستويات، والمواد هي ما تُدرَّس فيها. القراءة متاحة للمسؤولات، والتعديل للمديرة العامة وحدها.',
       categoriesTitle: 'الفئات',
       categoriesLede:
@@ -1429,6 +1432,9 @@ export const ar = {
       colGroups: 'المجموعات',
       colSubjects: 'المواد',
       colDefaultVisibility: 'الظهور الافتراضي',
+      // NEW L — وصف المستوى.
+      colDescription: 'الوصف',
+      descriptionHint: 'جملة قصيرة تُعرّف بالمستوى — تظهر تحت الاسم. اختيارية.',
       // **Corrected 2026-08-17: the old text described behaviour that no longer
       // exists.** It promised that creating a Level also creates «المجموعة 1» in
       // a chosen branch — true before R66 made the Administrative Group optional,

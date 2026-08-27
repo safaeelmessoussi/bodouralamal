@@ -800,3 +800,45 @@ Two things the enumeration settled that were open:
 **Four questions are open at §7 and implementation is blocked on them** — chiefly
 whether a مؤطِّرة may self-delete at all, given the responsibilities §3.3 gives her
 that a beneficiary does not have.
+
+## NEW K/L — a Category and a Level carry a description (2026-08-27)
+
+Ratified by the Document Owner. §7 defined both narrowly and the seed said so in
+a deliberate comment; the Owner's canonical dataset supplies a description for
+every one of them, so the narrow definition was the thing that was wrong.
+
+- **Migration** `20260827160000_new_kl_category_level_description` adds a
+  nullable `VARCHAR(500)` to `category` and `level`. **Nullable and staying so**:
+  a row without a description is ordinary, not incomplete — the treatment
+  Revision 35 gave the Branch contact fields and NEW I gave the second phone.
+- **A column, not a `system_setting` row.** The alternative was the pattern §4.9
+  uses for default visibility. Rejected: that pattern is for a *policy attached
+  to* a Category, whereas this is an attribute *of* it — read on every list, and
+  routing it through settings would make one screen issue two reads for one row.
+- **Super Admin CRUD end-to-end**: validators (`entityDescription`, shared in
+  `common.ts`), services, DTOs, controllers, OpenAPI, adapters, both forms and
+  both tables. `''` normalises to `null` at the boundary, because *no
+  description* is one state and not two; absent and `null` stay distinct, so
+  clearing a description is not the same as not mentioning one.
+- **The shared taxonomy form gained a documented variant, not a sibling.** A
+  Subject has no description, so `withDescription` is one declared flag rather
+  than a second copy of that file (rule C). The Subject contract records the
+  absence deliberately: a Subject is a curriculum word and needs no gloss.
+- **Not hardcoded in the frontend.** The canonical text is loaded by the
+  reconciliation script and seeded for a fresh install; every screen reads it
+  from the API. Level descriptions are **derived** as `المستوى N - برنامج X` from
+  position and Category rather than listed, so the two cannot disagree — and
+  that text is seeded data, not a format the API imposes.
+
+## R111 ratified — the account-deletion decisions (2026-08-27)
+
+All four questions answered and folded into `SRS-PROPOSAL-R111.md` §7.
+Self-deletion for **every** user including مؤطِّرات; an administrator may delete on
+someone's behalf on the **same 3-day window**; the tombstone reads **«حساب
+محذوف»** everywhere; and **BLOCK refuses with an explanation** naming what must
+be reassigned rather than reassigning in the same action — the explanation is the
+feature, and reassignment keeps its own authorization and audit.
+
+Implementation (#14) is unblocked. Still open and deliberately not taken here:
+how long the preserved records are kept (OD-06), and the copy shown to the person
+deleting.

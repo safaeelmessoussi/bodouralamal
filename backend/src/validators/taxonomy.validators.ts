@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import { displayOrder, entityName, uuid, version } from './common.js';
+import { displayOrder, entityDescription, entityName, uuid, version } from './common.js';
 
 /**
  * Zod schemas for the curriculum taxonomy boundary — Categories, Subjects and
@@ -13,12 +13,14 @@ import { displayOrder, entityName, uuid, version } from './common.js';
 
 export const createCategorySchema = z.object({
   name: entityName,
+  description: entityDescription.optional(),
   display_order: displayOrder.optional(),
 });
 
 export const updateCategorySchema = z.object({
   version,
   name: entityName.optional(),
+  description: entityDescription.optional(),
   display_order: displayOrder.optional(),
 });
 
@@ -56,6 +58,7 @@ const genderRestriction = z.enum(['any', 'girls_only', 'boys_only']);
 export const createLevelSchema = z
   .object({
     name: entityName,
+    description: entityDescription.optional(),
     category_id: uuid,
     gender_restriction: genderRestriction.default('any'),
     display_order: displayOrder.optional(),
@@ -81,6 +84,7 @@ export const updateLevelSchema = z
   .object({
     version,
     name: entityName.optional(),
+    description: entityDescription.optional(),
     gender_restriction: genderRestriction.optional(),
     display_order: displayOrder.optional(),
   })

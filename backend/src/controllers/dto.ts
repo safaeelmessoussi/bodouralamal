@@ -1103,6 +1103,12 @@ export function subjectWithLevelsDto(row: {
 export interface CategoryDto {
   id: string;
   name: string;
+  /**
+   * NEW K/L — the short description shown under the name. **`null` is ordinary,
+   * not a gap**: a row without one is the common case, and clients render the
+   * absence rather than inventing filler.
+   */
+  description: string | null;
   display_order: number | null;
   /** Live Levels in this Category — what says whether deleting it is possible
    *  at all, without a request per row. */
@@ -1113,6 +1119,7 @@ export interface CategoryDto {
 export function categoryDto(row: {
   id: string;
   name: string;
+  description: string | null;
   displayOrder: number | null;
   levelCount: number;
   version: number;
@@ -1120,6 +1127,7 @@ export function categoryDto(row: {
   return {
     id: row.id,
     name: row.name,
+    description: row.description,
     display_order: row.displayOrder,
     level_count: row.levelCount,
     version: row.version,
@@ -1137,6 +1145,8 @@ export function categoryDto(row: {
 export interface LevelCoreDto {
   id: string;
   name: string;
+  /** NEW L — see `CategoryDto.description`. `null` is ordinary. */
+  description: string | null;
   category_id: string;
   /** §4.4b / Revision 27 — `any | girls_only | boys_only`. */
   gender_restriction: string;
@@ -1147,6 +1157,7 @@ export interface LevelCoreDto {
 export function levelCoreDto(row: {
   id: string;
   name: string;
+  description: string | null;
   categoryId: string;
   genderRestriction: string;
   displayOrder: number | null;
@@ -1155,6 +1166,7 @@ export function levelCoreDto(row: {
   return {
     id: row.id,
     name: row.name,
+    description: row.description,
     category_id: row.categoryId,
     gender_restriction: row.genderRestriction,
     display_order: row.displayOrder,
@@ -1189,6 +1201,7 @@ export interface LevelDto extends LevelCoreDto {
 export function levelDto(row: {
   id: string;
   name: string;
+  description: string | null;
   categoryId: string;
   categoryName: string;
   genderRestriction: string;
@@ -1202,6 +1215,7 @@ export function levelDto(row: {
   return {
     id: row.id,
     name: row.name,
+    description: row.description,
     category_id: row.categoryId,
     category_name: row.categoryName,
     gender_restriction: row.genderRestriction,
@@ -1227,6 +1241,7 @@ export type CreatedLevelDto = LevelCoreDto;
 export function createdLevelDto(level: {
   id: string;
   name: string;
+  description: string | null;
   categoryId: string;
   genderRestriction: string;
   displayOrder: number | null;
@@ -1235,6 +1250,7 @@ export function createdLevelDto(level: {
   return {
     id: level.id,
     name: level.name,
+    description: level.description,
     category_id: level.categoryId,
     gender_restriction: level.genderRestriction,
     display_order: level.displayOrder,

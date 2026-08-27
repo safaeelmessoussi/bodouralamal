@@ -823,6 +823,13 @@ model Category {
   teacherCapabilities TeacherCategoryCapability[]
   id                  String                      @id @default(uuid()) @db.Uuid
   name                String                      @db.VarChar(120)
+  /// **NEW K — what this Category is, in the Owner's words** (2026-08-27).
+  ///
+  /// Nullable because a Category without one is ordinary, not incomplete. It is
+  /// an attribute OF the Category rather than a policy attached to it, which is
+  /// why it is a column here and not a `system_setting` row like §4.9's default
+  /// visibility.
+  description         String?                     @db.VarChar(500)
   displayOrder        Int?                        @map("display_order")
 
   // NOTE: the per-Category default content visibility (§4.9) is NOT a column
@@ -862,7 +869,9 @@ model Level {
   genderRestriction GenderRestriction @default(any) @map("gender_restriction")
 
   /// Ordering is scoped within the parent Category (§2.2).
-  displayOrder Int? @map("display_order")
+  /// **NEW L — what this Level is** (2026-08-27). See `Category.description`.
+  description  String? @db.VarChar(500)
+  displayOrder Int?    @map("display_order")
 
   // NOTE: the per-level passing grade is NOT a column here — §7 defines Level
   // as carrying only `name`, `gender_restriction`, and `display_order`, and

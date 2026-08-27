@@ -43,6 +43,8 @@ export const FIRST_GROUP_NAME = 'المجموعة 1';
 
 export interface CreateLevelInput {
   name: string;
+  /** NEW L — what this Level is. `null` is ordinary, not a gap. */
+  description?: string | null;
   categoryId: string;
   genderRestriction: 'any' | 'girls_only' | 'boys_only';
   displayOrder?: number | null;
@@ -83,6 +85,8 @@ function assertCanReadReferenceData(actor: Actor): void {
 export interface LevelSummary {
   id: string;
   name: string;
+  /** NEW L — what this Level is. `null` is ordinary. */
+  description: string | null;
   categoryId: string;
   categoryName: string;
   genderRestriction: string;
@@ -212,6 +216,7 @@ export async function listLevels(
     select: {
       id: true,
       name: true,
+      description: true,
       categoryId: true,
       genderRestriction: true,
       displayOrder: true,
@@ -241,6 +246,7 @@ export async function listLevels(
   return rows.map((row) => ({
     id: row.id,
     name: row.name,
+    description: row.description,
     categoryId: row.categoryId,
     categoryName: row.category.name,
     genderRestriction: row.genderRestriction,
@@ -294,6 +300,7 @@ export async function updateLevel(
   expectedVersion: number,
   data: {
     name?: string;
+    description?: string | null;
     genderRestriction?: 'any' | 'girls_only' | 'boys_only';
     displayOrder?: number | null;
   },
@@ -453,6 +460,7 @@ export async function createLevel(
     const level = await tx.level.create({
       data: {
         name: input.name,
+        description: input.description ?? null,
         categoryId: input.categoryId,
         genderRestriction: input.genderRestriction,
         displayOrder: input.displayOrder ?? null,

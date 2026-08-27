@@ -76,6 +76,10 @@ export function createCategoryHandler(prisma: PrismaClient) {
     const body = parse(createCategorySchema, req.body);
     const created = await createCategory(prisma, requireActor(req), {
       name: body.name,
+      // Absent stays absent; `null` is an explicit *no description* and reaches
+      // the service as itself. Collapsing the two would make clearing a
+      // description indistinguishable from not mentioning it.
+      ...(body.description !== undefined ? { description: body.description } : {}),
       ...(body.display_order !== undefined ? { displayOrder: body.display_order } : {}),
     });
     res.status(201).json({ data: categoryDto(created) });
@@ -92,6 +96,7 @@ export function updateCategoryHandler(prisma: PrismaClient) {
       body.version,
       {
         ...(body.name !== undefined ? { name: body.name } : {}),
+        ...(body.description !== undefined ? { description: body.description } : {}),
         ...(body.display_order !== undefined ? { displayOrder: body.display_order } : {}),
       },
     );
@@ -190,6 +195,7 @@ export function createLevelHandler(prisma: PrismaClient) {
     const body = parse(createLevelSchema, req.body);
     const created = await createLevel(prisma, requireActor(req), {
       name: body.name,
+      ...(body.description !== undefined ? { description: body.description } : {}),
       categoryId: body.category_id,
       genderRestriction: body.gender_restriction,
       ...(body.display_order !== undefined ? { displayOrder: body.display_order } : {}),
@@ -203,6 +209,7 @@ export function updateLevelHandler(prisma: PrismaClient) {
     const body = parse(updateLevelSchema, req.body);
     const updated = await updateLevel(prisma, requireActor(req), idParam(req, 'id'), body.version, {
       ...(body.name !== undefined ? { name: body.name } : {}),
+      ...(body.description !== undefined ? { description: body.description } : {}),
       ...(body.gender_restriction !== undefined
         ? { genderRestriction: body.gender_restriction }
         : {}),

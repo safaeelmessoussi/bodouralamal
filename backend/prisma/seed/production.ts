@@ -36,10 +36,32 @@ const ROLES = ['super_admin', 'admin', 'teacher', 'student', 'parent'] as const;
  * and no duplicate categories are created.
  */
 const CATEGORIES = [
-  { name: 'المرأة', displayOrder: 1, defaultVisibility: Visibility.public },
-  { name: 'اليافعات', displayOrder: 2, defaultVisibility: Visibility.private },
-  { name: 'الطفل', displayOrder: 3, defaultVisibility: Visibility.private },
+  {
+    name: 'المرأة',
+    description: 'النساء من سن الجامعة الى ما فوق',
+    displayOrder: 1,
+    defaultVisibility: Visibility.public,
+  },
+  {
+    name: 'اليافعات',
+    description: 'البنات اليافعات من سن السنة الأولى اعدادي الى سن السنة الأخيرة ثانوي',
+    displayOrder: 2,
+    defaultVisibility: Visibility.private,
+  },
+  {
+    name: 'الطفل',
+    description: 'الأطفال اناثا و ذكورا من سن السنة الأخيرة من الروض الى سن السادسة ابتدائي',
+    displayOrder: 3,
+    defaultVisibility: Visibility.private,
+  },
 ] as const;
+
+/**
+ * NEW L — a Level's description is derived from its position and its Category,
+ * never listed, so the two cannot disagree.
+ */
+const levelDescription = (categoryName: string, position: number): string =>
+  `المستوى ${position} - برنامج ${categoryName}`;
 
 /**
  * §15.1/§4.4b levels (NEW L). Each Category has its **own named sequence** —
@@ -247,7 +269,11 @@ async function seedCategoriesAndLevels(): Promise<Map<string, string>> {
     const row =
       existing ??
       (await prisma.category.create({
-        data: { name: category.name, displayOrder: category.displayOrder },
+        data: {
+          name: category.name,
+          description: category.description,
+          displayOrder: category.displayOrder,
+        },
       }));
     categoryIds.set(category.name, row.id);
 
@@ -269,6 +295,7 @@ async function seedCategoriesAndLevels(): Promise<Map<string, string>> {
         await prisma.level.create({
           data: {
             name: levelName,
+            description: levelDescription(category.name, level.displayOrder),
             categoryId: row.id,
             displayOrder: level.displayOrder,
             // §4.4b/§15.1 Revision 27: the restriction lives HERE, not in the

@@ -242,9 +242,15 @@ export function useScopeOptions({
        */
       const payload = await fetchScopeOptions(token);
       if (cancelled) return;
+      // `/me/scope-options` is a SELECTOR payload and deliberately narrower than
+      // the management one: it carries what a dropdown needs. The fields below
+      // are placeholders for what it does not send — `description: null` here
+      // means *this payload does not carry one*, not *this row has none*, which
+      // is why nothing in a selector renders it.
       const cats: Category[] = payload.categories.map((c) => ({
         id: c.id,
         name: c.name,
+        description: null,
         display_order: null,
         level_count: 0,
         version: 0,
@@ -252,6 +258,7 @@ export function useScopeOptions({
       const lvls: Level[] = payload.levels.map((l) => ({
         id: l.id,
         name: l.name,
+        description: null,
         category_id: l.category_id,
         category_name: l.category_name,
         default_visibility: l.default_visibility,

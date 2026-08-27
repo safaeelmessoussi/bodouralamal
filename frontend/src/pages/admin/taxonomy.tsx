@@ -26,7 +26,7 @@ import {
   type SortState,
   type TableStatus,
 } from '../../components/ui/data-table.js';
-import { TextField } from '../../components/ui/field.js';
+import { TextArea, TextField } from '../../components/ui/field.js';
 import { useSession } from '../../contexts/session.js';
 import { useActiveRole } from '../../contexts/active-role.js';
 import { FormDialog } from '../../components/ui/form-dialog.js';
@@ -78,6 +78,9 @@ interface KindSpec {
   blockedKey: string;
   /** Revision 27's warning, on Categories only. */
   formHintKey?: string;
+  /** NEW K — a Category carries a description and a Subject does not, so the
+   *  shared form is configured rather than copied (rule C). */
+  withDescription?: boolean;
   list: (token: string | null, sort: SortState | null) => Promise<Row[]>;
   /** R76.4 — the sequence, submitted to this kind's own `/order` route. */
   reorder: (ids: readonly string[], token: string | null) => Promise<unknown>;
@@ -102,12 +105,24 @@ const KINDS: Record<TaxonomyKind, KindSpec> = {
     deleteBodyKey: 'admin.taxonomy.deleteCategoryBody',
     blockedKey: 'admin.taxonomy.categoryBlocked',
     formHintKey: 'admin.taxonomy.categoryNameHint',
+    withDescription: true,
     list: listCategories,
     reorder: reorderCategories,
     create: createCategory,
     update: updateCategory,
     remove: deleteCategory,
     extraColumns: [
+      {
+        // §8/rule BA — the Owner's own words for what this Category is. Not
+        // sortable: it is prose, and ordering by it means nothing to a reader.
+        key: 'description',
+        header: 'admin.taxonomy.colDescription',
+        secondary: true,
+        cell: (r) =>
+          (r as { description: string | null }).description ?? (
+            <span className="muted">{t('common.notSet')}</span>
+          ),
+      },
       {
         key: 'levels',
         header: 'admin.taxonomy.colLevels',
@@ -347,6 +362,7 @@ export function TaxonomyPage({ kind }: { kind: TaxonomyKind }): ReactNode {
         <TaxonomyFormDialog
           title={t(editing === 'new' ? spec.createKey : spec.editKey)}
           {...(spec.formHintKey ? { hint: t(spec.formHintKey) } : {})}
+          {...(spec.withDescription ? { withDescription: true } : {})}
           initial={editing === 'new' ? null : editing}
           busy={busy}
           onCancel={() => setEditing(null)}
@@ -375,31 +391,38 @@ export function TaxonomyPage({ kind }: { kind: TaxonomyKind }): ReactNode {
 /**
  * The form both vocabularies share.
  *
- * A Category and a Subject carry the same two fields, so this is one component
+ * A Category and a Subject carry the same fields, so this is one component
  * configured twice rather than two components that will drift apart — the same
  * rule that produced `DataTable` instead of a `BranchTable`.
+ *
+ * **`withDescription` is a documented variant, not a second form** (rule C).
+ * NEW K gave a Category a description and a Subject has none, so the difference
+ * is one declared flag rather than a copy of this file with an extra field.
  */
 function TaxonomyFormDialog({
   title,
   hint,
   initial,
+  withDescription = false,
   busy,
   onSave,
   onCancel,
 }: {
   title: string;
   hint?: string;
-  initial: { name: string; display_order: number | null } | null;
+  initial: { name: string; description?: string | null; display_order: number | null } | null;
+  withDescription?: boolean;
   busy: boolean;
   onSave: (input: TaxonomyInput) => void;
   onCancel: () => void;
 }): ReactNode {
-  const pristine = initial?.name ?? '';
-  const [name, setName] = useState(pristine);
+  const pristine = { name: initial?.name ?? '', description: initial?.description ?? '' };
+  const [name, setName] = useState(pristine.name);
+  const [description, setDescription] = useState(pristine.description);
   const [touched, setTouched] = useState(false);
   const error = name.trim() === '' ? t('common.required') : null;
   // Only user-modified data is dirty; a validation error is not a change.
-  const dirty = isDirty(name, pristine);
+  const dirty = isDirty({ name, description }, pristine);
 
   function submit(): void {
     setTouched(true);
@@ -410,7 +433,13 @@ function TaxonomyFormDialog({
        place in a sequence nobody chose. Omitted, an edit preserves the stored
        position and a new row arrives with NULL — which sorts last, so it
        appears at the end and is dragged from there. */
-    onSave({ name: name.trim() });
+    onSave({
+      name: name.trim(),
+      // **Sent only by the form that offers it.** A Subject has no description,
+      // and sending `null` from there would clear a column it does not own.
+      // `''` becomes `null` at the boundary: *no description* is one state.
+      ...(withDescription ? { description: description.trim() || null } : {}),
+    });
   }
 
   return (
@@ -430,6 +459,15 @@ function TaxonomyFormDialog({
         error={touched ? error : null}
         {...(hint !== undefined ? { hint } : {})}
       />
+      {withDescription ? (
+        <TextArea
+          label={t('admin.taxonomy.colDescription')}
+          value={description}
+          onChange={setDescription}
+          rows={2}
+          hint={t('admin.taxonomy.descriptionHint')}
+        />
+      ) : null}
     </FormDialog>
   );
 }

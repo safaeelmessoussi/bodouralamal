@@ -24,7 +24,7 @@ import {
   type SortState,
   type TableStatus,
 } from '../../components/ui/data-table.js';
-import { SelectField, TextField } from '../../components/ui/field.js';
+import { SelectField, TextArea, TextField } from '../../components/ui/field.js';
 import { useSession } from '../../contexts/session.js';
 import { useActiveRole } from '../../contexts/active-role.js';
 import { FormDialog } from '../../components/ui/form-dialog.js';
@@ -102,6 +102,13 @@ export function LevelsPage(): ReactNode {
 
   const columns: Column<Level>[] = [
     { key: 'name', header: t('admin.levels.colName'), sortKey: 'name', cell: (r) => r.name },
+    {
+      // §8/rule BA — what this Level is, in the Owner's words.
+      key: 'description',
+      header: t('admin.levels.colDescription'),
+      secondary: true,
+      cell: (r) => r.description ?? <span className="muted">{t('common.notSet')}</span>,
+    },
     {
       key: 'category',
       header: t('admin.levels.colCategory'),
@@ -388,6 +395,7 @@ function LevelFormDialog({
    */
   const pristine = {
     name: level?.name ?? '',
+    description: level?.description ?? '',
     categoryId: level?.category_id ?? categories[0]?.id ?? '',
     gender: (level?.gender_restriction ?? 'any') as GenderRestriction,
   };
@@ -406,6 +414,8 @@ function LevelFormDialog({
     if (!valid) return;
     onSave({
       name: form.name.trim(),
+      // `''` → `null`: *no description* is one state, not two.
+      description: form.description.trim() || null,
       category_id: form.categoryId,
       gender_restriction: form.gender,
     });
@@ -427,6 +437,14 @@ function LevelFormDialog({
           onChange={(v) => setForm((f) => ({ ...f, name: v }))}
           required
           error={touched ? errors.name : null}
+        />
+
+        <TextArea
+          label={t('admin.levels.colDescription')}
+          value={form.description}
+          onChange={(v) => setForm((f) => ({ ...f, description: v }))}
+          rows={2}
+          hint={t('admin.levels.descriptionHint')}
         />
 
         {level ? null : (

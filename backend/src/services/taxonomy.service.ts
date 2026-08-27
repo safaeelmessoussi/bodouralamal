@@ -295,6 +295,8 @@ export async function deleteSubject(prisma: PrismaClient, actor: Actor, id: stri
 export interface CategoryRef {
   id: string;
   name: string;
+  /** NEW K — what this Category is, in the Owner's words. `null` is ordinary. */
+  description: string | null;
   displayOrder: number | null;
   /** How many live Levels sit in it — the one number that says whether deleting
    *  it is even possible, without a request per row. */
@@ -324,6 +326,7 @@ export async function listCategories(
     select: {
       id: true,
       name: true,
+      description: true,
       displayOrder: true,
       version: true,
       _count: { select: { levels: { where: { deletedAt: null } } } },
@@ -332,6 +335,7 @@ export async function listCategories(
   return rows.map((row) => ({
     id: row.id,
     name: row.name,
+    description: row.description,
     displayOrder: row.displayOrder,
     levelCount: row._count.levels,
     version: row.version,
@@ -342,13 +346,17 @@ export async function listCategories(
 export async function createCategory(
   prisma: PrismaClient,
   actor: Actor,
-  data: { name: string; displayOrder?: number | null },
+  data: { name: string; description?: string | null; displayOrder?: number | null },
 ): Promise<CategoryRef> {
   assertCanWrite(actor);
 
   return prisma.$transaction(async (tx) => {
     const category = await tx.category.create({
-      data: { name: data.name, displayOrder: data.displayOrder ?? null },
+      data: {
+        name: data.name,
+        description: data.description ?? null,
+        displayOrder: data.displayOrder ?? null,
+      },
     });
     await audit.write(tx, {
       actorUserId: actor.userId,
@@ -361,6 +369,7 @@ export async function createCategory(
     return {
       id: category.id,
       name: category.name,
+      description: category.description,
       displayOrder: category.displayOrder,
       levelCount: 0,
       version: category.version,
@@ -373,7 +382,7 @@ export async function updateCategory(
   actor: Actor,
   id: string,
   expectedVersion: number,
-  data: { name?: string; displayOrder?: number | null },
+  data: { name?: string; description?: string | null; displayOrder?: number | null },
 ): Promise<CategoryRef> {
   assertCanWrite(actor);
   const category = await updateWithVersion<Category>({
@@ -387,6 +396,7 @@ export async function updateCategory(
   return {
     id: category.id,
     name: category.name,
+    description: category.description,
     displayOrder: category.displayOrder,
     levelCount,
     version: category.version,

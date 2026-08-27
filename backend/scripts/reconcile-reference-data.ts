@@ -28,7 +28,30 @@ import { createPrismaClient } from '../src/lib/prisma.js';
 const config = loadConfig();
 const prisma = createPrismaClient(config.DATABASE_URL);
 
-const CATEGORY_ORDER = ['المرأة', 'اليافعات', 'الطفل'] as const;
+/**
+ * NEW K — the Owner's Categories, in order, with the descriptions ratified on
+ * 2026-08-27. The description is **normalized in place** like every other field
+ * here: an Owner who has since edited one keeps their edit only if it is not
+ * part of this canonical set, which is the point of a reconciliation.
+ */
+const CATEGORIES = [
+  { name: 'المرأة', description: 'النساء من سن الجامعة الى ما فوق' },
+  { name: 'اليافعات', description: 'البنات اليافعات من سن السنة الأولى اعدادي الى سن السنة الأخيرة ثانوي' },
+  { name: 'الطفل', description: 'الأطفال اناثا و ذكورا من سن السنة الأخيرة من الروض الى سن السادسة ابتدائي' },
+] as const;
+
+const CATEGORY_ORDER = CATEGORIES.map((c) => c.name);
+
+/**
+ * NEW L — every Level's description is `المستوى N - برنامج X`, where N is its
+ * position within its Category and X is the Category's own name. Derived rather
+ * than listed, so the two can never disagree: a Level moved in the ordering
+ * gets the description its new position implies.
+ *
+ * الطفل's المستوى 0 is deliberately included at N = 0.
+ */
+const levelDescription = (categoryName: string, position: number): string =>
+  `المستوى ${position} - برنامج ${categoryName}`;
 
 /** NEW L — the Owner's canonical Level sequence, per Category. */
 const LEVELS: Record<string, string[]> = {
@@ -81,9 +104,13 @@ async function reconcileCategories(): Promise<void> {
       continue;
     }
     const row = rows[0]!;
-    if (row.displayOrder !== index + 1) {
-      await prisma.category.update({ where: { id: row.id }, data: { displayOrder: index + 1 } });
-      console.log(`  category ${name}: order ${row.displayOrder ?? '-'} → ${index + 1}`);
+    const wanted = CATEGORIES[index]!.description;
+    if (row.displayOrder !== index + 1 || row.description !== wanted) {
+      await prisma.category.update({
+        where: { id: row.id },
+        data: { displayOrder: index + 1, description: wanted },
+      });
+      console.log(`  category ${name}: order → ${index + 1}, description set`);
     }
   }
 }
@@ -114,11 +141,19 @@ async function reconcileLevels(): Promise<void> {
       } else if (zero.deletedAt !== null) {
         await prisma.level.update({
           where: { id: zero.id },
-          data: { deletedAt: null, deletedById: null, displayOrder: 0 },
+          data: {
+            deletedAt: null,
+            deletedById: null,
+            displayOrder: 0,
+            description: levelDescription('الطفل', 0),
+          },
         });
         console.log('  الطفل المستوى 0: restored (same row, same id)');
-      } else if (zero.displayOrder !== 0) {
-        await prisma.level.update({ where: { id: zero.id }, data: { displayOrder: 0 } });
+      } else if (zero.displayOrder !== 0 || zero.description !== levelDescription('الطفل', 0)) {
+        await prisma.level.update({
+          where: { id: zero.id },
+          data: { displayOrder: 0, description: levelDescription('الطفل', 0) },
+        });
       }
     }
 
@@ -138,9 +173,13 @@ async function reconcileLevels(): Promise<void> {
         continue;
       }
       const row = rows[0]!;
-      if (row.displayOrder !== index + 1) {
-        await prisma.level.update({ where: { id: row.id }, data: { displayOrder: index + 1 } });
-        console.log(`  level ${categoryName}/${name}: order ${row.displayOrder ?? '-'} → ${index + 1}`);
+      const wanted = levelDescription(categoryName, index + 1);
+      if (row.displayOrder !== index + 1 || row.description !== wanted) {
+        await prisma.level.update({
+          where: { id: row.id },
+          data: { displayOrder: index + 1, description: wanted },
+        });
+        console.log(`  level ${categoryName}/${name}: order → ${index + 1}, description set`);
       }
     }
   }

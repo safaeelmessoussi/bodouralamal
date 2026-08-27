@@ -24,6 +24,24 @@ export const entityName = z.string().trim().min(1).max(120);
  */
 export const displayOrder = z.number().int().min(0).nullable();
 
+/**
+ * NEW K/L — a short description under a name (Category, Level).
+ *
+ * **Empty string normalises to `null`**, because *no description* is one state
+ * and not two: a form that clears the field sends `''`, and storing that beside
+ * `null` would make «has a description» two different checks forever after.
+ * Trimmed for the same reason a name is.
+ *
+ * 500 to match the column. It is a subtitle a person reads under a name, not a
+ * page — the length is what says so.
+ */
+export const entityDescription = z
+  .string()
+  .trim()
+  .max(500)
+  .nullable()
+  .transform((v) => (v === '' ? null : v));
+
 /** TD-15: every edit form loads the current `version` and sends it back. */
 export const version = z.coerce.number().int().min(0);
 

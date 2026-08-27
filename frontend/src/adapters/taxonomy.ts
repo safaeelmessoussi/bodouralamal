@@ -22,6 +22,11 @@ import type { SubjectRef } from './reference-data.js';
 export interface Category {
   id: string;
   name: string;
+  /**
+   * NEW K/L — the short description shown under the name. **`null` is ordinary,
+   * not a gap**, so screens render the absence rather than inventing filler.
+   */
+  description: string | null;
   display_order: number | null;
   /** Live Levels in this Category — what says whether deleting it is possible. */
   level_count: number;
@@ -39,6 +44,10 @@ export interface Category {
 
 export interface TaxonomyInput {
   name: string;
+  /** NEW K — omit to leave unchanged; `null` clears it. The two are distinct at
+   *  the boundary, so clearing a description is not the same as not mentioning
+   *  one. Subjects accept it too on the wire and simply never send it. */
+  description?: string | null;
   display_order?: number | null;
 }
 
@@ -134,6 +143,11 @@ export interface Level {
   default_visibility?: 'public' | 'private' | 'hidden';
   id: string;
   name: string;
+  /**
+   * NEW K/L — the short description shown under the name. **`null` is ordinary,
+   * not a gap**, so screens render the absence rather than inventing filler.
+   */
+  description: string | null;
   category_id: string;
   /** A label for grouping, never an identifier — `category_id` is that. */
   category_name: string;
@@ -161,6 +175,7 @@ export interface Level {
  */
 export interface CreateLevelInput {
   name: string;
+  description?: string | null;
   category_id: string;
   gender_restriction: GenderRestriction;
   display_order?: number | null;
@@ -171,6 +186,7 @@ export interface CreateLevelInput {
  *  it — so a client cannot believe a move succeeded. */
 export interface UpdateLevelInput {
   name?: string;
+  description?: string | null;
   gender_restriction?: GenderRestriction;
   display_order?: number | null;
 }

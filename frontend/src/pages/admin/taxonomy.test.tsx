@@ -17,6 +17,7 @@ import { IMPLEMENTED_ADMIN_PATHS } from './index.js';
 const CATEGORY: Category = {
   id: '00000000-0000-4000-8000-000000000001',
   name: 'طفل',
+  description: 'وصف الفئة',
   display_order: 1,
   level_count: 3,
   version: 0,
@@ -32,6 +33,7 @@ const SUBJECT: SubjectRef = {
 const LEVEL: Level = {
   id: '00000000-0000-4000-8000-000000000003',
   name: 'المستوى الأول',
+  description: 'وصف المستوى',
   category_id: CATEGORY.id,
   category_name: CATEGORY.name,
   gender_restriction: 'girls_only',
@@ -45,6 +47,7 @@ const LEVEL: Level = {
 describe('the adapter types match the wire contract', () => {
   it('a category carries exactly the documented keys', () => {
     expect(Object.keys(CATEGORY).sort()).toEqual([
+      'description',
       'display_order',
       'id',
       'level_count',
@@ -67,6 +70,7 @@ describe('the adapter types match the wire contract', () => {
     expect(Object.keys(LEVEL).sort()).toEqual([
       'category_id',
       'category_name',
+      'description',
       'display_order',
       'enrollment_count',
       'gender_restriction',

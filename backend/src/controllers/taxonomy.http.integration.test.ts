@@ -156,6 +156,7 @@ describe("Categories (§5.6 الفئات والمواد)", () => {
       (r) => r["id"] === categoryId,
     )!;
     expect(Object.keys(row).sort()).toEqual([
+      "description",
       "display_order",
       "id",
       "level_count",

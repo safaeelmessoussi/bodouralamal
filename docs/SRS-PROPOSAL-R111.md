@@ -5,8 +5,9 @@
 **A person may delete their account. Deleting a login does not delete the
 institution's record of what happened.**
 
-**Status:** **PROPOSED — awaiting the Document Owner. DESIGN ONLY; no schema, no
-migration and no code accompanies this document.** TASKS.md item 13 is explicit
+**Status:** **DESIGN RATIFIED by the Document Owner, 2026-08-27** — §7's four
+questions are all answered below and folded into the text. **Still design only;
+no schema, no migration and no code accompanies this document.** TASKS.md item 13 is explicit
 that the thirty-five relationships are classified *before* anything is built,
 and OD-06 is explicit that there is **no blanket retention decision** to lean on.
 
@@ -186,16 +187,42 @@ the old one can still come back.
   and safeguarding record survives — an interface promising deletion while §4
   retains the record would be the one genuinely unacceptable outcome.
 
-## 7 · Questions for the Document Owner
+## 7 · The Owner's decisions (2026-08-27)
 
-1. **Does a مؤطِّرة get self-service deletion, or only a beneficiary?** (§6.2)
-2. **May an administrator delete on someone's behalf**, and does that use the
-   same 3-day window or take effect at once?
-3. **Is a marker such as «حساب محذوف» the right tombstone name**, given it will
-   appear on a preserved grade or attendance row a مؤطِّرة can still read?
-4. **Should BLOCK refuse, or offer to reassign in the same action?** Refusing is
-   simpler and safer; offering is kinder to an administrator who will otherwise
-   visit several screens.
+**1 · Self-deletion is available to every user, مؤطِّرات included.** §6.2's
+question is closed: teaching responsibility does not remove the right to delete
+an account, it only decides *when* the deletion may proceed. A مؤطِّرة holding
+future or live responsibilities is **blocked with a clear explanation until they
+are reassigned** — and blocked is not refused-forever: the explanation names what
+must move, and the deletion succeeds once it has.
+
+**2 · An administrator may delete on someone's behalf, on the same 3-day
+window.** One rule and one mechanism: the person is signed out immediately —
+R102's revocation — while the account stays restorable for three days. A
+deletion clicked by mistake is recoverable, which an immediate purge would not
+be.
+
+**3 · The tombstone reads «حساب محذوف».** The same wording everywhere it
+appears, including on a preserved grade or attendance row a مؤطِّرة can still
+read. It says two true things at once: the record survives, and the person's
+details were removed. A per-role variant («مستفيدة سابقة» / «مؤطِّرة سابقة») was
+considered and rejected — it says what somebody *was* rather than what happened
+to the account, and needs a different word per role.
+
+**4 · BLOCK refuses, with a clear explanation.** It does not offer to reassign in
+the same action. The refusal must name what is holding the deletion, so the
+explanation is the feature — an administrator who is told *«three future classes
+and one hidden activity»* knows exactly what to do, and reassignment stays where
+it already lives, with its own authorization and its own audit.
+
+### What is still open, and is NOT this proposal's to take
+
+- **How long the preserved records themselves are kept.** OD-06 records that no
+  legal or operational retention rule is established. This proposal keeps them;
+  it does not claim they are kept forever.
+- **The exact wording shown to the person deleting.** It must say plainly that
+  the educational and safeguarding record survives — §6 above — but the sentence
+  itself is copy, and copy is written when the screen is.
 
 ---
 
