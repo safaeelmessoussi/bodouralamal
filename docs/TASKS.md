@@ -1659,17 +1659,16 @@ manual Production launch data · no-PII audit · §18/M8 rehearsal. **Production
 
 ### Findings that change the work (established, not assumed)
 
-* **NEW C — DONE this session.** Root cause was **not** the three-source union: `sort` was
-  missing from `approvals.tsx`'s loader dependency array, so the header updated state and
-  never re-requested. Fixed, with `sorted-pages-refetch.test.ts` covering all four
-  server-sorted pages. **Browser confirmation of the reorder is STILL OWED** (re-confirmed
-  2026-08-27, deliberately not bundled into NEW D). `verify-sorting-headers.sh` covers مكتبة
-  المحتوى, الجدولة and نقاط الامتحانات — **not** طلبات الانضمام — and the development database
-  holds exactly one pending user, one family link and one child application, which cannot show a
-  reorder at all. Closing it honestly needs **three or more scenario-owned pending registrations
-  with distinct sortable values**, seeded and cleaned by the harness (P1.2). That is unrelated
-  fixture work, which is the Owner's own stated reason to leave it open rather than half-check
-  it. Fold into whichever section next touches approvals or seeds registrations.
+* **NEW C — CLOSED 2026-08-27, browser proof included.** Root cause was **not** the
+  three-source union: `sort` was missing from `approvals.tsx`'s loader dependency array, so
+  the header updated state and never re-requested. Fixed, with `sorted-pages-refetch.test.ts`
+  covering all four server-sorted pages. The owed browser confirmation is now
+  `scripts/dev/browser/verify-approvals-sorting.sh` (**7/7**). It seeds **three
+  scenario-owned pending applicants** — the fixture work that was the honest reason to leave
+  it open — whose name order (أ ب ج) and oldest-first submission order (ج أ ب) are neither the
+  same list nor reverses of each other, so a screen returning its default order cannot satisfy
+  both assertions. It asserts on its own rows' relative order only and removes exactly what it
+  created; the queue was verified empty afterwards.
 * **NEW D — the incorrect layer is the SHARED HOOK, not the page.** `useScopeOptions` calls
   `listLevels`, `listSubjects`, `listAcademicYears` — all `403` for a Teacher (R93.4) — while
   `listBranches` correctly returns `200` (branch.service admits teachers). R93.4 already set

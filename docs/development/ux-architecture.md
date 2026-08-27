@@ -1947,6 +1947,46 @@ Measured, and **proved against the defect in the same page**: uncapped the note
 is one line of 648px in a 1105px table; with the prose cap restored on the same
 element it becomes two lines at 620px.
 
+## BA · A table shows every meaningful field of what it manages
+
+**Owner rule (2026-08-27).** *Every table in the platform must show all
+meaningful fields of the element represented by that table.*
+
+A management table is the answer to *what is in this collection*. When a field
+that decides how a reader thinks about a row is on the row and not on the
+screen, the reader has to open each row to find it — which is the same defect
+rule P names, in its quietest form: **the capability is complete and has no
+reach.**
+
+**Meaningful** is the reader's test, not the schema's. It is a field a مؤطِّرة or
+an administrator would use to tell one row from another, to decide which row to
+act on, or to notice something is wrong. What is deliberately excluded:
+
+- **Technical identity** — UUIDs, versions, storage keys, hashes.
+- **Audit plumbing** — `created_at`/`updated_at`/`deleted_by` where they exist to
+  make the system work rather than to inform a reader. A timestamp a person
+  *does* read, like when a request was submitted or when something was deleted,
+  is meaningful and belongs in the table.
+- **Actions.** *Delete*, *edit*, *open* are row actions and stay row actions,
+  ordered by `DataTable` (rule AC). A column whose cell is a button is an action
+  wearing a column's clothes.
+
+Two consequences that have already bitten:
+
+- **Show the row's own value, not its parent's.** حصص الجدول shows the
+  occurrence's `visibility`, which after an R109 single-occurrence override
+  differs from the schedule's. Rendering the parent's would hide precisely the
+  edit the reader opened the page to check.
+- **A field the row does not carry yet is a service change, not a column.**
+  المجموعات الإدارية needed a member count, which did not exist; it is derived in
+  the list query per request and **never stored**, because a stored count drifts
+  the moment an enrolment is made from any other screen.
+
+**A derived field is not sortable.** The server orders the collection by stored
+columns (R76.1); offering a sort on a value computed per page would order the 25
+rows on screen and present that as the collection's order. `sortable-columns.test.ts`
+pins each such column in its `never` list.
+
 ## The guards
 
 Rules that are not checked drift back. These are behavioural or registry-level,

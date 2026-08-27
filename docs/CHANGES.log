@@ -668,3 +668,26 @@ around it is scoped to the test's own fixture. It passed only because the suite
 emptied the table in teardown, which is the P1.2 leak that was just removed. It
 now asserts what the test actually claims: **the crash spent nothing**, i.e. the
 count is unchanged from before the child was spawned.
+
+## NEW C closed — طلبات الانضمام proved to reorder in a browser (2026-08-27)
+
+The fix shipped earlier; what stayed owed was the proof, because the queue holds
+pending registrations and a healthy development database has none — one pending
+user cannot demonstrate a reorder.
+
+`scripts/dev/browser/verify-approvals-sorting.sh` seeds three tagged applicants
+of its own and clicks both sortable headers, 7/7. The fixture's design is the
+point: the three names sort أ ب ج, and oldest-submitted-first they sort ج أ ب —
+**neither the same list nor its reverse**, so a screen that dropped the sort
+parameter and returned its default order could not satisfy both assertions. A
+single-column check would have passed while proving nothing.
+
+Two expectations in the first draft were wrong and the application was right:
+oldest-first is ج أ ب, not ج ب أ. Corrected against what the screen returned
+after confirming it matched the seeded timestamps.
+
+Also added §8's rule to the UX architecture as **rule BA** — a table shows every
+meaningful field of what it manages, with the exclusions (technical identity,
+audit plumbing, actions-as-columns) and the two consequences already met: show
+the row's own value rather than its parent's, and a field the row does not carry
+is a service change rather than a column.
