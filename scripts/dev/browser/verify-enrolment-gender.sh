@@ -13,7 +13,8 @@ CHROME="$(command -v google-chrome || command -v chromium || command -v chromium
 [[ -n "$CHROME" ]] || { echo "SKIP: no Chrome on this machine; the recorder was not verified"; exit 0; }
 
 export SCENARIO="$(bash scripts/dev/seed-dev-scenario.sh | tail -1)"
-export DEV_REFRESH_COOKIE="$(bash scripts/dev/issue-dev-session.sh)"
+SCENARIO_SUPER_ADMIN="$(node -e 'process.stdout.write(JSON.parse(process.env.SCENARIO).superAdmin)')"
+export DEV_REFRESH_COOKIE="$(bash scripts/dev/issue-dev-session.sh "$SCENARIO_SUPER_ADMIN")"
 
 WORK="$(mktemp -d)"
 cleanup() {

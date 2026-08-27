@@ -30,6 +30,22 @@ export interface TeachingFixture {
 }
 
 /**
+ * A cleanup prefix is an ownership boundary, not an arbitrary search term.
+ *
+ * `startsWith: ''` matches every row, and a malformed bracket prefix can match
+ * data outside the scenario just as easily. Keep the check beside the shared
+ * helper so every caller inherits it. The development seed's `[تجريبي]`
+ * namespace is explicitly reserved: integration scenarios may read those rows,
+ * but never claim ownership of them.
+ */
+export function assertTestOwnershipTag(tag: string): void {
+  const bracketedPrefix = /^\[[^\[\]\r\n]{4,80}\](?: [^\r\n]{1,80})?$/.test(tag);
+  if (!bracketedPrefix || tag.startsWith('[تجريبي]')) {
+    throw new Error(`unsafe test ownership tag: ${JSON.stringify(tag)}`);
+  }
+}
+
+/**
  * Creates a Level with one Administrative Group at `branchId`, a Subject
  * assigned to that Level, and a Recurring Course Schedule targeting the group.
  *
@@ -50,6 +66,7 @@ export async function createTeachingContext(
     hour?: number;
   } = {},
 ): Promise<TeachingFixture> {
+  assertTestOwnershipTag(tag);
   const categoryId =
     opts.categoryId ?? (await prisma.category.create({ data: { name: `${tag} فئة` } })).id;
   const levelId =
@@ -151,6 +168,7 @@ export async function staff(
  * trip over, which is a failure mode this project has already met twice.
  */
 export async function clearTeachingContext(prisma: PrismaClient, tag: string): Promise<void> {
+  assertTestOwnershipTag(tag);
   const tagged = { name: { startsWith: tag } };
   const bySubject = { schedule: { subject: tagged } };
 

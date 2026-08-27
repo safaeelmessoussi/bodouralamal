@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { issueAccessToken } from "../lib/access-token.js";
 import { loadConfig } from "../lib/config.js";
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from "../lib/prisma.js";
+import { localDateIso } from "../lib/recording-name.js";
 import { httpCall } from "../test-support/http-client.js";
 import { roomNameForSession } from "../policies/online-class.js";
 
@@ -94,10 +95,10 @@ let parentToken: string;
 let strangerId: string;
 let strangerToken: string;
 
-/** The class runs today, so the live server's own clock is inside the window —
- *  this endpoint is deliberately not time-injectable over HTTP. */
-const today = new Date();
-const isoDay = (d: Date): string => d.toISOString().slice(0, 10);
+/** The class runs today on the association's clock, so the live server is
+ * inside the window. UTC's date is yesterday for the first local hour after
+ * midnight; the full sweep crossed that boundary and exposed the old helper. */
+const today = new Date(`${localDateIso()}T00:00:00.000Z`);
 
 async function makeUser(label: string, role?: string): Promise<string> {
   const user = await prisma.user.create({
@@ -126,6 +127,12 @@ async function clear(): Promise<void> {
   });
   await prisma.sessionStaff.deleteMany({ where: { session: { scheduleId: { in: ids } } } });
   await prisma.notification.deleteMany({ where: { session: { scheduleId: { in: ids } } } });
+  // A failed assertion in the recording-shape test used to skip its local
+  // delete, then this teardown met SessionRecording's intentional RESTRICT and
+  // left the entire scenario behind. Teardown owns the fail-safe path.
+  await prisma.sessionRecording.deleteMany({
+    where: { session: { scheduleId: { in: ids } } },
+  });
   await prisma.session.deleteMany({ where: { scheduleId: { in: ids } } });
   await prisma.courseScheduleStaff.deleteMany({ where: { scheduleId: { in: ids } } });
   await prisma.recurringCourseSchedule.deleteMany({ where: { id: { in: ids } } });
@@ -195,7 +202,7 @@ beforeAll(async () => {
       endTime: new Date(Date.UTC(1970, 0, 1, 23, 59, 0)),
       recurrence: "weekly",
       weekdays: ["monday"],
-      anchorDate: new Date(isoDay(today)),
+      anchorDate: today,
       academicYearId,
       deliveryMode: "online",
       onlineMediaMode: "audio_only",
@@ -205,7 +212,7 @@ beforeAll(async () => {
     await prisma.session.create({
       data: {
         scheduleId: schedule.id,
-        date: new Date(isoDay(today)),
+        date: today,
         startTime: new Date(Date.UTC(1970, 0, 1, 0, 0, 0)),
         endTime: new Date(Date.UTC(1970, 0, 1, 23, 59, 0)),
         deliveryMode: "online",
@@ -225,7 +232,7 @@ beforeAll(async () => {
       endTime: new Date(Date.UTC(1970, 0, 1, 23, 59, 0)),
       recurrence: "weekly",
       weekdays: ["monday"],
-      anchorDate: new Date(isoDay(today)),
+      anchorDate: today,
       academicYearId,
     },
   });
@@ -233,7 +240,7 @@ beforeAll(async () => {
     await prisma.session.create({
       data: {
         scheduleId: physical.id,
-        date: new Date(isoDay(today)),
+        date: today,
         startTime: new Date(Date.UTC(1970, 0, 1, 0, 0, 0)),
         endTime: new Date(Date.UTC(1970, 0, 1, 23, 59, 0)),
       },
@@ -512,39 +519,43 @@ describe("the recording routes", () => {
       select: { id: true },
     });
 
-    const res = await httpCall<Res["body"]>(
-      BASE,
-      "GET",
-      `/sessions/${onlineSessionId}/recording`,
-      { token: studentToken },
-    );
-    expect(res.status).toBe(200);
-    const body = (res.body.data ?? {}) as Record<string, unknown>;
+    try {
+      const res = await httpCall<Res["body"]>(
+        BASE,
+        "GET",
+        `/sessions/${onlineSessionId}/recording`,
+        { token: studentToken },
+      );
+      expect(res.status).toBe(200);
+      const body = (res.body.data ?? {}) as Record<string, unknown>;
 
-    expect(Object.keys(body).sort()).toEqual([
-      "availability",
-      "educational_content_id",
-      "id",
-      "live",
-      "started_at",
-      "status",
-      "stopped_at",
-    ]);
-    // The provider is finished and the platform is not — R99.14's distinction,
-    // on the wire.
-    expect(body["status"]).toBe("completed");
-    expect(body["availability"]).toBe("importing");
-    expect(body["educational_content_id"]).toBeNull();
+      expect(Object.keys(body).sort()).toEqual([
+        "availability",
+        "educational_content_id",
+        "id",
+        "live",
+        "started_at",
+        "status",
+        "stopped_at",
+      ]);
+      // The provider is finished and the platform is not — R99.14's distinction,
+      // on the wire.
+      expect(body["status"]).toBe("completed");
+      expect(body["availability"]).toBe("importing");
+      expect(body["educational_content_id"]).toBeNull();
 
-    // R99.13 — the staging location is integration state and never leaves the
-    // server. Asserted on the serialised body, because a field added later
-    // would slip past a key list read by eye.
-    const wire = JSON.stringify(res.body);
-    for (const leak of ["recordings-staging", "output_key", "provider", "egress"]) {
-      expect(wire).not.toContain(leak);
+      // R99.13 — the staging location is integration state and never leaves the
+      // server. Asserted on the serialised body, because a field added later
+      // would slip past a key list read by eye.
+      const wire = JSON.stringify(res.body);
+      for (const leak of ["recordings-staging", "output_key", "provider", "egress"]) {
+        expect(wire).not.toContain(leak);
+      }
+    } finally {
+      // The row is scenario-owned and must disappear even when a wire
+      // assertion fails; suite teardown repeats this defensively.
+      await prisma.sessionRecording.deleteMany({ where: { id: recording.id } });
     }
-
-    await prisma.sessionRecording.delete({ where: { id: recording.id } });
   });
 
   it("refuses a body that names a format — the class decides (R99.7)", async () => {

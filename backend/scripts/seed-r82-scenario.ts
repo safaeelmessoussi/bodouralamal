@@ -73,6 +73,9 @@ async function wipe(): Promise<void> {
   await prisma.auditLog.deleteMany({ where: { actorUserId: { in: ids } } });
   await prisma.refreshToken.deleteMany({ where: { userId: { in: ids } } });
   await prisma.user.deleteMany({ where: { id: { in: ids } } });
+  await prisma.levelSurah.deleteMany({
+    where: { level: { name: { startsWith: TAG } } },
+  });
   await prisma.level.deleteMany({ where: { name: { startsWith: TAG } } });
   await prisma.category.deleteMany({ where: { name: { startsWith: TAG } } });
   await prisma.branch.deleteMany({ where: { name: { startsWith: TAG } } });
@@ -185,6 +188,32 @@ if (teacherRole) {
 }
 
 /**
+ * A scenario-owned Admin for browser authorization probes. Harnesses must not
+ * mint sessions or leave audit rows against whichever ambient Admin happens to
+ * be first in a development database; `wipe()` already owns every lifecycle
+ * row for tagged users.
+ */
+const admin = await prisma.user.create({
+  data: { nameArabic: `${TAG} المديرة`, sex: 'female', accountStatus: 'active' },
+});
+const adminRole = await prisma.role.findFirst({ where: { name: 'admin' } });
+if (adminRole) {
+  await prisma.userBranchRole.create({
+    data: { userId: admin.id, roleId: adminRole.id, branchId: branchA.id },
+  });
+}
+
+const superAdmin = await prisma.user.create({
+  data: { nameArabic: `${TAG} المديرة العامة`, sex: 'female', accountStatus: 'active' },
+});
+const superAdminRole = await prisma.role.findFirst({ where: { name: 'super_admin' } });
+if (superAdminRole) {
+  await prisma.userBranchRole.create({
+    data: { userId: superAdmin.id, roleId: superAdminRole.id, branchId: null },
+  });
+}
+
+/**
  * **A مؤطرة who is ALSO a beneficiary** (R88 — إدارة المؤطِّرات).
  *
  * The decisive row for the teaching screen's population. R79 made *beneficiary*
@@ -280,6 +309,10 @@ console.log(
     categoryWideEvent,
     uiEvent,
     teacher: teacher.id,
+    admin: admin.id,
+    superAdmin: superAdmin.id,
+    level: levelA.id,
+    tag: TAG,
     schedule: schedule.id,
     session: session.id,
     subject: subject.id,

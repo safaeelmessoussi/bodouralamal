@@ -95,6 +95,7 @@ function bearer(userId: string, roles: string[]): string {
 let superAdmin: string;
 let adminToken: string;
 let branchId: string;
+let sharedBranchOrder: Array<{ id: string; displayOrder: number | null }> = [];
 
 async function clear(): Promise<void> {
   await prisma.room.deleteMany({ where: { name: { startsWith: TAG } } });
@@ -137,6 +138,10 @@ beforeAll(async () => {
   }
 
   await clear();
+  sharedBranchOrder = await prisma.branch.findMany({
+    where: { deletedAt: null, NOT: { name: { startsWith: TAG } } },
+    select: { id: true, displayOrder: true },
+  });
   superAdmin = bearer(await makeStaff("super_admin"), ["super_admin", "admin"]);
   adminToken = bearer(await makeStaff("admin"), ["admin"]);
 
@@ -154,8 +159,25 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await clear();
-  await prisma.$disconnect();
+  try {
+    await clear();
+  } finally {
+    try {
+      // A whole-set reorder must use shared rows to exercise the real contract.
+      // Put back their exact stored positions, not merely their relative order:
+      // deleting this suite's rows otherwise leaves shifted/gapped Owner data.
+      await prisma.$transaction(
+        sharedBranchOrder.map((row) =>
+          prisma.branch.update({
+            where: { id: row.id },
+            data: { displayOrder: row.displayOrder },
+          }),
+        ),
+      );
+    } finally {
+      await prisma.$disconnect();
+    }
+  }
 });
 
 describe("branch responses are an explicit contract DTO (§16.2, Revision 38)", () => {
@@ -392,29 +414,38 @@ describe("R76 — reordering takes the sequence, not per-row numbers", () => {
   it("assigns contiguous 1..n from the sequence, and persists it", async () => {
     const before = await ids();
     const reversed = [...before].reverse();
+    try {
+      const res = await call("PATCH", "/admin/branches/order", superAdmin, {
+        ids: reversed,
+      });
+      expect(res.status).toBe(200);
+      // Returns the resulting order, so a client re-renders from the server rather
+      // than from its own optimistic guess.
+      expect((res.body.data as unknown as { ids: string[] }).ids).toEqual(
+        reversed,
+      );
 
-    const res = await call("PATCH", "/admin/branches/order", superAdmin, {
-      ids: reversed,
-    });
-    expect(res.status).toBe(200);
-    // Returns the resulting order, so a client re-renders from the server rather
-    // than from its own optimistic guess.
-    expect((res.body.data as unknown as { ids: string[] }).ids).toEqual(
-      reversed,
-    );
+      // R76.6 — contiguous and unique, never duplicated or gapped, because the
+      // positions came from a list rather than from the caller's arithmetic.
+      const rows = await prisma.branch.findMany({
+        where: { id: { in: reversed }, deletedAt: null },
+        select: { id: true, displayOrder: true },
+        orderBy: { displayOrder: "asc" },
+      });
+      expect(rows.map((r) => r.displayOrder)).toEqual(rows.map((_, i) => i + 1));
+      expect(rows.map((r) => r.id)).toEqual(reversed);
 
-    // R76.6 — contiguous and unique, never duplicated or gapped, because the
-    // positions came from a list rather than from the caller's arithmetic.
-    const rows = await prisma.branch.findMany({
-      where: { id: { in: reversed }, deletedAt: null },
-      select: { id: true, displayOrder: true },
-      orderBy: { displayOrder: "asc" },
-    });
-    expect(rows.map((r) => r.displayOrder)).toEqual(rows.map((_, i) => i + 1));
-    expect(rows.map((r) => r.id)).toEqual(reversed);
-
-    // And a fresh read returns it — the order survives the request.
-    expect(await ids()).toEqual(reversed);
+      // And a fresh read returns it — the order survives the request.
+      expect(await ids()).toEqual(reversed);
+    } finally {
+      // Reordering is whole-set semantics: this test necessarily touches rows
+      // it did not create. Restore the exact sequence even when an assertion
+      // fails, or a green/failing test silently rewrites Owner-managed data.
+      const restored = await call("PATCH", "/admin/branches/order", superAdmin, {
+        ids: before,
+      });
+      if (restored.status !== 200) throw new Error("could not restore shared branch order");
+    }
   });
 
   it("is idempotent — the same sequence twice is safe after a dropped response", async () => {

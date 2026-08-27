@@ -9,26 +9,14 @@ CHROME="$(command -v google-chrome || command -v chromium || command -v chromium
 set -a; . ./.env; set +a
 export DATABASE_URL="${DATABASE_URL//@db:5432/@127.0.0.1:5433}"
 
-# A REAL teacher — minted as she already is, never widened.
-TEACHER_ID="${TEACHER_USER_ID:-$(psql "$DATABASE_URL" -Atc "
-  SELECT u.id FROM \"user\" u
-  JOIN user_branch_role ubr ON ubr.user_id = u.id
-  JOIN role r ON r.id = ubr.role_id
-  WHERE u.account_status = 'active' AND u.deleted_at IS NULL
-  GROUP BY u.id
-  HAVING bool_or(r.name = 'teacher')
-     AND NOT bool_or(r.name IN ('admin','super_admin'))
-  LIMIT 1")}"
-[[ -n "$TEACHER_ID" ]] || { echo "SKIP: no teacher-only user in this database"; exit 0; }
-
-ADMIN_ID="$(psql "$DATABASE_URL" -Atc "
-  SELECT u.id FROM \"user\" u
-  JOIN user_branch_role ubr ON ubr.user_id = u.id
-  JOIN role r ON r.id = ubr.role_id
-  WHERE u.account_status = 'active'
-  GROUP BY u.id
-  HAVING bool_or(r.name = 'admin') AND NOT bool_or(r.name = 'super_admin')
-  LIMIT 1")"
+# The API half writes availability and mints refresh/audit state. Give it people
+# the harness owns instead of mutating whichever development Teacher/Admin is
+# returned first. The scenario cleaner removes all of those rows in the trap,
+# even when Chrome or an assertion fails.
+export R82_SCENARIO="$(cd backend && npx tsx scripts/seed-r82-scenario.ts | tail -1)"
+scenario_id() { node -e "process.stdout.write(JSON.parse(process.env.R82_SCENARIO).$1)"; }
+TEACHER_ID="$(scenario_id teacher)"
+ADMIN_ID="$(scenario_id admin)"
 
 # Two sessions per identity: R101 rotates the refresh token, so the browser
 # spends its cookie on the first page load and the API probes need their own.
@@ -37,7 +25,11 @@ export TEACHER_API_COOKIE="$(bash scripts/dev/issue-dev-session.sh "$TEACHER_ID"
 [[ -n "$ADMIN_ID" ]] && export ADMIN_API_COOKIE="$(bash scripts/dev/issue-dev-session.sh "$ADMIN_ID")"
 
 WORK="$(mktemp -d)"
-cleanup() { [[ -n "${CHROME_PID:-}" ]] && kill "$CHROME_PID" 2>/dev/null || true; rm -rf "$WORK" 2>/dev/null || true; }
+cleanup() {
+  [[ -n "${CHROME_PID:-}" ]] && kill "$CHROME_PID" 2>/dev/null || true
+  rm -rf "$WORK" 2>/dev/null || true
+  (cd backend && npx tsx scripts/seed-r82-scenario.ts --clean) >/dev/null 2>&1 || true
+}
 trap cleanup EXIT
 "$CHROME" --headless=new --disable-gpu --no-sandbox --remote-debugging-port=9249 \
   --remote-allow-origins='*' --user-data-dir="$WORK/profile" about:blank >/dev/null 2>&1 &

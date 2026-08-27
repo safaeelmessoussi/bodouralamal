@@ -1076,23 +1076,70 @@ with `git checkout -- scripts/dev/browser/` reverted *every* file in the
 directory, including C1 work that was correct and uncommitted. Restore the files
 you broke, never the directory they live in.
 
-### The full integration sweep clears development fixture staffing
+### An integration run must leave the database it found
 
-Measured, not inferred: `course_schedule_staff` holds **2** rows before
-`scripts/dev/test-integration.sh`, the sweep passes **1714** tests, and the
-table holds **0** after. Every individual teardown is tag-scoped, and the six
-suites that share R107's memorisation Subject were each run in isolation
-without touching it — so the responsible suite was **not** identified, and that
-is stated rather than guessed at.
+P1.2 closed a defect that a passing suite concealed: the complete integration
+sweep reduced `course_schedule_staff` from **2** rows to **0**. It was not an
+interaction between files. `branch.integration.test.ts` reproduced the loss by
+itself. Its first `beforeEach` called `clear()` before assigning `actorUserId`,
+and Prisma omitted `userId: undefined` from the filter, turning an apparently
+scoped `deleteMany` into an unscoped deletion. Cleanup now discovers the
+suite-owned, tagged users first and deletes staffing only for those exact ids.
+The shared teaching-fixture helper also refuses empty, malformed, or reserved
+development-fixture tags before it can query anything.
 
-**The practical rule: re-run `prisma/seed/fixtures.ts` after any full sweep.**
-It is idempotent (proven — a second run changes nothing), it derives staffing
-from the schedules that exist, and without it every teacher screen on localhost
-is legitimately empty for a reason that looks exactly like a defect.
+`scripts/dev/test-integration.sh` now enforces the general ownership rule. It
+takes a privacy-safe logical digest of every application base table before and
+after Vitest and fails if any table differs. The digest contains row counts and
+hashes of every row's logical fields, excluding only `created_at` and
+`updated_at`; it prints no row data. This catches residue, deletion,
+replacement, changed relationships, and same-count mutation. A source guard
+also rejects integration cleanup whose `deleteMany` has no `where` clause or
+contains `undefined`.
 
-This is the same family as the leaked `[email-owner-test]` Categories: **shared
-development data is collateral of integration teardown**, and a fixture seed is
-the cheap way back rather than something to debug in the application.
+The bounded ownership audit found further teardown defects while the original
+fix was being proved:
+
+- whole-set Branch, Category, and Subject reorder tests restored only relative
+  order, not the exact shared `display_order`; they now capture and restore the
+  exact shared positions in `finally` blocks;
+- the online-class test constructed a date from UTC while the authorization
+  path uses Morocco-local dates, so a sweep spanning local midnight could
+  expire its own class window;
+- recording cleanup depended on successful assertions and omitted
+  `SessionRecording` from suite teardown, so one failure could strand an entire
+  scenario. Both the assertion path and teardown are now fail-safe;
+- three browser authorization probes depended on ambient "first" rows: the
+  Teacher portal wrote availability for a development Teacher, the Admin
+  navigation probe targeted a development Level and could create a Category if
+  its refusal regressed, and the gender probe could create an enrolment across
+  ambient user/Level/Branch coordinates. They now use exact tagged scenario
+  identities and coordinates whose fail-safe shell traps remove domain, audit,
+  and refresh-token rows even when the expected refusal regresses.
+
+The consent migration retry check permits `completed` and `already_completed`:
+a live worker can converge the exact obligation before the direct retry does,
+and the test still proves the authoritative row and object postconditions. The
+same worker race made a retry-policy test select a newer legitimate follow-up
+row and made replacement setup lose an optimistic-version race. The retry proof
+now uses a unique real pg-boss queue carrying the registered TD-7 policy and
+asserts its exact job id; replacement/deletion tests establish their exact
+forced-private precondition directly. Production delivery, follow-up
+deduplication, replacement, and deletion remain covered separately, without two
+workers competing for a test that is specifically measuring one retry.
+
+The browser audit also repaired evidence defects exposed while isolation was
+being measured: navigation now waits for the requested pathname and for the
+skeleton to leave, the Admin catalogue expectation includes R110's tenth item,
+and the enrolment scenario records the durable beneficiary fact rather than
+assuming a `student` role implies it.
+
+The ownership guard was falsified deliberately: restoring the old
+`actorUserId ?? undefined` predicate left all **17/17** branch assertions green,
+then the wrapper failed with only `course_schedule_staff` changing **2 → 0**.
+With the correction restored, the final **1802-test** integration sweep passed
+and left the all-table logical snapshot identical. Re-seeding after a sweep is
+no longer an accepted remedy for isolation damage.
 
 ### In-page instrumentation must survive navigation, or it proves nothing
 

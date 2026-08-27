@@ -32,7 +32,9 @@ async function goto(path) {
   await send('Page.navigate', { url: `${BASE}${path}` });
   for (let i = 0; i < 100; i += 1) {
     const ready = await evaluate(
-      `(() => document.querySelector('.admin-table, .state') !== null)()`,
+      `(() => document.location.pathname === ${JSON.stringify(path)} &&
+        !document.querySelector('.skeleton') &&
+        document.querySelector('.admin-table, .state') !== null)()`,
     ).catch(() => false);
     if (ready) return true;
     await new Promise((r) => setTimeout(r, 250));
@@ -127,11 +129,11 @@ check(
 );
 
 const enrolled = JSON.parse((await api('/admin/enrollments')).body || '{}');
-const alreadyEnrolled = (enrolled.data ?? [])[0];
+const alreadyEnrolled = (enrolled.data ?? []).find((row) => row.student_id === S.student);
 check(
   '2 · a beneficiary already enrolled elsewhere is STILL offered',
   alreadyEnrolled !== undefined &&
-    (form.candidates ?? []).some((n) => n === alreadyEnrolled.student_name),
+    (form.candidates ?? []).some((name) => name.includes(alreadyEnrolled.student_name)),
   alreadyEnrolled?.student_name,
 );
 
@@ -169,6 +171,7 @@ check(
 const narrowed = await evaluate(`(async () => {
   const scope = [...document.querySelectorAll('dialog, .dialog, [role=dialog]')]
     .find((d) => d.querySelector('.field, .searchable-select'));
+  if (!scope) return { noDialog: true };
   const levelCount = () => {
     const sel = [...scope.querySelectorAll('select')]
       .find((s) => (s.closest('.field')?.textContent ?? '').includes('المستوى'));
@@ -177,8 +180,9 @@ const narrowed = await evaluate(`(async () => {
   const before = levelCount();
   const box = [...scope.querySelectorAll('.searchable-select')]
     .find((f) => (f.querySelector('legend')?.textContent ?? '').includes('المستفيدة'));
+  if (!box) return { noBeneficiaryField: true };
   const btn = [...box.querySelectorAll('.searchable-select__options li button')]
-    .find((b) => b.textContent.trim() === ${JSON.stringify(alreadyEnrolled?.student_name ?? '')});
+    .find((b) => b.textContent.includes(${JSON.stringify(alreadyEnrolled?.student_name ?? '')}));
   if (!btn) return { notFound: true };
   btn.click();
   await new Promise((r) => setTimeout(r, 2200));
@@ -202,9 +206,9 @@ check('8 · and the form says why', narrowed.says === true, JSON.stringify(narro
  * not establish its own precondition is a test that will one day accuse the
  * wrong layer.
  *
- * It now reads the eligible set for the chosen Level and picks somebody the
- * SERVER has excluded — whoever that is — so the precondition is derived rather
- * than believed.
+ * The scenario establishes both sides: a tagged male beneficiary and its
+ * tagged women-only Level. Using ambient "first" rows made an authorization
+ * regression capable of creating an enrolment the harness did not own.
  */
 const forged = await evaluate(`(async () => {
   const r = await fetch('/api/v1/auth/refresh', {
@@ -213,66 +217,22 @@ const forged = await evaluate(`(async () => {
     credentials: 'same-origin', body: '{}',
   });
   const { access_token } = await r.json();
-  const levels = await (await fetch('/api/v1/admin/levels', {
-    headers: { Authorization: 'Bearer ' + access_token },
-  })).json();
-  const restricted = (levels.data ?? []).find((l) => l.gender_restriction === 'girls_only');
-  if (!restricted) return { noRestricted: true };
-  const branches = await (await fetch('/api/v1/admin/branches?page_size=1', {
-    headers: { Authorization: 'Bearer ' + access_token },
-  })).json();
-  // Somebody the SERVER excludes from this Level — derived, never assumed.
-  const users = await (await fetch('/api/v1/admin/users?page_size=100', {
-    headers: { Authorization: 'Bearer ' + access_token },
-  })).json();
-  // **Excluded for GENDER specifically**, not for BR-21.
-  //
-  // Somebody already enrolled in the Level is ALSO missing from its eligible
-  // set, and forging with her proves the duplicate rule rather than the
-  // restriction — a correct refusal for the wrong reason, which would make this
-  // check quietly meaningless. The two are separated by asking who is already
-  // enrolled: excluded WITHOUT being enrolled is the gender exclusion.
-  const enrolments = await (await fetch('/api/v1/admin/enrollments', {
-    headers: { Authorization: 'Bearer ' + access_token },
-  })).json();
-  const enrolledHere = new Set(
-    (enrolments.data ?? []).filter((e) => e.level_id === restricted.id).map((e) => e.student_id),
-  );
-  let ineligible = null;
-  for (const u of users.data ?? []) {
-    if (enrolledHere.has(u.id)) continue;
-    const forU = await (await fetch('/api/v1/admin/levels?eligible_for_student=' + u.id, {
-      headers: { Authorization: 'Bearer ' + access_token },
-    })).json();
-    if (!(forU.data ?? []).some((l) => l.id === restricted.id)) { ineligible = u; break; }
-  }
-  if (!ineligible) return { noIneligible: true, checked: (users.data ?? []).length };
   const res = await fetch('/api/v1/admin/enrollments', {
     method: 'POST',
     headers: { Authorization: 'Bearer ' + access_token, 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      student_id: ineligible.id,
-      level_id: restricted.id,
-      branch_id: (branches.data ?? [])[0]?.id,
+      student_id: ${JSON.stringify(S.ineligible)},
+      level_id: ${JSON.stringify(S.levelId)},
+      branch_id: ${JSON.stringify(S.branchId)},
     }),
   });
   return { status: res.status, body: await res.text() };
 })()`);
-if (forged.noIneligible) {
-  // Honest outcome rather than a silent pass: with every account eligible there
-  // is no invalid request to forge, and saying so beats inventing one.
-  check(
-    '9 · a FORGED request is refused by the backend alone',
-    true,
-    `skipped — none of the ${forged.checked} accounts is excluded by SEX in this database, so there is no invalid request to forge. The rule itself is covered by three service tests and eight endpoint tests.`,
-  );
-} else {
-  check(
-    '9 · a FORGED request is refused by the backend alone, whatever the form does',
-    forged.status === 400 && String(forged.body).includes('GENDER_RESTRICTION'),
-    `${forged.status} ${String(forged.body).slice(0, 140)}`,
-  );
-}
+check(
+  '9 · a FORGED request is refused by the backend alone, whatever the form does',
+  forged.status === 400 && String(forged.body).includes('GENDER_RESTRICTION'),
+  `${forged.status} ${String(forged.body).slice(0, 140)}`,
+);
 
 close();
 process.exit(finish());

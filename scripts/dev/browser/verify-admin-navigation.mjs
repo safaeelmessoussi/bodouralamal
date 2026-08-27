@@ -26,6 +26,7 @@
 import { connect, results } from './cdp.mjs';
 
 const BASE = 'http://localhost';
+const S = JSON.parse(process.env.R82_SCENARIO ?? '{}');
 const SUPER_COOKIE = process.env.SUPER_REFRESH_COOKIE;
 const ADMIN_COOKIE = process.env.ADMIN_REFRESH_COOKIE;
 /**
@@ -65,6 +66,7 @@ const ADMINISTRATION = [
   ['مواد المستوى', '/admin/level-subjects'],
   ['مقرر الحفظ', '/admin/level-surahs'],
   ['الفروع والقاعات', '/admin/branches'],
+  ['أنواع الجدولة', '/admin/scheduling-types'],
   ['سلة المحذوفات', '/admin/trash'],
   ['التقويم الهجري', '/superadmin/hijri-calendar'],
   ['إعدادات المنصة', '/superadmin/settings'],
@@ -91,7 +93,9 @@ const goto = async (path) => {
   // project several confident wrong answers.
   for (let i = 0; i < 80; i += 1) {
     const ready = await evaluate(
-      `!!document.querySelector('.admin-nav a, .state, .admin-empty')`,
+      `document.location.pathname === ${JSON.stringify(path)} &&
+       !document.querySelector('.skeleton') &&
+       !!document.querySelector('.admin-nav a, .state, .admin-empty')`,
     );
     if (ready) return;
     await new Promise((r) => setTimeout(r, 100));
@@ -144,7 +148,7 @@ check(
   JSON.stringify(superNav?.groups.map((g) => g.title)),
 );
 check(
-  'Super Admin — الإدارة holds exactly the nine, in order',
+  'Super Admin — الإدارة holds exactly the ten, in order',
   same(superNav?.groups?.[0]?.items, labelled(ADMINISTRATION)),
   JSON.stringify(superNav?.groups?.[0]?.items?.map((i) => i.text)),
 );
@@ -259,12 +263,7 @@ for (const [label, path] of [
  * platform, silently.
  */
 const superToken = await accessTokenFor(SUPER_API_COOKIE);
-const levelId = await (async () => {
-  const res = await fetch(`${BASE}/api/v1/admin/levels`, {
-    headers: { Authorization: `Bearer ${superToken}` },
-  });
-  return (await res.json())?.data?.[0]?.id ?? null;
-})();
+const levelId = S.level ?? null;
 
 for (const [label, path] of [
   ['الفئات', '/admin/categories'],
@@ -301,7 +300,7 @@ const countCategories = async () => {
 };
 const before = await countCategories();
 const created = await api('POST', '/admin/categories', adminToken, {
-  name: '[verify-admin-navigation] فئة',
+  name: `${S.tag} فئة حدود الإدارة`,
 });
 check('server refuses an Admin CREATING a Category (403)', created === 403, `got ${created}`);
 check('…and no Category was created by the attempt', (await countCategories()) === before);

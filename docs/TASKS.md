@@ -1290,56 +1290,25 @@ was hiding behind it: the run went green on the first attempt.
   PostgreSQL/MinIO/pg-boss drill passes. **OWNER DECISION REQUIRED — AUTOMATIC QUARANTINE
   DESTRUCTION:** select/approve the automatic 90-day record/object policy before scheduling any
   `purge_after` scan
-- [ ] **P1.2 TEST-ISOLATION DEFECT — the integration sweep destroys Local Development fixture
-  staffing.** Measured, not inferred: `course_schedule_staff` holds **2** rows before
-  `scripts/dev/test-integration.sh`, the sweep passes **1714** tests, and the table holds **0**
-  after. Consequence: every مؤطِّرة screen on localhost seeds empty for a reason that looks
-  exactly like an application defect — §4.4c derives her whole scope from staffing, so the
-  screens are *correctly* empty and the cause is invisible. **Not root-caused.** Every
-  `courseScheduleStaff.deleteMany` teardown in the suite is tag-scoped, and the six suites that
-  share R107's memorisation Subject were each run in isolation without touching the rows, so the
-  responsible suite is **not** identified — stated rather than guessed. **Re-running
-  `fixtures.ts` is the interim remedy and is explicitly NOT the fix** (Owner, 2026-08-26). Same
-  family as the leaked `[email-owner-test]` Categories that blocked the fixture seed: shared
-  development data is collateral of integration teardown, and both must be closed before
-  Production readiness is considered complete. Likely shapes to investigate first: a teardown
-  scoped by *branch* or *level* rather than by tag, and any suite whose `clear()` runs against
-  rows it did not create.
+- [x] **P1.2 TEST ISOLATION — the integration sweep now leaves shared Local Development state
+  unchanged.** The staffing loss reproduced in `branch.integration.test.ts` alone: its first
+  `beforeEach` cleared with `userId: actorUserId ?? undefined` before the id existed, and Prisma
+  omitted the undefined predicate, deleting all staffing. Cleanup now resolves suite-tagged user
+  ids first; the shared teaching helper rejects unsafe ownership tags before querying.
 
-  **NARROWED by §E's before/after measurement (2026-08-26).** A fourteen-counter snapshot of
-  shared state taken either side of a full sweep now says exactly what the sweep destroys:
-
-  ```
-  4c4
-  < course_schedule_staff=2
-  > course_schedule_staff=0
-  ```
-
-  **One counter. Everything else — schedules, sessions, events, exams, branches, levels,
-  subjects, categories, content, users, the scheduling-type catalogue and every schedule's
-  visibility — is byte-identical.** That is a far smaller search than *"the sweep clears the
-  fixtures"*, and it is now a repeatable measurement rather than something noticed by accident:
-  `scripts/dev/` + the snapshot query in §E's report.
-
-  **It is an INTERACTION, not one suite.** The three suites that delete `course_schedule_staff`
-  by `userId` rather than by schedule were each run alone against seeded fixtures and each left
-  the two rows intact (`branch` 2→2, `consent` 2→2, `social-profile` 2→2). So the destruction
-  depends on state an earlier file leaves behind, which is exactly why it has survived several
-  passes.
-
-  **Two concrete mechanisms to rule in or out first**, both real in the current code:
-
-  1. `branch.integration.test.ts` deletes with `where: { userId: actorUserId ?? undefined }`, and
-     **Prisma treats an `undefined` filter value as *no filter at all*** — so if `clear()` ever
-     runs before `actorUserId` is assigned, that call is `deleteMany({})` against the whole
-     table. Running the file alone does not reach that state; running it after another file may.
-  2. `clearTeachingContext(prisma, tag)` deletes `courseScheduleStaff` by
-     `schedule.subject.name startsWith tag`. A caller passing an empty or over-broad tag sweeps
-     rows it never created.
-
-  **The fix belongs to its own section** and should include a guard, because the class has now
-  produced four incidents in one batch: this one, R110's whole-set reorder, §D's harness
-  splitting a development schedule, and the stray catalogue row a harness created through the UI.
+  **The durable guard is broader than the incident.** `scripts/dev/test-integration.sh` compares
+  privacy-safe logical hashes for every application base table before and after the sweep, while
+  a source test rejects unscoped/undefined-filter `deleteMany` cleanup. Deliberately restoring the
+  bad predicate left **17/17** branch tests green but made the wrapper fail on the exact **2 → 0**
+  staffing loss. The same guard exposed and drove exact `finally` restoration for whole-set
+  Branch/Category/Subject reorder tests, Morocco-local association dates for online-class tests,
+  fail-safe recording teardown, and three browser authorization probes that could mutate ambient
+  Teacher, Admin, Level, Category, beneficiary, or enrolment state. Those probes now use exact
+  tagged, fail-safe-cleaned identities and coordinates. B-01 retry assertions now distinguish
+  equivalent live-worker convergence from a dedicated exact-job pg-boss retry proof, eliminating
+  competition with the running Production worker without weakening final row/object checks. The
+  final sweep passed **1802** active tests and its complete logical database snapshot was identical
+  before and after. Fixture reseeding is no longer the remedy or the definition of success.
 
 ## OWNER RATIFICATIONS OD-01 … OD-07 — 2026-08-26 · all answered, none open
 

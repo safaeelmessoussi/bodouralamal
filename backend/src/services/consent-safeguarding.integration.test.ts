@@ -142,6 +142,15 @@ function canonicalBytes(label: string): Buffer {
   return Buffer.from(`%PDF-1.7\n${label}\n${'safe-canonical-bytes'.repeat(64)}`);
 }
 
+function expectConvergedMigration(
+  result: Awaited<ReturnType<typeof migrateConsentForcedContent>>,
+): void {
+  // The live API worker shares this database. Once a durable job exists, it
+  // may complete the exact obligation before a direct retry reaches the lock.
+  // Callers of this helper still assert the authoritative row/object state.
+  expect(['completed', 'already_completed']).toContain(result.state);
+}
+
 async function putCanonical(bucket: string, key: string, bytes: Buffer): Promise<void> {
   track(bucket, key);
   await clients.internal.send(
@@ -793,9 +802,9 @@ describe('B-01 consent safeguarding', () => {
       },
     });
 
-    expect(await migrateConsentForcedContent(prisma, clients, s.contentId)).toMatchObject({
-      state: 'completed',
-    });
+    expectConvergedMigration(
+      await migrateConsentForcedContent(prisma, clients, s.contentId),
+    );
     const completed = await prisma.educationalContent.findUniqueOrThrow({
       where: { id: s.contentId },
     });
@@ -1105,9 +1114,9 @@ describe('B-01 consent safeguarding', () => {
     expect(await statObjectStrict(clients, BUCKETS.public, s.key)).not.toBeNull();
     expect(await statObjectStrict(clients, BUCKETS.private, s.key)).not.toBeNull();
 
-    await expect(migrateConsentForcedContent(prisma, clients, s.contentId)).resolves.toMatchObject({
-      state: 'completed',
-    });
+    expectConvergedMigration(
+      await migrateConsentForcedContent(prisma, clients, s.contentId),
+    );
     expect(await statObjectStrict(clients, BUCKETS.public, s.key)).toBeNull();
     expect(
       await prisma.educationalContent.findUniqueOrThrow({ where: { id: s.contentId } }),
@@ -1131,8 +1140,16 @@ describe('B-01 consent safeguarding', () => {
       await prisma.educationalContent.findUniqueOrThrow({ where: { id: s.contentId } }),
     ).toMatchObject({ visibility: 'public', storageBucket: BUCKETS.public });
 
-    await expect(migrateConsentForcedContent(prisma, clients, s.contentId)).resolves.toMatchObject({
-      state: 'completed',
+    expectConvergedMigration(
+      await migrateConsentForcedContent(prisma, clients, s.contentId),
+    );
+    expect(
+      await prisma.educationalContent.findUniqueOrThrow({ where: { id: s.contentId } }),
+    ).toMatchObject({
+      consentForcedPrivate: true,
+      visibility: 'private',
+      storageBucket: BUCKETS.private,
+      storageKey: s.key,
     });
     expect(await hashStoredObject(clients, BUCKETS.private, s.key)).toEqual({
       sizeBytes: s.bytes.length,
@@ -1184,9 +1201,19 @@ describe('B-01 consent safeguarding', () => {
     expect(await statObjectStrict(clients, BUCKETS.public, placement.key)).toBeNull();
     expect(await statObjectStrict(clients, BUCKETS.private, placement.key)).not.toBeNull();
     vi.restoreAllMocks();
-    await expect(
-      migrateConsentForcedContent(prisma, clients, placement.contentId),
-    ).resolves.toMatchObject({ state: 'completed' });
+    expectConvergedMigration(
+      await migrateConsentForcedContent(prisma, clients, placement.contentId),
+    );
+    expect(
+      await prisma.educationalContent.findUniqueOrThrow({
+        where: { id: placement.contentId },
+      }),
+    ).toMatchObject({
+      consentForcedPrivate: true,
+      visibility: 'private',
+      storageBucket: BUCKETS.private,
+      storageKey: placement.key,
+    });
   });
 
   it('a migration snapshot cannot overwrite a replacement or a deletion', async () => {
@@ -1248,7 +1275,13 @@ describe('B-01 consent safeguarding', () => {
 
   it('replacement closes the new coordinate and durably retires the exact old public key', async () => {
     const s = await scenario('service-replacement');
-    await decide(s, false);
+    // This test owns replacement behavior, not asynchronous consent delivery.
+    // Set its exact precondition directly so the live consent worker cannot
+    // increment the optimistic version between upload initiation and commit.
+    await prisma.educationalContent.update({
+      where: { id: s.contentId },
+      data: { consentForcedPrivate: true },
+    });
     const replacement = await replaceScenarioFile(s, 'service-replacement-winner');
 
     const current = await prisma.educationalContent.findUniqueOrThrow({
@@ -1307,7 +1340,10 @@ describe('B-01 consent safeguarding', () => {
 
   it('deletion denies the stale coordinate and recovers its exact-key retirement job', async () => {
     const s = await scenario('service-deletion');
-    await decide(s, false);
+    await prisma.educationalContent.update({
+      where: { id: s.contentId },
+      data: { consentForcedPrivate: true },
+    });
     await deleteContent(
       prisma,
       failingPublicDelete(clients, s.key, 'before'),
@@ -1459,19 +1495,28 @@ describe('B-01 consent safeguarding', () => {
 
   it('pg-boss retries a transient storage failure with the registered TD-7 policy', async () => {
     const s = await scenario('pgboss-retry');
-    await decide(s, false);
-    await reevaluateSessionConsent(prisma, s.fixture.sessionId);
-    await prisma.$executeRaw`
-      UPDATE pgboss.job SET priority = 100
-      WHERE name = ${JOB_QUEUES.contentBucketMigrate}
-        AND data->>'content_id' = ${s.contentId}
-    `;
+    // Establish the migration precondition without putting this content on the
+    // live application's shared queue. Otherwise its worker can finish the row
+    // while this test's worker is proving retry behavior, or a concurrent full
+    // recompute can legitimately enqueue a follow-up while the first row is
+    // active. Both are correct production behavior and neither isolates which
+    // execution consumed the injected storage failure.
+    await prisma.educationalContent.update({
+      where: { id: s.contentId },
+      data: { consentForcedPrivate: true },
+    });
 
     const flaky = failingPublicDelete(clients, s.key, 'before');
+    const queue = `b01-storage-retry-${randomUUID()}`;
     const worker = boss();
     await worker.start();
+    const registered = await worker.getQueue(JOB_QUEUES.contentBucketMigrate);
+    expect(registered).toMatchObject(TD7_RETRY_POLICY);
+    await worker.createQueue(queue, TD7_RETRY_POLICY);
+    const id = await worker.send(queue, { content_id: s.contentId });
+    if (!id) throw new Error('pg-boss did not return a storage retry job id');
     await worker.work(
-      JOB_QUEUES.contentBucketMigrate,
+      queue,
       { pollingIntervalSeconds: 0.5 },
       async ([job]) => {
         if (!job) throw new Error('bucket worker received no job');
@@ -1486,19 +1531,17 @@ describe('B-01 consent safeguarding', () => {
         });
         return row.visibility === 'private';
       }, 'TD-7 storage retry to complete');
+      const jobs = await prisma.$queryRaw<{ state: string; retry_count: number }[]>`
+        SELECT state::text, retry_count
+        FROM pgboss.job
+        WHERE name = ${queue} AND id = ${id}::uuid
+      `;
+      expect(jobs[0]).toMatchObject({ state: 'completed', retry_count: 1 });
+      expect(await statObjectStrict(clients, BUCKETS.public, s.key)).toBeNull();
     } finally {
+      await worker.deleteQueue(queue);
       await worker.stop({ graceful: true });
     }
-    const jobs = await prisma.$queryRaw<{ state: string; retry_count: number }[]>`
-      SELECT state::text, retry_count
-      FROM pgboss.job
-      WHERE name = ${JOB_QUEUES.contentBucketMigrate}
-        AND data->>'content_id' = ${s.contentId}
-      ORDER BY created_on DESC
-      LIMIT 1
-    `;
-    expect(jobs[0]).toMatchObject({ state: 'completed', retry_count: 1 });
-    expect(await statObjectStrict(clients, BUCKETS.public, s.key)).toBeNull();
   });
 
   it('bounds a legacy queue-only row with one fully configured durable follow-up', async () => {

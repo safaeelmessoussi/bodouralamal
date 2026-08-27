@@ -66,6 +66,8 @@ let categoryA: string;
 let categoryB: string;
 let levelA1: string;
 let levelB1: string;
+let sharedCategoryOrder: Array<{ id: string; displayOrder: number | null }> = [];
+let sharedSubjectOrder: Array<{ id: string; displayOrder: number | null }> = [];
 
 async function makeUser(label: string): Promise<string> {
   return (
@@ -131,6 +133,16 @@ beforeAll(async () => {
   );
   if (!health || health.status !== 200) throw new Error("API not reachable");
   await clear();
+  [sharedCategoryOrder, sharedSubjectOrder] = await Promise.all([
+    prisma.category.findMany({
+      where: { deletedAt: null, NOT: { name: { startsWith: TAG } } },
+      select: { id: true, displayOrder: true },
+    }),
+    prisma.subject.findMany({
+      where: { deletedAt: null, NOT: { name: { startsWith: TAG } } },
+      select: { id: true, displayOrder: true },
+    }),
+  ]);
 
   branchId = (await prisma.branch.create({ data: { name: `${TAG} فرع` } })).id;
   superAdmin = bearer(await makeUser("مدير عام"), [
@@ -207,8 +219,31 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await clear();
-  await prisma.$disconnect();
+  try {
+    await clear();
+  } finally {
+    try {
+      // Flat reorder endpoints necessarily include Owner-managed rows. Restore
+      // their exact positions after removing this suite's rows: replaying only
+      // the relative sequence would leave gaps where the deleted fixtures sat.
+      await prisma.$transaction([
+        ...sharedCategoryOrder.map((row) =>
+          prisma.category.update({
+            where: { id: row.id },
+            data: { displayOrder: row.displayOrder },
+          }),
+        ),
+        ...sharedSubjectOrder.map((row) =>
+          prisma.subject.update({
+            where: { id: row.id },
+            data: { displayOrder: row.displayOrder },
+          }),
+        ),
+      ]);
+    } finally {
+      await prisma.$disconnect();
+    }
+  }
 });
 
 /* ── Sorting reaches every list ───────────────────────────────────────────── */
@@ -303,22 +338,33 @@ describe("R76 reorder — flat collections (Categories, Subjects)", () => {
     async (_l, base) => {
       const before = await idsOf(base);
       const reversed = [...before].reverse();
+      try {
+        const res = await call("PATCH", `${base}/order`, superAdmin, {
+          ids: reversed,
+        });
+        expect(res.status).toBe(200);
+        expect((res.body.data as unknown as { ids: string[] }).ids).toEqual(
+          reversed,
+        );
+        expect(await idsOf(base)).toEqual(reversed);
 
-      const res = await call("PATCH", `${base}/order`, superAdmin, {
-        ids: reversed,
-      });
-      expect(res.status).toBe(200);
-      expect((res.body.data as unknown as { ids: string[] }).ids).toEqual(
-        reversed,
-      );
-      expect(await idsOf(base)).toEqual(reversed);
-
-      // Idempotent — a retry after a dropped response is safe.
-      expect(
-        (await call("PATCH", `${base}/order`, superAdmin, { ids: reversed }))
-          .status,
-      ).toBe(200);
-      expect(await idsOf(base)).toEqual(reversed);
+        // Idempotent — a retry after a dropped response is safe.
+        expect(
+          (await call("PATCH", `${base}/order`, superAdmin, { ids: reversed }))
+            .status,
+        ).toBe(200);
+        expect(await idsOf(base)).toEqual(reversed);
+      } finally {
+        // Categories and Subjects are global whole sets. The rows not carrying
+        // TAG are shared development/Owner state, so exact restoration is part
+        // of this test rather than something teardown may infer from names.
+        const restored = await call("PATCH", `${base}/order`, superAdmin, {
+          ids: before,
+        });
+        if (restored.status !== 200) {
+          throw new Error(`could not restore shared ${String(_l)} order`);
+        }
+      }
     },
   );
 

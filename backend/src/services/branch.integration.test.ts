@@ -62,10 +62,19 @@ async function seedBranch(name: string): Promise<string> {
 }
 
 async function clear(): Promise<void> {
+  const actors = await prisma.user.findMany({
+    where: { nameArabic: { startsWith: TAG } },
+    select: { id: true },
+  });
+  const actorIds = actors.map((actor) => actor.id);
   // The teacher tests build a schedule to derive reach from; it references the
-  // branches this suite creates, so it unwinds first.
+  // branches this suite creates, so it unwinds first. Resolve the suite-owned
+  // people by their namespace instead of the in-memory actor id: on the first
+  // beforeEach that variable has never been assigned, and Prisma omits an
+  // `undefined` predicate. The old shape therefore became deleteMany({}) and
+  // removed every development staffing row before this suite created anything.
   await prisma.courseScheduleStaff.deleteMany({
-    where: { userId: actorUserId ?? undefined },
+    where: { userId: { in: actorIds } },
   });
   await clearTeachingContext(prisma, TAG);
   const branches = await prisma.branch.findMany({
@@ -94,11 +103,6 @@ async function clear(): Promise<void> {
   });
   await prisma.branch.deleteMany({ where: { id: { in: ids } } });
 
-  const actors = await prisma.user.findMany({
-    where: { nameArabic: { startsWith: TAG } },
-    select: { id: true },
-  });
-  const actorIds = actors.map((a) => a.id);
   await prisma.auditLog.deleteMany({
     where: { actorUserId: { in: actorIds } },
   });

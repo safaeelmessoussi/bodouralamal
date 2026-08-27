@@ -101,12 +101,14 @@ await clean();
 async function person(
   label: string,
   role: string | null,
-  sex: 'female' | null = 'female',
+  sex: 'female' | 'male' | null = 'female',
+  isBeneficiary = false,
 ): Promise<string> {
   const user = await prisma.user.create({
     data: {
       nameArabic: `${TAG} ${label}`,
       accountStatus: 'active',
+      isBeneficiary,
       ...(sex === null ? {} : { sex }),
     },
   });
@@ -159,10 +161,15 @@ const year =
   (await prisma.academicYear.findFirst({ orderBy: { label: 'desc' } })) ??
   (await prisma.academicYear.create({ data: { label: '2026-2027' } }));
 
+const superAdmin = await person('مديرة النظام', 'super_admin');
 const safa = await person('صفاء', 'teacher');
 const amina = await person('أمينة', 'teacher');
-const student = await person('مستفيدة مسجّلة', 'student');
-const outsider = await person('مستفيدة غير معنية', 'student');
+const student = await person('مستفيدة مسجّلة', 'student', 'female', true);
+const outsider = await person('مستفيدة غير معنية', 'student', 'female', true);
+// Exact negative enrolment coordinate for the browser authorization probe. If
+// the server regresses and accepts him into the women-only Level, `clean()`
+// still owns both sides of the accidentally-created relationship.
+const ineligible = await person('مستفيد غير مؤهل للمستوى النسائي', 'student', 'male', true);
 
 await prisma.enrollment.create({
   data: {
@@ -250,10 +257,12 @@ process.stdout.write(
       groupId: group.id,
       scheduleId: schedule.id,
       academicYearId: year.id,
+      superAdmin,
       safa,
       amina,
       student,
       outsider,
+      ineligible,
       sessions: created,
       circles,
       // The occurrence the recorder harness attaches to: the earliest one, so a

@@ -38,4 +38,36 @@ if ! (exec 3<>/dev/tcp/127.0.0.1/5433) 2>/dev/null; then
 fi
 
 cd backend
-exec npm run test:integration -- "$@"
+
+# Snapshot the logical contents of every application table around the run.
+# Tests may create any scenario they own, but the state they found must be the
+# state they leave. Hashes keep development data (including identities and
+# tokens) out of logs while detecting removed, added, replaced or changed rows.
+P1_2_BEFORE="$(mktemp /tmp/bodour-integration-before.XXXXXX)"
+P1_2_AFTER="$(mktemp /tmp/bodour-integration-after.XXXXXX)"
+cleanup_snapshots() {
+  rm -f "$P1_2_BEFORE" "$P1_2_AFTER"
+}
+trap cleanup_snapshots EXIT HUP INT TERM
+
+./node_modules/.bin/tsx src/test-support/snapshot-integration-state.ts >"$P1_2_BEFORE"
+
+set +e
+npm run test:integration -- "$@"
+P1_2_TEST_STATUS=$?
+set -e
+
+./node_modules/.bin/tsx src/test-support/snapshot-integration-state.ts >"$P1_2_AFTER"
+
+P1_2_ISOLATION_STATUS=0
+if ! cmp -s "$P1_2_BEFORE" "$P1_2_AFTER"; then
+  echo "FAIL: integration tests changed pre-existing application state." >&2
+  echo "      Every test must clean only rows it owns, or restore shared state in finally." >&2
+  diff -u "$P1_2_BEFORE" "$P1_2_AFTER" >&2 || true
+  P1_2_ISOLATION_STATUS=1
+fi
+
+if [[ "$P1_2_TEST_STATUS" -ne 0 ]]; then
+  exit "$P1_2_TEST_STATUS"
+fi
+exit "$P1_2_ISOLATION_STATUS"
