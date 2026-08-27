@@ -49,7 +49,13 @@ const requested = process.argv[2];
 const user =
   requested === undefined
     ? ((await prisma.user.findFirst({ where: { nameArabic: NAME } })) ??
-      (await prisma.user.create({ data: { nameArabic: NAME, accountStatus: 'active' } })))
+      // R80 made `sex` NOT NULL for every person, and this create never
+      // supplied one. It worked for months only because the row already
+      // existed — the first genuinely empty development database made the
+      // helper fail, and with it every browser harness that mints a session.
+      (await prisma.user.create({
+        data: { nameArabic: NAME, accountStatus: 'active', sex: 'female' },
+      })))
     : await prisma.user.findUniqueOrThrow({ where: { id: requested } });
 
 // The Super Admin role is granted only to the script's OWN default user. A user

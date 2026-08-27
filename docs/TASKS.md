@@ -1339,6 +1339,25 @@ was hiding behind it: the run went green on the first attempt.
      Prisma mass write in `backend/src` and `backend/prisma`; Codex's covers integration suites
      and shared helpers including a missing `where` entirely.
 
+- [ ] **P1.2-class, OPEN — three shared rows a sweep still moves, each now NAMED (2026-08-27).**
+  With the `[تجريبي]` soft-delete cause fixed and the development database reset, the guard's diff
+  is small enough to read, and it names three separate leaks — none from the deletion/seed batch,
+  all pre-existing:
+
+  1. **`legal.consent_text_version`** is left holding `"email-owner-test-v1"`. A suite sets this
+     GLOBAL setting and does not restore it — the exact hazard `vitest.integration.config.ts`
+     already warns about (*"one file's teardown pulled a setting out from under another file's
+     fixture"*). Reset to `"v1"` by hand; the suite must restore it in a `finally`.
+  2. **`consumed_token` 14 → 0.** An auth suite empties the whole table rather than its own rows.
+  3. **`category` and `subject` digests change with the count unchanged** — the R76 whole-set
+     reorder test's `afterAll` restores `display_order` by primary key, and the restore is not
+     landing exactly. It is the same family the reorder restoration was written for, one layer
+     deeper.
+
+  All three are **one suite each and individually addressable**, which is a much smaller job than
+  when this was *"the sweep destroys the fixtures"*. Fix each by restoring in `finally`, or by
+  scoping the delete to rows the suite created.
+
 - [ ] **P1.2-class, OPEN and ROOT-CAUSED TO A SIGNATURE — a suite soft-deletes the development
   fixtures (2026-08-27).** **My first hypothesis was wrong and is withdrawn:** I guessed
   overlapping sweeps, then ran one sweep with nothing else running and it failed identically. It
