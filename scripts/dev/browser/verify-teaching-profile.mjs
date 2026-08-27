@@ -3,7 +3,7 @@
  *
  * The point being verified is not that a form saves. It is *whose screen owns
  * the question*: المستخدمون administers accounts and must no longer offer a
- * teaching profile to guardians, minors and administrators; إدارة المؤطِّرات
+ * teaching profile to guardians, minors and administrators; المؤطِّرات
  * manages the people who teach, and is where the profile lives.
  */
 import { connect, results } from './cdp.mjs';
@@ -72,7 +72,10 @@ check(
 
 const inMenu = await evaluate(`(() => {
   const link = [...document.querySelectorAll('nav a')].find(
-    (a) => a.textContent.trim() === 'إدارة المؤطِّرات',
+    // R105 renamed this from «إدارة المؤطِّرات»: no sibling names its own verb.
+    // The harness kept the old label and reported the nav as missing — a stale
+    // expectation, not a defect, and it had been failing quietly since.
+    (a) => a.textContent.trim() === 'المؤطِّرات',
   );
   return {
     present: link !== undefined,
@@ -86,7 +89,7 @@ const inMenu = await evaluate(`(() => {
 })()`);
 
 check(
-  '3 · إدارة المؤطِّرات appears in the navigation',
+  '3 · المؤطِّرات appears in the navigation',
   inMenu.present === true,
   JSON.stringify(inMenu),
 );
@@ -194,7 +197,7 @@ const openProfile = () =>
 const opened = await openProfile();
 
 check(
-  '9 · الملف التدريسي opens from إدارة المؤطِّرات, for the row it was clicked on',
+  '9 · الملف التدريسي opens from المؤطِّرات, for the row it was clicked on',
   opened.opened === true && opened.about.includes(TEACHER),
   JSON.stringify({ ...opened, text: (opened.text ?? '').slice(0, 160) }),
 );
@@ -315,6 +318,43 @@ check(
     persisted.day === 'wednesday' &&
     persisted.chosen >= 1,
   JSON.stringify({ storedRanges: reopened.storedRanges, ...persisted }),
+);
+
+/**
+ * **14 · NEW E — a profile that already has content is not «dirty».**
+ *
+ * This is the only state the defect fires in, and check 13 has just produced
+ * it: the dialog is open on a مؤطِّرة with a saved Subject and a saved Wednesday
+ * range. The dialog reported `dirty` from *has any content* rather than *has
+ * changed*, so closing it without touching a field asked her to confirm
+ * discarding work she had not done (rule AY).
+ *
+ * Deliberately placed after check 13 rather than at the start: on an EMPTY
+ * profile the old computation and the correct one agree, so a check run there
+ * would have passed against the defect.
+ */
+const pristineClose = await evaluate(`(async () => {
+  const dialog = document.querySelector('dialog[open]');
+  if (!dialog) return { noDialog: true };
+  // The form's own cancel — the same button a person reaches for. Nothing has
+  // been typed since it opened.
+  const cancel = [...dialog.querySelectorAll('button')].find((b) =>
+    b.textContent.trim() === 'إلغاء' || b.textContent.trim() === 'إغلاق');
+  if (!cancel) return { noCancel: true };
+  cancel.click();
+  await new Promise((r) => setTimeout(r, 400));
+  return {
+    // The discard prompt must NOT have appeared.
+    prompted: document.body.textContent.includes('إغلاق النموذج؟'),
+    // And the dialog must actually be gone, not held open by the guard.
+    stillOpen: Boolean(document.querySelector('dialog[open]')),
+  };
+})()`);
+
+check(
+  '14 · an untouched profile with saved content closes without asking to discard (NEW E)',
+  pristineClose.prompted === false && pristineClose.stillOpen === false,
+  JSON.stringify(pristineClose),
 );
 
 close();

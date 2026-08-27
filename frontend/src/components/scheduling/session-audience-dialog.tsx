@@ -7,6 +7,7 @@ import {
 } from '../../adapters/sessions.js';
 import { Badge } from '../ui/badge.js';
 import { FormDialog } from '../ui/form-dialog.js';
+import { isDirty } from '../../lib/form-dirty.js';
 import { MultiSelectField } from '../ui/multi-select.js';
 import { t } from '../../i18n/index.js';
 
@@ -75,7 +76,11 @@ export function SessionAudienceDialog({
       .catch(() => setNotice(t('admin.sessions.audienceLoadFailed')));
   }, [sessionId, token]);
 
-  const dirty = [...chosen].sort().join(',') !== [...initial].sort().join(',');
+  // Through the shared comparison rather than a hand-rolled join. Sorted first,
+  // because the picker returns ids in click order and choosing A then B is the
+  // same audience as choosing B then A — `isDirty` is deliberately
+  // order-sensitive, so the sort is what makes it mean *changed*.
+  const dirty = isDirty([...chosen].sort(), [...initial].sort());
 
   return (
     <FormDialog

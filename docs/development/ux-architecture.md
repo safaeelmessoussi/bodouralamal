@@ -1857,6 +1857,34 @@ before passing**:
 Behaviour is pinned by `scripts/dev/browser/verify-unsaved-guard.sh` (**21/21**), which drives
 the reported scenario in a real browser and keeps `＋تسجيل مستفيدة` green as the reference.
 
+### AY.1 · «Dirty» means *changed*, never *has content* (NEW E)
+
+الملف التدريسي computed it as *has any content*:
+
+```ts
+const dirty = loaded && (subjectIds.length > 0 || categoryIds.length > 0 || ranges.length > 0);
+```
+
+On an **empty** profile that is indistinguishable from the correct answer, which
+is why it survived: every test and every browser check opened a profile with
+nothing in it. On a مؤطِّرة who already had subjects or an availability range the
+dialog opened **already dirty**, so closing it without touching a field asked her
+to confirm discarding work she had not done — the nag rule AY exists to prevent,
+produced by the mechanism meant to prevent it.
+
+The fix is the shared `isDirty(current, pristine)` against **the record the form
+loaded**, captured in the fetch rather than in a render — the timing trap
+`lib/form-dirty.ts` documents. Two consequences worth keeping:
+
+- **Sort selections before comparing.** A multi-select returns ids in click
+  order, and `isDirty` is deliberately order-sensitive, so choosing A then B
+  would otherwise differ from choosing B then A. Availability ranges are *not*
+  sorted — their order is the teacher's and the server stores it as given.
+- **A check that can pass against the defect proves nothing.** The browser check
+  for this is placed *after* the one that saves content, because on the empty
+  profile every earlier check runs against, the broken computation and the
+  correct one agree.
+
 ## AX · A create/edit form contains every field that decides what is saved
 
 **Owner decision, 2026-08-25.**

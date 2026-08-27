@@ -109,7 +109,7 @@ under the table.
 | `verify-teacher-portal.sh` | 5 | R106's teacher menu and `إدخال متى أنا متاحة`, plus allowed-vs-refused probed with a real Teacher token | 24/24 |
 | `verify-sorting-headers.sh` | 6 | §6 header sorting clicked — text, numeric and date, plus the not-sortable audit | 19/19 |
 | `verify-grading.sh` | 14d, 16 | R81 — the exam's own maximum, empty ≠ zero, publish notifies and a draft is silent | 16/16 |
-| `verify-teaching-profile.sh` | 15, 15b | **AQ/X** — ownership of «الملف التدريسي», the population, Arabic weekdays, a range that survives a reload | 13/13 |
+| `verify-teaching-profile.sh` | 15, 15b | **AQ/X/AY** — ownership of «الملف التدريسي», the population, Arabic weekdays, a range that survives a reload, and **NEW E**: an untouched profile that already has content closes without asking to discard | 14/14 |
 | `verify-guardian-child.sh` | 26 | **R96.1** — a parent-only account driven through the account switcher: her own QR, two linked children in turn each showing that child's own `user_qr_ref`, back to her own, plus a forged unrelated child and a revoked FamilyLink both refused | 12/12 |
 | `verify-user-qr.sh` | 25 | **R96** — four identities each seeing their own square, four distinct payloads, no PII or role, child context serving the child, and the reference refused as a credential with cookies cleared | 11/11 |
 | `verify-quran-entry.sh` | 24 | **Section C** — إدخال الحفظ driven as ten identities: Admin and مؤطِّرة and assistant entry, حفظي's bars and history, reload persistence, whole-Level/Group/Circle rosters, R88 granting nothing, R91 both ways, R92 reached then narrowed, مراجعة not inflating, two-Level grouping, a forged Surah refused | 24/24 |

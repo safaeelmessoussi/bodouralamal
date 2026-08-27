@@ -80,6 +80,13 @@ describe('the roster is shown, not inferred', () => {
 describe('unsaved work is not lost to a stray click (rule U)', () => {
   it('passes dirty, computed against what it opened with', () => {
     expect(code(DIALOG)).toContain('dirty={dirty}');
-    expect(code(DIALOG)).toContain('[...chosen].sort().join');
+    // **The property, restated 2026-08-27** — this pinned the literal
+    // `[...chosen].sort().join`, which is a mechanism, and it failed when the
+    // comparison moved to the shared `isDirty`. What must hold is that `dirty`
+    // is computed **against the values the dialog opened with**, so the two
+    // things asserted are that `initial` participates and that the shared
+    // comparison is the one used. A form comparing against emptiness instead is
+    // the NEW E defect, and it would fail both.
+    expect(code(DIALOG)).toMatch(/const dirty = isDirty\([^;]*initial[^;]*\)/s);
   });
 });

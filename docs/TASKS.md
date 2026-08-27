@@ -971,6 +971,7 @@ was hiding behind it: the run went green on the first attempt.
 - [x] «＋ تسجيل طفل» → `/dashboard/student/register-child`, same fields as `/register`; `ولي الأمر` hidden until a child is approved
 - [x] نوع التسجيل relabelled so it stops naming a Category
 - [x] Table rule established and applied (branches +4 columns, levels +1); `إضافة مجموعة` converted to `FormDialog`
+- [ ] **OWNER DECISION — Categories and Levels have no `description`, and NEW K/L supplied one for each.** The Owner's canonical dataset gives every Category a description (المرأة: *النساء من سن الجامعة الى ما فوق*, and so on) and every Level one of the form *المستوى N - برنامج X*. **Neither entity has a column to store it**, and §7 defines Category as carrying only `name` and `display_order`, and Level only those plus `gender_restriction` — the seed says so in a deliberate comment. Storing the descriptions is a schema addition against a normative §7 clause, which is the Document Owner's call and not the agent's. Everything else in NEW J/K/L shipped on 2026-08-27. **In simple words: do you want the platform to store and show a short description under each Category and Level? If yes, that is a small change to §7 and to the database, and the descriptions you already wrote are ready to load.**
 - [ ] **OWNER DECISION — nothing marks the adult Category.** §2.1 says adults hold logins and minors do not, but R27 made the Categories renameable generic rows, so no form can enforce it and matching by name would hardcode reference data. Recommendation: a `Category.holds_own_login` marker. Until then a self-registering adult can request الطفل, and an approver corrects it
 
 ### R65 — the personal section is role-independent (2026-08-11)
@@ -1642,9 +1643,9 @@ manual Production launch data · no-PII audit · §18/M8 rehearsal. **Production
 | 3 | ~~**NEW B §D** frontend Add/Edit + scope prompt~~ **DONE 2026-08-26** | feature | R50's scope prompt already shipped, so the tier joined the fields those three scopes already carry — no second recurrence mechanism |
 | 4 | ~~**NEW B §E** full authorization matrix~~ **DONE 2026-08-26 — NEW B is CLOSED** | tests | 35 HTTP assertions; proven against four reintroduced defects; shared dev state measured identical before/after |
 | 5 | ~~**NEW D** Teacher content-library lookups~~ **DONE 2026-08-27** | defect (backend authz) | `GET /me/scope-options` (R93.4's pattern); admin reads untouched and still refused |
-| 6 | **NEW E** الملف التدريسي false dirty | **defect** | folded into §9A–D/F acceptance |
-| 7 | **§8** table columns audit | feature | **BLOCKED — brief not recorded.** Its dependency on NEW I's column is now satisfied; what the audit must change is not written anywhere in this repository (see below) |
-| 8 | ~~NEW I~~ **DONE** · **NEW J/K/L** reference-data baseline | data | **BLOCKED — dataset not recorded.** NEW I's schema half shipped 2026-08-27; J/K/L need the Owner's actual reference data, and inventing it is forbidden |
+| 6 | ~~**NEW E** الملف التدريسي false dirty~~ **DONE 2026-08-27** | **defect** | `dirty` meant *has content*, not *has changed*. Fixed via the shared `isDirty`; recorded as **UX rule AY.1**; guarded in `teachers.test.tsx` (proved against the reintroduced defect) and in the browser at check 14 |
+| 7 | ~~**§8** table columns audit~~ **DONE 2026-08-27** | feature | Owner supplied the brief; recorded permanently as **UX rule BA**. الجدولة, حصص الجدول, المستويات, الفئات, المجموعات الإدارية and طاقم التأطير all gained the fields their rows already carried |
+| 8 | ~~NEW I~~ **DONE** · ~~**NEW J/K/L**~~ **DONE 2026-08-27** | data | Owner supplied the dataset. Seeded for a fresh install and **reconciled in place** for an initialized one via `backend/scripts/reconcile-reference-data.ts`. **Category/Level descriptions are the one part not done** — see the open Owner decision below |
 | 9 | **§9A–D/F** edit-form audit | feature | includes NEW E and NEW F |
 | 10 | **NEW F** availability page gains capabilities | feature | §5 follow-up; same entities as §9 work |
 | 11 | **§10** Rule AX carry-forwards | feature | recorder dialog + session materials |

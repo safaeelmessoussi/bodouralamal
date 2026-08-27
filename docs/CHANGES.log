@@ -691,3 +691,36 @@ meaningful field of what it manages, with the exclusions (technical identity,
 audit plumbing, actions-as-columns) and the two consequences already met: show
 the row's own value rather than its parent's, and a field the row does not carry
 is a service change rather than a column.
+
+## NEW E — «dirty» meant *has content*, not *has changed* (2026-08-27)
+
+الملف التدريسي reported itself dirty whenever the profile held any subject,
+category or availability range:
+
+    const dirty = loaded && (subjectIds.length > 0 || ... );
+
+So every مؤطِّرة who already had a profile opened the dialog **already dirty**,
+and closing it without touching a field asked her to confirm discarding work she
+had not done — precisely the nag rule AY exists to prevent, produced by the
+mechanism meant to prevent it.
+
+Now the shared `isDirty(current, pristine)` against the record the form loaded,
+captured in the fetch rather than in a render (the timing trap `form-dirty.ts`
+documents). Selections are sorted before comparing, because a multi-select
+returns ids in click order; availability ranges are deliberately not sorted.
+
+**Why it survived this long, and what that changes about the checks.** On an
+empty profile the broken computation and the correct one agree — and every test
+and browser check opened an empty profile. The new browser check is therefore
+placed *after* the one that saves content, and the new unit guard was proved by
+reintroducing the defect and watching it fail. Recorded as **UX rule AY.1**.
+
+Two incidental finds:
+
+- `session-audience-dialog` hand-rolled the same comparison correctly; moved
+  onto the shared helper. Its guard pinned the literal `[...chosen].sort().join`
+  — a mechanism — so it failed on a correct change; **restated as the property**
+  (dirty is computed against `initial` through `isDirty`) rather than deleted.
+- `verify-teaching-profile.sh` had been looking for the nav label «إدارة
+  المؤطِّرات», which **R105 renamed to «المؤطِّرات»**. Two checks had been failing
+  quietly ever since, and the QA inventory still recorded 13/13. Now 14/14.

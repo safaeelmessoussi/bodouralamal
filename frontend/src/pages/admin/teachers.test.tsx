@@ -187,4 +187,21 @@ describe('the weekday labels are Arabic, and come from the catalogue', () => {
     expect(dialog).toContain('AvailabilityEditor');
     expect(dialog).not.toContain('scheduling.weekday');
   });
+
+  it('reports dirty against the PROFILE it loaded, not against emptiness (NEW E)', () => {
+    // **The defect this exists for.** The dialog computed
+    // `dirty = loaded && (subjectIds.length > 0 || categoryIds.length > 0 || ranges.length > 0)`
+    // — *has any content*, not *has changed*. Every مؤطِّرة who already had a
+    // profile therefore opened the dialog already dirty, and closing it without
+    // touching a field asked her to confirm discarding work she had not done.
+    // Rule AY: a pristine form must not nag.
+    const dialog = code('/src/components/admin/teaching-profile-dialog.tsx');
+    expect(dialog).toContain('isDirty(');
+    // Compared against what the fetch returned, which is the only pristine side
+    // available to a form whose values arrive asynchronously.
+    expect(dialog).toMatch(/const dirty = .*isDirty\([^;]*pristine[^;]*\)/s);
+    // And the length test is gone rather than merely supplemented — an `||`
+    // beside the real comparison would restore the whole defect.
+    expect(dialog).not.toMatch(/subjectIds\.length > 0/);
+  });
 });
