@@ -13,6 +13,9 @@ export interface PublicBranch {
   name: string;
   address: string | null;
   phone: string | null;
+  /** NEW I — published on the public list for the same reason `phone` is (R35):
+   *  a branch that answers on its mobile is exactly this field's case. */
+  phone_secondary: string | null;
   email: string | null;
   opening_hours_ar: string | null;
   google_maps_url: string | null;

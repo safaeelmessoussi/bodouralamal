@@ -1339,6 +1339,21 @@ was hiding behind it: the run went green on the first attempt.
      Prisma mass write in `backend/src` and `backend/prisma`; Codex's covers integration suites
      and shared helpers including a missing `where` entirely.
 
+- [ ] **P1.2-class, OPEN — a sweep run under concurrency left residue (2026-08-27).** A full
+  sweep during NEW I's verification reported eight tables differing, all in the *added* direction:
+  `refresh_token +20`, `trash +7`, `audit_log +21`, `quran_progress_log +1`,
+  `student_surah_progress +1`, plus changed digests on `educational_content`, `exam` and
+  `teaching_group`. **NEW I cannot produce that signature** — it adds one nullable column and a
+  form field, and creates no tokens, trash or progress logs.
+  **Most likely cause, stated as a hypothesis rather than a finding: overlapping sweeps.** Several
+  runs were launched while earlier ones were still finishing, and two interleaved sweeps each
+  clean only what they created while the other's rows are mid-flight, which produces exactly this
+  *rows-added* shape. A confirming single clean run was started and killed before it reported, so
+  **this is unresolved.**
+  **What to do:** re-run one sweep with nothing else running and compare. If it is green, this was
+  self-inflicted by the verification method and the lesson is to serialise sweeps; if it is not,
+  the diff names the tables to chase. **Do not reseed to make it green.**
+
 - [ ] **P1.2-class, OPEN — one `audit_log` row was consumed by a sweep, once (2026-08-27).**
   Found by the P1.2 guard during NEW D's verification, and reported rather than reseeded away.
   The first full sweep after NEW D reported `audit_log 2382 → 2381`; **every other one of the 55
@@ -1582,8 +1597,8 @@ manual Production launch data · no-PII audit · §18/M8 rehearsal. **Production
 | 4 | ~~**NEW B §E** full authorization matrix~~ **DONE 2026-08-26 — NEW B is CLOSED** | tests | 35 HTTP assertions; proven against four reintroduced defects; shared dev state measured identical before/after |
 | 5 | ~~**NEW D** Teacher content-library lookups~~ **DONE 2026-08-27** | defect (backend authz) | `GET /me/scope-options` (R93.4's pattern); admin reads untouched and still refused |
 | 6 | **NEW E** الملف التدريسي false dirty | **defect** | folded into §9A–D/F acceptance |
-| 7 | **§8** table columns audit | feature | needs NEW I fields to exist first |
-| 8 | **NEW I/J/K/L** reference-data baseline | data + small schema | Branch needs one column (below) |
+| 7 | **§8** table columns audit | feature | **BLOCKED — brief not recorded.** Its dependency on NEW I's column is now satisfied; what the audit must change is not written anywhere in this repository (see below) |
+| 8 | ~~NEW I~~ **DONE** · **NEW J/K/L** reference-data baseline | data | **BLOCKED — dataset not recorded.** NEW I's schema half shipped 2026-08-27; J/K/L need the Owner's actual reference data, and inventing it is forbidden |
 | 9 | **§9A–D/F** edit-form audit | feature | includes NEW E and NEW F |
 | 10 | **NEW F** availability page gains capabilities | feature | §5 follow-up; same entities as §9 work |
 | 11 | **§10** Rule AX carry-forwards | feature | recorder dialog + session materials |
@@ -1622,9 +1637,10 @@ manual Production launch data · no-PII audit · §18/M8 rehearsal. **Production
   to live today. **Decide before §D**: seeded reference table vs. extending the registry.
   Recommend a **seeded reference table** — the Owner calls the order canonical, and a
   frontend constant cannot be seeded or ordered by an administrator.
-* **NEW I — Branch is missing exactly one column.** `address`, `phone`, `email`,
-  `openingHoursAr`, `googleMapsUrl` all exist; there is **no second phone**. One additive
-  nullable column (`phone_secondary`), plus §8/§9 surfacing. Do not overload `phone`.
+* **NEW I — DONE 2026-08-27.** `branch.phone_secondary` added (one additive nullable
+  `VARCHAR(20)`), validated by the same rule as `phone`, mapped on both write paths, surfaced as
+  its own management column/field and published on the §5.1 allowlist. Both contract key guards
+  restated. **`phone` was not overloaded**, as instructed.
 * **NEW M — "all branches" is already structural.** `UserBranchRole.branch_id IS NULL` means
   every branch (`branch-scope.ts`). **Never encode «الكل» as a Branch row.**
 
@@ -1639,6 +1655,24 @@ manual Production launch data · no-PII audit · §18/M8 rehearsal. **Production
 * Keep `production.ts` (reference) and `fixtures.ts` (synthetic) strictly separate — the
   §15.2 firewall already exists; do not blur it.
 * Phone/email for Teachers are unknown. **Do not invent placeholders.**
+
+### BLOCKED FOR LACK OF A RECORDED BRIEF (found 2026-08-27, while continuing the roadmap)
+
+Two roadmap rows carry a one-line label and nothing else. Neither can be implemented without
+guessing, and guessing here produces rework rather than a wrong answer that shows up in a test:
+
+* **§8 — "table columns audit".** Which tables, which columns, and what each is for is recorded
+  **nowhere** in this repository — only the roadmap row. Its stated dependency (NEW I's column)
+  is now satisfied, so the brief is the only thing missing. It came from an Owner message that
+  was never written down.
+* **NEW J, NEW K, NEW L — the reference-data baseline.** NEW I's *schema* half is done. J and K
+  are **not defined anywhere in TASKS.md**, and no authoritative dataset — branch addresses,
+  phones, opening hours, the Level orthography list — is recorded. The real-data policy is
+  explicit that placeholder contact data must not be invented, so this cannot proceed on a guess
+  either. NEW L's *protocol* is recorded; the rows it applies to are not.
+
+**What would unblock them:** for §8, the list of screens and the columns to add; for J/K/L, the
+actual values, which are Production reference data the Owner holds.
 
 ### Needs Owner decision before its section starts
 

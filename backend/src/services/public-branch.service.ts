@@ -21,6 +21,7 @@ export interface PublicBranch {
   address: string | null;
   phone: string | null;
   email: string | null;
+  phoneSecondary: string | null;
   openingHoursAr: string | null;
   googleMapsUrl: string | null;
   displayOrder: number | null;
@@ -44,6 +45,7 @@ export async function listPublicBranches(
         address: true,
         phone: true,
         email: true,
+        phoneSecondary: true,
         openingHoursAr: true,
         googleMapsUrl: true,
         displayOrder: true,

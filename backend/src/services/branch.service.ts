@@ -169,6 +169,8 @@ export async function listBranches(
 export interface BranchPublicFields {
   address?: string | undefined;
   phone?: string | null | undefined;
+  /** NEW I — a branch commonly publishes two numbers. */
+  phoneSecondary?: string | null | undefined;
   email?: string | null | undefined;
   openingHoursAr?: string | undefined;
   googleMapsUrl?: string | null | undefined;
@@ -180,6 +182,10 @@ function publicFieldData(data: BranchPublicFields): Record<string, unknown> {
   return {
     ...(data.address !== undefined ? { address: data.address } : {}),
     ...(data.phone !== undefined ? { phone: data.phone } : {}),
+    // **Listed here or silently dropped** — the R57 shape: a validator that
+    // accepts a key an update never maps answers 200, bumps the version and
+    // changes nothing.
+    ...(data.phoneSecondary !== undefined ? { phoneSecondary: data.phoneSecondary } : {}),
     ...(data.email !== undefined ? { email: data.email } : {}),
     ...(data.openingHoursAr !== undefined ? { openingHoursAr: data.openingHoursAr } : {}),
     ...(data.googleMapsUrl !== undefined ? { googleMapsUrl: data.googleMapsUrl } : {}),

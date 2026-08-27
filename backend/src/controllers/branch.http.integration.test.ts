@@ -38,6 +38,9 @@ const BRANCH_KEYS = [
   "opening_hours_ar",
   "operational_start_date",
   "phone",
+  // NEW I — the second published number. Pinned here deliberately: this set is
+  // asserted exactly, so a field cannot join the contract by accident.
+  "phone_secondary",
   "version",
 ];
 const ROOM_KEYS = ["branch_id", "id", "name", "version"];
@@ -151,6 +154,7 @@ beforeAll(async () => {
     display_order: 1,
     address: "شارع محمد السادس",
     phone: "+212524000000",
+    phone_secondary: "+212661000000",
     email: "branch@example.com",
     opening_hours_ar: "الاثنين–الجمعة\n09:00–17:00",
     google_maps_url: "https://maps.example.com/x",
@@ -242,6 +246,66 @@ describe("branch responses are an explicit contract DTO (§16.2, Revision 38)", 
     const res = await call("GET", "/admin/branches", superAdmin);
     const row = res.body.data!.find((b) => b.id === branchId)!;
     expect(row.operational_start_date).toBe("2026-03-01");
+  });
+
+  /** This suite's own branch, from the collection read — the only one there is. */
+  const readBranch = async (): Promise<Record<string, unknown>> => {
+    const res = await call("GET", "/admin/branches?page_size=200", adminToken);
+    const rows = (res.body.data ?? []) as unknown as Record<string, unknown>[];
+    const row = rows.find((b) => b["id"] === branchId);
+    if (!row) throw new Error("this suite's branch is not in the list");
+    return row;
+  };
+
+  it("NEW I — the second phone round-trips, and is its OWN field", async () => {
+    // **There is no `GET /admin/branches/{id}`** — the collection is the read
+    // surface — so the row is taken from the list rather than invented.
+    const row = await readBranch();
+    // Written on create, read back whole, and NOT packed into the first — the
+    // reason it is a column at all is that «0537… / 0661…» in one field stops
+    // being a phone number.
+    expect(row.phone).toBe("+212524000000");
+    expect(row.phone_secondary).toBe("+212661000000");
+
+    // Editable, and mapped on the update path too. R57's shape is a validator
+    // that accepts a key one path forgets: 200, a bumped version, no change.
+    const patched = await call("PATCH", `/admin/branches/${branchId}`, superAdmin, {
+      version: row.version,
+      phone_secondary: "+212662999999",
+    });
+    expect(patched.status).toBe(200);
+    const after = await readBranch();
+    expect(after.phone_secondary).toBe("+212662999999");
+    // The first number is untouched by an edit that never mentioned it.
+    expect(after.phone).toBe("+212524000000");
+
+    // Clearable — a branch that drops its second line says so with `null`,
+    // which is the ordinary one-number state and not a gap.
+    const cleared = await call("PATCH", `/admin/branches/${branchId}`, superAdmin, {
+      version: after.version,
+      phone_secondary: null,
+    });
+    expect(cleared.status).toBe(200);
+    expect((await readBranch()).phone_secondary).toBeNull();
+
+    // Restored, so the rest of this suite sees the branch it was handed.
+    const restore = await readBranch();
+    await call("PATCH", `/admin/branches/${branchId}`, superAdmin, {
+      version: restore.version,
+      phone_secondary: "+212661000000",
+    });
+  });
+
+  it("NEW I — the second phone is validated by the SAME rule as the first", async () => {
+    const row = await readBranch();
+    // A looser rule here would make "which of the two may I dial" depend on
+    // which field the value landed in.
+    const bad = await call("PATCH", `/admin/branches/${branchId}`, superAdmin, {
+      version: row.version,
+      phone_secondary: "not a phone",
+    });
+    expect(bad.status).toBe(400);
+    expect(bad.body.error?.code).toBe("VALIDATION_FAILED");
   });
 
   it("preserves opening_hours_ar verbatim, newlines included (§7)", async () => {

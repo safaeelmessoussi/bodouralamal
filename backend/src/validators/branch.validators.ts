@@ -45,6 +45,10 @@ export const createBranchSchema = z.object({
   // Revision 35 public fields.
   address: address.optional(),
   phone: phone.nullable().optional(),
+  /** NEW I — the second number, validated by the SAME rule as the first. A
+   *  looser one here would make «which of the two may I dial» depend on which
+   *  field it landed in. */
+  phone_secondary: phone.nullable().optional(),
   email: email.nullable().optional(),
   opening_hours_ar: openingHours.optional(),
   google_maps_url: googleMapsUrl.nullable().optional(),
@@ -57,6 +61,10 @@ export const updateBranchSchema = z.object({
   display_order: displayOrder.optional(),
   address: address.optional(),
   phone: phone.nullable().optional(),
+  /** NEW I — the second number, validated by the SAME rule as the first. A
+   *  looser one here would make «which of the two may I dial» depend on which
+   *  field it landed in. */
+  phone_secondary: phone.nullable().optional(),
   email: email.nullable().optional(),
   opening_hours_ar: openingHours.optional(),
   google_maps_url: googleMapsUrl.nullable().optional(),

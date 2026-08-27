@@ -75,6 +75,11 @@ export function createBranch(prisma: PrismaClient) {
       // Revision 35 public fields — same absent-stays-absent rule.
       ...(body.address !== undefined ? { address: body.address } : {}),
       ...(body.phone !== undefined ? { phone: body.phone } : {}),
+      // NEW I — mapped on BOTH paths. R57's shape is a validator that accepts a
+      // key one of them forgets: 200, a bumped version, and nothing changed.
+      ...(body.phone_secondary !== undefined
+        ? { phoneSecondary: body.phone_secondary }
+        : {}),
       ...(body.email !== undefined ? { email: body.email } : {}),
       ...(body.opening_hours_ar !== undefined ? { openingHoursAr: body.opening_hours_ar } : {}),
       ...(body.google_maps_url !== undefined ? { googleMapsUrl: body.google_maps_url } : {}),
@@ -95,6 +100,11 @@ export function updateBranch(prisma: PrismaClient) {
       // Revision 35 public fields — same absent-stays-absent rule.
       ...(body.address !== undefined ? { address: body.address } : {}),
       ...(body.phone !== undefined ? { phone: body.phone } : {}),
+      // NEW I — mapped on BOTH paths. R57's shape is a validator that accepts a
+      // key one of them forgets: 200, a bumped version, and nothing changed.
+      ...(body.phone_secondary !== undefined
+        ? { phoneSecondary: body.phone_secondary }
+        : {}),
       ...(body.email !== undefined ? { email: body.email } : {}),
       ...(body.opening_hours_ar !== undefined ? { openingHoursAr: body.opening_hours_ar } : {}),
       ...(body.google_maps_url !== undefined ? { googleMapsUrl: body.google_maps_url } : {}),

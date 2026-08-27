@@ -110,7 +110,7 @@ export function BranchesPage(): ReactNode {
     const needle = query.trim().toLowerCase();
     if (!needle) return rows;
     return rows.filter((row) =>
-      [row.name, row.address, row.phone, row.email]
+      [row.name, row.address, row.phone, row.phone_secondary, row.email]
         .filter(Boolean)
         .some((field) => field!.toLowerCase().includes(needle)),
     );
@@ -165,6 +165,19 @@ export function BranchesPage(): ReactNode {
       header: t('admin.branches.phone'),
       secondary: true,
       cell: (r) => r.phone ?? <span className="muted">{t('common.notSet')}</span>,
+    },
+    {
+      /**
+       * **NEW I — its own column, not appended to the first.**
+       *
+       * Packing both numbers into one cell would make the value unreadable as a
+       * phone number and unusable as a link, which is the same reason the
+       * database gives it its own column rather than overloading `phone`.
+       */
+      key: 'phone_secondary',
+      header: t('admin.branches.phoneSecondary'),
+      cell: (r) =>
+        r.phone_secondary ?? <span className="muted">{t('common.notSet')}</span>,
     },
     {
       key: 'email',
@@ -607,6 +620,7 @@ function BranchFormDialog({
     name: branch?.name ?? '',
     address: branch?.address ?? '',
     phone: branch?.phone ?? '',
+    phoneSecondary: branch?.phone_secondary ?? '',
     email: branch?.email ?? '',
     openingHours: branch?.opening_hours_ar ?? '',
     mapsUrl: branch?.google_maps_url ?? '',
@@ -645,6 +659,7 @@ function BranchFormDialog({
       // absent (leave it) — the same absent-stays-absent rule the controller
       // applies on the way in.
       phone: trimmed(form.phone) ?? null,
+      phone_secondary: trimmed(form.phoneSecondary) ?? null,
       email: trimmed(form.email) ?? null,
       ...(trimmed(form.openingHours) ? { opening_hours_ar: trimmed(form.openingHours)! } : {}),
       google_maps_url: trimmed(form.mapsUrl) ?? null,
@@ -681,6 +696,13 @@ function BranchFormDialog({
         />
         <div className="form__row">
           <TextField label={t('admin.branches.phone')} type="tel" value={form.phone} onChange={set('phone')} />
+          <TextField
+            label={t('admin.branches.phoneSecondary')}
+            type="tel"
+            value={form.phoneSecondary}
+            onChange={set('phoneSecondary')}
+            hint={t('admin.branches.phoneSecondaryHint')}
+          />
           <TextField label={t('admin.branches.email')} type="email" value={form.email} onChange={set('email')} />
         </div>
         <TextArea

@@ -55,6 +55,9 @@ export interface BranchDto {
   display_order: number | null;
   address: string | null;
   phone: string | null;
+  /** NEW I — the second published number. `null` is the ordinary one-number
+   *  branch, never a gap. */
+  phone_secondary: string | null;
   email: string | null;
   opening_hours_ar: string | null;
   google_maps_url: string | null;
@@ -75,6 +78,7 @@ export function branchDto(row: {
   displayOrder: number | null;
   address: string | null;
   phone: string | null;
+  phoneSecondary: string | null;
   email: string | null;
   openingHoursAr: string | null;
   googleMapsUrl: string | null;
@@ -87,6 +91,7 @@ export function branchDto(row: {
     display_order: row.displayOrder,
     address: row.address,
     phone: row.phone,
+    phone_secondary: row.phoneSecondary,
     email: row.email,
     opening_hours_ar: row.openingHoursAr,
     google_maps_url: row.googleMapsUrl,

@@ -21,6 +21,17 @@ export function list(prisma: PrismaClient) {
         name: branch.name,
         address: branch.address,
         phone: branch.phone,
+        /**
+         * **NEW I — published, because it is the same fact as `phone`.**
+         *
+         * R35 put the contact details on this public surface so a visitor can
+         * reach the branch; a branch that answers on its mobile and not its
+         * landline is exactly the case the second number exists for, and
+         * withholding it would publish half a contact list. This route is an
+         * **allowlist** (§5.1) and this is a deliberate addition to it, not a
+         * column that arrived by widening a `select`.
+         */
+        phone_secondary: branch.phoneSecondary,
         email: branch.email,
         opening_hours_ar: branch.openingHoursAr,
         google_maps_url: branch.googleMapsUrl,

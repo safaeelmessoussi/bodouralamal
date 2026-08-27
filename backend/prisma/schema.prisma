@@ -740,6 +740,18 @@ model Branch {
   /// boundary by TD-9, which is where a real value can be demanded.
   address        String? @db.VarChar(300)
   phone          String? @db.VarChar(20)
+  /**
+   * **NEW I — the SECOND number, as its own column.**
+   * A branch commonly publishes two: a landline and a mobile, or an office line
+   * and the coordinator's. Overloading `phone` with *«0537… / 0661…»* was the
+   * alternative and is refused for the reason §7 refuses every packed field —
+   * the value stops being a phone number, so nothing can dial it, validate it,
+   * or render it as a link, and the split becomes a parsing problem the moment
+   * anyone needs one of the two.
+   * Nullable, and it stays nullable: a branch with one number is the ordinary
+   * case, not a gap. Same TD-9 shape as `phone`.
+   */
+  phoneSecondary String? @map("phone_secondary") @db.VarChar(20)
   email          String? @db.VarChar(254)
   /// Free multiline Arabic text, displayed verbatim and NEVER parsed (§7).
   /// Ramadan and exceptional weeks change the hours; free text lets the person

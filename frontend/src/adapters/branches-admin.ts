@@ -29,6 +29,9 @@ export interface Branch {
   display_order: number | null;
   address: string | null;
   phone: string | null;
+  /** NEW I — the second published number. `null` is a one-number branch, which
+   *  is the ordinary case rather than a gap. */
+  phone_secondary: string | null;
   email: string | null;
   opening_hours_ar: string | null;
   google_maps_url: string | null;
@@ -54,6 +57,7 @@ export interface BranchInput {
   display_order?: number | null;
   address?: string;
   phone?: string | null;
+  phone_secondary?: string | null;
   email?: string | null;
   opening_hours_ar?: string;
   google_maps_url?: string | null;

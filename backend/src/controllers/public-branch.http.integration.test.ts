@@ -112,6 +112,11 @@ describe("GET /branches — public access", () => {
         "name",
         "opening_hours_ar",
         "phone",
+        // NEW I — a deliberate ADDITION to the §5.1 allowlist, not a column
+        // that arrived by widening a `select`. R35 published the contact
+        // details so a visitor can reach the branch; a branch that answers on
+        // its mobile is exactly this field's case.
+        "phone_secondary",
       ].sort(),
     );
     for (const leaked of [

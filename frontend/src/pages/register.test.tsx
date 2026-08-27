@@ -175,6 +175,8 @@ describe('BranchSelector — one component, two modes (§14.3)', () => {
       name: 'مقر أمرشيش',
       address: null,
       phone: null,
+    // NEW I — the fixture states it rather than letting the type drift silently.
+    phone_secondary: null,
       email: null,
       opening_hours_ar: null,
       google_maps_url: null,
