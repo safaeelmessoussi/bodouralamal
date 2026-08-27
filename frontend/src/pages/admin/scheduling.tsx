@@ -27,7 +27,7 @@ import {
   type SchedulingItem,
   type SchedulingType,
 } from '../../adapters/scheduling.js';
-import { searchUsers, type UserSummary } from '../../adapters/users.js';
+import { searchDirectory, type DirectoryEntry } from '../../adapters/users.js';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
 import { CalendarGrid } from '../../components/calendar/calendar-grid.js';
 import { CalendarHeader } from '../../components/calendar/calendar-header.js';
@@ -870,7 +870,7 @@ export function SchedulingDialog({
   // `RoomDto` publishes no `capacity` — BR-23 makes it informational and it is
   // enforced nowhere, so putting it on this wire is a further contract change
   // and is recorded as such rather than smuggled in here.
-  const [teachers, setTeachers] = useState<UserSummary[]>([]);
+  const [teachers, setTeachers] = useState<DirectoryEntry[]>([]);
   /**
    * **R91 — staffing is a list of dated assignments**, for a class.
    *
@@ -1117,7 +1117,7 @@ export function SchedulingDialog({
      * narrow one, which is only *whom may I name here*.
      */
     if (canAssignStaff) {
-      void searchUsers(token, { role: 'teacher' })
+      void searchDirectory(token, { role: 'teacher' })
         .then((p) => setTeachers(p.data))
         .catch(() => setTeachers([]));
       return;
@@ -1128,7 +1128,7 @@ export function SchedulingDialog({
     void listEventStaffOptions(token)
       .then((rows) =>
         setTeachers(
-          rows.map((r) => ({ id: r.id, name_arabic: r.name }) as unknown as UserSummary),
+          rows.map((r) => ({ id: r.id, name_arabic: r.name }) as unknown as DirectoryEntry),
         ),
       )
       .catch(() => setTeachers([]));

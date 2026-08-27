@@ -64,6 +64,50 @@ export interface UserQuery {
   beneficiaries_only?: 'true';
 }
 
+/**
+ * A person as an operational screen needs them (Owner clarification,
+ * 2026-08-28).
+ *
+ * **Everything absent here is absent on the wire too.** `/admin/directory`
+ * carries no email, no phone, no `account_status` and no `version`, because a
+ * staff picker or a roster can do nothing that would need them. Five screens
+ * used to receive every user's contact details in order to render a list of
+ * names.
+ */
+export interface DirectoryEntry {
+  id: string;
+  name_arabic: string;
+  nickname: string | null;
+  roles: RoleAssignment[];
+}
+
+/**
+ * `GET /admin/directory` — **who may I staff, enrol or roster?**
+ *
+ * Reachable by an Admin, unlike `searchUsers`, which is global ACCOUNT
+ * administration and is Super Admin's alone. Same filters and the same
+ * branch-scoping; a smaller answer.
+ */
+export async function searchDirectory(
+  token: string | null,
+  query: UserQuery = {},
+  page = 1,
+  sort: SortState | null = null,
+): Promise<Page<DirectoryEntry>> {
+  const params = new URLSearchParams({ page: String(page), page_size: '25' });
+  for (const [key, value] of Object.entries(query)) {
+    if (value) params.set(key, value);
+  }
+  applySort(params, sort);
+  return api<Page<DirectoryEntry>>(`/admin/directory?${params.toString()}`, { token });
+}
+
+/**
+ * `GET /admin/users` — the global account directory. **Super Admin only**
+ * (Owner, 2026-08-28), enforced server-side; an Admin receives `403`.
+ *
+ * An operational screen that needs to pick a person wants `searchDirectory`.
+ */
 export async function searchUsers(
   token: string | null,
   query: UserQuery = {},

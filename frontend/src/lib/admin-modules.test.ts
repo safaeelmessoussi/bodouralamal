@@ -275,13 +275,24 @@ describe('R61 — administration is Super Admin only by placement', () => {
   });
 
   it('leaves the Admin\'s operational sections untouched', () => {
-    // R61 withdraws a screen, not an Admin's work. Groups, users, approvals and
+    // R61 withdraws a screen, not an Admin's work. Groups, approvals and
     // scheduling all still belong to them — and all still read branches through
     // the selector feed the endpoint keeps serving (R61.2).
     const forAdmin = visibleModules(['admin']).map((m) => m.path);
     expect(forAdmin).toContain('/admin/groups');
-    expect(forAdmin).toContain('/admin/users');
     expect(forAdmin).toContain('/admin/approvals');
+    /**
+     * **`/admin/users` was here and is deliberately not** (Owner clarification,
+     * 2026-08-28).
+     *
+     * The Owner separated *managing operational data* from *administering
+     * accounts*. المستخدمون is the second: every person on the platform, their
+     * address, their status, their roles, and the power to delete the account.
+     * An Admin who needs to pick a person uses `/admin/directory`, which is a
+     * different endpoint with a smaller projection — so this removes a screen,
+     * not a capability.
+     */
+    expect(forAdmin).not.toContain('/admin/users');
   });
 });
 
@@ -393,8 +404,15 @@ describe('§14.1 renders exactly the order the Document Owner specified (R105)',
     expect(dashboardCards(['super_admin']).map((m) => m.path)).toEqual(
       [...MAIN_NAV_ORDER, ...ADMINISTRATION_ORDER].filter((p) => p !== '/admin'),
     );
+    /**
+     * **R105's ORDER is unchanged; the Admin's membership is** (Owner,
+     * 2026-08-28). المستخدمون keeps its third position for a Super Admin — the
+     * Owner fixed that order and this clarification did not revisit it — while
+     * an Admin no longer sees the entry at all, because account administration
+     * is not operational work.
+     */
     expect(dashboardCards(['admin']).map((m) => m.path)).toEqual(
-      [...MAIN_NAV_ORDER].filter((p) => p !== '/admin'),
+      [...MAIN_NAV_ORDER].filter((p) => p !== '/admin' && p !== '/admin/users'),
     );
   });
 });

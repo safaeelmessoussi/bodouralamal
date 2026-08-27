@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 
-import { searchUsers, type UserSummary } from '../../adapters/users.js';
+import { searchDirectory, type DirectoryEntry } from '../../adapters/users.js';
 import {
   fetchTeachingProfile,
   type TeachingProfile,
@@ -50,7 +50,7 @@ import { t } from '../../i18n/index.js';
 export function TeachersPage(): ReactNode {
   const { accessToken } = useSession();
 
-  const [rows, setRows] = useState<UserSummary[]>([]);
+  const [rows, setRows] = useState<DirectoryEntry[]>([]);
   const [status, setStatus] = useState<TableStatus>('loading');
   /**
    * R76 — server-side on `name`, the one column `/admin/users` owns.
@@ -71,7 +71,7 @@ export function TeachersPage(): ReactNode {
   const [profiles, setProfiles] = useState<Record<string, TeachingProfile>>({});
   const [subjects, setSubjects] = useState<{ id: string; name: string }[]>([]);
   const [categories, setCategories] = useState<{ id: string; name: string }[]>([]);
-  const [profiling, setProfiling] = useState<UserSummary | null>(null);
+  const [profiling, setProfiling] = useState<DirectoryEntry | null>(null);
 
   const load = useCallback(async () => {
     setStatus('loading');
@@ -82,7 +82,7 @@ export function TeachersPage(): ReactNode {
       // search, and the server refuses it — sending it would turn a deliberate
       // limit into an error message mid-typing.
       const trimmed = query.trim();
-      const page = await searchUsers(accessToken, {
+      const page = await searchDirectory(accessToken, {
         role: 'teacher',
         ...(trimmed.length >= 2 ? { q: trimmed } : {}),
       }, 1, sort);
@@ -138,7 +138,7 @@ export function TeachersPage(): ReactNode {
     [rows, profiles, subjectFilter, categoryFilter],
   );
 
-  const actions: RowAction<UserSummary>[] = [
+  const actions: RowAction<DirectoryEntry>[] = [
     { label: t('admin.teachingProfile.action'), onSelect: (r) => setProfiling(r) },
   ];
 
@@ -170,7 +170,7 @@ export function TeachersPage(): ReactNode {
             key: 'name',
             header: t('admin.users.colName'),
             sortKey: 'name',
-            cell: (r: UserSummary) => r.name_arabic,
+            cell: (r: DirectoryEntry) => r.name_arabic,
           },
           {
             // §8 — **where she teaches.** The row already carried it (every role
@@ -180,24 +180,24 @@ export function TeachersPage(): ReactNode {
             // all-branches rule is stated once, not copied here.
             key: 'branches',
             header: t('admin.users.colBranches'),
-            cell: (r: UserSummary) => <BranchScopeCell roles={r.roles} />,
+            cell: (r: DirectoryEntry) => <BranchScopeCell roles={r.roles} />,
           },
           {
             key: 'subjects',
             header: t('admin.teachers.colSubjects'),
-            cell: (r: UserSummary) => chips(profiles[r.id]?.subjects ?? []),
+            cell: (r: DirectoryEntry) => chips(profiles[r.id]?.subjects ?? []),
           },
           {
             key: 'categories',
             header: t('admin.teachers.colCategories'),
-            cell: (r: UserSummary) => chips(profiles[r.id]?.categories ?? []),
+            cell: (r: DirectoryEntry) => chips(profiles[r.id]?.categories ?? []),
           },
           {
             key: 'availability',
             header: t('admin.teachers.colAvailability'),
             // A count, not the ranges: seven days of ranges in a cell is a
             // table nobody can read. The dialog holds the detail.
-            cell: (r: UserSummary) => {
+            cell: (r: DirectoryEntry) => {
               const count = profiles[r.id]?.availability.length ?? 0;
               return count === 0 ? (
                 <span className="muted">{t('admin.teachers.noAvailability')}</span>

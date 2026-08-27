@@ -20,7 +20,7 @@ import {
   removeMember,
   type TeachingGroupRow,
 } from '../../adapters/teaching-groups.js';
-import { searchUsers, type UserSummary } from '../../adapters/users.js';
+import { searchDirectory, type DirectoryEntry } from '../../adapters/users.js';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
 import { LevelSelect, levelLabel } from '../../components/scope/level-select.js';
 import { Button } from '../../components/ui/button.js';
@@ -339,7 +339,7 @@ function EnrolDialog({
   onCancel: () => void;
   onDone: (message: string) => void;
 }): ReactNode {
-  const [matches, setMatches] = useState<UserSummary[]>([]);
+  const [matches, setMatches] = useState<DirectoryEntry[]>([]);
   const [studentId, setStudentId] = useState('');
   const [levelId, setLevelId] = useState<string | null>(null);
   /**
@@ -389,7 +389,7 @@ function EnrolDialog({
   useEffect(() => {
     void (async () => {
       try {
-        setMatches((await searchUsers(token, { beneficiaries_only: 'true' })).data);
+        setMatches((await searchDirectory(token, { beneficiaries_only: 'true' })).data);
       } catch {
         setMatches([]);
       }

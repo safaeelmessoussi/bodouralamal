@@ -12,7 +12,8 @@ import { StaffingPeriods, type StaffingPeriod } from './staffing-periods.js';
 import { t } from '../../i18n/index.js';
 import type { ScopeOptions } from '../../hooks/use-scope-options.js';
 import type { TeachingCandidate } from '../../adapters/teaching-candidates.js';
-import type { UserSummary } from '../../adapters/users.js';
+// The narrow directory entry — these render names, never account fields.
+import type { DirectoryEntry } from '../../adapters/users.js';
 
 /**
  * The fields a **class** needs and nothing else needs (§4.4c).
@@ -49,7 +50,7 @@ export interface ClassSectionProps {
   onDelivery: (v: DeliveryMode) => void;
   mediaMode: OnlineMediaMode;
   onMediaMode: (v: OnlineMediaMode) => void;
-  teachers: UserSummary[];
+  teachers: DirectoryEntry[];
   /** R91 — one row per assignment, each with its own effective period. */
   staffing: StaffingPeriod[];
   onStaffing: (next: StaffingPeriod[]) => void;
@@ -222,7 +223,7 @@ export function ActivitySection({
    *  joins explicitly, and re-pointing them later would silently change who has
    *  been seeing the event. */
   locked: boolean;
-  staff: UserSummary[];
+  staff: DirectoryEntry[];
   responsibleId: string;
   onResponsible: (v: string) => void;
   assistantIds: string[];
@@ -237,7 +238,7 @@ export function ActivitySection({
    * A مؤطرة is offered exactly herself: she may staff her own event and may not
    * hand it to somebody else. Absent, it is `staff` — the Admin's case.
    */
-  leadStaff?: UserSummary[];
+  leadStaff?: DirectoryEntry[];
   /** True when the lead is fixed and only the assistants are hers to choose. */
   responsibleLocked?: boolean;
   /** R72 — the scope kinds this caller may choose. A Teacher gets `group` and

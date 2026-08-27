@@ -59,6 +59,21 @@ const MAIN = [
   ['الجدولة', '/admin/schedules'],
   ['مكتبة المحتوى', '/admin/content'],
 ];
+/**
+ * **What an ADMIN sees: the main list minus المستخدمون** (Owner clarification,
+ * 2026-08-28).
+ *
+ * Global account administration is Super Admin's, so the entry leaves the
+ * Admin's menu — while R105's ORDER is untouched and a Super Admin still sees
+ * المستخدمون third. This is a change of membership, not of order.
+ *
+ * The menu is not the enforcement: `listUsers` asserts Super Admin in the
+ * service, so an Admin who types the URL is refused by the server. That is
+ * asserted with forged requests in the HTTP tests, which a browser check cannot
+ * do.
+ */
+const MAIN_FOR_ADMIN = MAIN.filter(([, href]) => href !== '/admin/users');
+
 const ADMINISTRATION = [
   ['الفئات', '/admin/categories'],
   ['المستويات', '/admin/levels'],
@@ -167,8 +182,8 @@ await goto('/admin');
 
 const adminNav = await readSidebar();
 check(
-  'Admin — the same eleven, in the same order',
-  same(adminNav?.flat, labelled(MAIN)),
+  'Admin — the same order, minus المستخدمون (account administration is Super Admin\'s)',
+  same(adminNav?.flat, labelled(MAIN_FOR_ADMIN)),
   JSON.stringify(adminNav?.flat?.map((i) => i.text)),
 );
 check(
@@ -184,8 +199,8 @@ check(
 
 const adminCards = await readCards();
 check(
-  'Admin — the dashboard shows the ten it can open, and no more',
-  same(adminCards, labelled(MAIN.slice(1))),
+  'Admin — the dashboard shows exactly what it can open, and no more',
+  same(adminCards, labelled(MAIN_FOR_ADMIN.slice(1))),
   `${adminCards?.length ?? 0} cards`,
 );
 

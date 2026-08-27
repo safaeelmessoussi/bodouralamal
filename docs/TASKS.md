@@ -1795,3 +1795,26 @@ actual values, which are Production reference data the Owner holds.
 - [ ] Certificate automation (Let's Encrypt) verified on VPS (R-8)
 - [ ] §18 Platform & Deployment checklist fully green
 - [ ] Production launch; LAUNCH row in CHANGES.log
+
+### Owner clarification — account administration vs operational work (2026-08-28)
+
+Recorded authoritatively in `docs/SRS-PROPOSAL-R111.md` §6a; the route and its
+normative wording are proposed in `docs/SRS-PROPOSAL-R112.md`.
+
+- [x] **المستخدمون is Super-Admin-only**, enforced in `user.service.ts` for the
+      list and **every write beneath it**; proved with forged requests.
+- [x] **`GET /admin/directory`** — the operational people-picker, Admin+, exactly
+      `id`, `name_arabic`, `nickname`, `roles`. Five screens moved onto it.
+- [ ] **BLOCKED ON THE OWNER — one TD-3 line.** `check-openapi-td3.sh` enforces
+      §20 rule 16 and is **correctly failing**: an endpoint in the API document
+      that TD-3 does not list is forbidden. `docs/SRS.md` is the Owner's; the
+      exact proposed entry is in `SRS-PROPOSAL-R112.md` §3, with the TD-2 change
+      in §4. **This is the only red guard.**
+- [ ] **Account deletion itself (R111 #14) is NOT yet implemented.** The
+      authorization split above is its precondition. Still to build: the
+      `AccountStatus` terminal value and its migration, self-delete for every
+      user, the last-active-Super-Admin refusal (reusing the existing
+      `LAST_SUPER_ADMIN` guard), Super-Admin delete of another account, permanent
+      delete as R111's de-identification performed now, the 3-day window as a
+      **second** retention window that must not disturb `PURGE_WINDOW_DAYS = 90`,
+      and R111's BLOCK on live staff responsibilities.

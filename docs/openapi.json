@@ -2217,10 +2217,51 @@
         }
       }
     },
+    "/admin/directory": {
+      "get": {
+        "summary": "Pick a person while doing operational work",
+        "description": "**Owner clarification, 2026-08-28 — the operational half of what `/admin/users` used to be.** Admin **or** Super Admin. It answers *who may I staff, enrol or roster*, and it is a **deliberately smaller projection**: exactly `id`, `name_arabic`, `nickname` and `roles`. No email, no phone, no `account_status`, no TD-15 `version` — a picker can do nothing that would need them, and five operational screens were receiving every user's contact details in order to render a list of names. **The scope rule is NOT relaxed**: it is the same branch-scoped query `/admin/users` runs (§4.2 R25), shared rather than reimplemented so the two cannot drift on which rows a branch-scoped Admin may see while differing on what is returned about them. Same filters (`role`, `branch_id`, `beneficiaries_only`), same TD-10 search and paging. **Why two endpoints rather than one with a relaxed role:** the representations are not identical — the Document Owner's standing preference for one endpoint with role-scoped data applies where two would return *the same* representation, and these deliberately do not.",
+        "responses": {
+          "200": {
+            "description": "A page of directory entries."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN for a caller holding neither admin nor super_admin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/admin/users": {
       "get": {
         "summary": "List, filter and search users",
-        "description": "§14.2 Users screen. Columns are exactly what §14.2 specifies — Arabic name, Nickname, Role(s), Branch scope, Status, Phone — and deliberately nothing from `StudentSocialProfile`, which §4.10 restricts to assigned teachers. Visibility is branch-scoped (§4.2 Revision 25): a branch-scoped Admin sees only users holding a live role assignment to one of that Admin's managed branches, and users with **no** branch assignment — parents, unassigned students, pre-provisioned accounts — are visible to **Super Admins only**. An all-branches (`NULL`) Admin sees everyone. The `branch_id` filter narrows within that scope and can never reach outside it. Filters: `role`, `branch_id`, `status` (§14.2). TD-10 search via `q` spans Arabic name, French name, nickname, phone, the linked parent's name, and Google email across **both** `UserIdentity.email` and `User.pre_provisioned_email` (Revision 15) — an unclaimed account has no identity row, and those are the accounts staff most need to find. Substring, case-insensitive, minimum 2 characters, matched against indexed normalized shadow columns; the query is normalized by the same rules as the stored value, with parity against the SQL functions asserted by test. Sorted by `name_arabic` (natively ar-x-icu collated, TD-6a) with `id` as the deterministic tiebreaker. Paginated: default 25, max 100. **`?beneficiaries_only=true` (R79.7)** returns exactly the institute's مستفيدات — the durable `is_beneficiary` fact, **independent of every role and of every enrolment**. A minor beneficiary holds no role row at all (§4.3) and is included; a مؤطرة who also studies is included while one who does not is not; a beneficiary between placements, or never yet placed, is included, because enrolment is BACKFILL EVIDENCE and never the runtime definition — it would otherwise be the precondition for being enrollable. **The flag itself is never published** (R79.8): the screens that need it read it server-side, exactly as `sex` is handled.",
+        "description": "**SUPER ADMIN ONLY (Owner clarification, 2026-08-28).** This is global ACCOUNT administration — every person on the platform, their address, their status, their roles, and the power to edit, suspend or delete the account itself — and it is separated from *managing operational data*, which an Admin does. An Admin receives `403` on this endpoint and on **every** write beneath it, asserted in the service so the refusal reaches every caller including tests and jobs; hiding the menu entry is not the enforcement. An Admin who needs to pick a person uses `/admin/directory`. **The refusal is uniform and therefore non-disclosing:** the same `403` comes back for an out-of-scope user, a user inside the caller's own branch, and an id that does not exist, so §20 rule 17's property is preserved by uniformity rather than by answering `404`. §14.2 Users screen. Columns are exactly what §14.2 specifies — Arabic name, Nickname, Role(s), Branch scope, Status, Phone — and deliberately nothing from `StudentSocialProfile`, which §4.10 restricts to assigned teachers. Visibility is branch-scoped (§4.2 Revision 25): a branch-scoped Admin sees only users holding a live role assignment to one of that Admin's managed branches, and users with **no** branch assignment — parents, unassigned students, pre-provisioned accounts — are visible to **Super Admins only**. An all-branches (`NULL`) Admin sees everyone. The `branch_id` filter narrows within that scope and can never reach outside it. Filters: `role`, `branch_id`, `status` (§14.2). TD-10 search via `q` spans Arabic name, French name, nickname, phone, the linked parent's name, and Google email across **both** `UserIdentity.email` and `User.pre_provisioned_email` (Revision 15) — an unclaimed account has no identity row, and those are the accounts staff most need to find. Substring, case-insensitive, minimum 2 characters, matched against indexed normalized shadow columns; the query is normalized by the same rules as the stored value, with parity against the SQL functions asserted by test. Sorted by `name_arabic` (natively ar-x-icu collated, TD-6a) with `id` as the deterministic tiebreaker. Paginated: default 25, max 100. **`?beneficiaries_only=true` (R79.7)** returns exactly the institute's مستفيدات — the durable `is_beneficiary` fact, **independent of every role and of every enrolment**. A minor beneficiary holds no role row at all (§4.3) and is included; a مؤطرة who also studies is included while one who does not is not; a beneficiary between placements, or never yet placed, is included, because enrolment is BACKFILL EVIDENCE and never the runtime definition — it would otherwise be the precondition for being enrollable. **The flag itself is never published** (R79.8): the screens that need it read it server-side, exactly as `sex` is handled.",
         "responses": {
           "200": {
             "description": "Page of users in the TD-10 envelope."

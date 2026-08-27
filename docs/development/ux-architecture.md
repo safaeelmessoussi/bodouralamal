@@ -527,6 +527,30 @@ verdict: it says a human decided this row, which a reader of the sheet needs.
 
 ## O · Scope and authorization
 
+### O.1 · A menu entry is never the enforcement (Owner, 2026-08-28)
+
+When المستخدمون became Super-Admin-only, the change that mattered was
+`ACCOUNT_ADMIN_ROLES` in `user.service.ts` — **not** the `roles` field on the
+navigation registry. The Owner said so in terms: *«Do not rely on hiding the page
+in the frontend; enforce it server-side.»*
+
+The registry entry still changed, and both are needed for different reasons:
+
+- **the service** refuses every caller, including a typed URL, a forged request,
+  a test and a background job;
+- **the menu** stops offering what the server will refuse, so nobody is invited
+  into a `403`.
+
+**The tell that the split is right:** the HTTP tests forge requests as an Admin
+against every account write and assert `403`. A menu test cannot do that, and a
+menu test passing would have proved nothing about the server.
+
+**Withdrawing a page must not withdraw the work.** Five operational screens read
+the account list purely to render names. They now read `/admin/directory`, which
+answers *whom may I staff, enrol or roster* — R93's rule again: **the fix for a
+screen that cannot work is a smaller question, never a wider permission.**
+
+
 **A component never decides authorization.**
 
 * The **caller** passes the dataset it is permitted to offer.

@@ -119,7 +119,12 @@ beforeAll(async () => {
     update: { value: TEXT_VERSION },
     create: { key: CONSENT_TEXT_VERSION_KEY, value: TEXT_VERSION },
   });
-  const adminRole = await prisma.role.findUniqueOrThrow({ where: { name: 'admin' } });
+  // **Super Admin since 2026-08-28**: pre-provisioning is account
+  // administration, and this suite uses it only as a fixture step — the
+  // properties it asserts are about email ownership, not about who may staff.
+  const adminRole = await prisma.role.findUniqueOrThrow({
+    where: { name: 'super_admin' },
+  });
   const admin = await prisma.user.create({
     data: { nameArabic: ADMIN_TAG, sex: 'female', accountStatus: 'active' },
   });

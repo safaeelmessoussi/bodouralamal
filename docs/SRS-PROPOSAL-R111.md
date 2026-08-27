@@ -187,6 +187,40 @@ the old one can still come back.
   and safeguarding record survives — an interface promising deletion while §4
   retains the record would be the one genuinely unacceptable outcome.
 
+## 6a · Who may delete whom (Owner clarification, 2026-08-28 — AUTHORITATIVE)
+
+This clarification is the Document Owner's and **overrides anything earlier in
+this document that reads differently**. Everything else in R111 — the
+de-identification model, the 3-day restoration window, OD-07's re-registration
+rule, historical-record retention and the staff-responsibility BLOCK — stands
+unchanged.
+
+**1 · Every authenticated user may soft-delete their own account** from their
+profile: Student, Teacher, Admin and Super Admin alike.
+
+**2 · A Super Admin may delete their own account only while another active Super
+Admin remains.** The last active Super Admin is never deletable. This is the
+existing `LAST_SUPER_ADMIN` guard — the one that already refuses to let the role
+be removed from the final holder — applied to deletion, not a second rule with
+its own drift.
+
+**3 · Only a Super Admin may delete another user's account.**
+
+**4 · On المستخدمون a Super Admin may act on any account**, with **soft delete**
+and **permanent delete** where §3's classification allows it. Permanent delete is
+not row removal: §2 establishes that twenty-six relationships must survive, so it
+is the de-identification of §4's tombstone performed **now** instead of after
+three days.
+
+**5 · المستخدمون is Super-Admin-only.** An Admin does not reach global account
+administration merely because they manage operational data, and **the enforcement
+is server-side** — hiding the page is not enforcement.
+
+**6 · Ordinary role-specific management screens stay separate.** Withdrawing the
+account page must not withdraw an Admin's work: staffing a class, enrolling a
+beneficiary and filling a roster all continue, through a surface that answers
+*who may I pick* rather than *whose account may I administer*.
+
 ## 7 · The Owner's decisions (2026-08-27)
 
 **1 · Self-deletion is available to every user, مؤطِّرات included.** §6.2's

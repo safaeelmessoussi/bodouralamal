@@ -411,6 +411,13 @@ export function createApp(
   guarded.post('/students/:id/consents', consents.record(prisma));
   guarded.get('/students/:id/social-profile', socialProfile.read(prisma));
   guarded.put('/students/:id/social-profile', socialProfile.write(prisma));
+  // **Two surfaces, two authorizations** (Owner clarification, 2026-08-28).
+  //
+  // `/admin/users` is global ACCOUNT administration — Super Admin only, asserted
+  // in the service so every caller meets it. `/admin/directory` is the
+  // operational people-picker an Admin needs to staff a class or fill a roster,
+  // and it answers a deliberately smaller projection.
+  guarded.get('/admin/directory', users.directory(prisma));
   guarded.get('/admin/users', users.list(prisma));
   guarded.post('/admin/users', users.create(prisma));
   // §5.6 "edit, deactivate, role/branch-scope assignment". Suspension is its own

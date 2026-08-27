@@ -907,3 +907,47 @@ harnesses rather than trusting their recorded counts:
 of the day it was recorded.** Three harnesses have now been found green in the
 documentation and failing in reality, each because a label was deliberately
 renamed and the harness was not.
+
+## Account administration is Super Admin's; the operational directory is not (2026-08-28)
+
+Owner clarification, recorded as authoritative in `SRS-PROPOSAL-R111.md` §6a.
+
+`/admin/users` had one role list — `['admin', 'super_admin']` — covering two
+different things: **global account administration** (every person, their address,
+their status, their roles, and the power to delete the account) and **picking a
+person while doing operational work** (staffing, enrolling, rostering). The Owner
+separated them.
+
+- **`/admin/users` and every write beneath it are Super Admin's**, asserted in
+  the service so the refusal reaches every caller — tests and jobs included.
+  Hiding the menu entry is not the enforcement, and the HTTP tests prove the
+  refusal with forged requests, which a menu test cannot.
+- **`/admin/directory` is new** — Admin or Super Admin, answering *who may I
+  staff, enrol or roster*. Exactly `id`, `name_arabic`, `nickname`, `roles`.
+
+**The projection is the point, not a side effect.** Five operational screens were
+receiving every user's **email, phone, account status and TD-15 version** in
+order to render a list of names. They now receive none of it, and the exact key
+set is pinned so a field added to the account projection cannot arrive here
+unnoticed.
+
+**The scope rule is shared, not copied.** Both surfaces run one unexported query
+with no role assertion of its own, so they cannot drift on *which rows* a
+branch-scoped Admin may see while differing on *what is returned about them* —
+which is the only difference intended.
+
+### A guard restated because the Owner changed the rule, not because code drifted
+
+`user-management.http.integration.test.ts` asserted **404, never 403**, for a
+branch Admin editing an out-of-scope user: §20 rule 17, because *"exists, but not
+yours"* is itself a disclosure. That was right while an Admin could edit *some*
+accounts.
+
+An Admin is now refused the **capability** rather than the row, so **403 is the
+non-disclosing answer, and uniformity is what makes it so** — the same status
+comes back for an out-of-scope user, a user in the caller's own branch, and an id
+that does not exist. The test now asserts exactly that: three very different
+targets, one answer. The scope-based rule moved to `/admin/directory`, where a
+branch-scoped Admin *is* authorized and out-of-scope people simply do not appear.
+
+Two frontend guards were restated the same way, and say so in place.

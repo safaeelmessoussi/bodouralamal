@@ -29,8 +29,37 @@ import { revokeAllSessions } from './refresh-token.service.js';
  * so one address can never be made claimable twice.
  */
 
-/** TD-2 (§14.2 row "Create/edit users; assign roles & branch scopes"). */
-const USER_ADMIN_ROLES = ['admin', 'super_admin'] as const;
+/**
+ * **Global account administration is Super Admin's alone** (Owner, 2026-08-28).
+ *
+ * It was `['admin', 'super_admin']`. The Owner's clarification separates two
+ * things this list had merged:
+ *
+ * * **the global account directory** — every person on the platform, their
+ *   address, their status, their roles, and the power to edit, suspend or delete
+ *   the account itself. That is *account administration*, and it is Super
+ *   Admin's;
+ * * **picking a person while doing operational work** — staffing a class,
+ *   enrolling a beneficiary, filling a roster. An Admin needs that and it is
+ *   not account administration at all.
+ *
+ * The second is `listDirectory` below, which is **a different projection, not a
+ * relaxed copy of this one**: it carries no address, no phone, no account
+ * status and no `version`, because a name picker needs none of them. Five
+ * operational screens were receiving every user's email and phone in order to
+ * render a list of names.
+ *
+ * Enforced here, in the service, and therefore for every caller including tests
+ * and jobs — never by hiding a page (§16.2, and the Owner is explicit).
+ */
+const ACCOUNT_ADMIN_ROLES = ['super_admin'] as const;
+
+/**
+ * Who may pick a person while doing their own operational work. Deliberately
+ * wider than `ACCOUNT_ADMIN_ROLES`, and deliberately reaching a narrower
+ * projection.
+ */
+const DIRECTORY_ROLES = ['admin', 'super_admin'] as const;
 
 /**
  * Roles staff may assign here. `super_admin` is deliberately absent: §15.1
@@ -71,7 +100,7 @@ export async function preProvision(
 ): Promise<{ id: string; accountStatus: string; preProvisionedEmail: string | null }> {
   // TD-12: user-management mutations are a high-risk surface, so the caller's
   // status and role are re-read from live rows rather than trusted from a token.
-  const actor = await assertFreshActive(prisma, caller.userId, USER_ADMIN_ROLES, caller.activeRole);
+  const actor = await assertFreshActive(prisma, caller.userId, ACCOUNT_ADMIN_ROLES, caller.activeRole);
 
   const email = input.email.trim().toLowerCase();
   const nameArabic = input.nameArabic.trim();
@@ -258,9 +287,30 @@ export async function listUsers(
   caller: Actor,
   filters: UserListFilters & SortParams = {},
 ): Promise<Page<UserListItem>> {
-  // TD-12: browsing beneficiary records is a user-management surface, so the
-  // caller's status and role are re-read from live rows on every request.
-  const actor = await assertFreshActive(prisma, caller.userId, USER_ADMIN_ROLES, caller.activeRole);
+  // TD-12: browsing the account directory is account administration, so the
+  // caller's status and role are re-read from live rows on every request — and
+  // since 2026-08-28 that role is Super Admin alone.
+  await assertFreshActive(prisma, caller.userId, ACCOUNT_ADMIN_ROLES, caller.activeRole);
+  return listUsersUnchecked(prisma, caller, filters);
+}
+
+/**
+ * The query both surfaces run, **with no role assertion of its own.**
+ *
+ * Split out on 2026-08-28 so `listUsers` and `listDirectory` cannot drift on
+ * *which rows a branch-scoped caller may see* while differing on *what is
+ * returned about them* — which is the only difference intended.
+ *
+ * **Not exported, and that is the safety property**: every route reaches it
+ * through one of the two functions above, each of which has already asserted
+ * its own role. A caller able to reach this directly would bypass both.
+ */
+async function listUsersUnchecked(
+  prisma: PrismaClient,
+  caller: Actor,
+  filters: UserListFilters & SortParams = {},
+): Promise<Page<UserListItem>> {
+  const actor = await assertFreshActive(prisma, caller.userId, DIRECTORY_ROLES, caller.activeRole);
 
   const { skip, take, page, pageSize } = pageWindow({ page: filters.page, pageSize: filters.pageSize });
 
@@ -389,6 +439,71 @@ export async function listUsers(
   };
 }
 
+/* ── The operational directory (Owner clarification, 2026-08-28) ─────────── */
+
+/**
+ * A person as an operational screen needs them: **a name to show and enough to
+ * tell two people apart.**
+ *
+ * Everything `UserListItem` carries and this does not is deliberate: no email,
+ * no phone, no `account_status`, no `version`. A staff picker cannot edit an
+ * account, so it is given nothing an account edit would need — and the five
+ * screens that used to call `GET /admin/users` for a list of names stop
+ * receiving every user's contact details as a side effect.
+ *
+ * `roles` stays, because it is what the screens filter on (*«teachers at my
+ * branch»*) and what `BranchScopeCell` renders on المؤطِّرات. It names roles and
+ * branches, which are assignments — not personal data about the person.
+ */
+export interface DirectoryEntry {
+  id: string;
+  nameArabic: string;
+  nickname: string | null;
+  roles: { role: string; branchId: string | null; branchName: string | null }[];
+}
+
+export type DirectoryFilters = Pick<
+  UserListFilters,
+  'q' | 'role' | 'branchId' | 'beneficiariesOnly' | 'page' | 'pageSize'
+>;
+
+/**
+ * `GET /admin/directory` — **who may I staff, enrol or roster?**
+ *
+ * Admin or Super Admin, and **branch-scoped exactly as `listUsers` is**: the
+ * scope rule is not relaxed to make a picker convenient. What differs is the
+ * projection, which is the whole point of the split — an Admin doing
+ * operational work gets the people, not their accounts.
+ *
+ * Filtering, searching and paging behave identically to the account list,
+ * because they are the same questions asked of the same table; they are
+ * delegated rather than reimplemented, so the two cannot drift on what a
+ * branch-scoped Admin may see.
+ */
+export async function listDirectory(
+  prisma: PrismaClient,
+  caller: Actor,
+  filters: DirectoryFilters & SortParams = {},
+): Promise<Page<DirectoryEntry>> {
+  // TD-12: re-read live, like every other user-facing read of this table.
+  await assertFreshActive(prisma, caller.userId, DIRECTORY_ROLES, caller.activeRole);
+
+  // Delegated on purpose. `listUsers` re-asserts `ACCOUNT_ADMIN_ROLES`, which an
+  // Admin does not hold, so this calls the shared query with the caller's own
+  // identity and narrows afterwards — see `listUsersUnchecked`.
+  const page = await listUsersUnchecked(prisma, caller, filters);
+
+  return {
+    data: page.data.map((u) => ({
+      id: u.id,
+      nameArabic: u.nameArabic,
+      nickname: u.nickname,
+      roles: u.roles,
+    })),
+    meta: page.meta,
+  };
+}
+
 /* ── User management (§5.6 "edit, deactivate, role/branch-scope assignment") ─ */
 
 /**
@@ -470,7 +585,7 @@ export async function updateUser(
   expectedVersion: number,
   input: UserProfileInput,
 ): Promise<UserListItem> {
-  const actor = await assertFreshActive(prisma, caller.userId, USER_ADMIN_ROLES, caller.activeRole);
+  const actor = await assertFreshActive(prisma, caller.userId, ACCOUNT_ADMIN_ROLES, caller.activeRole);
 
   await prisma.$transaction(async (tx) => {
     const target = await loadManageable(tx, actor, id);
@@ -545,7 +660,7 @@ export async function suspendUser(
   expectedVersion: number,
   reason: string,
 ): Promise<UserListItem> {
-  const actor = await assertFreshActive(prisma, caller.userId, USER_ADMIN_ROLES, caller.activeRole);
+  const actor = await assertFreshActive(prisma, caller.userId, ACCOUNT_ADMIN_ROLES, caller.activeRole);
   if (id === actor.userId) {
     // Not paternalism: an administrator who suspends themselves is locked out
     // by their own next request, and the recovery path is a VPS shell.
@@ -608,7 +723,7 @@ export async function reactivateUser(
   id: string,
   expectedVersion: number,
 ): Promise<UserListItem> {
-  const actor = await assertFreshActive(prisma, caller.userId, USER_ADMIN_ROLES, caller.activeRole);
+  const actor = await assertFreshActive(prisma, caller.userId, ACCOUNT_ADMIN_ROLES, caller.activeRole);
 
   await prisma.$transaction(async (tx) => {
     const target = await loadManageable(tx, actor, id);
@@ -839,7 +954,7 @@ export async function setUserRoles(
   id: string,
   assignments: RoleAssignmentInput[],
 ): Promise<UserListItem> {
-  const actor = await assertFreshActive(prisma, caller.userId, USER_ADMIN_ROLES, caller.activeRole);
+  const actor = await assertFreshActive(prisma, caller.userId, ACCOUNT_ADMIN_ROLES, caller.activeRole);
 
   await prisma.$transaction(async (tx) => {
     // Role-switch and login issuance derive credentials from these assignments.

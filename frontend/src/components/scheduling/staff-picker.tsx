@@ -5,7 +5,15 @@ import { SelectField } from '../ui/field.js';
 import { MultiSelectField } from '../ui/multi-select.js';
 import { t } from '../../i18n/index.js';
 import type { TeachingCandidate } from '../../adapters/teaching-candidates.js';
-import type { UserSummary } from '../../adapters/users.js';
+/**
+ * **The picker takes the narrow directory entry, not the account record.**
+ *
+ * It reads `id` and `name_arabic` and nothing else, so it is typed to what it
+ * uses. Typing it to the account record was how five operational screens came to
+ * fetch every user's email, phone and account status in order to render a list
+ * of names (Owner clarification, 2026-08-28).
+ */
+import type { DirectoryEntry } from '../../adapters/users.js';
 
 /**
  * **One lead مؤطرة, and any number of assistants.**
@@ -50,7 +58,7 @@ import type { UserSummary } from '../../adapters/users.js';
  * this control produces — not anything it displays.
  */
 export interface StaffPickerProps {
-  staff: UserSummary[];
+  staff: DirectoryEntry[];
   /** The label for the single lead — «المشرفة», «المسؤولة», «المؤطِّرة». */
   leadLabel: string;
   leadId: string;
@@ -81,7 +89,7 @@ export interface StaffPickerProps {
    * control owns the shape and each caller owns its word, and the guard beside
    * this file failed the moment the prop carried the event's vocabulary.
    */
-  leadStaff?: UserSummary[];
+  leadStaff?: DirectoryEntry[];
   /** Renders the lead read-only. The server refuses any other name regardless;
    *  this stops the control implying a choice that does not exist. */
   leadLocked?: boolean;
@@ -139,7 +147,7 @@ export function Warnings({ candidate }: { candidate: TeachingCandidate | undefin
  * implementation, used by both controls.
  */
 export function markedLabel(
-  person: UserSummary,
+  person: DirectoryEntry,
   appraisal: Record<string, TeachingCandidate> | undefined,
 ): string {
   const found = appraisal?.[person.id];

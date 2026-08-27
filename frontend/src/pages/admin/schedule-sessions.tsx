@@ -11,7 +11,7 @@ import {
   type ScheduleSession,
 } from '../../adapters/sessions.js';
 import { listBranches, listRooms } from '../../adapters/branches-admin.js';
-import { searchUsers, type UserSummary } from '../../adapters/users.js';
+import { searchDirectory, type DirectoryEntry } from '../../adapters/users.js';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
 import { TeacherLayout } from '../../components/teacher/teacher-layout.js';
 import { SessionMaterialsDialog } from '../../components/content/session-materials-dialog.js';
@@ -119,7 +119,7 @@ export function ScheduleSessionsPage({
   const [cancelling, setCancelling] = useState<ScheduleSession | null>(null);
   /** R91 §11 — the occurrence whose own staffing is being set. */
   const [staffingFor, setStaffingFor] = useState<ScheduleSession | null>(null);
-  const [teachers, setTeachers] = useState<UserSummary[]>([]);
+  const [teachers, setTeachers] = useState<DirectoryEntry[]>([]);
   /** R92 — the occurrence whose audience branches are being set. */
   const [audienceFor, setAudienceFor] = useState<ScheduleSession | null>(null);
   const [branches, setBranches] = useState<{ id: string; name: string }[]>([]);
@@ -281,7 +281,7 @@ export function ScheduleSessionsPage({
   useEffect(() => {
     // The people who may be named. Asked of the server by role, exactly as
     // إدارة المؤطِّرات does (rule AQ) — never filtered here.
-    void searchUsers(accessToken, { role: 'teacher' })
+    void searchDirectory(accessToken, { role: 'teacher' })
       .then((p) => setTeachers(p.data))
       .catch(() => setTeachers([]));
     // Every branch, because a combined occurrence may draw from any of them —
@@ -873,7 +873,7 @@ function OccurrenceStaffDialog({
   onSave,
 }: {
   session: ScheduleSession;
-  teachers: UserSummary[];
+  teachers: DirectoryEntry[];
   onClose: () => void;
   onSave: (staff: { user_id: string; position: 'teacher' | 'assistant' }[]) => Promise<void>;
 }): ReactNode {

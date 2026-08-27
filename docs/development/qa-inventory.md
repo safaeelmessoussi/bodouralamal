@@ -92,6 +92,7 @@ under the table.
 | `verify-sorting.sh` | 2, 3, 4–9 | R76 sort contract across four tables: one directed header, the actions column never sortable, order survives paging | 39/39 |
 | `verify-approvals-sorting.sh` | 2, 3 | NEW C — طلبات الانضمام reorders on both its sortable columns, proved against three scenario-owned pending applicants whose name order and submission order are different lists | 7/7 |
 | `verify-reorder.sh` | 4–9 | R76 manual ordering on five screens; canonical order is the only state that offers the grip | 30/30 |
+| `verify-admin-navigation.sh` | — | R105's menu and R61's section, clicked. **Restated 2026-08-28**: an Admin's list is the same order **minus المستخدمون**, since account administration is Super Admin's | 32/32 |
 | `verify-portals.sh` | 21, 22 | **AP** — three portals, one frame: each menu reaches what its role may reach and nothing else; R87 §M gates «إدخال حفظ المستفيدات» on real staffing. **The harness had kept the pre-R106 label and was failing quietly**; restated 2026-08-27 | 25/25 |
 | `verify-calendar-surfaces.sh` | 14c, 20 | **AO** — the five calendar surfaces against one contract matrix | 23/23 |
 | `verify-recorder.sh` | 19 | R75 through a real `MediaRecorder`: pause/resume produce one file, the beforeunload guard holds | 22/22 |

@@ -238,17 +238,43 @@ describe("PATCH /admin/users/{id} — the person's own fields", () => {
     expect(res.body.error?.code).toBe("VERSION_CONFLICT");
   });
 
-  it("answers 404 — never 403 — for a user outside a branch Admin's visibility", async () => {
-    // §20 rule 17: saying "exists, but not yours" is itself the disclosure the
-    // §4.2 R25 visibility rule prevents.
-    const id = await makeUser("طالبة في فرع آخر");
-    await grant(id, "student", otherBranchId);
-    const res = await call("PATCH", `/admin/users/${id}`, branchAdmin, {
-      version: 0,
-      nickname: "x",
-    });
-    expect(res.status).toBe(404);
-    expect(res.body.error?.code).toBe("NOT_FOUND");
+  it("discloses nothing to a branch Admin — the refusal is UNIFORM (restated 2026-08-28)", async () => {
+    /**
+     * **§20 rule 17's property survives; its shape changed with the Owner's
+     * clarification.**
+     *
+     * This asserted `404`, never `403`, because *"exists, but not yours"* is
+     * itself the disclosure §4.2 R25 prevents — and that was right while an
+     * Admin could edit SOME accounts and had to be told nothing about the rest.
+     *
+     * Account administration is now Super Admin's alone, so an Admin is refused
+     * the capability rather than the row. **`403` is now the non-disclosing
+     * answer, and uniformity is what makes it so**: the same status comes back
+     * for a real out-of-scope user, a user inside their own branch, and an id
+     * that does not exist at all. Nothing in the response varies with the
+     * target, so nothing about the target is learnable.
+     *
+     * The scope-based rule has not gone away — it moved to `/admin/directory`,
+     * where a branch-scoped Admin IS authorized and out-of-scope people simply
+     * do not appear. That is asserted below.
+     */
+    const outOfScope = await makeUser("طالبة في فرع آخر");
+    await grant(outOfScope, "student", otherBranchId);
+    const inScope = await makeUser("طالبة في فرعها");
+    await grant(inScope, "student", branchId);
+    const absent = "00000000-0000-4000-8000-0000000000ff";
+
+    const statuses: number[] = [];
+    for (const id of [outOfScope, inScope, absent]) {
+      const res = await call("PATCH", `/admin/users/${id}`, branchAdmin, {
+        version: 0,
+        nickname: "x",
+      });
+      statuses.push(res.status);
+      expect(res.body.error?.code).toBe("FORBIDDEN");
+    }
+    // The whole property in one line: three very different targets, one answer.
+    expect(statuses).toEqual([403, 403, 403]);
   });
 
   it("records which fields changed, never their values", async () => {
@@ -878,5 +904,87 @@ describe("R88 — who إدارة المؤطِّرات lists", () => {
     // A مؤطِّرة who has stopped teaching leaves the planning screen; her profile
     // rows are untouched, because history is not rewritten by a role change.
     expect(await listed()).not.toContain(spare);
+  });
+});
+
+/* ── Account administration is Super Admin's (Owner, 2026-08-28) ─────────── */
+
+/**
+ * **The separation, proved at the API boundary.**
+ *
+ * The Owner's clarification splits two things that used to share one endpoint
+ * and one role list:
+ *
+ * * **global ACCOUNT administration** — every person, their address, their
+ *   status, their roles, and the power to delete the account. Super Admin's.
+ * * **picking a person while doing operational work** — staffing, enrolling,
+ *   rostering. An Admin's, and not account administration at all.
+ *
+ * These are HTTP assertions on purpose. *"Do not rely on hiding the page in the
+ * frontend; enforce it server-side"* is the instruction, and a menu test cannot
+ * show that a forged request is refused — only a forged request can.
+ */
+describe("account administration is Super Admin's, the directory is not", () => {
+  it("refuses a branch Admin the global account list", async () => {
+    const res = await call("GET", "/admin/users", branchAdmin);
+    expect(res.status).toBe(403);
+    expect(res.body.error?.code).toBe("FORBIDDEN");
+  });
+
+  it("refuses a branch Admin every account WRITE, not only the list", async () => {
+    // A read-only refusal would leave the dangerous half reachable.
+    const target = await makeUser("هدف الإدارة", "active", "female", false);
+    const writes: [string, string, Record<string, unknown> | undefined][] = [
+      ["PATCH", `/admin/users/${target}`, { version: 0, nickname: "س" }],
+      ["POST", `/admin/users/${target}/suspend`, { version: 0, reason: "اختبار" }],
+      ["POST", `/admin/users/${target}/reactivate`, { version: 0 }],
+      ["PUT", `/admin/users/${target}/roles`, { assignments: [] }],
+      ["POST", "/admin/users", { email: "x@example.com", name_arabic: "س", sex: "female" }],
+    ];
+    for (const [method, path, body] of writes) {
+      const res = await call(method, path, branchAdmin, body);
+      expect(res.status, `${method} ${path}`).toBe(403);
+    }
+  });
+
+  it("still lets that Admin reach the operational directory", async () => {
+    // The point of the split: a screen that needs to pick a person keeps
+    // working. Withdrawing the account page must not withdraw an Admin's work.
+    const res = await call("GET", "/admin/directory", branchAdmin);
+    expect(res.status).toBe(200);
+    expect(Array.isArray(res.body.data)).toBe(true);
+  });
+
+  it("sends the directory NO account fields — the projection is the rule", async () => {
+    /**
+     * The reason the split is two endpoints rather than one with a relaxed role:
+     * an Admin rendering a list of names has no use for an address, a phone, an
+     * account status or a TD-15 `version`, and five screens were receiving all
+     * four. Asserted as an exact key set so a field added to the account
+     * projection cannot arrive here unnoticed.
+     */
+    const res = await call("GET", "/admin/directory?page_size=1", superAdmin);
+    expect(res.status).toBe(200);
+    const row = (res.body.data as unknown as Record<string, unknown>[])[0];
+    if (!row) throw new Error("the directory returned no rows to inspect");
+    expect(Object.keys(row).sort()).toEqual(["id", "name_arabic", "nickname", "roles"]);
+  });
+
+  it("does not widen what a branch-scoped Admin may see", async () => {
+    // The projection is narrower; the SCOPE rule is identical. A picker that
+    // reached outside its branches would be a worse leak than the fields it no
+    // longer carries.
+    const res = await call("GET", "/admin/directory?page_size=100", branchAdmin);
+    expect(res.status).toBe(200);
+    const ids = (res.body.data as unknown as Record<string, unknown>[]).map((u) => String(u["id"]));
+    const outsider = await makeUser("خارج النطاق", "active", "female", false);
+    const after = await call("GET", "/admin/directory?page_size=100", branchAdmin);
+    const idsAfter = (after.body.data as unknown as Record<string, unknown>[]).map((u) =>
+      String(u["id"]),
+    );
+    // Unassigned to any branch, so invisible to a branch-scoped Admin — the
+    // same rule `listUsers` applies, reached through the shared query.
+    expect(ids).not.toContain(outsider);
+    expect(idsAfter).not.toContain(outsider);
   });
 });

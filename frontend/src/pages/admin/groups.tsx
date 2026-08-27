@@ -18,7 +18,7 @@ import {
   type CategoryRef,
   type LevelRef,
 } from '../../adapters/calendar.js';
-import { searchUsers, type UserSummary } from '../../adapters/users.js';
+import { searchDirectory, type DirectoryEntry } from '../../adapters/users.js';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
 import { Button } from '../../components/ui/button.js';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
@@ -535,7 +535,7 @@ function RosterDialog({
   token: string | null;
 }): ReactNode {
   const [entries, setEntries] = useState<RosterEntry[]>([]);
-  const [candidates, setCandidates] = useState<UserSummary[]>([]);
+  const [candidates, setCandidates] = useState<DirectoryEntry[]>([]);
   const [picked, setPicked] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -561,7 +561,7 @@ function RosterDialog({
     }
     void (async () => {
       try {
-        setCandidates((await searchUsers(token, {})).data);
+        setCandidates((await searchDirectory(token, {})).data);
       } catch {
         setCandidates([]);
       }

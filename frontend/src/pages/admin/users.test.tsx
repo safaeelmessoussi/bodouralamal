@@ -120,14 +120,27 @@ describe('the registry and the router agree', () => {
     expect([...ready].sort()).toEqual([...IMPLEMENTED_ADMIN_PATHS].sort());
   });
 
-  it('/admin/users is live and open to an Admin, not only a Super Admin', () => {
-    // TD-2 grants "create/edit users; assign roles & branch scopes" to both.
-    // The privileged subset — granting an administrator role — is refused by
-    // the server, and the dialog hides those options rather than showing a
-    // control that exists only to fail.
+  it('/admin/users is live and SUPER ADMIN ONLY (Owner, 2026-08-28)', () => {
+    /**
+     * **Restated, because the Owner changed the rule — not because the code
+     * drifted.**
+     *
+     * It read *"open to an Admin, not only a Super Admin"*, on the reading that
+     * TD-2 grants *«create/edit users; assign roles & branch scopes»* to both.
+     * The Owner has since separated **managing operational data** from
+     * **administering accounts**: المستخدمون is the whole platform's account
+     * directory, including the power to delete an account, and an Admin does
+     * not get it merely because they manage operational data.
+     *
+     * **The menu is not the enforcement** — `listUsers` asserts Super Admin in
+     * the service, so an Admin who types the URL is refused by the server. This
+     * only pins that the menu agrees with it, which is the part a screen can get
+     * wrong on its own.
+     */
     const module = ADMIN_MODULES.find((m) => m.path === '/admin/users');
     expect(module?.status).toBe('ready');
-    expect(module?.roles).toContain('admin');
+    expect(module?.roles).toEqual(['super_admin']);
+    expect(module?.roles).not.toContain('admin');
   });
 });
 

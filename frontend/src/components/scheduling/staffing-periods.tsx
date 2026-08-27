@@ -5,7 +5,8 @@ import { markedLabel, Warnings } from './staff-picker.js';
 import { DateField, SelectField } from '../ui/field.js';
 import { t } from '../../i18n/index.js';
 import type { TeachingCandidate } from '../../adapters/teaching-candidates.js';
-import type { UserSummary } from '../../adapters/users.js';
+// The narrow directory entry — these render names, never account fields.
+import type { DirectoryEntry } from '../../adapters/users.js';
 
 /**
  * **Who teaches this class, and WHEN** (R91).
@@ -49,7 +50,7 @@ export interface StaffingPeriod {
 }
 
 export interface StaffingPeriodsProps {
-  staff: UserSummary[];
+  staff: DirectoryEntry[];
   value: StaffingPeriod[];
   onChange: (next: StaffingPeriod[]) => void;
   disabled?: boolean;

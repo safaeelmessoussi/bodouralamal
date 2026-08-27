@@ -6,6 +6,7 @@ import type { PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
 import { requireActor } from '../middleware/authenticate.js';
 import {
+  listDirectory,
   listUsers,
   preProvision,
   reactivateUser,
@@ -113,6 +114,49 @@ export function list(prisma: PrismaClient) {
     });
 
     res.json({ data: result.data.map(userDto), meta: result.meta });
+  };
+}
+
+/**
+ * `GET /admin/directory` — the operational people-picker (Owner, 2026-08-28).
+ *
+ * Same filters as the account list, **a deliberately smaller answer**: id, name,
+ * nickname and role assignments. No address, no phone, no account status, no
+ * `version`, because a picker can do nothing that would need them.
+ *
+ * The DTO is written out field by field rather than reusing `userDto` and
+ * trimming: reuse-then-trim is how a field added to the account projection
+ * silently appears here too (§16.2 Revision 38).
+ */
+export function directory(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const parsed = listSchema.safeParse(req.query);
+    if (!parsed.success) throw new AppError('VALIDATION_FAILED', 'bad query parameters');
+    const { q, role, branch_id, page, page_size, beneficiaries_only } = parsed.data;
+
+    const result = await listDirectory(prisma, requireActor(req), {
+      ...(q ? { q } : {}),
+      ...(role ? { role } : {}),
+      ...(branch_id ? { branchId: branch_id } : {}),
+      ...(beneficiaries_only === 'true' ? { beneficiariesOnly: true } : {}),
+      ...(page ? { page } : {}),
+      ...(page_size ? { pageSize: page_size } : {}),
+      ...sortParamsFrom(req.query),
+    });
+
+    res.json({
+      data: result.data.map((u) => ({
+        id: u.id,
+        name_arabic: u.nameArabic,
+        nickname: u.nickname,
+        roles: u.roles.map((r) => ({
+          role: r.role,
+          branch_id: r.branchId,
+          branch_name: r.branchName,
+        })),
+      })),
+      meta: result.meta,
+    });
   };
 }
 

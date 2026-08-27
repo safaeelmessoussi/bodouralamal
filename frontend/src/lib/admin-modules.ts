@@ -119,10 +119,25 @@ export const ADMIN_MODULES: readonly AdminModule[] = [
     status: 'ready',
   },
   {
+    /**
+     * **المستخدمون — global ACCOUNT administration, Super Admin only** (Owner
+     * clarification, 2026-08-28).
+     *
+     * It was `STAFF`. The Owner's separation is between *managing operational
+     * data*, which an Admin does, and *administering accounts* — every person on
+     * the platform, their address, their status, their roles and the power to
+     * delete them — which is not an operational concern at all.
+     *
+     * **This entry is not the enforcement.** `listUsers` asserts Super Admin in
+     * the service, so an Admin who types the URL still receives `403` and an
+     * empty screen; the menu merely stops offering what the server refuses. An
+     * Admin who needs to pick a person reaches `/admin/directory`, which is a
+     * different endpoint with a deliberately smaller projection.
+     */
     path: '/admin/users',
     labelKey: 'admin.nav.users',
     section: null,
-    roles: STAFF,
+    roles: SUPER_ONLY,
     status: 'ready',
   },
   {

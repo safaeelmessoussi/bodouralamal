@@ -6,7 +6,8 @@ import { StaffPicker } from './staff-picker.js';
 import { t } from '../../i18n/index.js';
 import type { ScopeOptions } from '../../hooks/use-scope-options.js';
 import type { ExamMode, ExamStaffRef } from '../../adapters/exams.js';
-import type { UserSummary } from '../../adapters/users.js';
+// The narrow directory entry — these render names, never account fields.
+import type { DirectoryEntry } from '../../adapters/users.js';
 import { Feedback } from '../ui/feedback.js';
 
 /**
@@ -47,12 +48,12 @@ export interface ExamSectionProps {
    *  classes, which already states the Level, Subject, Branch and Year. */
   hideScope?: boolean;
   /** Narrower than `staff` when the caller may only supervise her own sitting. */
-  leadStaff?: UserSummary[];
+  leadStaff?: DirectoryEntry[];
   leadLocked?: boolean;
   rooms: { id: string; name: string }[];
   roomId: string;
   onRoom: (v: string) => void;
-  staff: UserSummary[];
+  staff: DirectoryEntry[];
   supervisorId: string;
   onSupervisor: (v: string) => void;
   assistantIds: string[];
