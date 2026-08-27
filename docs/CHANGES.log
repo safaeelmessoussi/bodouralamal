@@ -724,3 +724,45 @@ Two incidental finds:
 - `verify-teaching-profile.sh` had been looking for the nav label «إدارة
   المؤطِّرات», which **R105 renamed to «المؤطِّرات»**. Two checks had been failing
   quietly ever since, and the QA inventory still recorded 13/13. Now 14/14.
+
+## §10 — the recorder became self-contained, and uncovered a seeding race (2026-08-27)
+
+**The rule AX carry-forward.** مكتبة المحتوى's recorder took its scope from the
+**page filter bar** and refused to open until those filters were set. That broke
+two rules at once: **AX**, because the four fields deciding what the recording
+*is* were outside the form creating it; and **A/F**, because a filter was acting
+as a **precondition** rather than narrowing what is visible.
+
+`ContentRecorderForm` now carries the same five controls through
+`useContentScope` — **extracted** from `ContentUploadForm`, not copied, because
+both surfaces create the same object under the same scope and the same §14.1
+visibility rule. Recording is deliberately not gated on a complete scope: the
+refusal moved to **save**, beside the button, since losing captured audio to an
+unset filter is the worse failure.
+
+`session-materials-dialog` was left exactly as it is. The platform audit records
+it as *Borderline, Owner decision*, and changing it would pre-empt that.
+
+### The defect this uncovered — a guard that outlived its mechanism
+
+Three checks in `verify-content-visibility.sh` had been failing and looking like
+fixture noise. They were one real defect: **مكتبة المحتوى's upload dialog lost the
+Subject its page filter had set, every time.**
+
+NEW D replaced the Subject *fetch* with a lookup and kept `loadingSubjects` as a
+constant `false`, documented as *"today's answer is always yes"*. But rule 2 — *a
+selection no longer offered is cleared* — used that flag to skip the field while
+its list was in flight. The window did not close; it **moved**: `levelSubjects`
+fills and `ready` flips true in the same commit, while `options` was memoised
+during that render from the still-empty `subjects` state. The seeded Subject was
+not in an empty list, so it was cleared.
+
+Fixed by deriving the Subject list **during render** rather than writing it to
+state in an effect — removing the window instead of re-guarding it. The unit
+guard now pins the absence of `setSubjects(` too, because restoring the effect
+would restore the defect. **24/24** in the browser, up from 21/24.
+
+Also: the first attempt mounted the recorder form unconditionally inside its
+`<Dialog>`, putting a second set of scope selectors in the document — anything
+reading the page by label found the hidden empty ones. Both content dialogs now
+mount their form only while open.

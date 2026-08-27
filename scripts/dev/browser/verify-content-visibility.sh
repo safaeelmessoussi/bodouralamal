@@ -38,6 +38,20 @@ SAME_CATEGORY_LEVEL_ID="$(docker compose exec -T db psql -U app -d bodour -tAc "
      AND EXISTS (SELECT 1 FROM level_subject ls WHERE ls.level_id=l.id AND ls.deleted_at IS NULL)
    LIMIT 1;" | tr -d '\r')"
 
+# **A Subject the PUBLIC Level actually teaches.**
+#
+# The filter bar lists every Subject (`mode: 'filter'`, unscoped) while the FORM
+# narrows to the Level's own (`mode: 'form'`) — rule AE's distinction, and
+# correct. So a harness that filled the filter with «the first option» could
+# choose a Subject that Level does not teach, watch the form rightly drop it,
+# and report a seeding defect that is not one. Pick from `level_subject`.
+PUBLIC_LEVEL_SUBJECT_ID="$(
+  docker compose exec -T db psql -U app -d bodour -tAc "
+    SELECT ls.subject_id::text FROM level_subject ls
+     WHERE ls.level_id='${PUBLIC_LEVEL_ID}' AND ls.deleted_at IS NULL LIMIT 1;" | tr -d '\r'
+)"
+export PUBLIC_LEVEL_SUBJECT_ID
+
 [[ -n "${PUBLIC_LEVEL_ID:-}" && -n "${PRIVATE_LEVEL_ID:-}" && -n "${SAME_CATEGORY_LEVEL_ID:-}" ]] || {
   echo "SKIP: need a public-default Level, a private-default Level, and a second Level in the first's Category"; exit 0; }
 export PUBLIC_LEVEL_ID PRIVATE_LEVEL_ID SAME_CATEGORY_LEVEL_ID

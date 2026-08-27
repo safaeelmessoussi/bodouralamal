@@ -2,6 +2,14 @@ import { describe, expect, it, vi, afterEach } from 'vitest';
 
 import CONTENT_PAGE from './content.tsx?raw';
 import UPLOAD_FORM from '../components/content/content-upload-form.tsx?raw';
+/**
+ * **The scope block moved here (§10, 2026-08-27)** and these guards moved with
+ * it. The recorder had to satisfy rule AX too, so the four scope fields and the
+ * §14.1 visibility rule are now one implementation shared by both surfaces
+ * rather than one per form — which is precisely the property these assertions
+ * exist to protect, so they read the shared file and not a copy of it.
+ */
+import SCOPE_FIELDS_SRC from '../components/content/content-scope-fields.tsx?raw';
 import { defaultVisibilityForLevel } from '../hooks/use-scope-options.js';
 import { uploadFile } from '../adapters/uploads.js';
 import { t } from '../i18n/index.js';
@@ -151,17 +159,19 @@ describe('replacement changes the object, never the tier or the scope', () => {
   it('a locked form omits visibility from the payload entirely', () => {
     // R53 swaps the object and keeps the record, so the row's own tier stays
     // authoritative. The guard is the `locked` arm of the meta builder.
-    const src = form();
-    const meta = src.slice(src.indexOf('const meta = useMemo'), src.indexOf('const problem'));
+    const shared = scopeBlock();
+    const meta = shared.slice(shared.indexOf('const meta = useMemo'), shared.indexOf('const problem'));
     expect(meta).toContain('visibility === null || locked');
-    expect(meta).toContain('replaces_content_id');
+    // The replacement id is the upload form's own — it is what distinguishes a
+    // replacement from a create, and the recorder has no such notion.
+    expect(form()).toContain('replaces_content_id');
   });
 
   it('locks every scope field rather than hiding them', () => {
     // The rule is that a determining field is never hidden — «this is fixed» is
     // exactly what a hidden field cannot say.
-    expect(form()).toContain('locked: FIELDS');
-    expect(form()).toContain('disabled={locked}');
+    expect(scopeBlock()).toContain('locked: SCOPE_FIELDS');
+    expect(scopeBlock()).toContain('disabled={locked}');
   });
 });
 
@@ -173,9 +183,10 @@ describe('consent-forced private cannot be overridden here', () => {
     // publication override, which is BR-3's separate Admin-with-justification
     // workflow and deliberately not this slice.
     //
-    const src = form();
-    expect(src).not.toContain('consent_forced_private');
-    const meta = src.slice(src.indexOf('const meta = useMemo'), src.indexOf('const problem'));
+    expect(form()).not.toContain('consent_forced_private');
+    const shared = scopeBlock();
+    expect(shared).not.toContain('consent_forced_private');
+    const meta = shared.slice(shared.indexOf('const meta = useMemo'), shared.indexOf('const problem'));
     expect(meta).toContain('visibility');
   });
 
@@ -193,6 +204,12 @@ describe('consent-forced private cannot be overridden here', () => {
 /** The self-contained upload form's CODE, comments stripped. */
 function form(): string {
   return UPLOAD_FORM.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
+}
+
+/** The SHARED scope block's code, comments stripped — where the scope fields and
+ *  the visibility rule actually live since §10. */
+function scopeBlock(): string {
+  return SCOPE_FIELDS_SRC.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '');
 }
 
 function readSource(): string {

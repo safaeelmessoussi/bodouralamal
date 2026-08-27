@@ -37,6 +37,8 @@ if (!COOKIE) throw new Error('DEV_REFRESH_COOKIE is required');
 /** A Level whose Category defaults to `public`, and one that defaults to
  *  `private` — the pair is what makes "re-propose on Level change" testable. */
 const PUBLIC_LEVEL = process.env.PUBLIC_LEVEL_ID;
+/** A Subject that Level genuinely teaches — see the shell for why it matters. */
+const PUBLIC_LEVEL_SUBJECT = process.env.PUBLIC_LEVEL_SUBJECT_ID;
 const PRIVATE_LEVEL = process.env.PRIVATE_LEVEL_ID;
 /**
  * A SECOND Level in the SAME Category as `PUBLIC_LEVEL`.
@@ -254,6 +256,22 @@ await new Promise((r) => setTimeout(r, 200));
  */
 const fillScope = async (levelId) => {
   await pickLevel(levelId);
+  // The Subject FIRST, and by id: the filter bar offers every Subject while the
+  // form offers only the Level's, so «first option» could pick one this Level
+  // does not teach — which the form then correctly drops.
+  if (PUBLIC_LEVEL_SUBJECT) {
+    await evaluate(`(() => {
+      const set = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set;
+      const sel = [...document.querySelectorAll('select')]
+        .filter((s) => !s.closest('dialog'))
+        .find((s) => [...s.options].some((o) => o.value === ${JSON.stringify(PUBLIC_LEVEL_SUBJECT)}));
+      if (!sel) return 'absent';
+      set.call(sel, ${JSON.stringify(PUBLIC_LEVEL_SUBJECT)});
+      sel.dispatchEvent(new Event('change', { bubbles: true }));
+      return 'set';
+    })()`);
+    await new Promise((r) => setTimeout(r, 700));
+  }
   await evaluate(`(() => {
     const set = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, 'value').set;
     for (const sel of document.querySelectorAll('.datatable__toolbar select, .toolbar select, select')) {

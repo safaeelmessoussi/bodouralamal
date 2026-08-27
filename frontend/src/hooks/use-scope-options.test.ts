@@ -45,8 +45,23 @@ describe('the Subject filter does not require a Level', () => {
      * every Subject in a filter and none in a form; a Level chosen means that
      * Level's.
      */
-    expect(code(HOOK)).toContain('setSubjects(subjectsUnscoped ? allSubjects : [])');
+    expect(code(HOOK)).toContain('subjectsUnscoped ? allSubjects : []');
     expect(code(HOOK)).toContain('levelSubjects.get(value.levelId)');
+    /**
+     * **RESTATED AGAIN 2026-08-27 — and the second half is now load-bearing.**
+     *
+     * The list is DERIVED during render rather than written to state by an
+     * effect. That is not a style preference: as an effect it left a one-commit
+     * window in which `options` was memoised from an empty `subjects` while
+     * `ready` had already flipped true, so rule 2 cleared a Subject the caller
+     * had deliberately seeded. مكتبة المحتوى's upload dialog lost the Subject
+     * its page filter had set, every time.
+     *
+     * A future author restoring `setSubjects` in an effect would restore the
+     * defect, so the absence is pinned, not just the rule.
+     */
+    expect(code(HOOK)).toContain('const subjects = useMemo');
+    expect(code(HOOK)).not.toContain('setSubjects(');
   });
 
   it('NEVER reaches for an Admin reference read — that WAS the defect (NEW D)', () => {

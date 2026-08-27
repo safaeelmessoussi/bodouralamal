@@ -1647,8 +1647,8 @@ manual Production launch data · no-PII audit · §18/M8 rehearsal. **Production
 | 7 | ~~**§8** table columns audit~~ **DONE 2026-08-27** | feature | Owner supplied the brief; recorded permanently as **UX rule BA**. الجدولة, حصص الجدول, المستويات, الفئات, المجموعات الإدارية and طاقم التأطير all gained the fields their rows already carried |
 | 8 | ~~NEW I~~ **DONE** · ~~**NEW J/K/L**~~ **DONE 2026-08-27** | data | Owner supplied the dataset. Seeded for a fresh install and **reconciled in place** for an initialized one via `backend/scripts/reconcile-reference-data.ts`. **Category/Level descriptions are the one part not done** — see the open Owner decision below |
 | 9 | **§9A–D/F** edit-form audit | feature | includes NEW E and NEW F |
-| 10 | **NEW F** availability page gains capabilities | feature | §5 follow-up; same entities as §9 work |
-| 11 | **§10** Rule AX carry-forwards | feature | recorder dialog + session materials |
+| 10 | ~~**NEW F** availability page gains capabilities~~ **DELIVERED BY R106** | feature | `/teacher/availability` already shows her Subjects and Categories as **text**, and already compares `dirty` against the loaded record. Covered by `verify-teacher-portal.sh` (24/24). **Making them editable is not this item** — R88.2 refuses it in terms, so that would be a new Owner decision, not a carry-forward |
+| 11 | ~~**§10** Rule AX carry-forwards~~ **DONE 2026-08-27** | feature | Recorder dialog converted onto the **shared** `useContentScope`. `session-materials-dialog` deliberately untouched — the audit marks it *Borderline, Owner decision*, and changing it would pre-empt that. The conversion uncovered a real seeding race in `useScopeOptions` (see below) |
 | 12 | **NEW M** Teacher baseline import | **data, Production only** | after §9 so the profile form is correct |
 | 13 | **NEW O** account deletion — **design only** | reconciliation | 35 FKs to classify before any schema |
 | 14 | **NEW O** implementation | feature + migration | only after its retention model is ratified |

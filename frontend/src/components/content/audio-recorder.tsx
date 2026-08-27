@@ -12,6 +12,7 @@ import {
   type RecordedSpan,
 } from '../../lib/recorder.js';
 import { Button } from '../ui/button.js';
+import { Feedback } from '../ui/feedback.js';
 import { TextField } from '../ui/field.js';
 
 /**
@@ -69,6 +70,16 @@ export interface AudioRecorderProps {
    * and nothing reads it back.
    */
   suggestedName: string;
+  /**
+   * **Why saving is not possible yet, or `null`** (§10).
+   *
+   * Recording is deliberately NOT gated on it: somebody may reasonably start
+   * recording and decide where it belongs afterwards, and losing captured audio
+   * to a scope that was not chosen would be the worse failure. So the refusal
+   * lands on **save**, next to the button it disables, and says which fields —
+   * all of which are now on this form (rule AX) rather than behind it.
+   */
+  saveBlockedReason?: string | null;
   onSaved: (contentId: string) => void;
   onCancel: () => void;
 }
@@ -79,6 +90,7 @@ export function AudioRecorder({
   meta,
   token,
   suggestedName,
+  saveBlockedReason = null,
   onSaved,
   onCancel,
 }: AudioRecorderProps): ReactNode {
@@ -344,10 +356,16 @@ export function AudioRecorder({
             >
               {t('recorder.discard')}
             </Button>
-            <Button variant="primary" disabled={state === 'saving'} onClick={() => void save()}>
+            <Button
+              variant="primary"
+              disabled={state === 'saving' || saveBlockedReason !== null}
+              onClick={() => void save()}
+            >
               {t('recorder.save')}
             </Button>
           </div>
+          {/* One message, beside the control it explains (rule AH). */}
+          {saveBlockedReason !== null ? <Feedback>{saveBlockedReason}</Feedback> : null}
         </>
       ) : null}
 

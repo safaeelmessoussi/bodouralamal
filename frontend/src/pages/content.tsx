@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import { kindOf, type ContentKind } from '../adapters/content.js';
 import { deleteContent } from '../adapters/uploads.js';
 import { AdminLayout } from '../components/admin/admin-layout.js';
-import { AudioRecorder } from '../components/content/audio-recorder.js';
+import { ContentRecorderForm } from '../components/content/content-recorder-form.js';
 import { ContentUploadForm } from '../components/content/content-upload-form.js';
 import { TeacherLayout } from '../components/teacher/teacher-layout.js';
 import { ConfirmDialog } from '../components/ui/confirm-dialog.js';
@@ -215,24 +215,6 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
    * dialog and its own submit path, and changing both flows at once would make
    * one browser regression answer for two behaviours.
    */
-  const recorderMeta = useMemo(
-    () => ({
-      level_id: levelId,
-      subject_id: subjectId,
-      academic_year_id: academicYearId,
-      branch_id: branchId === '' || branchId === GLOBAL ? null : branchId,
-    }),
-    [levelId, subjectId, academicYearId, branchId],
-  );
-
-  const recorderScopeProblem = scope.levelTeachesNothing
-    ? t('scope.assignSubjectsHint')
-    : levelId === '' || subjectId === '' || academicYearId === ''
-      ? t('content.upload.chooseScope')
-      : !isAdmin && (branchId === '' || branchId === GLOBAL)
-        ? t('content.upload.teacherNeedsBranch')
-        : null;
-
   const columns: Column<LibraryRow>[] = [
     { key: 'title', sortKey: 'title', header: t('content.col.title'), cell: (r) => r.title },
     {
@@ -360,18 +342,26 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
         onClose={() => setRecordingOpen(false)}
         title={t('recorder.title')}
       >
-        {/* The scope guard is the uploader's, verbatim: a recording lands
-            through the same pipeline and needs the same four fields, so a
-            missing Level here fails for the same reason and says the same
-            thing rather than inventing a second wording. */}
-        {recorderScopeProblem !== null ? (
-          <p className="state" role="status">
-            {recorderScopeProblem}
-          </p>
-        ) : (
-          <AudioRecorder
-            meta={recorderMeta}
+        {/* **Mounted only while open**, exactly as the upload dialog is, and for
+            two reasons. Each opening then seeds itself from the filters as they
+            are NOW rather than from a stale first render — and a form left
+            mounted behind a closed dialog puts a SECOND set of scope selectors
+            in the document, which is a real defect and not merely wasteful:
+            anything reading the page by label finds the hidden empty ones. */}
+        {recordingOpen ? (
+          <ContentRecorderForm
             token={accessToken}
+            mayAssignGlobal={isAdmin}
+            // Seeded from the page's filters and then **owned by the form**
+            // (rule AX). It was the reverse: the filters WERE the scope, and an
+            // unset filter refused to open the recorder at all — a filter
+            // acting as a precondition, which rule A/F forbids.
+            initial={{
+              levelId,
+              subjectId,
+              academicYearId,
+              ...(branchId === '' || branchId === GLOBAL ? {} : { branchId }),
+            }}
             suggestedName={suggestedName}
             onSaved={() => {
               setRecordingOpen(false);
@@ -380,7 +370,7 @@ export function ContentPage({ portal }: { portal: 'admin' | 'teacher' }): ReactN
             }}
             onCancel={() => setRecordingOpen(false)}
           />
-        )}
+        ) : null}
       </Dialog>
 
       <Dialog open={uploading} onClose={() => setUploading(false)} title={t('content.upload.action')}>

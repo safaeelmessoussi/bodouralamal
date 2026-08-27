@@ -1932,8 +1932,8 @@ It creates a worse one: **invisible state decides a write.**
 | Screen | Verdict |
 |---|---|
 | **Content Upload dialog** | **Was the violation. Fixed** — `ContentUploadForm` carries Level, Subject, Year, Branch, Visibility, file, title, description |
-| **Content Recorder dialog** (same page) | **Open — the one remaining confirmed instance.** `AudioRecorder` still takes its scope from the page filters. Left for its own slice: R75's recorder has a separate submit path, and converting both at once would make one browser regression answer for two behaviours |
-| `session-materials-dialog` | **Borderline, Owner decision.** Its scope is the **Session's**, passed as a prop — context, not a page filter, and correctly not editable. Under *"fixed → disabled, not hidden"* it should arguably display Level/Subject read-only |
+| **Content Recorder dialog** (same page) | **Closed 2026-08-27 (§10).** `ContentRecorderForm` carries the same five fields, through the **shared** `useContentScope` — the same implementation the upload form uses, not a copy. It also broke **A/F**: an unset filter refused to open the recorder at all, a filter acting as a precondition |
+| `session-materials-dialog` | **Borderline — still the Owner's call, deliberately untouched by §10.** Its scope is the **Session's**, passed as a prop — context, not a page filter, and correctly not editable. Under *"fixed → disabled, not hidden"* it should arguably display Level/Subject read-only. Changing it would pre-empt a decision, so §10 fixed only the confirmed instance |
 | `groups.tsx` | Compliant — name, Level and Branch are inside its `FormDialog` |
 | `scheduling.tsx` | Compliant — the form runs its own scope hook, seeded from the row being edited |
 | `enrollments.tsx` | Compliant — Level and Branch are local dialog state |
@@ -1941,6 +1941,33 @@ It creates a worse one: **invisible state decides a write.**
 
 A sweep for files that submit `level_id`/`subject_id`/`branch_id`/`academic_year_id` without
 rendering a control found **no further production screen** — every other hit was a test file.
+
+### The race the recorder work uncovered (2026-08-27)
+
+Converting the recorder made `verify-content-visibility.sh` reach three checks
+that had been failing for a while and were assumed to be fixture noise. They were
+one real defect, and it is worth recording because the shape recurs:
+
+**A flag kept for its meaning after its mechanism was removed stops guarding
+anything.** NEW D replaced the Subject *fetch* with a lookup and left
+`loadingSubjects = false` as a constant, documented as *"today's answer is always
+yes"*. But rule 2 — *a selection no longer offered is cleared* — used that flag to
+skip the field while its list was in flight, and the window did not close, it
+moved: `levelSubjects` fills and `ready` flips true **in the same commit**, while
+`options` was memoised during that render from the still-empty `subjects` state.
+So a Subject the caller seeded deliberately was cleared, every time مكتبة المحتوى
+opened its upload dialog.
+
+The fix derives the Subject list **during render** instead of writing it to state
+in an effect, which removes the window rather than re-guarding it: `options` can
+no longer disagree with `levelSubjects` because both are computed in one pass.
+
+> **A form left mounted behind a closed dialog is a defect, not waste.** The first
+> attempt rendered the recorder form unconditionally inside its `<Dialog>`, which
+> put a *second* set of scope selectors in the document; anything reading the page
+> by label found the hidden empty ones. Both content dialogs now mount their form
+> only while open — which is also what makes each opening seed from the filters as
+> they are *now*.
 
 > Guarded behaviourally by `scripts/dev/browser/verify-content-visibility.sh`, which asserts
 > the dialog contains all five selectors, that they are seeded from the page filters, that

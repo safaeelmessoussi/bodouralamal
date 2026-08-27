@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import type { ReactNode } from 'react';
 
-import { ScopeSelectors } from '../scope/scope-selectors.js';
-import { useScopeOptions, type ScopeField, type ScopeValue } from '../../hooks/use-scope-options.js';
-import { SelectField } from '../ui/field.js';
+import type { ScopeValue } from '../../hooks/use-scope-options.js';
 import { FileUploader } from './file-uploader.js';
-import { t } from '../../i18n/index.js';
+import { GLOBAL, useContentScope } from './content-scope-fields.js';
+
+export { GLOBAL };
 
 /**
  * **The Content Upload form, self-contained** (Owner UX rule, 2026-08-25 — rule AX).
@@ -68,12 +68,6 @@ export interface ContentUploadFormProps {
   onCancel: () => void;
 }
 
-const FIELDS: readonly ScopeField[] = ['levelId', 'subjectId', 'academicYearId', 'branchId'];
-
-/** `branch_id = null` — a real scope (§4.9), and the one value a branch list can
- *  never contain. `''` already means *not chosen*, so the two cannot share it. */
-export const GLOBAL = '__global__';
-
 export function ContentUploadForm({
   token,
   mayAssignGlobal,
@@ -85,105 +79,24 @@ export function ContentUploadForm({
 }: ContentUploadFormProps): ReactNode {
   const locked = replacing !== undefined;
 
-  const scope = useScopeOptions({
+  // The scope block is shared with the recorder (§10): same object, same
+  // four-part scope, same visibility rule — so one implementation.
+  const { fields, meta, problem } = useContentScope({
     token,
-    fields: FIELDS,
-    // Seeded from the page's filters, then owned by this form.
+    mayAssignGlobal,
     initial,
-    // A write belongs to the live year; a filter bar deliberately defaults to
-    // none, because defaulting a filter silently hides rows.
-    defaultCurrentYear: !locked,
-    mode: 'form',
+    locked,
+    ...(replacing ? { lockedVisibility: replacing.visibility } : {}),
   });
 
-  const { levelId, subjectId, academicYearId, branchId } = scope.value;
-
-  /**
-   * §14.1's visibility, proposed **once per Level** and then the person's.
-   *
-   * `null` is *not knowable yet* and renders as a placeholder — never as عام,
-   * because a control that displays the open tier while holding nothing is how
-   * content gets published by accident. The default follows the **form's**
-   * Level, so changing Level here re-proposes that Category's default rather
-   * than leaving a stale one behind.
-   */
-  const [visibility, setVisibility] = useState<string | null>(replacing?.visibility ?? null);
-  const [initialisedFor, setInitialisedFor] = useState<string | null>(null);
-  const categoryDefault = scope.defaultVisibility;
-
-  useEffect(() => {
-    if (locked) return;
-    if (levelId === '') {
-      setInitialisedFor(null);
-      setVisibility(null);
-      return;
-    }
-    // Not knowable yet — wait rather than propose. Clobbering a selection
-    // because a list was still arriving would be worse than showing nothing.
-    if (categoryDefault === null) return;
-    if (initialisedFor === levelId) return;
-    setInitialisedFor(levelId);
-    setVisibility(categoryDefault);
-  }, [locked, levelId, categoryDefault, initialisedFor]);
-
-  const meta = useMemo(
-    () => ({
-      level_id: levelId,
-      subject_id: subjectId,
-      academic_year_id: academicYearId,
-      branch_id: branchId === '' || branchId === GLOBAL ? null : branchId,
-      ...(visibility === null || locked
-        ? {}
-        : { visibility: visibility as 'public' | 'private' | 'hidden' }),
-      ...(replacing ? { replaces_content_id: replacing.id } : {}),
-    }),
-    [levelId, subjectId, academicYearId, branchId, visibility, locked, replacing],
-  );
-
-  /**
-   * Why the upload cannot start yet, in the person's terms — and now naming
-   * fields that are **in front of them**, which is what makes it actionable.
-   */
-  const problem = scope.levelTeachesNothing
-    ? t('scope.assignSubjectsHint')
-    : levelId === '' || subjectId === '' || academicYearId === ''
-      ? t('content.upload.chooseScope')
-      : null;
+  const uploadMeta = { ...meta, ...(replacing ? { replaces_content_id: replacing.id } : {}) };
 
   return (
     <>
-      <ScopeSelectors
-        scope={scope}
-        fields={FIELDS}
-        mode="form"
-        {...(locked ? { locked: FIELDS } : {})}
-        // Offered only to those who may assign it (§4.9). The field stays
-        // visible for everyone; only the value is withheld.
-        extraOptions={
-          mayAssignGlobal && !locked
-            ? { branchId: [{ value: GLOBAL, label: t('content.globalScope') }] }
-            : {}
-        }
-      />
-
-      <SelectField
-        label={t('content.col.visibility')}
-        value={visibility ?? ''}
-        disabled={locked}
-        // Honest while unknown: `''` gets a real option so the browser cannot
-        // fall back to rendering عام for a state that is actually `null`.
-        {...(visibility === null ? { placeholder: t('common.choose') } : {})}
-        onChange={setVisibility}
-        options={[
-          { value: 'public', label: t('content.visibility.public') },
-          { value: 'private', label: t('content.visibility.private') },
-          { value: 'hidden', label: t('content.visibility.hidden') },
-        ]}
-        {...(locked ? { hint: t('content.upload.keepsScope') } : {})}
-      />
+      {fields}
 
       <FileUploader
-        meta={meta}
+        meta={uploadMeta}
         token={token}
         {...(replacing
           ? { initialTitle: replacing.title, initialDescription: replacing.description }

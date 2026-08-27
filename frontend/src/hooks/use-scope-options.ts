@@ -193,7 +193,6 @@ export function useScopeOptions({
   const [levels, setLevels] = useState<Level[]>([]);
   const [branches, setBranches] = useState<Branch[]>([]);
   const [years, setYears] = useState<AcademicYearRef[]>([]);
-  const [subjects, setSubjects] = useState<SubjectRef[]>([]);
   const [groups, setGroups] = useState<AdministrativeGroup[]>([]);
   /** NEW D — every Subject, and each Level's own Subjects, from the one read.
    *  The narrowing below is a lookup rather than a second (Admin-only) request. */
@@ -311,27 +310,48 @@ export function useScopeOptions({
    * platform's Subject list and `listLevelSubjects` is one Level's pairing. This
    * picks between them; it does not filter one to fake the other.
    */
-  useEffect(() => {
-    if (!wants('subjectId')) return;
-    /**
-     * **Derived, not fetched** (NEW D).
-     *
-     * This used to call `/admin/subjects` or `/admin/levels/{id}/subjects` —
-     * both Admin-only, so a مؤطِّرة's Subject control was empty in a filter and
-     * refused the moment she chose a Level. The one scope-options read carries
-     * every Subject and each Level's own, so the SAME rule now runs against
-     * data she is allowed to have.
-     *
-     * The rule itself is unchanged and is still the Owner's (2026-08-17): with
-     * no Level chosen a **filter** offers every Subject and a **form** offers
-     * none, and choosing a Level narrows to that Level's.
-     */
-    if (value.levelId === '') {
-      setSubjects(subjectsUnscoped ? allSubjects : []);
-      return;
-    }
+  /**
+   * **Derived during render, not held in state** (NEW D; made a `useMemo` on
+   * 2026-08-27 to close a real race).
+   *
+   * This used to call `/admin/subjects` or `/admin/levels/{id}/subjects` — both
+   * Admin-only, so a مؤطِّرة's Subject control was empty in a filter and refused
+   * the moment she chose a Level. The one scope-options read carries every
+   * Subject and each Level's own, so the SAME rule now runs against data she is
+   * allowed to have.
+   *
+   * The rule itself is unchanged and is still the Owner's (2026-08-17): with no
+   * Level chosen a **filter** offers every Subject and a **form** offers none,
+   * and choosing a Level narrows to that Level's.
+   *
+   * ## Why it is a memo and not an effect
+   *
+   * As an effect it wrote `subjects` state, and that opened a **one-commit
+   * window** that silently dropped a seeded Subject:
+   *
+   * 1. the form mounts with `initial` — Level *and* Subject already chosen;
+   * 2. the scope-options payload lands, so `levelSubjects` fills and `ready`
+   *    flips true **in the same commit**;
+   * 3. rule 2's clearing effect runs on that commit against `options`, which was
+   *    memoised **during that render** from the still-EMPTY `subjects` state —
+   *    the effect that would have filled it has not committed yet;
+   * 4. the seeded Subject is not in an empty list, so it is cleared.
+   *
+   * Before NEW D the `loadingSubjects` flag was true across that window and rule
+   * 2 skipped the field. NEW D removed the fetch and made the flag a constant
+   * `false`, which removed the guard along with the request it was guarding —
+   * and the defect it had been hiding became reachable. مكتبة المحتوى's upload
+   * dialog lost the Subject its page filter had set, every time.
+   *
+   * Deriving it during render removes the window rather than re-guarding it:
+   * `options` can no longer disagree with `levelSubjects`, because both are
+   * computed in the same pass from the same data.
+   */
+  const subjects = useMemo<SubjectRef[]>(() => {
+    if (!wants('subjectId')) return [];
+    if (value.levelId === '') return subjectsUnscoped ? allSubjects : [];
     const taught = new Set(levelSubjects.get(value.levelId) ?? []);
-    setSubjects(allSubjects.filter((s) => taught.has(s.id)));
+    return allSubjects.filter((s) => taught.has(s.id));
   }, [value.levelId, wants, subjectsUnscoped, allSubjects, levelSubjects]);
 
   /* ── Groups depend on Level AND Branch together (§4.4c) ───────────────── */
