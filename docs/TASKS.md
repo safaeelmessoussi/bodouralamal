@@ -1339,20 +1339,47 @@ was hiding behind it: the run went green on the first attempt.
      Prisma mass write in `backend/src` and `backend/prisma`; Codex's covers integration suites
      and shared helpers including a missing `where` entirely.
 
-- [ ] **P1.2-class, OPEN — a sweep run under concurrency left residue (2026-08-27).** A full
-  sweep during NEW I's verification reported eight tables differing, all in the *added* direction:
-  `refresh_token +20`, `trash +7`, `audit_log +21`, `quran_progress_log +1`,
-  `student_surah_progress +1`, plus changed digests on `educational_content`, `exam` and
-  `teaching_group`. **NEW I cannot produce that signature** — it adds one nullable column and a
-  form field, and creates no tokens, trash or progress logs.
-  **Most likely cause, stated as a hypothesis rather than a finding: overlapping sweeps.** Several
-  runs were launched while earlier ones were still finishing, and two interleaved sweeps each
-  clean only what they created while the other's rows are mid-flight, which produces exactly this
-  *rows-added* shape. A confirming single clean run was started and killed before it reported, so
-  **this is unresolved.**
-  **What to do:** re-run one sweep with nothing else running and compare. If it is green, this was
-  self-inflicted by the verification method and the lesson is to serialise sweeps; if it is not,
-  the diff names the tables to chase. **Do not reseed to make it green.**
+- [ ] **P1.2-class, OPEN and ROOT-CAUSED TO A SIGNATURE — a suite soft-deletes the development
+  fixtures (2026-08-27).** **My first hypothesis was wrong and is withdrawn:** I guessed
+  overlapping sweeps, then ran one sweep with nothing else running and it failed identically. It
+  is reproducible and serial.
+
+  **What the guard reported on the clean run** — note the shape, which is the whole clue:
+
+  ```
+  administrative_group      13 → 13   digest CHANGED
+  recurring_course_schedule 15 → 15   digest CHANGED
+  session                  775 → 775  digest CHANGED
+  trash                     54 → 60
+  refresh_token           9954 → 9959
+  audit_log               2408 → 2406
+  ```
+
+  **Same count, different content, plus Trash growing** is the signature of a **soft delete**, and
+  `trash` named the rows outright:
+
+  ```
+  AdministrativeGroup      [تجريبي] مجموعة رشيش 3 · اركة 3 · رشيش 2 · اركة 2 · اركة 1
+  RecurringCourseSchedule  [تجريبي] حلقة  ×5
+  ```
+
+  **`[تجريبي]` is the development seed's own namespace** — the one `assertTestOwnershipTag`
+  explicitly reserves with *"integration scenarios may read those rows, but never claim ownership
+  of them"*. So a suite is calling the **deletion service** against seeded fixture rows it does
+  not own: 5 groups, 6 schedules and **316 sessions** soft-deleted in one sweep, each writing a
+  Trash snapshot and an audit row.
+
+  **Restored** (soft deletes undone, the 11 stray Trash snapshots removed) — the interim remedy,
+  not the fix.
+
+  **Next diagnostic step, and it is cheap:** the culprit deletes an Administrative Group and a
+  Course Schedule. Grep the integration suites for a deletion test that resolves its target from a
+  LIST rather than from a row it created — the ambient-*first* pattern — since a suite that
+  created its own group would delete its own. `trash.snapshot` also records `deleted_by`, so the
+  actor id on those rows names the suite's user directly.
+
+  **Note this is NOT the same finding as the `audit_log` one below**, and neither is NEW I's:
+  NEW I adds one nullable column and a form field and deletes nothing.
 
 - [ ] **P1.2-class, OPEN — one `audit_log` row was consumed by a sweep, once (2026-08-27).**
   Found by the P1.2 guard during NEW D's verification, and reported rather than reseeded away.
