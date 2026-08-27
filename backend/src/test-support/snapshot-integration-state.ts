@@ -27,6 +27,22 @@ const tables = await prisma.$queryRaw<Array<{ tableName: string }>>`
   ORDER BY table_name
 `;
 
+/**
+ * **A guard that can produce nothing compares equal to itself.**
+ *
+ * The wrapper decides isolation with `cmp -s BEFORE AFTER`, and two empty files
+ * are identical — so a snapshot that silently returned no rows would report
+ * every run as clean. That is the fail-open shape this project has already
+ * shipped three times in CI guards that depended on an absent `rg`. An empty
+ * catalogue means the query, the schema or the connection is wrong, never that
+ * the application has no tables.
+ */
+if (tables.length === 0) {
+  throw new Error(
+    'snapshot found no application tables — refusing to emit an empty state digest',
+  );
+}
+
 try {
   for (const { tableName } of tables) {
     // The identifier comes from PostgreSQL's own catalogue. Quote it anyway so

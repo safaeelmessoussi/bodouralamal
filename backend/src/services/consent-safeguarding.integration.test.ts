@@ -1084,8 +1084,18 @@ describe('B-01 consent safeguarding', () => {
 
   it('a transient public-delete failure stays fail-closed and retryable', async () => {
     const s = await scenario('delete-retry');
-    await decide(s, false);
-    await reevaluateSessionConsent(prisma, s.fixture.sessionId);
+    // This test owns fail-closed retryability, not asynchronous consent
+    // delivery. Going through `decide` + `reevaluate` puts the obligation on the
+    // LIVE application queue, whose worker may legitimately complete the
+    // migration — deleting the public object — between the injected failure and
+    // the assertion below that it is still there. Establishing the precondition
+    // directly is the same isolation the replacement, deletion and pg-boss
+    // retry tests in this file already use, and it removes the only shared
+    // dependency without touching a single assertion.
+    await prisma.educationalContent.update({
+      where: { id: s.contentId },
+      data: { consentForcedPrivate: true },
+    });
 
     await expect(
       migrateConsentForcedContent(

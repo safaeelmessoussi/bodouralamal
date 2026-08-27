@@ -39,7 +39,14 @@ for root in ROOTS:
             if not where:
                 continue
             clause = where.group(1)
-            if re.search(r"\w!\s*(?:[,}\n]|$)", clause) or re.search(r":\s*undefined\b", clause):
+            # `\bundefined\b`, not `:\s*undefined`. The narrower pattern matched
+            # `id: undefined` and MISSED `userId: actorUserId ?? undefined` —
+            # which is the exact shape that shipped as P1.2 and deleted every
+            # development staffing row. This file was already in scope and the
+            # guard still reported nothing, so the hole was the pattern, not the
+            # coverage. Any `undefined` inside a mass-write filter is ignorable
+            # by Prisma however it got there.
+            if re.search(r"\w!\s*(?:[,}\n]|$)", clause) or re.search(r"\bundefined\b", clause):
                 findings.append((path, i + 1, line.strip(), clause.strip().replace("\n", " ")[:100]))
 
 if findings:

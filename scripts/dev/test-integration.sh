@@ -51,6 +51,14 @@ cleanup_snapshots() {
 trap cleanup_snapshots EXIT HUP INT TERM
 
 ./node_modules/.bin/tsx src/test-support/snapshot-integration-state.ts >"$P1_2_BEFORE"
+# An empty digest compares equal to an empty digest, so a snapshot that produced
+# nothing would report every run as clean. The snapshot itself refuses to emit an
+# empty catalogue; this is the second lock on the same door, because the file is
+# what the comparison actually reads.
+if [[ ! -s "$P1_2_BEFORE" ]]; then
+  echo "FAIL: the before-state digest is empty; the isolation guard cannot run." >&2
+  exit 1
+fi
 
 set +e
 npm run test:integration -- "$@"
@@ -58,6 +66,10 @@ P1_2_TEST_STATUS=$?
 set -e
 
 ./node_modules/.bin/tsx src/test-support/snapshot-integration-state.ts >"$P1_2_AFTER"
+if [[ ! -s "$P1_2_AFTER" ]]; then
+  echo "FAIL: the after-state digest is empty; the isolation guard cannot run." >&2
+  exit 1
+fi
 
 P1_2_ISOLATION_STATUS=0
 if ! cmp -s "$P1_2_BEFORE" "$P1_2_AFTER"; then

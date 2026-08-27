@@ -1310,6 +1310,35 @@ was hiding behind it: the run went green on the first attempt.
   final sweep passed **1802** active tests and its complete logical database snapshot was identical
   before and after. Fixture reseeding is no longer the remedy or the definition of success.
 
+  **Reviewed and hardened on integration (Claude, 2026-08-27).** The root cause was reproduced
+  independently — the pre-fix file alone passes 17/17 and takes staffing 2 → 0, and the new
+  wrapper catches it — which also **corrects this document's own earlier claim** that a preceding
+  suite was required. That claim was a mismeasurement and is withdrawn. Three additions, each
+  closing a way a guard could pass while proving nothing:
+
+  1. **The state snapshot refuses to emit an empty catalogue**, and the wrapper refuses an empty
+     digest file. `cmp -s` on two empty files succeeds, so a snapshot that returned nothing would
+     have reported every run clean — the same fail-open shape as the three CI guards that
+     depended on an absent `rg`.
+  2. **The source guard now falsifies itself.** Its only assertion read the real tree and expected
+     `[]`, which a detector that matched nothing would satisfy forever. It is now aimed at both
+     unsafe constructs and required to report them, at their safe counterparts and required to
+     stay quiet, and at parentheses inside strings and comments.
+  3. **One B-01 race survived**, in a sibling of the test that was isolated: *«a transient
+     public-delete failure stays fail-closed and retryable»* still reached the live queue through
+     `decide` + `reevaluate`, so the running worker could delete the public object before the
+     assertion that it was still there. It now sets its precondition directly, which is the
+     isolation the replacement, deletion and pg-boss retry tests in the same file already use.
+     No assertion changed.
+  4. **A fourth, found by the review rather than by either author.**
+     `check-prisma-mass-write.sh` has scanned `backend/src` since R39b and covered the offending
+     file, yet reported nothing: its pattern was `:\s*undefined`, which matches `id: undefined`
+     and misses `userId: actorUserId ?? undefined` — the shape that shipped. **The hole was the
+     pattern, not the coverage.** Broadened to `\bundefined\b` and proven by restoring the
+     pre-fix file, which it now reports. The two guards are complementary: this one covers every
+     Prisma mass write in `backend/src` and `backend/prisma`; Codex's covers integration suites
+     and shared helpers including a missing `where` entirely.
+
 ## OWNER RATIFICATIONS OD-01 … OD-07 — 2026-08-26 · all answered, none open
 
 **OD-01 · Catalogue management — Admin AND Super Admin.** Admin may manage ordinary
@@ -1519,7 +1548,7 @@ verification.**
 ### Production blockers — STILL OPEN, not closed by this batch
 
 object-store replacement · backup target/retention · backup automation/alerting · Production
-RTO drill · automatic quarantine destruction · **P1.2 test isolation (two symptoms)** ·
+RTO drill · automatic quarantine destruction · ~~P1.2 test isolation~~ **CLOSED 2026-08-27** ·
 manual Production launch data · no-PII audit · §18/M8 rehearsal. **Production undeployed.**
 
 ## NEXT BATCH — planned 2026-08-26, ready to execute after reset

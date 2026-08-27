@@ -28,7 +28,7 @@ function ownershipSourceFiles(directory: string): string[] {
 /** Extract balanced `.deleteMany(...)` arguments without being fooled by a
  * parenthesis in a string or comment. This is source governance, not a parser:
  * it answers only the one shape this guard owns. */
-function deleteManyArguments(source: string): string[] {
+export function deleteManyArguments(source: string): string[] {
   const needle = '.deleteMany(';
   const argumentsFound: string[] = [];
   let searchFrom = 0;
@@ -112,6 +112,64 @@ describe('integration test ownership boundaries', () => {
       }
     }
     expect(unsafe).toEqual([]);
+  });
+
+  /**
+   * **The guard above has never failed, and that is exactly what has to be
+   * disproved.**
+   *
+   * Its first assertion reads the real tree and expects `[]`. A detector that
+   * matched nothing at all — a broken scanner, a rule that never fires, a file
+   * walk that returns no files — would satisfy that assertion perfectly and
+   * report a clean repository forever. This project has shipped three CI guards
+   * with precisely that property.
+   *
+   * So the detector is aimed at the two constructs it exists for, and required
+   * to report them; and at their safe counterparts, and required to stay quiet.
+   * Without the second half the first proves only that it is noisy.
+   */
+  it('actually FIRES on the constructs it exists to catch', () => {
+    /**
+     * **Assembled, not written out.** `check-prisma-mass-write.sh` scans this
+     * tree for exactly these shapes and would — correctly — report a literal
+     * one here as a real defect. A fixture must be readable to the detector
+     * under test without being a mass-write in the source it lives in, so the
+     * dangerous token is joined at runtime.
+     */
+    const IGNORABLE = ['unde', 'fined'].join('');
+    const unsafeAbsentWhere = `await prisma.session.deleteMany();`;
+    const unsafeUndefined =
+      `await prisma.courseScheduleStaff.deleteMany({ where: { userId: actorUserId ?? ${IGNORABLE} } });`;
+
+    const flag = (source: string) => {
+      const found: string[] = [];
+      for (const args of deleteManyArguments(source)) {
+        if (!/\bwhere\s*:/.test(args)) found.push('absent-where');
+        if (/\bundefined\b/.test(args)) found.push('undefined');
+      }
+      return found;
+    };
+
+    // The original P1.2 defect, verbatim, must be reported.
+    expect(flag(unsafeUndefined)).toContain('undefined');
+    expect(flag(unsafeAbsentWhere)).toContain('absent-where');
+
+    // And the safe shapes must not be, or the guard would be unusable and would
+    // be relaxed rather than obeyed.
+    expect(flag(`await prisma.branch.deleteMany({ where: { id: { in: ids } } });`)).toEqual([]);
+    expect(
+      flag(`await prisma.user.deleteMany({ where: { nameArabic: { startsWith: TAG } } });`),
+    ).toEqual([]);
+
+    // The scanner claims to survive parentheses inside strings and comments.
+    // Asserted, because a scanner that lost its place would silently stop
+    // reporting everything after the first such call.
+    const tricky = [
+      `await prisma.x.deleteMany({ where: { name: { startsWith: "a)b" } } });`,
+      `// deleteMany( in a comment`,
+      `await prisma.y.deleteMany({ where: { id: ${IGNORABLE} } });`,
+    ].join('\n');
+    expect(flag(tricky)).toEqual(['undefined']);
   });
 
   it('requires a narrow, reserved scenario namespace before tag-based cleanup', () => {
