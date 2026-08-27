@@ -18,7 +18,7 @@ import { AdminLayout } from '../../components/admin/admin-layout.js';
 import { Button } from '../../components/ui/button.js';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
 import { BlockedNotice } from '../../components/ui/blocked-notice.js';
-import { blockingDependencies } from '../../lib/blocked-by.js';
+import { classifyDeletion, deletionNotice } from '../../lib/deletion-outcome.js';
 import {
   DataTable,
   type Column,
@@ -271,10 +271,15 @@ export function BranchesPage(): ReactNode {
        * schedule. From the reader's seat the confirm simply vanished, which is
        * why this was reported as *«deleting does nothing»*.
        */
-      if (blockingDependencies(error) !== null) {
+      const outcome = classifyDeletion(error);
+      if (outcome.kind === 'blocked') {
         setBlocked(error);
       } else {
-        setNotice(t('common.deleteFailed'));
+        // `already-gone` reloads and says so: the row is gone, which is what
+        // was asked for, and reporting a failure for it is what made Delete
+        // read as unreliable on a page left open.
+        if (outcome.kind === 'already-gone') await load();
+        setNotice(deletionNotice(outcome));
         setDeleting(null);
       }
     } finally {

@@ -16,7 +16,7 @@ import { AdminLayout } from '../../components/admin/admin-layout.js';
 import { Button } from '../../components/ui/button.js';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
 import { BlockedNotice } from '../../components/ui/blocked-notice.js';
-import { blockingDependencies } from '../../lib/blocked-by.js';
+import { classifyDeletion, deletionNotice } from '../../lib/deletion-outcome.js';
 import {
   DataTable,
   type Column,
@@ -212,12 +212,20 @@ export function LevelsPage(): ReactNode {
     } catch (error) {
       // TD-5 refuses while enrolments, groups, schedules, exams or content
       // reference the Level. The dialog stays open and names them (NEW A).
-      if (blockingDependencies(error) !== null) {
+      const outcome = classifyDeletion(error);
+      if (outcome.kind === 'blocked') {
         setBlocked(error);
         setBusy(false);
         return;
       }
-      setNotice(t('common.deleteFailed'));
+      /**
+       * **`already-gone` is a success for the reader** (2026-08-27). The row she
+       * asked to remove is not there, which is what she wanted; reporting
+       * *«تعذّر الحذف»* said the opposite and made Delete look unreliable on any
+       * page left open while somebody else worked.
+       */
+      if (outcome.kind === 'already-gone') await load();
+      setNotice(deletionNotice(outcome));
     } finally {
       setBusy(false);
       setDeleting(null);

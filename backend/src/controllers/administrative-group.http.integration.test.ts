@@ -534,7 +534,8 @@ describe("deletion is guarded (TD-5, §4.4b)", () => {
     // group, and students are enrolled in it directly.
     //
     // The rule that actually protects people is unchanged and tested below:
-    // a group holding students is still refused with `ENROLMENTS_EXIST`.
+    // a group holding students is still refused, now through the platform's
+    // shared `blocked_by` shape rather than a vocabulary of its own.
     const solo = await call(
       "POST",
       "/admin/administrative-groups",
@@ -613,7 +614,19 @@ describe("deletion is guarded (TD-5, §4.4b)", () => {
       superAdmin,
     );
     expect(res.status).toBe(409);
-    expect(res.body.error?.details?.["reason"]).toBe("ENROLMENTS_EXIST");
+    /**
+     * **RESTATED 2026-08-27 — the rule is unchanged, the SHAPE is.**
+     *
+     * This pinned `details.reason === 'ENROLMENTS_EXIST'`, a refusal vocabulary
+     * only this service used. The client classifies a blocked deletion on
+     * `details.blocked_by`, so that bespoke shape meant the groups screen fell
+     * through to the generic sentence — *«يرجى تحديث الصفحة»* — and refreshing
+     * can never resolve an enrolled student. One mechanism now, so the named
+     * dependency actually reaches the reader.
+     *
+     * A group holding students is still refused, which is what the guard is for.
+     */
+    expect(res.body.error?.details?.["blocked_by"]).toMatchObject({ enrollments: 1 });
 
     await prisma.enrollment.deleteMany({ where: { studentId: student.id } });
   });

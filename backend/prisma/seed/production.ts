@@ -120,6 +120,71 @@ interface SurahRow {
   totalAyahs: number;
 }
 
+/**
+ * **Seeded ≠ owned. The seed INITIALIZES; afterwards the database is
+ * authoritative** (Owner, 2026-08-27).
+ *
+ * ## The defect this ends
+ *
+ * Every catalogue seeder was *"find a live row by that name, else create it"*.
+ * That reads as idempotent and is not: a Super Admin who **deletes** a Subject
+ * leaves a soft-deleted row, which `deletedAt: null` does not match — so the
+ * next deploy **recreated it**. The same held for a Category, a Level and a
+ * scheduling type. A catalogue the platform silently restores is not one an
+ * administrator manages; it is hardcoded truth wearing a CRUD screen.
+ *
+ * ## Why a marker rather than a smarter name match
+ *
+ * Including soft-deleted rows in the lookup would fix deletion alone. It would
+ * not fix a **rename** — the Owner's own instruction is that a rerun must not
+ * *"overwrite Owner-created catalogue data"*, and a renamed row is invisible to
+ * any name-based search, so the old name would come back beside it.
+ *
+ * One marker per catalogue answers the only question the seed may ask: *has
+ * this platform ever been initialized?* Once it has, the seed does not look at
+ * that catalogue again — deletions, renames, reorderings and additions are all
+ * the administrator's, permanently. A genuinely fresh database still gets its
+ * baseline, which is what a seed is for.
+ *
+ * **`SystemSetting` is the right home**: §15.1 already keeps deployment-scoped
+ * configuration there, the row is visible to anyone debugging a deploy, and it
+ * needs no schema change.
+ */
+const SEED_MARKER_PREFIX = 'seed.initialized.';
+
+async function alreadyInitialized(catalogue: string): Promise<boolean> {
+  const key = `${SEED_MARKER_PREFIX}${catalogue}`;
+  const row = await prisma.systemSetting.findUnique({ where: { key } });
+  return row !== null;
+}
+
+async function markInitialized(catalogue: string): Promise<void> {
+  const key = `${SEED_MARKER_PREFIX}${catalogue}`;
+  await prisma.systemSetting.upsert({
+    where: { key },
+    update: {},
+    create: { key, value: new Date().toISOString() },
+  });
+}
+
+/**
+ * **The one exception that is NOT a catalogue**: a platform whose baseline
+ * predates the marker.
+ *
+ * An installation seeded before 2026-08-27 has the rows but no marker, and
+ * re-seeding it would be a no-op anyway — every name already matches. Treating
+ * "the catalogue already has rows" as initialized keeps those deployments
+ * exactly where they are instead of re-running a baseline against them.
+ */
+async function initializedByPresence(catalogue: string, count: number): Promise<boolean> {
+  if (await alreadyInitialized(catalogue)) return true;
+  if (count > 0) {
+    await markInitialized(catalogue);
+    return true;
+  }
+  return false;
+}
+
 async function seedRoles(): Promise<void> {
   for (const name of ROLES) {
     await prisma.role.upsert({ where: { name }, update: {}, create: { name } });
@@ -134,6 +199,25 @@ async function seedRoles(): Promise<void> {
  */
 async function seedCategoriesAndLevels(): Promise<Map<string, string>> {
   const categoryIds = new Map<string, string>();
+
+  /**
+   * Same rule as the Subjects: initialize once, then leave it alone. The map is
+   * still returned — `seedSystemSettings` keys the §4.9 per-Category default on
+   * it — so an initialized platform resolves the CURRENT Categories by name
+   * rather than the baseline's, and a Category the Owner renamed simply does
+   * not appear, which is correct: its default setting is already keyed by id.
+   */
+  const initialized = await initializedByPresence('categories_levels', await prisma.category.count());
+  if (initialized) {
+    for (const row of await prisma.category.findMany({
+      where: { deletedAt: null },
+      select: { id: true, name: true },
+    })) {
+      categoryIds.set(row.name, row.id);
+    }
+    console.log('  categories/levels: already initialized — the database is authoritative');
+    return categoryIds;
+  }
 
   for (const category of CATEGORIES) {
     const existing = await prisma.category.findFirst({
@@ -168,11 +252,25 @@ async function seedCategoriesAndLevels(): Promise<Map<string, string>> {
   }
 
   const levelCount = await prisma.level.count({ where: { deletedAt: null } });
+  await markInitialized('categories_levels');
   console.log(`  categories: ${CATEGORIES.length}, levels: ${levelCount}`);
   return categoryIds;
 }
 
 async function seedSubjects(): Promise<void> {
+  /**
+   * **After initialization the Subjects belong to the Super Admin.**
+   *
+   * R107/R108's baseline is what a *fresh* platform starts with. Once it has
+   * been laid down, a rerun must not restore a Subject she deleted, rename one
+   * she renamed, or reinstate an ordering she changed — every one of which the
+   * old "find by live name, else create" did.
+   */
+  if (await initializedByPresence('subjects', await prisma.subject.count())) {
+    console.log('  subjects: already initialized — the database is authoritative');
+    return;
+  }
+
   await prisma.$transaction(async (tx) => {
     // Fail before writing if existing Owner-managed reference data is
     // ambiguous. The seed may complete a correctly named حفظ القرآن row by
@@ -229,6 +327,7 @@ async function seedSubjects(): Promise<void> {
       );
     }
   });
+  await markInitialized('subjects');
   console.log(`  subjects: ${SUBJECTS.length}`);
 }
 
@@ -255,6 +354,12 @@ async function seedSubjects(): Promise<void> {
  * of them the seed means is exactly what R107's preflight refuses to do.
  */
 async function seedSchedulingTypes(): Promise<void> {
+  // Same rule: the five rows are a starting point, not a whitelist (R110).
+  if (await initializedByPresence('scheduling_types', await prisma.schedulingType.count())) {
+    console.log('  scheduling types: already initialized — the database is authoritative');
+    return;
+  }
+
   await prisma.$transaction(async (tx) => {
     for (const type of SCHEDULING_TYPES) {
       const live = await tx.schedulingType.findMany({
@@ -301,10 +406,19 @@ async function seedSchedulingTypes(): Promise<void> {
       }
     }
   });
-  console.log(`  scheduling types: ${SCHEDULING_TYPES.length} (additive; renames and order preserved)`);
+  await markInitialized('scheduling_types');
+  console.log(`  scheduling types: ${SCHEDULING_TYPES.length} (initial baseline laid once)`);
 }
 
 async function seedAcademicYear(): Promise<void> {
+  // An academic year rolls over; the baseline's is only the first one. An
+  // upsert here would re-assert `is_current` on a year the association has
+  // already moved past.
+  if (await initializedByPresence('academic_year', await prisma.academicYear.count())) {
+    console.log('  academic year: already initialized — the database is authoritative');
+    return;
+  }
+
   await prisma.academicYear.upsert({
     where: { label: ACADEMIC_YEAR },
     update: {},
@@ -312,6 +426,7 @@ async function seedAcademicYear(): Promise<void> {
     // unique index (TD-6), so re-running can never create a second.
     create: { label: ACADEMIC_YEAR, isCurrent: true },
   });
+  await markInitialized('academic_year');
   console.log(`  academic year: ${ACADEMIC_YEAR} (is_current)`);
 }
 

@@ -223,7 +223,7 @@ describe("Subjects (§5.6 الفئات والمواد)", () => {
     expect(listed["name"]).toBe(`${TAG} مادة معدلة`);
   });
 
-  it("refuses deletion while a Level still teaches it", async () => {
+  it("RESTATED: a Level pairing is an OWNED LINK — it follows, it does not block", async () => {
     const level = await prisma.level.create({
       data: {
         name: `${TAG} مستوى للمادة`,
@@ -235,19 +235,46 @@ describe("Subjects (§5.6 الفئات والمواد)", () => {
       data: { levelId: level.id, subjectId },
     });
 
+    /**
+     * **RESTATED 2026-08-27.** This asserted a `409` naming `levels`, and the
+     * rule it pinned made deletion impossible for every Subject anybody had
+     * actually assigned — which is what the Owner reported.
+     *
+     * `LevelSubject` says *«this Level teaches this Subject»*. It records
+     * nothing that happened, so it is an **owned link**: it follows the Subject
+     * rather than refusing it. The need the old rule served — telling her which
+     * Levels were affected — is answered by the refusal dialog naming
+     * dependencies, not by refusing a deletion she is entitled to make.
+     *
+     * What must NOT happen is the Level being harmed, so that is asserted.
+     */
     const res = await call(
       "DELETE",
       `/admin/subjects/${subjectId}`,
       superAdmin,
     );
-    expect(res.status).toBe(409);
-    expect(res.body.error?.code).toBe("STATE_CONFLICT");
-    // Named, so the screen can say WHICH relationship blocks it rather than
-    // "cannot delete".
-    expect(res.body.error?.details?.["blocked_by"]).toHaveProperty("levels");
+    expect(res.status).toBe(204);
+
+    const pairing = await prisma.levelSubject.findFirst({
+      where: { levelId: level.id, subjectId },
+    });
+    // The link is detached, not destroyed — TD-5 soft delete, so the record of
+    // what was taught stays readable.
+    expect(pairing?.deletedAt).not.toBeNull();
+
+    // **The Level itself is untouched.** A reference deletion must never take
+    // an educational entity with it.
+    const survivor = await prisma.level.findUnique({ where: { id: level.id } });
+    expect(survivor?.deletedAt ?? null).toBeNull();
 
     await prisma.levelSubject.deleteMany({ where: { levelId: level.id } });
     await prisma.level.delete({ where: { id: level.id } });
+    // This test now consumes the Subject, so the one below makes its own.
+    await prisma.subject.update({
+      where: { id: subjectId },
+      data: { deletedAt: null, deletedById: null },
+    });
+    await prisma.trash.deleteMany({ where: { targetId: subjectId } });
   });
 
   it("deletes once nothing teaches it, and leaves a Trash snapshot (TD-5)", async () => {

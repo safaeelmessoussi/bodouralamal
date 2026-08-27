@@ -6,7 +6,10 @@ import { page, pageWindow, type Page, type PageParams } from '../lib/pagination.
 import * as scope from '../policies/branch-scope.js';
 import * as audit from '../repositories/audit.repository.js';
 import * as trash from '../repositories/trash.repository.js';
-import { updateWithVersion } from '../repositories/optimistic-lock.js';
+import {
+  assertNoBlockingReferences,
+  updateWithVersion,
+} from '../repositories/optimistic-lock.js';
 import type { Actor } from '../policies/actor.js';
 
 /**
@@ -203,25 +206,42 @@ export async function deleteAdministrativeGroup(
   assertInScope(actor, group.branchId);
 
   await prisma.$transaction(async (tx) => {
-    const enrolled = await tx.enrollment.count({
-      where: { administrativeGroupId: id, deletedAt: null },
-    });
-    if (enrolled > 0) {
-      throw new AppError('STATE_CONFLICT', 'group still has enrolled students', {
-        reason: 'ENROLMENTS_EXIST',
-        enrolled,
-      });
-    }
+    /**
+     * **ONE refusal shape, the platform's** (2026-08-27).
+     *
+     * This used to throw two bespoke `STATE_CONFLICT`s carrying `reason:
+     * 'ENROLMENTS_EXIST'` and `reason: 'SCHEDULES_EXIST'` with `enrolled` /
+     * `schedules` beside them — a third vocabulary for a refusal every other
+     * reference deletion already expressed as `blocked_by`. The consequence was
+     * not cosmetic: `blockingDependencies()` keys on `details.blocked_by`, so it
+     * returned `null` here, the screen fell through to the generic
+     * `STATE_CONFLICT` sentence — *«يرجى تحديث الصفحة»* — and **refreshing can
+     * never resolve an enrolled student.** The reader followed the instruction,
+     * nothing changed, and Delete read as broken.
+     *
+     * The rules are unchanged; only the shape is. Both are still hard blockers:
+     * a group holding students, and one a class is still delivered to.
+     */
+    const [enrolled, scheduled, grades] = await Promise.all([
+      tx.enrollment.count({ where: { administrativeGroupId: id, deletedAt: null } }),
+      tx.recurringCourseSchedule.count({
+        where: { administrativeGroupId: id, deletedAt: null },
+      }),
+      // A Grade names its group, and a mark a student was awarded is never
+      // removed to let a reference row be tidied away. No `deleted_at` term —
+      // the model gives a Grade no soft-delete column at all.
+      tx.grade.count({ where: { administrativeGroupId: id } }),
+    ]);
+    await assertNoBlockingReferences([
+      { label: 'enrollments', count: enrolled },
+      { label: 'course_schedules', count: scheduled },
+      { label: 'grades', count: grades },
+    ]);
 
-    const scheduled = await tx.recurringCourseSchedule.count({
-      where: { administrativeGroupId: id, deletedAt: null },
-    });
-    if (scheduled > 0) {
-      throw new AppError('STATE_CONFLICT', 'group is targeted by a course schedule', {
-        reason: 'SCHEDULES_EXIST',
-        schedules: scheduled,
-      });
-    }
+    // `EventAdministrativeGroup` is an owned join row — *«this activity is
+    // addressed to that group»* — so it follows the deletion rather than
+    // refusing it. The Event and its other scopes are untouched.
+    await tx.eventAdministrativeGroup.deleteMany({ where: { administrativeGroupId: id } });
 
     /**
      * **`LAST_GROUP_IN_LEVEL` retired by Revision 66.**

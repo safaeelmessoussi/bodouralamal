@@ -43,6 +43,8 @@ import {
 } from '../../components/scope/level-select.js';
 import { isDirty } from '../../lib/form-dirty.js';
 import { t } from '../../i18n/index.js';
+import { classifyDeletion, deletionNotice } from '../../lib/deletion-outcome.js';
+import { BlockedNotice } from '../../components/ui/blocked-notice.js';
 import { ScopeSelectors } from '../../components/scope/scope-selectors.js';
 import { useScopeOptions } from '../../hooks/use-scope-options.js';
 import { ApiError } from '../../lib/api.js';
@@ -96,6 +98,8 @@ export function GroupsPage(): ReactNode {
   const branchFilter = scope.value.branchId;
   const [editing, setEditing] = useState<AdministrativeGroup | 'new' | null>(null);
   const [deleting, setDeleting] = useState<AdministrativeGroup | null>(null);
+  /** The refusal itself, so the dialog can name what blocks it (rule AZ.1). */
+  const [blocked, setBlocked] = useState<unknown>(null);
   const [rosterOf, setRosterOf] = useState<AdministrativeGroup | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -234,6 +238,17 @@ export function GroupsPage(): ReactNode {
     }
   }
 
+  /**
+   * **The platform's deletion outcomes, not this screen's** (2026-08-27).
+   *
+   * This screen read `details.reason` and translated `admin.groups.refused_*` —
+   * a third vocabulary for a refusal every other reference deletion already
+   * expressed as `blocked_by`. When the server was corrected to the shared
+   * shape those keys stopped matching, and the screen would have fallen back to
+   * *«تعذّر الحفظ»* on a **deletion**. `classifyDeletion` is the one classifier
+   * now, so this page gains the named-dependency dialog and the already-gone
+   * case it never had.
+   */
   async function confirmDelete(): Promise<void> {
     if (!deleting) return;
     setBusy(true);
@@ -243,15 +258,19 @@ export function GroupsPage(): ReactNode {
       await load();
       setNotice(t('common.deleted'));
     } catch (error) {
-      // The three refusals are the interesting outcome, not a generic failure:
-      // enrolments exist, a schedule targets the group, or it is the last group
-      // in its Level (§4.4b). The server names which in `details.reason`.
-      const reason =
-        error instanceof ApiError
-          ? (error.details?.['reason'] as string | undefined)
-          : undefined;
-      setNotice(reason ? t(`admin.groups.refused_${reason}`) : t('common.saveFailed'));
+      const outcome = classifyDeletion(error);
+      if (outcome.kind === 'blocked') {
+        // The dialog STAYS OPEN and names what blocks it (rule AZ.1): closing
+        // onto a sentence loses the one thing she needs in order to act.
+        setBlocked(error);
+        setBusy(false);
+        return;
+      }
+      // Everything else closes, and `already-gone` reloads — the row she asked
+      // to remove is gone, which is the outcome she wanted.
       setDeleting(null);
+      if (outcome.kind === 'already-gone') await load();
+      setNotice(deletionNotice(outcome));
     } finally {
       setBusy(false);
     }
@@ -347,13 +366,19 @@ export function GroupsPage(): ReactNode {
 
       <ConfirmDialog
         open={deleting !== null}
+        {...(blocked
+          ? { blocked: <BlockedNotice error={blocked} item={t('admin.groups.thisItem')} /> }
+          : {})}
         title={t('admin.groups.deleteTitle')}
         body={t('admin.groups.deleteBody')}
         confirmLabel={t('common.delete')}
         danger
         busy={busy}
         onConfirm={() => void confirmDelete()}
-        onCancel={() => setDeleting(null)}
+        onCancel={() => {
+          setDeleting(null);
+          setBlocked(null);
+        }}
       />
     </AdminLayout>
   );

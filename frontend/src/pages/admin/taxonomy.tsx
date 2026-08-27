@@ -18,7 +18,7 @@ import { levelLabel } from '../../components/scope/level-select.js';
 import { Button } from '../../components/ui/button.js';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
 import { BlockedNotice } from '../../components/ui/blocked-notice.js';
-import { blockingDependencies } from '../../lib/blocked-by.js';
+import { classifyDeletion, deletionNotice } from '../../lib/deletion-outcome.js';
 import {
   DataTable,
   type Column,
@@ -254,12 +254,20 @@ export function TaxonomyPage({ kind }: { kind: TaxonomyKind }): ReactNode {
       // next action differs completely.
       // TD-5 (NEW A) — the dialog stays open and names the dependencies rather
       // than closing onto a guessed sentence at the top of the page.
-      if (blockingDependencies(error) !== null) {
+      const outcome = classifyDeletion(error);
+      if (outcome.kind === 'blocked') {
         setBlocked(error);
         setBusy(false);
         return;
       }
-      setNotice(t('common.deleteFailed'));
+      /**
+       * **`already-gone` is a success for the reader** (2026-08-27). The row she
+       * asked to remove is not there, which is what she wanted; reporting
+       * *«تعذّر الحذف»* said the opposite and made Delete look unreliable on any
+       * page left open while somebody else worked.
+       */
+      if (outcome.kind === 'already-gone') await load();
+      setNotice(deletionNotice(outcome));
     } finally {
       setBusy(false);
       setDeleting(null);

@@ -338,21 +338,38 @@ export async function deleteLevel(prisma: PrismaClient, actor: Actor, id: string
     const level = await tx.level.findFirst({ where: { id, deletedAt: null } });
     if (!level) throw new AppError('NOT_FOUND', 'level not found');
 
-    const [enrollments, teachingGroups, schedules, exams, content, subjects, grades, events] =
+    /**
+     * **Blockers only — an OWNED LINK is not a blocker** (2026-08-27).
+     *
+     * `LevelSubject` and `EventLevel` are pure join rows: *«this Level teaches
+     * that Subject»*, *«this activity is addressed to that Level»*. Neither is
+     * a record of something that happened, so neither survives the Level's
+     * removal meaningfully — and counting them as blockers made deletion
+     * **impossible in practice**: every Level a Super Admin had actually
+     * configured had at least one, so the button refused every real row and
+     * only worked on Levels nobody had used.
+     *
+     * They now follow the deletion (below), soft-deleted in the same
+     * transaction, exactly as this service has always treated the Level's own
+     * Administrative Groups.
+     *
+     * **What still blocks is what a person invested in**: enrolments, teaching
+     * groups, course schedules, exams, educational content and grades. None of
+     * those is ever removed to make a reference row deletable.
+     */
+    const [enrollments, teachingGroups, schedules, exams, content, grades] =
       await Promise.all([
         tx.enrollment.count({ where: { levelId: id, deletedAt: null } }),
         tx.teachingGroup.count({ where: { levelId: id, deletedAt: null } }),
         tx.recurringCourseSchedule.count({ where: { levelId: id, deletedAt: null } }),
         tx.exam.count({ where: { levelId: id, deletedAt: null } }),
         tx.educationalContent.count({ where: { levelId: id, deletedAt: null } }),
-        tx.levelSubject.count({ where: { levelId: id, deletedAt: null } }),
         // Per-group, because a Grade names its Administrative Group rather than
         // the Level. Reached through the group so the guard still describes the
         // Level as a whole. **No `deleted_at` term**: a Grade has no soft-delete
         // column at all — a mark a student was awarded is not a row anyone
         // removes, so every row found here is live by construction.
         tx.grade.count({ where: { administrativeGroup: { levelId: id } } }),
-        tx.eventLevel.count({ where: { levelId: id } }),
       ]);
     await assertNoBlockingReferences([
       { label: 'enrollments', count: enrollments },
@@ -360,12 +377,19 @@ export async function deleteLevel(prisma: PrismaClient, actor: Actor, id: string
       { label: 'course_schedules', count: schedules },
       { label: 'exams', count: exams },
       { label: 'content', count: content },
-      { label: 'subjects', count: subjects },
       { label: 'grades', count: grades },
-      { label: 'events', count: events },
     ]);
 
     const now = new Date();
+    // The owned links follow the Level. `LevelSubject` carries a soft-delete
+    // column; `EventLevel` is a bare join row and is removed outright, which
+    // destroys no history — the Event itself and its other scopes are untouched.
+    await tx.levelSubject.updateMany({
+      where: { levelId: id, deletedAt: null },
+      data: { deletedAt: now, deletedById: actor.userId },
+    });
+    await tx.eventLevel.deleteMany({ where: { levelId: id } });
+
     const groups = await tx.administrativeGroup.findMany({
       where: { levelId: id, deletedAt: null },
       select: { id: true },

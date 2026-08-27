@@ -237,20 +237,40 @@ export async function deleteSubject(prisma: PrismaClient, actor: Actor, id: stri
     const subject = await tx.subject.findFirst({ where: { id, deletedAt: null } });
     if (!subject) throw new AppError('NOT_FOUND', 'subject not found');
 
-    const [levels, teachingGroups, schedules, exams, content] = await Promise.all([
-      tx.levelSubject.count({ where: { subjectId: id, deletedAt: null } }),
+    /**
+     * **Blockers only — the Level pairing is an OWNED LINK** (2026-08-27).
+     *
+     * `LevelSubject` says *«this Level teaches this Subject»*. It records
+     * nothing that happened, so it does not survive the Subject meaningfully —
+     * and counting it as a blocker made deletion impossible for every Subject
+     * anybody had actually assigned. The comment this replaces argued the
+     * opposite (*"undoing it deliberately is how an administrator finds out
+     * which Levels were still teaching this"*), which is a real need — but it is
+     * answered by **telling her**, which the refusal dialog now does with names
+     * and counts, not by refusing a deletion she is entitled to make.
+     *
+     * What still blocks is what a person invested in: Teaching Groups that split
+     * the Subject, Course Schedules that deliver it, Exams sat in it, and
+     * Library content filed under it. None is ever removed to make this succeed.
+     */
+    const [teachingGroups, schedules, exams, content] = await Promise.all([
       tx.teachingGroup.count({ where: { subjectId: id, deletedAt: null } }),
       tx.recurringCourseSchedule.count({ where: { subjectId: id, deletedAt: null } }),
       tx.exam.count({ where: { subjectId: id, deletedAt: null } }),
       tx.educationalContent.count({ where: { subjectId: id, deletedAt: null } }),
     ]);
     await assertNoBlockingReferences([
-      { label: 'levels', count: levels },
       { label: 'teaching_groups', count: teachingGroups },
       { label: 'course_schedules', count: schedules },
       { label: 'exams', count: exams },
       { label: 'content', count: content },
     ]);
+
+    // The owned link follows the Subject.
+    await tx.levelSubject.updateMany({
+      where: { subjectId: id, deletedAt: null },
+      data: { deletedAt: new Date(), deletedById: actor.userId },
+    });
 
     await tx.subject.update({ where: { id }, data: { deletedAt: new Date(), deletedById: actor.userId } });
     await trash.snapshot(tx, {
@@ -395,9 +415,12 @@ export async function deleteCategory(prisma: PrismaClient, actor: Actor, id: str
     const category = await tx.category.findFirst({ where: { id, deletedAt: null } });
     if (!category) throw new AppError('NOT_FOUND', 'category not found');
 
-    const [levels, events, pendingRequests] = await Promise.all([
+    // `EventCategory` is an owned join row — *«this activity is addressed to
+    // that Category»* — not a record of anything, so it follows the deletion
+    // rather than refusing it (2026-08-27). Levels and pending requests are
+    // real and still block.
+    const [levels, pendingRequests] = await Promise.all([
       tx.level.count({ where: { categoryId: id, deletedAt: null } }),
-      tx.eventCategory.count({ where: { categoryId: id } }),
       // Revision 49 (Document Owner decision, 2026-08-05): **a Category with
       // PENDING registration requests pointing at it must not vanish
       // underneath them** — the §4.1 approval screen would be left preselecting
@@ -415,10 +438,10 @@ export async function deleteCategory(prisma: PrismaClient, actor: Actor, id: str
     ]);
     await assertNoBlockingReferences([
       { label: 'levels', count: levels },
-      { label: 'events', count: events },
       { label: 'pending_requests', count: pendingRequests },
     ]);
 
+    await tx.eventCategory.deleteMany({ where: { categoryId: id } });
     await tx.category.update({
       where: { id },
       data: { deletedAt: new Date(), deletedById: actor.userId },
