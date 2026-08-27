@@ -192,6 +192,11 @@ PATCH /admin/scheduling-types/{id}            # R110; TD-15 optimistic locking; 
 DELETE /admin/scheduling-types/{id}           # R110; TD-5, refused while an activity names it
 PATCH /admin/scheduling-types/order           # R76.4; the sequence; refused unless the exact live set
 
+# NEW D — R93.4's pattern for the content/scheduling vocabulary. Recorded here on
+# the same footing as /me/event-scope-options: the narrow question a staff member
+# may ask, so the Admin reference reads stay refused to teaching staff (R26/R30).
+GET /me/scope-options                         # NEW D; staff only; branch-scoped branches
+
 GET /admin/categories                         # §5.6 "Categories & Subjects", §14.2 screen standard
 POST /admin/categories                        # §5.6; Super Admin only (reference data, TD-2 R26)
 PATCH /admin/categories/{id}                  # §5.6; TD-15 optimistic locking

@@ -1553,6 +1553,62 @@ export function scheduleSessionDto(row: {
   };
 }
 
+/* ── `/me/scope-options` — the caller's own filter vocabulary (NEW D) ────── */
+
+export interface ScopeOptionsDto {
+  categories: { id: string; name: string }[];
+  levels: {
+    id: string;
+    name: string;
+    category_id: string;
+    /** A label for grouping, never an identifier — `{Category} — {Level}` is
+     *  how §4.4b's non-unique Level names are disambiguated (rule D). */
+    category_name: string;
+    /** §4.9's default content tier for this Level, through its Category (§15.1). */
+    default_visibility: string;
+    /** The Subjects this Level teaches (§4.4b). Inline so narrowing needs no
+     *  second request — and that request was itself Admin-only. */
+    subject_ids: string[];
+  }[];
+  subjects: { id: string; name: string }[];
+  academic_years: { id: string; label: string; is_current: boolean }[];
+  branches: { id: string; name: string }[];
+}
+
+export function scopeOptionsDto(row: {
+  categories: { id: string; name: string }[];
+  levels: {
+    id: string;
+    name: string;
+    categoryId: string;
+    categoryName: string;
+    defaultVisibility: string;
+    subjectIds: string[];
+  }[];
+  subjects: { id: string; name: string }[];
+  academicYears: { id: string; label: string; isCurrent: boolean }[];
+  branches: { id: string; name: string }[];
+}): ScopeOptionsDto {
+  return {
+    categories: row.categories,
+    levels: row.levels.map((l) => ({
+      id: l.id,
+      name: l.name,
+      category_id: l.categoryId,
+      category_name: l.categoryName,
+      default_visibility: l.defaultVisibility,
+      subject_ids: l.subjectIds,
+    })),
+    subjects: row.subjects,
+    academic_years: row.academicYears.map((y) => ({
+      id: y.id,
+      label: y.label,
+      is_current: y.isCurrent,
+    })),
+    branches: row.branches,
+  };
+}
+
 /* ── The scheduling-type catalogue (R110, NEW H) ─────────────────────────── */
 
 export interface SchedulingTypeDto {

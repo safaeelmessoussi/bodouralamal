@@ -253,8 +253,11 @@ export async function listLevels(
   }));
 }
 
-/** §15.1's key shape, in one place so the read and the write cannot drift. */
-const DEFAULT_VISIBILITY_PREFIX = 'content.default_visibility.category.';
+/** §15.1's key shape, in one place so the read and the write cannot drift.
+ *  Exported for `/me/scope-options`, which answers the same question for a
+ *  caller the admin Level list refuses (NEW D) — a second copy of the key
+ *  shape or of the fail-closed reading is exactly what §16.4 forbids. */
+export const DEFAULT_VISIBILITY_PREFIX = 'content.default_visibility.category.';
 
 /**
  * The stored value is JSON, and anything unrecognised resolves to `private`.
@@ -262,7 +265,7 @@ const DEFAULT_VISIBILITY_PREFIX = 'content.default_visibility.category.';
  * **Never widen on a surprise.** A malformed settings row must not resolve to
  * `public`, which would propose publishing content because a setting was wrong.
  */
-function readDefaultVisibility(raw: unknown): 'public' | 'private' | 'hidden' {
+export function readDefaultVisibility(raw: unknown): 'public' | 'private' | 'hidden' {
   const value = typeof raw === 'string' ? raw : undefined;
   return value === 'public' || value === 'hidden' ? value : 'private';
 }

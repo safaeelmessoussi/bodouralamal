@@ -1,13 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-import { listBranches, type Branch } from '../adapters/branches-admin.js';
+import type { Branch } from '../adapters/branches-admin.js';
 import { listAdministrativeGroups, type AdministrativeGroup } from '../adapters/administrative-groups.js';
-import {
-  listAcademicYears,
-  listSubjects,
-  type AcademicYearRef,
-} from '../adapters/reference-data.js';
-import { listCategories, listLevelSubjects, listLevels, type Category, type Level } from '../adapters/taxonomy.js';
+import type { AcademicYearRef } from '../adapters/reference-data.js';
+import type { Category, Level } from '../adapters/taxonomy.js';
+import { fetchScopeOptions } from '../adapters/scope-options.js';
 import type { SubjectRef } from '../adapters/reference-data.js';
 import { levelLabel } from '../components/scope/level-select.js';
 
@@ -198,9 +195,23 @@ export function useScopeOptions({
   const [years, setYears] = useState<AcademicYearRef[]>([]);
   const [subjects, setSubjects] = useState<SubjectRef[]>([]);
   const [groups, setGroups] = useState<AdministrativeGroup[]>([]);
+  /** NEW D — every Subject, and each Level's own Subjects, from the one read.
+   *  The narrowing below is a lookup rather than a second (Admin-only) request. */
+  const [allSubjects, setAllSubjects] = useState<SubjectRef[]>([]);
+  const [levelSubjects, setLevelSubjects] = useState<Map<string, string[]>>(new Map());
 
   const [ready, setReady] = useState(false);
-  const [loadingSubjects, setLoadingSubjects] = useState(false);
+  /**
+   * **Always false now, and kept rather than removed** (NEW D).
+   *
+   * Subjects are derived from the one scope-options read instead of fetched, so
+   * there is no window in which the list is in flight. The flag stays because
+   * three real behaviours read it — the control's busy state, the *«this Level
+   * teaches nothing»* message, and rule 2's clearing guard — and each of them
+   * asks *"is this list trustworthy yet?"*, which is a question the hook should
+   * keep answering even when today's answer is always yes.
+   */
+  const loadingSubjects = false;
   const [loadingGroups, setLoadingGroups] = useState(false);
 
   // Levels are needed whenever a Category, Level or Group is offered: a Category
@@ -211,17 +222,57 @@ export function useScopeOptions({
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const [cats, lvls, brs, yrs] = await Promise.all([
-        wants('categoryId') ? listCategories(token) : Promise.resolve<Category[]>([]),
-        needsLevels ? listLevels(token) : Promise.resolve<Level[]>([]),
-        wants('branchId') || wants('groupId')
-          ? listBranches(token).then((p) => p.data)
-          : Promise.resolve<Branch[]>([]),
-        wants('academicYearId')
-          ? listAcademicYears(token)
-          : Promise.resolve<AcademicYearRef[]>([]),
-      ]);
+      /**
+       * **One caller-scoped read, not four admin ones** (NEW D).
+       *
+       * This hook is shared by مكتبة المحتوى, الجدولة, the groups screen and
+       * the upload form, and it used to assemble its vocabulary from
+       * `/admin/categories`, `/admin/levels`, `/admin/branches` and
+       * `/admin/academic-years`. Three of those answer **403** for a مؤطِّرة by
+       * design (R30), so every screen this hook serves opened for her with a
+       * half-dead filter row — **the wrong layer was here, not the page.**
+       *
+       * `GET /me/scope-options` answers the narrower question *what may I
+       * filter and compose by*, per caller, and the admin reads are untouched
+       * and still refuse her (R93.4's precedent and mechanism).
+       *
+       * The fields are still requested conditionally in spirit — the hook uses
+       * only what the caller `wants` — but there is nothing to save by asking
+       * for less of one small payload, and asking for all of it is what lets
+       * the Level → Subject narrowing be a lookup instead of a second request.
+       */
+      const payload = await fetchScopeOptions(token);
       if (cancelled) return;
+      const cats: Category[] = payload.categories.map((c) => ({
+        id: c.id,
+        name: c.name,
+        display_order: null,
+        level_count: 0,
+        version: 0,
+      }));
+      const lvls: Level[] = payload.levels.map((l) => ({
+        id: l.id,
+        name: l.name,
+        category_id: l.category_id,
+        category_name: l.category_name,
+        default_visibility: l.default_visibility,
+        gender_restriction: 'any',
+        display_order: null,
+        group_count: 0,
+        subject_count: l.subject_ids.length,
+        enrollment_count: 0,
+        version: 0,
+      }));
+      const brs: Branch[] = payload.branches.map((b) => ({ id: b.id, name: b.name }) as Branch);
+      const yrs: AcademicYearRef[] = payload.academic_years.map((y) => ({
+        id: y.id,
+        label: y.label,
+        is_current: y.is_current,
+      }));
+      setLevelSubjects(
+        new Map(payload.levels.map((l) => [l.id, l.subject_ids])),
+      );
+      setAllSubjects(payload.subjects.map((x) => ({ id: x.id, name: x.name }) as SubjectRef));
       setCategories(cats);
       setLevels(lvls);
       setBranches(brs);
@@ -262,28 +313,26 @@ export function useScopeOptions({
    */
   useEffect(() => {
     if (!wants('subjectId')) return;
-    let cancelled = false;
-    setLoadingSubjects(true);
-    void (async () => {
-      try {
-        const list =
-          value.levelId === ''
-            ? // No Level chosen. In a FORM this stays empty — `ScopeSelectors`
-              // disables the control and says which answer is missing — and in a
-              // FILTER it is every Subject.
-              subjectsUnscoped
-              ? await listSubjects(token)
-              : []
-            : await listLevelSubjects(value.levelId, token);
-        if (!cancelled) setSubjects(list);
-      } finally {
-        if (!cancelled) setLoadingSubjects(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [value.levelId, token, wants, subjectsUnscoped]);
+    /**
+     * **Derived, not fetched** (NEW D).
+     *
+     * This used to call `/admin/subjects` or `/admin/levels/{id}/subjects` —
+     * both Admin-only, so a مؤطِّرة's Subject control was empty in a filter and
+     * refused the moment she chose a Level. The one scope-options read carries
+     * every Subject and each Level's own, so the SAME rule now runs against
+     * data she is allowed to have.
+     *
+     * The rule itself is unchanged and is still the Owner's (2026-08-17): with
+     * no Level chosen a **filter** offers every Subject and a **form** offers
+     * none, and choosing a Level narrows to that Level's.
+     */
+    if (value.levelId === '') {
+      setSubjects(subjectsUnscoped ? allSubjects : []);
+      return;
+    }
+    const taught = new Set(levelSubjects.get(value.levelId) ?? []);
+    setSubjects(allSubjects.filter((s) => taught.has(s.id)));
+  }, [value.levelId, wants, subjectsUnscoped, allSubjects, levelSubjects]);
 
   /* ── Groups depend on Level AND Branch together (§4.4c) ───────────────── */
   useEffect(() => {

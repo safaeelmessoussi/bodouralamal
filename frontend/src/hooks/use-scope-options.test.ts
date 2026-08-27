@@ -32,12 +32,51 @@ function code(source: string): string {
  * and in the browser.
  */
 describe('the Subject filter does not require a Level', () => {
-  it('reads every Subject when no Level is chosen, and the Level’s when one is', () => {
-    // Two different endpoints, chosen between — not one filtered to fake the
-    // other. `listSubjects` is the platform's Subject list; `listLevelSubjects`
-    // is one Level's pairing.
-    expect(code(HOOK)).toContain('listSubjects(token)');
-    expect(code(HOOK)).toContain('listLevelSubjects(value.levelId, token)');
+  it('offers every Subject when no Level is chosen, and the Level’s when one is', () => {
+    /**
+     * **RESTATED for NEW D — the property is the same, the mechanism is not.**
+     *
+     * This used to assert two endpoints chosen between, `listSubjects` and
+     * `listLevelSubjects`. Both are Admin-only, which is precisely why a
+     * مؤطِّرة's Subject control was empty in a filter and refused the moment she
+     * chose a Level. The hook now derives both answers from the one
+     * caller-scoped read, so the calls are gone — **but the rule they
+     * implemented is unchanged and is what this pins**: no Level chosen means
+     * every Subject in a filter and none in a form; a Level chosen means that
+     * Level's.
+     */
+    expect(code(HOOK)).toContain('setSubjects(subjectsUnscoped ? allSubjects : [])');
+    expect(code(HOOK)).toContain('levelSubjects.get(value.levelId)');
+  });
+
+  it('NEVER reaches for an Admin reference read — that WAS the defect (NEW D)', () => {
+    /**
+     * **The regression guard for NEW D itself.**
+     *
+     * `/admin/levels`, `/admin/subjects`, `/admin/academic-years` and
+     * `/admin/levels/{id}/subjects` all answer **403** for a مؤطِّرة by design
+     * (R30), and this hook is shared by مكتبة المحتوى, الجدولة, the groups
+     * screen and the upload form — so one of these calls reappearing here
+     * breaks a Teacher workflow on every screen at once, and does it silently:
+     * an Admin developer would never see it.
+     *
+     * The narrow read is `/me/scope-options` (R93.4's pattern). Anything else
+     * belongs to a screen that has already established the caller is an Admin.
+     */
+    const c = code(HOOK);
+    for (const forbidden of [
+      'listLevels(',
+      'listSubjects(',
+      'listAcademicYears(',
+      'listLevelSubjects(',
+      'listCategories(',
+      'listBranches(',
+    ]) {
+      expect(c, `${forbidden} is Admin-only and must not return to the shared hook`).not.toContain(
+        forbidden,
+      );
+    }
+    expect(c).toContain('fetchScopeOptions(token)');
   });
 
   it('is driven by `mode`, and defaults to the strict one', () => {

@@ -1339,6 +1339,25 @@ was hiding behind it: the run went green on the first attempt.
      Prisma mass write in `backend/src` and `backend/prisma`; Codex's covers integration suites
      and shared helpers including a missing `where` entirely.
 
+- [ ] **P1.2-class, OPEN — one `audit_log` row was consumed by a sweep, once (2026-08-27).**
+  Found by the P1.2 guard during NEW D's verification, and reported rather than reseeded away.
+  The first full sweep after NEW D reported `audit_log 2382 → 2381`; **every other one of the 55
+  tables was byte-identical**, and all 1818 tests passed. The **second** sweep was completely
+  green — `audit_log` identical, zero rows added or removed — which is consistent with a single
+  *pre-existing* row whose identity happened to match some suite's cleanup predicate: once
+  deleted there is nothing left to match, so it cannot recur and cannot now be identified from
+  the digest.
+  **What is known:** it is one row, it is not `course_schedule_staff` (2 → 2 throughout), it is
+  not NEW D's own suite (run alone under the guard: clean), and it is not reproducible.
+  **What to do:** the cheap decisive method is the one used here — snapshot `audit_log`'s
+  `id|action_type|target_entity|target_id|actor_user_id` before and after a sweep and `comm` the
+  two, which names the row and therefore its owner. That needs a database where the vulnerable
+  row still exists, so it is worth running **before** the next sweep on a freshly seeded
+  environment. Candidate shapes: any `auditLog.deleteMany` keyed on `targetId` or `actorUserId`
+  whose id set can contain something the suite did not create.
+  **The guard is working as intended** — this is exactly the class of loss that no failing test
+  would ever have shown.
+
 ## OWNER RATIFICATIONS OD-01 … OD-07 — 2026-08-26 · all answered, none open
 
 **OD-01 · Catalogue management — Admin AND Super Admin.** Admin may manage ordinary
@@ -1561,7 +1580,7 @@ manual Production launch data · no-PII audit · §18/M8 rehearsal. **Production
 | 2 | ~~**NEW H** scheduling-type catalogue~~ **DONE (R110)** | reconciliation → feature | precedes §D, as planned — §D now builds on a picker that already reads the catalogue |
 | 3 | ~~**NEW B §D** frontend Add/Edit + scope prompt~~ **DONE 2026-08-26** | feature | R50's scope prompt already shipped, so the tier joined the fields those three scopes already carry — no second recurrence mechanism |
 | 4 | ~~**NEW B §E** full authorization matrix~~ **DONE 2026-08-26 — NEW B is CLOSED** | tests | 35 HTTP assertions; proven against four reintroduced defects; shared dev state measured identical before/after |
-| 5 | **NEW D** Teacher content-library lookups | **defect (backend authz)** | standalone; unblocks Teacher content work |
+| 5 | ~~**NEW D** Teacher content-library lookups~~ **DONE 2026-08-27** | defect (backend authz) | `GET /me/scope-options` (R93.4's pattern); admin reads untouched and still refused |
 | 6 | **NEW E** الملف التدريسي false dirty | **defect** | folded into §9A–D/F acceptance |
 | 7 | **§8** table columns audit | feature | needs NEW I fields to exist first |
 | 8 | **NEW I/J/K/L** reference-data baseline | data + small schema | Branch needs one column (below) |
@@ -1582,8 +1601,14 @@ manual Production launch data · no-PII audit · §18/M8 rehearsal. **Production
 * **NEW C — DONE this session.** Root cause was **not** the three-source union: `sort` was
   missing from `approvals.tsx`'s loader dependency array, so the header updated state and
   never re-requested. Fixed, with `sorted-pages-refetch.test.ts` covering all four
-  server-sorted pages. **Browser confirmation of the reorder is still owed** — fold into the
-  first §6 follow-up sweep.
+  server-sorted pages. **Browser confirmation of the reorder is STILL OWED** (re-confirmed
+  2026-08-27, deliberately not bundled into NEW D). `verify-sorting-headers.sh` covers مكتبة
+  المحتوى, الجدولة and نقاط الامتحانات — **not** طلبات الانضمام — and the development database
+  holds exactly one pending user, one family link and one child application, which cannot show a
+  reorder at all. Closing it honestly needs **three or more scenario-owned pending registrations
+  with distinct sortable values**, seeded and cleaned by the harness (P1.2). That is unrelated
+  fixture work, which is the Owner's own stated reason to leave it open rather than half-check
+  it. Fold into whichever section next touches approvals or seeds registrations.
 * **NEW D — the incorrect layer is the SHARED HOOK, not the page.** `useScopeOptions` calls
   `listLevels`, `listSubjects`, `listAcademicYears` — all `403` for a Teacher (R93.4) — while
   `listBranches` correctly returns `200` (branch.service admits teachers). R93.4 already set

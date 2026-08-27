@@ -25,6 +25,7 @@ import * as libraryCtl from './controllers/library.controller.js';
 import * as referenceData from './controllers/reference-data.controller.js';
 import * as taxonomy from './controllers/taxonomy.controller.js';
 import * as schedulingTypes from './controllers/scheduling-type.controller.js';
+import * as scopeOptions from './controllers/scope-options.controller.js';
 import * as trash from './controllers/trash.controller.js';
 import * as contentCtl from './controllers/content.controller.js';
 import * as enrollments from './controllers/enrollment.controller.js';
@@ -396,6 +397,12 @@ export function createApp(
   // **Before** the parameterised route, or `staff-options` is read as an id.
   guarded.get('/me/event-staff-options', events.staffOptions(prisma));
   guarded.get('/me/event-scope-options', events.scopeOptions(prisma));
+  /**
+   * NEW D — the caller's own filter/compose vocabulary. Beside
+   * `/me/event-scope-options` because it is the same idea: ask the smaller
+   * question rather than widen an admin read.
+   */
+  guarded.get('/me/scope-options', scopeOptions.read(prisma));
   guarded.put('/events/:id/staff', events.setStaff(prisma));
   guarded.delete('/events/:id', events.remove(prisma));
   guarded.get('/admin/branches/:id/event-backfill', events.listBackfill(prisma));

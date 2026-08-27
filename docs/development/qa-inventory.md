@@ -121,6 +121,7 @@ under the table.
 | `verify-schedule-edit.sh` | 10, 11 | «تعديل العنصر» — R50's scopes through the real dialog | 12/12 |
 | `verify-student-flows.sh` | 22 | The beneficiary's own portal: calendar, library, memorisation, grades, account | 11/11 |
 | `verify-calendar-filters.sh` | 20 | **AL** — a filter chosen in one view survives the switch, in the controls, in the URL **and in the other view's request** | 11/11 |
+| `verify-content-scope.sh` | 14 | NEW D — a مؤطِّرة's مكتبة المحتوى filters, and the admin reads still refused | 14/14 |
 | `verify-visibility-ui.sh` | 19 | NEW B §D — the visibility tier on the forms, and where each R50 scope lands | 19/19 |
 | `verify-scheduling-types.sh` | 10 | R110 — the scheduling-type catalogue on أنواع الجدولة and the الجدولة picker | 10/10 |
 | `verify-circles-reorder.sh` | 9 | R78.1 — ordering حلقات المواد within a `(level, subject)` pairing | 9/9 |
