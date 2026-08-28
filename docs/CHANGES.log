@@ -1432,6 +1432,15 @@ normalises to `null`: *no description* is one state, not two. `＋ إضافة ش
 moved into `AdminLayout`'s shared header slot, where the other eleven management
 pages put it.
 
+### A harness that borrowed another suite's fixture
+
+`verify-unsaved-guard`'s pristine-close check seeded its group against `LIMIT 1`
+of whatever branch existed. Run beside the integration sweep it took the branch
+the recording suite was about to delete, and that suite's teardown hit RESTRICT
+— five failures in a suite that had nothing to do with the change. The harness
+now creates its **own** branch and group and removes both: a harness must own
+every row it depends on, or it is a fixture for somebody else's test.
+
 ### A harness that pointed at a withdrawn control
 
 `verify-unsaved-guard` drove `＋تسجيل مستفيدة` as its reference form. The Owner

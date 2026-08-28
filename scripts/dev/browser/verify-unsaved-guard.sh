@@ -13,10 +13,18 @@ PSQL() { docker compose exec -T db psql -U app -d bodour -tAc "$1"; }
 # **The pristine-close check seeds its own group** (P1.2). It read whichever row
 # happened to be there, so it failed the day that row was cleaned up — a harness
 # that depends on ambient state proves nothing on a fresh database.
+# **It seeds its own BRANCH as well as its own group** (P1.2). Attaching to
+# `LIMIT 1` of whatever existed made it borrow another suite's fixture: run
+# beside the integration sweep, the group held a branch that the recording suite
+# was about to delete, and that suite's teardown hit RESTRICT. A harness must own
+# every row it depends on, or it is a fixture for somebody else's test.
+PSQL "INSERT INTO branch (id, name, updated_at)
+      VALUES (gen_random_uuid(), '[cguard] مقر', now())
+      ON CONFLICT DO NOTHING;" >/dev/null
 PSQL "INSERT INTO administrative_group (id, name, level_id, branch_id, updated_at)
       SELECT gen_random_uuid(), '[cguard] مجموعة', l.id, b.id, now()
         FROM level l, branch b
-       WHERE l.deleted_at IS NULL AND b.deleted_at IS NULL
+       WHERE l.deleted_at IS NULL AND b.name = '[cguard] مقر'
        LIMIT 1
       ON CONFLICT DO NOTHING;" >/dev/null
 
@@ -24,6 +32,7 @@ cleanup() {
   [[ -n "${CHROME_PID:-}" ]] && kill "$CHROME_PID" 2>/dev/null || true
   rm -rf "$WORK" 2>/dev/null || true
   PSQL "DELETE FROM administrative_group WHERE name LIKE '[cguard]%';" >/dev/null 2>&1 || true
+  PSQL "DELETE FROM branch WHERE name LIKE '[cguard]%';" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 "$CHROME" --headless=new --disable-gpu --no-sandbox --remote-debugging-port=9243 \
