@@ -1651,7 +1651,7 @@ manual Production launch data · no-PII audit · §18/M8 rehearsal. **Production
 | 11 | ~~**§10** Rule AX carry-forwards~~ **DONE 2026-08-27** | feature | Recorder dialog converted onto the **shared** `useContentScope`. `session-materials-dialog` deliberately untouched — the audit marks it *Borderline, Owner decision*, and changing it would pre-empt that. The conversion uncovered a real seeding race in `useScopeOptions` (see below) |
 | 12 | **NEW M** Teacher baseline import | **data, Production only** | after §9 so the profile form is correct |
 | 13 | ~~**NEW O** account deletion — design only~~ **DESIGN DELIVERED 2026-08-27** | reconciliation | `docs/SRS-PROPOSAL-R111.md` classifies all 35, enumerated from the **live database**. Central finding: 26 must survive, so deletion is the **de-identification of a row that continues to exist**. **All four questions ANSWERED by the Owner 2026-08-27** and folded into §7; implementation (#14) is unblocked |
-| 14 | **NEW O** implementation | feature + migration | **UNBLOCKED 2026-08-27** — R111's design is ratified. Self-deletion for every user including مؤطِّرات; admin-initiated deletion on the same 3-day window; tombstone «حساب محذوف»; BLOCK refuses **with an explanation naming what must be reassigned**, and does not reassign in the same action |
+| 14 | ~~**NEW O** implementation~~ **DONE 2026-08-28** | feature (no migration needed) | **UNBLOCKED 2026-08-27** — R111's design is ratified. Self-deletion for every user including مؤطِّرات; admin-initiated deletion on the same 3-day window; tombstone «حساب محذوف»; BLOCK refuses **with an explanation naming what must be reassigned**, and does not reassign in the same action |
 | 15 | **NEW M** Teacher import | data, **Production only** | R104 — never Staging |
 | 16 | ~~**NEW G** حسابي redesign~~ **DONE 2026-08-27** | UX | The page said who she is and not where she is. `GET /profile` now carries `enrolments`, `circles` and `guardians`; the guardian block is **a name and a status, enforced by the projection**. Guarded in `pages/profile/privacy.test.ts`, proved against a reintroduced phone leak |
 | 17 | **NEW N** Partner model + landing | feature | reference CRUD + public section |
@@ -1805,12 +1805,16 @@ normative wording are proposed in `docs/SRS-PROPOSAL-R112.md`.
       list and **every write beneath it**; proved with forged requests.
 - [x] **`GET /admin/directory`** — the operational people-picker, Admin+, exactly
       `id`, `name_arabic`, `nickname`, `roles`. Five screens moved onto it.
-- [ ] **BLOCKED ON THE OWNER — one TD-3 line.** `check-openapi-td3.sh` enforces
+- [x] **TD-3 line added by the Document Owner's instruction 2026-08-28** — R112 is
+      in `docs/SRS.md` (§5.6, §5.7, TD-2) and all 27 CI guards are green. Was: `check-openapi-td3.sh` enforces
       §20 rule 16 and is **correctly failing**: an endpoint in the API document
       that TD-3 does not list is forbidden. `docs/SRS.md` is the Owner's; the
       exact proposed entry is in `SRS-PROPOSAL-R112.md` §3, with the TD-2 change
       in §4. **This is the only red guard.**
-- [ ] **Account deletion itself (R111 #14) is NOT yet implemented.** The
+- [x] **Account deletion (R111 #14) — DONE 2026-08-28.** No migration was needed:
+      a fifth `account_status` value was drafted and **reverted**, because the
+      schema already records that TD-1's Deleted state is `deleted_at IS NOT NULL`
+      so the two cannot disagree. Was: The
       authorization split above is its precondition. Still to build: the
       `AccountStatus` terminal value and its migration, self-delete for every
       user, the last-active-Super-Admin refusal (reusing the existing
