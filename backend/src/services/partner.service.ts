@@ -95,7 +95,7 @@ export async function createPartner(
       actionType: 'partner.create',
       targetEntity: 'Partner',
       targetId: partner.id,
-      detail: { name: partner.name },
+      detail: {},
     });
     return {
       id: partner.id,
@@ -177,7 +177,7 @@ export async function deletePartner(
       actionType: 'partner.delete',
       targetEntity: 'Partner',
       targetId: id,
-      detail: { name: existing.name },
+      detail: {},
     });
   });
 }

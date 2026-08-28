@@ -106,12 +106,21 @@ is unsafe for this boundary; the error log is restricted to process/configuratio
 `emerg` failures. Request outcomes, including upstream failures, remain visible
 in the structured access record.
 
-An indefinitely retained `AuditLog` follows the same identity rule. A
-`user.create` row records `identity_channel = pre_provisioned` and the target
-User id, not the mailbox copied from that User. TD-8's older instruction that
-`auth.login` / `auth.login_denied` include identity email contradicts TD-14's
-explicit *never emails* rule; current code remains no-email/fail-closed pending
-the Document Owner's reconciliation recorded in `TASKS.md`.
+An indefinitely retained `AuditLog` follows the same identity rule. Its one
+repository write rejects nested detail properties that copy names, contacts,
+titles, labels, filenames or exact storage locators. Domain target ids and
+non-reversible storage-coordinate ids carry attribution without duplicating a
+display/identity value into a broader retention boundary. Content workers still
+receive exact keys in their governed job/domain rows; finalization retries derive
+the current canonical key from the signed grant id and accepted SHA-256, with a
+read-only fallback for legacy audit rows.
+
+This is not a blanket free-text sanitizer. TD-8 still requires reasons,
+justifications and setting old/new values, while TD-14 says never PII; silently
+discarding those fields would destroy evidence the SRS requires. The same TD-8
+grid still asks for identity email on auth rows and raw storage keys on content
+rows. Current code follows the stricter no-redundant-PII boundary; the three
+smallest Document Owner reconciliations are recorded in `TASKS.md`.
 
 A **log audit** is an explicit item on the deployment checklist.
 
@@ -143,7 +152,7 @@ Distinct from logs, and worth knowing when debugging:
 |---|---|---|
 | For | Diagnosis | **Accountability** |
 | Retention | Rotated | 12 months for authentication rows; **indefinite** for everything else |
-| Contains PII | **Never** | User ids and action detail — never PII values |
+| Contains PII | **Never** | User ids and minimized action detail; mandated free text remains an explicit Owner-policy decision |
 | Deletable | Rotated freely | Only by one job, on an enumerated allowlist |
 
 In the MVP there is **no audit browsing page** — reads happen through a documented SQL

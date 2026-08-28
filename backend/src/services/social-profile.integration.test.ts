@@ -6,6 +6,10 @@ import { actorFor } from "../test-support/actor.js";
 import { loadConfig } from "../lib/config.js";
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from "../lib/prisma.js";
 import {
+  purgeExpiredAuthRows,
+  type Db,
+} from "../repositories/audit.repository.js";
+import {
   clearTeachingContext,
   createTeachingContext,
   enrol as enrolStudent,
@@ -25,8 +29,21 @@ import { readProfile, writeProfile } from "./social-profile.service.js";
 const config = loadConfig();
 const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);
 const TAG = `[social-test:${randomUUID()}]`;
+const AUDIT_PURGE_ROLLBACK = new Error("social-profile audit-purge rollback");
 
 let levelId: string;
+
+async function rolledBackAuditPurge(run: (tx: Db) => Promise<void>): Promise<void> {
+  try {
+    await prisma.$transaction(async (tx) => {
+      await run(tx);
+      throw AUDIT_PURGE_ROLLBACK;
+    });
+  } catch (error) {
+    if (error === AUDIT_PURGE_ROLLBACK) return;
+    throw error;
+  }
+}
 
 async function person(label: string, status = "active"): Promise<string> {
   const u = await prisma.user.create({
@@ -359,17 +376,18 @@ describe("TD-8 R28 — reads and writes are both audited", () => {
   it("socialprofile actions are NOT purgeable (R19 allowlist)", async () => {
     const { teacher, student } = await scenario();
     await readProfile(prisma, await actorFor(prisma, teacher), student);
-    const { purgeExpiredAuthRows } =
-      await import("../repositories/audit.repository.js");
 
     // Far-future horizon: age alone must not remove a safeguarding-access row.
-    await purgeExpiredAuthRows(prisma, new Date("2099-01-01"));
-
-    expect(
-      await prisma.auditLog.count({
-        where: { actorUserId: teacher, actionType: "socialprofile.view" },
-      }),
-    ).toBe(1);
+    // The Production query is intentionally platform-wide, so the proof must
+    // roll back: tagged cleanup cannot recreate somebody else's auth history.
+    await rolledBackAuditPurge(async (tx) => {
+      await purgeExpiredAuthRows(tx, new Date("2099-01-01"));
+      expect(
+        await tx.auditLog.count({
+          where: { actorUserId: teacher, actionType: "socialprofile.view" },
+        }),
+      ).toBe(1);
+    });
   });
 });
 

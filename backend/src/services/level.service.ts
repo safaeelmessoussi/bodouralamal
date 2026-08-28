@@ -420,7 +420,6 @@ export async function deleteLevel(prisma: PrismaClient, actor: Actor, id: string
       targetEntity: 'Level',
       targetId: id,
       detail: {
-        name: level.name,
         category_id: level.categoryId,
         // Named, not merely counted: these groups disappeared as a CONSEQUENCE
         // of this decision, and TD-8's record has to say which.
@@ -474,7 +473,6 @@ export async function createLevel(
       targetEntity: 'Level',
       targetId: level.id,
       detail: {
-        name: level.name,
         category_id: level.categoryId,
         gender_restriction: level.genderRestriction,
       },

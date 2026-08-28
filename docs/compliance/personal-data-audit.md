@@ -120,18 +120,25 @@ nothing. If attendance is planned, it is a new purpose (see E).
 | `AuditLog.detail` (JSON) | `AuditLog` | 12 months for an **enumerated** auth allowlist only; everything else **indefinite** **[CODE]** | **KEEP** — see I.2 |
 | `ConsentRecord` | its own table | Indefinite | **KEEP** |
 
-**[CODE] Audit detail is minimised at both identity write boundaries.** Profile
-updates log **field names only, never values**. Staff pre-provisioning records
-the target User id and `identity_channel = pre_provisioned`, never the mailbox.
-The CI no-PII guard rejects reintroducing that email copy.
+**[CODE] Audit detail is minimised at its shared repository boundary.** Profile
+and catalogue updates log **field names only, never copied values**. Staff
+pre-provisioning records the target User id and
+`identity_channel = pre_provisioned`, never the mailbox. Content lifecycle rows
+use non-reversible exact-coordinate ids instead of filename-derived object keys;
+the exact actionable key stays in the governed content/Trash/job record. The
+recursive repository guard refuses copied names, contacts, titles, labels,
+filenames and exact locators before the domain transaction commits, while its
+unit test and the CI source guard pin the boundary.
 
 **[CODE] Operational logs take no public identity coordinates.** Nginx creates
 the correlation id and logs no URI or client address; Express logs a route
 template / `<unmatched>` and fixed internal-error text. Raw database/storage
 exception messages are excluded because they may contain SQL, credentials or
-filename-derived keys. TD-8's contradictory identity-email instruction remains
-an explicit Owner reconciliation in `TASKS.md`, with the stricter no-email
-behavior retained meanwhile.
+filename-derived keys. TD-8's contradictory identity-email and exact-storage-key
+instructions remain explicit Document Owner reconciliations in `TASKS.md`, with
+the stricter no-PII behavior retained meanwhile. TD-8-required reasons,
+justifications and old/new setting values are not silently sanitized; their
+access/retention or structured-reason policy is a separate Owner decision.
 
 **[CODE]** Security events (`consent_gate.override`, `grade.passfail_override`,
 `settings.change`, `trash.permanent_delete`) are **deliberately excluded** from

@@ -168,7 +168,6 @@ export async function createSchedulingType(
       targetEntity: 'SchedulingType',
       targetId: created.id,
       detail: {
-        name: created.name,
         structural_kind: created.structuralKind,
         attendance_required: created.attendanceRequired,
       },
@@ -216,14 +215,13 @@ export async function updateSchedulingType(
     actionType: 'schedulingtype.update',
     targetEntity: 'SchedulingType',
     targetId: id,
-    // **Old → new, and only where it moved.** *«When did محاضرة start taking
-    // attendance, and on whose word»* is a question the record has to answer,
-    // and a row that logged the flag on every edit would bury the one edit that
-    // changed it.
+    // Record every changed field name, never the free-text catalogue value.
+    // Attendance remains old → new only where it moved: *«When did محاضرة
+    // start taking attendance, and on whose word»* is a question the record
+    // has to answer, while logging the flag on every edit would bury that one
+    // transition.
     detail: {
-      ...(data.name !== undefined && data.name !== existing.name
-        ? { name_from: existing.name, name_to: data.name }
-        : {}),
+      fields: Object.keys(data),
       ...(data.attendanceRequired !== undefined &&
       data.attendanceRequired !== existing.attendanceRequired
         ? {
@@ -280,7 +278,7 @@ export async function deleteSchedulingType(
       actionType: 'schedulingtype.delete',
       targetEntity: 'SchedulingType',
       targetId: id,
-      detail: { name: row.name, structural_kind: row.structuralKind },
+      detail: { structural_kind: row.structuralKind },
     });
   });
 }

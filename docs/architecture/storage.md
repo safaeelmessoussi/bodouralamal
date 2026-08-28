@@ -261,6 +261,14 @@ ticket retry recognizes the committed finalization audit and converges without a
 version bump. If same-ticket readers accepted different stable client-staging snapshots,
 the mandatory audit identifies the one winner and the loser removes only its distinct key.
 
+Audit evidence identifies those exact coordinates by SHA-256 of
+`bucket + NUL + key`; it never copies the filename-derived key into the
+indefinitely retained `AuditLog`. Exact old keys remain in the content/Trash and
+transactional pg-boss records that must act on them. For a current finalization,
+the signed finalization id plus accepted full content SHA-256 deterministically
+rebuilds the canonical key on retry. Rows written by older releases retain a
+read-only exact-key compatibility fallback.
+
 An outstanding replacement ticket that has `replaces` but no `replaces_version` is a pre-B-03
 grant with no authoritative compare-and-swap observation. Completion rejects it with
 `VERSION_CONFLICT` / `REPLACEMENT_REINITIATION_REQUIRED`, discards its unreferenced upload

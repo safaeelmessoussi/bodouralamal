@@ -312,7 +312,7 @@ export async function createTeachingGroup(
       actionType: 'teachinggroup.create',
       targetEntity: 'TeachingGroup',
       targetId: group.id,
-      detail: { name: group.name, level_id: group.levelId, subject_id: group.subjectId },
+      detail: { level_id: group.levelId, subject_id: group.subjectId },
     });
     return group;
   });
@@ -352,7 +352,7 @@ export async function updateTeachingGroup(
       actionType: 'teachinggroup.update',
       targetEntity: 'TeachingGroup',
       targetId: id,
-      detail: { name: updated.name },
+      detail: { fields: ['name'] },
     });
     return updated;
   });
@@ -431,7 +431,6 @@ export async function deleteTeachingGroup(
       targetEntity: 'TeachingGroup',
       targetId: id,
       detail: {
-        name: group.name,
         level_id: group.levelId,
         subject_id: group.subjectId,
         // The number that answers "how many students went back to unassigned",

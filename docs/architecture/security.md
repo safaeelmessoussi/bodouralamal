@@ -274,6 +274,15 @@ which may have been purged or overwritten. That is why revocation-bearing entiti
 A revocation path that mutates state without its audit row **in the same transaction** is
 non-compliant, not merely under-logged.
 
+The audit transaction is also a privacy boundary. The shared repository rejects
+detail keys that copy display identity, contact values, free-text titles/labels,
+filenames or exact storage locators. Callers record the affected entity id, the
+names of fields changed, or a SHA-256 storage-coordinate id instead. This guard
+is recursive and fails the domain transaction before a prohibited audit row can
+commit. It deliberately does not reinterpret required reason/justification text;
+the TD-8/TD-14 policy reconciliation for that governed evidence remains explicit
+in `TASKS.md`.
+
 The same atomicity applies at login. Successful `auth.login`, the new refresh anchor/token,
 and the authoritative account/role read share one User-locked transaction. If its mandatory
 audit write fails, the new session rolls back and no cookie or access token is returned. A

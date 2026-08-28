@@ -110,7 +110,55 @@ export interface AuditEntry {
   detail: Prisma.InputJsonValue;
 }
 
+/**
+ * Detail-property names which signal that a governed entity's display or
+ * identity value was copied into the audit log.
+ *
+ * This is deliberately NOT a free-text sanitizer. TD-8 currently mandates
+ * reasons/justifications and old/new consent-setting values; deciding their
+ * retention/access treatment is an Owner policy question. Rejecting them here
+ * would silently change legal/safeguarding evidence. This guard covers the
+ * independently determined class: redundant names, contacts, titles,
+ * filenames and exact storage locators for which the target id or a
+ * non-reversible coordinate id is the authoritative audit representation.
+ */
+function copiedIdentityOrLocatorKey(key: string): boolean {
+  const normalized = key
+    .replace(/([a-z0-9])([A-Z])/g, '$1_$2')
+    .replace(/[^a-zA-Z0-9]+/g, '_')
+    .toLowerCase();
+  if (
+    /(^|_)(name|email|phone|telephone|mobile|address|contact|mailbox|username|title|label|filename)(_|$)/.test(
+      normalized,
+    )
+  ) {
+    return true;
+  }
+  return /^(storage|staging|canonical|previous|new|old|source|destination|retired|object)(?:_(?:storage|object))?_key$/.test(
+    normalized,
+  );
+}
+
+function assertMinimizedDetail(value: Prisma.InputJsonValue, path: string[] = []): void {
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => assertMinimizedDetail(item, [...path, String(index)]));
+    return;
+  }
+  if (typeof value !== 'object' || value === null) return;
+
+  for (const [key, nested] of Object.entries(value)) {
+    const at = [...path, key];
+    if (copiedIdentityOrLocatorKey(key)) {
+      throw new Error(
+        `audit detail ${at.join('.')} must use an entity/coordinate id, not a copied identity, label or locator`,
+      );
+    }
+    assertMinimizedDetail(nested as Prisma.InputJsonValue, at);
+  }
+}
+
 export async function write(db: Db, entry: AuditEntry): Promise<void> {
+  assertMinimizedDetail(entry.detail);
   await db.auditLog.create({
     data: {
       actorUserId: entry.actorUserId,

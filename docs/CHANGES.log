@@ -1228,3 +1228,49 @@ OpenAPI is current at **130 paths / 172 operations**, with **0** implemented TD-
 undocumented; and `git diff --check` is clean. `nginx -t` and the loaded `nginx -T` pass against
 the repository-mounted config. A live hostile-header/path request receives a generated 32-hex id,
 and its Nginx record contains only that id, method, status, byte count and timings.
+
+## Durable audit-detail minimisation (2026-08-28)
+
+The follow-on TD-14 audit found a broader retention leak behind the pre-provisioned mailbox:
+domain services copied catalogue names, event titles, Trash labels and filename-derived object
+keys into `AuditLog.detail`, whose non-authentication rows are retained indefinitely. Those
+copies added no attribution beyond the target id, while R111 could erase a person's identity
+from its governed row and still leave the same value embedded in unrelated audit JSON.
+
+The sole audit repository write now recursively refuses identity/display property names and
+exact storage locators before the surrounding domain transaction can commit. Catalogue actions
+record target ids and changed field names. Content upload, replacement and deletion record a
+deterministic SHA-256 identity of the exact bucket/key coordinate; exact locators remain only in
+the content/Trash/pg-boss records that must execute the transition. Current upload retries
+reconstruct the canonical key from the signed finalization id plus the accepted content digest,
+while rows from older releases retain their read-only raw-key fallback. Real MinIO regressions
+prove publish/retry/replace/delete still converge and that an email-shaped filename never enters
+the new audit detail.
+
+The guard intentionally does not sanitize reasons, notes or setting values. TD-8 explicitly
+requires some of that evidence while TD-14 prohibits PII in logs; it also literally requires
+identity email and raw storage keys in two audit-grid rows. The three smallest Owner/Document
+Owner reconciliations are recorded in `TASKS.md`; current implementation follows the stricter
+boundary for unambiguous system-copied values without inventing a policy for mandated free text.
+
+The first complete integration sweep then exposed an independent falsely-green fixture. The
+social-profile retention test invoked the real platform-wide audit purge with a 2099 horizon and
+checked only that its safeguarding row survived; it passed while deleting **83** pre-existing
+eligible authentication audit rows. That purge and its assertion now execute inside an
+always-rolled-back transaction. The deleted rows were not fabricated or restored, and the one
+concurrent refresh-token addition observed in the same digest was left as Owner activity rather
+than misclassified as fixture leakage.
+
+Verification: backend unit **298/298**; focused real PostgreSQL/MinIO integrations
+**364/364** across 14 files, each with an identical all-table before/after digest; backend lint,
+exact typecheck and Production build pass. All **28** CI guards pass; documentation links are
+**883/883**; OpenAPI is current at **130 paths / 172 operations**, with **0** implemented TD-3
+endpoints undocumented; and `git diff --check` passes. The complete real-stack catalog passed
+**1,861 assertions with 10 skipped twice**. Its first wrapper comparison exposed the now-fixed
+83-row destructive fixture. The post-fix comparison observed only concurrent non-test activity:
+one `courseschedule.create`, its 23 non-test-tagged Sessions, and login/refresh/logout rows; no
+test-tagged schedule or Session survived. Those Owner rows remain untouched. A third shared-state
+sweep was refused on safety grounds, and the repository has no disposable full Nginx/API harness;
+the focused corrected purge proof is independently isolation-clean **19/19**.
+The direct-Prisma audit-write guard was also mutation-tested: an unreachable
+`prisma.auditLog.create` in a domain service was detected at its exact line, then removed.

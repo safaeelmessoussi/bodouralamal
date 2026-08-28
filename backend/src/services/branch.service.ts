@@ -221,7 +221,7 @@ export async function createBranch(
       actionType: 'branch.create',
       targetEntity: 'Branch',
       targetId: branch.id,
-      detail: { name: branch.name },
+      detail: {},
     });
 
     /**
@@ -378,7 +378,7 @@ export async function deleteBranch(
       actionType: 'branch.delete',
       targetEntity: 'Branch',
       targetId: id,
-      detail: { name: branch.name },
+      detail: {},
     });
   });
 }
@@ -435,7 +435,7 @@ export async function createRoom(
       actionType: 'room.create',
       targetEntity: 'Room',
       targetId: room.id,
-      detail: { name: room.name, branch_id: branchId },
+      detail: { branch_id: branchId },
     });
     return room;
   });
@@ -501,7 +501,7 @@ export async function deleteRoom(prisma: PrismaClient, actor: Actor, id: string)
       actionType: 'room.delete',
       targetEntity: 'Room',
       targetId: id,
-      detail: { name: room.name, branch_id: room.branchId },
+      detail: { branch_id: room.branchId },
     });
   });
 }

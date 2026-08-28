@@ -152,7 +152,7 @@ export async function createAdministrativeGroup(
       actionType: 'administrativegroup.create',
       targetEntity: 'AdministrativeGroup',
       targetId: group.id,
-      detail: { name: group.name, level_id: group.levelId, branch_id: group.branchId },
+      detail: { level_id: group.levelId, branch_id: group.branchId },
     });
     // A group is created empty; nothing can have enrolled into it yet.
     return { ...group, memberCount: 0 };
@@ -197,7 +197,7 @@ export async function updateAdministrativeGroup(
       actionType: 'administrativegroup.update',
       targetEntity: 'AdministrativeGroup',
       targetId: id,
-      detail: { name: updated.name },
+      detail: { fields: ['name'] },
     });
     // Editing a group's name or position never changes who is enrolled in it,
     // so the count is read alongside rather than recomputed from the write.
@@ -295,7 +295,7 @@ export async function deleteAdministrativeGroup(
       actionType: 'administrativegroup.delete',
       targetEntity: 'AdministrativeGroup',
       targetId: id,
-      detail: { name: group.name, level_id: group.levelId, branch_id: group.branchId },
+      detail: { level_id: group.levelId, branch_id: group.branchId },
     });
   });
 }

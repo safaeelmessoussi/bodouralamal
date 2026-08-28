@@ -1,4 +1,4 @@
-import { randomBytes } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 
 /**
  * TD-9 — upload limits, the MIME whitelist, magic-byte verification, and the
@@ -343,6 +343,20 @@ export function buildStorageKey(
   const ext = extensionOf(originalFilename);
   const name = slugify(originalFilename.replace(/\.[^.]*$/, ''));
   return `content/${contentId}/${hash}/${name}${ext === '' ? '' : `.${ext}`}`;
+}
+
+/**
+ * A non-reversible identity for one exact object-store coordinate.
+ *
+ * Storage keys deliberately carry a slug of the original filename (TD-9), so
+ * copying an exact key into the indefinitely retained AuditLog can copy a
+ * person's name or mailbox into a broader security record. Lifecycle workers
+ * still receive the exact bucket/key because they must act on it; audit rows
+ * use this digest to correlate that obligation without becoming another
+ * filename store. The NUL separator makes `(ab, c)` distinct from `(a, bc)`.
+ */
+export function storageCoordinateId(bucket: string, key: string): string {
+  return createHash('sha256').update(bucket).update('\0').update(key).digest('hex');
 }
 
 /**

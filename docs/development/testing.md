@@ -51,7 +51,7 @@ legitimate SigV4 traffic cannot pass.
 cd backend && npm run lint && npm run typecheck && npm test && npm run build
 cd frontend && npm run lint && npm run typecheck && npm test && npm run build
 
-# Repository and contract guards — all twenty-four are represented in CI
+# Repository and contract guards — every scripts/ci/check-*.sh guard is represented in CI
 for g in scripts/ci/check-*.sh; do bash "$g"; done
 
 # Integration — needs the stack up
@@ -1098,13 +1098,32 @@ message. The input must appear in none of them. The staff-pre-provisioning
 integration asserts its indefinitely retained `user.create` audit contains the
 non-identifying channel and never the mailbox.
 
+`audit.repository.test.ts` attacks the shared durable-detail boundary with
+nested snake-case and camel-case identity/locator keys and proves the database
+write is never reached. Real PostgreSQL/MinIO content tests use an email-shaped
+filename, then prove upload, same-ticket retry, replacement and deletion retain
+only deterministic 64-hex coordinate ids in audit while their exact-key storage
+transitions still converge. The Trash integration proves an irreversible audit
+row outlives its entity without copying the entity label.
+
+The complete-sweep isolation guard caught a separate falsely-green proof:
+`social-profile.integration.test.ts` called the platform-wide `audit.purge`
+with a 2099 horizon and asserted only that its retained safeguarding row
+survived. It passed while deleting ambient eligible authentication history. The
+purge and survival assertion now run inside an always-rolled-back transaction;
+a fixture tag cannot restore rows deleted by a global selection.
+
 `check-no-pii-logs.sh` pins the deployment half: Nginx must generate the id,
 its access format may contain neither URI nor client address, its fixed-format
 error log is process-emergency only, and neither runtime logger may reintroduce
 raw exception text. It also rejects copying the pre-provisioned mailbox into
-the audit detail. This is intentionally a source guard plus behavior tests: a
+the audit detail, raw content keys, or Trash labels, and requires every audit
+write to cross the recursive repository guard. This is intentionally a source
+guard plus behavior tests: a
 behavior-only test cannot observe the loaded Nginx format, while a source-only
 guard cannot prove the redaction code actually handles hostile values.
+The direct-write rule was mutation-tested with an otherwise unreachable
+`prisma.auditLog.create`: the guard named the exact service line and failed.
 
 ### An integration run must leave the database it found
 

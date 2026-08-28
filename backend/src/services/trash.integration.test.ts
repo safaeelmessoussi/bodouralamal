@@ -278,7 +278,8 @@ describe("permanent deletion is Super Admin only and irreversible (R59.1)", () =
       where: { actionType: "trash.permanent_delete", targetId: branch.id },
     });
     expect(log).not.toBeNull();
-    expect((log?.detail as Record<string, unknown>)["label"]).toContain("فرع");
+    expect(log?.detail).not.toHaveProperty("label");
+    expect(JSON.stringify(log?.detail)).not.toContain(`${TAG} فرع`);
   });
 
   it("refuses while a live row still references it, and names the constraint", async () => {

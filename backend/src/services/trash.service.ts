@@ -694,7 +694,6 @@ export async function purgeEntry(
           already_purged: false,
           deleted_at: entry.deletedAt.toISOString(),
           deleted_by: entry.deletedById,
-          label: labelOf(entry.snapshot),
         },
       });
 

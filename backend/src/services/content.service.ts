@@ -10,6 +10,7 @@ import {
   mimeEssence,
   quarantineKeyFor,
   sizeCapFor,
+  storageCoordinateId,
   type AcceptedMime,
 } from '../lib/file-types.js';
 import {
@@ -626,16 +627,25 @@ async function publishedFinalization(
   if (typeof detail !== 'object' || detail === null || Array.isArray(detail)) {
     throw new Error(`content finalization audit ${finalizationId} has no detail object`);
   }
-  const canonicalKey = detail['canonical_key'] ?? detail['new_key'];
+  const contentSha256 =
+    typeof detail['content_sha256'] === 'string' &&
+    /^[0-9a-f]{64}$/i.test(detail['content_sha256'])
+      ? detail['content_sha256']
+      : null;
+  // Current finalizations retain the accepted digest and signed grant id, so
+  // their immutable canonical coordinate is reproducible without copying a
+  // filename-derived storage key into the indefinitely retained AuditLog.
+  // The exact-key fallback reads rows written by releases before this change.
+  const canonicalKey =
+    contentSha256 === null
+      ? detail['canonical_key'] ?? detail['new_key']
+      : canonicalKeyFor(claims, finalizationId, contentSha256);
   if (typeof canonicalKey !== 'string') {
-    throw new Error(`content finalization audit ${finalizationId} has no canonical key`);
+    throw new Error(`content finalization audit ${finalizationId} has no key evidence`);
   }
   return {
     canonicalKey,
-    contentSha256:
-      typeof detail['content_sha256'] === 'string'
-        ? detail['content_sha256']
-        : null,
+    contentSha256,
   };
 }
 
@@ -758,8 +768,8 @@ async function createContentFromFinalization(
         size_bytes: size,
         visibility: claims.visibility,
         branch_id: claims.branch_id,
-        staging_key: claims.key,
-        canonical_key: canonicalKey,
+        staging_coordinate_id: storageCoordinateId(claims.bucket, claims.key),
+        canonical_coordinate_id: storageCoordinateId(claims.bucket, canonicalKey),
         content_sha256: contentSha256,
         upload_finalization_id: finalizationId,
       },
@@ -1094,10 +1104,12 @@ async function replaceContentFile(
       targetEntity: 'EducationalContent',
       targetId: claims.cid,
       detail: {
-        previous_key: existing.storageKey,
-        new_key: canonicalKey,
-        canonical_key: canonicalKey,
-        staging_key: claims.key,
+        previous_storage_coordinate_id: storageCoordinateId(
+          existing.storageBucket,
+          existing.storageKey,
+        ),
+        new_storage_coordinate_id: storageCoordinateId(claims.bucket, canonicalKey),
+        staging_coordinate_id: storageCoordinateId(claims.bucket, claims.key),
         size_bytes: size,
         content_sha256: contentSha256,
         upload_finalization_id: finalizationId,
@@ -1145,11 +1157,7 @@ async function enqueueQuarantineTransition(
   bucket: string,
   storageKey: string,
 ): Promise<boolean> {
-  const coordinateHash = createHash('sha256')
-    .update(bucket)
-    .update('\0')
-    .update(storageKey)
-    .digest('hex');
+  const coordinateHash = storageCoordinateId(bucket, storageKey);
   return enqueue(
     tx,
     JOB_QUEUES.contentQuarantinePurge,
@@ -1248,7 +1256,12 @@ export async function deleteContent(
       actionType: 'content.delete',
       targetEntity: 'EducationalContent',
       targetId: contentId,
-      detail: { storage_key: existing.storageKey },
+      detail: {
+        storage_coordinate_id: storageCoordinateId(
+          existing.storageBucket,
+          existing.storageKey,
+        ),
+      },
     });
     if (retireForConsent) {
       await enqueueConsentPublicRetirement(tx, contentId, existing.storageKey);

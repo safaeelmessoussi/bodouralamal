@@ -21,7 +21,7 @@ import {
 } from "vitest";
 
 import { loadConfig } from "../lib/config.js";
-import { quarantineKeyFor } from "../lib/file-types.js";
+import { quarantineKeyFor, storageCoordinateId } from "../lib/file-types.js";
 import {
   BUCKETS,
   createStorageClients,
@@ -464,12 +464,56 @@ describe("the two-phase upload (TD-3.5)", () => {
     );
   });
 
-  it("writes a content.upload audit row", async () => {
-    const { id } = await uploadPdf(admin(), "مدقق");
-    const entry = await prisma.auditLog.findFirst({
-      where: { actionType: "content.upload", targetId: id },
+  it("writes non-identifying coordinates and preserves same-ticket retry", async () => {
+    const filename = "guardian.person@example.test.pdf";
+    const bytes = pdfBytes();
+    const initiated = await initiateUpload(prisma, clients, KEY, admin(), {
+      filename,
+      size: bytes.length,
+      mime: "application/pdf",
+      meta: meta() as never,
     });
-    expect(entry).not.toBeNull();
+    const ticket = trackTicket(initiated.uploadId);
+    expect(await putObject(initiated.putUrl, bytes, "application/pdf")).toBe(200);
+
+    const completed = await completeUpload(
+      prisma,
+      clients,
+      KEY,
+      admin(),
+      initiated.uploadId,
+      { title: `${TAG} مدقق`, description: null },
+    );
+    const row = await prisma.educationalContent.findUniqueOrThrow({
+      where: { id: completed.id },
+      select: { storageBucket: true, storageKey: true },
+    });
+    trackObject(row.storageBucket, row.storageKey);
+    const entry = await prisma.auditLog.findFirstOrThrow({
+      where: { actionType: "content.upload", targetId: completed.id },
+      select: { detail: true },
+    });
+    expect(entry.detail).toMatchObject({
+      staging_coordinate_id: storageCoordinateId(ticket.bucket, ticket.key),
+      canonical_coordinate_id: storageCoordinateId(row.storageBucket, row.storageKey),
+    });
+    expect(JSON.stringify(entry.detail)).not.toContain("guardian.person");
+    expect(entry.detail).not.toHaveProperty("staging_key");
+    expect(entry.detail).not.toHaveProperty("canonical_key");
+
+    // The retry reads the minimized audit evidence and derives exactly the
+    // already-published key; it never needs the removed raw locator fields.
+    await expect(
+      completeUpload(prisma, clients, KEY, admin(), initiated.uploadId, {
+        title: `${TAG} لا يتكرر`,
+        description: null,
+      }),
+    ).resolves.toEqual({ id: completed.id });
+    expect(
+      await prisma.auditLog.count({
+        where: { actionType: "content.upload", targetId: completed.id },
+      }),
+    ).toBe(1);
   });
 
   it("refuses a MIME type TD-9 does not list, before anything is uploaded", async () => {
@@ -1945,6 +1989,22 @@ describe("replace and delete (R53)", () => {
     expect(
       await prisma.educationalContent.count({ where: { id: first.id } }),
     ).toBe(1);
+    const replacementAudit = await prisma.auditLog.findFirstOrThrow({
+      where: { actionType: "content.replace", targetId: first.id },
+      select: { detail: true },
+    });
+    expect(replacementAudit.detail).toMatchObject({
+      previous_storage_coordinate_id: storageCoordinateId(
+        before.storageBucket,
+        before.storageKey,
+      ),
+      new_storage_coordinate_id: storageCoordinateId(
+        after.storageBucket,
+        after.storageKey,
+      ),
+    });
+    expect(replacementAudit.detail).not.toHaveProperty("previous_key");
+    expect(replacementAudit.detail).not.toHaveProperty("new_key");
   });
 
   it("deletion soft-deletes, snapshots to the Trash, and leaves the file recoverable", async () => {
@@ -1970,6 +2030,17 @@ describe("replace and delete (R53)", () => {
     // being destroyed — the retention rule is the whole point of a soft delete.
     expect(tomb).not.toBeNull();
     expect(tomb!.purgeAfter.getTime()).toBeGreaterThan(Date.now());
+    const deletionAudit = await prisma.auditLog.findFirstOrThrow({
+      where: { actionType: "content.delete", targetId: id },
+      select: { detail: true },
+    });
+    expect(deletionAudit.detail).toMatchObject({
+      storage_coordinate_id: storageCoordinateId(
+        before.storageBucket,
+        before.storageKey,
+      ),
+    });
+    expect(JSON.stringify(deletionAudit.detail)).not.toContain(before.storageKey);
   });
 
   it("refuses a Teacher deleting content outside their branch scope, as a 404", async () => {

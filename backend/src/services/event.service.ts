@@ -677,7 +677,10 @@ export async function deleteEvent(
       actionType: 'event.delete',
       targetEntity: 'Event',
       targetId: id,
-      detail: { title: event.title },
+      // The target id is the durable coordinate. Event titles are free text and
+      // may contain a person's identity; copying one here would put it under a
+      // broader/indefinite audit retention rule for no accountability gain.
+      detail: {},
     });
   });
 }

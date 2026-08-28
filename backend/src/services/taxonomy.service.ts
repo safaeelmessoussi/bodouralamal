@@ -188,7 +188,7 @@ export async function createSubject(
       actionType: 'subject.create',
       targetEntity: 'Subject',
       targetId: subject.id,
-      detail: { name: subject.name },
+      detail: {},
     });
     return subject;
   });
@@ -285,7 +285,7 @@ export async function deleteSubject(prisma: PrismaClient, actor: Actor, id: stri
       actionType: 'subject.delete',
       targetEntity: 'Subject',
       targetId: id,
-      detail: { name: subject.name },
+      detail: {},
     });
   });
 }
@@ -364,7 +364,7 @@ export async function createCategory(
       actionType: 'category.create',
       targetEntity: 'Category',
       targetId: category.id,
-      detail: { name: category.name },
+      detail: {},
     });
     return {
       id: category.id,
@@ -468,7 +468,7 @@ export async function deleteCategory(prisma: PrismaClient, actor: Actor, id: str
       actionType: 'category.delete',
       targetEntity: 'Category',
       targetId: id,
-      detail: { name: category.name },
+      detail: {},
     });
   });
 }

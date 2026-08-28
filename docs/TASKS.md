@@ -1758,14 +1758,26 @@ actual values, which are Production reference data the Owner holds.
 - [~] **No-PII log audit (TD-14) — independently determined code paths are closed.** Nginx now
   generates (rather than trusts) the request id and logs no URI/client address; Express logs the
   registered route template or `<unmatched>`; API and job-start logs copy no raw exception text;
-  `user.create` AuditLog detail records the pre-provisioned identity channel but not the mailbox.
-  Behavior regressions and a CI guard pin all four boundaries. **DOCUMENT OWNER DECISION
+  and the shared AuditLog repository recursively refuses copied identity/display fields and exact
+  storage locators. Catalogue actions use target ids/changed field names; content audit uses a
+  non-reversible exact-coordinate id while exact actionable keys remain in governed domain/Trash/job
+  rows. Current finalization retry derives its immutable key from the accepted SHA-256 and grant id,
+  retaining a read-only fallback for legacy audit rows. Unit, real PostgreSQL/MinIO behavior tests
+  and the CI guard pin these boundaries. **DOCUMENT OWNER DECISION
   REQUIRED — AUTH AUDIT IDENTITY:** TD-8 says `auth.login` / `auth.login_denied` detail includes
   identity email, while TD-14 and §20 rule 18 say never log emails. Current implementation follows
   the stricter no-email rule. Reconcile TD-8 by either removing `identity email` (recommended;
   actor/target User id + provider + reason remain attributable) or explicitly defining a narrowly
-  controlled AuditLog exception and its access/retention basis. Until then the audit is partial,
-  not falsely marked complete.
+  controlled AuditLog exception and its access/retention basis. **DOCUMENT OWNER DECISION REQUIRED
+  — CONTENT AUDIT COORDINATES:** TD-8 R53 literally requires previous/new/raw deletion storage keys,
+  while TD-14 prohibits filename-derived values in logs. Replace that wording with non-reversible
+  storage-coordinate ids (recommended; exact locators remain recoverable in the authoritative
+  lifecycle records), or define a controlled exact-key exception. **OWNER DECISION REQUIRED —
+  AUDIT FREE TEXT:** TD-8 mandates reasons/justifications and setting old/new values, and consent
+  audit accepts an optional note; each can contain personal data. Decide whether these are a
+  governed AuditLog exception with explicit access/retention/input notice, or whether actions use
+  structured reason codes while governed source-record text stays outside AuditLog. Until these
+  decisions are reconciled, the audit remains partial rather than falsely marked complete.
 - [ ] §18 Data, Admin & Audit checklist green
 
 ## M8 — Rehearsal, UAT, Launch
