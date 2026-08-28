@@ -869,9 +869,21 @@ describe('B-01 consent safeguarding', () => {
         administrativeGroupId: secondGroup.id,
       },
     });
+    /**
+     * **The actor must reach BOTH branches, expressed in the current model.**
+     *
+     * This created a second `admin` assignment at the other branch. A role is
+     * now held **once** per account (Owner, 2026-08-28) — enforced by
+     * `user_branch_role_one_live_role_per_user` — so multi-branch reach is the
+     * all-branches scope rather than two rows. `branch_id: null` is *all
+     * branches* (§7 R24), never *no branch*, so this widens the existing
+     * assignment instead of adding beside it. The token below already claims
+     * both branches; this makes the live rows agree with it.
+     */
     const adminRole = await prisma.role.findUniqueOrThrow({ where: { name: 'admin' } });
-    await prisma.userBranchRole.create({
-      data: { userId: s.actorId, roleId: adminRole.id, branchId: secondBranch.id },
+    await prisma.userBranchRole.updateMany({
+      where: { userId: s.actorId, roleId: adminRole.id, deletedAt: null },
+      data: { branchId: null },
     });
     const version = await prisma.session.findUniqueOrThrow({
       where: { id: s.fixture.sessionId },

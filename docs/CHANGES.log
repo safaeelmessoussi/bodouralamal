@@ -1345,6 +1345,15 @@ first that no `Event` referenced any of them. A holiday carries **الفرع and
 rule. The fields a class has and an `Event` does not — القاعة, المادة, الحلقة,
 نمط التدريس, طريقة الحضور — need no refusal: there is no column for them.
 
+### The constraint caught a fixture, which is what it is for
+
+The first full sweep failed one assertion: `consent-safeguarding` granted its
+actor `admin` at a **second branch** to give it reach over both. That is the
+multi-branch form the Owner withdrew, and the new index refused it. The fixture
+now widens the existing assignment to the all-branches scope (`branch_id: null`
+is *all branches*, never *none*), which is how that reach is expressed in the
+current model — and which the test's own token already claimed.
+
 ### Two SRS conflicts surfaced rather than resolved silently
 
 - **R80 point 6** said `sex` *«stays off every contract»*. The Owner amended it:
