@@ -259,5 +259,51 @@ if (opened === 'ok') {
   check('the reference form could be opened', false, `state=${opened}`);
 }
 
+/* ── A PRISTINE form closes without asking (2026-08-28) ─────────────────── */
+
+/**
+ * **The half the harness did not cover**, and the defect it missed.
+ *
+ * تعديل المجموعة asked *«هناك تغييرات لم تُحفظ بعد»* on a form nobody had
+ * touched. Every check above opens a form and **types into it**, so all of them
+ * passed against it: they proved the question appears when it should and never
+ * that it stays away when it should. The sequence needs a real `<dialog>` and
+ * its native `close` event — the parent clears the record it was editing, and
+ * that event re-enters the guard in the one render before the form's reset
+ * effect has run.
+ */
+const reached = await goto('/admin/groups');
+if (reached === 'ready') {
+  const opened = await evaluate(`(async () => {
+    const edit = [...document.querySelectorAll('.admin-table tbody button, .admin-table tbody a')]
+      .find((b) => b.textContent.trim() === 'تعديل');
+    if (!edit) return { noRow: true };
+    edit.click();
+    await new Promise((r) => setTimeout(r, 900));
+    const dlg = document.querySelector('dialog[open]');
+    if (!dlg) return { noDialog: true };
+    // The X, which is the path that re-enters through the native close event —
+    // not «إلغاء», which the defect did not reach.
+    const close = [...dlg.querySelectorAll('button')].find((b) => b.textContent.trim() === 'إغلاق');
+    if (!close) return { noCloseButton: true };
+    close.click();
+    await new Promise((r) => setTimeout(r, 700));
+    return { closed: true };
+  })()`);
+
+  if (opened.noRow) {
+    check('PRISTINE close: a group exists to edit', false, JSON.stringify(opened));
+  } else {
+    const after = await state();
+    check(
+      'PRISTINE: an untouched edit form closes with no discard question',
+      opened.closed === true && after.confirming === false && after.open === 0,
+      JSON.stringify({ opened, after }),
+    );
+  }
+} else {
+  check('PRISTINE close: مجموعات المستويات could be reached', false, `state=${reached}`);
+}
+
 close();
 process.exit(finish());

@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+import * as person from './person.js';
+
 /**
  * Registration payloads (SRS §4.1, §4.1b step 5, TD-9).
  *
@@ -22,17 +24,13 @@ import { z } from 'zod';
  * authority on how a person's name reads (§1.1), and `.strict()` below turns a
  * submitted `name_arabic` into a refusal rather than a silently ignored field.
  */
-const namePart = z.string().trim().min(1).max(60);
+// Shared with the back-office edit so both forms ask the same thing (§16.2).
+const namePart = person.namePart;
 
-const nickname = z.string().trim().max(60);
+const nickname = person.nickname;
 /** TD-9: 5–20 chars, digits/`+`/spaces only; non-unique (families share phones). */
-const phone = z
-  .string()
-  .trim()
-  .min(5)
-  .max(20)
-  .regex(/^[0-9+ ]+$/, 'digits, + and spaces only');
-const notes = z.string().trim().max(2000);
+const phone = person.phone;
+const notes = person.notes;
 
 /**
  * §4.1b step 5, Revision 27: `sex` is **required** on every person the

@@ -1452,6 +1452,32 @@ export function settingDto(row: {
 export interface UserDto {
   id: string;
   name_arabic: string;
+  /**
+   * The stored name parts, sex and notes — what the §5.6 edit form hydrates
+   * from. The composed `name_arabic` above is what a table renders; these are
+   * what was collected, and §1.1 composes the first from the last.
+   */
+  first_name_arabic: string | null;
+  last_name_arabic: string | null;
+  first_name_french: string | null;
+  last_name_french: string | null;
+  /**
+   * **R80 point 6 AMENDED by the Document Owner, 2026-08-28.**
+   *
+   * It read *«the field stays off every contract … no response publishes it»*,
+   * written when `/admin/users` was reachable by any Admin. **R112 made this
+   * read Super-Admin-only**, and the Owner's decision is that a Super Admin
+   * reads and edits everything about an account — including الجنس, which §5.6's
+   * edit form must hydrate to be usable.
+   *
+   * **The narrowing is exact**: published here and **nowhere else**.
+   * `/admin/directory`, the Admin-reachable people surface, carries id, name,
+   * nickname and roles and does not carry this — so nothing widens to an Admin,
+   * a Teacher or any public surface. R80.3/R80.4 are untouched: the write still
+   * COMPLETES a missing value and refuses a change.
+   */
+  sex: string | null;
+  notes: string | null;
   nickname: string | null;
   public_display_name: string | null;
   phone: string | null;
@@ -1480,6 +1506,12 @@ export interface UserDto {
 export function userDto(row: {
   id: string;
   nameArabic: string;
+  firstNameArabic: string | null;
+  lastNameArabic: string | null;
+  firstNameFrench: string | null;
+  lastNameFrench: string | null;
+  sex: string | null;
+  notes: string | null;
   nickname: string | null;
   publicDisplayName: string | null;
   phone: string | null;
@@ -1491,6 +1523,12 @@ export function userDto(row: {
   return {
     id: row.id,
     name_arabic: row.nameArabic,
+    first_name_arabic: row.firstNameArabic,
+    last_name_arabic: row.lastNameArabic,
+    first_name_french: row.firstNameFrench,
+    last_name_french: row.lastNameFrench,
+    sex: row.sex,
+    notes: row.notes,
     nickname: row.nickname,
     public_display_name: row.publicDisplayName,
     phone: row.phone,

@@ -322,16 +322,26 @@ export async function reorderSchedulingTypes(
 export async function assertActivityType(
   tx: { schedulingType: PrismaClient['schedulingType'] },
   schedulingTypeId: string,
-): Promise<void> {
+): Promise<'activity' | 'holiday'> {
   const type = await tx.schedulingType.findFirst({
     where: { id: schedulingTypeId, deletedAt: null },
     select: { structuralKind: true },
   });
   if (!type) throw new AppError('NOT_FOUND', 'no such scheduling type');
-  if (type.structuralKind !== 'activity') {
+  /**
+   * **Two kinds are stored as an `Event`, and they are not the same thing.**
+   *
+   * `activity` is something people attend; `holiday` is a period on which
+   * nothing is delivered (Owner, 2026-08-28). Both are dated rows with a title
+   * and a scope, so both live in `Event` — and the caller is told **which**, so
+   * it can enforce the difference rather than accept an activity-shaped record
+   * with the extra fields left empty by convention.
+   */
+  if (type.structuralKind !== 'activity' && type.structuralKind !== 'holiday') {
     throw new AppError('VALIDATION_FAILED', 'that type is not delivered as an activity', {
       reason: 'STRUCTURAL_KIND_MISMATCH',
       structural_kind: type.structuralKind,
     });
   }
+  return type.structuralKind;
 }

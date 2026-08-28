@@ -1,6 +1,7 @@
 import type { Prisma, PrismaClient } from '../generated/prisma/client.js';
 import { resolveSort, type SortableFields, type SortParams } from '../lib/sorting.js';
 import { AppError, uniqueViolationFields } from '../lib/errors.js';
+import { composeArabicName, composeFrenchName } from '../lib/person-name.js';
 import { pageWindow, type Page } from '../lib/pagination.js';
 import { MIN_QUERY_LENGTH, normalizePhone, normalizeSearchText } from '../lib/search-normalize.js';
 import { branchesForRole } from '../policies/branch-scope.js';
@@ -252,6 +253,22 @@ export interface UserListFilters {
 export interface UserListItem {
   id: string;
   nameArabic: string;
+  /**
+   * **The stored parts, so the edit form hydrates from what was collected.**
+   *
+   * The dialog had one «الاسم» box holding the composed name, so opening it and
+   * saving rewrote `name_arabic` from a client-typed string — and the parts,
+   * the French name, the sex and the notes could not be edited at all. They
+   * travel here rather than through a second `GET /admin/users/{id}`, for the
+   * reason `version` already does: one projection of one concept.
+   */
+  firstNameArabic: string | null;
+  lastNameArabic: string | null;
+  firstNameFrench: string | null;
+  lastNameFrench: string | null;
+  /** R80.6 amended 2026-08-28 — see `UserDto.sex`. */
+  sex: string | null;
+  notes: string | null;
   nickname: string | null;
   publicDisplayName: string | null;
   phone: string | null;
@@ -387,6 +404,12 @@ async function listUsersUnchecked(
       select: {
         id: true,
         nameArabic: true,
+        firstNameArabic: true,
+        lastNameArabic: true,
+        firstNameFrench: true,
+        lastNameFrench: true,
+        sex: true,
+        notes: true,
         nickname: true,
         publicDisplayName: true,
         phone: true,
@@ -422,6 +445,12 @@ async function listUsersUnchecked(
     data: users.map((u) => ({
       id: u.id,
       nameArabic: u.nameArabic,
+      firstNameArabic: u.firstNameArabic,
+      lastNameArabic: u.lastNameArabic,
+      firstNameFrench: u.firstNameFrench,
+      lastNameFrench: u.lastNameFrench,
+      sex: u.sex,
+      notes: u.notes,
       nickname: u.nickname,
       publicDisplayName: u.publicDisplayName,
       phone: u.phone,
@@ -500,6 +529,12 @@ export async function listDirectory(
     data: page.data.map((u) => ({
       id: u.id,
       nameArabic: u.nameArabic,
+      firstNameArabic: u.firstNameArabic,
+      lastNameArabic: u.lastNameArabic,
+      firstNameFrench: u.firstNameFrench,
+      lastNameFrench: u.lastNameFrench,
+      sex: u.sex,
+      notes: u.notes,
       nickname: u.nickname,
       roles: u.roles,
     })),
@@ -529,10 +564,19 @@ export async function listDirectory(
  * to *which name did this person publish* would be introduced.
  */
 export interface UserProfileInput {
-  nameArabic?: string;
-  nameFrench?: string | null;
+  /**
+   * **The parts, and the display names are composed from them** (§1.1, R40).
+   * Registration has always worked this way; the back-office edit accepted the
+   * composed name instead, which made the client the authority on how a
+   * person's name reads.
+   */
+  firstNameArabic?: string;
+  lastNameArabic?: string;
+  firstNameFrench?: string | null;
+  lastNameFrench?: string | null;
   nickname?: string | null;
   phone?: string | null;
+  notes?: string | null;
   /**
    * **R80.3 — COMPLETION, never correction.**
    *
@@ -563,6 +607,10 @@ async function loadManageable(
   accountStatus: string;
   version: number;
   sex: 'female' | 'male' | null;
+  firstNameArabic: string | null;
+  lastNameArabic: string | null;
+  firstNameFrench: string | null;
+  lastNameFrench: string | null;
 }> {
   const managed = branchesForRole(actor.roleScopes, 'admin');
   const user = await db.user.findFirst({
@@ -575,7 +623,19 @@ async function loadManageable(
     },
     // `sex` travels with the row so the R80.3 completion guard can see whether
     // one is already recorded — a fact only the stored row knows.
-    select: { id: true, nameArabic: true, accountStatus: true, version: true, sex: true },
+    // The stored name PARTS travel too: composing a display name from one
+    // edited half requires the other half as it currently stands (§1.1).
+    select: {
+      id: true,
+      nameArabic: true,
+      accountStatus: true,
+      version: true,
+      sex: true,
+      firstNameArabic: true,
+      lastNameArabic: true,
+      firstNameFrench: true,
+      lastNameFrench: true,
+    },
   });
   if (!user) throw new AppError('NOT_FOUND', 'no such user');
   return user;
@@ -612,10 +672,37 @@ export async function updateUser(
     const written = await tx.user.updateMany({
       where: { id, version: expectedVersion, deletedAt: null },
       data: {
-        ...(input.nameArabic !== undefined ? { nameArabic: input.nameArabic } : {}),
-        ...(input.nameFrench !== undefined ? { nameFrench: input.nameFrench } : {}),
+        // **Composed here, from whichever half changed** (§1.1, R40). The stored
+        // parts are the authority, so an edit of one part recomposes against the
+        // other as it currently stands rather than against what the client
+        // happened to send.
+        ...(input.firstNameArabic !== undefined
+          ? { firstNameArabic: input.firstNameArabic }
+          : {}),
+        ...(input.lastNameArabic !== undefined ? { lastNameArabic: input.lastNameArabic } : {}),
+        ...(input.firstNameArabic !== undefined || input.lastNameArabic !== undefined
+          ? {
+              nameArabic: composeArabicName(
+                input.firstNameArabic ?? target.firstNameArabic ?? '',
+                input.lastNameArabic ?? target.lastNameArabic ?? '',
+              ).trim(),
+            }
+          : {}),
+        ...(input.firstNameFrench !== undefined
+          ? { firstNameFrench: input.firstNameFrench }
+          : {}),
+        ...(input.lastNameFrench !== undefined ? { lastNameFrench: input.lastNameFrench } : {}),
+        ...(input.firstNameFrench !== undefined || input.lastNameFrench !== undefined
+          ? {
+              nameFrench: composeFrenchName(
+                input.firstNameFrench ?? target.firstNameFrench ?? undefined,
+                input.lastNameFrench ?? target.lastNameFrench ?? undefined,
+              ),
+            }
+          : {}),
         ...(input.nickname !== undefined ? { nickname: input.nickname } : {}),
         ...(input.phone !== undefined ? { phone: input.phone } : {}),
+        ...(input.notes !== undefined ? { notes: input.notes } : {}),
         ...(input.sex !== undefined ? { sex: input.sex } : {}),
         version: { increment: 1 },
       },
@@ -870,6 +957,30 @@ export async function applyRoleAssignments(
     }
   }
 
+  /**
+   * **A role is held once per account** (Owner decision, 2026-08-28).
+   *
+   * Refused here as a `400` rather than left to the database: the partial unique
+   * index `user_branch_role_one_live_role_per_user` is the authority, but a
+   * constraint violation surfaces as a `500` with no field named, and a client
+   * that sent the same role twice deserves to be told which one.
+   *
+   * The old code could produce the duplicate itself — it read the existing rows
+   * **once** and then iterated the submitted list, so a role submitted twice
+   * found no prior row either time and inserted two. The platform's own Super
+   * Admin held `super_admin` twice.
+   */
+  const seen = new Set<string>();
+  for (const a of assignments) {
+    if (seen.has(a.role)) {
+      throw new AppError('VALIDATION_FAILED', `role ${a.role} assigned more than once`, {
+        reason: 'DUPLICATE_ROLE',
+        role: a.role,
+      });
+    }
+    seen.add(a.role);
+  }
+
   {
     const existing = await tx.userBranchRole.findMany({
       where: { userId: id },
@@ -879,7 +990,9 @@ export async function applyRoleAssignments(
     const roleRows = await tx.role.findMany({ where: { name: { in: [...ALL_ROLES] } } });
     const roleIdByName = new Map(roleRows.map((r) => [r.name, r.id]));
 
-    const wanted = new Set(assignments.map((a) => `${a.role}|${a.branchId ?? ''}`));
+    // Keyed by ROLE alone: a role carries one scope, so changing that scope is
+    // an edit of the existing assignment rather than a second one beside it.
+    const wanted = new Set(assignments.map((a) => a.role));
     const live = existing.filter((e) => e.deletedAt === null);
     const privileged = (role: string): boolean => role === 'admin' || role === 'super_admin';
 
@@ -889,7 +1002,7 @@ export async function applyRoleAssignments(
       ...assignments.filter(
         (a) => !live.some((e) => e.role.name === a.role && e.branchId === a.branchId),
       ).map((a) => a.role),
-      ...live.filter((e) => !wanted.has(`${e.role.name}|${e.branchId ?? ''}`)).map((e) => e.role.name),
+      ...live.filter((e) => !wanted.has(e.role.name)).map((e) => e.role.name),
     ];
     if (changing.some(privileged) && !isSuperAdmin) {
       throw new AppError('FORBIDDEN', 'only a Super Admin may grant or revoke administrator roles');
@@ -909,7 +1022,7 @@ export async function applyRoleAssignments(
     if (losingSuperAdmin) await assertNotLastSuperAdmin(tx, id);
 
     // Revoke what is no longer wanted (TD-5 soft delete).
-    const revoked = live.filter((e) => !wanted.has(`${e.role.name}|${e.branchId ?? ''}`));
+    const revoked = live.filter((e) => !wanted.has(e.role.name));
     if (revoked.length > 0) {
       await tx.userBranchRole.updateMany({
         where: { id: { in: revoked.map((e) => e.id) } },
@@ -919,17 +1032,47 @@ export async function applyRoleAssignments(
 
     // Grant what is missing, reviving a tombstoned row rather than inserting a
     // duplicate the unique index would refuse anyway.
+    /** Scope changes recorded for the audit row, beside the outright revocations. */
+    const moved: { role: string; from: string | null; to: string | null }[] = [];
+
     for (const a of assignments) {
       const roleId = roleIdByName.get(a.role);
       if (!roleId) throw new AppError('VALIDATION_FAILED', `unknown role ${a.role}`);
-      const prior = existing.find((e) => e.roleId === roleId && e.branchId === a.branchId);
-      if (prior === undefined) {
-        await tx.userBranchRole.create({ data: { userId: id, roleId, branchId: a.branchId } });
-      } else if (prior.deletedAt !== null) {
+
+      const liveRow = existing.find((e) => e.roleId === roleId && e.deletedAt === null);
+
+      if (liveRow && liveRow.branchId === a.branchId) continue; // already exactly this
+
+      /**
+       * **Moving a scope REVOKES and re-grants; it never rewrites the row.**
+       *
+       * One row per role is a rule about *live* rows, so a tombstone beside it
+       * is allowed — and required. Mutating `branch_id` in place would satisfy
+       * the constraint and silently destroy the answer to *«who taught at this
+       * branch in March»*, which is exactly what TD-5's soft delete exists to
+       * keep. The first draft of this change did mutate, and the existing
+       * regression caught it.
+       */
+      if (liveRow) {
         await tx.userBranchRole.update({
-          where: { id: prior.id },
+          where: { id: liveRow.id },
+          data: { deletedAt: new Date(), deletedById: actor.userId },
+        });
+        moved.push({ role: a.role, from: liveRow.branchId, to: a.branchId });
+      }
+
+      // A tombstoned row for this exact role AND scope is revived rather than
+      // duplicated; anything else becomes a new assignment.
+      const revivable = existing.find(
+        (e) => e.roleId === roleId && e.deletedAt !== null && e.branchId === a.branchId,
+      );
+      if (revivable && !liveRow) {
+        await tx.userBranchRole.update({
+          where: { id: revivable.id },
           data: { deletedAt: null, deletedById: null },
         });
+      } else {
+        await tx.userBranchRole.create({ data: { userId: id, roleId, branchId: a.branchId } });
       }
     }
 
@@ -942,6 +1085,9 @@ export async function applyRoleAssignments(
       detail: {
         assignments: assignments.map((a) => ({ role: a.role, branch_id: a.branchId })),
         revoked: revoked.map((e) => ({ role: e.role.name, branch_id: e.branchId })),
+        // A scope change is neither a grant nor a revocation on its own; the
+        // trail says so rather than leaving it to be inferred from two rows.
+        moved,
       },
     });
   }
@@ -1007,6 +1153,12 @@ async function readOne(prisma: PrismaClient, id: string): Promise<UserListItem> 
     select: {
       id: true,
       nameArabic: true,
+      firstNameArabic: true,
+      lastNameArabic: true,
+      firstNameFrench: true,
+      lastNameFrench: true,
+      sex: true,
+      notes: true,
       nickname: true,
       publicDisplayName: true,
       phone: true,
@@ -1021,6 +1173,12 @@ async function readOne(prisma: PrismaClient, id: string): Promise<UserListItem> 
   return {
     id: u.id,
     nameArabic: u.nameArabic,
+    firstNameArabic: u.firstNameArabic,
+    lastNameArabic: u.lastNameArabic,
+    firstNameFrench: u.firstNameFrench,
+    lastNameFrench: u.lastNameFrench,
+    sex: u.sex,
+    notes: u.notes,
     nickname: u.nickname,
     publicDisplayName: u.publicDisplayName,
     phone: u.phone,

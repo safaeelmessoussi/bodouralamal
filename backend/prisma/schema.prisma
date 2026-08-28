@@ -191,6 +191,14 @@ enum SchedulingStructuralKind {
   activity
   exam
 
+  /// **A holiday is not an activity** (Owner, 2026-08-28). It has no staff, no
+  /// room, no Subject and no attendance — only *which branches and which
+  /// Categories are off*. Stored as an `Event`, because it is a dated thing with
+  /// a title and a scope; what this value decides is that the write boundary
+  /// accepts **branch and category scopes only**, and refuses staff, Levels and
+  /// groups rather than leaving them empty by convention.
+  holiday
+
   @@map("scheduling_structural_kind")
 }
 

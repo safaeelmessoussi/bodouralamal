@@ -62,6 +62,7 @@ const KIND_KEYS: Record<SchedulingType, string> = {
   class: 'scheduling.type.class',
   activity: 'scheduling.type.activity',
   exam: 'scheduling.type.exam',
+  holiday: 'scheduling.type.holiday',
 };
 
 /** Which entity a row is delivered by, in the reader's words. */

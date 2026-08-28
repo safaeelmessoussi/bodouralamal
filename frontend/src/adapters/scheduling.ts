@@ -47,7 +47,14 @@ import { STRUCTURAL_KIND_SPECS } from './scheduling-types.js';
 
 /** What an administrator is scheduling. **Not** a stored column — it is which
  *  entity the item is, which the SRS already distinguishes (§4.4). */
-export type SchedulingType = 'class' | 'activity' | 'exam';
+/**
+ * **`holiday` joined on 2026-08-28** (Owner decision). A عطلة is not an
+ * activity: it is a period on which nothing is delivered, carrying الفرع and
+ * الفئة and nothing else — no staff, no room, no Subject, no Level, no
+ * attendance. It is stored as an `Event`, and this kind is what tells the form
+ * and the write boundary which shape that Event may take.
+ */
+export type SchedulingType = 'class' | 'activity' | 'exam' | 'holiday';
 
 export const SCHEDULING_TYPES: readonly SchedulingType[] = ['class', 'activity', 'exam'];
 

@@ -11,6 +11,7 @@ import {
   updateWithVersion,
 } from '../repositories/optimistic-lock.js';
 import type { Actor } from '../policies/actor.js';
+import { liveMemberEnrolment, liveMembersOfGroup } from '../policies/enrolment-membership.js';
 
 /**
  * Administrative Groups — the permanent **organisational** unit inside a Level
@@ -105,7 +106,10 @@ export async function listAdministrativeGroups(
       // most needs and the one it could not previously show. Counted in the
       // same query rather than fetched per row, and filtered to live enrolments
       // so a soft-deleted one (TD-5) does not inflate it.
-      include: { _count: { select: { enrollments: { where: { deletedAt: null } } } } },
+      // **The shared membership predicate** — the same one the roster and the
+      // deletion refusal use. It was `{ deletedAt: null }` here, so this column
+      // counted the preserved enrolments of deleted accounts as members.
+      include: { _count: { select: { enrollments: { where: liveMemberEnrolment } } } },
     }),
     prisma.administrativeGroup.count({ where }),
   ]);
@@ -202,7 +206,7 @@ export async function updateAdministrativeGroup(
     // Editing a group's name or position never changes who is enrolled in it,
     // so the count is read alongside rather than recomputed from the write.
     const memberCount = await tx.enrollment.count({
-      where: { administrativeGroupId: updated.id, deletedAt: null },
+      where: liveMembersOfGroup(updated.id),
     });
     return { ...updated, memberCount };
   });
@@ -245,7 +249,7 @@ export async function deleteAdministrativeGroup(
      * a group holding students, and one a class is still delivered to.
      */
     const [enrolled, scheduled, grades] = await Promise.all([
-      tx.enrollment.count({ where: { administrativeGroupId: id, deletedAt: null } }),
+      tx.enrollment.count({ where: liveMembersOfGroup(id) }),
       tx.recurringCourseSchedule.count({
         where: { administrativeGroupId: id, deletedAt: null },
       }),

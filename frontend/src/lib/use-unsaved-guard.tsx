@@ -77,13 +77,43 @@ export function useUnsavedGuard({
     if (!open) setConfirming(false);
   }, [open]);
 
+  /**
+   * **A form that is not open holds no unsaved work** (2026-08-28).
+   *
+   * Not a convenience: it closes a real defect that reached every always-mounted
+   * `FormDialog` whose parent clears the record it is editing on close.
+   *
+   * تعديل المجموعة showed *«هناك تغييرات لم تُحفظ بعد»* on a form nobody had
+   * touched, and the sequence is worth recording because nothing in the caller
+   * was wrong:
+   *
+   * 1. the close button calls `requestClose`; `dirty` is **false**, so it calls
+   *    `onCancel`;
+   * 2. the parent sets its `editing` row to `null`, so `open` becomes false and
+   *    the form's `group` prop becomes `null`;
+   * 3. the caller derives its pristine values from that prop, so pristine is now
+   *    empty — while the field state still holds the loaded values, because the
+   *    effect that resets it has not run yet. **`dirty` is spuriously true for
+   *    that one render;**
+   * 4. `Dialog` closes the native element, whose `close` event calls `onClose`
+   *    — **re-entering `requestClose` inside exactly that window**, which opens
+   *    the discard question.
+   *
+   * Fixing it in each caller would mean every form remembering to null-guard its
+   * own pristine, which is the per-caller opt-in this hook exists to replace: a
+   * behaviour each caller must remember is one that will be missing somewhere.
+   * Reading `open` here states the invariant once, where the mechanism already
+   * lives.
+   */
+  const unsaved = open && dirty;
+
   const requestClose = (): void => {
-    if (dirty && !busy) setConfirming(true);
+    if (unsaved && !busy) setConfirming(true);
     else onCancel();
   };
 
   return {
-    dismissible: !dirty,
+    dismissible: !unsaved,
     requestClose,
     confirmation: (
       /* **The shared question, not a second one.** `ConfirmDialog` is how this

@@ -35,6 +35,7 @@ import { DayEventsDialog } from '../../components/calendar/day-events-dialog.js'
 import { EventDetailsDialog } from '../../components/calendar/event-details-dialog.js';
 import {
   ActivitySection,
+  HOLIDAY_SCOPE_KINDS,
   ClassSection,
   TEACHER_SCOPE_KINDS,
 } from '../../components/scheduling/class-section.js';
@@ -441,7 +442,7 @@ export function SchedulingPage(): ReactNode {
       // An Event cancellation is its soft deletion (R82). The delete is already
       // committed; this second dialog decides delivery only. Classes and exams
       // keep their own, separate lifecycle paths unchanged.
-      if (deleted.type === 'activity') {
+      if (deleted.type === 'activity' || deleted.type === 'holiday') {
         setNotifying({ id: deleted.id, change: 'cancelled' });
       }
     } catch {
@@ -833,7 +834,7 @@ export function SchedulingDialog({
   const [endTime, setEndTime] = useState(item?.endTime ?? '10:00');
   const [endDate, setEndDate] = useState(item?.endDate ?? '');
   const [recurrence, setRecurrence] = useState<RecurrenceValue>({
-    type: item?.recurrence ?? (item?.type === 'activity' ? 'none' : 'weekly'),
+    type: item?.recurrence ?? (item?.type === 'activity' || item?.type === 'holiday' ? 'none' : 'weekly'),
     weekdays: item?.weekdays ?? [],
     startDate: item?.startDate ?? '',
     endDate: item?.repeatUntil ?? '',
@@ -988,7 +989,7 @@ export function SchedulingDialog({
     endTime: item?.endTime ?? '10:00',
     endDate: item?.endDate ?? '',
     recurrence: {
-      type: item?.recurrence ?? (item?.type === 'activity' ? 'none' : 'weekly'),
+      type: item?.recurrence ?? (item?.type === 'activity' || item?.type === 'holiday' ? 'none' : 'weekly'),
       weekdays: item?.weekdays ?? [],
       startDate: item?.startDate ?? '',
       endDate: item?.repeatUntil ?? '',
@@ -1205,7 +1206,7 @@ export function SchedulingDialog({
      * would be a gate on the platform's own blindness — the shape R94 already
      * corrected once.
      */
-    if (type === 'activity' && catalogue.length > 0 && schedulingTypeId === null) {
+    if ((type === 'activity' || type === 'holiday') && catalogue.length > 0 && schedulingTypeId === null) {
       return t('scheduling.invalid.itemType');
     }
     if (recurrence.startDate === '') return t('scheduling.invalid.startDate');
@@ -1242,7 +1243,7 @@ export function SchedulingDialog({
       if (canAssignStaff && supervisorId === '') return t('scheduling.invalid.supervisor');
       return null;
     }
-    if (type === 'activity') {
+    if (type === 'activity' || type === 'holiday') {
       /**
        * **The activity's own scope was never checked** (2026-08-20).
        *
@@ -1582,7 +1583,15 @@ export function SchedulingDialog({
             assistantIds={assistantIds}
             onAssistants={setAssistantIds}
             canAssignStaff={canAssignStaff}
-            scopeKinds={canAssignStaff ? undefined : TEACHER_SCOPE_KINDS}
+            scopeKinds={
+              // عطلة first: it is the narrowest, and a Teacher never reaches it
+              // (creating one is an administrative act).
+              type === 'holiday'
+                ? HOLIDAY_SCOPE_KINDS
+                : canAssignStaff
+                  ? undefined
+                  : TEACHER_SCOPE_KINDS
+            }
             /**
              * **Her own groups, from the read that answers her** (R93).
              *

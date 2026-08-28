@@ -1,0 +1,34 @@
+-- عطلة is its own structural kind (Owner decision, 2026-08-28).
+--
+-- ## The correction
+--
+-- The catalogue's five entries carried three kinds, and two were wrong about
+-- what the thing IS:
+--
+--   * **محاضرة** was `activity`. A lecture is taught — it has a Subject, a Level
+--     and a teaching mode — so it belongs with **حصة دراسية** as a `class`.
+--   * **عطلة** was `activity`. A holiday is not an activity anybody attends: it
+--     has no staff, no room, no Subject and no audience beyond *which branches
+--     and which Categories are off*. Modelling it as an activity meant every
+--     activity field existed for it and had to be left empty.
+--
+-- A fourth entry, **نشاط**, is added as the generic `activity` the catalogue was
+-- missing — حفل was carrying that role alone.
+--
+-- ## Why a new enum value rather than a flag
+--
+-- `structural_kind` is the authoritative model: it decides which write path a
+-- type takes and which fields its form may carry. Expressing *holiday* as an
+-- activity plus a hidden-field rule would leave the record activity-shaped and
+-- put the distinction in the interface — which is exactly the layer that must
+-- not hold it. A holiday is still stored as an `Event` (it is a dated thing with
+-- a title and a scope); what changes is that the boundary now knows it may carry
+-- **branch and category scopes only**, and refuses staff, Levels and groups.
+--
+-- ## Rows are corrected in place
+--
+-- No id changes and nothing is recreated. Verified before writing this: no
+-- `Event` references any of these types, so no historical record is reclassified
+-- under it.
+
+ALTER TYPE "scheduling_structural_kind" ADD VALUE IF NOT EXISTS 'holiday';

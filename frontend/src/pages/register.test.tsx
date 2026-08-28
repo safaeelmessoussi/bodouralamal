@@ -3,7 +3,9 @@ import { describe, expect, it } from 'vitest';
 
 import { BranchSelector } from '../components/ui/branch-selector.js';
 import type { PublicBranch } from '../adapters/branches.js';
-import { validate } from './register.js';
+import { explainFailure, validate } from './register.js';
+import { ApiError } from '../lib/api.js';
+import { ar } from '../i18n/ar.js';
 
 /**
  * Registration form rules (§4.1, §4.1b step 5, Revision 39).
@@ -229,5 +231,37 @@ describe('BranchSelector — one component, two modes (§14.3)', () => {
       <BranchSelector branches={branches} value="b1" onChange={() => undefined} />,
     );
     expect(html).toContain('مقر أمرشيش');
+  });
+});
+
+
+/**
+ * **A taken address and a spent token are different dead ends.**
+ *
+ * They shared one message: an address that already belongs to an account came
+ * back as *«ابدئي تسجيل الدخول من جديد»* — advice that cannot work, because
+ * signing in again reaches the same taken address. The applicant was told to
+ * repeat the one step guaranteed to fail.
+ */
+describe('registration says WHY it refused (2026-08-28)', () => {
+  const duplicate = (reason?: string): ApiError =>
+    new ApiError(409, {
+      code: 'DUPLICATE',
+      message_key: 'errors.duplicate',
+      message: '',
+      details: reason === undefined ? {} : { reason },
+      request_id: 'r',
+    });
+
+  it('names the taken email rather than blaming the token', () => {
+    expect(explainFailure(duplicate('EMAIL_ALREADY_CLAIMED'))).toBe(ar.register.emailTaken);
+    expect(ar.register.emailTaken).toContain('مستخدم بالفعل');
+  });
+
+  it('still says «start again» for a replayed identity, which IS the token', () => {
+    // The other `DUPLICATE`: the same Google identity registering twice. Its
+    // remedy really is to begin the sign-in again, so the distinction must not
+    // collapse in the other direction either.
+    expect(explainFailure(duplicate())).toBe(ar.register.tokenSpent);
   });
 });

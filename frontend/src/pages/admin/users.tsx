@@ -12,8 +12,10 @@ import {
   updateUser,
   deleteUserAccount,
   type RoleAssignment,
+  type UserProfileInput,
   type UserSummary,
 } from '../../adapters/users.js';
+import { PersonFields, type PersonForm } from '../../components/registration/person-fields.js';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
 import { BranchScopeCell } from '../../components/admin/branch-scope-cell.js';
 import { Button } from '../../components/ui/button.js';
@@ -78,7 +80,6 @@ export function UsersPage(): ReactNode {
   const [statusFilter, setStatusFilter] = useState('');
 
   const [editing, setEditing] = useState<UserSummary | null>(null);
-  const [assigning, setAssigning] = useState<UserSummary | null>(null);
 
   const [suspending, setSuspending] = useState<UserSummary | null>(null);
   const [deleting, setDeleting] = useState<UserSummary | null>(null);
@@ -148,6 +149,14 @@ export function UsersPage(): ReactNode {
       // the one they are given when somebody reports a problem. Absent for a
       // minor student, who has no account of their own (§4.3) — rendered as a
       // stated absence rather than a blank cell.
+      /**
+       * **«حساب بلا دخول» is not a product state** (Owner, 2026-08-28): every
+       * account is created through registration with a Google address, and a
+       * minor signs in through their guardian's. What a `null` here actually
+       * means is the one remaining case — an account staff pre-provisioned that
+       * nobody has signed into yet (§4.1b step 4b) — so the cell says that
+       * instead of announcing a state the product does not have.
+       */
       cell: (r) => r.email ?? <span className="muted">{t('admin.users.noEmail')}</span>,
     },
     {
@@ -194,7 +203,6 @@ export function UsersPage(): ReactNode {
 
   const actions: RowAction<UserSummary>[] = [
     { label: t('common.edit'), onSelect: (r) => setEditing(r) },
-    { label: t('admin.users.assignRoles'), onSelect: (r) => setAssigning(r) },
     // Offered only where TD-1 allows the transition, rather than shown and
     // refused: a control that exists only to fail teaches nothing (§14.2).
     {
@@ -247,7 +255,6 @@ export function UsersPage(): ReactNode {
     try {
       await action();
       setEditing(null);
-      setAssigning(null);
       setSuspending(null);
       setReactivating(null);
       await load();
@@ -258,7 +265,6 @@ export function UsersPage(): ReactNode {
         // Someone else changed this row, or the state moved on. Reloading is the
         // only correct response — never a retry with a stale version.
         setEditing(null);
-        setAssigning(null);
         setSuspending(null);
         setReactivating(null);
         await load();
@@ -361,26 +367,22 @@ export function UsersPage(): ReactNode {
       {editing ? (
         <ProfileDialog
           user={editing}
+          branches={branches}
+          canGrantAdmin={isSuperAdmin}
           busy={busy}
           onCancel={() => setEditing(null)}
-          onSave={(input) =>
-            void run(() => updateUser(editing.id, editing.version, input, accessToken), 'common.saved')
+          onSave={(input, assignments) =>
+            void run(async () => {
+              // **One decision, in order.** The person's own fields carry the
+              // TD-15 version, so they go first; the role set is a separate
+              // endpoint by design (§5.6) and one audit row per decision.
+              await updateUser(editing.id, editing.version, input, accessToken);
+              await setUserRoles(editing.id, assignments, accessToken);
+            }, 'common.saved')
           }
         />
       ) : null}
 
-      {assigning ? (
-        <RolesDialog
-          user={assigning}
-          branches={branches}
-          canGrantAdmin={isSuperAdmin}
-          busy={busy}
-          onCancel={() => setAssigning(null)}
-          onSave={(assignments) =>
-            void run(() => setUserRoles(assigning.id, assignments, accessToken), 'admin.users.rolesSaved')
-          }
-        />
-      ) : null}
 
       {suspending ? (
         <SuspendDialog
@@ -483,55 +485,177 @@ function messageFor(error: unknown): string {
  * *claiming* an account (§7 R15) — editing it would hand a half-registered
  * person's account to somebody else. The server refuses both.
  */
+/**
+ * **One form for the person and their roles** (Owner, 2026-08-28).
+ *
+ * الأدوار used to be a second dialog behind its own row action, so editing
+ * somebody meant two forms, two saves and two chances to leave half a change
+ * behind. They are one form now, saved as one decision.
+ *
+ * ## What the person half asks
+ *
+ * Exactly what registration asks, through the same `PersonFields` component:
+ * الاسم الشخصي and العائلي, الجنس, the optional French pair, الكنية, الهاتف and
+ * ملاحظات. It was a single «الاسم» box holding the **composed** display name —
+ * so a staff member retyping it became the authority on how the name reads,
+ * which §1.1 composes server-side to prevent, and the French name, the sex and
+ * the notes could not be edited at all.
+ *
+ * ## Why the role list offers only what is missing
+ *
+ * A role is held **once** per account (Owner, 2026-08-28), enforced by the
+ * partial unique index `user_branch_role_one_live_role_per_user` and refused by
+ * the service before it. Filtering the dropdown is the courtesy; **neither is
+ * the enforcement**, and the server refuses a forged request that names a role
+ * twice.
+ */
 function ProfileDialog({
   user,
+  branches,
+  canGrantAdmin,
   busy,
   onSave,
   onCancel,
 }: {
   user: UserSummary;
+  branches: Branch[];
+  canGrantAdmin: boolean;
   busy: boolean;
-  onSave: (input: { name_arabic: string; nickname: string | null; phone: string | null }) => void;
+  onSave: (
+    input: UserProfileInput,
+    assignments: { role: string; branch_id: string | null }[],
+  ) => void;
   onCancel: () => void;
 }): ReactNode {
   /** Hydration from the persisted record IS the baseline — opening an edit
    *  form must never make it dirty. */
-  const pristine = {
-    name: user.name_arabic,
+  const pristinePerson: PersonForm = {
+    firstNameArabic: user.first_name_arabic ?? '',
+    lastNameArabic: user.last_name_arabic ?? '',
+    firstNameFrench: user.first_name_french ?? '',
+    lastNameFrench: user.last_name_french ?? '',
     nickname: user.nickname ?? '',
     phone: user.phone ?? '',
+    notes: user.notes ?? '',
+    // R80.6 amended (Owner, 2026-08-28): this Super-Admin-only read publishes
+    // `sex`, so the form hydrates it. R80.3/R80.4 still govern the write —
+    // completing a missing value is allowed, changing a recorded one is refused.
+    sex: (user.sex === 'female' || user.sex === 'male' ? user.sex : '') as PersonForm['sex'],
   };
-  const [name, setName] = useState(pristine.name);
-  const [nickname, setNickname] = useState(pristine.nickname);
-  const [phone, setPhone] = useState(pristine.phone);
+  const pristineRoles = user.roles.map((r) => ({ role: r.role, branch_id: r.branch_id }));
+
+  const [person, setPerson] = useState<PersonForm>(pristinePerson);
+  const [rows, setRows] = useState(pristineRoles);
+  const [role, setRole] = useState('');
+  const [branchId, setBranchId] = useState('');
   const [touched, setTouched] = useState(false);
-  const profileGuard = useUnsavedGuard({
+
+  const errors: Record<string, string> = {};
+  if (person.firstNameArabic.trim() === '') errors['user.firstNameArabic'] = t('common.required');
+  if (person.lastNameArabic.trim() === '') errors['user.lastNameArabic'] = t('common.required');
+  if (person.sex === '') errors['user.sex'] = t('common.required');
+  const valid = Object.keys(errors).length === 0;
+
+  /**
+   * **Only roles this account does not already hold.** A role carries one
+   * scope, so a second row of the same role is not a wider grant — it is the
+   * duplicate the database now refuses.
+   */
+  const offered = ROLES.filter(
+    (r) =>
+      (canGrantAdmin || (r !== 'admin' && r !== 'super_admin')) &&
+      !rows.some((x) => x.role === r),
+  );
+
+  const guard = useUnsavedGuard({
     open: true,
-    dirty: isDirty({ name, nickname, phone }, pristine),
-    onCancel: onCancel,
+    dirty:
+      isDirty(person, pristinePerson) ||
+      isDirty(rows, pristineRoles) ||
+      role !== '' ||
+      branchId !== '',
+    onCancel,
   });
-  const error = name.trim() === '' ? t('common.required') : null;
 
   return (
     <Dialog
       open
-      onClose={profileGuard.requestClose}
-      dismissible={profileGuard.dismissible}
+      onClose={guard.requestClose}
+      dismissible={guard.dismissible}
       title={t('admin.users.editTitle')}
     >
-      {profileGuard.confirmation}
+      {guard.confirmation}
       <div className="form">
-        <TextField
-          label={t('admin.users.colName')}
-          value={name}
-          onChange={setName}
-          required
-          error={touched ? error : null}
-        />
-        <TextField label={t('admin.users.colNickname')} value={nickname} onChange={setNickname} />
-        <TextField label={t('admin.users.colPhone')} type="tel" value={phone} onChange={setPhone} />
+        <PersonFields value={person} onChange={setPerson} errors={touched ? errors : {}} prefix="user" />
+
+        <h3>{t('admin.users.rolesHeading')}</h3>
+        {rows.length === 0 ? (
+          // Not an empty box: an account with no assignment can sign in and
+          // reach nothing, which is a state worth naming before it is saved.
+          <p className="state" role="status">
+            {t('admin.users.noRolesWarning')}
+          </p>
+        ) : (
+          <ul className="admin-list">
+            {rows.map((r) => (
+              <li key={r.role}>
+                <span>
+                  {t(`admin.users.role.${r.role}`)}
+                  {' — '}
+                  {r.branch_id
+                    ? (branches.find((b) => b.id === r.branch_id)?.name ?? r.branch_id)
+                    : t('admin.users.allBranches')}
+                </span>
+                <Button
+                  variant="secondary"
+                  onClick={() => setRows((current) => current.filter((x) => x.role !== r.role))}
+                >
+                  {t('common.delete')}
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {offered.length === 0 ? null : (
+          <>
+            <div className="form__row">
+              <SelectField
+                label={t('admin.users.addRole')}
+                value={role}
+                onChange={setRole}
+                options={[
+                  { value: '', label: t('common.choose') },
+                  ...offered.map((r) => ({ value: r, label: t(`admin.users.role.${r}`) })),
+                ]}
+              />
+              <SelectField
+                label={t('admin.users.branchScope')}
+                value={branchId}
+                onChange={setBranchId}
+                options={[
+                  { value: '', label: t('admin.users.allBranches') },
+                  ...branches.map((b) => ({ value: b.id, label: b.name })),
+                ]}
+                hint={t('admin.users.branchScopeHint')}
+              />
+            </div>
+            <Button
+              variant="secondary"
+              disabled={role === ''}
+              onClick={() => {
+                setRows((current) => [...current, { role, branch_id: branchId || null }]);
+                setRole('');
+                setBranchId('');
+              }}
+            >
+              {t('admin.users.addRole')}
+            </Button>
+          </>
+        )}
+
         <div className="form__actions">
-          <Button variant="secondary" onClick={onCancel}>
+          <Button variant="secondary" onClick={guard.requestClose}>
             {t('common.cancel')}
           </Button>
           <Button
@@ -539,14 +663,24 @@ function ProfileDialog({
             disabled={busy}
             onClick={() => {
               setTouched(true);
-              if (error) return;
-              // An emptied optional field is `null` (clear it), never `''` —
-              // a blank would read as set and render as nothing.
-              onSave({
-                name_arabic: name.trim(),
-                nickname: nickname.trim() === '' ? null : nickname.trim(),
-                phone: phone.trim() === '' ? null : phone.trim(),
-              });
+              if (!valid) return;
+              // An emptied optional field is `null` (clear it), never `''` — a
+              // blank would read as set and render as nothing.
+              const orNull = (v: string): string | null => (v.trim() === '' ? null : v.trim());
+              onSave(
+                {
+                  first_name_arabic: person.firstNameArabic.trim(),
+                  last_name_arabic: person.lastNameArabic.trim(),
+                  first_name_french: orNull(person.firstNameFrench),
+                  last_name_french: orNull(person.lastNameFrench),
+                  nickname: orNull(person.nickname),
+                  phone: orNull(person.phone),
+                  notes: orNull(person.notes),
+                  // R80.3 completes a missing sex; the server refuses a change.
+                  ...(person.sex === '' ? {} : { sex: person.sex }),
+                },
+                rows,
+              );
             }}
           >
             {t('common.save')}
@@ -571,133 +705,6 @@ function ProfileDialog({
  * **`POST /admin/users` and the `createUser` adapter are untouched**, tested,
  * and remain the way a pre-provisioned account is made.
  */
-function RolesDialog({
-  user,
-  branches,
-  canGrantAdmin,
-  busy,
-  onSave,
-  onCancel,
-}: {
-  user: UserSummary;
-  branches: Branch[];
-  canGrantAdmin: boolean;
-  busy: boolean;
-  onSave: (assignments: { role: string; branch_id: string | null }[]) => void;
-  onCancel: () => void;
-}): ReactNode {
-  const [rows, setRows] = useState<{ role: string; branch_id: string | null }[]>(
-    user.roles.map((r) => ({ role: r.role, branch_id: r.branch_id })),
-  );
-  const [role, setRole] = useState('');
-  const [branchId, setBranchId] = useState('');
-
-  const offered = ROLES.filter(
-    (r) => canGrantAdmin || (r !== 'admin' && r !== 'super_admin'),
-  );
-  const duplicate = rows.some((r) => r.role === role && r.branch_id === (branchId || null));
-
-  /**
-   * Two kinds of unsaved work here: a staged change to the assignment list, and
-   * a half-filled add row. Both are the person's typing and both are lost by a
-   * stray backdrop click, so both count.
-   */
-  const rolesGuard = useUnsavedGuard({
-    open: true,
-    dirty:
-      isDirty(rows, user.roles.map((r) => ({ role: r.role, branch_id: r.branch_id }))) ||
-      role !== '' ||
-      branchId !== '',
-    onCancel: onCancel,
-  });
-
-  return (
-    <Dialog
-      open
-      onClose={rolesGuard.requestClose}
-      dismissible={rolesGuard.dismissible}
-      title={t('admin.users.rolesTitle').replace('{name}', user.name_arabic)}
-    >
-      {rolesGuard.confirmation}
-      <div className="form">
-        {rows.length === 0 ? (
-          // Not an empty box: an account with no assignment can sign in and
-          // reach nothing, which is a state worth naming before it is saved.
-          <p className="state" role="status">
-            {t('admin.users.noRolesWarning')}
-          </p>
-        ) : (
-          <ul className="admin-list">
-            {rows.map((r) => (
-              <li key={`${r.role}|${r.branch_id ?? ''}`}>
-                <span>
-                  {t(`admin.users.role.${r.role}`)}
-                  {' — '}
-                  {r.branch_id
-                    ? (branches.find((b) => b.id === r.branch_id)?.name ?? r.branch_id)
-                    : t('admin.users.allBranches')}
-                </span>
-                <Button
-                  variant="secondary"
-                  onClick={() =>
-                    setRows((current) =>
-                      current.filter((x) => !(x.role === r.role && x.branch_id === r.branch_id)),
-                    )
-                  }
-                >
-                  {t('common.delete')}
-                </Button>
-              </li>
-            ))}
-          </ul>
-        )}
-
-        <div className="form__row">
-          <SelectField
-            label={t('admin.users.addRole')}
-            value={role}
-            onChange={setRole}
-            options={[
-              { value: '', label: t('common.choose') },
-              ...offered.map((r) => ({ value: r, label: t(`admin.users.role.${r}`) })),
-            ]}
-          />
-          <SelectField
-            label={t('admin.users.branchScope')}
-            value={branchId}
-            onChange={setBranchId}
-            options={[
-              { value: '', label: t('admin.users.allBranches') },
-              ...branches.map((b) => ({ value: b.id, label: b.name })),
-            ]}
-            hint={t('admin.users.branchScopeHint')}
-          />
-        </div>
-        <Button
-          variant="secondary"
-          disabled={role === '' || duplicate}
-          onClick={() => {
-            setRows((current) => [...current, { role, branch_id: branchId || null }]);
-            setRole('');
-            setBranchId('');
-          }}
-        >
-          {t('admin.users.addRole')}
-        </Button>
-
-        <div className="form__actions">
-          <Button variant="secondary" onClick={onCancel}>
-            {t('common.cancel')}
-          </Button>
-          <Button variant="primary" disabled={busy} onClick={() => onSave(rows)}>
-            {t('common.save')}
-          </Button>
-        </div>
-      </div>
-    </Dialog>
-  );
-}
-
 /**
  * Suspension asks for a reason and says what it does.
  *

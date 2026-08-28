@@ -24,6 +24,12 @@ const ASSIGNMENT: RoleAssignment = {
 const WIRE: UserSummary = {
   id: '00000000-0000-4000-8000-000000000001',
   name_arabic: 'فاطمة الزهراء',
+  first_name_arabic: 'سعاد',
+  last_name_arabic: 'العلوي',
+  first_name_french: null,
+  sex: 'female',
+  last_name_french: null,
+  notes: null,
   nickname: null,
   phone: null,
   email: 'fatima@example.com',
@@ -64,11 +70,21 @@ describe('the adapter type matches the wire contract', () => {
       // by. **Not** a display identity (§20 rule 21) — that rule governs the
       // name shown to the public, and this list is staff-only (TD-2).
       'email',
+      // The stored name PARTS, the sex and the notes — what the §5.6 edit form
+      // hydrates from since 2026-08-28. `name_arabic` stays because a table
+      // renders the composed name; these are what was collected, and §1.1
+      // composes the first from the last.
+      'first_name_arabic',
+      'first_name_french',
       'id',
+      'last_name_arabic',
+      'last_name_french',
       'name_arabic',
       'nickname',
+      'notes',
       'phone',
       'roles',
+      'sex',
       'version',
     ]);
   });

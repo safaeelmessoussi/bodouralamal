@@ -1274,3 +1274,85 @@ sweep was refused on safety grounds, and the repository has no disposable full N
 the focused corrected purge proof is independently isolation-clean **19/19**.
 The direct-Prisma audit-write guard was also mutation-tested: an unreachable
 `prisma.auditLog.create` in a domain service was detected at its exact line, then removed.
+
+## User, group and scheduling-type corrections (2026-08-28)
+
+Built on Codex's R111/TD-14/audit hardening; every guard it added stayed green.
+
+### مجموعات المستويات — one question had two predicates
+
+Deleting a group answered *«تسجيلات مستفيدات (2)»* while its roster read *«لا
+توجد مستفيدات»*. Both counted `Enrollment` rows: the roster required a **live
+student**, the deletion refusal — and the `member_count` column beside it — only
+a live enrolment. The rows between them are **R111's and are correct**: account
+deletion preserves the enrolment because the educational record outlives the
+account, so a group whose members had deleted their accounts held live rows and
+no beneficiaries. Measured, not inferred: the one group in the database showed
+`blocker=2, roster=0`, both enrolments belonging to «حساب محذوف» tombstones.
+
+`policies/enrolment-membership.ts` now holds the predicate once and all three
+reads use it. The roster's answer is authoritative — a de-identified tombstone is
+not a beneficiary — so a group whose members have all left can be closed, while
+one holding a live student is refused exactly as before. Invested records still
+block under their own name: a `Grade` is unaffected.
+
+### A pristine form asked to discard nothing
+
+تعديل المجموعة warned *«هناك تغييرات لم تُحفظ»* on an untouched form, and nothing
+in the caller was wrong. The close button ran with `dirty` false and called
+`onCancel`; the parent cleared the row; for the one render before the reset
+effect, the still-loaded fields compared against an empty pristine and read as
+dirty; and `Dialog`'s native `close` event **re-entered `requestClose` inside
+that window**. `useUnsavedGuard` now derives `open && dirty` once — a form that is
+not open holds no unsaved work — which fixes every always-mounted `FormDialog`
+of that shape rather than one caller.
+
+### المستخدمون
+
+- **الأدوار merged into the edit form.** One form, one decision; the separate
+  dialog and row action are gone.
+- **A role is held once per account** (Owner decision). `UNIQUE (user_id,
+  role_id, branch_id)` never prevented it, because **PostgreSQL treats NULLs as
+  distinct** and `branch_id IS NULL` is the ordinary all-branches scope — the
+  platform's own Super Admin held `super_admin` twice. A partial unique index on
+  live rows now enforces it, the service refuses a repeated role with
+  `DUPLICATE_ROLE`, and the dropdown offers only roles not already held.
+  **Multi-branch scoping is withdrawn deliberately** (ratified): a role carries
+  one scope. Moving a scope **revokes and re-grants** rather than rewriting the
+  row — the first draft mutated `branch_id`, and the existing TD-5 regression
+  caught that it destroyed *«who taught at this branch in March»*.
+- **The person fields are registration's**, through the same `PersonFields`
+  component and the same limits (`validators/person.ts`). The form had one
+  «الاسم» box holding the **composed** name, so a staff member retyping it became
+  the authority on how it reads — which §1.1 composes server-side to prevent —
+  and the French name, sex and notes were uneditable.
+- **A taken email says so.** `DUPLICATE` mapped to *«ابدئي تسجيل الدخول من
+  جديد»*, advice that cannot work when the address itself is the problem. The
+  server already distinguished `EMAIL_ALREADY_CLAIMED` under its lock; the client
+  now does too.
+- **«حساب بلا دخول» is not a product state** (Owner): every account is created
+  through registration with a Google address. The label now names the one real
+  case — an account pre-provisioned and not yet signed into.
+
+### أنواع الجدولة — عطلة is its own structural kind
+
+`محاضرة` was an activity and is a **class**; `عطلة` was an activity and is now
+**`holiday`**, a new `SchedulingStructuralKind`; the missing generic `نشاط` was
+added. Corrected **in place** — ids preserved, nothing recreated, and verified
+first that no `Event` referenced any of them. A holiday carries **الفرع and
+الفئة only**: Levels, groups and staff are refused at the write boundary
+(`HOLIDAY_SHAPE`), not hidden by the form, so a forged request meets the same
+rule. The fields a class has and an `Event` does not — القاعة, المادة, الحلقة,
+نمط التدريس, طريقة الحضور — need no refusal: there is no column for them.
+
+### Two SRS conflicts surfaced rather than resolved silently
+
+- **R80 point 6** said `sex` *«stays off every contract»*. The Owner amended it:
+  المستخدمون is Super-Admin-only since R112, and a Super Admin reads and edits
+  everything about an account. It is published on **that read alone** —
+  `/admin/directory`, the Admin-reachable surface, still does not carry it.
+  R80.3/R80.4 are untouched.
+- **Minors and guardian emails.** The Owner states every account has an email and
+  a minor signs in through their guardian's. §4.3 currently models a minor as a
+  login-less row. That is a model change with its own slice; this batch changed
+  the label only and did not touch §4.3.

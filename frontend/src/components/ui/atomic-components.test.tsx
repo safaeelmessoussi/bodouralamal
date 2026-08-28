@@ -518,7 +518,16 @@ describe('unsaved form changes are protected by the shared dialog', () => {
   const GUARD = stripComments(RAW['/src/lib/use-unsaved-guard.tsx'] ?? '');
 
   it('a dirty form is not dismissible by backdrop or Escape', () => {
-    expect(GUARD).toContain('dismissible: !dirty');
+    /**
+     * **Restated 2026-08-28.** This pinned `dismissible: !dirty`. The guard now
+     * derives one open-gated value first — `const unsaved = open && dirty` —
+     * because a form that is not open holds no unsaved work, and `Dialog`'s
+     * native `close` event re-entered `requestClose` in the render where a
+     * closing form's pristine had already been cleared. The property is
+     * unchanged: the backdrop and Escape are refused exactly when there is
+     * unsaved work.
+     */
+    expect(GUARD).toContain('dismissible: !unsaved');
   });
 
   it('every deliberate way out routes through one guarded function', () => {
@@ -527,7 +536,7 @@ describe('unsaved form changes are protected by the shared dialog', () => {
     // the form that the other one prevents.
     expect(FORM_DIALOG).toContain('onClose={requestClose}');
     expect(FORM_DIALOG).toContain('onClick={requestClose}');
-    expect(GUARD).toContain('if (dirty && !busy) setConfirming(true);');
+    expect(GUARD).toContain('if (unsaved && !busy) setConfirming(true);');
   });
 
   it('asks with the shared ConfirmDialog, not a bespoke question', () => {

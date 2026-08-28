@@ -560,3 +560,49 @@ describe("PATCH /events/{id}", () => {
     expect(res.status).toBe(404);
   });
 });
+
+/* ── عطلة is its own structural kind (Owner, 2026-08-28) ─────────────────── */
+
+/**
+ * **A holiday is not an activity.**
+ *
+ * It is a period on which nothing is delivered: الفرع and الفئة, and nothing
+ * else — no staff, no Levels, no groups. Enforced at the write boundary rather
+ * than by hiding controls, because a form that merely omits the fields still
+ * persists an activity-shaped record and puts the structural distinction in the
+ * one layer that must not hold it.
+ */
+describe("عطلة carries branches and categories only", () => {
+  it("accepts a holiday scoped to a branch", async () => {
+    const holiday = await prisma.schedulingType.findFirstOrThrow({
+      where: { structuralKind: "holiday", deletedAt: null },
+    });
+    const res = await call(
+      "POST",
+      "/events",
+      superToken,
+      payload({
+        title: `${TAG} عطلة الفرع`,
+        scheduling_type_id: holiday.id,
+        branch_ids: [await makeBranch("مراكش")],
+      }),
+    );
+    expect(res.status).toBe(201);
+  });
+
+  it("keeps the catalogue's kinds as the Owner set them", async () => {
+    // محاضرة moved to `class` and عطلة to `holiday` in place — ids preserved,
+    // nothing recreated. Pinned so a reseed or an edit cannot quietly undo it.
+    const rows = await prisma.schedulingType.findMany({
+      where: { deletedAt: null },
+      select: { name: true, structuralKind: true },
+    });
+    const byName = new Map(rows.map((r) => [r.name, r.structuralKind]));
+    expect(byName.get("حصة دراسية")).toBe("class");
+    expect(byName.get("محاضرة")).toBe("class");
+    expect(byName.get("حفل")).toBe("activity");
+    expect(byName.get("نشاط")).toBe("activity");
+    expect(byName.get("اختبار")).toBe("exam");
+    expect(byName.get("عطلة")).toBe("holiday");
+  });
+});

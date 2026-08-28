@@ -184,8 +184,20 @@ export function update(prisma: PrismaClient) {
       idParam(req, 'id'),
       body.version,
       {
-        ...(body.name_arabic !== undefined ? { nameArabic: body.name_arabic } : {}),
-        ...(body.name_french !== undefined ? { nameFrench: body.name_french } : {}),
+        // The parts. The service composes the display names (§1.1).
+        ...(body.first_name_arabic !== undefined
+          ? { firstNameArabic: body.first_name_arabic }
+          : {}),
+        ...(body.last_name_arabic !== undefined
+          ? { lastNameArabic: body.last_name_arabic }
+          : {}),
+        ...(body.first_name_french !== undefined
+          ? { firstNameFrench: body.first_name_french }
+          : {}),
+        ...(body.last_name_french !== undefined
+          ? { lastNameFrench: body.last_name_french }
+          : {}),
+        ...(body.notes !== undefined ? { notes: body.notes } : {}),
         ...(body.nickname !== undefined ? { nickname: body.nickname } : {}),
         ...(body.phone !== undefined ? { phone: body.phone } : {}),
         ...(body.sex !== undefined ? { sex: body.sex } : {}),

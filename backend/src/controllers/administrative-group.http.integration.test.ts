@@ -883,3 +883,102 @@ describe("the roster is a contract DTO too", () => {
     expect(asTeacher.status).toBe(403);
   });
 });
+
+/* ── The membership contradiction (2026-08-28) ───────────────────────────── */
+
+/**
+ * **One question, one predicate.**
+ *
+ * Deleting a group answered *«لا يمكن حذف هذه المجموعة … تسجيلات مستفيدات (2)»*
+ * while the group's own roster read *«لا توجد مستفيدات في هذه المجموعة»*. Both
+ * counted `Enrollment` rows and disagreed, because the roster required a **live
+ * student** and the deletion refusal — and the `member_count` column beside it —
+ * required only a live enrolment.
+ *
+ * The rows between them are **R111's, and are correct**: account deletion
+ * preserves the enrolment because the educational record outlives the account.
+ * So a group whose members had all deleted their accounts held live enrolment
+ * rows and no beneficiaries, and the platform asserted both.
+ *
+ * These three assertions are one scenario deliberately: the contradiction was
+ * never visible from a single view, and a test that read only one of them would
+ * pass against the defect.
+ */
+describe("a group's membership means the same thing everywhere", () => {
+  it("counts, lists and refuses on the SAME rows when a member's account is deleted", async () => {
+    const group = await prisma.administrativeGroup.create({
+      data: { name: `${TAG} مجموعة التناقض`, levelId, branchId: branchA },
+    });
+    const live = await makeUser("مستفيدة حيّة");
+    const departed = await makeUser("مستفيدة غادرت");
+    for (const studentId of [live, departed]) {
+      await prisma.enrollment.create({
+        data: { studentId, levelId, branchId: branchA, administrativeGroupId: group.id },
+      });
+    }
+
+    // R111's shape exactly: the ACCOUNT is soft-deleted and the enrolment is
+    // deliberately left live, because the educational record outlives it.
+    await prisma.user.update({
+      where: { id: departed },
+      data: { deletedAt: new Date(), nameArabic: "حساب محذوف" },
+    });
+
+    const roster = await call(
+      "GET",
+      `/admin/administrative-groups/${group.id}/roster`,
+      superAdmin,
+    );
+    expect(roster.status).toBe(200);
+    const rosterIds = (roster.body.data as unknown as Record<string, unknown>[]).map((r) =>
+      String(r["student_id"]),
+    );
+    expect(rosterIds).toEqual([live]);
+
+    const listed = await call(
+      "GET",
+      `/admin/administrative-groups?level_id=${levelId}&page_size=100`,
+      superAdmin,
+    );
+    const row = (listed.body.data as unknown as Record<string, unknown>[]).find(
+      (g) => g["id"] === group.id,
+    );
+    // The column beside the row must agree with the row's own roster.
+    expect(row?.["member_count"]).toBe(1);
+
+    // And the refusal must name that same one — not two.
+    const refused = await call("DELETE", `/admin/administrative-groups/${group.id}`, superAdmin);
+    expect(refused.status).toBe(409);
+    expect(refused.body.error?.details?.["blocked_by"]).toMatchObject({ enrollments: 1 });
+  });
+
+  it("lets the group close once every member has gone, rather than blocking forever", async () => {
+    /**
+     * The other half, and the reason suppressing the blocker would have been the
+     * wrong fix: a group whose members have all left **is** empty, and refusing
+     * it forever on rows nobody can see is the defect, not the protection.
+     */
+    const group = await prisma.administrativeGroup.create({
+      data: { name: `${TAG} مجموعة انتهت`, levelId, branchId: branchA },
+    });
+    const departed = await makeUser("مستفيدة أخرى غادرت");
+    await prisma.enrollment.create({
+      data: { studentId: departed, levelId, branchId: branchA, administrativeGroupId: group.id },
+    });
+    await prisma.user.update({
+      where: { id: departed },
+      data: { deletedAt: new Date(), nameArabic: "حساب محذوف" },
+    });
+
+    const res = await call("DELETE", `/admin/administrative-groups/${group.id}`, superAdmin);
+    expect(res.status).toBe(204);
+
+    // TD-5, and R111's rule: the group is soft-deleted and the preserved
+    // enrolment row is still there — closing a group erases no history.
+    const after = await prisma.administrativeGroup.findUnique({ where: { id: group.id } });
+    expect(after?.deletedAt).not.toBeNull();
+    expect(
+      await prisma.enrollment.count({ where: { administrativeGroupId: group.id } }),
+    ).toBe(1);
+  });
+});

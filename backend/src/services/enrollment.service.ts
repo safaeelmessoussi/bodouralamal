@@ -6,6 +6,7 @@ import * as scope from '../policies/branch-scope.js';
 import * as audit from '../repositories/audit.repository.js';
 import * as trash from '../repositories/trash.repository.js';
 import type { Actor } from '../policies/actor.js';
+import { liveMembersOfGroup } from '../policies/enrolment-membership.js';
 import {
   consentSessionIdsForStudent,
   enqueueConsentReevaluationForSessions,
@@ -119,11 +120,8 @@ export async function listGroupRoster(
   if (!group) throw new AppError('NOT_FOUND', 'no such group');
   scope.assertCanActOnBranch(actor.roleScopes, MANAGING_ROLE, group.branchId, 'no such group');
 
-  const where: Prisma.EnrollmentWhereInput = {
-    administrativeGroupId,
-    deletedAt: null,
-    student: { deletedAt: null },
-  };
+  // The shared predicate, so this read and the deletion refusal cannot drift.
+  const where: Prisma.EnrollmentWhereInput = liveMembersOfGroup(administrativeGroupId);
   const window = pageWindow(params);
   const [rows, total] = await Promise.all([
     prisma.enrollment.findMany({

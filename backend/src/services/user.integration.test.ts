@@ -789,6 +789,40 @@ describe("§14.2 / TD-10 — user list, filters and search", () => {
           "publicDisplayName",
           "roles",
           "version",
+          /**
+           * **Argued onto the list on 2026-08-28, not arrived by accident.**
+           *
+           * `firstNameArabic` / `lastNameArabic` / `firstNameFrench` /
+           * `lastNameFrench` are **the parts of the legal name already on this
+           * row**: §1.1 composes `nameArabic` from them, so publishing the
+           * composed value and withholding its halves protected nothing. The
+           * §5.6 edit form hydrates from them, and the alternative — a
+           * single-user read returning these same fields plus the parts — is
+           * the second projection this comment already rejects.
+           *
+           * **`sex` — R80 point 6 amended by the Document Owner, 2026-08-28.**
+           * That clause read *«stays off every contract»* and was written when
+           * this list was reachable by any Admin. R112 made it Super-Admin-only,
+           * and the Owner's decision is that a Super Admin reads and edits
+           * everything about an account. It is published **here and nowhere
+           * else** — `/admin/directory`, the Admin-reachable surface, still does
+           * not carry it, which the directory's own key assertion pins.
+           *
+           * `notes` is the registration free text — **not** a
+           * `StudentSocialProfile` field, which is what §4.10 restricts to
+           * assigned teachers and which still appears nowhere here. The premise
+           * this assertion was written under has also changed: **R112 made
+           * `listUsers` Super-Admin-only**, so this is no longer "a list every
+           * Admin can call". An Admin doing operational work reads
+           * `/admin/directory`, which carries id, name, nickname and roles —
+           * and none of these six.
+           */
+          "firstNameArabic",
+          "lastNameArabic",
+          "firstNameFrench",
+          "lastNameFrench",
+          "sex",
+          "notes",
         ].sort(),
       );
     }
@@ -980,20 +1014,37 @@ describe("§4.2 Revision 25 — directory visibility is branch-scoped", () => {
     expect(ids).toContain(unassigned.id);
   });
 
-  it("an Admin scoped to several branches sees all of them", async () => {
+  it("an ALL-BRANCHES Admin sees every branch; a single-branch one sees only theirs", async () => {
+    /**
+     * **Restated 2026-08-28 — the Owner changed the model, not the code.**
+     *
+     * This read *"an Admin scoped to several branches sees all of them"* and
+     * built that scope as **two assignments of the same role**. A role is now
+     * held once per account (`user_branch_role_one_live_role_per_user`), so a
+     * scope is either **one branch or all of them** and the two-row form no
+     * longer exists to test.
+     *
+     * The property §4.2 R25 actually protects is unchanged and is what this
+     * asserts: an unscoped Admin reaches everyone, and a scoped one reaches
+     * their own branch and no other.
+     */
     const marrakesh = await branch("مراكش");
     const casablanca = await branch("الدار البيضاء");
-    const rabat = await branch("الرباط");
     const a = await memberOf(marrakesh);
     const b = await memberOf(casablanca);
-    const c = await memberOf(rabat);
-    const admin = await scopedAdmin([marrakesh, casablanca]);
 
-    const ids = idsOf(
-      await listDirectory(prisma, await actorFor(prisma, admin), {}),
+    const everywhere = await scopedAdmin([]); // branch_id NULL — all branches
+    const everywhereIds = idsOf(
+      await listDirectory(prisma, await actorFor(prisma, everywhere), {}),
     );
-    expect(ids).toEqual(expect.arrayContaining([a, b]));
-    expect(ids).not.toContain(c);
+    expect(everywhereIds).toEqual(expect.arrayContaining([a, b]));
+
+    const oneBranch = await scopedAdmin([marrakesh]);
+    const oneBranchIds = idsOf(
+      await listDirectory(prisma, await actorFor(prisma, oneBranch), {}),
+    );
+    expect(oneBranchIds).toContain(a);
+    expect(oneBranchIds).not.toContain(b);
   });
 
   it("the branch FILTER cannot reach outside the Admin's own scope", async () => {

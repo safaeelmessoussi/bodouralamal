@@ -1,6 +1,7 @@
 import { z } from 'zod';
 
 import { uuid, version } from './common.js';
+import * as person from './person.js';
 
 /**
  * Zod schemas for the user-management boundary (§5.6 `/admin/users`, §16.2).
@@ -8,18 +9,17 @@ import { uuid, version } from './common.js';
  * TD-9's column limits are encoded here and nowhere else in the request path.
  */
 
-/** TD-9: `name_arabic` is 1–120. */
-const nameArabic = z.string().trim().min(1).max(120);
-/** Nullable — an optional name the person may clear. */
-const nameFrench = z.string().trim().min(1).max(120).nullable();
-const nickname = z.string().trim().min(1).max(60).nullable();
-const phone = z
-  .string()
-  .trim()
-  .min(5)
-  .max(20)
-  .regex(/^[0-9+ ]+$/, 'digits, + and spaces only')
-  .nullable();
+/**
+ * **The person's own details, from the shared definitions** (2026-08-28).
+ *
+ * The back office asks for exactly what registration asks for, under exactly its
+ * limits — see `validators/person.ts` for why the two had drifted apart.
+ * Nullable where the field is genuinely optional and may be cleared.
+ */
+const nickname = person.nickname.nullable();
+const phone = person.phone.nullable();
+const notes = person.notes.nullable();
+const optionalNamePart = person.namePart.nullable();
 
 /**
  * **`.strict()`, and the refused keys are the point.**
@@ -44,10 +44,21 @@ export const updateUserSchema = z
      */
     sex: z.enum(['female', 'male']).optional(),
     version,
-    name_arabic: nameArabic.optional(),
-    name_french: nameFrench.optional(),
+    /**
+     * **The parts, never the composed name** (§1.1, Revision 40).
+     *
+     * `name_arabic` and `name_french` were accepted here directly, which made
+     * the client the authority on how a person's name reads — on the one screen
+     * where a staff member retypes it. The server composes both from these, as
+     * registration already does.
+     */
+    first_name_arabic: person.namePart.optional(),
+    last_name_arabic: person.namePart.optional(),
+    first_name_french: optionalNamePart.optional(),
+    last_name_french: optionalNamePart.optional(),
     nickname: nickname.optional(),
     phone: phone.optional(),
+    notes: notes.optional(),
   })
   .strict();
 

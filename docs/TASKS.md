@@ -1825,3 +1825,27 @@ harness, and **§14.1's sitemap does not list it**. `admin-modules.test.ts` did 
 catch it because its expected list is hand-maintained against the registry rather
 than against the SRS — the exact failure its own comment warns about. R113's
 approved scope covers Partners only, so this is reported rather than taken.
+
+### Owner decisions and open items from the 2026-08-28 batch
+
+- [x] **A role is held once per account** — partial unique index
+      `user_branch_role_one_live_role_per_user`, service refusal
+      (`DUPLICATE_ROLE`), dropdown filtered. **Multi-branch scoping withdrawn
+      deliberately** (ratified): a role carries one scope, a single branch or all
+      of them. No account used the multi-branch form when measured.
+- [x] **R80 point 6 amended** — `sex` is published on the Super-Admin-only
+      `/admin/users` read so §5.6's edit form can hydrate it, and **nowhere
+      else**. R80.3/R80.4 unchanged.
+- [x] **عطلة is a `holiday` structural kind**; محاضرة corrected to `class`;
+      `نشاط` added. Corrected in place with ids preserved.
+- [ ] **OWNER-STATED MODEL CHANGE, not yet taken — minors and guardian emails.**
+      The Owner states every account has an email and a minor signs in through
+      their guardian's address. **§4.3 currently models a minor as a login-less
+      row** reached through an approved `FamilyLink`, and `User.email` is `null`
+      for them by design. Reconciling the two is a slice of its own: it touches
+      §4.3, the registration flow, `resolveActingStudent` and the child-context
+      middleware. This batch changed only the المستخدمون label, which no longer
+      presents «حساب بلا دخول» as a state.
+- [ ] Codex's four open Owner questions (audit identity email, exact storage-key
+      wording, required free-text audit evidence, the R111 3-day purge job)
+      remain open and were **not** touched by this batch.

@@ -40,6 +40,37 @@ const isSuperAdmin = (actor: Actor) => scope.isSuperAdmin(actor.roleScopes);
 const isAdmin = (actor: Actor) => scope.hasRole(actor.roleScopes, MANAGING_ROLE) || isSuperAdmin(actor);
 const isTeacher = (actor: Actor) => scope.hasRole(actor.roleScopes, 'teacher');
 
+
+/**
+ * **What a عطلة may carry** (Owner decision, 2026-08-28).
+ *
+ * A holiday is a period on which nothing is delivered: *which branches, and
+ * which Categories, are off*. It has no staff, no Levels and no groups — so
+ * those are **refused at the write boundary** rather than hidden by the form and
+ * persisted empty. Hiding them in the interface would leave an activity-shaped
+ * record behind and put the structural distinction in the one layer that must
+ * not hold it.
+ *
+ * The fields a class carries and an Event does not — القاعة, المادة, الحلقة,
+ * نمط التدريس, طريقة الحضور — need no refusal here: `Event` has no column for
+ * any of them, which is the model already saying so.
+ *
+ * **Staff is refused in `setEventStaff`, not here**: it is a separate endpoint
+ * with its own transaction, so a rule written into this shape check would have
+ * been dead code that read like protection.
+ */
+function assertHolidayShape(input: { levelIds?: string[]; groupIds?: string[] }): void {
+  const carried: string[] = [];
+  if (input.levelIds?.length) carried.push('levels');
+  if (input.groupIds?.length) carried.push('administrative_groups');
+  if (carried.length > 0) {
+    throw new AppError('VALIDATION_FAILED', 'a holiday carries branches and categories only', {
+      reason: 'HOLIDAY_SHAPE',
+      refused: carried,
+    });
+  }
+}
+
 export interface EventScopes {
   /** Empty with `global: true` means every already-operational branch. */
   branchIds?: string[];
@@ -178,7 +209,10 @@ export async function createEvent(
 
     // R110 — checked before the row is written, so a bad type is a coded
     // refusal rather than a foreign-key violation surfacing as a 500.
-    if (input.schedulingTypeId) await assertActivityType(tx, input.schedulingTypeId);
+    if (input.schedulingTypeId) {
+      const kind = await assertActivityType(tx, input.schedulingTypeId);
+      if (kind === 'holiday') assertHolidayShape(input);
+    }
 
     if (!isAdmin(actor) && isTeacher(actor)) {
       await assertStaffAccountsAvailable(tx, [actor.userId]);
@@ -393,7 +427,12 @@ export async function updateEvent(
     assertValidDates(merged);
     // R110 — re-checked on the MERGED value, so an edit cannot move an activity
     // onto a type that routes somewhere else.
-    if (merged.schedulingTypeId) await assertActivityType(tx, merged.schedulingTypeId);
+    if (merged.schedulingTypeId) {
+      const kind = await assertActivityType(tx, merged.schedulingTypeId);
+      // The merged view, so changing a type to عطلة on an activity that carries
+      // Levels or staff is refused rather than silently keeping them.
+      if (kind === 'holiday') assertHolidayShape(merged);
+    }
 
     // TD-15.1: conditional UPDATE on `version` — a stale version is a coded 409,
     // never a silent overwrite of a colleague's edit.
@@ -494,6 +533,25 @@ export async function setEventStaff(
   // is *a main responsible مؤطرة and one or more assistants*, and two people
   // named responsible is not a stricter version of that — it is a different
   // arrangement nobody asked for.
+  /**
+   * **Nobody staffs a عطلة** (Owner, 2026-08-28). A holiday is a period on
+   * which nothing is delivered, so there is no one to be answerable for it —
+   * and refusing it here rather than hiding the control is what keeps the rule
+   * true for a forged request.
+   */
+  if (staff.length > 0) {
+    const event = await prisma.event.findFirst({
+      where: { id: eventId, deletedAt: null },
+      select: { schedulingType: { select: { structuralKind: true } } },
+    });
+    if (event?.schedulingType?.structuralKind === 'holiday') {
+      throw new AppError('VALIDATION_FAILED', 'a holiday carries no staff', {
+        reason: 'HOLIDAY_SHAPE',
+        refused: ['staff'],
+      });
+    }
+  }
+
   if (staff.filter((p) => p.position === 'responsible').length > 1) {
     throw new AppError('VALIDATION_FAILED', 'an event has one responsible مؤطرة', {
       reason: 'ONE_RESPONSIBLE_ONLY',

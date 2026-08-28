@@ -918,8 +918,13 @@ describe("R79 — who the enrolment selector offers", () => {
   });
 
   it("never publishes the flag on the contract", async () => {
-    // R79.8 — it is a fact about a person's relationship with the institute, and
-    // the screens that need it read it server-side.
+    // R79.8 — `is_beneficiary` is a fact about a person's relationship with the
+    // institute, and the screens that need it read it server-side.
+    //
+    // **`sex` was asserted here too and no longer is** (Owner, 2026-08-28). It
+    // was bundled in under R80 point 6, which the Owner amended once R112 had
+    // made this read Super-Admin-only: a Super Admin reads and edits everything
+    // about an account. R79.8's own rule is untouched.
     const res = await call(
       "GET",
       `/admin/users?q=${encodeURIComponent(TAG)}`,
@@ -927,7 +932,6 @@ describe("R79 — who the enrolment selector offers", () => {
     );
     for (const row of res.body.data as unknown as Record<string, unknown>[]) {
       expect(row).not.toHaveProperty("is_beneficiary");
-      expect(row).not.toHaveProperty("sex");
     }
   });
 });

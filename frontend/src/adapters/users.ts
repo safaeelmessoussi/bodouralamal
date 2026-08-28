@@ -34,6 +34,18 @@ export interface RoleAssignment {
 export interface UserSummary {
   id: string;
   name_arabic: string;
+  /**
+   * The stored parts, sex and notes — what the edit form hydrates from.
+   * `name_arabic` is the composed display name (§1.1); these are what was
+   * collected, and the server composes the first from the last.
+   */
+  first_name_arabic: string | null;
+  last_name_arabic: string | null;
+  first_name_french: string | null;
+  last_name_french: string | null;
+  /** R80.6 amended 2026-08-28 — published on this Super-Admin-only read only. */
+  sex: string | null;
+  notes: string | null;
   nickname: string | null;
   phone: string | null;
   /**
@@ -141,10 +153,16 @@ export type Role = (typeof ROLES)[number];
 export const ACCOUNT_STATUSES = ['pending', 'active', 'suspended', 'rejected'] as const;
 
 export interface UserProfileInput {
-  name_arabic?: string;
-  name_french?: string | null;
+  /** The parts. The server composes `name_arabic`/`name_french` (§1.1, R40). */
+  first_name_arabic?: string;
+  last_name_arabic?: string;
+  first_name_french?: string | null;
+  last_name_french?: string | null;
   nickname?: string | null;
   phone?: string | null;
+  notes?: string | null;
+  /** R80.3 — completes a missing sex; the server refuses a change. */
+  sex?: 'female' | 'male';
 }
 
 /**

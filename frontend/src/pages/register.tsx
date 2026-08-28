@@ -25,6 +25,7 @@ import {
   validateChildren,
   type ChildForm,
 } from '../components/registration/children.js';
+import { PersonFields } from '../components/registration/person-fields.js';
 import { t } from '../i18n/index.js';
 import { ApiError } from '../lib/api.js';
 
@@ -430,40 +431,6 @@ const emptyPerson: PersonForm = {
  * to a family.
  */
 /** The applicant: the shared names, plus the two fields only an adult gives. */
-function PersonFields({
-  value,
-  onChange,
-  errors,
-  prefix,
-}: {
-  value: PersonForm;
-  onChange: (next: PersonForm) => void;
-  errors: Record<string, string>;
-  prefix: 'applicant';
-}): ReactNode {
-  const set = (patch: Partial<PersonForm>) => onChange({ ...value, ...patch });
-
-  return (
-    <>
-      <NameFields value={value} onChange={set} errors={errors} prefix={prefix} />
-      <TextField
-        label={t('register.phone')}
-        type="tel"
-        value={value.phone}
-        onChange={(next) => set({ phone: next })}
-        hint={t('register.phoneHint')}
-        error={errors[`${prefix}.phone`] ?? null}
-      />
-      <TextArea
-        label={t('register.notes')}
-        value={value.notes}
-        onChange={(next) => set({ notes: next })}
-        rows={3}
-      />
-    </>
-  );
-}
-
 /* ── Turning a failure into something the reader can act on ───────────────── */
 
 /**
@@ -583,11 +550,26 @@ export function explainFailure(error: unknown): string {
       return t('register.errConsent');
     case 'VALIDATION_FAILED':
       return t('register.rejected');
+    /**
+     * **`DUPLICATE` is two different dead ends, and they had one message.**
+     *
+     * The server distinguishes them and this did not: an address that already
+     * belongs to an account came back as *«ابدئي تسجيل الدخول من جديد»*, which
+     * is advice that cannot work — signing in again reaches the same taken
+     * address. The applicant was told to repeat the one step guaranteed to fail.
+     *
+     * `EMAIL_ALREADY_CLAIMED` is `registration.service`'s own reason, raised
+     * under the normalized-email lock after re-reading **both** ownership
+     * channels, so it is authoritative rather than a guess from a status code.
+     */
+    case 'DUPLICATE':
+      return error.details['reason'] === 'EMAIL_ALREADY_CLAIMED'
+        ? t('register.emailTaken')
+        : t('register.tokenSpent');
     // The onboarding token is single-use and short-lived (§4.1b). A replay or an
     // expiry is not "try again" — it is "start the sign-in again", and saying so
     // is the difference between a fixable dead end and a mysterious one.
     case 'STATE_CONFLICT':
-    case 'DUPLICATE':
     case 'AUTH_REQUIRED':
       return t('register.tokenSpent');
     default:

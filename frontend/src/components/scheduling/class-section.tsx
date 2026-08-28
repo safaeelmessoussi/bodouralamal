@@ -183,6 +183,18 @@ const ALL_SCOPE_KINDS = [
   { value: 'group', labelKey: 'admin.calendar.scopeGroup' },
 ] as const;
 
+/**
+ * **A عطلة is scoped to الفرع and الفئة, and to nothing else** (Owner,
+ * 2026-08-28). It is a period on which nothing is delivered, so «this Level» or
+ * «this group» would be describing an audience a holiday does not have — and
+ * the server refuses them (`HOLIDAY_SHAPE`), so this list is the affordance
+ * agreeing with the rule rather than the rule itself.
+ */
+export const HOLIDAY_SCOPE_KINDS = [
+  { value: 'branch', labelKey: 'admin.calendar.scopeBranch' },
+  { value: 'category', labelKey: 'admin.calendar.scopeCategory' },
+] as const;
+
 /** R72 — a Teacher may scope an event to their own Administrative Groups and
  *  to nothing else, so this is the whole list they are offered. */
 export const TEACHER_SCOPE_KINDS = [

@@ -100,6 +100,25 @@ export const STRUCTURAL_KIND_SPECS: Record<SchedulingType, SchedulingTypeSpec> =
     // Computed on read by `expandEvent` — there is no row to open (§4.4).
     hasOccurrences: false,
   },
+  holiday: {
+    /**
+     * **عطلة — a period on which nothing is delivered** (Owner, 2026-08-28).
+     *
+     * Stored as an `Event`, so it behaves like one for dates and recurrence;
+     * what differs is its **scope**, and that difference is enforced by the
+     * server (`HOLIDAY_SHAPE`) rather than by this registry. A holiday spanning
+     * days with no clock time is the ordinary case, which is why it is the one
+     * kind where all-day and an end date matter most.
+     */
+    available: true,
+    hasTitle: true,
+    hasDescription: true,
+    hasAllDay: true,
+    hasEndDate: true,
+    allowsOnce: true,
+    // Computed on read by `expandEvent`, exactly as an activity is.
+    hasOccurrences: false,
+  },
   exam: {
     // R58 — the **physical** sitting is built. The `عن بُعد` mode is offered
     // inside the exam section, disabled, with its reason stated (§14.4); the
