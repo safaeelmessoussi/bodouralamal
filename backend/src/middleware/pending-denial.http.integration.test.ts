@@ -149,6 +149,12 @@ const EXEMPT = new Set([
   "/healthz",
   // Revision 35: the §5.1 landing-page branch directory, anonymous.
   "/branches",
+  // Revision 113 (NEW N): the §5.1 landing-page partners section, anonymous —
+  // the same surface and the same reasoning as the branch directory beside it.
+  // **The guard caught this one**, which is what it is for: a new route is
+  // guarded until somebody states otherwise here, so making something public is
+  // a deliberate line in this file rather than an omission somewhere else.
+  "/partners",
   // Revision 36 (TD-3.10): the calendar screen's reference data, anonymous.
   "/calendar/bootstrap",
   // TD-3.4 (Revision 43): the §5.2 Session page is PUBLIC at the caller's tier,
