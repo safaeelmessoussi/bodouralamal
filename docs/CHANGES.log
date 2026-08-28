@@ -1812,3 +1812,74 @@ Owner instruction (2026-08-28) added `Partner.description` end to end — schema
 DTOs, the form, the management table and the public landing section. **The implementation is
 what the Owner asked for; the SRS sentence predates it.** Correcting it is a requirement
 change and therefore the Document Owner's, so it is reported here rather than edited.
+
+## SRS Revisions 109 and 110 ratified; the Partner description reconciled (2026-08-30)
+
+**Documentation ratification, on the Document Owner's instruction.** `docs/SRS.md`,
+`docs/README.md` and the two proposal documents are the only files changed. **No
+implementation changed** — and one consistency check found a contradiction that is reported
+below rather than fixed.
+
+### Applied as written
+
+- **Revision 109** — a scheduling item's visibility is its own fact, on all three kinds, and
+  `hidden` means the responsible person plus Super Admins. Applied from
+  `SRS-PROPOSAL-R109.md` §2 verbatim, its clause (8) assembled from the proposal's own *What
+  is NOT proposed* list. §4.4's tier-3 sentence — *«and to all Admins regardless of branch
+  scope»* — is struck through **in place** with its supersession, because that is the one
+  place the revision removes access and a reader landing there must not act on the old rule.
+- **Revision 110** — the scheduling-type catalogue as managed reference data. Applied from
+  `SRS-PROPOSAL-R110.md` §2 verbatim, its clause (8) recording the proposal's §1 finding that
+  **R56 is not superseded** (its stated condition for reversal was met).
+  **Clause (9) records the Owner's later amendment of 2026-08-28** — محاضرة → `class`, عطلة →
+  the new fourth `structural_kind` `holiday`, and نشاط added as the generic activity — which
+  is migrated and live. That is a supersession that already existed; recording it is
+  reconciliation, not reinterpretation.
+
+Both proposals now carry **APPLIED** status lines and point at §0 as authoritative;
+`docs/README.md`'s two rows follow. The placeholder note added yesterday saying 109 and 110
+were unratified is removed.
+
+### Partner description
+
+§5.7 and the Revision-113 entry both said a partner carries **no description**. The Owner
+added `Partner.description` on 2026-08-28 and confirmed it on 2026-08-30, so both places now
+record a nullable `VARCHAR(500)` description, with the amendment marked and scoped: **logo,
+URL and contact remain absent and are not authorised by it.**
+
+### Verified against the implementation
+
+R109: all four scheduling entities carry `visibility Visibility @default(public)`
+(`RecurringCourseSchedule`, `Session`, `Event`, `Exam`), and `EducationalContent` keeps
+`private` — §4.9 is a different concept and R109 does not touch it. R110: the entity carries
+all five fields plus TD-5 soft delete, `Event.schedulingTypeId` is `onDelete: Restrict`, and
+writes assert Super Admin.
+
+### CONTRADICTION FOUND — reported, NOT fixed
+
+**A fresh Production install would seed a scheduling-type catalogue of ONE row.**
+
+Measured, not inferred, on a throwaway database: after `prisma migrate deploy`,
+`scheduling_type` contains exactly **`نشاط`** — migration `20260828190100_holiday_catalogue`
+inserts it unconditionally, and its two corrective `UPDATE`s match nothing on an empty table.
+The production seed then reaches `initializedByPresence('scheduling_types', count)`, which
+returns true for any `count > 0`, logs *«already initialized — the database is
+authoritative»* and **skips all five rows**. Confirmed end to end: the catalogue finishes
+with `count = 1`.
+
+- **Existing databases are correct** (six rows, right kinds): the migration corrected them in
+  place, which is what it was written for.
+- **A fresh install is not.** It would lack حصة دراسية, اختبار, محاضرة, حفل and عطلة, so
+  `الجدولة` would offer one type and no class could be scheduled.
+- This now contradicts a **ratified** requirement: Revision 110(2) states the initial
+  catalogue, and 110(1) that the seed *"establishes the initial state"*.
+- Also noted while measuring: `SCHEDULING_TYPES` in `production.ts` still carries the
+  **pre-amendment** kinds (محاضرة `activity`, عطلة `activity`) and no نشاط row, so even were
+  the guard to let it run it would seed the superseded shape.
+
+**Not changed**, per the Owner's instruction to report rather than silently alter behaviour.
+Two candidate fixes for the Owner: make the seed reconcile by name rather than short-circuit
+on presence, or move the نشاط insert out of the migration into the seed list. Separately,
+`scripts/seed/verify-production-seed.sh` fails two **pre-existing** R107/R108 Subject
+preflight assertions unrelated to this work, and its drill asserts nothing about the
+scheduling catalogue — which is why this went unseen.

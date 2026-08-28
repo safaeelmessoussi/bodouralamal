@@ -5,10 +5,9 @@
 **A scheduling item's visibility is its own fact, on all three kinds — and
 `hidden` means the person responsible for it, not every Admin.**
 
-**Status:** **PROPOSED — awaiting the Document Owner.** The decisions below are
-already ratified (NEW B §B, 2026-08-26, and the readiness audit's supersession
-table); what is proposed here is the **normative wording**, because `docs/SRS.md`
-is the Document Owner's to edit and this agent must never touch it.
+**Status:** **APPLIED — ratified by the Document Owner as SRS Revision 109 on 2026-08-30.**
+`docs/SRS.md` §0 now carries the normative text and is authoritative; this document is kept
+as the drafting record and must not be edited to diverge from it.
 
 The implementation shipped with this proposal (NEW B §C). **It implements the
 ratified decisions, not this text** — if the Owner's wording differs, the code is

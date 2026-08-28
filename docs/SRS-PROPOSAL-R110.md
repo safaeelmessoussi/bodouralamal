@@ -5,10 +5,9 @@
 **The scheduling-type catalogue is seeded reference data an administrator
 manages, and an activity records which type it is.**
 
-**Status:** **PROPOSED — awaiting the Document Owner.** The catalogue's contents
-are already ratified (Owner, 2026-08-26: the five rows with their order and
-`حضور إجباري` column; OD-03 on عطلة). What is proposed here is the **normative
-wording**, because `docs/SRS.md` is the Document Owner's to edit.
+**Status:** **APPLIED — ratified by the Document Owner as SRS Revision 110 on 2026-08-30.**
+`docs/SRS.md` §0 now carries the normative text and is authoritative; this document is kept
+as the drafting record and must not be edited to diverge from it. The catalogue was amended by the Owner on 2026-08-28 (محاضرة → `class`; عطلة → the new `holiday` kind; نشاط added); that amendment is recorded in Revision 110(9).
 
 The implementation shipped with this proposal (NEW H). **It implements the
 ratified decisions, not this text** — if the Owner's wording differs, the code
