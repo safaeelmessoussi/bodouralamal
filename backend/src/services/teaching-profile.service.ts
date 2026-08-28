@@ -4,6 +4,7 @@ import type { Actor } from '../policies/actor.js';
 import * as scope from '../policies/branch-scope.js';
 import { firstOverlap } from '../policies/teaching-profile.js';
 import * as audit from '../repositories/audit.repository.js';
+import { assertStaffAccountsAvailable } from './staffing-integrity.service.js';
 
 /**
  * **The teaching profile (§E, R88) — planning data, never authority.**
@@ -216,6 +217,13 @@ export async function replaceTeachingProfile(
   assertNoOverlap(input.availability);
 
   await prisma.$transaction(async (tx) => {
+    // R111 — the preflight lookup above gives the ordinary missing-target 404,
+    // but it cannot govern the write: permanent account deletion may commit
+    // between that read and this transaction. Take the same User lock as
+    // deletion, then revalidate, so a stale profile save cannot recreate
+    // planning satellites after final de-identification.
+    await assertStaffAccountsAvailable(tx, [userId]);
+
     // Replaced whole: three `deleteMany`s and three inserts express *this is her
     // profile now*, where a diff would invite the half-applied state.
     await tx.teacherSubjectCapability.deleteMany({ where: { userId } });
@@ -307,6 +315,11 @@ export async function replaceOwnAvailability(
   assertNoOverlap(availability);
 
   await prisma.$transaction(async (tx) => {
+    // A still-valid access token is not permission to recreate availability
+    // after this account has been deleted. The governing User lock makes this
+    // self-service writer serialize with R111 deletion/de-identification.
+    await assertStaffAccountsAvailable(tx, [actor.userId]);
+
     // Replaced whole, like the administrative writer: *these are my ranges now*
     // is the statement being made, and a diff would invite a half-applied one.
     await tx.teacherAvailability.deleteMany({ where: { userId: actor.userId } });

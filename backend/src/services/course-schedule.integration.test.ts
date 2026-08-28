@@ -15,6 +15,7 @@ import {
   listScheduleSessions,
 } from "./course-schedule.service.js";
 import { runMaterialization } from "./session-materialize.service.js";
+import { deleteOwnAccount } from "./account-deletion.service.js";
 import {
   cancelSession,
   linkContent,
@@ -1144,6 +1145,44 @@ describe("Revision 43.4 — a Session snapshots its teaching assignment", () => 
     expect(overwrote?.staff?.join(",")).toContain(original);
   });
 
+  it("regenerates from the assignment effective on that Session, not every retained period", async () => {
+    const former = await person("الأستاذة المنتهية");
+    const current = await person("الأستاذة النافذة");
+    const { id } = await createCourseSchedule(
+      prisma,
+      superAdmin(),
+      baseInput({
+        staff: [
+          {
+            userId: former,
+            position: "teacher",
+            effectiveUntil: day("2026-06-15"),
+          },
+          {
+            userId: current,
+            position: "teacher",
+            effectiveFrom: day("2026-06-16"),
+          },
+        ],
+      }),
+      NOW,
+    );
+    const occurrence = await prisma.session.findFirstOrThrow({
+      where: { scheduleId: id, date: day("2026-06-30") },
+    });
+    // R111 permits this because the former assignment and every Session it
+    // staffed are historical at the actual current date.
+    await deleteOwnAccount(prisma, { userId: former });
+
+    await regenerateSessions(prisma, superAdmin(), [occurrence.id]);
+
+    const live = await prisma.sessionStaff.findMany({
+      where: { sessionId: occurrence.id, deletedAt: null },
+      select: { userId: true },
+    });
+    expect(live.map((person) => person.userId)).toEqual([current]);
+  });
+
   it("a teacher may not regenerate — rewriting a taught class is not a teaching action", async () => {
     const { id } = await createCourseSchedule(
       prisma,
@@ -1564,6 +1603,52 @@ describe('SRS Revision 50 — "this session and all future sessions" splits the 
       include: { staff: true },
     });
     expect(session.staff.map((s) => s.userId)).toEqual([teacher]);
+  });
+
+  it("does not let an ended, deleted assignment block a later split or staff its successor", async () => {
+    const former = await person("الأستاذة السابقة");
+    const current = await person("الأستاذة الحالية");
+    const { id } = await createCourseSchedule(
+      prisma,
+      superAdmin(),
+      baseInput({
+        staff: [
+          {
+            userId: former,
+            position: "teacher",
+            effectiveUntil: day("2026-06-15"),
+          },
+          {
+            userId: current,
+            position: "teacher",
+            effectiveFrom: day("2026-06-16"),
+          },
+        ],
+      }),
+      NOW,
+    );
+    await deleteOwnAccount(prisma, { userId: former });
+
+    const result = await updateCourseSchedule(
+      prisma,
+      superAdmin(),
+      id,
+      {
+        version: 0,
+        roomId: roomB,
+        scope: "this_and_future",
+        fromDate: day("2026-08-01"),
+      },
+      NOW,
+    );
+
+    const successorSession = await prisma.session.findFirstOrThrow({
+      where: { scheduleId: result.successorId!, deletedAt: null },
+      include: { staff: { where: { deletedAt: null } } },
+    });
+    expect(successorSession.staff.map((person) => person.userId)).toEqual([
+      current,
+    ]);
   });
 
   it("refuses `this_and_future` with no from_date", async () => {

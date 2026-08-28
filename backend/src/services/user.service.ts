@@ -791,9 +791,22 @@ const ALL_ROLES = ['super_admin', 'admin', 'teacher', 'student', 'parent'] as co
  * *recovery*, not an outcome a back-office control may produce with one click.
  */
 async function assertNotLastSuperAdmin(
-  tx: Pick<PrismaClient, 'user'>,
+  tx: Prisma.TransactionClient,
   losingUserId: string,
 ): Promise<void> {
+  // The caller holds this User, so their own assignment cannot change between
+  // this cheap test and the guarded mutation.
+  const self = await tx.user.count({
+    where: {
+      id: losingUserId,
+      branchRoles: { some: { deletedAt: null, role: { name: 'super_admin' } } },
+    },
+  });
+  if (self === 0) return;
+
+  if (!(await users.lockRole(tx, 'super_admin'))) {
+    throw new Error('super_admin role is not configured');
+  }
   const remaining = await tx.user.count({
     where: {
       id: { not: losingUserId },
@@ -803,17 +816,9 @@ async function assertNotLastSuperAdmin(
     },
   });
   if (remaining === 0) {
-    const self = await tx.user.count({
-      where: {
-        id: losingUserId,
-        branchRoles: { some: { deletedAt: null, role: { name: 'super_admin' } } },
-      },
+    throw new AppError('STATE_CONFLICT', 'this is the last active Super Admin', {
+      reason: 'LAST_SUPER_ADMIN',
     });
-    if (self > 0) {
-      throw new AppError('STATE_CONFLICT', 'this is the last active Super Admin', {
-        reason: 'LAST_SUPER_ADMIN',
-      });
-    }
   }
 }
 

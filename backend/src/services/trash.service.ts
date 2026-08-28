@@ -6,6 +6,7 @@ import { assertFreshActive } from '../policies/freshness.policy.js';
 import * as audit from '../repositories/audit.repository.js';
 import { enqueue, JOB_QUEUES } from '../repositories/jobs.repository.js';
 import type { Actor } from '../policies/actor.js';
+import { assertStaffAccountsAvailable } from './staffing-integrity.service.js';
 
 /**
  * The Trash — **soft-deleted records, browsable; restorable where restoration is
@@ -43,7 +44,14 @@ import type { Actor } from '../policies/actor.js';
  */
 /** The delegate names on a transaction client — `keyof PrismaClient` would
  *  include `$connect` and friends, which are not models. */
-type ModelName = 'branch' | 'category' | 'subject' | 'room' | 'exam' | 'hijriMonthStart';
+type ModelName =
+  | 'branch'
+  | 'category'
+  | 'subject'
+  | 'room'
+  | 'exam'
+  | 'hijriMonthStart'
+  | 'user';
 
 /** Delegates a purge plan may destroy. Separate from `ModelName` because the
  *  restorable set and the purgeable set are different questions. */
@@ -107,6 +115,16 @@ const RESTORABLE: Record<
     children?: DeclaredChild[];
   }
 > = {
+  /**
+   * R111 is the deliberate exception to the older User-cascade warning below.
+   * Account soft deletion removes no relationship row: it stamps `deleted_at`,
+   * revokes sessions and keeps identity, roles, family and educational history
+   * intact during the three-day window. Clearing the tombstone is therefore a
+   * complete restoration; revoked credentials stay revoked and the person signs
+   * in again. Permanent de-identification removes the Trash row transactionally,
+   * so this path can never reconstruct an already-erased identity.
+   */
+  User: { model: 'user' },
   // No parent: nothing above them can be missing.
   Branch: { model: 'branch' },
   Category: { model: 'category' },
@@ -137,7 +155,6 @@ const RESTORABLE: Record<
  * so renaming one changes what an administrator is told about their own data.
  */
 const BLOCKED_REASON: Record<string, string> = {
-  User: 'CASCADE_RELATIONSHIPS',
   Level: 'CASCADE_CHILDREN',
   AdministrativeGroup: 'CASCADE_CHILDREN',
   TeachingGroup: 'CASCADE_CHILDREN',
@@ -343,7 +360,7 @@ export interface TrashFilters extends PageParams {
 function labelOf(snapshot: unknown): string | null {
   if (typeof snapshot !== 'object' || snapshot === null) return null;
   const row = snapshot as Record<string, unknown>;
-  for (const key of ['name', 'nameArabic', 'title', 'label']) {
+  for (const key of ['name', 'nameArabic', 'name_arabic', 'title', 'label']) {
     const value = row[key];
     if (typeof value === 'string' && value.trim() !== '') return value;
   }
@@ -435,9 +452,9 @@ export async function listTrash(
  * Restores one soft-deleted record — **only where §7's cascade problem does not
  * arise**.
  *
- * The refusal is deliberately loud rather than a hidden no-op: a client that
- * asks to restore a `User` is asking for something this service cannot yet do
- * correctly, and answering `200` would be the silent breakage §7 warns about.
+ * The refusal is deliberately loud rather than a hidden no-op. R111's account
+ * deletion is restorable because its soft-delete phase removes no relationship
+ * rows; entity types whose deletion really cascades remain outside RESTORABLE.
  */
 export async function restoreEntry(
   prisma: PrismaClient,
@@ -512,6 +529,31 @@ export async function restoreEntry(
     // supposed: the staff were 4 ms early and a restored exam came back with
     // nobody supervising it.
     const deletedAt = row['deletedAt'] as Date;
+
+    /**
+     * Restoring a FUTURE exam revives an operational obligation, not merely
+     * history. An account may have been deleted after the exam was binned,
+     * because its ExamStaff rows were correctly tombstoned at that moment.
+     * Lock and re-check those people before revival so restore participates in
+     * the same R111 serialization as ordinary staffing writes. Past exam staff
+     * remain historical evidence and may still point at a de-identified User.
+     */
+    if (entry.targetEntity === 'Exam') {
+      const examDate = row['date'];
+      const today = new Date();
+      today.setUTCHours(0, 0, 0, 0);
+      if (examDate instanceof Date && examDate >= today) {
+        const staff = await tx.examStaff.findMany({
+          where: { examId: entry.targetId, deletedAt: { gte: deletedAt } },
+          select: { userId: true },
+        });
+        await assertStaffAccountsAvailable(
+          tx,
+          staff.map((person) => person.userId),
+        );
+      }
+    }
+
     for (const child of plan.children ?? []) {
       const childDelegate = tx[child.model] as unknown as {
         updateMany: (a: unknown) => Promise<{ count: number }>;

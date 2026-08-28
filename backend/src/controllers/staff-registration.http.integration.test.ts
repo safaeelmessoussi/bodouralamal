@@ -2,8 +2,11 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { issueAccessToken } from "../lib/access-token.js";
 import { loadConfig } from "../lib/config.js";
-import { issueOnboardingToken } from "../lib/onboarding-token.js";
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from "../lib/prisma.js";
+import {
+  clearOwnedConsumedTokens,
+  ownedOnboardingTokens,
+} from "../test-support/consumed-tokens.js";
 import { httpCall } from "../test-support/http-client.js";
 import {
   clearPlacement,
@@ -32,6 +35,8 @@ import {
  */
 const config = loadConfig();
 const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);
+const suiteTokens = ownedOnboardingTokens();
+const issueOnboardingToken = suiteTokens.issue;
 const BASE = `${config.PUBLIC_BASE_URL}/api/v1`;
 const TAG = "[http-staffreg-test]";
 /**
@@ -140,6 +145,10 @@ async function apply(requestedRole?: "teacher"): Promise<string> {
 }
 
 async function clear(): Promise<void> {
+  // A consumed onboarding token is the replay boundary, not anonymous scratch
+  // state. Delete only the exact random JTIs this suite issued; a production
+  // registration can legitimately complete during the full sweep.
+  await clearOwnedConsumedTokens(prisma, suiteTokens);
   const users = await prisma.user.findMany({
     where: { nameArabic: { startsWith: TAG } },
     select: { id: true },

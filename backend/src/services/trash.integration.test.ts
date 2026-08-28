@@ -9,10 +9,9 @@ import { listTrash, purgeEntry, restoreEntry } from "./trash.service.js";
  * The Trash (§7, TD-5, BR-15, Revision 52).
  *
  * The property that matters is **not** "a list came back" — it is that the
- * screen can never offer a restore that would half-restore a person. §7:
- * *"a User restored without their links, enrollments and roles is a
- * half-restored, silently broken account."* So the tests below are mostly about
- * what the service REFUSES.
+ * screen can never offer a restore that would lose relationship state. R111's
+ * account soft delete is the deliberate safe exception: it removes none of the
+ * links, enrolments, roles or identities during its three-day window.
  */
 const config = loadConfig();
 const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);
@@ -69,6 +68,8 @@ async function clear(): Promise<void> {
   await prisma.room.deleteMany({ where: { name: { startsWith: TAG } } });
   await prisma.branch.deleteMany({ where: { name: { startsWith: TAG } } });
   await prisma.subject.deleteMany({ where: { name: { startsWith: TAG } } });
+  await prisma.level.deleteMany({ where: { name: { startsWith: TAG } } });
+  await prisma.category.deleteMany({ where: { name: { startsWith: TAG } } });
   await prisma.user.deleteMany({ where: { id: { in: ids } } });
 }
 
@@ -118,7 +119,7 @@ describe("what the list says about each row", () => {
     expect(row.purgeAfter).toBeInstanceOf(Date);
   });
 
-  it("marks a guarded entity RESTORABLE and a cascading one not, with a reason", async () => {
+  it("marks R111 accounts RESTORABLE and a cascading entity not, with a reason", async () => {
     // This is the whole design: the capability is a server decision, per entity
     // type, because a client cannot know which deletions cascade.
     const subject = await prisma.subject.create({
@@ -133,9 +134,9 @@ describe("what the list says about each row", () => {
 
     expect(subjectRow.restorable).toBe(true);
     expect(subjectRow.restoreBlockedReason).toBeNull();
-    expect(userRow.restorable).toBe(false);
-    // §7's hazard, named: the cascade removes six relationship types.
-    expect(userRow.restoreBlockedReason).toBe("CASCADE_RELATIONSHIPS");
+    expect(userRow.label).toContain("شخص");
+    expect(userRow.restorable).toBe(true);
+    expect(userRow.restoreBlockedReason).toBeNull();
   });
 
   it("filters by entity type", async () => {
@@ -179,14 +180,15 @@ describe("restore is offered only where it is COMPLETE (§7)", () => {
     ).toBe(1);
   });
 
-  it("REFUSES a cascading entity loudly rather than half-restoring it", async () => {
-    // Answering 200 here would be exactly the silent breakage §7 warns about.
-    const entryId = await bin("User", actorUserId, {
-      nameArabic: `${TAG} شخص`,
+  it("REFUSES a genuinely cascading entity loudly rather than half-restoring it", async () => {
+    const category = await prisma.category.create({ data: { name: `${TAG} فئة` } });
+    const level = await prisma.level.create({
+      data: { name: `${TAG} مستوى`, categoryId: category.id, deletedAt: new Date() },
     });
+    const entryId = await bin("Level", level.id, { name: level.name });
     const e = await failure(() => restoreEntry(prisma, superAdmin(), entryId));
     expect(e.code).toBe("STATE_CONFLICT");
-    expect(e.details?.["reason"]).toBe("CASCADE_RELATIONSHIPS");
+    expect(e.details?.["reason"]).toBe("CASCADE_CHILDREN");
   });
 
   it("will not restore a child into a deleted parent", async () => {

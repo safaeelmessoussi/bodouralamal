@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { actorFor } from "../test-support/actor.js";
 
@@ -22,7 +24,7 @@ import { readProfile, writeProfile } from "./social-profile.service.js";
  */
 const config = loadConfig();
 const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);
-const TAG = "[social-test]";
+const TAG = `[social-test:${randomUUID()}]`;
 
 let levelId: string;
 

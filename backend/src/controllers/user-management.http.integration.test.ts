@@ -1,9 +1,26 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { randomUUID } from "node:crypto";
+
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { issueAccessToken } from "../lib/access-token.js";
 import { loadConfig } from "../lib/config.js";
 import { createPrismaClient, TEST_CONNECTION_LIMIT } from "../lib/prisma.js";
+import { createStorageClients } from "../lib/storage.js";
 import { issueNewSession } from "../services/refresh-token.service.js";
+import {
+  DELETED_ACCOUNT_NAME,
+  deIdentifyAccount,
+  deleteOwnAccount,
+  purgeUserAccount,
+} from "../services/account-deletion.service.js";
+import { setEventStaff } from "../services/event.service.js";
+import { initiateUpload } from "../services/content.service.js";
+import { notifyEventStaffAssigned } from "../services/notification.service.js";
+import { writeProfile } from "../services/social-profile.service.js";
+import { replaceTeachingProfile } from "../services/teaching-profile.service.js";
+import { restoreEntry } from "../services/trash.service.js";
+import * as userRepository from "../repositories/user.repository.js";
+import { actorFor } from "../test-support/actor.js";
 import { httpCall } from "../test-support/http-client.js";
 
 /**
@@ -19,7 +36,7 @@ import { httpCall } from "../test-support/http-client.js";
 const config = loadConfig();
 const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);
 const BASE = `${config.PUBLIC_BASE_URL}/api/v1`;
-const TAG = "[http-usermgmt-test]";
+const TAG = `[http-usermgmt-test:${randomUUID()}]`;
 
 interface Res {
   status: number;
@@ -69,6 +86,9 @@ let spareSuperAdminId: string;
  * An id never changes. The name was only ever a convenience.
  */
 const createdUserIds: string[] = [];
+/** Stable email-lock rows deliberately outlive ownership; tests record the
+ * addresses they introduce so teardown removes only their own infrastructure. */
+const createdEmails: string[] = [];
 
 async function makeUser(
   label: string,
@@ -110,7 +130,10 @@ async function grant(
  * the deletion refusal, not schedule creation: a fixture that had to satisfy the
  * scheduling validators would fail for reasons that are not this test's subject.
  */
-async function liveScheduleStaffedBy(userId: string): Promise<string> {
+async function liveScheduleStaffedBy(
+  userId: string,
+  bounds: { scheduleUntil?: Date; staffUntil?: Date } = {},
+): Promise<string> {
   const subject = await prisma.subject.findFirstOrThrow({ where: { deletedAt: null } });
   const level = await prisma.level.findFirstOrThrow({ where: { deletedAt: null } });
   // AcademicYear carries no soft-delete column — it is a period, not a record
@@ -128,12 +151,43 @@ async function liveScheduleStaffedBy(userId: string): Promise<string> {
       weekdays: ["monday"],
       startTime: new Date("1970-01-01T09:00:00Z"),
       endTime: new Date("1970-01-01T10:00:00Z"),
+      ...(bounds.scheduleUntil === undefined
+        ? {}
+        : { effectiveUntil: bounds.scheduleUntil }),
     },
   });
   await prisma.courseScheduleStaff.create({
-    data: { scheduleId: schedule.id, userId, position: "teacher" },
+    data: {
+      scheduleId: schedule.id,
+      userId,
+      position: "teacher",
+      ...(bounds.staffUntil === undefined ? {} : { effectiveUntil: bounds.staffUntil }),
+    },
   });
   return schedule.id;
+}
+
+async function responsibleForEvent(userId: string, startDate: Date): Promise<string> {
+  const event = await prisma.event.create({
+    data: {
+      title: `${TAG} نشاط مسؤولية`,
+      visibility: "hidden",
+      startDate,
+      recurrenceType: "none",
+    },
+  });
+  await prisma.eventStaff.create({
+    data: { eventId: event.id, userId, position: "responsible" },
+  });
+  return event.id;
+}
+
+function deferred(): { promise: Promise<void>; resolve: () => void } {
+  let resolve!: () => void;
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
 }
 
 async function clear(): Promise<void> {
@@ -152,6 +206,15 @@ async function clear(): Promise<void> {
     // the record of what happened, so it never vanishes beneath a person. The
     // R79 suite creates one, so the teardown unwinds it first.
     await prisma.enrollment.deleteMany({ where: { studentId: { in: ids } } });
+    await prisma.familyLink.deleteMany({
+      where: { OR: [{ parentId: { in: ids } }, { studentId: { in: ids } }] },
+    });
+    await prisma.rateLimitCounter.deleteMany({ where: { userId: { in: ids } } });
+    await prisma.notification.deleteMany({ where: { userId: { in: ids } } });
+    await prisma.studentSocialProfile.deleteMany({ where: { studentId: { in: ids } } });
+    await prisma.teacherAvailability.deleteMany({ where: { userId: { in: ids } } });
+    await prisma.teacherSubjectCapability.deleteMany({ where: { userId: { in: ids } } });
+    await prisma.teacherCategoryCapability.deleteMany({ where: { userId: { in: ids } } });
     await prisma.refreshToken.deleteMany({ where: { userId: { in: ids } } });
     // **R111's own residue** (2026-08-28). Deleting an account writes a Trash
     // row, revokes sessions and staffs nothing — but the BLOCK fixture staffs a
@@ -162,16 +225,19 @@ async function clear(): Promise<void> {
       where: { OR: [{ deletedById: { in: ids } }, { targetId: { in: ids } }] },
     });
     await prisma.refreshSession.deleteMany({ where: { userId: { in: ids } } });
+    await prisma.eventStaff.deleteMany({ where: { userId: { in: ids } } });
     await prisma.courseScheduleStaff.deleteMany({ where: { userId: { in: ids } } });
     await prisma.userBranchRole.deleteMany({ where: { userId: { in: ids } } });
     await prisma.userIdentity.deleteMany({ where: { userId: { in: ids } } });
     await prisma.user.deleteMany({ where: { id: { in: ids } } });
   }
+  if (createdEmails.length > 0) {
+    await prisma.normalizedEmailLock.deleteMany({ where: { email: { in: createdEmails } } });
+  }
   await prisma.recurringCourseSchedule.deleteMany({
     where: { title: { startsWith: TAG } },
   });
-  if (ids.length > 0) {
-  }
+  await prisma.event.deleteMany({ where: { title: { startsWith: TAG } } });
   await prisma.enrollment.deleteMany({
     where: { level: { name: { startsWith: TAG } } },
   });
@@ -1105,6 +1171,37 @@ describe("R111 — deleting an account keeps the record", () => {
     expect(days).toBe(3);
   });
 
+  it("can restore the SAME complete account during the three-day window", async () => {
+    const id = await makeUser("قابلة للاسترجاع", "active", "female", true);
+    await grant(id, "student", branchId);
+    const email = `restore-${id}@example.test`;
+    createdEmails.push(email);
+    await prisma.normalizedEmailLock.createMany({ data: [{ email }], skipDuplicates: true });
+    await prisma.userIdentity.create({
+      data: {
+        userId: id,
+        provider: "google",
+        providerSubjectId: `restore-${id}`,
+        email,
+      },
+    });
+
+    await call("DELETE", "/profile", bearer(id, [{ role: "student", branches: [branchId] }]));
+    const entry = await prisma.trash.findFirstOrThrow({
+      where: { targetEntity: "User", targetId: id },
+    });
+
+    const restored = await call("POST", `/admin/trash/${entry.id}/restore`, superAdmin);
+    expect(restored.status).toBe(200);
+
+    const after = await prisma.user.findUniqueOrThrow({ where: { id } });
+    expect(after.deletedAt).toBeNull();
+    expect(after.nameArabic).toContain("قابلة للاسترجاع");
+    expect(await prisma.userIdentity.count({ where: { userId: id } })).toBe(1);
+    expect(await prisma.userBranchRole.count({ where: { userId: id } })).toBe(1);
+    expect(await prisma.trash.count({ where: { id: entry.id } })).toBe(0);
+  });
+
   it("signs the person out at once — not when the window expires", async () => {
     const id = await makeUser("مسجَّلة الخروج", "active", "female", false);
     await grant(id, "student", branchId);
@@ -1143,6 +1240,52 @@ describe("R111 — deleting an account keeps the record", () => {
     expect(after?.deletedAt).toBeNull();
   });
 
+  it("uses one database row to serialize platform-wide last-Super-Admin checks", async () => {
+    /**
+     * Locking only the target User cannot protect a platform-wide count: two
+     * different administrators mean two different User rows. Prove that the
+     * shared Role row really conflicts in PostgreSQL rather than accepting a
+     * comment or a mocked repository call as evidence.
+     */
+    const holderClient = createPrismaClient(config.DATABASE_URL, 1);
+    const contenderClient = createPrismaClient(config.DATABASE_URL, 1);
+    const held = deferred();
+    const release = deferred();
+    let holder: Promise<void> | undefined;
+
+    try {
+      holder = holderClient.$transaction(async (tx) => {
+        expect(await userRepository.lockRole(tx, "super_admin")).toBe(true);
+        held.resolve();
+        await release.promise;
+      });
+      await held.promise;
+
+      await expect(
+        contenderClient.$transaction(async (tx) => {
+          // Static test-only SQL: fail promptly instead of making a timing
+          // assertion about how long a blocked lock should wait.
+          await tx.$executeRawUnsafe("SET LOCAL lock_timeout = '100ms'");
+          await userRepository.lockRole(tx, "super_admin");
+        }),
+      ).rejects.toThrow();
+
+      release.resolve();
+      await holder;
+
+      await contenderClient.$transaction(async (tx) => {
+        expect(await userRepository.lockRole(tx, "super_admin")).toBe(true);
+      });
+    } finally {
+      release.resolve();
+      await holder?.catch(() => undefined);
+      await Promise.allSettled([
+        holderClient.$disconnect(),
+        contenderClient.$disconnect(),
+      ]);
+    }
+  });
+
   it("BLOCKS a مؤطِّرة with a live class, and names what to reassign", async () => {
     const teacher = await makeUser("مؤطرة بحصص", "active", "female", false);
     await grant(teacher, "teacher", branchId);
@@ -1178,6 +1321,137 @@ describe("R111 — deleting an account keeps the record", () => {
     expect(retry.status).toBe(204);
   });
 
+  it("does not call an ended effective-dated assignment a live responsibility", async () => {
+    const teacher = await makeUser("مؤطرة انتهى تكليفها", "active", "female", false);
+    await grant(teacher, "teacher", branchId);
+    const yesterday = new Date();
+    yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+    await liveScheduleStaffedBy(teacher, {
+      scheduleUntil: yesterday,
+      staffUntil: yesterday,
+    });
+
+    const res = await call(
+      "DELETE",
+      "/profile",
+      bearer(teacher, [{ role: "teacher", branches: [branchId] }]),
+    );
+    expect(res.status).toBe(204);
+  });
+
+  it("uses Event.start_date: future responsibility blocks and past history survives", async () => {
+    const futureOwner = await makeUser("مسؤولة نشاط قادم", "active", "female", false);
+    await grant(futureOwner, "teacher", branchId);
+    const tomorrow = new Date();
+    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+    const futureEvent = await responsibleForEvent(futureOwner, tomorrow);
+
+    const blocked = await call(
+      "DELETE",
+      "/profile",
+      bearer(futureOwner, [{ role: "teacher", branches: [branchId] }]),
+    );
+    expect(blocked.status).toBe(409);
+    expect(blocked.body.error?.details?.["blocked_by"]).toMatchObject({
+      responsible_for_events: 1,
+    });
+
+    await prisma.eventStaff.updateMany({
+      where: { eventId: futureEvent, userId: futureOwner },
+      data: { deletedAt: new Date() },
+    });
+    expect(
+      (
+        await call(
+          "DELETE",
+          "/profile",
+          bearer(futureOwner, [{ role: "teacher", branches: [branchId] }]),
+        )
+      ).status,
+    ).toBe(204);
+
+    const pastOwner = await makeUser("مسؤولة نشاط سابق", "active", "female", false);
+    await grant(pastOwner, "teacher", branchId);
+    const yesterday = new Date();
+    yesterday.setUTCDate(yesterday.getUTCDate() - 1);
+    const pastEvent = await responsibleForEvent(pastOwner, yesterday);
+    expect(
+      (
+        await call(
+          "DELETE",
+          "/profile",
+          bearer(pastOwner, [{ role: "teacher", branches: [branchId] }]),
+        )
+      ).status,
+    ).toBe(204);
+    expect(
+      await prisma.eventStaff.count({ where: { eventId: pastEvent, userId: pastOwner } }),
+    ).toBe(1);
+  });
+
+  it("serializes a future staffing assignment against account deletion", async () => {
+    const victim = await makeUser("سباق التكليف والحذف", "active", "female", false);
+    await grant(victim, "teacher", branchId);
+    const tomorrow = new Date();
+    tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+    const event = await prisma.event.create({
+      data: {
+        title: `${TAG} سباق مسؤولية`,
+        visibility: "hidden",
+        startDate: tomorrow,
+        recurrenceType: "none",
+      },
+    });
+
+    const bothAtBoundary = deferred();
+    let arrivals = 0;
+    const realLock = userRepository.lockUser;
+    const lock = vi.spyOn(userRepository, "lockUser").mockImplementation(async (tx, id) => {
+      if (id === victim && arrivals < 2) {
+        arrivals += 1;
+        if (arrivals === 2) bothAtBoundary.resolve();
+        await bothAtBoundary.promise;
+      }
+      return realLock(tx, id);
+    });
+
+    try {
+      const outcomes = await Promise.allSettled([
+        deleteOwnAccount(prisma, {
+          userId: victim,
+          activeRole: "teacher",
+        }),
+        setEventStaff(
+          prisma,
+          {
+            userId: superAdminId,
+            roles: ["super_admin"],
+            roleScopes: [{ role: "super_admin", branches: null }],
+            accountStatus: "active",
+            activeRole: "super_admin",
+          } as never,
+          event.id,
+          [{ userId: victim, position: "responsible" }],
+        ),
+      ]);
+      expect(outcomes.filter((outcome) => outcome.status === "fulfilled")).toHaveLength(1);
+      expect(outcomes.filter((outcome) => outcome.status === "rejected")).toHaveLength(1);
+
+      const user = await prisma.user.findUniqueOrThrow({ where: { id: victim } });
+      const liveStaff = await prisma.eventStaff.count({
+        where: { eventId: event.id, userId: victim, deletedAt: null },
+      });
+      // Both valid serial orders converge on one of these states. The forbidden
+      // state — deleted with a live future responsibility — is unreachable.
+      expect(
+        (user.deletedAt !== null && liveStaff === 0) ||
+          (user.deletedAt === null && liveStaff === 1),
+      ).toBe(true);
+    } finally {
+      lock.mockRestore();
+    }
+  });
+
   it("refuses a branch Admin the deletion of somebody else's account", async () => {
     const victim = await makeUser("هدف الحذف", "active", "female", false);
     const res = await call("DELETE", `/admin/users/${victim}`, branchAdmin);
@@ -1203,11 +1477,52 @@ describe("R111 — deleting an account keeps the record", () => {
 
   it("permanent delete DE-IDENTIFIES and preserves — it removes no row", async () => {
     /**
-     * The assertion this whole design exists for. A grade is filed against the
-     * account; after a permanent delete the person is unidentifiable and **the
-     * grade is still there, still pointing at the same row**.
+     * The assertion this whole design exists for. A safeguarding relationship
+     * is filed against the account; after a permanent delete the person is
+     * unidentifiable and the relationship still points at the same tombstone.
      */
     const victim = await makeUser("محذوفة نهائياً", "active", "female", false);
+    const parent = await makeUser("ولي سجل محفوظ", "active", "female", false);
+    const email = `erase-${victim}@example.test`;
+    const intendedCategory = await prisma.category.findFirstOrThrow({});
+    createdEmails.push(email);
+    await prisma.user.update({
+      where: { id: victim },
+      data: {
+        firstNameArabic: "اسم شخصي سري",
+        lastNameArabic: "اسم عائلي سري",
+        nameFrench: "Nom Secret",
+        firstNameFrench: "Nom",
+        lastNameFrench: "Secret",
+        nickname: "كنية سرية",
+        publicDisplayName: "اسم منشور قديم",
+        phone: "0600000000",
+        notes: "ملاحظة شخصية سرية",
+        referenceCode: "BA-TEST2",
+        schoolingStage: "post_secondary",
+        intendedBranchId: branchId,
+        intendedCategoryId: intendedCategory.id,
+        requestedRole: "teacher",
+        preProvisionedEmail: email,
+      },
+    });
+    await grant(victim, "student", branchId);
+    await prisma.normalizedEmailLock.createMany({ data: [{ email }], skipDuplicates: true });
+    await prisma.userIdentity.create({
+      data: {
+        userId: victim,
+        provider: "google",
+        providerSubjectId: `erase-${victim}`,
+        email,
+      },
+    });
+    await issueNewSession(prisma, victim);
+    await prisma.rateLimitCounter.create({
+      data: { userId: victim, bucket: "upload.initiate", windowStart: new Date(0), count: 1 },
+    });
+    const familyLink = await prisma.familyLink.create({
+      data: { parentId: parent, studentId: victim, status: "approved", relationshipType: "mother" },
+    });
     const before = await prisma.user.findUniqueOrThrow({ where: { id: victim } });
 
     const res = await call("DELETE", `/admin/users/${victim}?permanent=true`, superAdmin);
@@ -1216,8 +1531,26 @@ describe("R111 — deleting an account keeps the record", () => {
     const after = await prisma.user.findUnique({ where: { id: victim } });
     expect(after).not.toBeNull();
     expect(after?.nameArabic).toBe("حساب محذوف");
-    expect(after?.phone).toBeNull();
-    expect(after?.preProvisionedEmail).toBeNull();
+    for (const value of [
+      after?.firstNameArabic,
+      after?.lastNameArabic,
+      after?.nameFrench,
+      after?.firstNameFrench,
+      after?.lastNameFrench,
+      after?.nickname,
+      after?.publicDisplayName,
+      after?.phone,
+      after?.notes,
+      after?.referenceCode,
+      after?.schoolingStage,
+      after?.intendedBranchId,
+      after?.intendedCategoryId,
+      after?.requestedRole,
+      after?.preProvisionedEmail,
+    ]) {
+      expect(value).toBeNull();
+    }
+    expect(after?.qrRef).not.toBe(before.qrRef);
     /**
      * **The TD-10 search shadows no longer carry the original.**
      *
@@ -1237,6 +1570,25 @@ describe("R111 — deleting an account keeps the record", () => {
     // Credentials are gone, which is what lets the identity register again.
     expect(await prisma.userIdentity.count({ where: { userId: victim } })).toBe(0);
     expect(await prisma.userBranchRole.count({ where: { userId: victim } })).toBe(0);
+    expect(await prisma.refreshToken.count({ where: { userId: victim } })).toBe(0);
+    expect(await prisma.refreshSession.count({ where: { userId: victim } })).toBe(0);
+    expect(await prisma.rateLimitCounter.count({ where: { userId: victim } })).toBe(0);
+    // The stable lock carries no owner and remains to serialize the next
+    // claimant. The two ownership channels above are what release the address.
+    expect(await prisma.normalizedEmailLock.count({ where: { email } })).toBe(1);
+    const reclaimed = await call("POST", "/admin/users", superAdmin, {
+      name_arabic: `${TAG} صاحبة بريد جديد`,
+      email,
+      sex: "female",
+    });
+    expect(reclaimed.status).toBe(201);
+    // Safeguarding/history survives and still points at the tombstone.
+    expect(await prisma.familyLink.count({ where: { id: familyLink.id } })).toBe(1);
+    // The recoverable snapshot held the original PII. It must disappear in the
+    // same transaction as de-identification or the erasure is only cosmetic.
+    expect(
+      await prisma.trash.count({ where: { targetEntity: "User", targetId: victim } }),
+    ).toBe(0);
   });
 
   it("is idempotent — running the permanent delete twice changes nothing", async () => {
@@ -1245,10 +1597,262 @@ describe("R111 — deleting an account keeps the record", () => {
     const victim = await makeUser("مكرَّرة", "active", "female", false);
     await call("DELETE", `/admin/users/${victim}?permanent=true`, superAdmin);
     const first = await prisma.user.findUniqueOrThrow({ where: { id: victim } });
+    const firstAudits = await prisma.auditLog.count({
+      where: { actionType: "user.deidentify", targetId: victim },
+    });
     const res = await call("DELETE", `/admin/users/${victim}?permanent=true`, superAdmin);
     expect(res.status).toBe(204);
     const second = await prisma.user.findUniqueOrThrow({ where: { id: victim } });
     expect(second.nameArabic).toBe(first.nameArabic);
     expect(second.accountStatus).toBe(first.accountStatus);
+    expect(second.qrRef).toBe(first.qrRef);
+    expect(
+      await prisma.auditLog.count({
+        where: { actionType: "user.deidentify", targetId: victim },
+      }),
+    ).toBe(firstAudits);
+  });
+
+  it("rotates the QR even when the person's real name already equals the tombstone label", async () => {
+    const row = await prisma.user.create({
+      data: {
+        nameArabic: DELETED_ACCOUNT_NAME,
+        sex: "female",
+        accountStatus: "active",
+      },
+    });
+    createdUserIds.push(row.id);
+
+    const res = await call(
+      "DELETE",
+      `/admin/users/${row.id}?permanent=true`,
+      superAdmin,
+    );
+    expect(res.status).toBe(204);
+    expect(
+      (await prisma.user.findUniqueOrThrow({ where: { id: row.id } })).qrRef,
+    ).not.toBe(row.qrRef);
+  });
+
+  it("a purge that loses to Trash restoration refuses instead of erasing the restored account", async () => {
+    const victim = await makeUser("سباق الاسترجاع", "active", "female", false);
+    await call("DELETE", `/admin/users/${victim}`, superAdmin);
+    const entry = await prisma.trash.findFirstOrThrow({
+      where: { targetEntity: "User", targetId: victim },
+      orderBy: { deletedAt: "desc" },
+    });
+    const reachedUserLock = deferred();
+    const allowPurgeToContinue = deferred();
+    const realLock = userRepository.lockUser;
+    const lock = vi.spyOn(userRepository, "lockUser").mockImplementation(
+      async (tx, id) => {
+        if (id === victim) {
+          reachedUserLock.resolve();
+          await allowPurgeToContinue.promise;
+        }
+        return realLock(tx, id);
+      },
+    );
+
+    try {
+      const purge = deIdentifyAccount(
+        prisma,
+        { userId: superAdminId, activeRole: "super_admin" },
+        victim,
+      );
+      await reachedUserLock.promise;
+      await restoreEntry(prisma, await actorFor(prisma, superAdminId), entry.id);
+      allowPurgeToContinue.resolve();
+
+      await expect(purge).rejects.toMatchObject({
+        code: "STATE_CONFLICT",
+        details: { reason: "NOT_DELETED" },
+      });
+      const restored = await prisma.user.findUniqueOrThrow({
+        where: { id: victim },
+      });
+      expect(restored.deletedAt).toBeNull();
+      expect(restored.nameArabic).toContain("سباق الاسترجاع");
+    } finally {
+      allowPurgeToContinue.resolve();
+      lock.mockRestore();
+    }
+  });
+
+  it("serializes teaching-profile writes against final de-identification", async () => {
+    const victim = await makeUser("سباق ملف التخطيط", "active", "female", false);
+    const boundary = deferred();
+    let arrivals = 0;
+    const realLock = userRepository.lockUser;
+    const lock = vi.spyOn(userRepository, "lockUser").mockImplementation(async (tx, id) => {
+      if (id === victim && arrivals < 2) {
+        arrivals += 1;
+        if (arrivals === 2) boundary.resolve();
+        await boundary.promise;
+      }
+      return realLock(tx, id);
+    });
+
+    try {
+      const [purge] = await Promise.allSettled([
+        purgeUserAccount(
+          prisma,
+          { userId: superAdminId, activeRole: "super_admin" },
+          victim,
+        ),
+        replaceTeachingProfile(
+          prisma,
+          await actorFor(prisma, superAdminId),
+          victim,
+          {
+            subjectIds: [],
+            categoryIds: [],
+            availability: [{ weekday: "monday", startTime: "09:00", endTime: "10:00" }],
+          },
+        ),
+      ]);
+      expect(purge.status).toBe("fulfilled");
+      expect(
+        await prisma.teacherAvailability.count({ where: { userId: victim } }),
+      ).toBe(0);
+    } finally {
+      boundary.resolve();
+      lock.mockRestore();
+    }
+  });
+
+  it("serializes safeguarding-profile writes against final de-identification", async () => {
+    const victim = await makeUser("سباق ملف اجتماعي", "active", "female", true);
+    const boundary = deferred();
+    let arrivals = 0;
+    const realLock = userRepository.lockUser;
+    const lock = vi.spyOn(userRepository, "lockUser").mockImplementation(async (tx, id) => {
+      if (id === victim && arrivals < 2) {
+        arrivals += 1;
+        if (arrivals === 2) boundary.resolve();
+        await boundary.promise;
+      }
+      return realLock(tx, id);
+    });
+
+    try {
+      const [purge] = await Promise.allSettled([
+        purgeUserAccount(
+          prisma,
+          { userId: superAdminId, activeRole: "super_admin" },
+          victim,
+        ),
+        writeProfile(prisma, await actorFor(prisma, superAdminId), victim, {
+          healthCondition: "بيانات يجب ألا تعود",
+        }),
+      ]);
+      expect(purge.status).toBe("fulfilled");
+      expect(
+        await prisma.studentSocialProfile.count({ where: { studentId: victim } }),
+      ).toBe(0);
+    } finally {
+      boundary.resolve();
+      lock.mockRestore();
+    }
+  });
+
+  it("serializes notification delivery against final de-identification", async () => {
+    const victim = await makeUser("سباق صندوق الإشعار", "active", "female", false);
+    const event = await prisma.event.create({
+      data: {
+        title: `${TAG} نشاط إشعار قديم`,
+        visibility: "public",
+        startDate: new Date("2025-01-01T00:00:00.000Z"),
+        recurrenceType: "none",
+      },
+    });
+    const boundary = deferred();
+    let arrivals = 0;
+    const realLock = userRepository.lockUser;
+    const lock = vi.spyOn(userRepository, "lockUser").mockImplementation(async (tx, id) => {
+      if (id === victim && arrivals < 2) {
+        arrivals += 1;
+        if (arrivals === 2) boundary.resolve();
+        await boundary.promise;
+      }
+      return realLock(tx, id);
+    });
+
+    try {
+      const [purge] = await Promise.allSettled([
+        purgeUserAccount(
+          prisma,
+          { userId: superAdminId, activeRole: "super_admin" },
+          victim,
+        ),
+        prisma.$transaction((tx) =>
+          notifyEventStaffAssigned(tx, event.id, [victim], superAdminId),
+        ),
+      ]);
+      expect(purge.status).toBe("fulfilled");
+      expect(await prisma.notification.count({ where: { userId: victim } })).toBe(0);
+    } finally {
+      boundary.resolve();
+      lock.mockRestore();
+    }
+  });
+
+  it("serializes upload capabilities and quota satellites against final de-identification", async () => {
+    const victim = await makeUser("سباق صلاحية الرفع", "active", "female", false);
+    await grant(victim, "admin", branchId);
+    const curriculum = await prisma.levelSubject.findFirstOrThrow({
+      where: { level: { deletedAt: null }, subject: { deletedAt: null } },
+      select: { levelId: true, subjectId: true },
+    });
+    const year = await prisma.academicYear.findFirstOrThrow({ select: { id: true } });
+    const boundary = deferred();
+    let arrivals = 0;
+    const realLock = userRepository.lockUser;
+    const lock = vi.spyOn(userRepository, "lockUser").mockImplementation(async (tx, id) => {
+      if (id === victim && arrivals < 2) {
+        arrivals += 1;
+        if (arrivals === 2) boundary.resolve();
+        await boundary.promise;
+      }
+      return realLock(tx, id);
+    });
+
+    try {
+      const [purge] = await Promise.allSettled([
+        purgeUserAccount(
+          prisma,
+          { userId: superAdminId, activeRole: "super_admin" },
+          victim,
+        ),
+        initiateUpload(
+          prisma,
+          createStorageClients(config),
+          config.JWT_SIGNING_KEY,
+          {
+            userId: victim,
+            roles: ["admin"],
+            roleScopes: [{ role: "admin", branches: [branchId] }],
+            accountStatus: "active",
+            activeRole: "admin",
+          } as never,
+          {
+            filename: "r111-race.pdf",
+            size: 64,
+            mime: "application/pdf",
+            meta: {
+              levelId: curriculum.levelId,
+              subjectId: curriculum.subjectId,
+              academicYearId: year.id,
+              branchId,
+            },
+          },
+        ),
+      ]);
+      expect(purge.status).toBe("fulfilled");
+      expect(await prisma.rateLimitCounter.count({ where: { userId: victim } })).toBe(0);
+    } finally {
+      boundary.resolve();
+      lock.mockRestore();
+    }
   });
 });

@@ -9,6 +9,7 @@ import { updateWithVersion } from '../repositories/optimistic-lock.js';
 import * as trash from '../repositories/trash.repository.js';
 import type { Actor } from '../policies/actor.js';
 import { assertActivityType } from './scheduling-type.service.js';
+import { assertStaffAccountsAvailable } from './staffing-integrity.service.js';
 
 /**
  * Events — the exception/special-activity layer (SRS §4.4, §7, TD-2, TD-5, TD-11).
@@ -178,6 +179,10 @@ export async function createEvent(
     // R110 — checked before the row is written, so a bad type is a coded
     // refusal rather than a foreign-key violation surfacing as a 500.
     if (input.schedulingTypeId) await assertActivityType(tx, input.schedulingTypeId);
+
+    if (!isAdmin(actor) && isTeacher(actor)) {
+      await assertStaffAccountsAvailable(tx, [actor.userId]);
+    }
 
     const event = await tx.event.create({
       data: {
@@ -537,6 +542,11 @@ export async function setEventStaff(
         });
       }
     }
+
+    await assertStaffAccountsAvailable(
+      tx,
+      staff.map((person) => person.userId),
+    );
 
     const existing = await tx.eventStaff.findMany({ where: { eventId } });
     const wanted = new Map(staff.map((p) => [p.userId, p.position]));

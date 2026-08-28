@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { issueAccessToken } from "../lib/access-token.js";
@@ -22,7 +24,7 @@ import { requireMemorisationSubject } from "../test-support/quran-subject.js";
 const config = loadConfig();
 const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);
 const BASE = `${config.PUBLIC_BASE_URL}/api/v1`;
-const TAG = "[r88-profile-test]";
+const TAG = `[r88-profile-test:${randomUUID()}]`;
 
 interface Res {
   status: number;

@@ -71,6 +71,14 @@ duplicate concurrent runs.
 Post-MVP additions (`import.csv`, `export.csv`, `grade.recalculate`) join with their
 features.
 
+> **DOCUMENT OWNER ACTION REQUIRED — R111 catalog reconciliation.** The ratified R111 design
+> requires a durable, idempotent pg-boss de-identification after the three-day restoration
+> window, but TD-7 contains no account-purge row and the implementation has no such handler.
+> The interface must not pretend a scheduler exists: manual `?permanent=true` works, while an
+> untouched soft-deleted account remains recoverable and identifiable past `purge_after`.
+> Add the queue's normative name, trigger, payload and singleton rule to TD-7 before it is
+> implemented; registering an invented queue would violate §20.
+
 ## Runtime worker health
 
 `GET /healthz` keeps **queue infrastructure** and **application workers** as two

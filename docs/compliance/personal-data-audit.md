@@ -48,16 +48,26 @@ Verified against `prisma/schema.prisma` and the services that read it.
 | `nickname` | all | What a person is called | Yes | Optional | staff; self | Yes | Yes | No | **KEEP** |
 | `publicDisplayName` | all | Resolved public identity (§20 r21) | Yes | Derived | public | Yes | Yes | No | **KEEP** |
 | `phone` | adult/parent/staff | Contact | Yes | Optional | staff; self | Yes | **Should never be a child's** | No | **KEEP** — see G.2 |
-| `sex` | all | §4.4b sex-restricted Levels | Yes **[SRS]** | Optional | staff | Yes | Yes | **[CONFIRM]** | **KEEP** |
+| `qrRef` | all | Stable scannable person reference (R96) | Yes | Required | staff; self | Yes | Yes | External correlate | **KEEP while active; rotate at final de-identification** |
+| `referenceCode` | beneficiaries | Spoken short identifier (R62) | Yes | Optional | staff; self | Yes | Yes | External correlate | **KEEP while active; clear at final de-identification** |
+| `sex` | all | §4.4b sex-restricted Levels | Yes **[SRS]** | Required | staff | Yes | Yes | **[CONFIRM]** | **KEEP** |
 | `notes` | all | Free-text admin note | **No defined purpose** | Optional | staff | Yes | Yes | 2000 chars of anything | **LEGAL REVIEW** — see I.1 |
 | `preProvisionedEmail` | staff | Account claiming (§4.1b) | Yes | Optional | staff | Yes | No | No | **KEEP** |
 | `accountStatus` | all | TD-1 lifecycle | Yes | Required | staff; self | Yes | Yes | No | **KEEP** |
 | `intendedBranchId` | applicant | Routing an application (R39) | Yes | Optional | staff | Yes | Yes | No | **KEEP** |
+| `intendedCategoryId`, `schoolingStage`, `requestedRole` | applicant | Approval context | Yes | Optional | staff | Yes | Yes | No | **KEEP until decided; clear at final de-identification** |
 | `*Normalized` | all | Arabic search | Yes | Derived | server only | **No** | Yes | No | **KEEP** |
 
 **[CODE]** There is **no date of birth, no CIN/national ID, no photo field, and
 no geolocation** anywhere in the schema. That is a strong starting position and
 should be defended.
+
+**[CODE] R111 de-identification is an allow-list, not a display rename.** The preserved User
+tombstone keeps `id`, `sex`, lifecycle, beneficiary status and record age. It clears both
+composed and split names, contact/public identity, registration-request metadata, free-text
+notes, spoken/QR identifiers and every credential/planning satellite. Its recoverable Trash
+snapshot is deleted in that same transaction; otherwise the original PII would survive the
+operation in JSONB.
 
 ## A.2 `StudentSocialProfile` — the highest-risk table
 
@@ -358,8 +368,8 @@ how backup retention interacts with an erasure obligation.
 | # | Gap | Severity | Recommendation |
 |---|---|---|---|
 | **I.1** | `siblingsCount`, `fatherProfession`, `motherProfession` — **verified stored and returned, never read by any logic** **[CODE]**; plus `User.notes` free text collected about children | **High** | Delete the three; give `notes` a stated purpose or remove it from the child form |
-| **I.2** | **No automatic retention job runs.** `content.quarantine-purge` now processes transactionally committed exact replacement/deletion/manual-purge coordinates, but R59.4 keeps automatic destruction Owner-gated; `purge_after` is still written and never read **[CODE]** | **High** | Deliberate Super Admin purge is durable; automatic 90-day retention is documented and not in force |
-| **I.3** | **No privacy notice exists** in the product **[CODE]** | **High** | Required before R62 widens collection |
+| **I.2** | **No automatic retention job runs.** `content.quarantine-purge` processes exact obligations but R59.4 keeps age-based destruction Owner-gated; R111's separate three-day account de-identification is ratified but absent from TD-7 and from the worker **[CODE]** | **High** | Deliberate Super Admin account/content purge works; the Document Owner must add the account queue to TD-7 before implementation, and separately decide automatic content destruction |
+| **I.3** | Privacy and terms pages now exist and describe the implemented account-deletion boundary **[CODE]**; legal entity/registration/CNDP details remain visibly marked as required | **High** | Association/legal review must supply the marked launch details |
 | **I.4** | **No data-subject access/export path** | Medium | A parent cannot obtain their child's record |
 | **I.5** | Backup **retention** period unset — an erased record may survive in backups indefinitely | Medium | See H.4. The policy itself exists and is sound |
 | **I.6** | **No emergency contact** | Medium | Safeguarding gap (C) |

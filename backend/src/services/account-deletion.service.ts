@@ -1,7 +1,10 @@
+import { randomUUID } from 'node:crypto';
+
 import type { Prisma, PrismaClient } from '../generated/prisma/client.js';
 import { RefreshRevokedReason } from '../generated/prisma/enums.js';
 import { AppError } from '../lib/errors.js';
 import * as audit from '../repositories/audit.repository.js';
+import * as users from '../repositories/user.repository.js';
 import { assertFreshActive } from '../policies/freshness.policy.js';
 import { revokeAllSessions } from './refresh-token.service.js';
 import { ACCOUNT_PURGE_WINDOW_DAYS, snapshot } from '../repositories/trash.repository.js';
@@ -101,7 +104,11 @@ export async function assertNoLiveResponsibilities(
 
   const [scheduleRows, sessionRows, eventRows, examRows] = await Promise.all([
     tx.courseScheduleStaff.findMany({
-      where: { userId, deletedAt: null },
+      where: {
+        userId,
+        deletedAt: null,
+        OR: [{ effectiveUntil: null }, { effectiveUntil: { gte: today } }],
+      },
       select: { scheduleId: true },
     }),
     tx.sessionStaff.findMany({
@@ -125,13 +132,32 @@ export async function assertNoLiveResponsibilities(
     // A recurring class she teaches. Bounded by the schedule's own life rather
     // than by a date: a live schedule with no end is precisely the blocking case.
     liveCount([...new Set(scheduleRows.map((r) => r.scheduleId))], (ids) =>
-      tx.recurringCourseSchedule.count({ where: { id: { in: ids }, deletedAt: null } }),
+      tx.recurringCourseSchedule.count({
+        where: {
+          id: { in: ids },
+          deletedAt: null,
+          OR: [{ effectiveUntil: null }, { effectiveUntil: { gte: today } }],
+        },
+      }),
     ),
     liveCount([...new Set(sessionRows.map((r) => r.sessionId))], (ids) =>
       tx.session.count({ where: { id: { in: ids }, deletedAt: null, date: { gte: today } } }),
     ),
     liveCount([...new Set(eventRows.map((r) => r.eventId))], (ids) =>
-      tx.event.count({ where: { id: { in: ids }, deletedAt: null, date: { gte: today } } }),
+      tx.event.count({
+        where: {
+          id: { in: ids },
+          deletedAt: null,
+          // One-off and multi-day activities end at `end_date` (or their
+          // start when no end is present); recurring activities remain live
+          // through `recurrence_end_date`. Event has no `date` column.
+          OR: [
+            { endDate: { gte: today } },
+            { endDate: null, startDate: { gte: today } },
+            { recurrenceEndDate: { gte: today } },
+          ],
+        },
+      }),
     ),
     liveCount([...new Set(examRows.map((r) => r.examId))], (ids) =>
       tx.exam.count({ where: { id: { in: ids }, deletedAt: null, date: { gte: today } } }),
@@ -171,6 +197,13 @@ async function assertNotLastActiveSuperAdmin(
     where: { userId, deletedAt: null, role: { name: 'super_admin' } },
   });
   if (isSuperAdmin === 0) return;
+
+  // The User caller is already locked. The shared Role row serializes this
+  // platform-wide invariant against deletion, suspension and role removal of a
+  // different administrator.
+  if (!(await users.lockRole(tx, 'super_admin'))) {
+    throw new Error('super_admin role is not configured');
+  }
 
   const remaining = await tx.user.count({
     where: {
@@ -213,6 +246,13 @@ async function softDelete(
   selfService: boolean,
 ): Promise<void> {
   await prisma.$transaction(async (tx) => {
+    // Shared with every staffing writer and with new-session issuance. If a
+    // concurrent assignment wins, the responsibility query below sees it and
+    // refuses deletion; if deletion wins, the assignment re-reads this User as
+    // unavailable and refuses instead.
+    if (!(await users.lockUser(tx, targetId))) {
+      throw new AppError('NOT_FOUND', 'no such account');
+    }
     const user = await tx.user.findFirst({
       where: { id: targetId, deletedAt: null },
       select: {
@@ -341,10 +381,10 @@ export async function deleteUserAccount(
  * `user_search_shadow_sync_trigger`, so they follow the columns they shadow and
  * now hold the normalized marker. The original is unreachable through them.
  *
- * **The satellites in R111 §3.1 are deleted**, and the normalized-email lock is
- * released: it exists to stop two accounts claiming one address, and holding it
- * against a purged account would silently refuse a genuine new registration,
- * which OD-07 permits.
+ * **The satellites in R111 §3.1 are deleted**, and normalized-email ownership
+ * is released: the stable lock row owns nothing and remains to serialize the
+ * next claimant, while both authoritative ownership channels are cleared so a
+ * purged account cannot refuse the genuine new registration OD-07 permits.
  *
  * Idempotent by construction — every write is an assignment to a fixed value or
  * a delete of rows that may already be gone — because a de-identification that
@@ -357,28 +397,127 @@ export async function deIdentifyAccount(
   targetId: string,
 ): Promise<void> {
   await prisma.$transaction(async (tx) => {
+    // Read only the email coordinates first because the global authentication
+    // hierarchy is Email -> User. The complete row is re-read only after both
+    // governing locks are held; using this optimistic read for the mutation
+    // would let a concurrent Trash restore revive the account in between.
+    const locator = await tx.user.findUnique({
+      where: { id: targetId },
+      select: {
+        id: true,
+        preProvisionedEmail: true,
+        identities: { select: { email: true } },
+      },
+    });
+    if (!locator) throw new AppError('NOT_FOUND', 'no such account');
+
+    // Every address this account currently claims. Acquire the SAME stable
+    // cross-table locks as registration, provisioning and binding before
+    // clearing those claims. Deleting a lock row is not "releasing" an email:
+    // the row deliberately carries no owner. Deleting it while another writer
+    // waits can instead make that writer wake up to no row and fail. Ownership
+    // is released by clearing the two authoritative channels below; the stable
+    // lock row remains available to serialize the next claimant.
+    const addresses = [...new Set([
+      ...locator.identities.map((i) => i.email),
+      ...(locator.preProvisionedEmail ? [locator.preProvisionedEmail] : []),
+    ].map((e) => e.toLowerCase()))].sort();
+    for (const address of addresses) {
+      await users.lockNormalizedEmail(tx, address);
+    }
+
+    // Authentication binds in Email -> User order, so permanent
+    // de-identification does the same. The account is already soft-deleted,
+    // which prevents any staffing writer from naming it while this waits.
+    if (!(await users.lockUser(tx, targetId))) {
+      throw new AppError('NOT_FOUND', 'no such account');
+    }
+
     const user = await tx.user.findUnique({
       where: { id: targetId },
-      select: { id: true, preProvisionedEmail: true, identities: { select: { email: true } } },
+      select: {
+        nameArabic: true,
+        firstNameArabic: true,
+        lastNameArabic: true,
+        nameFrench: true,
+        firstNameFrench: true,
+        lastNameFrench: true,
+        nickname: true,
+        publicDisplayName: true,
+        phone: true,
+        notes: true,
+        referenceCode: true,
+        schoolingStage: true,
+        intendedBranchId: true,
+        intendedCategoryId: true,
+        requestedRole: true,
+        preProvisionedEmail: true,
+        deletedAt: true,
+        identities: { select: { id: true } },
+      },
     });
     if (!user) throw new AppError('NOT_FOUND', 'no such account');
+    if (user.deletedAt === null) {
+      // Most importantly, a purge that lost a race with restoration must not
+      // erase the newly restored live account. Manual permanent deletion also
+      // passes through softDelete first, so every legitimate caller arrives
+      // here with a tombstone.
+      throw new AppError('STATE_CONFLICT', 'the account is not deleted', {
+        reason: 'NOT_DELETED',
+      });
+    }
 
-    // Every address this account ever claimed, so the lock is released for all
-    // of them rather than for whichever one happened to be current.
-    const addresses = [
-      ...user.identities.map((i) => i.email),
-      ...(user.preProvisionedEmail ? [user.preProvisionedEmail] : []),
-    ].map((e) => e.toLowerCase());
+    const trashBefore = await tx.trash.count({
+      where: { targetEntity: 'User', targetId },
+    });
+    const hadIdentitySurface =
+      user.nameArabic !== DELETED_ACCOUNT_NAME ||
+      [
+        user.firstNameArabic,
+        user.lastNameArabic,
+        user.nameFrench,
+        user.firstNameFrench,
+        user.lastNameFrench,
+        user.nickname,
+        user.publicDisplayName,
+        user.phone,
+        user.notes,
+        user.referenceCode,
+        user.schoolingStage,
+        user.intendedBranchId,
+        user.intendedCategoryId,
+        user.requestedRole,
+        user.preProvisionedEmail,
+      ].some((value) => value !== null) ||
+      user.identities.length > 0;
 
     await tx.user.update({
       where: { id: targetId },
       data: {
         nameArabic: DELETED_ACCOUNT_NAME,
+        firstNameArabic: null,
+        lastNameArabic: null,
         nameFrench: null,
+        firstNameFrench: null,
+        lastNameFrench: null,
         nickname: null,
         publicDisplayName: null,
         phone: null,
+        notes: null,
+        referenceCode: null,
+        schoolingStage: null,
+        intendedBranchId: null,
+        intendedCategoryId: null,
+        requestedRole: null,
         preProvisionedEmail: null,
+        // A printed QR is an external correlate of the person even though the
+        // UUID is not secret and grants no authority. Rotate it on the first
+        // de-identification so an old card no longer resolves the tombstone;
+        // retain the rotated value on retries to keep the operation idempotent.
+        // The Trash row distinguishes a first de-identification from an
+        // idempotent retry even when somebody's legitimate recorded name was
+        // already exactly «حساب محذوف» and every optional field was empty.
+        ...(trashBefore > 0 || hadIdentitySurface ? { qrRef: randomUUID() } : {}),
         // **The TD-10 shadow columns are NOT set here, and that is deliberate.**
         // `user_search_shadow_sync_trigger` owns them: they track whatever the
         // columns they shadow contain, so writing them would be overwritten in
@@ -392,27 +531,47 @@ export async function deIdentifyAccount(
     // R111 §3.1 — credentials and planning data. None of it carries
     // institutional meaning, and `user_identity` in particular must go or the
     // identity could never be registered again (OD-07).
-    await tx.userIdentity.deleteMany({ where: { userId: targetId } });
-    await tx.userBranchRole.deleteMany({ where: { userId: targetId } });
-    await tx.teacherAvailability.deleteMany({ where: { userId: targetId } });
-    await tx.teacherSubjectCapability.deleteMany({ where: { userId: targetId } });
-    await tx.teacherCategoryCapability.deleteMany({ where: { userId: targetId } });
-    await tx.studentSocialProfile.deleteMany({ where: { studentId: targetId } });
-    await tx.notification.deleteMany({ where: { userId: targetId } });
-    if (addresses.length > 0) {
-      await tx.normalizedEmailLock.deleteMany({ where: { email: { in: addresses } } });
-    }
+    const removed = [
+      await tx.userIdentity.deleteMany({ where: { userId: targetId } }),
+      await tx.userBranchRole.deleteMany({ where: { userId: targetId } }),
+      await tx.refreshToken.deleteMany({ where: { userId: targetId } }),
+      await tx.refreshSession.deleteMany({ where: { userId: targetId } }),
+      await tx.rateLimitCounter.deleteMany({ where: { userId: targetId } }),
+      await tx.teacherAvailability.deleteMany({ where: { userId: targetId } }),
+      await tx.teacherSubjectCapability.deleteMany({ where: { userId: targetId } }),
+      await tx.teacherCategoryCapability.deleteMany({ where: { userId: targetId } }),
+      await tx.studentSocialProfile.deleteMany({ where: { studentId: targetId } }),
+      await tx.notification.deleteMany({ where: { userId: targetId } }),
+    ];
 
-    await audit.write(tx, {
-      actorUserId: actor.userId,
-      ...(actor.activeRole ? { activeRole: actor.activeRole } : {}),
-      actionType: 'user.deidentify',
-      targetEntity: 'User',
-      targetId,
-      // **Which fields, never their values** (§14, no PII in logs) — an audit row
-      // recording what was cleared must not become the last copy of it.
-      detail: { cleared: ['name', 'contact', 'identity', 'planning_data'] },
+    // The recoverable Trash snapshot necessarily contains the fields needed to
+    // undo a soft delete. Once de-identification is final it must disappear in
+    // the SAME transaction, or the supposedly-erased name, phone and email live
+    // on indefinitely in JSONB and the Trash still offers a false restoration.
+    const removedTrash = await tx.trash.deleteMany({
+      where: { targetEntity: 'User', targetId },
     });
+
+    // A retry after full convergence writes no second audit fact. Duplicate
+    // "deidentified" entries would make an idempotent job look like two human
+    // decisions; satellite residue from an older/partial implementation still
+    // counts as work and therefore remains auditable.
+    if (
+      hadIdentitySurface ||
+      removedTrash.count > 0 ||
+      removed.some((result) => result.count > 0)
+    ) {
+      await audit.write(tx, {
+        actorUserId: actor.userId,
+        ...(actor.activeRole ? { activeRole: actor.activeRole } : {}),
+        actionType: 'user.deidentify',
+        targetEntity: 'User',
+        targetId,
+        // **Which fields, never their values** (§14, no PII in logs) — an audit row
+        // recording what was cleared must not become the last copy of it.
+        detail: { cleared: ['name', 'contact', 'identity', 'planning_data'] },
+      });
+    }
   });
 }
 
@@ -439,6 +598,9 @@ export async function purgeUserAccount(
   );
 
   await prisma.$transaction(async (tx) => {
+    if (!(await users.lockUser(tx, targetId))) {
+      throw new AppError('NOT_FOUND', 'no such account');
+    }
     await assertNotLastActiveSuperAdmin(tx, targetId);
     await assertNoLiveResponsibilities(tx, targetId);
   });

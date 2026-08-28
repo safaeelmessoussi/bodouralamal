@@ -103,55 +103,34 @@ Docker-socket mount and call the job complete.
 
 **Never run restoration SQL directly in `psql`.**
 
-The reason is stated plainly in the specification: *a raw session enforces nothing, and
-accountability would depend on developer goodwill.*
+The reason is stated plainly in the specification: a raw session enforces no authority,
+parent-first ordering or audit. Restore through `/admin/trash` as a live Super Admin; the
+service clears the record tombstone, reinstates only the child rows declared safe for that
+entity type, removes the Trash entry and writes `trash.restore` in one transaction.
 
-Restoration runs through a **locked CLI maintenance script checked into the repository**:
+**R111 account deletion is a deliberate special case.** Its recoverable phase removes no
+family link, enrolment, Teaching Group membership, course staffing, role or Google identity.
+It only stamps the User tombstone and revokes credentials, so restoring the User during the
+three-day window is complete: the same account and relationships return, while revoked
+sessions stay revoked. Permanent de-identification removes the account's Trash entry in the
+same transaction, so an erased identity is never offered for reconstruction.
 
-```bash
-docker compose run --rm api npm run db:restore -- --entity=User --id=<uuid>
-```
-
-The script wraps three things in **one transaction**:
-
-1. Restoring the row from its Trash snapshot — clearing `deleted_at` / `deleted_by`
-2. **Reinstating the relationship rows the cascade removed**
-3. Writing the `trash.manual_restore` audit row
-
-### Step 2 is the one that gets forgotten
-
-Deleting a user cascades: family links, group assignments, branch-role assignments, and
-identity deactivations. Restoring the user row alone produces **a half-restored, silently
-broken account** — a person who exists, can log in, and has no roles, no enrolments, and no
-children.
-
-The runbook must explicitly capture and reinstate:
-
-- `FamilyLink`
-- `Enrollment` — **and with it the student's level membership**, which is stored nowhere
-  else (BR-21). A user restored without their enrolments has no level, no group and no
-  branch
-- `StudentTeachingGroup`
-- `CourseScheduleStaff` — a teacher restored without these staffs no courses, and any
-  schedule left with no `teacher` position must surface to Admins as unstaffed
-- `UserBranchRole`
-- `UserIdentity` deactivations
-
-The Trash snapshot contains them. The script's job is to put them back.
+For every other entity, the old warning still applies: clearing `deleted_at` is insufficient
+if the deletion removed owned relationships. The service refuses those types until their
+complete reinstatement is implemented and tested. There is currently no general `db:restore`
+CLI; do not use a command or direct SQL that the repository does not provide.
 
 > The Trash restoration **UI shipped** (R52), and **permanent deletion with it** (R59.1).
 > The snapshot and the 90-day window remain non-negotiable
 > ([`BR-15`](../reference/business-rules.md#br-15)).
 
-### When to use this runbook rather than the screen
+### What the screen can restore
 
 The screen handles the types whose reinstatement is **written and tested** — today
-`Branch`, `Category`, `Subject`, `Room`, `Exam` (R59.3) and `HijriMonthStart` (R59.5). It
-refuses everything else loudly, with the reason on the row, because clearing `deleted_at` is
+`User` (R111), `Branch`, `Category`, `Subject`, `Room`, `Exam` (R59.3) and
+`HijriMonthStart` (R59.5). It refuses everything else loudly, with the reason on the row,
+because clearing `deleted_at` is
 the easy tenth of the problem and every failure of the other nine is silent.
-
-This runbook is for the refused ones. A `User` is the case it was written for and remains
-the hardest: six relationship types, listed above.
 
 ### Permanent deletion, and what it will not do
 
@@ -168,7 +147,7 @@ Two types have no destruction plan at all:
 
 | Type | Reason | What to do instead |
 |---|---|---|
-| `User` | `ACCOUNTABILITY_RECORD` — a person's row is referenced by `AuditLog` and `Trash` themselves, so destroying it takes the record of who deleted what | The account stays soft-deleted with its fields anonymised. Erasure of a person's data is R54's decision, and it is about anonymisation, not row destruction |
+| `User` | `ACCOUNTABILITY_RECORD` — a person's row is referenced by `AuditLog` and institutional records, so destroying it takes their meaning and the record of who acted | Use R111 permanent de-identification. The non-identifying tombstone remains; its personal fields, credentials, planning data and recoverable snapshot do not |
 | `RecurringCourseSchedule` | `CASCADE_CHILDREN` — its Sessions are materialized rows other records reference, so destroying it destroys a timetable's history | Purge the Sessions that block it first, or leave it to BR-15 |
 
 The deliberate action is storage-durable for `EducationalContent`: its transaction inserts an

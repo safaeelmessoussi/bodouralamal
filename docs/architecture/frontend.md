@@ -1293,15 +1293,18 @@ requests naming no branch and no stage. A second door invites a second form.
 how you enter that child's Student Dashboard, and no registration action lives
 inside it.
 
-### What is deliberately absent
+### Account deletion belongs to the person, not to a role
 
-**No account-deletion control**, though §4.10 says *"two-step account
-self-deletion"*. Those five words have no route, no state and no screen;
-`docs/SRS-PROPOSAL-R54.md` drafted the whole thing and **has never been
-approved**, because it reverses R52's prohibition on permanent deletion.
-Shipping an irreversible action because a page now exists to host it would be
-the worst possible reading of R65. When the Owner takes that decision, the
-screen belongs here.
+R111 closed the earlier design gap. Every authenticated account sees the deletion control in
+`/profile`; the subject comes from the session, so the request has no id with which to name
+somebody else. The confirmation says plainly that educational and consent history survives,
+that sessions end immediately, and that a Super Admin can restore the same account during the
+three-day window. A live staff responsibility or last-Super-Admin block is rendered through
+the shared `BlockedNotice`, including the server's `blocked_by` breakdown.
+
+The separate Users action is Super-Admin-only. Its ordinary form uses the same recoverable
+window; its permanent variant de-identifies now and is explicitly irreversible. Both are one
+server mechanism rather than two frontend interpretations of retention.
 
 ### The write surface is two fields
 

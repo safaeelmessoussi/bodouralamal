@@ -45,6 +45,7 @@ import {
   materializeSchedule,
   type MaterializeResult,
 } from "./session-materialize.service.js";
+import { assertStaffAccountsAvailable } from "./staffing-integrity.service.js";
 
 /**
  * Recurring Course Schedules — the unit of **delivery** (SRS §4.4, §4.4c,
@@ -622,6 +623,7 @@ export async function createCourseSchedule(
     );
 
     const staff = input.staff ?? [];
+    await assertStaffAccountsAvailable(tx, staff.map((person) => person.userId));
     const conflicts = await findConflicts(
       tx,
       {
@@ -979,6 +981,10 @@ export async function updateCourseSchedule(
      * visible in the record.
      */
     if (data.staff !== undefined) {
+      await assertStaffAccountsAvailable(
+        tx,
+        data.staff.map((person) => person.userId),
+      );
       await assertStaffIntervals(tx, id, data.staff, {
         anchorDate: merged.anchorDate,
         effectiveUntil:
@@ -1197,6 +1203,24 @@ async function splitCourseSchedule(
   });
 
   return prisma.$transaction(async (tx) => {
+    // The split copies the complete effective-dated record, including periods
+    // that ended before the successor begins. Only periods intersecting the
+    // successor create a live obligation and therefore require an available
+    // account; an expired historical assignment must not block the series
+    // forever merely because its row is retained (R91/R111).
+    const successorStaff = existing.staff.filter((person) =>
+      withinScheduleLife(
+        { from: person.effectiveFrom, until: person.effectiveUntil },
+        {
+          anchorDate: splitOn,
+          effectiveUntil: existing.effectiveUntil,
+        },
+      ),
+    );
+    await assertStaffAccountsAvailable(
+      tx,
+      successorStaff.map((person) => person.userId),
+    );
     const successorValues = {
       // **The successor IS the same class**, split at a date (R50) — so it keeps
       // its name, and an edit that renames it renames both halves' successor.

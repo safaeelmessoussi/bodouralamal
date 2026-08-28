@@ -170,21 +170,28 @@ specification says it is, and keeps the gap **visible rather than silent**.
 |---|---|---|---|
 | `GET` | `/admin/trash` | 👤 | Soft-deleted records: entity, label, who deleted it, when, `purge_after`. Filters `entity` `deleted_by` `from` `to` `q` |
 | `POST` | `/admin/trash/{id}/restore` | 👤 | **Per entity type.** Refused loudly for anything that cascades |
+| `DELETE` | `/admin/trash/{id}` | 👤 | Permanent deletion only for server-declared purgeable types; Super Admin and audited |
 
 **`restorable` is a server decision, published per row.** A client cannot know which deletions
 cascade, and one that guessed would offer a button that silently half-restores a person.
-**Restorable today: `Branch`, `Category`, `Subject`, `Room`** — the types whose deletion is
-*guarded* rather than cascading, so nothing was removed alongside them. Everything else answers
-`409` with `CASCADE_RELATIONSHIPS` or `CASCADE_CHILDREN`, and the screen states the reason
-rather than merely hiding the action.
+**Restorable today:** `User` under R111, plus `Branch`, `Category`, `Subject`, `Room`,
+`Exam` and `HijriMonthStart`. User qualifies because the three-day soft-delete removes no
+relationship row; revoked credentials stay revoked. Exam declares and reinstates exactly its
+staff rows. A future Exam additionally locks and revalidates every supervisor, refusing the
+whole restore with `STAFF_ACCOUNT_UNAVAILABLE` if an account was deleted while the sitting was
+binned; past staffing remains historical evidence. Everything else answers `409` with a stable
+reason, and the screen states it rather than merely hiding the action.
 
 **Two further guards:** `PARENT_DELETED` (a Room whose Branch is still binned would be alive but
 unreachable) and `ALREADY_PURGED` (BR-15 removed the row; the snapshot alone cannot safely
 recreate it, since every foreign key it names may have gone too).
 
-**There is no permanent-delete route.** BR-15's window is enforced by `content.quarantine-purge`;
-a manual override is a data-retention decision and needs its own revision. **The `snapshot` is
-never on the wire** — it is the whole row, including columns no screen is entitled to.
+`DELETE /admin/trash/{id}` is R59.1's explicit permanent action. The server publishes
+`purgeable` per row, deletes only a declared entity/owned-child plan, turns independent foreign
+key referrers into `DEPENDENTS_EXIST`, and retains the `trash.permanent_delete` audit row.
+`User` is not hard-purgeable: R111 de-identifies its row so institutional and accountability
+records survive. **The `snapshot` is never on the wire** — it is the whole row, including
+columns no screen is entitled to.
 
 ## Registration and approvals
 
@@ -293,8 +300,16 @@ re-assert live assignments per request. §7's `RefreshRevokedReason` values desc
 safeguarding action, replay, and R101's one-time cookie-Path rollout; none honestly describes
 a demotion.
 
-**There is no user-delete endpoint.** §5.6 lists *deactivate*; a person's soft delete reaches
-grades, submissions, Quran logs and consent records, which is its own decision.
+**Account deletion preserves the institutional record (R111).** `DELETE /profile` deletes the
+caller only and is available to every authenticated account; `DELETE /admin/users/{id}` is
+Super-Admin-only. Both revoke sessions immediately and place the still-complete account on a
+three-day restoration window. `?permanent=true` on the administrative route de-identifies now
+instead: the User tombstone and its educational, consent, safeguarding and accountability
+relationships survive, while personal fields, credentials and planning data are erased. Live
+responsibilities and the last active Super Admin are refused with named `409` reasons.
+De-identification re-reads the tombstone after taking the normalized-email and User locks; if a
+concurrent Trash restoration won, it refuses with `409 STATE_CONFLICT` / `NOT_DELETED` rather
+than erasing the restored account.
 
 ## Reference data
 

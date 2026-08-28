@@ -1119,3 +1119,74 @@ that is built, wired and tested — so the roadmap was overstating what remains:
 decide what to build next, and every one of these would have been re-derived
 before the error was noticed. Verified by reading the code and the routes rather
 than by trusting the boxes.
+
+## R111 deletion, restoration and responsibility invariants are now real (2026-08-28)
+
+An adversarial read of R111 found several independent false claims behind green tests.
+
+- Permanent deletion changed only the composed display names. The separately stored Arabic
+  and French name parts, notes, registration-request metadata, spoken identifier and old QR
+  remained, as did refresh-session and quota rows. The operation now clears the complete
+  person-side allow-list, rotates the first external QR correlate, removes every declared
+  credential/planning satellite, and keeps the stable email lock rather than racing its
+  deletion. The lock owns nothing; the two cleared ownership channels release the address.
+- The recoverable Trash JSON kept the original name, phone and email after permanent
+  de-identification. It is now deleted in the de-identification transaction, while the audit
+  trail and institutional relationships remain. The regression creates a real family link,
+  identity, refresh session and quota row and reads every one back.
+- The interface promised three-day restoration while Trash labelled every User
+  `CASCADE_RELATIONSHIPS` and refused it. R111's soft-delete phase actually removes none of
+  those relationships, so User joins the tested restorable set; revoked sessions correctly
+  stay revoked. The old test's claimed preserved grade did not create one, and its replacement
+  now proves a real safeguarding relationship survives.
+- The responsibility check queried a nonexistent generic `Event.date` at runtime and treated
+  every non-deleted course assignment as live forever. It now uses the Event's actual bounded
+  date fields and both effective-dated schedule/staff bounds, so future responsibility blocks
+  while past delivery remains evidence.
+- Session regeneration and schedule splitting also read those effective dates now. An ended
+  former teacher is neither written back onto a later occurrence nor treated as a live staffing
+  obligation on the successor schedule.
+- Account deletion, every supported staffing mutation and future-Exam restoration now share
+  deterministic User locks and active-account validation. This closes both directions of the
+  race: no deleted account can be assigned a new obligation, and a committed assignment is
+  visible to the deletion refusal. A binned future Exam can no longer be restored onto a
+  supervisor deleted in the meantime. The platform-wide last-Super-Admin count is separately
+  serialized on the stable `super_admin` Role row; locking two different User rows was not a
+  global invariant.
+- De-identification re-reads `deleted_at` after normalized-email and User locks. A concurrent
+  Trash restoration can therefore win safely: the stale purge refuses `NOT_DELETED` instead of
+  erasing the restored person. A converged retry neither rotates the QR twice nor writes a second
+  `user.deidentify` audit fact, including when a legitimate original name already equals the
+  tombstone label.
+- The final adversarial pass found four stale-writer variants behind the same erasure boundary:
+  teaching-profile/availability saves, safeguarding-profile upserts, notification inserts and
+  upload initiation/publication had all resolved a live User before their write transaction, so
+  they could recreate a deleted satellite or mint/publish new upload authority after the purge.
+  They now take the governing User locks in deterministic UUID order and revalidate after locking.
+  Forced concurrent regressions prove both serial winners converge on no planning, case-file,
+  inbox or quota satellite attached to the tombstone.
+- The broader verification falsified three old fixture claims. Restoring only a SystemSetting's
+  JSON still changed its version/updater; deleting a database delta of consumed tokens could
+  remove a real user's replay guard; and an audit-purge proof consumed matching ambient history.
+  Fixtures now restore the whole logical setting row, own exact JTIs from issue time, and run the
+  fixed-clock platform purge inside a rollback. The first full rerun then exposed a fifth
+  onboarding suite previously masked by the broad cleanup (`consumed_token 0 → 14`); its exact
+  14/14 regression now leaves the database snapshot unchanged.
+- The first affected-suite rerun passed all 137 assertions but the all-table guard caught
+  `audit_log 139 → 92`: fixed suite tags let a restarted process adopt and delete 47 audit rows
+  attached to older interrupted fixtures. No assertion observed the loss. The six affected suites
+  now use run-unique ownership prefixes; the identical 137-test rerun and the 58-test R111 rerun
+  both leave every application-table digest unchanged.
+
+The automatic end of the three-day window remains blocked rather than fabricated: R111 calls
+for a pg-boss purge, but TD-7 has no such queue and the current SRS still carries pre-R111
+"no account deletion" clauses/routes. The exact Document Owner reconciliation is recorded in
+`TASKS.md`; manual immediate de-identification is complete, automatic expiry is not.
+
+Verification on the final diff: focused real-stack R111/trash/exam/schedule **157/157**;
+focused setting/registration/approval/email/audit isolation **87/87**; staff-registration
+ownership **14/14**; backend unit **285/285**; complete real-stack integration **89 files,
+1861 passed, 10 skipped**, with the before/after digest of every application table identical;
+frontend **857/857**. Backend and frontend lint, exact typecheck and Production builds pass;
+all 27 CI guards pass, documentation links are **883/883**, OpenAPI is current at **130 paths /
+172 operations**, and `git diff --check` is clean.

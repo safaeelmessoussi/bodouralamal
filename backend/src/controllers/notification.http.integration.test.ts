@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { issueAccessToken } from "../lib/access-token.js";
@@ -22,7 +24,7 @@ import { httpCall } from "../test-support/http-client.js";
 const config = loadConfig();
 const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);
 const BASE = `${config.PUBLIC_BASE_URL}/api/v1`;
-const TAG = "[http-notification-test]";
+const TAG = `[http-notification-test:${randomUUID()}]`;
 const YEAR_LABEL = "2097-2098";
 
 /**

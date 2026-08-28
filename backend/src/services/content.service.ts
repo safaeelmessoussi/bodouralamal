@@ -38,6 +38,7 @@ import { teacherBranchIds } from '../policies/roster-resolution.js';
 import * as audit from '../repositories/audit.repository.js';
 import { enqueue, JOB_QUEUES } from '../repositories/jobs.repository.js';
 import { snapshot } from '../repositories/trash.repository.js';
+import * as users from '../repositories/user.repository.js';
 import { visibleContentIds } from './library.service.js';
 import {
   enqueueConsentContentMigration,
@@ -162,6 +163,30 @@ async function assertUploadScope(
  * decision is synchronous).
  */
 export const UPLOAD_QUOTA = { bucket: 'upload.initiate', perHour: 30 } as const;
+
+/**
+ * R111 final-deletion boundary for upload authority.
+ *
+ * The access token and upload ticket can both outlive a concurrent account
+ * deletion. Without the governing User lock, initiation can recreate the
+ * deleted `RateLimitCounter` satellite and mint a new PUT, while completion can
+ * publish after the person has been finally de-identified. A publication that
+ * commits first remains institutional history and is preserved; a deletion
+ * that commits first makes the stale capability unusable.
+ */
+async function assertUploadAccountAvailable(
+  tx: Prisma.TransactionClient,
+  userId: string,
+): Promise<void> {
+  if (!(await users.lockUser(tx, userId))) {
+    throw new AppError('FORBIDDEN', 'account is unavailable');
+  }
+  const account = await tx.user.findFirst({
+    where: { id: userId, deletedAt: null, accountStatus: 'active' },
+    select: { id: true },
+  });
+  if (!account) throw new AppError('FORBIDDEN', 'account is unavailable');
+}
 
 function windowStartOf(now: Date): Date {
   const start = new Date(now);
@@ -318,6 +343,7 @@ export async function initiateUpload(
   const finalizationId = randomUUID();
 
   const putUrl = await prisma.$transaction(async (tx) => {
+    await assertUploadAccountAvailable(tx, actor.userId);
     await consumeUploadQuota(tx, actor.userId, new Date());
     // Minting inside the transaction keeps the quota and the grant atomic: a URL
     // handed out after a failed increment would be an unaccounted upload.
@@ -702,6 +728,7 @@ async function createContentFromFinalization(
   contentSha256: string,
 ): Promise<void> {
   await prisma.$transaction(async (tx) => {
+    await assertUploadAccountAvailable(tx, actor.userId);
     await tx.educationalContent.create({
       data: {
         id: claims.cid,
@@ -998,6 +1025,7 @@ async function replaceContentFile(
   retireOldPublic: boolean;
 }> {
   return prisma.$transaction(async (tx) => {
+    await assertUploadAccountAvailable(tx, actor.userId);
     // Replacement is an upload trigger for every occurrence already referencing
     // this recording. Session locks precede the content CAS, matching the
     // re-evaluation lock hierarchy and avoiding a Session↔Content deadlock.

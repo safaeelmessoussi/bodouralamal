@@ -481,7 +481,7 @@
     "/admin/trash/{id}/restore": {
       "post": {
         "summary": "Restore a soft-deleted record",
-        "description": "**Revision 52 — supported per entity type, and only where §7's cascade problem does not arise.** §7 states the hazard: the TD-5 cascade removes `FamilyLink`, `Enrollment`, `StudentTeachingGroup`, `CourseScheduleStaff`, `UserBranchRole` and `UserIdentity` rows, and **a User restored without them is a half-restored, silently broken account** — the row returns, every screen looks right, and the person is enrolled in nothing. **Restorable today: `Branch`, `Category`, `Subject`, `Room`** — the four whose deletion is GUARDED rather than cascading, so nothing was removed alongside them and clearing the tombstone genuinely restores the whole record. **Every other type is refused loudly** (`409 STATE_CONFLICT`, `reason: CASCADE_RELATIONSHIPS` or `CASCADE_CHILDREN`) rather than silently half-restored. **A child is never restored into a deleted parent** (`PARENT_DELETED`): a Room whose Branch is still in the Trash would be technically alive and practically unreachable. **`ALREADY_PURGED`** where BR-15 has removed the row itself — the snapshot alone cannot safely recreate it, since every foreign key it names may have gone too. On success the tombstone is removed, because the record is no longer deleted and leaving it listed would make the Trash disagree with the platform; the `trash.restore` audit row is what keeps the event answerable.",
+        "description": "**Revision 52 — supported per entity type, and only where reinstatement is complete.** **Restorable today:** `User` under R111 (its three-day soft-delete removes no relationship row), plus `Branch`, `Category`, `Subject`, `Room`, `Exam` and `HijriMonthStart`, whose complete reinstatements are declared and tested. Revoked account credentials stay revoked after restoration. Restoring a future Exam also revalidates its supervisors under the same User locks as ordinary staffing; `STAFF_ACCOUNT_UNAVAILABLE` refuses the whole transaction if an account was deleted while the Exam was binned. Past staffing remains historical evidence. **Every other type is refused loudly** (`409 STATE_CONFLICT`, `reason: CASCADE_RELATIONSHIPS`, `CASCADE_CHILDREN` or `NOT_YET_SUPPORTED`) rather than silently half-restored. **A child is never restored into a deleted parent** (`PARENT_DELETED`), and `ALREADY_PURGED` answers a row BR-15 already removed. On success the record tombstone and Trash entry are removed together, while `trash.restore` preserves the event in the audit trail.",
         "responses": {
           "200": {
             "description": "Restored; names the entity and id."
@@ -517,7 +517,7 @@
             }
           },
           "409": {
-            "description": "Error envelope (TD-3.8). STATE_CONFLICT with reason CASCADE_RELATIONSHIPS, CASCADE_CHILDREN, NOT_YET_SUPPORTED, PARENT_DELETED, ALREADY_PURGED or NOT_DELETED.",
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT with reason CASCADE_RELATIONSHIPS, CASCADE_CHILDREN, NOT_YET_SUPPORTED, PARENT_DELETED, ALREADY_PURGED, NOT_DELETED or STAFF_ACCOUNT_UNAVAILABLE.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2651,7 +2651,7 @@
     "/admin/users/{id}": {
       "delete": {
         "summary": "Delete another person's account",
-        "description": "**R111/R112 — Super Admin only** (Document Owner, 2026-08-28); an Admin receives `403`, asserted in the service. Behaves exactly as `DELETE /profile` does, **on the same three-day window**: one rule and one mechanism, so a deletion clicked by mistake stays recoverable, which an immediate purge would not be. **`?permanent=true`** performs R111's de-identification **now** instead of after the window. It is **the same operation the window reaches, not a stronger one** — no row is removed, and every preserved relationship survives exactly as it would have. The tombstone keeps its structural columns (`id`, `sex` — §4.4b evaluates Level restrictions against it, so a preserved enrolment must still make sense — `account_status`, `created_at`, `is_beneficiary`) and loses its identifying ones; the **TD-10 search shadows are trigger-maintained and follow**, which had to be checked rather than assumed, since a populated `name_arabic_normalized` behind a cleared `name_arabic` would keep the person findable by search — the one place the omission would show on no screen. Credentials, role assignments, planning data and the normalized-email lock are removed, which is what lets the identity register again (OD-07). **Idempotent**: running it twice changes nothing, because a de-identification that half-ran is worse than one that has not run. The same two refusals apply — *sooner* must not mean *with fewer checks*.",
+        "description": "**R111/R112 — Super Admin only** (Document Owner, 2026-08-28); an Admin receives `403`, asserted in the service. Behaves exactly as `DELETE /profile` does, **on the same three-day window**: one rule and one mechanism, so a deletion clicked by mistake stays recoverable, which an immediate purge would not be. **`?permanent=true`** performs R111's de-identification **now** instead of after the window. It is **the same operation the window reaches, not a stronger one** — no row is removed, and every preserved relationship survives exactly as it would have. The tombstone keeps its structural columns (`id`, `sex` — §4.4b evaluates Level restrictions against it, so a preserved enrolment must still make sense — `account_status`, `created_at`, `is_beneficiary`) and loses its complete identifying surface: composed and split names, contact/public identity, request metadata, notes and external identifiers. Credentials, role assignments, planning data and both email-ownership channels are removed; the ownerless normalized-email lock row remains to serialize the next claimant. The recoverable Trash snapshot is removed in the same transaction so it cannot retain the erased PII. The **TD-10 search shadows are trigger-maintained and follow**, so the original remains unsearchable. **Idempotent**: running it twice changes nothing, because a de-identification that half-ran is worse than one that has not run. The same two refusals apply — *sooner* must not mean *with fewer checks*.",
         "responses": {
           "204": {
             "description": "Deleted, or de-identified when permanent."
@@ -2687,7 +2687,7 @@
             }
           },
           "409": {
-            "description": "Error envelope (TD-3.8). STATE_CONFLICT with reason LAST_SUPER_ADMIN or RESPONSIBILITIES_ASSIGNED.",
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT with reason LAST_SUPER_ADMIN, RESPONSIBILITIES_ASSIGNED or NOT_DELETED (a concurrent restoration won before de-identification acquired the governing User lock).",
             "content": {
               "application/json": {
                 "schema": {

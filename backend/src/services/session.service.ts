@@ -9,6 +9,7 @@ import { AppError } from "../lib/errors.js";
 import { atMidnightUtc } from "../lib/recurrence.js";
 import * as scope from "../policies/branch-scope.js";
 import { resolveDelivery } from "../policies/delivery.js";
+import { effectiveOn } from "../policies/effective-staffing.js";
 import {
   audienceForSession,
   audienceSize,
@@ -24,6 +25,7 @@ import {
 } from "../policies/session-protection.js";
 import type { Actor } from "../policies/actor.js";
 import { enqueueConsentReevaluationForSessions } from "./consent-reevaluation.service.js";
+import { assertStaffAccountsAvailable } from "./staffing-integrity.service.js";
 
 /**
  * Sessions — the materialized dated occurrence (SRS §4.4, TD-1, TD-8,
@@ -304,6 +306,10 @@ export async function overrideSession(
     });
 
     if (data.staff !== undefined) {
+      await assertStaffAccountsAvailable(
+        tx,
+        data.staff.map((person) => person.userId),
+      );
       const before = await tx.sessionStaff.findMany({
         where: { sessionId, deletedAt: null },
         select: { userId: true, position: true },
@@ -767,7 +773,11 @@ async function regenerateOne(
       endTime: true,
       roomId: true,
       staff: {
-        where: { deletedAt: null },
+        // R91 — regeneration restores the staffing in force for THIS dated
+        // occurrence. Loading every historical/future assignment would both
+        // rewrite the snapshot incorrectly and let an ended, deleted account
+        // block regeneration forever.
+        where: effectiveOn(session.date),
         select: { userId: true, position: true },
       },
     },
@@ -789,6 +799,10 @@ async function regenerateOne(
   const wasProtectedFor = await protectionReasonsFor(prisma, protectable);
 
   return prisma.$transaction(async (tx) => {
+    await assertStaffAccountsAvailable(
+      tx,
+      schedule.staff.map((person) => person.userId),
+    );
     const updated = await tx.session.update({
       where: { id: sessionId },
       data: {

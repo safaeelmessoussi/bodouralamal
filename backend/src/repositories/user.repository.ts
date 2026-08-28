@@ -44,6 +44,27 @@ export async function lockUser(
 }
 
 /**
+ * Serializes mutations whose invariant is platform-wide for one Role.
+ *
+ * The last-Super-Admin rule cannot be protected by locking only the User being
+ * changed: two transactions removing the role from different people would
+ * hold different rows, both observe the other administrator, and both commit.
+ * The stable Role row is the shared governing row for that invariant. Callers
+ * still lock their target User first, so the global order is User -> Role.
+ */
+export async function lockRole(
+  tx: Prisma.TransactionClient,
+  name: string,
+): Promise<boolean> {
+  const rows = await tx.$queryRaw<Array<{ id: string }>>`
+    SELECT "id"
+    FROM "role"
+    WHERE "name" = ${name}
+    FOR UPDATE`;
+  return rows.length === 1;
+}
+
+/**
  * Serializes every authoritative ownership decision for one normalized email.
  *
  * The lock row is inserted transactionally when the email has never been seen.

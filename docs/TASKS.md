@@ -921,11 +921,15 @@ was hiding behind it: the run went green on the first attempt.
 - [x] **Rooms CRUD** — verified complete (shipped M3b-30); added the missing delete confirmation that every other destructive action already had
 - [x] **Trash UI (`/admin/trash`)** — SRS Revision 52 applied; list, filter by type and date, search, restore **per entity type**
   - `restorable` is a **server** decision on every row: a client cannot know which deletions cascade
-  - Restorable: `Branch`, `Category`, `Subject`, `Room` — the types whose deletion is *guarded* rather than cascading
+  - Restorable: `User` (R111), `Branch`, `Category`, `Subject`, `Room`, `Exam` and
+    `HijriMonthStart`; future Exam staff are revalidated transactionally before revival
   - Blocked types state **why**, rather than silently omitting the action
   - Guards the SRS did not name: `PARENT_DELETED` and `ALREADY_PURGED`
-  - **No permanent delete** — BR-15's window is the purge job's, and bypassing it needs its own revision
-- [ ] **Widen the restorable set** — each type needs its TD-5 cascade reinstated and tested before it joins: `Level` (its Administrative Groups), `TeachingGroup` (member seats), `RecurringCourseSchedule` (future Sessions), `User` (`FamilyLink`, `Enrollment`, `StudentTeachingGroup`, `CourseScheduleStaff`, `UserBranchRole`, `UserIdentity`). Until then the screen says so per row
+  - R59.1 later added server-declared, audited permanent deletion; User remains
+    de-identification, never row destruction
+- [ ] **Widen the remaining restorable set** — each type needs its TD-5 cascade reinstated and
+  tested before it joins: `Level` (its Administrative Groups), `TeachingGroup` (member seats),
+  and `RecurringCourseSchedule` (future Sessions). Until then the screen says so per row
 
 **Gates
 - [ ] §18 *Educational Model* checklist green — including the §19.2 named regressions: composite-FK rejection **attempted directly in SQL**, weekly-vs-biweekly conflict on the alternating week, double-`materialize` idempotency, schedule edit sparing an overridden session, and anonymous-vs-authenticated parity on `/calendar` and `/library`
@@ -994,7 +998,9 @@ was hiding behind it: the run went green on the first attempt.
 - [x] `GET`/`PATCH /profile` registered in TD-3; `PATCH` accepts `phone` and `nickname` only, refused not ignored; TD-15 versioning; `user.update` audit
 - [x] **No authorization change** — `POST /child-applications` never checked a role; only the door was missing
 - [x] `ولي الأمر` untouched: about already-approved children, and no registration action inside it
-- [ ] **OWNER DECISION — account deletion (R54).** §4.10 says "two-step account self-deletion"; `docs/SRS-PROPOSAL-R54.md` is drafted and unapproved because it reverses R52's prohibition on permanent deletion. The personal section deliberately ships **no** deletion control. When the decision is taken, its screen belongs at `/profile`
+- [x] **Account deletion settled by ratified R111/R112, superseding the R54 draft.** The control
+  ships on `/profile`; the remaining authoritative-SRS/TD-7 synchronization is recorded under
+  M7 below rather than reopened as a product decision.
 
 ### R69 — the two hierarchies get their own navigation (2026-08-12)
 - [x] **Audit first: the model and the authorization were already correct.** No schema, service, policy or TD-2 change
@@ -1133,7 +1139,10 @@ was hiding behind it: the run went green on the first attempt.
 - [ ] **AUDITED, NOT IMPLEMENTED — see [audit-2026-08-11.md](development/audit-2026-08-11.md):**
   - **Level creation's branch** conflicts with TD-4.6b (Level + first group, atomic). Three resolutions costed; **A recommended** (retire the invariant). Needs a revision + a decision on the 18 existing group-less Levels
   - **Per-child branch/category** needs **no migration** — `child_application` already holds both per row. Only the validator and two forms treat them as request-level. Needs a revision amending R62/R64.2
-  - **Deletion**: 28 of 45 models soft-delete; 6 restorable, 17 purgeable, deliberately narrower. **Recommendation: do NOT draft a generic "delete anything" revision** — three smaller decisions instead (widen RESTORABLE per type · switch on retention · settle the backup statement)
+  - **Deletion**: 28 of 45 models soft-delete; 7 are currently restorable and the purgeable
+    set remains deliberately narrower. **Recommendation: do NOT draft a generic "delete anything"
+    revision** — three smaller decisions instead (widen RESTORABLE per type · switch on retention ·
+    settle the backup statement)
   - **Deployment**: `bodouralamal.vercel.app` is a **mock-backed frontend preview by design** (§19.0). Same-origin routing is load-bearing for TD-12 cookies and the OAuth callback, so a split deploy is ruled out by the SRS. **Do not deploy.** Needs a VPS
   - **Educational structure** (addendum): 4 of the 6 statements are ALREADY the specification — a Subject needs no change at all (§7 states it verbatim). The conflict is one rule R43 took explicitly: *"exactly one Administrative Group inside each enrolled Level"*. **Smallest revision: the branch moves from the group to `Enrollment`**, which makes the group nullable with no other structural change, keeps groups branch-owning as the Owner's example requires, and makes the 18 group-less Levels legal instead of broken. Retires TD-4.6b, TD-4.6d and `LAST_GROUP_IN_LEVEL`. Backfill is derivable
 
@@ -1195,7 +1204,9 @@ was hiding behind it: the run went green on the first attempt.
 - [x] Fixed a silent half-restore: one timestamp per deletion, and the restore keys on the record's own tombstone rather than the Trash entry's
 - [x] ~~A branch created after Levels exist cannot be deleted~~ — **closed by R66**: TD-4.6d's backfill and `LAST_GROUP_IN_LEVEL` both retired, so a new branch gets no groups and deletes cleanly. Measured against the running stack with 20 Levels present
 - [~] **`content.quarantine-purge` exact-operation worker is built; automatic retention is not** (R59.4) — replacement/deletion quarantine and deliberate R59.1 storage retirement are durable and retryable, while nothing reads `purge_after`. **OWNER DECISION REQUIRED — AUTOMATIC QUARANTINE DESTRUCTION:** switch on a tested 90-day record/object policy, or continue deliberate manual purging
-- [ ] `User` and `RecurringCourseSchedule` are not purgeable — `ACCOUNTABILITY_RECORD` and `CASCADE_CHILDREN`. The first is R54's decision and is about anonymisation, not row destruction
+- [x] `User` and `RecurringCourseSchedule` are not row-purgeable — `ACCOUNTABILITY_RECORD` and
+  `CASCADE_CHILDREN`. R111 now supplies User de-identification without destroying the tombstone;
+  the schedule remains blocked on its materialized history
 
 ### R58 — physical exam scheduling (2026-08-09)
 - [x] `Exam.mode` discriminator; `physical` carries date, wall-clock window, branch, room, optional group and supervising staff. Migration + boot-time CHECK ("all four place columns or none", so one legacy row survives without inventing a room)
@@ -1304,6 +1315,16 @@ was hiding behind it: the run went green on the first attempt.
   PostgreSQL/MinIO/pg-boss drill passes. **OWNER DECISION REQUIRED — AUTOMATIC QUARANTINE
   DESTRUCTION:** select/approve the automatic 90-day record/object policy before scheduling any
   `purge_after` scan
+- [ ] **DOCUMENT OWNER ACTION REQUIRED — R111 account-purge reconciliation.** The ratified
+  R111 design and shipped UI promise automatic de-identification after the account's three-day
+  restoration window, but the authoritative SRS still says account deletion is unapproved in
+  §5.2/§14.1, excludes User from the complete restorable set in §0/§4.10, lists neither
+  `DELETE /profile` nor `DELETE /admin/users/{id}` in TD-3, and has no account-purge job in
+  TD-7. The routes are present only in the derived `td3-routes.txt`, so the
+  conformance guard cannot detect this drift. Reconcile those clauses and define the job name,
+  payload, trigger and singleton rule; until then manual `?permanent=true` is complete, while an
+  untouched soft-deleted account remains identifiable past `purge_after`. Do not invent the
+  missing TD-7 row in implementation.
 - [x] **P1.2 TEST ISOLATION — the integration sweep now leaves shared Local Development state
   unchanged.** The staffing loss reproduced in `branch.integration.test.ts` alone: its first
   `beforeEach` cleared with `userId: actorUserId ?? undefined` before the id existed, and Prisma
@@ -1353,85 +1374,23 @@ was hiding behind it: the run went green on the first attempt.
      Prisma mass write in `backend/src` and `backend/prisma`; Codex's covers integration suites
      and shared helpers including a missing `where` entirely.
 
-- [ ] **P1.2-class, OPEN — three shared rows a sweep still moves, each now NAMED (2026-08-27).**
-  With the `[تجريبي]` soft-delete cause fixed and the development database reset, the guard's diff
-  is small enough to read, and it names three separate leaks — none from the deletion/seed batch,
-  all pre-existing:
+- [x] **P1.2 follow-up — every named shared-state leak is closed (2026-08-28).**
+  The setting fixture restores the complete logical row (`value`, `version`, `updated_by_id`),
+  not merely its JSON value. Registration, approval and staff-registration suites record exact
+  random onboarding-token JTIs at issue time and delete only those coordinates; neither a
+  purpose-wide delete nor a before/after delta can erase a real user's replay guard. The final
+  full sweep exposed the previously masked staff-registration issuer as `consumed_token 0 → 14`;
+  its 14/14 focused run now leaves the snapshot unchanged. R76's whole-set Category/Subject
+  ordering is restored from exact captured ids in `finally`.
 
-  1. **`legal.consent_text_version`** is left holding `"email-owner-test-v1"`. A suite sets this
-     GLOBAL setting and does not restore it — the exact hazard `vitest.integration.config.ts`
-     already warns about (*"one file's teardown pulled a setting out from under another file's
-     fixture"*). Reset to `"v1"` by hand; the suite must restore it in a `finally`.
-  2. **`consumed_token` 14 → 0.** An auth suite empties the whole table rather than its own rows.
-  3. **`category` and `subject` digests change with the count unchanged** — the R76 whole-set
-     reorder test's `afterAll` restores `display_order` by primary key, and the restore is not
-     landing exactly. It is the same family the reorder restoration was written for, one layer
-     deeper.
-
-  All three are **one suite each and individually addressable**, which is a much smaller job than
-  when this was *"the sweep destroys the fixtures"*. Fix each by restoring in `finally`, or by
-  scoping the delete to rows the suite created.
-
-- [ ] **P1.2-class, OPEN and ROOT-CAUSED TO A SIGNATURE — a suite soft-deletes the development
-  fixtures (2026-08-27).** **My first hypothesis was wrong and is withdrawn:** I guessed
-  overlapping sweeps, then ran one sweep with nothing else running and it failed identically. It
-  is reproducible and serial.
-
-  **What the guard reported on the clean run** — note the shape, which is the whole clue:
-
-  ```
-  administrative_group      13 → 13   digest CHANGED
-  recurring_course_schedule 15 → 15   digest CHANGED
-  session                  775 → 775  digest CHANGED
-  trash                     54 → 60
-  refresh_token           9954 → 9959
-  audit_log               2408 → 2406
-  ```
-
-  **Same count, different content, plus Trash growing** is the signature of a **soft delete**, and
-  `trash` named the rows outright:
-
-  ```
-  AdministrativeGroup      [تجريبي] مجموعة رشيش 3 · اركة 3 · رشيش 2 · اركة 2 · اركة 1
-  RecurringCourseSchedule  [تجريبي] حلقة  ×5
-  ```
-
-  **`[تجريبي]` is the development seed's own namespace** — the one `assertTestOwnershipTag`
-  explicitly reserves with *"integration scenarios may read those rows, but never claim ownership
-  of them"*. So a suite is calling the **deletion service** against seeded fixture rows it does
-  not own: 5 groups, 6 schedules and **316 sessions** soft-deleted in one sweep, each writing a
-  Trash snapshot and an audit row.
-
-  **Restored** (soft deletes undone, the 11 stray Trash snapshots removed) — the interim remedy,
-  not the fix.
-
-  **Next diagnostic step, and it is cheap:** the culprit deletes an Administrative Group and a
-  Course Schedule. Grep the integration suites for a deletion test that resolves its target from a
-  LIST rather than from a row it created — the ambient-*first* pattern — since a suite that
-  created its own group would delete its own. `trash.snapshot` also records `deleted_by`, so the
-  actor id on those rows names the suite's user directly.
-
-  **Note this is NOT the same finding as the `audit_log` one below**, and neither is NEW I's:
-  NEW I adds one nullable column and a form field and deletes nothing.
-
-- [ ] **P1.2-class, OPEN — one `audit_log` row was consumed by a sweep, once (2026-08-27).**
-  Found by the P1.2 guard during NEW D's verification, and reported rather than reseeded away.
-  The first full sweep after NEW D reported `audit_log 2382 → 2381`; **every other one of the 55
-  tables was byte-identical**, and all 1818 tests passed. The **second** sweep was completely
-  green — `audit_log` identical, zero rows added or removed — which is consistent with a single
-  *pre-existing* row whose identity happened to match some suite's cleanup predicate: once
-  deleted there is nothing left to match, so it cannot recur and cannot now be identified from
-  the digest.
-  **What is known:** it is one row, it is not `course_schedule_staff` (2 → 2 throughout), it is
-  not NEW D's own suite (run alone under the guard: clean), and it is not reproducible.
-  **What to do:** the cheap decisive method is the one used here — snapshot `audit_log`'s
-  `id|action_type|target_entity|target_id|actor_user_id` before and after a sweep and `comm` the
-  two, which names the row and therefore its owner. That needs a database where the vulnerable
-  row still exists, so it is worth running **before** the next sweep on a freshly seeded
-  environment. Candidate shapes: any `auditLog.deleteMany` keyed on `targetId` or `actorUserId`
-  whose id set can contain something the suite did not create.
-  **The guard is working as intended** — this is exactly the class of loss that no failing test
-  would ever have shown.
+  The later `[تجريبي]` soft-delete signature was independently resolved by making the deletion
+  suites own the rows they target; seeded groups/schedules are never selected as convenient
+  ambient examples. The audit-purge repository proof now uses a unique per-run marker and fixed
+  clock inside a deliberately rolled-back transaction, so it exercises the production-wide
+  query without consuming an ambient historical fact. These are fixture corrections, not a
+  reseed or an Owner-data rewrite; the logical-table isolation guard remains the acceptance
+  condition. Final sweep: **89 files / 1857 active tests passed, 10 skipped**, with every
+  application-table digest identical before and after.
 
 ## OWNER RATIFICATIONS OD-01 … OD-07 — 2026-08-26 · all answered, none open
 

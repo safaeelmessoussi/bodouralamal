@@ -16,6 +16,7 @@ import {
   type EventScopeRows,
   audienceForSession,
 } from "../policies/roster-resolution.js";
+import * as users from "../repositories/user.repository.js";
 
 /**
  * **The minimum MVP notification surface** (§4.8, R77/R78/R82/R83/R93).
@@ -132,6 +133,34 @@ export interface NotificationRow {
     date: Date;
     subject: { name: string } | null;
   } | null;
+}
+
+/**
+ * Locks a prospective recipient set and returns only accounts that still have
+ * an inbox.
+ *
+ * Roster resolution already excludes a User whose tombstone was committed
+ * before the query. That alone leaves a check/write race: final R111
+ * de-identification can delete this person's notifications after resolution,
+ * then a stale writer can insert one again. Taking every governing User lock in
+ * UUID order gives both serial outcomes the same result: either this insert
+ * commits first and de-identification removes it, or deletion commits first and
+ * the recipient is omitted.
+ */
+async function liveNotificationRecipients(
+  tx: Prisma.TransactionClient,
+  userIds: readonly string[],
+): Promise<string[]> {
+  const ids = [...new Set(userIds)].sort();
+  for (const id of ids) await users.lockUser(tx, id);
+  if (ids.length === 0) return [];
+
+  const live = await tx.user.findMany({
+    where: { id: { in: ids }, deletedAt: null },
+    select: { id: true },
+  });
+  const liveIds = new Set(live.map((row) => row.id));
+  return ids.filter((id) => liveIds.has(id));
 }
 
 /**
@@ -259,9 +288,10 @@ async function writeFor(
   type: "session_cancelled" | "session_rescheduled" | "session_assigned",
   userIds: readonly string[],
 ): Promise<number> {
-  if (userIds.length === 0) return 0;
+  const recipients = await liveNotificationRecipients(tx, userIds);
+  if (recipients.length === 0) return 0;
   const created = await tx.notification.createMany({
-    data: userIds.map((userId) => ({ userId, sessionId, type })),
+    data: recipients.map((userId) => ({ userId, sessionId, type })),
     skipDuplicates: true,
   });
   return created.count;
@@ -467,11 +497,15 @@ export async function notifyEventChange(
   )[change];
   if (userIds.length === 0) return { notified: 0 };
 
-  const created = await prisma.notification.createMany({
-    data: userIds.map((userId) => ({ userId, eventId, type })),
-    skipDuplicates: true,
+  return prisma.$transaction(async (tx) => {
+    const recipients = await liveNotificationRecipients(tx, userIds);
+    if (recipients.length === 0) return { notified: 0 };
+    const created = await tx.notification.createMany({
+      data: recipients.map((userId) => ({ userId, eventId, type })),
+      skipDuplicates: true,
+    });
+    return { notified: created.count };
   });
-  return { notified: created.count };
 }
 
 /**
@@ -574,7 +608,10 @@ export async function notifyGradePublished(
   studentIds: readonly string[],
   actorUserId: string,
 ): Promise<number> {
-  const recipients = studentIds.filter((id) => id !== actorUserId);
+  const recipients = await liveNotificationRecipients(
+    tx,
+    studentIds.filter((id) => id !== actorUserId),
+  );
   if (recipients.length === 0) return 0;
 
   const created = await tx.notification.createMany({
@@ -649,6 +686,13 @@ export async function notifyRestored(
   });
   const read = cancelled.filter((n) => n.readAt !== null);
   const unread = cancelled.filter((n) => n.readAt === null);
+  const liveReadIds = new Set(
+    await liveNotificationRecipients(
+      tx,
+      read.map((notice) => notice.userId),
+    ),
+  );
+  const liveRead = read.filter((notice) => liveReadIds.has(notice.userId));
 
   if (unread.length > 0) {
     // A hard delete, deliberately: the audit log already holds both the cancel
@@ -658,9 +702,9 @@ export async function notifyRestored(
       where: { id: { in: unread.map((n) => n.id) } },
     });
   }
-  if (read.length > 0) {
+  if (liveRead.length > 0) {
     await tx.notification.createMany({
-      data: read.map((n) => ({
+      data: liveRead.map((n) => ({
         userId: n.userId,
         sessionId,
         type: "session_restored" as const,
@@ -786,7 +830,10 @@ export async function notifyEventStaffAssigned(
   newlyAssigned: readonly string[],
   actorUserId: string,
 ): Promise<number> {
-  const recipients = [...new Set(newlyAssigned)].filter((id) => id !== actorUserId);
+  const recipients = await liveNotificationRecipients(
+    tx,
+    [...new Set(newlyAssigned)].filter((id) => id !== actorUserId),
+  );
   if (recipients.length === 0) return 0;
 
   const created = await tx.notification.createMany({

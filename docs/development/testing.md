@@ -515,12 +515,22 @@ broken, and the tests were the reason.**
 Two lessons, both now enforced in code:
 
 - **"Clean up after yourself" means restore what was there, not delete what you
-  used.** `test-support/consent-setting.ts` captures the prior value once per
-  suite and puts it back — including *absent*, which is a real state the suites
-  deliberately exercise.
+  used.** `test-support/consent-setting.ts` captures the prior logical row once
+  per suite and puts it back — value, version and updater, including *absent*,
+  which is a real state the suites deliberately exercise. Restoring only the
+  JSON while incrementing the version still changes shared application state.
 - **Capture once, not per test.** A `beforeEach` capture would re-save whatever
   the previous test left, so the suite would "restore" its own scratch value
   rather than the developer's.
+- **Track ownership when the coordinate is created.** Registration fixtures
+  record the exact random onboarding-token JTIs they issue, then delete only
+  those coordinates. A before/after database delta is unsafe too: a real user
+  can finish registration during the sweep, and deleting that newly observed
+  replay guard would make their spent token usable again.
+- **Run platform-wide destructive repository proofs inside a rolled-back
+  transaction.** The audit-purge suite uses a per-run marker and a fixed clock,
+  then deliberately rolls back the purge. It can prove the production query
+  without consuming an ambient audit fact that happens to resemble a fixture.
 
 ### The same failure, a second time: a global invariant needs global fixtures
 
@@ -1129,6 +1139,25 @@ asserts its exact job id; replacement/deletion tests establish their exact
 forced-private precondition directly. Production delivery, follow-up
 deduplication, replacement, and deletion remain covered separately, without two
 workers competing for a test that is specifically measuring one retry.
+
+R111's final-erasure regressions also meet writers at the governing User-lock
+boundary rather than relying on timing. The test starts permanent
+de-identification concurrently with teaching-profile replacement,
+safeguarding-profile upsert, notification delivery and upload initiation. Both
+legitimate serial orders must converge on no planning, case-file, inbox or quota
+satellite for the tombstone, and deletion-first mints no upload authority. This
+specifically detects a stale request that passed an earlier
+authorization/roster read and writes after the purge's `deleteMany`; a
+sequential "write, then delete" test cannot observe that race.
+
+Those focused suites also exposed a second ownership trap: a fixed tag such as
+`[content-test]` is not proof that the current process owns a row. A process
+restarted after interruption can find the earlier process's tagged Users and
+delete their domain/audit rows during its opening cleanup. The affected R111,
+content, teaching-profile, social-profile and notification suites now include a
+random run id in their ownership prefix. Their cleanup can match only ids born
+in that process, while the all-table wrapper remains the backstop that detects
+any residue left by an interrupted run.
 
 The browser audit also repaired evidence defects exposed while isolation was
 being measured: navigation now waits for the requested pathname and for the

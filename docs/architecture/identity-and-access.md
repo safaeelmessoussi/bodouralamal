@@ -118,6 +118,60 @@ would have offered **a deleted person the registration form**, contrary to the r
 nothing silently re-registers. The scoping was removed and refusal became solely the
 routing condition's job: **one rule instead of two half-rules** (Revision 20).
 
+### Account deletion is a recoverable tombstone before it is de-identified
+
+R111 separates the login from the institutional record. `DELETE /profile` (the account
+owner) and `DELETE /admin/users/{id}` (Super Admin) first stamp `deleted_at`, revoke every
+refresh session, and write a three-day Trash snapshot in one transaction. They remove no
+identity, role, family, enrolment or staffing-history row during that window. The Trash
+restore action can therefore restore the complete same account by clearing the tombstone;
+revoked credentials remain revoked and the person signs in again.
+
+`?permanent=true` performs the later de-identification immediately. The User id, sex,
+account lifecycle, beneficiary fact and institutional relationships survive, while names and
+their split parts, contact/public identity, registration-request fields, notes, spoken and QR
+identifiers, Google binding, roles, live credentials, quota rows, notifications, safeguarding
+case-file detail and teaching-planning rows are cleared. The recoverable snapshot is deleted
+in the same transaction: leaving the original name, phone and email in Trash would make the
+erasure cosmetic. Stable normalized-email lock rows remain because they carry no owner;
+removing the two ownership facts releases the address, while retaining the row keeps the next
+claim serialized.
+
+Live responsibilities and the last active Super Admin still block the first step. The check is
+time-aware: ended schedule/assignment periods and past occurrences are history, while live or
+future schedules, Sessions, responsible Events and Exams must be reassigned. Event liveness is
+read from `start_date`/`end_date`/`recurrence_end_date`, never a nonexistent generic date field.
+Session regeneration selects only the staff assignment effective on that occurrence date, and a
+schedule split validates only assignments whose dated interval can staff its successor; an ended
+former assignment remains historical evidence rather than an obligation that blocks forever.
+
+The rule is serialized, not merely checked. Every supported staffing mutation locks its distinct
+User ids in UUID order and revalidates active/non-deleted state; deletion takes the same User lock
+before reading responsibilities. A future Exam restore does too before reviving its `ExamStaff`.
+Thus staffing either commits first and deletion names the obligation, or deletion commits first
+and staffing/restoration refuses transactionally with `STAFF_ACCOUNT_UNAVAILABLE`. The
+last-Super-Admin count uses the stable `super_admin` Role row as its platform-wide lock after the
+target User lock, so two different administrators cannot both observe the other and leave the
+platform with none.
+
+Final erasure uses that lock boundary for the satellite writers too. Administrative teaching-
+profile replacement, teacher availability self-service, safeguarding-profile writes and upload
+initiation/publication revalidate the target only after taking the User lock. Notification
+delivery locks distinct recipients in UUID order and omits a committed tombstone. Consequently a
+request authorised or resolved just before deletion cannot recreate planning, case-file, quota or
+inbox rows—or mint/publish a new upload—after de-identification: either the writer commits first
+and the purge removes its deletable satellite, or the purge commits first and the writer
+refuses/omits it. An already-published upload remains institutional history and its retry remains
+idempotently readable.
+
+De-identification follows normalized-email → User lock order and then re-reads the tombstone. If
+Trash restoration committed first, it refuses with `NOT_DELETED` instead of erasing the restored
+live account. A converged retry is a no-op: it preserves the already rotated QR coordinate and
+does not manufacture a second `user.deidentify` audit event.
+
+Historical educational, consent, safeguarding and accountability relations keep pointing at the
+non-identifying tombstone, which is the reason the row itself is never hard-deleted.
+
 ### The onboarding token
 
 Short-lived (10 minutes), signed, single-use. It carries the verified email and subject id

@@ -1,4 +1,4 @@
-import type { PrismaClient } from '../generated/prisma/client.js';
+import type { Prisma, PrismaClient } from '../generated/prisma/client.js';
 import { CONSENT_TEXT_VERSION_KEY } from '../services/registration.service.js';
 
 /**
@@ -20,13 +20,23 @@ import { CONSENT_TEXT_VERSION_KEY } from '../services/registration.service.js';
 export interface SavedConsentVersion {
   readonly existed: boolean;
   readonly value: unknown;
+  readonly version: number;
+  readonly updatedById: string | null;
 }
 
 export async function captureConsentVersion(
   prisma: Pick<PrismaClient, 'systemSetting'>,
 ): Promise<SavedConsentVersion> {
-  const row = await prisma.systemSetting.findUnique({ where: { key: CONSENT_TEXT_VERSION_KEY } });
-  return { existed: row !== null, value: row?.value ?? null };
+  const row = await prisma.systemSetting.findUnique({
+    where: { key: CONSENT_TEXT_VERSION_KEY },
+    select: { value: true, version: true, updatedById: true },
+  });
+  return {
+    existed: row !== null,
+    value: row?.value ?? null,
+    version: row?.version ?? 0,
+    updatedById: row?.updatedById ?? null,
+  };
 }
 
 /**
@@ -43,7 +53,16 @@ export async function restoreConsentVersion(
   }
   await prisma.systemSetting.upsert({
     where: { key: CONSENT_TEXT_VERSION_KEY },
-    update: { value: saved.value as object },
-    create: { key: CONSENT_TEXT_VERSION_KEY, value: saved.value as object },
+    update: {
+      value: saved.value as Prisma.InputJsonValue,
+      version: saved.version,
+      updatedById: saved.updatedById,
+    },
+    create: {
+      key: CONSENT_TEXT_VERSION_KEY,
+      value: saved.value as Prisma.InputJsonValue,
+      version: saved.version,
+      updatedById: saved.updatedById,
+    },
   });
 }

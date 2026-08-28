@@ -3,6 +3,8 @@ import { assertFreshActive } from '../policies/freshness.policy.js';
 import type { Actor } from '../policies/actor.js';
 import { assertCanAccessStudent } from '../policies/roster-resolution.js';
 import * as audit from '../repositories/audit.repository.js';
+import * as users from '../repositories/user.repository.js';
+import { AppError } from '../lib/errors.js';
 
 /**
  * StudentSocialProfile — minors' case-file data (SRS §4.10, BR-16, TD-2 R28).
@@ -145,6 +147,20 @@ export async function writeProfile(
   const acting = await authorize(prisma, caller, studentId);
 
   return prisma.$transaction(async (tx) => {
+    // Authorization above intentionally answers scope without revealing whether
+    // a case file exists. It is not a write lock, though: R111 final
+    // de-identification may otherwise delete the profile and a request that
+    // already passed authorization can recreate it afterwards. Serialize on
+    // the target User and re-check only after the lock is held.
+    if (!(await users.lockUser(tx, studentId))) {
+      throw new AppError('NOT_FOUND', 'no such student');
+    }
+    const liveStudent = await tx.user.findFirst({
+      where: { id: studentId, deletedAt: null },
+      select: { id: true },
+    });
+    if (!liveStudent) throw new AppError('NOT_FOUND', 'no such student');
+
     const existing = await tx.studentSocialProfile.findFirst({
       where: { studentId, deletedAt: null },
     });

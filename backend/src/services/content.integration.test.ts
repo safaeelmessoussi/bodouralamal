@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { Readable } from "node:stream";
 
 import {
@@ -67,7 +67,9 @@ import {
 const config = loadConfig();
 const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);
 const KEY = config.JWT_SIGNING_KEY;
-const TAG = "[content-test]";
+// Run-unique ownership: a new process must never treat residue from an
+// interrupted older process as its fixture and delete it from the ambient DB.
+const TAG = `[content-test:${randomUUID()}]`;
 
 let clients: StorageClients;
 let adminId = "";

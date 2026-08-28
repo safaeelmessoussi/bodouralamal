@@ -683,6 +683,44 @@ describe("an exam is restorable, and comes back whole (R59.3)", () => {
     const row = await prisma.exam.findUnique({ where: { id } });
     expect(row?.deletedAt).not.toBeNull();
   });
+
+  it("will not revive a future obligation onto an account deleted while the exam was binned", async () => {
+    const removedSupervisor = await makeUser("مؤطرة حُذف حسابها");
+    const id = await createExam({
+      date: "2099-11-30",
+      staff: [{ user_id: removedSupervisor, position: "supervisor" }],
+    });
+    expect((await call("DELETE", `/exams/${id}`, superAdmin)).status).toBe(204);
+
+    const trash = await call(
+      "GET",
+      "/admin/trash?entity=Exam&page_size=100",
+      superAdmin,
+    );
+    const entry = (trash.body.data ?? []).find((row) => row["target_id"] === id)!;
+
+    // With the exam binned its staff row is historical/tombstoned, so R111
+    // correctly allows the account to leave.
+    expect(
+      (await call("DELETE", `/admin/users/${removedSupervisor}`, superAdmin)).status,
+    ).toBe(204);
+
+    const restore = await call(
+      "POST",
+      `/admin/trash/${entry["id"]}/restore`,
+      superAdmin,
+    );
+    expect(restore.status).toBe(409);
+    expect(restore.body.error?.details?.["reason"]).toBe("STAFF_ACCOUNT_UNAVAILABLE");
+
+    // Transactional refusal: neither the sitting nor its staffing was revived.
+    expect((await prisma.exam.findUniqueOrThrow({ where: { id } })).deletedAt).not.toBeNull();
+    expect(
+      await prisma.examStaff.count({
+        where: { examId: id, userId: removedSupervisor, deletedAt: null },
+      }),
+    ).toBe(0);
+  });
 });
 
 /**

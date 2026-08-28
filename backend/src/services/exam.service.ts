@@ -11,6 +11,7 @@ import {
 import { resolveSort, type SortableFields, type SortParams } from '../lib/sorting.js';
 import * as audit from '../repositories/audit.repository.js';
 import * as trash from '../repositories/trash.repository.js';
+import { assertStaffAccountsAvailable } from './staffing-integrity.service.js';
 
 /**
  * Exams as **scheduled sittings** (§4.6 as amended by SRS Revision 58).
@@ -213,6 +214,10 @@ export async function createPhysicalExam(
       administrativeGroupId: input.administrativeGroupId ?? null,
     });
     await assertCoherent(tx, input);
+    await assertStaffAccountsAvailable(
+      tx,
+      (input.staff ?? []).map((person) => person.userId),
+    );
 
     const exam = await tx.exam.create({
       data: {
@@ -377,6 +382,10 @@ export async function updatePhysicalExam(
     });
 
     if (input.staff !== undefined) {
+      await assertStaffAccountsAvailable(
+        tx,
+        input.staff.map((person) => person.userId),
+      );
       // Replaced, not merged: one call is one decision, and there is no window
       // in which the exam holds half of an intended change.
       //
