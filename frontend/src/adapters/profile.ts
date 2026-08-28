@@ -80,3 +80,16 @@ export async function updateOwnProfile(
 ): Promise<OwnProfile> {
   return api<OwnProfile>('/profile', { method: 'PATCH', token, body: { ...edit, version } });
 }
+
+/**
+ * `DELETE /profile` — **delete my own account** (R111).
+ *
+ * Available to every authenticated user. The server may **refuse** with a `409`
+ * naming what holds it: live teaching responsibilities
+ * (`RESPONSIBILITIES_ASSIGNED`, with a `blocked_by` breakdown) or being the last
+ * active Super Admin (`LAST_SUPER_ADMIN`). Those are blocks to clear, not
+ * permanent refusals, which is why the screen shows what must move.
+ */
+export async function deleteOwnAccount(token: string | null): Promise<void> {
+  await api<void>('/profile', { method: 'DELETE', token });
+}

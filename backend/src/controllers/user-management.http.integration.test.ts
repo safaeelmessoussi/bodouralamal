@@ -58,6 +58,18 @@ let otherBranchId: string;
  *  under test in every other case. */
 let spareSuperAdminId: string;
 
+/**
+ * **Every user this suite creates, by id.**
+ *
+ * The teardown used to find its rows by the `TAG` name prefix, which R111 broke:
+ * a de-identified account is renamed «حساب محذوف», so a deleted one stopped
+ * matching and was left behind — accumulating across runs and, worse, changing
+ * the all-table snapshot the isolation guard compares (P1.2).
+ *
+ * An id never changes. The name was only ever a convenience.
+ */
+const createdUserIds: string[] = [];
+
 async function makeUser(
   label: string,
   status = "active",
@@ -74,6 +86,7 @@ async function makeUser(
       isBeneficiary: beneficiary,
     },
   });
+  createdUserIds.push(u.id);
   return u.id;
 }
 
@@ -90,12 +103,47 @@ async function grant(
   });
 }
 
+/**
+ * A live recurring class staffed by `userId` — the R111 BLOCK fixture.
+ *
+ * Built directly rather than through the API because the property under test is
+ * the deletion refusal, not schedule creation: a fixture that had to satisfy the
+ * scheduling validators would fail for reasons that are not this test's subject.
+ */
+async function liveScheduleStaffedBy(userId: string): Promise<string> {
+  const subject = await prisma.subject.findFirstOrThrow({ where: { deletedAt: null } });
+  const level = await prisma.level.findFirstOrThrow({ where: { deletedAt: null } });
+  // AcademicYear carries no soft-delete column — it is a period, not a record
+  // that can be withdrawn.
+  const year = await prisma.academicYear.findFirstOrThrow({});
+  const schedule = await prisma.recurringCourseSchedule.create({
+    data: {
+      title: `${TAG} حصة حية`,
+      subjectId: subject.id,
+      levelId: level.id,
+      teachingMode: "entire_level",
+      branchId,
+      academicYearId: year.id,
+      recurrence: "weekly",
+      weekdays: ["monday"],
+      startTime: new Date("1970-01-01T09:00:00Z"),
+      endTime: new Date("1970-01-01T10:00:00Z"),
+    },
+  });
+  await prisma.courseScheduleStaff.create({
+    data: { scheduleId: schedule.id, userId, position: "teacher" },
+  });
+  return schedule.id;
+}
+
 async function clear(): Promise<void> {
   const users = await prisma.user.findMany({
     where: { nameArabic: { startsWith: TAG } },
     select: { id: true },
   });
-  const ids = users.map((u) => u.id);
+  // The name prefix AND the ids this suite recorded — a de-identified account
+  // answers to neither its old name nor the TAG.
+  const ids = [...new Set([...users.map((u) => u.id), ...createdUserIds])];
   if (ids.length > 0) {
     await prisma.auditLog.deleteMany({
       where: { OR: [{ actorUserId: { in: ids } }, { targetId: { in: ids } }] },
@@ -105,9 +153,24 @@ async function clear(): Promise<void> {
     // R79 suite creates one, so the teardown unwinds it first.
     await prisma.enrollment.deleteMany({ where: { studentId: { in: ids } } });
     await prisma.refreshToken.deleteMany({ where: { userId: { in: ids } } });
+    // **R111's own residue** (2026-08-28). Deleting an account writes a Trash
+    // row, revokes sessions and staffs nothing — but the BLOCK fixture staffs a
+    // real schedule, and all of it is RESTRICT against `user`. Removed here in
+    // dependency order so the suite leaves the all-table snapshot as it found
+    // it (P1.2); the schedule itself goes below, once its staffing is gone.
+    await prisma.trash.deleteMany({
+      where: { OR: [{ deletedById: { in: ids } }, { targetId: { in: ids } }] },
+    });
+    await prisma.refreshSession.deleteMany({ where: { userId: { in: ids } } });
+    await prisma.courseScheduleStaff.deleteMany({ where: { userId: { in: ids } } });
     await prisma.userBranchRole.deleteMany({ where: { userId: { in: ids } } });
     await prisma.userIdentity.deleteMany({ where: { userId: { in: ids } } });
     await prisma.user.deleteMany({ where: { id: { in: ids } } });
+  }
+  await prisma.recurringCourseSchedule.deleteMany({
+    where: { title: { startsWith: TAG } },
+  });
+  if (ids.length > 0) {
   }
   await prisma.enrollment.deleteMany({
     where: { level: { name: { startsWith: TAG } } },
@@ -986,5 +1049,206 @@ describe("account administration is Super Admin's, the directory is not", () => 
     // same rule `listUsers` applies, reached through the shared query.
     expect(ids).not.toContain(outsider);
     expect(idsAfter).not.toContain(outsider);
+  });
+});
+
+/* ── R111 account deletion (Owner decisions, 2026-08-27/28) ──────────────── */
+
+/**
+ * **Deleting an account, proved at the API boundary.**
+ *
+ * The property that matters most is not that the row goes — it is that **it does
+ * not**, and that everything filed against it survives. R111 §2: twenty-six of
+ * the thirty-five relationships referencing `"user"` must outlive the account,
+ * so deletion is the de-identification of a row that continues to exist.
+ */
+describe("R111 — deleting an account keeps the record", () => {
+  it("lets ANY authenticated user delete their own account", async () => {
+    // Owner, 2026-08-28: Student, Teacher, Admin and Super Admin alike. A role
+    // is never a reason to be unable to leave.
+    const id = await makeUser("مغادرة بنفسها", "active", "female", false);
+    await grant(id, "student", branchId);
+    const token = bearer(id, [{ role: "student", branches: [branchId] }]);
+
+    const res = await call("DELETE", "/profile", token);
+    expect(res.status).toBe(204);
+
+    const after = await prisma.user.findUnique({ where: { id } });
+    // **The row is still there.** That is the whole design, not an implementation
+    // detail: twenty-six relationships point at it.
+    expect(after).not.toBeNull();
+    /**
+     * **`deleted_at`, not a fifth `account_status` value.** The schema records
+     * that decision at the enum itself — TD-1's Deleted state is
+     * `deleted_at IS NOT NULL`, so a soft-deleted user has one source of truth
+     * rather than two that can disagree. A `deleted` status was drafted here and
+     * reverted; this asserts the rule that actually holds.
+     */
+    expect(after?.deletedAt).not.toBeNull();
+  });
+
+  it("files the account on a THREE-day window, leaving BR-15's ninety alone", async () => {
+    const id = await makeUser("نافذة ثلاثة أيام", "active", "female", false);
+    await grant(id, "student", branchId);
+    await call("DELETE", "/profile", bearer(id, [{ role: "student", branches: [branchId] }]));
+
+    const row = await prisma.trash.findFirst({
+      where: { targetEntity: "User", targetId: id },
+      orderBy: { deletedAt: "desc" },
+    });
+    if (!row) throw new Error("no Trash row was written for the deleted account");
+    const days = Math.round(
+      (row.purgeAfter.getTime() - row.deletedAt.getTime()) / 86_400_000,
+    );
+    // Three, and NOT ninety. A second window for one entity type; merging the
+    // two would silently move one of them.
+    expect(days).toBe(3);
+  });
+
+  it("signs the person out at once — not when the window expires", async () => {
+    const id = await makeUser("مسجَّلة الخروج", "active", "female", false);
+    await grant(id, "student", branchId);
+    const token = bearer(id, [{ role: "student", branches: [branchId] }]);
+    expect((await call("GET", "/profile", token)).status).toBe(200);
+
+    await call("DELETE", "/profile", token);
+    // TD-12 freshness: the token is still cryptographically valid and the
+    // account is not. **Locked out is the property**; whether 401 or 403 says so
+    // depends on which of the session lookup and the freshness check refuses
+    // first, and pinning one would pin an ordering this test does not care
+    // about. What must never happen is a 200.
+    const locked = await call("GET", "/profile", token);
+    expect([401, 403]).toContain(locked.status);
+  });
+
+  it("REFUSES the last active Super Admin, naming why", async () => {
+    // The platform's existing LAST_SUPER_ADMIN guard, applied to deletion.
+    // Revision 22's lockout recovery needs DATABASE_URL and a manual seed run —
+    // a sanctioned recovery, not something one click may produce.
+    const others = await prisma.user.count({
+      where: {
+        id: { not: superAdminId },
+        accountStatus: "active",
+        deletedAt: null,
+        branchRoles: { some: { deletedAt: null, role: { name: "super_admin" } } },
+      },
+    });
+    if (others > 0) return; // another Super Admin exists; this case cannot arise
+
+    const res = await call("DELETE", "/profile", superAdmin);
+    expect(res.status).toBe(409);
+    expect(res.body.error?.details?.["reason"]).toBe("LAST_SUPER_ADMIN");
+
+    const after = await prisma.user.findUnique({ where: { id: superAdminId } });
+    expect(after?.deletedAt).toBeNull();
+  });
+
+  it("BLOCKS a مؤطِّرة with a live class, and names what to reassign", async () => {
+    const teacher = await makeUser("مؤطرة بحصص", "active", "female", false);
+    await grant(teacher, "teacher", branchId);
+    const schedule = await liveScheduleStaffedBy(teacher);
+
+    const res = await call(
+      "DELETE",
+      "/profile",
+      bearer(teacher, [{ role: "teacher", branches: [branchId] }]),
+    );
+    expect(res.status).toBe(409);
+    expect(res.body.error?.details?.["reason"]).toBe("RESPONSIBILITIES_ASSIGNED");
+    // The refusal NAMES what must move — the Owner chose explanation over
+    // reassigning in the same action.
+    expect(res.body.error?.details?.["blocked_by"]).toMatchObject({
+      course_schedules: 1,
+    });
+
+    const after = await prisma.user.findUnique({ where: { id: teacher } });
+    expect(after?.deletedAt).toBeNull();
+
+    // ...and it succeeds once the responsibility is gone. A block that could not
+    // be cleared would be a refusal wearing a block's clothes.
+    await prisma.courseScheduleStaff.updateMany({
+      where: { scheduleId: schedule, userId: teacher },
+      data: { deletedAt: new Date() },
+    });
+    const retry = await call(
+      "DELETE",
+      "/profile",
+      bearer(teacher, [{ role: "teacher", branches: [branchId] }]),
+    );
+    expect(retry.status).toBe(204);
+  });
+
+  it("refuses a branch Admin the deletion of somebody else's account", async () => {
+    const victim = await makeUser("هدف الحذف", "active", "female", false);
+    const res = await call("DELETE", `/admin/users/${victim}`, branchAdmin);
+    expect(res.status).toBe(403);
+    const after = await prisma.user.findUnique({ where: { id: victim } });
+    expect(after?.deletedAt).toBeNull();
+  });
+
+  it("lets a Super Admin delete another account, on the SAME 3-day window", async () => {
+    const victim = await makeUser("محذوفة إدارياً", "active", "female", false);
+    const res = await call("DELETE", `/admin/users/${victim}`, superAdmin);
+    expect(res.status).toBe(204);
+
+    const row = await prisma.trash.findFirst({
+      where: { targetEntity: "User", targetId: victim },
+      orderBy: { deletedAt: "desc" },
+    });
+    const days = Math.round(
+      ((row?.purgeAfter.getTime() ?? 0) - (row?.deletedAt.getTime() ?? 0)) / 86_400_000,
+    );
+    expect(days).toBe(3);
+  });
+
+  it("permanent delete DE-IDENTIFIES and preserves — it removes no row", async () => {
+    /**
+     * The assertion this whole design exists for. A grade is filed against the
+     * account; after a permanent delete the person is unidentifiable and **the
+     * grade is still there, still pointing at the same row**.
+     */
+    const victim = await makeUser("محذوفة نهائياً", "active", "female", false);
+    const before = await prisma.user.findUniqueOrThrow({ where: { id: victim } });
+
+    const res = await call("DELETE", `/admin/users/${victim}?permanent=true`, superAdmin);
+    expect(res.status).toBe(204);
+
+    const after = await prisma.user.findUnique({ where: { id: victim } });
+    expect(after).not.toBeNull();
+    expect(after?.nameArabic).toBe("حساب محذوف");
+    expect(after?.phone).toBeNull();
+    expect(after?.preProvisionedEmail).toBeNull();
+    /**
+     * **The TD-10 search shadows no longer carry the original.**
+     *
+     * This is the one place the omission would show on no screen: a cleared
+     * `name_arabic` beside a populated `name_arabic_normalized` leaves the person
+     * findable by search. They are trigger-maintained
+     * (`user_search_shadow_sync_trigger`), so the assertion is not that they are
+     * null — they track the marker — but that **the original name is gone from
+     * them**, which is what a search would otherwise find.
+     */
+    expect(after?.nameArabicNormalized ?? "").not.toContain("محذوفة نهائياً");
+    expect(after?.phoneNormalized ?? "").toBe("");
+    // Structural columns survive: §4.4b evaluates Level restrictions against
+    // `sex`, so a preserved enrolment must still make sense.
+    expect(after?.sex).toBe(before.sex);
+    expect(after?.createdAt.getTime()).toBe(before.createdAt.getTime());
+    // Credentials are gone, which is what lets the identity register again.
+    expect(await prisma.userIdentity.count({ where: { userId: victim } })).toBe(0);
+    expect(await prisma.userBranchRole.count({ where: { userId: victim } })).toBe(0);
+  });
+
+  it("is idempotent — running the permanent delete twice changes nothing", async () => {
+    // The purge job must be safe to execute twice: a de-identification that
+    // half-ran is worse than one that has not run.
+    const victim = await makeUser("مكرَّرة", "active", "female", false);
+    await call("DELETE", `/admin/users/${victim}?permanent=true`, superAdmin);
+    const first = await prisma.user.findUniqueOrThrow({ where: { id: victim } });
+    const res = await call("DELETE", `/admin/users/${victim}?permanent=true`, superAdmin);
+    expect(res.status).toBe(204);
+    const second = await prisma.user.findUniqueOrThrow({ where: { id: victim } });
+    expect(second.nameArabic).toBe(first.nameArabic);
+    expect(second.accountStatus).toBe(first.accountStatus);
   });
 });

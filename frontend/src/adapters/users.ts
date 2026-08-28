@@ -247,3 +247,21 @@ export async function createUser(
     body: input,
   });
 }
+
+/**
+ * `DELETE /admin/users/{id}` — **Super Admin only** (R111/R112).
+ *
+ * `permanent` performs the de-identification now instead of after the three-day
+ * window. It is the same operation the window reaches, not a stronger one: no
+ * row is removed and every preserved record survives.
+ */
+export async function deleteUserAccount(
+  id: string,
+  token: string | null,
+  permanent = false,
+): Promise<void> {
+  await api<void>(`/admin/users/${id}${permanent ? '?permanent=true' : ''}`, {
+    method: 'DELETE',
+    token,
+  });
+}

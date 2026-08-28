@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 
 import { fetchMyChildApplications, type MyChildApplication } from '../../adapters/child-applications.js';
-import { fetchOwnProfile, updateOwnProfile, type OwnProfile } from '../../adapters/profile.js';
+import {
+  deleteOwnAccount,
+  fetchOwnProfile,
+  updateOwnProfile,
+  type OwnProfile,
+} from '../../adapters/profile.js';
+import { BlockedNotice } from '../../components/ui/blocked-notice.js';
+import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
 import { ApplicationHeader } from '../../components/header/application-header.js';
 import { SiteFooter } from '../../components/site-footer.js';
 import { ErrorState, LoadingState } from '../../components/states.js';
@@ -82,6 +89,7 @@ export function ProfilePage(): ReactNode {
               <ProfileDetails profile={profile} onSaved={setProfile} />
               <PlacementSection profile={profile} />
               <ChildSection applications={applications} />
+              <DeleteAccountSection />
             </>
           )}
         </Container>
@@ -203,6 +211,77 @@ function ProfileDetails({
           {busy ? t('common.saving') : t('common.save')}
         </Button>
       </div>
+    </section>
+  );
+}
+
+/**
+ * **R111 — deleting your own account.**
+ *
+ * Available to **every authenticated user** (Owner, 2026-08-28): Student,
+ * Teacher, Admin and Super Admin alike. Holding a role has never been a reason
+ * to be unable to leave.
+ *
+ * ## What the screen must say, and must not
+ *
+ * The one genuinely unacceptable outcome here is an interface that promises
+ * deletion while §4 retains the record. So the copy says plainly that the
+ * **educational and safeguarding record survives** — grades, memorisation,
+ * attendance, consent — and that the account and personal details go.
+ *
+ * ## A refusal is a block to clear, not a wall
+ *
+ * The server answers `409` naming what holds it — live classes, or being the
+ * last active Super Admin. Rendered through the shared `BlockedNotice`, which
+ * already knows how to read a `blocked_by` breakdown, so the person is told
+ * *what to reassign* rather than merely *no*.
+ */
+function DeleteAccountSection(): ReactNode {
+  const { accessToken } = useSession();
+  const [confirming, setConfirming] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [blocked, setBlocked] = useState<unknown>(null);
+
+  return (
+    <section className="card" aria-labelledby="delete-account-heading">
+      <h2 id="delete-account-heading">{t('profile.deleteTitle')}</h2>
+      <p className="muted">{t('profile.deleteLede')}</p>
+      {blocked === null ? null : (
+        <BlockedNotice error={blocked} item={t('profile.thisAccount')} />
+      )}
+      <div className="register-form__actions">
+        <Button variant="danger" onClick={() => setConfirming(true)}>
+          {t('profile.deleteAction')}
+        </Button>
+      </div>
+
+      <ConfirmDialog
+        open={confirming}
+        title={t('profile.deleteTitle')}
+        body={t('profile.deleteConfirm')}
+        confirmLabel={t('profile.deleteAction')}
+        danger
+        busy={busy}
+        onCancel={() => setConfirming(false)}
+        onConfirm={() => {
+          void (async () => {
+            setBusy(true);
+            setBlocked(null);
+            try {
+              await deleteOwnAccount(accessToken);
+              // The account is gone and every session with it, so there is no
+              // signed-in state left to return to. A full navigation rather than
+              // a route change: the app's own session context is now stale.
+              window.location.assign('/');
+            } catch (error) {
+              setBlocked(error);
+              setConfirming(false);
+            } finally {
+              setBusy(false);
+            }
+          })();
+        }}
+      />
     </section>
   );
 }

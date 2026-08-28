@@ -66,6 +66,8 @@ PATCH /admin/users/{id}                       # §5.6 /admin/users "edit"; §14.
 POST /admin/users/{id}/suspend                # §5.6 "deactivate"; TD-1 Active→Suspended; TD-4.15 revokes sessions
 POST /admin/users/{id}/reactivate             # §5.6 "deactivate" (its inverse); TD-1 Suspended→Active
 PUT /admin/users/{id}/roles                   # §5.6 "role/branch-scope assignment"; §14.2; TD-2
+DELETE /profile                               # R111; any authenticated user deletes their OWN account; no role gate
+DELETE /admin/users/{id}                      # R111/R112; Super Admin only; ?permanent=true de-identifies now
 DELETE /admin/family-links/{id}                # §4.3 Revision 16 (soft-delete IS revocation), TD-2, TD-8 familylink.revoke
 
 # ── Calendar & events (TD-3.4)

@@ -865,6 +865,45 @@
           }
         }
       },
+      "delete": {
+        "summary": "Delete my own account",
+        "description": "**R111 — every authenticated user may delete their own account** (Document Owner, 2026-08-28): Student, Teacher, Admin and Super Admin alike. **No role gate**, deliberately — the subject is the JWT `sub`, so there is nowhere for a caller to name someone else, and holding a role has never been a reason to be unable to leave. **The row is NOT removed.** Twenty-six of the thirty-five relationships referencing `\"user\"` must outlive the account — grades, Quran progress, enrolment, consent, safeguarding applications, guardianship, staffing history, audit — thirty-two are `RESTRICT`, and `CASCADE` is forbidden, so **deletion is the de-identification of a row that continues to exist**; nulling those columns instead would destroy the link that makes the surviving record mean anything. The soft delete sets `deleted_at` (**not** a fifth `account_status` value — TD-1's Deleted state has one source of truth so two fields cannot disagree), **revokes every live session in the same transaction** (TD-4.15's mechanism, so the account is unreachable at once rather than when the window expires), and files a `Trash` row on a **three-day** window. That window is **a second one for a single entity type and never a change to BR-15's ninety days**: they answer different questions, and Trash must show which one a row is on. Two refusals, each naming what has to change first: `409 STATE_CONFLICT` with `LAST_SUPER_ADMIN` (the platform's existing guard — Revision 22's lockout recovery needs `DATABASE_URL` and a manual seed run, a sanctioned recovery rather than something one click may produce), and `RESPONSIBILITIES_ASSIGNED` carrying a `blocked_by` breakdown of live staff duties. Those responsibilities split **by time, not by table**: past `SessionStaff`/`EventStaff`/`ExamStaff` rows are preserved history (R43.4 and R91 forbid rewriting who delivered a class) while future ones are an unfilled obligation — and a **responsible** principal on a hidden activity is the sharpest case, since R109 resolves `hidden` to *the responsible person + Super Admin*, so deleting her would leave the item visible to nobody at all.",
+        "responses": {
+          "204": {
+            "description": "Deleted; the session is revoked and the account is restorable for three days."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT with reason LAST_SUPER_ADMIN, or RESPONSIBILITIES_ASSIGNED carrying blocked_by.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
       "patch": {
         "summary": "Edit own basic contact info",
         "description": "**§5.2: *view/edit own basic contact info (sensitive profiling fields remain restricted)*.** Accepts **`phone` and `nickname` and nothing else**, and the exclusions are the specification rather than an oversight: **names are identity** — §1.1 composes them server-side from parts collected once, and a rename is a staff act on the §14.2 screen where it is reviewable; **`sex`** feeds §4.4b's `gender_restriction`, so self-editing it would let a person move themselves past an admission rule; **`email`** is the Google identity the account is keyed to (§4.1b); **`account_status`** is an approver's decision (TD-1); and §4.10/BR-16 safeguarding data never reaches this surface. **TD-15 optimistic locking**: the caller sends the `version` it loaded. The write reuses the existing `user.update` audit action — the same act as a staff edit by a different actor — and records the FIELDS changed, never their values (§14, no PII in logs).",
@@ -2379,6 +2418,65 @@
       }
     },
     "/admin/users/{id}": {
+      "delete": {
+        "summary": "Delete another person's account",
+        "description": "**R111/R112 — Super Admin only** (Document Owner, 2026-08-28); an Admin receives `403`, asserted in the service. Behaves exactly as `DELETE /profile` does, **on the same three-day window**: one rule and one mechanism, so a deletion clicked by mistake stays recoverable, which an immediate purge would not be. **`?permanent=true`** performs R111's de-identification **now** instead of after the window. It is **the same operation the window reaches, not a stronger one** — no row is removed, and every preserved relationship survives exactly as it would have. The tombstone keeps its structural columns (`id`, `sex` — §4.4b evaluates Level restrictions against it, so a preserved enrolment must still make sense — `account_status`, `created_at`, `is_beneficiary`) and loses its identifying ones; the **TD-10 search shadows are trigger-maintained and follow**, which had to be checked rather than assumed, since a populated `name_arabic_normalized` behind a cleared `name_arabic` would keep the person findable by search — the one place the omission would show on no screen. Credentials, role assignments, planning data and the normalized-email lock are removed, which is what lets the identity register again (OD-07). **Idempotent**: running it twice changes nothing, because a de-identification that half-ran is worse than one that has not run. The same two refusals apply — *sooner* must not mean *with fewer checks*.",
+        "responses": {
+          "204": {
+            "description": "Deleted, or de-identified when permanent."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN below Super Admin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). STATE_CONFLICT with reason LAST_SUPER_ADMIN or RESPONSIBILITIES_ASSIGNED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
       "patch": {
         "summary": "Edit a user's own fields",
         "description": "§5.6 `/admin/users` *\"edit\"*, §14.2, TD-15 optimistic locking. Body: `{ version, name_arabic?, name_french?, nickname?, phone? }` — **strictly** those keys. **`account_status` is refused, not ignored**: suspension carries TD-4.15's obligation to revoke every live `RefreshToken` **in the same transaction**, so a client that set the field here and received `200` would believe access had been withdrawn while a 30-day credential was still live. It is the same reasoning that makes `PATCH /sessions/{id}` refuse `status`. **`pre_provisioned_email` is refused** because it authorises *claiming* an account (§7 R15) — editing it after the fact would hand a half-registered person's account to someone else — and **`public_display_name`** because §20 rule 21 resolves the published identity server-side, and a back-office form is exactly where a second answer to *which name did this person publish* would appear. **A user outside a branch Admin's §4.2 R25 visibility answers `404`, never `403`** (§20 rule 17): saying *exists, but not yours* is itself the disclosure that rule prevents. TD-12 freshness applies — user-management mutations re-read the caller's live status and role on every request. The **TD-10 search shadow columns are maintained by a database trigger**, never by this handler; a second normalization would drift from the one the indexes were built with and make search find some rows and not others. The audit row records **which fields changed, not their values** — a name and a phone number are personal data, and TD-8's record must not become a second copy of them.",

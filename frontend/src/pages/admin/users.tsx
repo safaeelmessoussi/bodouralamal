@@ -10,12 +10,14 @@ import {
   setUserRoles,
   suspendUser,
   updateUser,
+  deleteUserAccount,
   type RoleAssignment,
   type UserSummary,
 } from '../../adapters/users.js';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
 import { BranchScopeCell } from '../../components/admin/branch-scope-cell.js';
 import { Button } from '../../components/ui/button.js';
+import { BlockedNotice } from '../../components/ui/blocked-notice.js';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
 import { DataTable, type Column, type RowAction, type TableStatus } from '../../components/ui/data-table.js';
 import { Dialog } from '../../components/ui/dialog.js';
@@ -79,6 +81,11 @@ export function UsersPage(): ReactNode {
   const [assigning, setAssigning] = useState<UserSummary | null>(null);
 
   const [suspending, setSuspending] = useState<UserSummary | null>(null);
+  const [deleting, setDeleting] = useState<UserSummary | null>(null);
+  /** **Permanent is opt-in, per deletion.** The default is the recoverable
+   *  three-day window, because a mistaken click must be undoable. */
+  const [permanent, setPermanent] = useState(false);
+  const [blocked, setBlocked] = useState<unknown>(null);
   const [reactivating, setReactivating] = useState<UserSummary | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -200,6 +207,35 @@ export function UsersPage(): ReactNode {
       label: t('admin.users.reactivate'),
       onSelect: (r) => setReactivating(r),
       available: (r) => r.account_status === 'suspended',
+    },
+    /**
+     * **R111 — deleting somebody else's account. Super Admin only**, and the
+     * server says so: the menu entry is not the enforcement.
+     *
+     * **Not offered on your own row.** Deleting yourself is a decision taken on
+     * حسابي, where the copy explains what survives — an administrator clicking a
+     * row action is not in that frame of mind, and the two are different acts.
+     */
+    {
+      label: t('admin.users.deleteAccount'),
+      danger: true,
+      onSelect: (r) => {
+        setPermanent(false);
+        setDeleting(r);
+      },
+      available: (r) => r.id !== me?.id,
+    },
+    {
+      // The de-identification R111 would reach after three days, performed now.
+      // A separate action, because «sooner» is a different decision from
+      // «delete» and must be chosen deliberately rather than by a checkbox.
+      label: t('admin.users.deletePermanent'),
+      danger: true,
+      onSelect: (r) => {
+        setPermanent(true);
+        setDeleting(r);
+      },
+      available: (r) => r.id !== me?.id,
     },
   ];
 
@@ -373,6 +409,42 @@ export function UsersPage(): ReactNode {
           )
         }
         onCancel={() => setReactivating(null)}
+      />
+
+      {/* R111 — two ACTIONS rather than one action with a switch.
+          Each says what it does, and the destructive one cannot be reached by
+          missing a checkbox. */}
+      <ConfirmDialog
+        open={deleting !== null}
+        {...(blocked === null
+          ? {}
+          : { blocked: <BlockedNotice error={blocked} item={t('admin.users.thisAccount')} /> })}
+        title={permanent ? t('admin.users.deletePermanentTitle') : t('admin.users.deleteTitle')}
+        body={(permanent ? t('admin.users.deleteBodyPermanent') : t('admin.users.deleteBody'))
+          .replace('{name}', deleting?.name_arabic ?? '')}
+        confirmLabel={
+          permanent ? t('admin.users.deletePermanent') : t('admin.users.deleteAccount')
+        }
+        danger
+        busy={busy}
+        onConfirm={() =>
+          void run(async () => {
+            setBlocked(null);
+            try {
+              await deleteUserAccount(deleting!.id, accessToken, permanent);
+            } catch (error) {
+              // A 409 naming what holds the deletion is not a generic failure —
+              // it is the list of things to reassign, so it is shown in place.
+              setBlocked(error);
+              throw error;
+            }
+          }, 'admin.users.deleted')
+        }
+        onCancel={() => {
+          setDeleting(null);
+          setPermanent(false);
+          setBlocked(null);
+        }}
       />
     </AdminLayout>
   );

@@ -951,3 +951,54 @@ targets, one answer. The scope-based rule moved to `/admin/directory`, where a
 branch-scoped Admin *is* authorized and out-of-scope people simply do not appear.
 
 Two frontend guards were restated the same way, and say so in place.
+
+## R111 — account deletion (2026-08-28)
+
+Implements the six Owner decisions. `backend/src/services/account-deletion.service.ts`.
+
+**Deletion is the de-identification of a row that continues to exist.** Twenty-six
+of the thirty-five relationships referencing `"user"` must outlive the account,
+thirty-two are `RESTRICT`, and `CASCADE` is forbidden — so the row cannot go, and
+nulling the columns would destroy the link that makes the surviving record mean
+anything.
+
+- **`DELETE /profile`** — every authenticated user, no role gate. The subject is
+  the JWT `sub`, so nobody can name someone else, and a role has never been a
+  reason to be unable to leave. A role can **block**, never forbid.
+- **`DELETE /admin/users/{id}`** — Super Admin only, same 3-day window.
+  **`?permanent=true`** performs the de-identification now: the operation the
+  window reaches, **not a stronger one**. Idempotent.
+- **Blocks**, each naming what to move: `LAST_SUPER_ADMIN` (the platform's
+  existing guard, applied rather than rewritten) and `RESPONSIBILITIES_ASSIGNED`
+  with a `blocked_by` breakdown. Responsibilities split **by time, not table** —
+  past staffing is preserved history (R43.4, R91), future staffing is an
+  unfilled obligation.
+- **Three days, and BR-15's ninety untouched.** `snapshot()` gained an optional
+  window; every existing caller keeps what it had.
+
+### Three things the implementation had to correct in itself
+
+- **A fifth `account_status` value was drafted and reverted.** The schema already
+  records the opposite decision at the enum: TD-1's Deleted state is
+  `deleted_at IS NOT NULL` *"so a soft-deleted user has exactly one source of
+  truth instead of two that can disagree"*. My own justification was the inverse
+  of that reasoning and weaker. The migration was withdrawn and the enum value
+  removed from the development database.
+- **The TD-10 search shadows are trigger-maintained.** Clearing `name_arabic`
+  while leaving `name_arabic_normalized` would keep a deleted person findable by
+  search — the one place the omission shows on no screen. They follow the columns
+  they shadow, so the correct assertion is that the **original** is gone from
+  them, not that they are null. Setting them explicitly would have looked like
+  the safeguard and been decoration.
+- **The suite's teardown found its rows by name prefix**, which deletion breaks:
+  a de-identified account is renamed «حساب محذوف» and stopped matching, so rows
+  accumulated and would have changed the all-table isolation snapshot (P1.2). It
+  now tracks ids, which never change.
+
+**One construction is in the code for a reason I could not fully explain**, and
+says so in place: the block check reads staffing rows and asks about their
+parents by id, rather than using a nested relation filter. The nested form was
+rejected at runtime inside the request path while the identical query succeeded
+from a script against the same client in the same container. Rather than ship a
+construction whose behaviour I could not account for, it is written the plainer
+way — which also reads as what it means.

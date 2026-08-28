@@ -1,4 +1,5 @@
 import type { Request, Response } from 'express';
+import { deleteOwnAccount } from '../services/account-deletion.service.js';
 import { z } from 'zod';
 
 import type { PrismaClient } from '../generated/prisma/client.js';
@@ -99,5 +100,22 @@ export function update(prisma: PrismaClient) {
       fields,
     );
     res.json(dto(updated));
+  };
+}
+
+/**
+ * `DELETE /profile` — **every authenticated user may delete their own account**
+ * (Owner, 2026-08-28): Student, Teacher, Admin and Super Admin alike.
+ *
+ * **No role gate, deliberately.** The subject is the JWT `sub`, so there is
+ * nowhere for a caller to name someone else, and holding a role has never been a
+ * reason to be unable to leave. A role can make the deletion **blocked** — live
+ * teaching responsibilities, or being the last active Super Admin — and each
+ * refusal names what has to change first.
+ */
+export function remove(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    await deleteOwnAccount(prisma, requireActor(req));
+    res.status(204).end();
   };
 }

@@ -355,6 +355,10 @@ export function createApp(
    */
   guarded.get('/profile', profile.read(prisma));
   guarded.patch('/profile', profile.update(prisma));
+  // R111 — anyone may delete their own account. No role gate: the subject is the
+  // JWT `sub`, so a caller cannot name somebody else. A role can BLOCK it (live
+  // teaching responsibilities, the last active Super Admin), never forbid it.
+  guarded.delete('/profile', profile.remove(prisma));
 
   guarded.get('/students/me', childContext(prisma), students.me(prisma));
 
@@ -428,6 +432,9 @@ export function createApp(
   guarded.post('/admin/users/:id/suspend', users.suspend(prisma));
   guarded.post('/admin/users/:id/reactivate', users.reactivate(prisma));
   guarded.put('/admin/users/:id/roles', users.setRoles(prisma));
+  // R111 — Super Admin only, on the same 3-day window as a self-deletion.
+  // `?permanent=true` performs the de-identification now instead.
+  guarded.delete('/admin/users/:id', users.remove(prisma));
   guarded.post('/family-links', familyLinks.create(prisma));
   guarded.delete('/admin/family-links/:id', familyLinks.revoke(prisma));
   guarded.get('/admin/branches', branch.listBranches(prisma));

@@ -14,6 +14,10 @@ import {
   suspendUser,
   updateUser,
 } from '../services/user.service.js';
+import {
+  deleteUserAccount,
+  purgeUserAccount,
+} from '../services/account-deletion.service.js';
 import { userDto } from './dto.js';
 import { idParam, parse } from './parse.js';
 import {
@@ -238,5 +242,28 @@ export function setRoles(prisma: PrismaClient) {
       body.assignments.map((a) => ({ role: a.role, branchId: a.branch_id })),
     );
     res.json({ data: userDto(user) });
+  };
+}
+
+/* ── Account deletion (R111, Owner clarification 2026-08-28) ─────────────── */
+
+/**
+ * `DELETE /admin/users/{id}` — Super Admin only.
+ *
+ * `?permanent=true` performs R111's de-identification **now** instead of after
+ * the three-day window. It is the same operation the window reaches, not a
+ * stronger one: no row is removed, and every preserved relationship survives.
+ */
+export function remove(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const permanent = req.query['permanent'] === 'true';
+    const actor = requireActor(req);
+    const id = idParam(req, 'id');
+    if (permanent) {
+      await purgeUserAccount(prisma, actor, id);
+    } else {
+      await deleteUserAccount(prisma, actor, id);
+    }
+    res.status(204).end();
   };
 }
