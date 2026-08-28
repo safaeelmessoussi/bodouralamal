@@ -26,6 +26,7 @@
  */
 
 import type { Prisma } from "../generated/prisma/client.js";
+import { splitComposedName } from '../lib/person-name.js';
 import { toNumber } from "../policies/grading.js";
 import type { Page } from "../lib/pagination.js";
 
@@ -1523,8 +1524,15 @@ export function userDto(row: {
   return {
     id: row.id,
     name_arabic: row.nameArabic,
-    first_name_arabic: row.firstNameArabic,
-    last_name_arabic: row.lastNameArabic,
+    /**
+     * **Derived when they were never recorded** (2026-08-28). Rows predating
+     * Revisions 40–41, and every path that writes only the composed column,
+     * carry a name and no parts — so §5.6's edit form opened blank on them and
+     * then refused to save, because both parts are required. The stored row is
+     * untouched: the split is shown, and becomes real only if she saves it.
+     */
+    first_name_arabic: row.firstNameArabic ?? splitComposedName(row.nameArabic).first,
+    last_name_arabic: row.lastNameArabic ?? splitComposedName(row.nameArabic).last,
     first_name_french: row.firstNameFrench,
     last_name_french: row.lastNameFrench,
     sex: row.sex,

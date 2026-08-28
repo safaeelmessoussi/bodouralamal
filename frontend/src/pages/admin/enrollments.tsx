@@ -75,6 +75,8 @@ import { Feedback } from '../../components/ui/feedback.js';
 interface StudentRow {
   id: string;
   name: string;
+  firstName: string | null;
+  lastName: string | null;
   enrolments: EnrollmentRowView[];
 }
 
@@ -83,7 +85,6 @@ export function EnrollmentsPage(): ReactNode {
 
   const [rows, setRows] = useState<EnrollmentRowView[]>([]);
   const [levels, setLevels] = useState<Level[]>([]);
-  const [branches, setBranches] = useState<Branch[]>([]);
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [filterLevel, setFilterLevel] = useState<string | null>(null);
   // `null` is BR-19's order, which the server keeps when nothing is asked.
@@ -132,17 +133,6 @@ export function EnrollmentsPage(): ReactNode {
     void load();
   }, [load]);
 
-  useEffect(() => {
-    void (async () => {
-      try {
-        // The server returns only the branches this caller may act on, so the
-        // form cannot offer one the placement would refuse.
-        setBranches((await listBranches(accessToken)).data);
-      } catch {
-        setBranches([]);
-      }
-    })();
-  }, [accessToken]);
 
   /** Client-side narrowing by name; the Level narrows server-side already. */
 
@@ -164,12 +154,22 @@ export function EnrollmentsPage(): ReactNode {
    */
   const byStudent = new Map<string, StudentRow>();
   for (const person of students) {
-    byStudent.set(person.id, { id: person.id, name: person.name_arabic, enrolments: [] });
+    byStudent.set(person.id, {
+      id: person.id,
+      name: person.name_arabic,
+      firstName: person.first_name_arabic,
+      lastName: person.last_name_arabic,
+      enrolments: [],
+    });
   }
   for (const e of rows) {
     const existing = byStudent.get(e.student_id) ?? {
       id: e.student_id,
       name: e.student_name,
+      // An enrolment names the student without splitting her name; the split is
+      // the directory's, so a row reached only through an enrolment shows none.
+      firstName: null,
+      lastName: null,
       enrolments: [],
     };
     existing.enrolments.push(e);
@@ -189,9 +189,14 @@ export function EnrollmentsPage(): ReactNode {
 
   const columns: Column<StudentRow>[] = [
     {
-      key: 'student',
-      header: t('admin.enrollments.student'),
-      cell: (r) => r.name,
+      key: 'first_name',
+      header: t('admin.users.colFirstName'),
+      cell: (r) => r.firstName ?? r.name,
+    },
+    {
+      key: 'last_name',
+      header: t('admin.users.colLastName'),
+      cell: (r) => r.lastName ?? <span className="muted">{t('common.notSet')}</span>,
     },
     {
       key: 'level',
@@ -459,7 +464,6 @@ export function EnrollmentsPage(): ReactNode {
       {composing ? (
         <EnrolDialog
           levels={levels}
-          branches={branches}
           token={accessToken}
           studentId={composing}
           onCancel={() => setComposing(null)}
@@ -476,14 +480,12 @@ export function EnrollmentsPage(): ReactNode {
 
 function EnrolDialog({
   levels,
-  branches,
   token,
   studentId: fixedStudentId,
   onCancel,
   onDone,
 }: {
   levels: Level[];
-  branches: Branch[];
   token: string | null;
   /**
    * **Opened from her row, so she is already chosen** (Owner, 2026-08-28). The
@@ -505,7 +507,6 @@ function EnrolDialog({
    * reader has not been asked yet.
    */
   const [eligibleLevels, setEligibleLevels] = useState<Level[] | null>(null);
-  const [branchId, setBranchId] = useState('');
   const [groupId, setGroupId] = useState('');
   const [groups, setGroups] = useState<AdministrativeGroup[]>([]);
   /** The Level's circles, across its Subjects — offered, never required. */
@@ -513,6 +514,22 @@ function EnrolDialog({
   const [circleIds, setCircleIds] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+
+  /**
+   * **The branch is DERIVED, never asked for** (Owner, 2026-08-28).
+   *
+   * A المقر dropdown was added here and is withdrawn: branch membership is
+   * managed on تعديل بيانات المستخدم and this form must not offer a second
+   * place to decide it. The answer is already contained in what the reader
+   * chooses — **an Administrative Group carries its branch** (§4.4c) — and for
+   * a Level-only placement (R66) it is the مستفيدة's own branch, from her role
+   * assignment.
+   */
+  const derivedBranchId =
+    groups.find((g) => g.id === groupId)?.branch_id ??
+    matches.find((m) => m.id === studentId)?.roles.find((r) => r.branch_id !== null)?.branch_id ??
+    '';
+
 
   // **The list is loaded once, on open; search NARROWS it in the control.** It
   // used to be gated on two typed characters, so the dialog opened with an empty
@@ -610,10 +627,9 @@ function EnrolDialog({
 
   // A group states its own branch (§7), so choosing one answers the branch
   // rather than having to agree with a separate answer.
-  useEffect(() => {
-    const group = groups.find((g) => g.id === groupId);
-    if (group) setBranchId(group.branch_id);
-  }, [groupId, groups]);
+  // The group's branch is read straight from the chosen group by
+  // `derivedBranchId` above — an effect mirroring it into state would be a
+  // second copy of one fact, and the copy is what drifts.
 
   /**
    * **The Level's circles, keyed by Level ALONE — not by the group.**
@@ -668,7 +684,7 @@ function EnrolDialog({
    * seats can be added from `حلقات المواد`.
    */
   async function submit(): Promise<void> {
-    if (!studentId || !levelId || !branchId) return;
+    if (!studentId || !levelId || !derivedBranchId) return;
     setBusy(true);
     setNotice(null);
     try {
@@ -676,7 +692,7 @@ function EnrolDialog({
         {
           student_id: studentId,
           level_id: levelId,
-          branch_id: branchId,
+          branch_id: derivedBranchId,
           // `null` is the placement, not the absence of one (R66).
           administrative_group_id: groupId === '' ? null : groupId,
         },
@@ -710,8 +726,17 @@ function EnrolDialog({
 
   // A create form opens blank, so anything entered is unsaved work.
   const dirty = isDirty(
-    { studentId, levelId, branchId, groupId, circleIds: [...circleIds].sort() },
-    { studentId: '', levelId: null, branchId: '', groupId: '', circleIds: [] },
+    { levelId, groupId, circleIds: [...circleIds].sort() },
+    /**
+     * **What the form opened with, not a blank slate** (2026-08-28).
+     *
+     * The baseline was every field empty — including `studentId`, which this
+     * dialog now receives **pre-chosen from her row**. So it was dirty the
+     * instant it opened, and closing تسجيل without touching anything asked to
+     * discard nothing. The student is no longer part of the comparison at all:
+     * it is not a field the reader can change here.
+     */
+    { levelId: null, groupId: '', circleIds: [] },
   );
 
   return (
@@ -721,7 +746,7 @@ function EnrolDialog({
       notice={notice}
       busy={busy}
       dirty={dirty}
-      disabled={!studentId || !levelId || !branchId}
+      disabled={!studentId || !levelId || !derivedBranchId}
       onSubmit={() => void submit()}
       onCancel={onCancel}
     >
@@ -760,14 +785,6 @@ function EnrolDialog({
             : t('admin.enrollments.levelsForStudent')}
         </p>
       ) : null}
-
-      <SelectField
-        label={t('admin.enrollments.branch')}
-        value={branchId}
-        onChange={setBranchId}
-        placeholder={t('common.choose')}
-        options={branches.map((b) => ({ value: b.id, label: b.name }))}
-      />
 
       <SelectField
         label={t('admin.nav.groups')}

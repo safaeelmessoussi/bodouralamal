@@ -89,6 +89,9 @@ export interface UserQuery {
 export interface DirectoryEntry {
   id: string;
   name_arabic: string;
+  /** The same name in its two parts — §14.2's tables show them as columns. */
+  first_name_arabic: string | null;
+  last_name_arabic: string | null;
   nickname: string | null;
   roles: RoleAssignment[];
 }

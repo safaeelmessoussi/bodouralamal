@@ -323,6 +323,56 @@ describe("PATCH /admin/users/{id} — the person's own fields", () => {
     expect(res.body.data!["version"]).toBe((row["version"] as number) + 1);
   });
 
+  it("prefills the name PARTS on a row that only carries the composed name", async () => {
+    /**
+     * **The defect this pins** (2026-08-28). `تعديل بيانات المستخدم` opened
+     * with الاسم الشخصي and الاسم العائلي empty for every account created
+     * before Revisions 40–41, and `حفظ` then did nothing at all: both fields
+     * are required, so the form failed validation and returned without a word.
+     *
+     * `makeUser` writes ONLY `nameArabic` — exactly the production shape — so
+     * this fixture is the defect. The list must hand the dialog something to
+     * prefill, and what it hands back must survive being saved.
+     */
+    const id = await makeUser("سعاد المسوسي");
+    await grant(id, "student", branchId);
+
+    const stored = await prisma.user.findUniqueOrThrow({ where: { id } });
+    // Guard the guard: if a later migration backfills the parts, this test
+    // stops exercising the case it was written for and must be revisited.
+    expect(stored.firstNameArabic).toBeNull();
+    expect(stored.lastNameArabic).toBeNull();
+
+    const list = await call(
+      "GET",
+      `/admin/users?q=${encodeURIComponent(TAG)}`,
+      superAdmin,
+    );
+    const row = (
+      list.body as unknown as { data: Record<string, unknown>[] }
+    ).data.find((r) => r["id"] === id)!;
+    expect(row["first_name_arabic"]).toBe(TAG);
+    expect(row["last_name_arabic"]).toBe("سعاد المسوسي");
+
+    // Derived for READING only — the row itself is untouched until she saves.
+    const untouched = await prisma.user.findUniqueOrThrow({ where: { id } });
+    expect(untouched.firstNameArabic).toBeNull();
+
+    // And saving the prefilled form persists the parts, which is the half that
+    // silently did nothing before.
+    const res = await call("PATCH", `/admin/users/${id}`, superAdmin, {
+      version: row["version"],
+      first_name_arabic: "سعاد",
+      last_name_arabic: "المسوسي",
+    });
+    expect(res.status).toBe(200);
+    const saved = await prisma.user.findUniqueOrThrow({ where: { id } });
+    expect(saved.firstNameArabic).toBe("سعاد");
+    expect(saved.lastNameArabic).toBe("المسوسي");
+    // §1.1 — the composed name is the server's, recomposed from the parts.
+    expect(saved.nameArabic).toBe("سعاد المسوسي");
+  });
+
   it("refuses account_status rather than dropping it", async () => {
     // The whole reason suspension is its own verb: TD-4.15 requires session
     // revocation in the same transaction, and a client that set this field and
@@ -1100,7 +1150,17 @@ describe("account administration is Super Admin's, the directory is not", () => 
     expect(res.status).toBe(200);
     const row = (res.body.data as unknown as Record<string, unknown>[])[0];
     if (!row) throw new Error("the directory returned no rows to inspect");
-    expect(Object.keys(row).sort()).toEqual(["id", "name_arabic", "nickname", "roles"]);
+    // The parts joined 2026-08-28: §14.2's tables show الاسم الشخصي and
+    // الاسم العائلي separately, and the parts ARE the composed name — they
+    // disclose nothing it does not.
+    expect(Object.keys(row).sort()).toEqual([
+      "first_name_arabic",
+      "id",
+      "last_name_arabic",
+      "name_arabic",
+      "nickname",
+      "roles",
+    ]);
   });
 
   it("does not widen what a branch-scoped Admin may see", async () => {

@@ -1878,7 +1878,7 @@ before passing**:
   rendered is *worse* than the original defect, because the dialog becomes impossible to
   leave while dirty. One of the six did precisely that while this section was being written.
 
-Behaviour is pinned by `scripts/dev/browser/verify-unsaved-guard.sh` (**21/21**), which drives
+Behaviour is pinned by `scripts/dev/browser/verify-unsaved-guard.sh` (**23/23**), which drives
 the reported scenario in a real browser and keeps `＋تسجيل مستفيدة` green as the reference.
 
 ### AY.1 · «Dirty» means *changed*, never *has content* (NEW E)
@@ -1908,6 +1908,32 @@ loaded**, captured in the fetch rather than in a render — the timing trap
   for this is placed *after* the one that saves content, because on the empty
   profile every earlier check runs against, the broken computation and the
   correct one agree.
+
+### AY.1b · A baseline may only hold fields the reader can CHANGE (2026-08-28)
+
+`＋تسجيل مستفيدة` — the very dialog cited above as *the reference that stays
+green* — began asking to discard on close without a field being touched. Its
+comparison had grown a fourth member:
+
+```ts
+isDirty({ studentId, levelId, groupId, circleIds }, { studentId: '', levelId: null, … })
+```
+
+`studentId` is set **by the row action that opens the dialog**. It is not a
+control, it is not editable, and it was different from `''` on the first render
+and every render after — so the form was born dirty and stayed dirty. The
+symptom is AY.1's exactly; the mechanism is new, and it is the one that will
+recur, because adding a field to a form and adding it to both sides of the
+baseline is a single reflex that produces the bug when the field is not a field.
+
+**The rule: a `dirty` baseline enumerates what the reader can modify, not what
+the component holds.** A value the dialog *receives* is context; only a value
+she can *change* is a candidate for unsaved work. The same reasoning already
+excludes hydration and server-loaded values two paragraphs up — this is the
+third face of it, and the first where the value never changes at all.
+
+Pinned in `verify-unsaved-guard.mjs` alongside الجدولة and إضافة شريك, because
+three different mechanisms have now produced this one sentence for the reader.
 
 ## AX · A create/edit form contains every field that decides what is saved
 

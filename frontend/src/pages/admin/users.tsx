@@ -137,10 +137,15 @@ export function UsersPage(): ReactNode {
 
   const columns: Column<UserSummary>[] = [
     {
-      key: 'name',
-      header: t('admin.users.colName'),
+      key: 'first_name',
+      header: t('admin.users.colFirstName'),
       sortKey: 'name',
-      cell: (r) => r.name_arabic,
+      cell: (r) => r.first_name_arabic ?? <span className="muted">{t('common.notSet')}</span>,
+    },
+    {
+      key: 'last_name',
+      header: t('admin.users.colLastName'),
+      cell: (r) => r.last_name_arabic ?? <span className="muted">{t('common.notSet')}</span>,
     },
     {
       key: 'email',
@@ -549,6 +554,7 @@ function ProfileDialog({
   const [role, setRole] = useState('');
   const [branchId, setBranchId] = useState('');
   const [touched, setTouched] = useState(false);
+  const [formNotice, setFormNotice] = useState<string | null>(null);
 
   const errors: Record<string, string> = {};
   if (person.firstNameArabic.trim() === '') errors['user.firstNameArabic'] = t('common.required');
@@ -586,6 +592,7 @@ function ProfileDialog({
     >
       {guard.confirmation}
       <div className="form">
+        {formNotice === null ? null : <Feedback>{formNotice}</Feedback>}
         <PersonFields value={person} onChange={setPerson} errors={touched ? errors : {}} prefix="user" />
 
         <h3>{t('admin.users.rolesHeading')}</h3>
@@ -684,7 +691,20 @@ function ProfileDialog({
             disabled={busy}
             onClick={() => {
               setTouched(true);
-              if (!valid) return;
+              /**
+               * **A refusal must say so** (2026-08-28). This returned silently,
+               * so حفظ looked broken: the required name parts were empty —
+               * because the account predated Revisions 40–41 and had none stored
+               * — and pressing Save did nothing at all, with no request and no
+               * message. The field errors render now that `touched` is set, and
+               * the form states the refusal above its own buttons (rule AH)
+               * rather than leaving the reader to find them.
+               */
+              if (!valid) {
+                setFormNotice(t('admin.users.fixFieldsFirst'));
+                return;
+              }
+              setFormNotice(null);
               // An emptied optional field is `null` (clear it), never `''` — a
               // blank would read as set and render as nothing.
               const orNull = (v: string): string | null => (v.trim() === '' ? null : v.trim());

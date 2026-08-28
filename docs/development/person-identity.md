@@ -140,6 +140,44 @@ identification · linking physical documents to a person. **None is implemented*
 and none of them changes the rule above: whatever is built on a scan authorises
 itself.
 
+## The name parts, and the rows that do not have them
+
+Revision 40 split the Arabic name into **الاسم الشخصي + الاسم العائلي** and kept
+`name_arabic` as the server-composed whole. It also refused a backfill, in
+terms: *splitting an existing full name on whitespace would be a guess, and
+afterwards nothing could distinguish a guessed part from a typed one.* That
+refusal stands.
+
+It left a consequence nobody had followed through. Every account created before
+Revision 40 — and every path that still writes only the composed column, the
+seeds and most test fixtures among them — carries `first_name_arabic` and
+`last_name_arabic` as **NULL**. `تعديل بيانات المستخدم` requires both. So the
+edit dialog opened with two required fields empty on those accounts, and `حفظ`
+failed validation and **returned without saying anything**: a screen that looked
+functional, could not be saved, and gave no reason.
+
+Two fixes, and the split between them is the point:
+
+- **`splitComposedName` derives the parts at READ time**
+  ([`lib/person-name.ts`](../../backend/src/lib/person-name.ts)), in `userDto`
+  and in the directory projection. It splits at the **first** space — «عبد
+  الله» is one given name far more often than «الرحمن» is a family name — and
+  returns `null`, never `''`, for what it cannot determine.
+- **The form now refuses out loud.** A validation failure that returns silently
+  is indistinguishable from a broken button (rule AH: an action's message
+  belongs beside its controls).
+
+**Why this does not reopen Revision 40's refusal.** The derivation never writes.
+The row keeps its NULLs until an administrator saves the dialog, so the guess is
+never persisted as though it were typed — it is *offered to a human who knows
+the person's name, in a field she can correct before it becomes a fact*. That is
+the one thing a migration could not do, and it is exactly why Revision 40 said
+no to the migration and not to the split itself. A later contract phase (TD-6b)
+inherits a table whose parts were all confirmed by somebody.
+
+The derivation is pinned by `lib/person-name.test.ts` and by an HTTP test that
+asserts the stored row is **still NULL** after the read that derived from it.
+
 ## The guards
 
 | Guard | What it pins |

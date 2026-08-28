@@ -309,5 +309,49 @@ if (sched === 'ready') {
   check('PRISTINE الجدولة: the page could be reached', false, `state=${sched}`);
 }
 
+/**
+ * **المستفيدات → تسجيل** (2026-08-28) — the third page to reach the reader as
+ * *«لديك تغييرات غير محفوظة»* on a form she had not touched.
+ *
+ * Its pristine snapshot compared a `studentId` that the dialog does not offer
+ * as a field: the row action sets it when it opens, so it was already different
+ * from the `''` baseline on the very first render and never stopped being
+ * different. **A `dirty` baseline may only contain fields the reader can
+ * change** — a value the form receives is not a change she made.
+ *
+ * Checked here rather than left to a one-off probe because the two above are
+ * proof that this defect returns by a different route each time.
+ */
+const enrolPage = await goto('/admin/enrollments');
+if (enrolPage === 'ready') {
+  const opened = await evaluate(`(async () => {
+    const enrol = [...document.querySelectorAll('.admin-table tbody button')].find((b) =>
+      b.textContent.trim() === 'تسجيل');
+    if (!enrol) return { noRowAction: true };
+    enrol.click();
+    await new Promise((r) => setTimeout(r, 1500));
+    const dlg = document.querySelector('dialog[open]');
+    if (!dlg) return { noDialog: true };
+    const close = [...dlg.querySelectorAll('button')].find((b) => b.textContent.trim() === 'إغلاق');
+    if (!close) return { noCloseButton: true };
+    close.click();
+    await new Promise((r) => setTimeout(r, 800));
+    return { closed: true };
+  })()`);
+
+  if (opened.closed !== true) {
+    check('PRISTINE تسجيل: the enrolment form could be opened', false, JSON.stringify(opened));
+  } else {
+    const after = await state();
+    check(
+      'PRISTINE: an untouched تسجيل مستفيدة closes with no discard question',
+      after.confirming === false && after.open === 0,
+      JSON.stringify(after),
+    );
+  }
+} else {
+  check('PRISTINE تسجيل: المستفيدات could be reached', false, `state=${enrolPage}`);
+}
+
 close();
 process.exit(finish());

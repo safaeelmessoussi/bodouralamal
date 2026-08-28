@@ -597,6 +597,37 @@ accumulated debris. The development database had to be purged by hand before the
 suite could be trusted again. **A red teardown is never "just cleanup"; it is the
 next run's false failure.**
 
+### A fourth time: a tag in a MUTABLE column is not a handle (2026-08-28)
+
+Every suite here identifies its own rows by a `TAG` prefix and sweeps them with
+`startsWith(TAG)`. That works precisely as long as nothing under test rewrites
+the tagged column — and R111's whole purpose is to rewrite one:
+
+```ts
+await prisma.user.update({
+  where: { id: departed },
+  data: { deletedAt: new Date(), nameArabic: "حساب محذوف" },
+});
+```
+
+Two tests in `administrative-group.http` do this. After each of them the row no
+longer answers to the TAG, the teardown found nothing, and the full sweep leaked
+**two users per run** — caught by the all-table snapshot guard as
+`user 25 → 27`, and invisible to the suite itself, which passed 26/26 every
+time.
+
+**The fix is to hold a handle the test under test cannot destroy: the id.**
+`makeUser` records into a `createdUserIds` array and the teardown deletes the
+**union** of the name query and the recorded ids — the shape
+`user-management.http` already used, for exactly this reason and against exactly
+this feature.
+
+Generalised: **a fixture's handle on its rows must live in a column no test
+writes.** A tag is a convenience for finding rows a helper did not record; it is
+never the only handle when the subject under test is a mutation. The tell is a
+suite that is green and a snapshot that is not — which is the whole reason the
+snapshot guard is all-table rather than per-suite.
+
 ## Assert that a failure is ACTIONABLE, not merely that it fails
 
 There *was* a test for the missing consent version. It asserted

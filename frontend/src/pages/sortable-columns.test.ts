@@ -42,13 +42,19 @@ const PAGES: { label: string; path: string; sortable: string[]; never: string[] 
   {
     label: 'المؤطِّرات',
     path: '/src/pages/admin/teachers.tsx',
-    sortable: ['name'],
+    /**
+     * **`first_name` carries the sort** (2026-08-28). §14.2 now shows the name
+     * in two columns, and the server orders by the natively collated
+     * `name_arabic` — one column offers that order because two headers claiming
+     * it would be two controls for one decision.
+     */
+    sortable: ['first_name'],
     // Fetched per row AFTER the page arrives, so sorting by them would order
     // the 25 rows this page holds and present it as the collection's order.
     // `branches` comes from the row itself, but a person may hold several
     // assignments, so there is no single value to order by — the server sorts
     // rows, not sets.
-    never: ['branches', 'subjects', 'categories', 'availability'],
+    never: ['last_name', 'branches', 'subjects', 'categories', 'availability'],
   },
   {
     label: 'طلبات الانضمام',

@@ -5,6 +5,7 @@ import { z } from 'zod';
 import type { PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
 import { requireActor } from '../middleware/authenticate.js';
+import { splitComposedName } from '../lib/person-name.js';
 import {
   listDirectory,
   listUsers,
@@ -152,6 +153,10 @@ export function directory(prisma: PrismaClient) {
       data: result.data.map((u) => ({
         id: u.id,
         name_arabic: u.nameArabic,
+        // Derived when never recorded, exactly as the account projection does —
+        // one rule, so the two tables cannot show different names.
+        first_name_arabic: u.firstNameArabic ?? splitComposedName(u.nameArabic).first,
+        last_name_arabic: u.lastNameArabic ?? splitComposedName(u.nameArabic).last,
         nickname: u.nickname,
         roles: u.roles.map((r) => ({
           role: r.role,

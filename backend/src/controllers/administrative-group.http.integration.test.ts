@@ -71,6 +71,20 @@ async function call(
   });
 }
 
+/**
+ * **Why the ids are recorded and not just the name prefix** (2026-08-28).
+ *
+ * Two tests below reproduce R111 by rewriting `nameArabic` to «حساب محذوف» —
+ * which is the point of de-identification, and which also erases the only
+ * handle the teardown had on those rows. `startsWith(TAG)` then matched
+ * nothing, and each full sweep left two users behind; the all-table snapshot
+ * guard caught it as `user 25 → 27`.
+ *
+ * A tag in a mutable column is a handle the test under test is allowed to
+ * destroy. The id is not, so the teardown takes the union of both (P1.2).
+ */
+const createdUserIds: string[] = [];
+
 async function makeUser(label: string): Promise<string> {
   const user = await prisma.user.create({
     data: {
@@ -80,6 +94,7 @@ async function makeUser(label: string): Promise<string> {
       accountStatus: "active",
     },
   });
+  createdUserIds.push(user.id);
   return user.id;
 }
 
@@ -138,7 +153,9 @@ async function clear(): Promise<void> {
     where: { nameArabic: { startsWith: TAG } },
     select: { id: true },
   });
-  const userIds = users.map((u) => u.id);
+  // The prefix AND the recorded ids — a de-identified account answers to
+  // neither its old name nor the TAG.
+  const userIds = [...new Set([...users.map((u) => u.id), ...createdUserIds])];
   if (userIds.length > 0) {
     await prisma.auditLog.deleteMany({
       where: { actorUserId: { in: userIds } },
@@ -600,6 +617,7 @@ describe("deletion is guarded (TD-5, §4.4b)", () => {
         sex: "female",
       },
     });
+    createdUserIds.push(student.id);
     await prisma.enrollment.create({
       data: {
         studentId: student.id,
@@ -662,6 +680,9 @@ async function makeStudent(label: string): Promise<string> {
       sex: "female",
     },
   });
+  // Recorded for the same reason `makeUser` records: the teardown must not
+  // depend on a column the tests are free to rewrite.
+  createdUserIds.push(s.id);
   return s.id;
 }
 

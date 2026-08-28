@@ -1446,3 +1446,73 @@ every row it depends on, or it is a fixture for somebody else's test.
 `verify-unsaved-guard` drove `＋تسجيل مستفيدة` as its reference form. The Owner
 removed that button, so the reference is now الشركاء — a plain pristine
 `FormDialog` behind a header Add, which is what the check was ever about.
+
+## The name parts, the silent حفظ, and a leak the tests could not see (2026-08-28)
+
+### تعديل بيانات المستخدم opened empty and saved nothing
+
+Two defects with **one** cause. Every account created before Revisions 40–41 —
+and everything the seeds and most fixtures still write — carries only the
+composed `name_arabic`; `first_name_arabic` and `last_name_arabic` are NULL.
+The edit dialog requires both, so it opened with two required fields blank, and
+`حفظ` then failed validation and **returned without a word**. The button looked
+broken because, from the reader's side, it was.
+
+- **`splitComposedName` derives the parts at read time** — `userDto` and the
+  directory projection — splitting at the **first** space and returning `null`,
+  never `''`, for what it cannot determine.
+- **It never writes.** Revision 40 refused a backfill because a guessed part
+  would become indistinguishable from a typed one; deriving for *display* keeps
+  that refusal intact, because the guess is offered to somebody who knows the
+  person's name and can correct it before it becomes a fact. An HTTP test
+  asserts the stored row is **still NULL** after the read that derived from it.
+- **The form now refuses out loud** (rule AH). A validation failure that returns
+  silently is indistinguishable from a dead button.
+
+Recorded in `docs/development/person-identity.md`, which is where the concept
+already lived.
+
+### الاسم الشخصي and الاسم العائلي are two columns, on all three tables
+
+المستخدمون · المؤطِّرات · المستفيدات each showed one combined name. They now show
+the two fields the platform actually stores, sorting still carried by the
+composed name — §14.2's tables name the halves separately, and the parts are
+*in* the composed name, so the directory projection discloses nothing new by
+publishing them (its exact-key assertion was restated rather than relaxed).
+
+### تسجيل — the branch was asked for and already known
+
+The `المقر` dropdown is withdrawn. An Administrative Group carries its branch
+(§4.4c), and a Level-only placement (R66) falls back to the مستفيدة's own role
+assignment — so the value is **derived, not mirrored**, and the page-level
+branch state and the `groupId → setBranchId` effect are gone with it. Branch
+stays managed from تعديل بيانات المستخدم, as the Owner asked.
+
+الحلقة selection was **already implemented** and became reachable once the level
+gate above it was fixed; verified in a browser rather than assumed.
+
+### A form born dirty, by a third mechanism
+
+`＋تسجيل مستفيدة` asked to discard on an untouched close because its pristine
+baseline compared `studentId` — a value the **row action sets when it opens**,
+not a field anybody can change. New rule **AY.1b**: *a `dirty` baseline
+enumerates what the reader can modify, not what the component holds.* Pinned in
+`verify-unsaved-guard.mjs`, now 23/23, beside الجدولة and إضافة شريك — three
+different mechanisms producing one sentence for the reader.
+
+### A tag in a mutable column is not a handle
+
+Found while verifying the above, in a file this batch never touched. Two tests
+in `administrative-group.http` reproduce R111 by rewriting `nameArabic` to
+«حساب محذوف» — after which the teardown's `startsWith(TAG)` matches nothing.
+The suite passed 26/26 while **leaking two users per run**; only the all-table
+snapshot guard could see it (`user 25 → 27`). Fixtures now record ids and the
+teardown deletes the union, the shape `user-management.http` already used
+against exactly this feature. Generalised in `testing.md`: **a fixture's handle
+on its rows must live in a column no test writes.**
+
+**Residue not cleaned:** 26 soft-deleted `حساب محذوف` rows from runs before the
+fix remain in the local development database. All carry zero roles and zero
+enrolments and are excluded from every read; one is held by an enrolment under
+RESTRICT. Deleting them would mean unwinding audit and trash trails for no gain,
+so they are reported rather than removed.

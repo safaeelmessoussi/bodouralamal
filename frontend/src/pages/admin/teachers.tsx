@@ -167,10 +167,17 @@ export function TeachersPage(): ReactNode {
         onSort={setSort}
         columns={[
           {
-            key: 'name',
-            header: t('admin.users.colName'),
+            key: 'first_name',
+            header: t('admin.users.colFirstName'),
             sortKey: 'name',
-            cell: (r: DirectoryEntry) => r.name_arabic,
+            cell: (r: DirectoryEntry) =>
+              r.first_name_arabic ?? <span className="muted">{t('common.notSet')}</span>,
+          },
+          {
+            key: 'last_name',
+            header: t('admin.users.colLastName'),
+            cell: (r: DirectoryEntry) =>
+              r.last_name_arabic ?? <span className="muted">{t('common.notSet')}</span>,
           },
           {
             // §8 — **where she teaches.** The row already carried it (every role

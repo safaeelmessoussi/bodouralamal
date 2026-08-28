@@ -490,6 +490,15 @@ async function listUsersUnchecked(
 export interface DirectoryEntry {
   id: string;
   nameArabic: string;
+  /**
+   * **The same name, in its two parts** (2026-08-28). §14.2's tables show
+   * الاسم الشخصي and الاسم العائلي as separate columns, so the parts travel
+   * with the name they compose. They disclose nothing the composed name does
+   * not — it *is* them, joined — which is why this stays a picker projection
+   * rather than becoming an account one.
+   */
+  firstNameArabic: string | null;
+  lastNameArabic: string | null;
   nickname: string | null;
   roles: { role: string; branchId: string | null; branchName: string | null }[];
 }
