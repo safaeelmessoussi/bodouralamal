@@ -684,6 +684,41 @@ model NormalizedEmailLock {
   @@map("normalized_email_lock")
 }
 
+/// **A partner of the association** (NEW N).
+///
+/// Reference data a Super Admin owns, and **the landing page's only source for
+/// the section** — §5.1 renders what this table holds and nothing else, so
+/// adding a partner needs no frontend change and no deployment.
+///
+/// **`name` and nothing else about them.** No logo, no URL, no description, no
+/// contact: the association supplied names, and a column exists for a fact the
+/// platform actually holds rather than for one it might. Adding a logo later is
+/// a column and a migration; inventing an empty one now would put a blank frame
+/// on a public page.
+model Partner {
+  id   String @id @default(uuid()) @db.Uuid
+  name String @db.VarChar(200)
+
+  /// §2.2 ordering. Nullable, because *unordered* is a real state — BR-19 falls
+  /// back to the name.
+  displayOrder Int? @map("display_order")
+
+  /// **Visible on the public landing page.** Distinct from `deleted_at`: a
+  /// partner may be temporarily withheld from the site without the row being
+  /// withdrawn, which is what an association actually needs mid-renewal.
+  isVisible Boolean @default(true) @map("is_visible")
+
+  /// TD-15 optimistic locking, like every other Super-Admin-edited row.
+  version Int @default(0)
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  @@index([deletedAt, isVisible, displayOrder])
+  @@map("partner")
+}
+
 model Role {
   id   String @id @default(uuid()) @db.Uuid
   /// Seeded set (§15.1): super_admin, admin, teacher, student, parent.

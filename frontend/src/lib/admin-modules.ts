@@ -408,6 +408,21 @@ export const ADMIN_MODULES: readonly AdminModule[] = [
   },
   {
     /**
+     * **شركاء بذور الأمل** (NEW N) — the names §5.1's landing section renders.
+     *
+     * In الإدارة and **Super Admin only**, which is OD-01's sub-decision: it
+     * lists *scheduling types · Partners* as undelegated until a later Owner
+     * decision. Like every node in this section, its visibility is not the
+     * control — the service refuses an Admin regardless of the menu.
+     */
+    path: '/admin/partners',
+    labelKey: 'admin.nav.partners',
+    section: 'administration',
+    roles: SUPER_ONLY,
+    status: 'ready',
+  },
+  {
+    /**
      * §7/BR-15 (R52) — Super Admin only: the list spans every entity regardless
      * of branch, which no other surface allows.
      *

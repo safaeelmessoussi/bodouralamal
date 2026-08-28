@@ -2417,6 +2417,237 @@
         }
       }
     },
+    "/partners": {
+      "get": {
+        "summary": "The association's partners",
+        "description": "**PUBLIC and unauthenticated** (Revision 113) — §5.1's landing section, and its only source, exactly as `GET /branches` is for the branch directory: a partner added in the back office appears on the landing page with **no frontend change and no deployment**, which is the whole reason this is a table rather than four lines of copy. **Live and visible rows only**, ordered by `display_order` then name (BR-19; `ar-x-icu` is native under TD-6a, so no per-query COLLATE). **Exactly `id` and `name`.** A partner is a NAME — no logo, no URL, no description, no contact, none of which may be invented; a column exists for a fact the platform holds rather than one it might, and an empty logo frame on a public page reports an absence the data does not have. `is_visible` is **not** `deleted_at`: withholding a partner while a relationship is renewed is an ordinary need and not the act of removing the record, so a withheld partner is absent here and still present in the back office. **Unpaginated**, deliberately: the set is bounded by the association's real relationships, and a public section showing a subset would misstate who its partners are. **The section renders nothing at all when this returns an empty list** — specified behaviour rather than a degraded one, because having no partners is ordinary while having no branches would be a fault.",
+        "responses": {
+          "200": {
+            "description": "Every visible partner, in order."
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/partners": {
+      "get": {
+        "summary": "List partners for management",
+        "description": "**Super Admin only** (Revision 113; OD-01's sub-decision keeps *scheduling types · Partners* undelegated until a later Owner decision), asserted in the service so the refusal reaches every caller. Returns **every live partner including the withheld ones**, each with `display_order`, `is_visible` and the TD-15 `version` its edit form must send back. **A separate DTO from the public one, not a superset filtered down** — building the public shape by trimming this one is how a field added for the back office reaches a public page (§16.2 Revision 38).",
+        "responses": {
+          "200": {
+            "description": "Every live partner."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN below Super Admin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Add a partner",
+        "description": "**Super Admin only** (Revision 113). Body: `{ name, display_order?, is_visible? }` — **strictly** those keys, so a client sending a logo or a URL is refused rather than having it silently dropped: a `201` after sending a logo would reasonably be read as one having been recorded, and none exists to record.",
+        "responses": {
+          "201": {
+            "description": "Created."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a blank name, an over-long one, or a key this entity does not have.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN below Super Admin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/partners/{id}": {
+      "patch": {
+        "summary": "Rename a partner, reorder it, or withhold it from the site",
+        "description": "**Super Admin only** (Revision 113), TD-15 optimistic locking. Body: `{ version, name?, display_order?, is_visible? }`, **strictly**. Setting `is_visible: false` removes the partner from the public section **without withdrawing the record** — the control the association needs mid-renewal, and the reason visibility is not expressed as deletion.",
+        "responses": {
+          "200": {
+            "description": "Updated."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a missing version or an unknown key.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN below Super Admin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Error envelope (TD-3.8). VERSION_CONFLICT.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "Remove a partner",
+        "description": "**Super Admin only** (Revision 113). TD-5 soft delete. **Nothing references a Partner**, so no blocked-delete case arises and none is reported — the absence of a dependency check here is deliberate rather than an omission. To take a partner off the site while keeping the record, `PATCH` `is_visible: false` instead.",
+        "responses": {
+          "204": {
+            "description": "Deleted."
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN below Super Admin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Error envelope (TD-3.8). NOT_FOUND.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/admin/users/{id}": {
       "delete": {
         "summary": "Delete another person's account",

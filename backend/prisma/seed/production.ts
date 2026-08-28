@@ -314,6 +314,50 @@ async function seedCategoriesAndLevels(): Promise<Map<string, string>> {
   return categoryIds;
 }
 
+/**
+ * **NEW N — the association's partners.**
+ *
+ * ## The names are the Owner's and are NOT in this file
+ *
+ * `PARTNERS` below is **deliberately empty**, and that is the finished state
+ * until the Document Owner supplies the four names. The brief is explicit that
+ * nothing about a partner may be invented, and a name is the whole of what this
+ * entity holds — a placeholder would put fabricated text on the public landing
+ * page, which is the one outcome worse than an absent section.
+ *
+ * **Nothing is broken by the emptiness.** §5.1's section renders **nothing at
+ * all** when no partner is visible, which is the specified behaviour rather than
+ * a degraded one, and a Super Admin can add all four through the back office
+ * without a deployment. Filling the array in later is a one-line change that
+ * affects **fresh installs only**.
+ *
+ * ## Initialized once, then the database is authoritative
+ *
+ * The same rule the Subjects follow: after initialization a rerun must not
+ * restore a partner the Super Admin deleted, rename one she renamed, or
+ * reinstate an ordering she changed.
+ */
+const PARTNERS: { name: string; displayOrder: number }[] = [];
+
+async function seedPartners(): Promise<void> {
+  if (await initializedByPresence('partners', await prisma.partner.count())) {
+    console.log('  partners: already initialized — the database is authoritative');
+    return;
+  }
+  if (PARTNERS.length === 0) {
+    // NOT an error, and not silent either: a reader running the seed should be
+    // told why the table is empty rather than left to wonder.
+    console.log('  partners: none seeded — the Owner\'s names are not recorded yet');
+    return;
+  }
+  for (const partner of PARTNERS) {
+    await prisma.partner.create({
+      data: { name: partner.name, displayOrder: partner.displayOrder },
+    });
+  }
+  console.log(`  partners: ${PARTNERS.length}`);
+}
+
 async function seedSubjects(): Promise<void> {
   /**
    * **After initialization the Subjects belong to the Super Admin.**
@@ -558,6 +602,7 @@ async function main(): Promise<void> {
   // other reference-data write. An Owner must never discover a conflicting
   // memorisation marker after this same invocation has changed unrelated data.
   await seedSubjects();
+  await seedPartners();
   await seedRoles();
   const categoryIds = await seedCategoriesAndLevels();
   await seedSchedulingTypes();

@@ -11,6 +11,7 @@ import * as calendar from './controllers/calendar.controller.js';
 import * as events from './controllers/event.controller.js';
 import * as hijri from './controllers/hijri-calendar.controller.js';
 import * as calendarBootstrap from './controllers/calendar-bootstrap.controller.js';
+import * as partners from './controllers/partner.controller.js';
 import * as publicBranches from './controllers/public-branch.controller.js';
 import * as socialProfile from './controllers/social-profile.controller.js';
 import * as users from './controllers/user.controller.js';
@@ -273,6 +274,9 @@ export function createApp(
   api.get('/calendar/bootstrap', calendarBootstrap.read(prisma));
 
   api.get('/branches', publicBranches.list(prisma));
+  // NEW N — §5.1's partners section. Public and unauthenticated, exactly as the
+  // branch directory is: the landing page renders what the table holds.
+  api.get('/partners', partners.listPublic(prisma));
 
   // TD-3.13 (Revision 43): the Educational Library is PUBLIC. Mounted before the
   // guarded router with OPTIONAL authentication, exactly as /calendar is — a
@@ -435,6 +439,11 @@ export function createApp(
   // R111 — Super Admin only, on the same 3-day window as a self-deletion.
   // `?permanent=true` performs the de-identification now instead.
   guarded.delete('/admin/users/:id', users.remove(prisma));
+  // NEW N — Super Admin only (OD-01's sub-decision), asserted in the service.
+  guarded.get('/admin/partners', partners.list(prisma));
+  guarded.post('/admin/partners', partners.create(prisma));
+  guarded.patch('/admin/partners/:id', partners.update(prisma));
+  guarded.delete('/admin/partners/:id', partners.remove(prisma));
   guarded.post('/family-links', familyLinks.create(prisma));
   guarded.delete('/admin/family-links/:id', familyLinks.revoke(prisma));
   guarded.get('/admin/branches', branch.listBranches(prisma));

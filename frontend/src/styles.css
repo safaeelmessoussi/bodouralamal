@@ -80,6 +80,7 @@
 @import './styles/base/utilities.css';
 
 @import './styles/components/branch-card.css';
+@import './styles/components/partner-list.css';
 @import './styles/components/calendar.css';
 /* After calendar.css deliberately: the content library REUSES `.cal-toolbar` and
  * `.cal-filter` so the platform has one filter appearance, and adds

@@ -82,6 +82,9 @@ const ADMINISTRATION = [
   ['مقرر الحفظ', '/admin/level-surahs'],
   ['الفروع والقاعات', '/admin/branches'],
   ['أنواع الجدولة', '/admin/scheduling-types'],
+  // الشركاء (R113) — beside the other catalogue, before the platform-operations
+  // tail. R105's sequence is extended, not reinterpreted.
+  ['الشركاء', '/admin/partners'],
   ['سلة المحذوفات', '/admin/trash'],
   ['التقويم الهجري', '/superadmin/hijri-calendar'],
   ['إعدادات المنصة', '/superadmin/settings'],
@@ -163,7 +166,7 @@ check(
   JSON.stringify(superNav?.groups.map((g) => g.title)),
 );
 check(
-  'Super Admin — الإدارة holds exactly the ten, in order',
+  'Super Admin — الإدارة holds exactly these, in order',
   same(superNav?.groups?.[0]?.items, labelled(ADMINISTRATION)),
   JSON.stringify(superNav?.groups?.[0]?.items?.map((i) => i.text)),
 );

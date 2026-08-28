@@ -1002,3 +1002,55 @@ rejected at runtime inside the request path while the identical query succeeded
 from a script against the same client in the same container. Rather than ship a
 construction whose behaviour I could not account for, it is written the plainer
 way — which also reads as what it means.
+
+## NEW N — partners are data, and the landing page reads them (2026-08-28)
+
+Ratified as **R113**; `docs/SRS.md` gains five TD-3 routes, one §14.1 node
+(الشركاء, in الإدارة) and one TD-2 row, applied at the Document Owner's
+instruction.
+
+- **`Partner`** — `name`, `display_order`, `is_visible`, TD-5 soft delete,
+  TD-15 version. Hand-written migration with a `display_order >= 0` check.
+- **`GET /partners`** is public and is §5.1's only source, exactly as the branch
+  directory is: a partner added in the back office appears with **no frontend
+  change and no deployment**.
+- **`/admin/partners`** — Super Admin only (OD-01's sub-decision), asserted in
+  the service. New screen in الإدارة, placed after أنواع الجدولة on that
+  section's own logic — the dependency chain, then the standalone nodes.
+
+**A partner is a NAME.** No logo, URL, description or contact; the write schema
+is `.strict()`, so a client sending a logo is **refused rather than silently
+dropped** — a `201` after sending one would reasonably be read as its having been
+recorded. Asserted at the boundary.
+
+**`is_visible` is not `deleted_at`**, and the tests say so: a withheld partner is
+absent from the public list and still present in the back office. Withholding one
+while a relationship is renewed is an ordinary need and not the act of removing
+the record.
+
+**The section renders nothing at all when no partner is visible** — specified
+behaviour, not a degraded one, and the reason it differs from the branch list
+beside it: an empty branch list is a *fault* (the association has premises), while
+having no partners is ordinary, so a heading over an empty area would report an
+absence nobody asked about. `verify-partners.sh` proves the absence in a browser,
+which no unit test can observe — a component test asks what the component
+returns, never what the page looks like around it.
+
+### The four names are NOT seeded, and that is the finished state
+
+They are referred to as already provided and are **not recorded anywhere in this
+repository** — `docs/`, the task log and the change log were searched. The brief
+forbids inventing anything about a partner, and a name is the *whole* of this
+entity, so `PARTNERS` in the seeder is an empty array with a line saying why.
+**Owner decision, 2026-08-28: ship empty and enter them through the new screen** —
+no deployment needed, and nothing is fabricated. Filling the array later affects
+fresh installs only.
+
+### One gap found and reported, not fixed
+
+`/admin/scheduling-types` (R110) is in the navigation registry and in the
+harness, and **§14.1's sitemap does not list it**. The registry guard did not
+catch it because its expectation is hand-maintained — the exact failure its own
+comment warns about: *"a test that pins one copy against another copy cannot
+catch that; only re-reading §14.1 could."* Adding it is the Document Owner's
+edit, and it is outside R113's approved scope.

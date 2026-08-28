@@ -68,6 +68,13 @@ POST /admin/users/{id}/reactivate             # §5.6 "deactivate" (its inverse)
 PUT /admin/users/{id}/roles                   # §5.6 "role/branch-scope assignment"; §14.2; TD-2
 DELETE /profile                               # R111; any authenticated user deletes their OWN account; no role gate
 DELETE /admin/users/{id}                      # R111/R112; Super Admin only; ?permanent=true de-identifies now
+
+# ── Partners (NEW N / R113) — §5.1 landing section + Super-Admin catalogue
+GET /partners                                 # R113 §14.1/§5.1; PUBLIC; live+visible only; id and name
+GET /admin/partners                           # R113; Super Admin only; every live partner incl. withheld
+POST /admin/partners                          # R113; Super Admin only
+PATCH /admin/partners/{id}                    # R113; Super Admin only; TD-15
+DELETE /admin/partners/{id}                   # R113; Super Admin only; TD-5 soft delete (nothing references a Partner)
 DELETE /admin/family-links/{id}                # §4.3 Revision 16 (soft-delete IS revocation), TD-2, TD-8 familylink.revoke
 
 # ── Calendar & events (TD-3.4)

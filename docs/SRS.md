@@ -912,6 +912,7 @@ The registration/login entry is **OAuth-first**: the registration form is never 
 
 ### 5.7 Super Admin Only
 * **User Management (`/admin/users`)** — *(moved here by Revision 112, 2026-08-28)* search (fields: TD-10), filter, list, create (staff pre-provisioning against a Google email), edit, approve, reject, deactivate, role/branch-scope assignment, consent-record management. **Super Admin only, asserted in the service** so the refusal reaches every caller — a typed URL, a forged request, a test and a background job alike. **The refusal is uniform and therefore non-disclosing**: the same `403` answers an out-of-scope user, a user inside the caller's own branch, and an id that does not exist, so §20 rule 17's property is preserved by uniformity rather than by answering `404`. An Admin needing to pick a person uses `GET /admin/directory` (§5.6). **Account deletion — soft, and permanent where TD-5/R111's retention classification allows — lives here** (Revision 111).
+* **Partners (`/admin/partners`)** — *(Revision 113)* the association's partners, as **reference data rather than markup**: §5.1's landing section renders what this table holds, so adding a partner is an administrative act rather than a deployment — the same rule the public branch directory already follows. **A partner is a `name`**, with `display_order` and a visibility flag; **no logo, URL, description or contact**, none of which may be invented. **`is_visible` is not `deleted_at`**: withholding a partner from the site while a relationship is renewed is an ordinary need and is not the act of removing the record. **The landing section renders nothing at all when no partner is visible** — specified behaviour, not a degraded state, because having no partners is ordinary while having no branches would be a fault.
 * **System Settings (`/superadmin/settings`)** — branding assets, legal/consent text versions, `display_order` management, `AcademicYear` management (incl. `is_current`). **First iteration (Revision 42) carries `legal.consent_text_version`**: it is displayed, editable by Super Admin only, validated non-empty, audited with its previous value, and **affects future registrations only** — stored consents keep the version captured when they were given (§4.1a). Without it no registration can be accepted at all, so it is the first entry rather than a later one.
 * **Hijri Calendar Management (`/superadmin/hijri-calendar`)** — *(Revision 31; refined by Revision 32)* the surface on which a Super Admin **records the official announcements** of the Ministry of Habous and Islamic Affairs. A **year selector**; the **twelve Hijri months** of the selected year, each with the **Gregorian date on which the Ministry announced that month began**; and the actions **Record official month start**, **Save**, **Publish official month**, and **View history**. Only **published** months are rendered anywhere in the platform, so a year can be recorded progressively and reviewed before it becomes visible. **The Super Admin is not deciding when a month starts — the Ministry decides, and this screen records what it announced.** The screen's language must reflect that (Revision 32): *record*, *official announcement*, never *choose*, *define* or *set*. **Importing is not an MVP feature** (Revision 32, §10.1): no official machine-readable source exists to import from.
 
@@ -1197,6 +1198,7 @@ consent_forced_private = true → public   ONLY via Admin override with justific
 | Revoke an approved family link (soft-delete, §4.3) *(Revision 16)* | ✔ | ✔ | ⊘ | ⊘ | ⊘ | ⊘ |
 | Create/edit users; assign roles & branch scopes — **global account administration** *(Admin withdrawn by Revision 112)* | ✔ | ⊘ | ⊘ | ⊘ | ⊘ | ⊘ |
 | **Delete a user account** — own account (any authenticated user); **another person's account, Super Admin only** *(Revision 111/112)* | ✔ | ⊘ | ⊘ | ⊘ | ⊘ | ⊘ |
+| **Manage the partner catalogue** *(Revision 113)* — the names §5.1's landing section renders | ✔ | ⊘ | ⊘ | ⊘ | ⊘ | ⊘ |
 | **Read the operational directory** (`GET /admin/directory`) — scoped rows, minimal projection, **no account-management capability** *(Revision 112)* | ✔ | ✔ (own branches) | ⊘ | ⊘ | ⊘ | ⊘ |
 | Record staff-declared consent grants/revocations | ✔ | ✔ | ⊘ | ⊘ | ⊘ | ⊘ |
 | Override consent gate (with justification) | ✔ | ✔ | ⊘ | ⊘ | ⊘ | ⊘ |
@@ -2024,6 +2026,14 @@ BACK OFFICE (Admin / Super Admin) — THE SIDEBAR, IN THIS EXACT ORDER (Revision
     │                                   nowhere. Super Admin writes, Admin reads (R26)
     ├── الفروع والقاعات / Branches & Rooms  /admin/branches (Super Admin only — R61; the READ endpoint
     │                                   stays Admin-accessible, R61.2)
+    ├── الشركاء / Partners ............. /admin/partners (Super Admin only — Revision 113; OD-01's
+    │                                   sub-decision keeps Partners undelegated). The names §5.1's
+    │                                   landing section renders. A partner is a NAME: no logo, no
+    │                                   URL, no description, no contact. Placed here — after the
+    │                                   catalogues, before the platform-operations tail — on this
+    │                                   section's own logic, the dependency chain then the
+    │                                   standalone nodes; R105's sequence is extended, not
+    │                                   reinterpreted
     ├── سلة المحذوفات / Trash .......... /admin/trash (Super Admin — R52/R59; restore per entity type,
     │                                   permanent delete per entity type). **Moved into this section
     │                                   by R105**, from the second `Administration` group that held

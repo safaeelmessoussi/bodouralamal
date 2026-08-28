@@ -77,6 +77,8 @@ describe('the registry matches §14.1', () => {
          * hardcoded frontend constant with no screen at all.
          */
         '/admin/scheduling-types',
+        // الشركاء — §14.1 lists it in الإدارة (Revision 113).
+        '/admin/partners',
         // R55 — §14.1's single "Categories & Subjects" node became two, on the
         // Owner's instruction. One implementation still serves both.
         '/admin/categories',
@@ -360,6 +362,14 @@ describe('§14.1 renders exactly the order the Document Owner specified (R105)',
     '/admin/level-surahs', // مقرر الحفظ
     '/admin/branches', // الفروع والقاعات
     '/admin/scheduling-types', // أنواع الجدولة (R110)
+    /**
+     * الشركاء (NEW N) — beside the other catalogue it belongs with, and **before**
+     * the platform-operations tail (سلة المحذوفات · التقويم الهجري · الإعدادات).
+     * That is this section's own stated logic — the dependency chain, then the
+     * standalone nodes — and it is where R110 put أنواع الجدولة for the same
+     * reason, so R105's sequence is extended rather than reinterpreted.
+     */
+    '/admin/partners', // الشركاء (NEW N)
     '/admin/trash', // سلة المحذوفات
     '/superadmin/hijri-calendar', // التقويم الهجري
     '/superadmin/settings', // إعدادات المنصة

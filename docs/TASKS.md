@@ -1654,7 +1654,7 @@ manual Production launch data · no-PII audit · §18/M8 rehearsal. **Production
 | 14 | ~~**NEW O** implementation~~ **DONE 2026-08-28** | feature (no migration needed) | **UNBLOCKED 2026-08-27** — R111's design is ratified. Self-deletion for every user including مؤطِّرات; admin-initiated deletion on the same 3-day window; tombstone «حساب محذوف»; BLOCK refuses **with an explanation naming what must be reassigned**, and does not reassign in the same action |
 | 15 | **NEW M** Teacher import | data, **Production only** | R104 — never Staging |
 | 16 | ~~**NEW G** حسابي redesign~~ **DONE 2026-08-27** | UX | The page said who she is and not where she is. `GET /profile` now carries `enrolments`, `circles` and `guardians`; the guardian block is **a name and a status, enforced by the projection**. Guarded in `pages/profile/privacy.test.ts`, proved against a reintroduced phone leak |
-| 17 | **NEW N** Partner model + landing | feature | reference CRUD + public section |
+| 17 | ~~**NEW N** Partner model + landing~~ **DONE 2026-08-28 (R113)** | feature | Model, Super-Admin CRUD, public `GET /partners`, الشركاء screen, landing section that renders **nothing** when none is visible. **The four names are not seeded** — they are not recorded anywhere in this repository and the brief forbids inventing them; Owner decision: enter them through the screen |
 | 18 | **NEW P** privacy/terms + OAuth readiness | docs + UX | **must follow NEW O** |
 | — | **Academic Years management** | feature | fold into #8 (reference-data batch) |
 
@@ -1726,7 +1726,7 @@ actual values, which are Production reference data the Owner holds.
    schedulable-with-attendance.~~ **ANSWERED and shipped (R110).** OD-03 settled both:
    `attendance_required` is *"a stored column and not display text"*, which requires a table;
    and عطلة is an ordinary schedulable Event with `attendance_required = false`.
-2. **NEW N** — static content vs Super-Admin-managed reference data.
+2. ~~**NEW N** — static content vs Super-Admin-managed reference data.~~ **ANSWERED: Super-Admin-managed reference data (R113).** The landing page reads the table, so a partner is added without a deployment.
 3. **NEW L** — existing Level names differ in spelling from the baseline; the same
    orthography question as the Subject normalization. Audit before touching.
 4. ~~**NEW G** — which guardian fields may a beneficiary see?~~ **ANSWERED BY THE CONSTRAINT ITSELF, 2026-08-27.** The recorded rule already excludes guardian email, guardian phone and every unrelated guardian field *by default*, and requires that a field a business rule needs be **reported, not assumed**. So the conservative reading was implemented — **name and relationship status only** — and the projection is what enforces it. If the Owner wants more shown, that is an additive decision against a screen that currently discloses nothing extra.
@@ -1822,3 +1822,12 @@ normative wording are proposed in `docs/SRS-PROPOSAL-R112.md`.
       delete as R111's de-identification performed now, the 3-day window as a
       **second** retention window that must not disturb `PURGE_WINDOW_DAYS = 90`,
       and R111's BLOCK on live staff responsibilities.
+
+
+### Found while building NEW N, not fixed — the Owner's edit
+
+`/admin/scheduling-types` (R110) is in `admin-modules.ts` and in the navigation
+harness, and **§14.1's sitemap does not list it**. `admin-modules.test.ts` did not
+catch it because its expected list is hand-maintained against the registry rather
+than against the SRS — the exact failure its own comment warns about. R113's
+approved scope covers Partners only, so this is reported rather than taken.
