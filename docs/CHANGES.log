@@ -1099,3 +1099,23 @@ the others forget. **No verification was submitted**, as the brief directs.
 Remaining before launch: the domain must be verified in Google Search Console
 under a project owner, and the consent screen's privacy-policy URL must match the
 deployed one. Both are deployment steps, not code.
+
+## Three stale checklist entries corrected (2026-08-28)
+
+Found while looking for the next unblocked item. Each described work as missing
+that is built, wired and tested — so the roadmap was overstating what remains:
+
+- **ChildContextSwitcher + header injection.** All three parts exist: the
+  component (rendered by `role-switcher.tsx`, so it has reach), the
+  `active-child` context, and `lib/api.ts` sending `X-Active-Child-ID` per
+  request — never in the token. 3 component tests beside the 15 middleware tests
+  the contract already had.
+- **TD-3.5 storage endpoints** — *"specified but not mounted; `app.ts` has no
+  `/uploads`"*. All four are mounted.
+- **Educational Content upload UI** — ships on مكتبة المحتوى, and
+  `verify-content-visibility.sh` performs a real upload end to end.
+
+**An out-of-date checklist is not a harmless one**: it is the artefact used to
+decide what to build next, and every one of these would have been re-derived
+before the error was noticed. Verified by reading the code and the routes rather
+than by trusting the boxes.

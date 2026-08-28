@@ -318,7 +318,14 @@ was hiding behind it: the run went green on the first attempt.
   - ✓ Tests — 10 service + 7 HTTP tests; asserted through the resolver (access gone on the next request), not merely that a column changed
   - ✓ Security — TD-2 admin-only with the TD-12 freshness assertion; revoking one link leaves the parent's other children and the child's other parent untouched
 
-- [ ] ChildContextSwitcher component + API-client header injection (§14.3, §16.1) — **frontend (v0)**; the backend contract it drives is complete and covered by 15 middleware tests
+- [x] ChildContextSwitcher component + API-client header injection (§14.3, §16.1)
+  - ✓ **The box was stale, not the work** — verified 2026-08-28. All three parts
+    exist and are wired: `components/header/child-context-switcher.tsx` (rendered
+    by `role-switcher.tsx`, so it has reach), `contexts/active-child.tsx`, and
+    `lib/api.ts` sending `X-Active-Child-ID` per request — never in the token.
+  - ✓ Tests — 3 component tests, plus the 15 middleware tests the contract
+    already had. Consumed by `dashboard/student.tsx`, `dashboard/account.tsx`
+    and `resources.tsx`.
 - [~] GroupTeacher join + teacher-scoping resolution helpers (§4.2)
   - ✓ Backend — `policies/teacher-scope.ts`; reach resolves exclusively through `GroupTeacher`, never through a Teacher's branch assignment
   - ✓ Tests — 16 integration tests against real branches, groups and enrolments; six mutations caught
@@ -902,8 +909,14 @@ was hiding behind it: the run went green on the first attempt.
   - Rows carry `protected_reasons`: §4.4 requires the dialog to say what will change, which needs knowing what will be spared
   - The scope is asked before **every** operation that can reach a series, with a live count, and stated before confirming
   - The date moves only under *this session only* — the wider scopes edit a rule, and a rule has times but no date
-- [ ] **TD-3.5 storage endpoints** — `POST /uploads/initiate`, `/complete`, `/abort`, `GET /content/{id}/download-url`. **Specified in TD-3.5 but not mounted**; `app.ts` has no `/uploads`
-- [ ] **Educational Content upload UI** — attach to a Subject of a Level (library) or to a Session (`POST /sessions/{id}/content` already exists)
+- [x] **TD-3.5 storage endpoints** — **the note was stale**, verified 2026-08-28.
+  All four are mounted in `app.ts`: `POST /uploads/initiate`,
+  `POST /uploads/{uploadId}/complete`, `POST /uploads/{uploadId}/abort` and
+  `GET /content/{id}/download-url`.
+- [x] **Educational Content upload UI** — also stale. `ContentUploadForm` ships on
+  مكتبة المحتوى and `SessionMaterialsDialog` attaches to a Session.
+  `verify-content-visibility.sh` performs a **real upload** end to end and removes
+  its own row afterwards (24/24).
 
 - [x] **Rooms CRUD** — verified complete (shipped M3b-30); added the missing delete confirmation that every other destructive action already had
 - [x] **Trash UI (`/admin/trash`)** — SRS Revision 52 applied; list, filter by type and date, search, restore **per entity type**
