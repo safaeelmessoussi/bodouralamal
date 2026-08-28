@@ -19,6 +19,13 @@ export type Route =
   | 'login'
   | 'register'
   | 'content-unavailable'
+  /**
+   * NEW P — the two legal pages. **Public and unauthenticated**: Google's OAuth
+   * policy requires the privacy policy to be reachable from the homepage on the
+   * same verified domain, and a policy behind a login is not reachable.
+   */
+  | 'privacy'
+  | 'terms'
   | 'calendar'
   /** §5.2's Session page. A parameterised public path, so it is matched by
    *  pattern rather than by the literal switch above. */
@@ -75,6 +82,10 @@ export function resolveRoute(pathname: string): Route {
       return 'register';
     case '/content-unavailable':
       return 'content-unavailable';
+    case '/privacy':
+      return 'privacy';
+    case '/terms':
+      return 'terms';
     case '/calendar':
       return 'calendar';
     case '/resources':

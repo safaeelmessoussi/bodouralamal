@@ -19,6 +19,7 @@ import { StudentCalendarPage, StudentDashboard } from './pages/dashboard/student
 import { RegisterChildPage } from './pages/profile/register-child.js';
 import { ProfilePage } from './pages/profile/index.js';
 import { Landing } from './pages/landing.js';
+import { PrivacyPage, TermsPage } from './pages/legal.js';
 import { Register } from './pages/register.js';
 import {
   AccountDeactivated,
@@ -52,6 +53,12 @@ function App(): React.ReactNode {
       return <Register />;
     case 'content-unavailable':
       return <ContentUnavailable />;
+    // NEW P — public and unauthenticated: Google's OAuth policy requires the
+    // privacy policy to be reachable from the homepage on the same domain.
+    case 'privacy':
+      return <PrivacyPage />;
+    case 'terms':
+      return <TermsPage />;
     case 'calendar':
       return <CalendarPage />;
     // §14.1's single resources node. Both §5.2 views live here — the level list,

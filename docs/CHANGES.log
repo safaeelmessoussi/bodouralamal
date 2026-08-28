@@ -1054,3 +1054,48 @@ catch it because its expectation is hand-maintained — the exact failure its ow
 comment warns about: *"a test that pins one copy against another copy cannot
 catch that; only re-reading §14.1 could."* Adding it is the Document Owner's
 edit, and it is outside R113's approved scope.
+
+## NEW P — the legal pages (2026-08-28)
+
+`/privacy` and `/terms`, public and unauthenticated. They waited for R111 for the
+stated reason: **a privacy policy cannot describe a retention model that has not
+been decided**, and now it can.
+
+**Every statement is traceable to something the code does.** The Google section
+names the three scopes `oauth.ts` actually requests — `openid email profile` —
+and says what they are used for; the deletion section describes R111 exactly:
+sessions end at once, three days to change your mind, then the personal details
+go and the educational, consent and safeguarding record stays. That last
+sentence is the one the whole page exists for — **an interface promising deletion
+while §4 retains the record is the one genuinely unacceptable outcome**, so the
+policy says plainly what survives.
+
+**Nothing legal is invented.** The legal entity, registration numbers,
+addresses, CNDP references and governing law each render a visible
+«⚠ معلومة مطلوبة من الجمعية» marker. A plausible-looking legal detail is worse
+than an obviously missing one: the first is trusted and wrong, the second asks to
+be filled in. `legal.test.ts` pins that — including that the retention period is
+stated as **undecided**, because OD-06 says it is.
+
+### Google's OAuth requirements, verified against Google's own documentation
+
+Checked on 2026-08-28 against `developers.google.com/identity/protocols/oauth2/policies`
+and `support.google.com/cloud/answer/13464321`, not against repository notes:
+
+- the homepage must be on a **verified domain**, describe the app, and **link to
+  both the privacy policy and the terms**;
+- the privacy policy **should be hosted within the domain that hosts the
+  homepage** and **linked from it so users can find it easily**;
+- it must explain how the app **accesses, uses, stores and shares Google user
+  data**;
+- **verification is triggered by sensitive or restricted scopes.** The platform
+  requests `openid email profile` only — all non-sensitive — so app verification
+  is **not** required; brand/domain verification for the consent screen still is.
+
+The footer carries both links on every public page, which is why the requirement
+is met by one implementation rather than by a link the landing page remembers and
+the others forget. **No verification was submitted**, as the brief directs.
+
+Remaining before launch: the domain must be verified in Google Search Console
+under a project owner, and the consent screen's privacy-policy URL must match the
+deployed one. Both are deployment steps, not code.

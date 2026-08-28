@@ -23,3 +23,12 @@
   font-weight: 600;
   color: var(--color-text);
 }
+
+/**
+ * NEW P — the footer's legal links. Beside the copyright on a wide screen,
+ * stacked beneath it on a narrow one, which the row's own flex handles.
+ */
+.site-footer__links {
+  display: flex;
+  gap: var(--space-4);
+}

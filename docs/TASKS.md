@@ -1655,7 +1655,7 @@ manual Production launch data · no-PII audit · §18/M8 rehearsal. **Production
 | 15 | **NEW M** Teacher import | data, **Production only** | R104 — never Staging |
 | 16 | ~~**NEW G** حسابي redesign~~ **DONE 2026-08-27** | UX | The page said who she is and not where she is. `GET /profile` now carries `enrolments`, `circles` and `guardians`; the guardian block is **a name and a status, enforced by the projection**. Guarded in `pages/profile/privacy.test.ts`, proved against a reintroduced phone leak |
 | 17 | ~~**NEW N** Partner model + landing~~ **DONE 2026-08-28 (R113)** | feature | Model, Super-Admin CRUD, public `GET /partners`, الشركاء screen, landing section that renders **nothing** when none is visible. **The four names are not seeded** — they are not recorded anywhere in this repository and the brief forbids inventing them; Owner decision: enter them through the screen |
-| 18 | **NEW P** privacy/terms + OAuth readiness | docs + UX | **must follow NEW O** |
+| 18 | ~~**NEW P** privacy/terms + OAuth readiness~~ **DONE 2026-08-28** | docs + UX | `/privacy` and `/terms`, public, linked from the footer of every public page. Google's requirements verified against **Google's own documentation**; the platform requests only non-sensitive scopes, so app verification is not triggered. **Not submitted.** Everything legal is marked ⚠ rather than invented |
 | — | **Academic Years management** | feature | fold into #8 (reference-data batch) |
 
 ### Findings that change the work (established, not assumed)

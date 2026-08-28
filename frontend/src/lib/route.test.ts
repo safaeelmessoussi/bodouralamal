@@ -24,6 +24,9 @@ describe('every path resolves to a page — never to nothing', () => {
     '/calendar',
     '/resources',
     '/content-unavailable',
+    // NEW P — public and unauthenticated, as Google's OAuth policy requires.
+    '/privacy',
+    '/terms',
     '/pending-approval',
     '/account-deactivated',
     '/admin',
@@ -149,5 +152,31 @@ describe('the student’s Quran node (M4b)', () => {
 
   it('does not swallow the dashboard itself', () => {
     expect(resolveRoute('/dashboard/student')).toBe('dashboard-student');
+  });
+});
+
+/**
+ * **NEW P — the legal pages are PUBLIC, and that is a requirement, not a
+ * preference.**
+ *
+ * Google's OAuth policy, verified against Google's own documentation on
+ * 2026-08-28, requires the privacy policy to be *"hosted within the domain that
+ * hosts your homepage"* and *"linked on your homepage so that users can find
+ * this information easily"*. A policy behind a login satisfies neither, so
+ * routing either of these through an authenticated guard would break the OAuth
+ * consent screen — a failure that would surface at Google's review rather than
+ * in this repository.
+ */
+describe('the legal pages are reachable without signing in (NEW P)', () => {
+  it('resolves /privacy and /terms to their own public routes', () => {
+    expect(resolveRoute('/privacy')).toBe('privacy');
+    expect(resolveRoute('/terms')).toBe('terms');
+  });
+
+  it('resolves them with a trailing slash too', () => {
+    // A footer link that works and a pasted URL that does not would be the same
+    // page failing for the one visitor who typed it.
+    expect(resolveRoute('/privacy/')).toBe('privacy');
+    expect(resolveRoute('/terms/')).toBe('terms');
   });
 });
