@@ -4,6 +4,10 @@ import { Button } from '../ui/button.js';
 import { markedLabel, Warnings } from './staff-picker.js';
 import { DateField, SelectField } from '../ui/field.js';
 import { t } from '../../i18n/index.js';
+import {
+  periodEndsBeforeItStarts,
+  periodOutsideSchedule,
+} from '../../lib/staffing-period.js';
 import type { TeachingCandidate } from '../../adapters/teaching-candidates.js';
 // The narrow directory entry — these render names, never account fields.
 import type { DirectoryEntry } from '../../adapters/users.js';
@@ -55,6 +59,21 @@ export interface StaffingPeriodsProps {
   onChange: (next: StaffingPeriod[]) => void;
   disabled?: boolean;
   appraisal?: Record<string, TeachingCandidate>;
+  /**
+   * **The schedule's own life** — its start date and R50's series end, `''`
+   * for open (2026-08-29). An assignment must share at least one day with it
+   * (§5), and the server refuses one that does not with
+   * `STAFF_PERIOD_OUTSIDE_SCHEDULE`.
+   *
+   * Passed in rather than read from a context so that **the marking is derived
+   * on every render**: when the administrator edits the class's start date, the
+   * rows below re-evaluate against the new bound immediately. That is the half
+   * the Owner asked for that a submit-time check cannot give — an assignment
+   * that was valid can be made invalid by editing the *schedule*, and nothing
+   * touched the assignment to trigger a check of its own.
+   */
+  scheduleFrom?: string;
+  scheduleUntil?: string;
 }
 
 export function StaffingPeriods({
@@ -63,9 +82,29 @@ export function StaffingPeriods({
   onChange,
   disabled = false,
   appraisal,
+  scheduleFrom = '',
+  scheduleUntil = '',
 }: StaffingPeriodsProps): ReactNode {
   const update = (index: number, patch: Partial<StaffingPeriod>): void =>
     onChange(value.map((row, i) => (i === index ? { ...row, ...patch } : row)));
+
+  /**
+   * **What is wrong with this row's dates, if anything.**
+   *
+   * Two different mistakes with two different fixes, so they are two different
+   * sentences: ends reversed, and a period that shares no day with the class.
+   * Reported on the field that is wrong rather than as one message above the
+   * form (rule AH) — an administrator told *«outside the schedule»* with three
+   * date fields on screen has to guess which one.
+   */
+  const rowError = (row: StaffingPeriod): string | null => {
+    const period = { from: row.effective_from, until: row.effective_until };
+    if (periodEndsBeforeItStarts(period)) return t('admin.schedules.periodReversed');
+    if (periodOutsideSchedule(period, { from: scheduleFrom, until: scheduleUntil })) {
+      return t('admin.schedules.staffPeriodOutside');
+    }
+    return null;
+  };
 
   return (
     <fieldset className="form__group">
@@ -109,11 +148,19 @@ export function StaffingPeriods({
               { value: 'assistant', label: t('admin.schedules.positionAssistant') },
             ]}
           />
+          {/* **Constrained, then explained.** `min`/`max` let the browser's own
+              picker grey out what the class's life does not contain — the
+              cheapest «not that one», before a click. The bounds are a native
+              hint and nothing more, so the message below still says why, and
+              the server still refuses (rule O). */}
           <DateField
             label={t('admin.schedules.effectiveFrom')}
             value={row.effective_from}
             onChange={(v) => update(index, { effective_from: v })}
             disabled={disabled}
+            {...(scheduleFrom ? { min: scheduleFrom } : {})}
+            {...(scheduleUntil ? { max: scheduleUntil } : {})}
+            error={rowError(row)}
             hint={t('admin.schedules.effectiveFromHint')}
           />
           <DateField
@@ -121,6 +168,11 @@ export function StaffingPeriods({
             value={row.effective_until}
             onChange={(v) => update(index, { effective_until: v })}
             disabled={disabled}
+            {...(row.effective_from || scheduleFrom
+              ? { min: row.effective_from || scheduleFrom }
+              : {})}
+            {...(scheduleUntil ? { max: scheduleUntil } : {})}
+            error={rowError(row)}
             hint={t('admin.schedules.effectiveUntilHint')}
           />
           <Button

@@ -99,6 +99,16 @@ describe("an assignment must touch the schedule's own life (§5)", () => {
     ).toBe(true);
   });
 
+  it("accepts a period that merely touches its FIRST day", () => {
+    // The symmetric case to the one above, and the boundary the Owner's report
+    // sat one day outside of: an assignment on the very day the class begins is
+    // inside. Only the upper bound was pinned, so an off-by-one here would have
+    // refused a legitimate first-day assignment with nothing to catch it.
+    expect(
+      withinScheduleLife({ from: d("2026-09-01"), until: d("2026-09-01") }, schedule),
+    ).toBe(true);
+  });
+
   it("refuses one entirely before it", () => {
     expect(
       withinScheduleLife({ from: d("2026-01-01"), until: d("2026-08-31") }, schedule),

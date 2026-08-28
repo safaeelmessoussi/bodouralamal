@@ -54,6 +54,13 @@ export interface ClassSectionProps {
   /** R91 — one row per assignment, each with its own effective period. */
   staffing: StaffingPeriod[];
   onStaffing: (next: StaffingPeriod[]) => void;
+  /**
+   * The schedule's start date and R50 series end, `''` for open — the bounds
+   * every staffing period must overlap (§5). Owned by the form above, not
+   * re-derived here: they are the same two values the payload sends.
+   */
+  scheduleFrom: string;
+  scheduleUntil: string;
   /** R90's planning appraisal for the class being planned, keyed by user id.
    *  Absent while the form has no time yet — there is nothing to appraise
    *  against, and an appraisal of a blank class would be noise. */
@@ -77,6 +84,8 @@ export function ClassSection({
   staffing,
   onStaffing,
   appraisal,
+  scheduleFrom,
+  scheduleUntil,
 }: ClassSectionProps): ReactNode {
   return (
     <>
@@ -146,6 +155,10 @@ export function ClassSection({
         value={staffing}
         onChange={onStaffing}
         {...(appraisal ? { appraisal } : {})}
+        /* The class's own life, so an assignment outside it is marked as it is
+           typed — and re-marked the moment these dates are edited. */
+        scheduleFrom={scheduleFrom}
+        scheduleUntil={scheduleUntil}
       />
     </>
   );

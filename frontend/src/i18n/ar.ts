@@ -266,6 +266,9 @@ export const ar = {
     created: 'تمت الإضافة.',
     deleted: 'تم الحذف.',
     saveFailed: 'تعذّر الحفظ.',
+    // The same sentence carrying the server's own TD-3.8 code, so an unmapped
+    // refusal is something the reader can quote rather than a dead end.
+    saveFailedCode: 'تعذّر الحفظ. يرجى المحاولة من جديد. (الرمز: {code})',
     loadFailed: 'تعذّر تحميل البيانات.',
     breadcrumb: 'مسار التنقل',
     loading: 'جارٍ التحميل…',
@@ -1643,6 +1646,9 @@ export const ar = {
       filterLevel: 'تصفية بالمستوى',
       allLevels: 'كل المستويات',
       noGroup: 'المستوى مباشرة',
+      levelRequired: 'يرجى اختيار المستوى قبل الحفظ.',
+      branchUnknown:
+        'تعذّر تحديد المقر لهذه المستفيدة. اختاري مجموعة، أو أضيفي لها مقرًّا من تعديل بيانات المستخدم.',
       levelOnly: 'المستوى مباشرة (بلا مجموعة)',
       // The internal revision number is gone. It said «بعد المراجعة 66» — a
       // number no reader of this screen can look up, and the platform's own
@@ -1650,6 +1656,8 @@ export const ar = {
       // What replaces it is the MEANING that revision carries.
       groupHint: 'اتركيها فارغة لتسجيلها في المستوى مباشرة.',
       enrolled: 'تم التسجيل.',
+      genderRestricted: 'هذا المستوى مخصَّص لجنس واحد، ولا يمكن تسجيل هذه المستفيدة فيه.',
+      alreadyInGroup: 'المستفيدة مسجّلة في مجموعة أخرى من هذا المستوى.',
       already: 'المستفيدة مسجّلة في هذا المستوى أصلًا.',
       outOfScope: 'المستوى أو المقر أو المجموعة خارج نطاقك.',
       circles: 'الحلقات',
@@ -1980,6 +1988,7 @@ export const ar = {
       overlappingMain: 'لا يمكن أن تكون مؤطّرتان مسؤولتين في تواريخ متداخلة. عدّلي المدد.',
       overlappingAssignment: 'لهذه المؤطّرة إسنادان متداخلان في هذه الحصة. عدّلي المدد.',
       staffPeriodOutside: 'مدّة الإسناد خارج فترة الحصة كلّها.',
+      periodReversed: 'تاريخ النهاية سابق لتاريخ البداية.',
       fixedAfterCreate:
         'المادة ونمط التدريس وهدفه والفرع والسنة تُحدَّد عند الإنشاء ولا تُعدَّل — تغييرها يعيد توجيه حصص مُولّدة سابقاً.',
       clash: 'القاعة أو أحد المؤطرين مرتبط بحصة أخرى في نفس الوقت. اختر توقيتاً أو قاعة أخرى.',

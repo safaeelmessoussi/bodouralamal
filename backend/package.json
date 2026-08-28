@@ -12,6 +12,7 @@
     "build": "tsc -p tsconfig.json && cp prisma/seed/*.json dist/prisma/seed/",
     "start": "node dist/src/index.js",
     "lint": "eslint src prisma/seed",
+    "postinstall": "prisma generate",
     "typecheck": "tsc -p tsconfig.typecheck.json",
     "test": "vitest run",
     "test:integration": "vitest run --config vitest.integration.config.ts",

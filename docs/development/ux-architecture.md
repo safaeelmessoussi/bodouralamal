@@ -2052,6 +2052,90 @@ Measured, and **proved against the defect in the same page**: uncapped the note
 is one line of 648px in a 1105px table; with the prose cap restored on the same
 element it becomes two lines at 620px.
 
+## BC · A dialog does not re-fetch what its caller handed it
+
+**The defect, 2026-08-29.** `حفظ` on `تسجيل مستفيدة` did nothing at all — not a
+failing request, **no request**. The dialog opens from a مستفيدة's row, so she
+is already chosen; it nonetheless went looking for her again, in a directory
+search of its own narrowed to `beneficiaries_only`, in order to read her branch:
+
+```ts
+matches.find((m) => m.id === studentId)?.roles.find((r) => r.branch_id !== null)
+```
+
+The page builds its rows from the **union** of that durable fact and the Student
+role — R79.7 exists precisely because *role membership does not identify a
+beneficiary* — so a person who is on the page can be absent from the dialog's
+narrower list. She was: the search returned zero rows. The branch resolved to
+`''`, which both disabled the button and made `submit` return on its first line.
+
+**Two lists, two definitions of the same word, one of them invisible.** The rule
+that prevents it: **a dialog receives the row, not an identifier it must
+re-resolve.** The caller already holds the answer; asking a second question is
+how the two come to disagree, and the disagreement surfaces as a dead control
+rather than as an error.
+
+The branch is now derived from what the reader chooses and what the row already
+states — §4.4c gives an Administrative Group its branch, R66's Level-only
+placement falls back to her role assignment and then to a branch she is already
+enrolled at — and if none of them answers, the form **says so** rather than
+disabling حفظ (rule AH, and see BB's *explain*).
+
+## BB · A server invariant is stated at entry, and re-stated when its measure moves
+
+**Owner report, 2026-08-29.** A class beginning **30 غشت 2026** with a staffing
+assignment of **29 غشت → 29 غشت** was refused with
+`STAFF_PERIOD_OUTSIDE_SCHEDULE`. The refusal is correct — §5 makes an assignment
+sharing no day with its schedule meaningless, and it is **refused rather than
+clipped** on purpose, because silently rewriting a date leaves the
+administrator believing she recorded something she did not.
+
+What was wrong is *when* and *where* she was told: on Save, after a whole form,
+in a sentence naming no field.
+
+**Three jobs, and a screen that does only one of them is not finished:**
+
+| | Where | What it can do |
+|---|---|---|
+| **Constrain** | the control's native `min`/`max` | greys the impossible out of the picker, before a click |
+| **Explain** | a field error on the fields that are wrong (rule AH) | says *why*, and *which* |
+| **Enforce** | the server | the only one that is authoritative (rule O) |
+
+The first two are courtesies and are **trivially bypassable**; that is fine,
+because the third never moves. A screen that constrains without explaining
+produces a control that refuses silently — the same defect in a new place.
+
+### The half that is easy to miss
+
+**The measure can move without the measured thing being touched.** Editing the
+class's own start date can invalidate a staffing row nobody has looked at, and
+nothing about that row changed to trigger a check of its own. So the marking is
+**derived on every render** from props — never computed in an effect, never
+cached in state:
+
+```tsx
+error={rowError(row)}   // ← recomputed whenever scheduleFrom changes
+```
+
+`StaffingPeriods` holds **no** `useState` and **no** `useEffect`, and its guard
+asserts both absences, because either would reintroduce exactly this staleness.
+The browser harness drives the case directly: type an invalid period, then move
+the *schedule* and watch the untouched row go green.
+
+### The mirrored rule, and why it is allowed here
+
+`lib/staffing-period.ts` restates `withinScheduleLife` on the client, which the
+platform's one-source-of-truth rule normally forbids. It is admissible **only**
+because it can never be permissive: the server refuses independently, so a
+client copy that drifts makes the warning early or absent, never wrong. It is
+pinned against the same boundary cases as the backend policy — including the
+anchor day itself, which the backend had not covered on the lower side.
+
+**The rule is OVERLAP, not containment.** An assignment already in force when
+the class begins is ordinary; only a period sharing no day at all is refused.
+A client check that demanded containment would be *stricter* than the server,
+which is the one thing a mirror must never be.
+
 ## BA · A table shows every meaningful field of what it manages
 
 **Owner rule (2026-08-27).** *Every table in the platform must show all
@@ -2126,7 +2210,9 @@ system's internals, break on every restyle, and catch nothing.
 | [`scripts/ci/check-progress-css.sh`](../../scripts/ci/check-progress-css.sh) | **AV** — logical sizing, a clipped track and `prefers-reduced-motion`, proved against the defect it exists for |
 | [`components/calendar/shared-details.test.ts`](../../frontend/src/components/calendar/shared-details.test.ts) | **AT** — all four calendars render the shared dialog **and** none discards the click · two content sections with two empty states · nothing claimed before a 200 · no Session-page step · the focused read carries the caller's token |
 | [`scripts/dev/browser/verify-occurrence-details.mjs`](../../scripts/dev/browser/verify-occurrence-details.mjs) | **AT** — the dialog opened from public, back-office, مؤطرة and beneficiary calendars on a real Session, with both sections present and every focused read a 200 |
-| [`components/scheduling/staffing-periods.test.ts`](../../frontend/src/components/scheduling/staffing-periods.test.ts) | **AS** — a blank date is open-ended and converted once at the wire · many assistants and one person on several rows · a new row defaults to assistant · each interval refusal has its own Arabic sentence |
+| [`components/scheduling/staffing-periods.test.ts`](../../frontend/src/components/scheduling/staffing-periods.test.ts) | **AS** — a blank date is open-ended and converted once at the wire · many assistants and one person on several rows · a new row defaults to assistant · each interval refusal has its own Arabic sentence · **BB** — the schedule's bounds reach the rows, the marking is derived (no `useState`/`useEffect`) on **both** date fields, and Save refuses through the same one rule |
+| [`lib/staffing-period.test.ts`](../../frontend/src/lib/staffing-period.test.ts) | **BB** — the client mirror of `withinScheduleLife`: the Owner's 29-vs-30 غشت case, the anchor day accepted, overlap rather than containment, an untouched row never marked, and `''` behaving as ±∞ rather than as an empty string |
+| [`pages/admin/enrolment-save.test.ts`](../../frontend/src/pages/admin/enrolment-save.test.ts) | **BC/AH** — the enrolment dialog takes the row rather than an id it re-resolves, never derives the branch from a directory search, falls back through group → role → existing enrolment, gates حفظ only on the Level, and turns the service's own reasons into Arabic |
 | [`scripts/dev/browser/verify-effective-staffing.mjs`](../../scripts/dev/browser/verify-effective-staffing.mjs) | **AS/R91** — the replacement driven as four identities: dated rows on the form, Safa twice, per-date occurrences, four different answers on one class at one moment, and a handover that leaves the past alone |
 | [`components/scheduling/staff-picker.test.ts`](../../frontend/src/components/scheduling/staff-picker.test.ts) | **AR/C** — all three sections delegate to the shared picker and none hand-rolls a checkbox list · exactly one `filter`, and nothing `disabled` by a warning · every warning kind has its own catalogue key · no warning string reads as a prohibition |
 | `teaching-candidates.http.integration.test.ts` | **AR** — the four appraisals, the containment rule, ranges never merged, *not declared* ≠ *unavailable*, `monthly` indeterminate, a schedule never conflicting with itself · **and both halves of R88.3**: four warnings do not block the assignment, and a flawless profile with no assignment reaches nothing |

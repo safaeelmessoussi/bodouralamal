@@ -65,6 +65,10 @@ import { useScopeOptions } from '../../hooks/use-scope-options.js';
 import { useSession } from '../../contexts/session.js';
 import { useActiveRole } from '../../contexts/active-role.js';
 import { isDirty } from '../../lib/form-dirty.js';
+import {
+  periodEndsBeforeItStarts,
+  periodOutsideSchedule,
+} from '../../lib/staffing-period.js';
 import type { StaffingPeriod } from '../../components/scheduling/staffing-periods.js';
 import { SelectField } from '../../components/ui/field.js';
 import { useTeachingCandidates } from '../../hooks/use-teaching-candidates.js';
@@ -1210,6 +1214,29 @@ export function SchedulingDialog({
       return t('scheduling.invalid.itemType');
     }
     if (recurrence.startDate === '') return t('scheduling.invalid.startDate');
+    /**
+     * **A staffing period outside the class's life, refused HERE** (2026-08-29).
+     *
+     * The server refuses it — `STAFF_PERIOD_OUTSIDE_SCHEDULE`, and that stays
+     * the authority — but only on Save, and its message names no field. The
+     * rows mark themselves as they are typed; this is the same rule at the
+     * submit boundary, so an invalid combination cannot survive a schedule-date
+     * edit that made it invalid without anyone touching the assignment.
+     *
+     * `rangesOverlap` is the one client-side statement of the rule, shared with
+     * the rows — not a second copy that could disagree with the marking the
+     * reader is looking at.
+     */
+    const outside = staffing
+      .filter((row) => row.user_id !== '')
+      .some((row) =>
+        periodEndsBeforeItStarts({ from: row.effective_from, until: row.effective_until }) ||
+        periodOutsideSchedule(
+          { from: row.effective_from, until: row.effective_until },
+          { from: recurrence.startDate, until: recurrence.endDate },
+        ),
+      );
+    if (outside) return t('admin.schedules.staffPeriodOutside');
     if (type === 'exam') {
       // The mode is refused by the server too; saying so here is the courtesy,
       // not the guarantee.
@@ -1498,6 +1525,13 @@ export function SchedulingDialog({
             staffing={staffing}
             onStaffing={setStaffing}
             appraisal={appraisal}
+            /* **The bounds the server measures against** (§5). `startDate` is
+               the schedule's anchor and the recurrence end is R50's series
+               bound — the same two values the payload sends as `startDate` and
+               `repeatUntil`, so the form cannot warn about a different period
+               from the one it saves. */
+            scheduleFrom={recurrence.startDate}
+            scheduleUntil={recurrence.endDate}
           />
         ) : type === 'exam' ? (
           <>

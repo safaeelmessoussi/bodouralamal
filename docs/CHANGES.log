@@ -1516,3 +1516,77 @@ fix remain in the local development database. All carry zero roles and zero
 enrolments and are excluded from every read; one is held by an enrolment under
 RESTRICT. Deleting them would mean unwinding audit and trash trails for no gain,
 so they are reported rather than removed.
+
+## حفظ that did nothing, and a refusal that arrived too late (2026-08-29)
+
+### تسجيل مستفيدة — no request at all
+
+Not a failing save: **no request left the browser**. The dialog opens from a
+مستفيدة's row, so she is already chosen — and it then went looking for her
+again, in a `beneficiaries_only` directory search of its own, to read her
+branch. The page builds its rows from the **union** of that durable fact and the
+Student role (R79.7 exists because role membership does not identify a
+beneficiary), so a person on the page can be missing from the dialog's narrower
+list. She was; the search returned zero rows; the branch resolved to `''`; and
+that both disabled حفظ and made `submit` return on its first line.
+
+- **The dialog now receives the row, not an id it must re-resolve** — new rule
+  **BC**. Two lists holding two definitions of the same word is how they come to
+  disagree, and the disagreement surfaced as a dead control rather than an error.
+- **The branch is derived from what is already known:** the group's branch
+  (§4.4c) → her role assignment → a branch she is already enrolled at (R66).
+- **If none of them answers, the form says so.** حفظ is gated on the Level alone
+  — the one required answer the reader can actually give.
+- **The service's own reasons reach her in Arabic.** `GENDER_RESTRICTION` and
+  `ALREADY_ENROLLED_IN_LEVEL` were arriving as a bare «تعذّر الحفظ»; an unmapped
+  refusal now carries the server's code so it can be quoted.
+
+Verified in a browser on the Owner's exact case — a Level plus **حفظ القرآن — 1**
+— as two `201`s and a closed dialog.
+
+### المؤطّرات وفتراتهن — the invariant was right, the moment was wrong
+
+A class beginning 30 غشت 2026 with an assignment of 29 غشت → 29 غشت is
+`STAFF_PERIOD_OUTSIDE_SCHEDULE`. **The invariant is untouched.** What changed is
+that it is now said at entry: the pickers carry the schedule's bounds as native
+`min`/`max`, and both date fields show the reason and go `aria-invalid` as it is
+typed.
+
+**The half that is easy to miss** — new rule **BB** — is that the *measure* can
+move without the measured thing being touched: editing the class's start date
+invalidates a staffing row nobody looked at. The marking is therefore derived on
+every render from props, never from an effect or cached state, and the component
+holds no `useState` and no `useEffect` at all. A browser harness drives exactly
+that: type an invalid period, move the schedule, watch the untouched row clear.
+
+`lib/staffing-period.ts` mirrors `withinScheduleLife` on the client. Admissible
+only because it can never be permissive — the server refuses independently — and
+pinned against the same boundaries, **including the anchor day, which the
+backend policy had not covered on the lower side.**
+
+### The two red errors in `production.ts`
+
+`description does not exist in CategoryCreateInput` and `prisma.partner does not
+exist` were **the editor's, not the code's**. Established rather than assumed:
+the schema validates, the live database has `partner` and `category.description`,
+and `npm run typecheck`, `lint` and `build` are all green — including
+`prisma/seed`, which is inside the typecheck surface.
+
+The client generates into `backend/src/generated/prisma`, which is **gitignored**
+— a per-machine build artifact — and there was **no `postinstall` hook**. So a
+fresh clone had no client at all, and a machine that pulled a schema change kept
+serving the old shape to its language server. Added
+`"postinstall": "prisma generate"` and proved it: deleting the generated
+directory and running `npm install` alone restores it. Recorded in
+`getting-started.md` beside the existing staleness entry, with the rule that
+**when the CLI and the editor disagree, the CLI is right.**
+
+### A harness that reported 4/4 while leaking
+
+The new enrolment harness seeds its own branch, مستفيدة and role — and its
+teardown named `teaching_group_member`, a table that does not exist. `|| true`
+swallowed the error, so it passed while leaving its مستفيدة behind under
+RESTRICT. Corrected to `student_teaching_group`, and its trap is now armed
+**before** the first row is created: a seed step failing under `set -e` had
+already exited once with rows it had made. Proven by counting rows either side —
+`users 29→29`, `enrolments 5→5`.

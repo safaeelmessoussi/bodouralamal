@@ -20,7 +20,7 @@ import {
   removeMember,
   type TeachingGroupRow,
 } from '../../adapters/teaching-groups.js';
-import { searchDirectory, type DirectoryEntry } from '../../adapters/users.js';
+import { searchDirectory, type DirectoryEntry, type RoleAssignment } from '../../adapters/users.js';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
 import { LevelSelect, levelLabel } from '../../components/scope/level-select.js';
 import { Button } from '../../components/ui/button.js';
@@ -77,7 +77,31 @@ interface StudentRow {
   name: string;
   firstName: string | null;
   lastName: string | null;
+  /**
+   * **Her role assignments, carried on the row** (2026-08-29). The enrolment
+   * dialog needs her branch and used to go looking for it in a directory
+   * search of its own — see `branchOfStudent`. The page already holds the
+   * answer; handing it over is both correct and one request cheaper.
+   */
+  roles: RoleAssignment[];
   enrolments: EnrollmentRowView[];
+}
+
+/**
+ * **Where a مستفيدة's branch comes from, in order** (2026-08-29).
+ *
+ * §4.4c: an Administrative Group carries its branch, so a group placement
+ * answers it outright. R66 allows a Level-only placement, and then the branch
+ * is the person's own — from her role assignment, or from a branch she is
+ * already enrolled at. Returns `''` when nothing answers, and the caller must
+ * SAY so rather than quietly refusing to submit.
+ */
+function branchOfStudent(row: StudentRow): string {
+  return (
+    row.roles.find((r) => r.branch_id !== null)?.branch_id ??
+    row.enrolments[0]?.branch_id ??
+    ''
+  );
 }
 
 export function EnrollmentsPage(): ReactNode {
@@ -91,7 +115,7 @@ export function EnrollmentsPage(): ReactNode {
   const [sort, setSort] = useState<SortState | null>(null);
   const [query, setQuery] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
-  const [composing, setComposing] = useState<string | null>(null);
+  const [composing, setComposing] = useState<StudentRow | null>(null);
   /**
    * Every account this screen must list: the Student role (Owner) united with
    * R79.7's durable beneficiary fact, so neither rule drops anybody.
@@ -159,6 +183,7 @@ export function EnrollmentsPage(): ReactNode {
       name: person.name_arabic,
       firstName: person.first_name_arabic,
       lastName: person.last_name_arabic,
+      roles: person.roles,
       enrolments: [],
     });
   }
@@ -170,6 +195,9 @@ export function EnrollmentsPage(): ReactNode {
       // the directory's, so a row reached only through an enrolment shows none.
       firstName: null,
       lastName: null,
+      // Nor does it carry her roles — `branchOfStudent` falls through to the
+      // enrolment's own branch, which such a row always has.
+      roles: [],
       enrolments: [],
     };
     existing.enrolments.push(e);
@@ -283,7 +311,7 @@ export function EnrollmentsPage(): ReactNode {
       // «تسجيل» alone: the row already says who, so repeating «مستفيدة» in
       // the action would restate the column beside it.
       label: t('admin.enrollments.enrol'),
-      onSelect: (r) => setComposing(r.id),
+      onSelect: (r) => setComposing(r),
     },
     /**
      * **تعديل / إنهاء act on ONE placement.** A student row may hold several,
@@ -465,7 +493,7 @@ export function EnrollmentsPage(): ReactNode {
         <EnrolDialog
           levels={levels}
           token={accessToken}
-          studentId={composing}
+          student={composing}
           onCancel={() => setComposing(null)}
           onDone={(message) => {
             setComposing(null);
@@ -481,24 +509,24 @@ export function EnrollmentsPage(): ReactNode {
 function EnrolDialog({
   levels,
   token,
-  studentId: fixedStudentId,
+  student,
   onCancel,
   onDone,
 }: {
   levels: Level[];
   token: string | null;
   /**
-   * **Opened from her row, so she is already chosen** (Owner, 2026-08-28). The
-   * form no longer begins by asking who is being enrolled — the row answered
-   * that — so the picker below is not rendered and the question the dialog asks
-   * is only *where*.
+   * **The row that opened the dialog, whole** (2026-08-29). It used to receive
+   * only an id and then re-fetch the person — from a directory search narrowed
+   * to `beneficiaries_only`, which is a *different question* from the one the
+   * page asked to build its rows. When the two disagreed the lookup found
+   * nothing, and the branch that lookup existed to supply came back `''`.
    */
-  studentId: string;
+  student: StudentRow;
   onCancel: () => void;
   onDone: (message: string) => void;
 }): ReactNode {
-  const [matches, setMatches] = useState<DirectoryEntry[]>([]);
-  const [studentId] = useState(fixedStudentId);
+  const [studentId] = useState(student.id);
   const [levelId, setLevelId] = useState<string | null>(null);
   /**
    * **The Levels THIS beneficiary may enter**, resolved server-side once she is
@@ -525,10 +553,7 @@ function EnrolDialog({
    * a Level-only placement (R66) it is the مستفيدة's own branch, from her role
    * assignment.
    */
-  const derivedBranchId =
-    groups.find((g) => g.id === groupId)?.branch_id ??
-    matches.find((m) => m.id === studentId)?.roles.find((r) => r.branch_id !== null)?.branch_id ??
-    '';
+  const derivedBranchId = groups.find((g) => g.id === groupId)?.branch_id ?? branchOfStudent(student);
 
 
   // **The list is loaded once, on open; search NARROWS it in the control.** It
@@ -559,16 +584,6 @@ function EnrolDialog({
    * would make enrolment the precondition for being enrollable. The durable fact
    * answers it, and the SERVER answers it: this list is what it is handed.
    */
-  useEffect(() => {
-    void (async () => {
-      try {
-        setMatches((await searchDirectory(token, { beneficiaries_only: 'true' })).data);
-      } catch {
-        setMatches([]);
-      }
-    })();
-  }, [token]);
-
   /**
    * **WHO → WHERE.** Choosing the beneficiary narrows the Levels, because that
    * is the direction the domain runs: R27 asks whether *she* may enter a
@@ -684,7 +699,23 @@ function EnrolDialog({
    * seats can be added from `حلقات المواد`.
    */
   async function submit(): Promise<void> {
-    if (!studentId || !levelId || !derivedBranchId) return;
+    /**
+     * **A refusal the reader can see** (2026-08-29). This was
+     * `if (!studentId || !levelId || !derivedBranchId) return;` — and the same
+     * three conditions also disabled حفظ, so when the branch could not be
+     * derived the button was simply dead: no request, no message, nothing to
+     * act on. **A form never declines in silence** (rule AH); of the three,
+     * only the Level is a control she can see, so the other two must explain
+     * themselves in words.
+     */
+    if (!levelId) {
+      setNotice(t('admin.enrollments.levelRequired'));
+      return;
+    }
+    if (!derivedBranchId) {
+      setNotice(t('admin.enrollments.branchUnknown'));
+      return;
+    }
     setBusy(true);
     setNotice(null);
     try {
@@ -746,7 +777,10 @@ function EnrolDialog({
       notice={notice}
       busy={busy}
       dirty={dirty}
-      disabled={!studentId || !levelId || !derivedBranchId}
+      /* Only the Level gates the button, because the Level is the one required
+         answer the reader can actually give here. A missing branch is not her
+         omission and must be said out loud, not enforced by a dead control. */
+      disabled={!levelId}
       onSubmit={() => void submit()}
       onCancel={onCancel}
     >
@@ -766,13 +800,10 @@ function EnrolDialog({
           Filtering by role would hide exactly the students who need enrolling. */}
       {/* **The beneficiary is no longer asked for** (Owner, 2026-08-28): this
           dialog opens from her row, so the question it asks is only *where*.
-          The list of candidates above is still loaded, because the name is what
-          the heading shows and what the Level narrowing is resolved against. */}
+          Her name comes from that row — the dialog does not go looking for a
+          person the caller already handed it. */}
       <p className="field__hint">
-        {t('admin.enrollments.enrolling').replace(
-          '{name}',
-          matches.find((m) => m.id === studentId)?.name_arabic ?? '',
-        )}
+        {t('admin.enrollments.enrolling').replace('{name}', student.name)}
       </p>
 
       {/* Narrowed by HER: restricted Levels she cannot enter, and the one she is
@@ -829,11 +860,29 @@ function EnrolDialog({
   );
 }
 
+/**
+ * **A server refusal, in the reader's words** (extended 2026-08-29).
+ *
+ * This branched on the status alone, so every 400 — including the two the
+ * enrolment service takes trouble to explain — arrived as a bare *«تعذّر
+ * الحفظ»*. The service reports **why** in `details.reason` (§TD-3.8 carries it
+ * through untouched); reading it is the difference between «that didn't work»
+ * and «this Level is for girls».
+ *
+ * The fallback still says the generic sentence, but **appends the server's own
+ * `code`**, so an unmapped refusal is something a person can quote rather than
+ * a dead end.
+ */
 function refusal(error: unknown): string {
   if (!(error instanceof ApiError)) return t('common.saveFailed');
+  const reason = error.details['reason'];
+  if (reason === 'GENDER_RESTRICTION') return t('admin.enrollments.genderRestricted');
+  if (reason === 'ALREADY_ENROLLED_IN_LEVEL') return t('admin.enrollments.alreadyInGroup');
   if (error.status === 409) return t('admin.enrollments.already');
   if (error.status === 404) return t('admin.enrollments.outOfScope');
-  return t('common.saveFailed');
+  return error.code === null
+    ? t('common.saveFailed')
+    : t('common.saveFailedCode').replace('{code}', error.code);
 }
 
 /**

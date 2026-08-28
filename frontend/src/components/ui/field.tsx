@@ -208,7 +208,17 @@ export function TextArea({ rows = 4, ...props }: BaseProps & { rows?: number }):
  * The stored and transmitted value is untouched: `YYYY-MM-DD`, exactly as TD-11
  * requires.
  */
-export function DateField(props: BaseProps): ReactNode {
+/**
+ * **A date, optionally bounded** (`min`/`max` added 2026-08-29).
+ *
+ * The bounds are the native ones, so the browser's own picker greys out what
+ * cannot be chosen — the cheapest possible *«not that one»*, before a click.
+ * They are **not** validation: a native `min` is trivially bypassed and says
+ * nothing about *why*, so a caller that sets them must still pass `error` and
+ * the server must still refuse. Constrain, explain, and enforce — three jobs,
+ * and this does only the first.
+ */
+export function DateField(props: BaseProps & { min?: string; max?: string }): ReactNode {
   return (
     <FieldShell {...props} hint={props.hint ?? t('common.dateFormatHint')}>
       {({ id, describedBy }) => (
@@ -219,6 +229,8 @@ export function DateField(props: BaseProps): ReactNode {
             type="date"
             lang="ar-MA"
             value={props.value}
+            {...(props.min ? { min: props.min } : {})}
+            {...(props.max ? { max: props.max } : {})}
             required={props.required ?? false}
             disabled={props.disabled ?? false}
             aria-invalid={props.error ? true : undefined}

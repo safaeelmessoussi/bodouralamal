@@ -60,6 +60,56 @@ describe('the domain permits many assistants, and the interface does not cap it'
   });
 });
 
+/**
+ * **The refusal was correct and far too late** (2026-08-29).
+ *
+ * A schedule beginning 30 غشت 2026 with an assignment of 29 غشت → 29 غشت is
+ * `STAFF_PERIOD_OUTSIDE_SCHEDULE` — and the administrator learned that only
+ * after filling in the whole form, from a message that names no field. The
+ * invariant is untouched; what changed is that the rows now say it as they are
+ * typed, and re-say it when the SCHEDULE's own dates move under them.
+ */
+describe('a staffing period is measured against the schedule as it is typed', () => {
+  it('receives the schedule’s life rather than guessing at it', () => {
+    expect(code(PERIODS)).toContain('scheduleFrom');
+    expect(code(PERIODS)).toContain('scheduleUntil');
+    // The two values the payload actually sends, so the warning and the save
+    // cannot be about different periods.
+    expect(code(FORM)).toContain('scheduleFrom={recurrence.startDate}');
+    expect(code(FORM)).toContain('scheduleUntil={recurrence.endDate}');
+  });
+
+  it('derives the marking on every render, so editing the schedule re-marks the rows', () => {
+    // **The property, not the path.** A `useEffect` that validated on change
+    // would leave a row that became invalid because the CLASS moved still
+    // looking correct — nothing touched the row, so nothing would re-run.
+    expect(code(PERIODS)).toContain('const rowError = (row: StaffingPeriod): string | null =>');
+    // **Both** date fields, counted rather than merely present: dropping the
+    // error from one of the two left `toContain` satisfied by the other, and a
+    // guard that cannot fail is not protection.
+    expect(code(PERIODS).match(/error=\{rowError\(row\)\}/g) ?? []).toHaveLength(2);
+    expect(code(PERIODS)).not.toContain('useEffect');
+    expect(code(PERIODS)).not.toContain('useState');
+  });
+
+  it('constrains the pickers to the schedule as well as explaining', () => {
+    expect(code(PERIODS)).toContain('min: scheduleFrom');
+    expect(code(PERIODS)).toContain('max: scheduleUntil');
+  });
+
+  it('refuses at Save too, through the SAME rule the rows are marked with', () => {
+    // One statement of the rule on the client. A second copy at the submit
+    // boundary could disagree with the marking the reader is looking at.
+    expect(code(FORM)).toContain('periodOutsideSchedule(');
+    expect(code(FORM)).toContain("return t('admin.schedules.staffPeriodOutside');");
+  });
+
+  it('says «ends before it starts» as its own sentence', () => {
+    expect(code(PERIODS)).toContain('periodEndsBeforeItStarts');
+    expect(ar.admin.schedules.periodReversed.length).toBeGreaterThan(10);
+  });
+});
+
 describe('a refusal arrives in the administrator’s words', () => {
   it('maps each interval refusal to its own sentence', () => {
     expect(code(FORM)).toContain('OVERLAPPING_MAIN_TEACHER');

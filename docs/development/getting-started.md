@@ -114,6 +114,7 @@ database), `*.http.integration.test.ts` (drives the HTTP surface).
 | Symptom | Cause |
 |---|---|
 | `PrismaClientValidationError` that reads like a logic bug | **A stale Prisma client after a schema change.** Run `npx prisma generate`. This has cost time twice |
+| The editor reports `partner does not exist on PrismaClient`, or a column missing from a `CreateInput`, while `npm run typecheck` is green | **The same staleness, seen by the language server rather than the compiler.** The client generates into `backend/src/generated/prisma`, which is **gitignored** — so it is a build artifact each machine makes for itself, and an editor that indexed it before the schema changed keeps serving the old shape. `npm install` now regenerates it (`postinstall`); after a schema change *inside* a session, regenerate and restart the TS server. **When the CLI and the editor disagree, the CLI is right** |
 | Migration checksum mismatch | A migration file was edited after being applied. **Repair the recorded checksum** — do not reset the database |
 | Integration tests cannot reach the database | The dev overlay is not up, or something else holds 5433 |
 | `SignatureDoesNotMatch` on storage | The `/storage/` location stopped stripping the prefix or rewriting `Host` consistently with the signed endpoint |
