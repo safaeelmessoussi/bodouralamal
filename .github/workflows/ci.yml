@@ -51,6 +51,8 @@ jobs:
         run: bash scripts/ci/check-shared-layout.sh
       - name: Every Nginx header set carries HSTS
         run: bash scripts/ci/check-security-headers.sh
+      - name: Operational and audit logs contain no caller-supplied PII
+        run: bash scripts/ci/check-no-pii-logs.sh
       - name: The hero logo is a cleanly matted cut-out
         run: bash scripts/ci/check-logo-alpha.sh
       # Guards are protection only if they can fail. Three shipped depending on

@@ -91,6 +91,28 @@ The population includes minors, the association is subject to Moroccan data-prot
 and logs are the least-controlled surface in any system — they get copied into tickets,
 pasted into chats, and shipped to third parties by accident.
 
+The edge therefore generates its own opaque request id; a public
+`X-Request-Id` is never preserved. Nginx's structured access record contains
+time, request id, method, status, byte count and timings — **no URI and no
+client address**. The application logs the matched Express route template
+(`/admin/users/:id`), never the requested coordinate, and uses `<unmatched>` for
+unknown routes. Internal exception text is not logged: database/storage errors
+may embed SQL, connection strings or filename-derived object keys, so the fixed
+failure stage plus `request_id` is the diagnostic join.
+
+Nginx's error-log format cannot be made JSON and can echo request coordinates.
+Its own source includes request-context log calls at `crit`, so even that level
+is unsafe for this boundary; the error log is restricted to process/configuration
+`emerg` failures. Request outcomes, including upstream failures, remain visible
+in the structured access record.
+
+An indefinitely retained `AuditLog` follows the same identity rule. A
+`user.create` row records `identity_channel = pre_provisioned` and the target
+User id, not the mailbox copied from that User. TD-8's older instruction that
+`auth.login` / `auth.login_denied` include identity email contradicts TD-14's
+explicit *never emails* rule; current code remains no-email/fail-closed pending
+the Document Owner's reconciliation recorded in `TASKS.md`.
+
 A **log audit** is an explicit item on the deployment checklist.
 
 ### Verbosity

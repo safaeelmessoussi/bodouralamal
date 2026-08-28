@@ -195,7 +195,10 @@ export async function preProvision(
       targetEntity: 'User',
       targetId: user.id,
       detail: {
-        pre_provisioned_email: email,
+        // TD-14: the target User is the attributable coordinate. Recording the
+        // mailbox again would move personal identity into an indefinitely
+        // retained AuditLog row and defeat R111's eventual erasure.
+        identity_channel: 'pre_provisioned',
         role: input.role ?? null,
         branch_id: input.branchId ?? null,
         account_status: user.accountStatus,

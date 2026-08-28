@@ -1190,3 +1190,41 @@ ownership **14/14**; backend unit **285/285**; complete real-stack integration *
 frontend **857/857**. Backend and frontend lint, exact typecheck and Production builds pass;
 all 27 CI guards pass, documentation links are **883/883**, OpenAPI is current at **130 paths /
 172 operations**, and `git diff --check` is clean.
+
+## TD-14 no-PII logging boundary (2026-08-28)
+
+The Production-readiness log audit found four ways personal or sensitive data could cross a
+boundary whose comments claimed it was absent. Nginx trusted a public `X-Request-Id` verbatim and
+logged the raw URI plus client address; Express logged `req.path`, including arbitrary unmatched
+paths; both the HTTP error handler and failed job-runner startup copied raw exception messages;
+and `user.create` duplicated the pre-provisioned mailbox into an indefinitely retained AuditLog
+row. A caller could therefore place an email in two operational logs merely by requesting an
+unknown path or setting one header, while driver/storage errors could disclose SQL, connection
+strings or filename-derived object keys.
+
+The edge now generates the correlation id and forwards only that id. Its structured record omits
+URI and client address; its non-customisable error log is process-emergency only (`crit` has
+request-context call sites and was rejected during adversarial review). Express accepts
+only Nginx's 32-hex id or a UUID, logs the registered route template / `<unmatched>`, and emits a
+fixed internal-error operator message. Job-start failure logging names the failed stage without
+the exception text. Staff pre-provisioning records `identity_channel = pre_provisioned`, role,
+scope and target User id, never the mailbox. Three behavior tests inject the same email-shaped
+value through the header, matched/unmatched paths and exception message; the user-service
+integration proves audit attribution without identity duplication. A new CI guard pins the Nginx,
+runtime and AuditLog source boundaries, and `nginx -T`/`nginx -t` verify the repository-mounted
+configuration under test.
+
+One specification contradiction remains explicit rather than invented: TD-8 says
+`auth.login`/`auth.login_denied` detail includes identity email, while TD-14 and §20 rule 18 say
+never log email. Current code already follows the stricter rule and remains unchanged; `TASKS.md`
+asks the Document Owner to remove that TD-8 field (recommended) or define a controlled exception
+with access/retention basis. The launch checklist therefore remains open on that decision.
+
+Verification: hostile-value middleware regressions and the complete backend unit suite pass
+**288/288**; the real-PostgreSQL staff pre-provisioning integration passes **38/38** with an
+identical all-table before/after snapshot. Backend lint, exact typecheck and Production build pass.
+All **28** CI guards pass (including the new no-PII guard); documentation links are **883/883**;
+OpenAPI is current at **130 paths / 172 operations**, with **0** implemented TD-3 endpoints
+undocumented; and `git diff --check` is clean. `nginx -t` and the loaded `nginx -T` pass against
+the repository-mounted config. A live hostile-header/path request receives a generated 32-hex id,
+and its Nginx record contains only that id, method, status, byte count and timings.

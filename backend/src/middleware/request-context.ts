@@ -22,7 +22,16 @@ declare module 'express-serve-static-core' {
  */
 export function requestContext(req: Request, res: Response, next: NextFunction): void {
   const forwarded = req.header('x-request-id');
-  req.requestId = forwarded && forwarded.length <= 200 ? forwarded : randomUUID();
+  // Nginx supplies its 32-hex `$request_id`; local/direct callers may supply a
+  // UUID. Nothing else is accepted. A public client can set this header, so an
+  // arbitrary value would be an attacker-controlled field copied into every
+  // application/Nginx log and error envelope — including an email or phone.
+  const safeForwarded =
+    forwarded !== undefined &&
+    /^(?:[0-9a-f]{32}|[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})$/i.test(
+      forwarded,
+    );
+  req.requestId = safeForwarded ? forwarded : randomUUID();
   res.setHeader('X-Request-Id', req.requestId);
   next();
 }
@@ -38,9 +47,14 @@ export function accessLog(req: Request, res: Response, next: NextFunction): void
         time: new Date().toISOString(),
         request_id: req.requestId,
         method: req.method,
-        // req.route is undefined for unmatched paths; the raw path is safe
-        // because no PII appears in any TD-3 path segment.
-        path: req.path,
+        // Log the registered template, never the caller-controlled coordinate.
+        // Unknown routes are particularly important: `/name@example.test` is
+        // not in TD-3 and must not become personal data in an access log merely
+        // because somebody requested it.
+        path:
+          typeof (req.route as { path?: unknown } | undefined)?.path === 'string'
+            ? (req.route as { path: string }).path
+            : '<unmatched>',
         status: res.statusCode,
         duration_ms: Math.round(durationMs * 10) / 10,
       })}\n`,
@@ -76,7 +90,10 @@ export function errorHandler(
         time: new Date().toISOString(),
         request_id: req.requestId,
         level: 'error',
-        message: error instanceof Error ? error.message : 'unknown error',
+        // Driver/storage errors may include SQL, credentials, object keys or a
+        // user-supplied filename. The request id is the diagnostic join; the
+        // exception text is deliberately not copied into the operational log.
+        message: 'unhandled application error',
       })}\n`,
     );
   }

@@ -117,6 +117,13 @@ Structured JSON logs carry a `request_id` that is propagated into every error en
 job record, so a user-reported error is traceable end to end **without** logging who the
 user is.
 
+The public edge creates that id itself. It does not trust a caller's
+`X-Request-Id`, and neither Nginx nor Express logs a raw URI/path coordinate or
+client network address. Express records the registered route template and a
+constant for unmatched routes. Raw exception messages are excluded because a
+driver or object-store client may place SQL, credentials or filename-derived
+keys in them.
+
 ### In tokens
 
 No PII beyond the claims listed in [Identity and access](identity-and-access.md#jwt-claims).

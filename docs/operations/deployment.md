@@ -281,7 +281,8 @@ That drill is not a formality. It is the check on
 - [ ] Same-origin routing serves client, API, and storage under one domain
 - [ ] R101 deployment only: old API stopped before migration; users warned that sessions will end
 - [ ] Signed PUT/GET round trip passes **through the proxy**
-- [ ] No PII in logs (log audit)
+- [ ] No PII in logs (engineering audit complete; TD-8 identity-email contradiction awaits the
+      Document Owner before this launch checkbox can close)
 
 ---
 

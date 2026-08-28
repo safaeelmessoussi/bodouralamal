@@ -120,9 +120,18 @@ nothing. If attendance is planned, it is a new purpose (see E).
 | `AuditLog.detail` (JSON) | `AuditLog` | 12 months for an **enumerated** auth allowlist only; everything else **indefinite** **[CODE]** | **KEEP** — see I.2 |
 | `ConsentRecord` | its own table | Indefinite | **KEEP** |
 
-**[CODE] Audit detail is minimised by design in at least one place**:
-`user.service.ts:425` logs **field names only, never values** on a profile
-update. That is the right pattern and should be made a stated rule.
+**[CODE] Audit detail is minimised at both identity write boundaries.** Profile
+updates log **field names only, never values**. Staff pre-provisioning records
+the target User id and `identity_channel = pre_provisioned`, never the mailbox.
+The CI no-PII guard rejects reintroducing that email copy.
+
+**[CODE] Operational logs take no public identity coordinates.** Nginx creates
+the correlation id and logs no URI or client address; Express logs a route
+template / `<unmatched>` and fixed internal-error text. Raw database/storage
+exception messages are excluded because they may contain SQL, credentials or
+filename-derived keys. TD-8's contradictory identity-email instruction remains
+an explicit Owner reconciliation in `TASKS.md`, with the stricter no-email
+behavior retained meanwhile.
 
 **[CODE]** Security events (`consent_gate.override`, `grade.passfail_override`,
 `settings.change`, `trash.permanent_delete`) are **deliberately excluded** from
@@ -374,7 +383,7 @@ how backup retention interacts with an erasure obligation.
 | **I.5** | Backup **retention** period unset — an erased record may survive in backups indefinitely | Medium | See H.4. The policy itself exists and is sound |
 | **I.6** | **No emergency contact** | Medium | Safeguarding gap (C) |
 | **I.7** | `data_processing` consent exists but is **not enforced as a gate** on registration **[CONFIRM]** | Medium | Verify the flow records it before processing begins |
-| **I.8** | **No documented minimisation rule for audit `detail`** | Low | The good practice at `user.service.ts:425` should be a stated rule and a guard |
+| **I.8** | ~~No documented minimisation rule for audit `detail`~~ **Resolved in code/docs/CI:** personal values stay on their governed entity; audit detail uses ids, structural coordinates and changed field names. The TD-8 identity-email contradiction is separately Owner-blocked | Low | Keep `check-no-pii-logs.sh` and the hostile-value behavior regressions green |
 
 ---
 

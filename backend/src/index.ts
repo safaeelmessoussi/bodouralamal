@@ -36,7 +36,10 @@ startJobRunner(boss, prisma, config, jobReadiness)
         time: new Date().toISOString(),
         level: 'error',
         message: 'job runner failed to start',
-        detail: error instanceof Error ? error.message : 'unknown',
+        // Startup errors from PostgreSQL/pg-boss may embed connection strings,
+        // credentials or internal paths. Their text never belongs in runtime
+        // logs; readiness plus the fixed message identifies the failed stage.
+        error_type: error instanceof Error ? 'exception' : 'unknown',
       })}\n`,
     );
   });

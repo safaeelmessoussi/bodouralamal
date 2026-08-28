@@ -1088,6 +1088,24 @@ with `git checkout -- scripts/dev/browser/` reverted *every* file in the
 directory, including C1 work that was correct and uncommitted. Restore the files
 you broke, never the directory they live in.
 
+### No-PII logging is tested in both directions
+
+`request-context.test.ts` supplies an email-shaped `X-Request-Id`, an
+email-shaped supported path, an email-shaped unmatched path and an internal
+exception containing the same value. The accepted outputs are a newly generated
+opaque id, the registered route template / `<unmatched>`, and a fixed operator
+message. The input must appear in none of them. The staff-pre-provisioning
+integration asserts its indefinitely retained `user.create` audit contains the
+non-identifying channel and never the mailbox.
+
+`check-no-pii-logs.sh` pins the deployment half: Nginx must generate the id,
+its access format may contain neither URI nor client address, its fixed-format
+error log is process-emergency only, and neither runtime logger may reintroduce
+raw exception text. It also rejects copying the pre-provisioned mailbox into
+the audit detail. This is intentionally a source guard plus behavior tests: a
+behavior-only test cannot observe the loaded Nginx format, while a source-only
+guard cannot prove the redaction code actually handles hostile values.
+
 ### An integration run must leave the database it found
 
 P1.2 closed a defect that a passing suite concealed: the complete integration

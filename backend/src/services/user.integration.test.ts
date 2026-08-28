@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import { afterAll, beforeEach, describe, expect, it } from "vitest";
 import { actorFor } from "../test-support/actor.js";
 
@@ -17,12 +19,13 @@ import { listDirectory, listUsers, preProvision } from "./user.service.js";
  */
 const config = loadConfig();
 const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);
-const TAG = "[preprov-test]";
+const RUN = randomUUID();
+const TAG = `[preprov-test:${RUN}]`;
 
 let seq = 0;
 const addr = () => {
   seq += 1;
-  return `preprov-${Date.now()}-${seq}@example.com`;
+  return `preprov-${RUN}-${Date.now()}-${seq}@example.com`;
 };
 
 async function makeStaff(role: string): Promise<string> {
@@ -46,7 +49,7 @@ async function clear(): Promise<void> {
     where: {
       OR: [
         { nameArabic: { startsWith: TAG } },
-        { preProvisionedEmail: { startsWith: "preprov-" } },
+        { preProvisionedEmail: { startsWith: `preprov-${RUN}-` } },
       ],
     },
     select: { id: true },
@@ -391,7 +394,9 @@ describe("§4.1b step 4b — staff pre-provisioning", () => {
     });
     expect(row?.actorUserId).toBe(admin);
     const detail = row!.detail as Record<string, unknown>;
-    expect(detail["pre_provisioned_email"]).toBe(email);
+    expect(detail["identity_channel"]).toBe("pre_provisioned");
+    expect(detail).not.toHaveProperty("pre_provisioned_email");
+    expect(JSON.stringify(detail)).not.toContain(email);
     expect(detail["role"]).toBe("teacher");
   });
 });

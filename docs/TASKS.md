@@ -1755,7 +1755,17 @@ actual values, which are Production reference data the Owner holds.
   data plus additive preservation and fail-closed conflicts, and exercises marked-versus-unmarked
   teacher authorization through the real Quran policy/service before running the affected suites
 - [ ] Manual launch-data entry session(s) with coordinator: branches, rooms, groups, roster (R-5, §15.1)
-- [ ] No-PII log audit pass (TD-14)
+- [~] **No-PII log audit (TD-14) — independently determined code paths are closed.** Nginx now
+  generates (rather than trusts) the request id and logs no URI/client address; Express logs the
+  registered route template or `<unmatched>`; API and job-start logs copy no raw exception text;
+  `user.create` AuditLog detail records the pre-provisioned identity channel but not the mailbox.
+  Behavior regressions and a CI guard pin all four boundaries. **DOCUMENT OWNER DECISION
+  REQUIRED — AUTH AUDIT IDENTITY:** TD-8 says `auth.login` / `auth.login_denied` detail includes
+  identity email, while TD-14 and §20 rule 18 say never log emails. Current implementation follows
+  the stricter no-email rule. Reconcile TD-8 by either removing `identity email` (recommended;
+  actor/target User id + provider + reason remain attributable) or explicitly defining a narrowly
+  controlled AuditLog exception and its access/retention basis. Until then the audit is partial,
+  not falsely marked complete.
 - [ ] §18 Data, Admin & Audit checklist green
 
 ## M8 — Rehearsal, UAT, Launch
