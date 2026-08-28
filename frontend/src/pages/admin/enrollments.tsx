@@ -32,6 +32,7 @@ import { SearchInput, SelectField } from '../../components/ui/field.js';
 import { MultiSelectField } from '../../components/ui/multi-select.js';
 import { useSession } from '../../contexts/session.js';
 import { isDirty } from '../../lib/form-dirty.js';
+import { sortRows } from '../../lib/sort-rows.js';
 import { t } from '../../i18n/index.js';
 import { ApiError } from '../../lib/api.js';
 import { Feedback } from '../../components/ui/feedback.js';
@@ -209,21 +210,40 @@ export function EnrollmentsPage(): ReactNode {
   // and a student with no placement cannot match one (§14.4 — a filtered empty
   // state is a different answer from an empty page).
   const needleText = query.trim().toLowerCase();
-  const visibleStudents = studentRows.filter(
+  const filteredStudents = studentRows.filter(
     (r) =>
       (needleText === '' || r.name.toLowerCase().includes(needleText)) &&
       (filterLevel === null || r.enrolments.some((e) => e.level_id === filterLevel)),
   );
 
+  /**
+   * **This list is the CLIENT's, so the client orders it** (R76.2, 2026-08-30).
+   *
+   * The exception `sort-rows.ts` describes and not a breach of it: these rows
+   * are not a page of a paginated collection. They are assembled here from the
+   * union of two directory reads and the enrolments, one row per مستفيدة, so no
+   * endpoint exists that could order them — the same reason الجدولة sorts here.
+   *
+   * The accessors read **exactly what the cells render**, fallback included, so
+   * a row cannot sort by one value and display another. `null` sorts last in
+   * both directions, which is what «no family name recorded» should do.
+   */
+  const visibleStudents = sortRows(filteredStudents, sort, {
+    first_name: (r) => r.firstName ?? r.name,
+    last_name: (r) => r.lastName,
+  });
+
   const columns: Column<StudentRow>[] = [
     {
       key: 'first_name',
       header: t('admin.users.colFirstName'),
+      sortKey: 'first_name',
       cell: (r) => r.firstName ?? r.name,
     },
     {
       key: 'last_name',
       header: t('admin.users.colLastName'),
+      sortKey: 'last_name',
       cell: (r) => r.lastName ?? <span className="muted">{t('common.notSet')}</span>,
     },
     {

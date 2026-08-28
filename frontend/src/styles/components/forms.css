@@ -163,6 +163,14 @@
 .datatable__scroll {
   overflow-x: auto;
 }
+/* **The zero-row message spans the table rather than replacing it.** The state
+   components inside are block-level and carry their own spacing, so the cell
+   only has to stop the table's cell padding from doubling it and centre the
+   text under the columns it describes. */
+.admin-table__empty-row > td {
+  text-align: center;
+  padding-block: var(--space-4);
+}
 .datatable__skeleton {
   display: grid;
   gap: var(--space-2);

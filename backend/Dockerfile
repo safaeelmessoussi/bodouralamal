@@ -13,7 +13,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
   && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci
+# **`--ignore-scripts`, because this stage has no schema yet.** `postinstall`
+# runs `prisma generate` — which is exactly what a developer's `npm install`
+# should do, and exactly what cannot work here: only the two manifests are
+# copied at this point, deliberately, so that a source change does not
+# invalidate the dependency layer. The build stage below copies `prisma/` and
+# runs the generate explicitly, which is the same command at the point where it
+# has something to read.
+RUN npm ci --ignore-scripts
 
 FROM deps AS build
 COPY tsconfig.json prisma.config.ts ./

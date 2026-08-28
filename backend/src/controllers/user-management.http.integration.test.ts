@@ -373,6 +373,96 @@ describe("PATCH /admin/users/{id} — the person's own fields", () => {
     expect(saved.nameArabic).toBe("سعاد المسوسي");
   });
 
+  it("sorts by EITHER name part, and legacy rows sort by their real family name", async () => {
+    /**
+     * **The trap this pins** (Owner, 2026-08-30). Ordering by
+     * `last_name_arabic` would put every row predating Revisions 40–41 under
+     * NULL — sorting by *whether anybody has edited this person*, not by her
+     * family name. The order runs through the GENERATED columns instead, which
+     * carry the same derivation `splitComposedName` applies on read.
+     *
+     * The fixture mixes both shapes deliberately: two rows with **no stored
+     * parts** — what `makeUser` writes, and what production rows look like —
+     * and one with them. If the sort read the stored columns, the two legacy
+     * rows would collect at one end whatever their names, and this order could
+     * not hold.
+     *
+     * **Named without the TAG**, because the tag is a token of `name_arabic`
+     * and would therefore *be* the derived personal name. Ids are recorded so
+     * the teardown still collects them (it deletes the union of the tag query
+     * and `createdUserIds`), and the assertions read the **relative** order of
+     * these three rows only — never the whole table, which other suites share.
+     */
+    const named = async (
+      composed: string,
+      parts: { first: string; last: string } | null,
+    ): Promise<string> => {
+      const u = await prisma.user.create({
+        data: {
+          sex: "female",
+          nameArabic: composed,
+          accountStatus: "active",
+          ...(parts === null
+            ? {}
+            : { firstNameArabic: parts.first, lastNameArabic: parts.last }),
+        },
+      });
+      createdUserIds.push(u.id);
+      return u.id;
+    };
+
+    const yousfi = await named("زينب اليوسفي", null); // legacy: parts NULL
+    const baqali = await named("مريم البقالي", null); // legacy: parts NULL
+    const tazi = await named("هدى التازي", { first: "هدى", last: "التازي" });
+    const mine = [yousfi, baqali, tazi];
+    for (const id of mine) await grant(id, "student", branchId);
+
+    const order = async (by: string, dir: string): Promise<string[]> => {
+      const res = await call(
+        "GET",
+        `/admin/users?sort_by=${by}&sort_dir=${dir}&page_size=100`,
+        superAdmin,
+      );
+      if (res.status !== 200) throw new Error(JSON.stringify(res.body));
+      return (res.body as unknown as { data: Record<string, unknown>[] }).data
+        .filter((r) => mine.includes(String(r["id"])))
+        .map((r) => String(r["last_name_arabic"]));
+    };
+
+    // البقالي · التازي · اليوسفي — Arabic collation, with the two DERIVED family
+    // names interleaved WITH the stored one rather than parked beside it.
+    expect(await order("last_name", "asc")).toEqual(["البقالي", "التازي", "اليوسفي"]);
+    expect(await order("last_name", "desc")).toEqual(["اليوسفي", "التازي", "البقالي"]);
+
+    // And the personal name orders INDEPENDENTLY. Arabic collation puts
+    // ز before م before ه, so the personal order is زينب · مريم · هدى — while
+    // the family order above is البقالي · التازي · اليوسفي, i.e. مريم · هدى ·
+    // زينب. **The two orders are different**, which is the whole point: a
+    // single sort serving both columns could not produce both.
+    const byFirst = async (dir: string): Promise<string[]> => {
+      const res = await call(
+        "GET",
+        `/admin/users?sort_by=first_name&sort_dir=${dir}&page_size=100`,
+        superAdmin,
+      );
+      if (res.status !== 200) throw new Error(JSON.stringify(res.body));
+      return (res.body as unknown as { data: Record<string, unknown>[] }).data
+        .filter((r) => mine.includes(String(r["id"])))
+        .map((r) => String(r["first_name_arabic"]));
+    };
+    expect(await byFirst("asc")).toEqual(["زينب", "مريم", "هدى"]);
+    expect(await byFirst("desc")).toEqual(["هدى", "مريم", "زينب"]);
+  });
+
+  it("refuses a sort field outside the allow-list rather than passing it on", async () => {
+    // R76 — `sort_by` names a contract field, never a column. Restated because
+    // two fields were just added to that list, and the column they order by is
+    // NOT one of them: the generated columns are an implementation detail and
+    // naming one must still be refused.
+    const res = await call("GET", "/admin/users?sort_by=first_name_sort&sort_dir=asc", superAdmin);
+    expect(res.status).toBe(400);
+  });
+
   it("refuses account_status rather than dropping it", async () => {
     // The whole reason suspension is its own verb: TD-4.15 requires session
     // revocation in the same transaction, and a client that set this field and

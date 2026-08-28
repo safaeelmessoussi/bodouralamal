@@ -139,12 +139,13 @@ export function UsersPage(): ReactNode {
     {
       key: 'first_name',
       header: t('admin.users.colFirstName'),
-      sortKey: 'name',
+      sortKey: 'first_name',
       cell: (r) => r.first_name_arabic ?? <span className="muted">{t('common.notSet')}</span>,
     },
     {
       key: 'last_name',
       header: t('admin.users.colLastName'),
+      sortKey: 'last_name',
       cell: (r) => r.last_name_arabic ?? <span className="muted">{t('common.notSet')}</span>,
     },
     {

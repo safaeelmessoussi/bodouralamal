@@ -43,18 +43,21 @@ const PAGES: { label: string; path: string; sortable: string[]; never: string[] 
     label: 'المؤطِّرات',
     path: '/src/pages/admin/teachers.tsx',
     /**
-     * **`first_name` carries the sort** (2026-08-28). §14.2 now shows the name
-     * in two columns, and the server orders by the natively collated
-     * `name_arabic` — one column offers that order because two headers claiming
-     * it would be two controls for one decision.
+     * **Both parts sort, independently** (Owner, 2026-08-30). Restated from
+     * *«`first_name` carries the sort»*: while the server could only order by
+     * the composed `name_arabic`, one column offered that order because two
+     * headers claiming it would be two controls for one decision. It now orders
+     * by either part — through GENERATED columns that carry the same derivation
+     * the DTO applies, so pre-Revision-40 rows sort by their real family name
+     * instead of collecting under NULL.
      */
-    sortable: ['first_name'],
+    sortable: ['first_name', 'last_name'],
     // Fetched per row AFTER the page arrives, so sorting by them would order
     // the 25 rows this page holds and present it as the collection's order.
     // `branches` comes from the row itself, but a person may hold several
     // assignments, so there is no single value to order by — the server sorts
     // rows, not sets.
-    never: ['last_name', 'branches', 'subjects', 'categories', 'availability'],
+    never: ['branches', 'subjects', 'categories', 'availability'],
   },
   {
     label: 'طلبات الانضمام',

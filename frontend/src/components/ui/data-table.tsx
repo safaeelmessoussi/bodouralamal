@@ -193,12 +193,6 @@ export function DataTable<T>({
         />
       ) : status === 'loading' ? (
         <TableSkeleton columns={columns.length + (hasActions ? 1 : 0) + (showGrip ? 1 : 0)} />
-      ) : rows.length === 0 ? (
-        filtered ? (
-          <NoResultsState {...(onClearFilters ? { onClear: onClearFilters } : {})} />
-        ) : (
-          <EmptyState />
-        )
       ) : (
         <div className="datatable__scroll">
           <table className="admin-table">
@@ -242,6 +236,34 @@ export function DataTable<T>({
               </tr>
             </thead>
             <tbody>
+              {/**
+                * **Zero rows keeps the columns** (Owner, 2026-08-30).
+                *
+                * The empty and no-results states used to be rendered *instead
+                * of* the table, so a management page with nothing in it showed
+                * a paragraph and no columns at all — and the reader could not
+                * see what the page would hold, could not sort, and on a
+                * filtered table could not tell an empty dataset from a filter
+                * that excluded everything.
+                *
+                * The message now lives in a full-width cell in the body, which
+                * is also what makes it correct for a screen reader: it is
+                * announced as part of the table it describes rather than as
+                * loose prose beside one. `colSpan` counts every column the
+                * header renders, the grip and actions columns included, or the
+                * cell would not span the row.
+                */}
+              {displayed.length === 0 ? (
+                <tr className="admin-table__empty-row">
+                  <td colSpan={columns.length + (hasActions ? 1 : 0) + (showGrip ? 1 : 0)}>
+                    {filtered ? (
+                      <NoResultsState {...(onClearFilters ? { onClear: onClearFilters } : {})} />
+                    ) : (
+                      <EmptyState />
+                    )}
+                  </td>
+                </tr>
+              ) : null}
               {displayed.map((row, rowIndex) => {
                 // Ordered before filtering, so a row whose contextual action is
                 // unavailable still shows the remaining two in the same places.

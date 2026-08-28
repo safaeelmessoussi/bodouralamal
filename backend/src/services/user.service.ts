@@ -296,6 +296,23 @@ export interface UserListItem {
  */
 export const USER_SORT_FIELDS: SortableFields = {
   name: (dir) => [{ nameArabic: dir }],
+  /**
+   * **The two name parts, independently** (Owner, 2026-08-30).
+   *
+   * Ordered by the GENERATED columns, not by `firstNameArabic` /
+   * `lastNameArabic`: the stored parts are NULL on every row predating
+   * Revisions 40–41, which refused to backfill them, so ordering by them would
+   * group all legacy rows under NULL — sorting by *whether anybody has edited
+   * this person* rather than by her family name. The generated columns carry
+   * the same derivation the DTO applies on read, so the order matches what the
+   * table displays.
+   *
+   * **Absent last, in both directions.** A single-token name has no family
+   * name; absent is not *smallest*, so it does not ambush the top of a
+   * descending sort — the same rule `sort-rows.ts` states for the client.
+   */
+  first_name: (dir) => [{ firstNameSort: { sort: dir, nulls: 'last' } }],
+  last_name: (dir) => [{ lastNameSort: { sort: dir, nulls: 'last' } }],
   created_at: (dir) => [{ createdAt: dir }],
 };
 

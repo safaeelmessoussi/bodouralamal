@@ -464,6 +464,22 @@ model User {
   firstNameArabic String? @map("first_name_arabic") @db.VarChar(60)
   lastNameArabic  String? @map("last_name_arabic") @db.VarChar(60)
 
+  /// **Ordering only — GENERATED ALWAYS, and nothing may write them** (2026-08-30).
+  ///
+  /// Sorting a table by الاسم الشخصي or الاسم العائلي has to be a Prisma
+  /// `orderBy`, and Prisma cannot order by an expression — while ordering by
+  /// the stored parts alone would group every pre-Revision-40 row together
+  /// under NULL, i.e. order by *whether anybody has edited this person*.
+  ///
+  /// These carry the same derivation `splitComposedName` performs on read,
+  /// expressed once in SQL and maintained by the database. **Never projected
+  /// into a DTO**: what a reader sees still comes from the API's derivation, so
+  /// there is one answer on the wire. Postgres rejects any write to them, which
+  /// is what keeps them from becoming a second source of truth rather than a
+  /// convention that they should not be written.
+  firstNameSort String? @map("first_name_sort") @db.VarChar(200)
+  lastNameSort  String? @map("last_name_sort") @db.VarChar(200)
+
   /// Revision 41 — server-composed from the French parts, exactly as
   /// `nameArabic` is from the Arabic ones. Retained for the same reason:
   /// consumers want the whole name, and a client must not decide its order.
