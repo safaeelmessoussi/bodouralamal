@@ -1,6 +1,7 @@
 import type { HijriMonthStart, Prisma, PrismaClient } from '../generated/prisma/client.js';
 import { AppError } from '../lib/errors.js';
 import { MAX_HIJRI_YEAR, MIN_HIJRI_YEAR, MONTHS_IN_YEAR, hijriMonthNameArabic } from '../lib/hijri.js';
+import { ummAlQuraMonthStarts } from '../lib/umm-al-qura.js';
 import * as scope from '../policies/branch-scope.js';
 import * as audit from '../repositories/audit.repository.js';
 import { updateWithVersion } from '../repositories/optimistic-lock.js';
@@ -325,6 +326,140 @@ export async function recordMonthStart(
  * visible platform-wide: only published rows are rendered, so a year can be
  * entered progressively and reviewed before anyone sees it.
  */
+/**
+ * **The provenance an imported row carries.** A stored value that reads
+ * `manual` was typed or corrected by a Super Admin; one that reads this was
+ * derived and has not been touched since.
+ */
+export const UMM_AL_QURA_SOURCE = 'umm_al_qura_icu';
+
+export interface ImportResult {
+  imported: number;
+  /** Months already present — left exactly as they were. */
+  skipped: number;
+  source: string;
+}
+
+/**
+ * **Prefills a year from the Umm al-Qura baseline** (Owner, 2026-08-30).
+ *
+ * ## Insert-only, and that is the whole rule
+ *
+ * The Owner's constraint is that a Super Admin's correction must survive every
+ * later import. This does not implement that as a comparison, a flag or a
+ * "don't overwrite if edited" branch — **it never updates at all.** A month
+ * that has a row is skipped, whatever that row says and whoever wrote it.
+ *
+ * That is stronger than a rule about *corrected* rows, and it is stronger on
+ * purpose: any test of «has a human touched this?» is a test that can be got
+ * wrong, and getting it wrong means silently replacing an official Moroccan
+ * date with a computed Saudi one. Skipping every existing row cannot fail that
+ * way. Re-running the import is therefore idempotent and safe by construction.
+ *
+ * ## Why the rows land as `draft`
+ *
+ * Umm al-Qura is **calculated**; Morocco announces by **sighting**, and the two
+ * differ by a day with some regularity. `draft` is what §7 already means by
+ * *"a year can be entered progressively and reviewed before it becomes
+ * visible"* — so nothing derived is displayed to anybody until a Super Admin
+ * has looked at it and published the year.
+ *
+ * ## The database stays authoritative
+ *
+ * This runs when a Super Admin asks it to. No read path consults the baseline,
+ * and after the insert the row is an ordinary row: corrected through
+ * `recordMonthStart` under TD-15, audited, publishable. The external calendar
+ * is a starting point that is never consulted again.
+ *
+ * ## Ordering
+ *
+ * `assertOrdered` — the invariant that a month cannot begin before its
+ * predecessor — is applied per row, so an import that would violate it against
+ * *already stored* neighbours refuses that month rather than corrupting the
+ * sequence. The rest of the year still imports; the refusal is reported as a
+ * skip rather than failing the whole request, because one disputed boundary
+ * must not block eleven uncontested months.
+ */
+export async function importYearFromUmmAlQura(
+  prisma: PrismaClient,
+  actor: Actor,
+  year: number,
+): Promise<ImportResult> {
+  assertSuperAdmin(actor);
+  assertValidCoordinates(year, 1);
+
+  const derived = ummAlQuraMonthStarts(year, year);
+
+  /**
+   * **One transaction for the year, not one per month.**
+   *
+   * The first version opened a transaction per month so that an ordering
+   * refusal on one boundary left the rest in place. It did leave them in
+   * place — and twelve short transactions per call, run beside the rest of the
+   * integration sweep, contended hard enough on this table to time out an
+   * unrelated suite's `beforeAll`. The refusal is preserved by *deciding* per
+   * month inside a single transaction rather than by *isolating* per month.
+   */
+  const { imported, skipped } = await prisma.$transaction(async (tx) => {
+    const present = new Set(
+      (
+        await tx.hijriMonthStart.findMany({
+          where: { hijriYear: year, deletedAt: null },
+          select: { hijriMonth: true },
+        })
+      ).map((r) => r.hijriMonth),
+    );
+
+    const toInsert: typeof derived = [];
+    for (const month of derived) {
+      // **The Owner's rule, in one line.** Present means untouched by this —
+      // whatever the row says and whoever wrote it.
+      if (present.has(month.hijriMonth)) continue;
+      try {
+        await assertOrdered(tx, month.hijriYear, month.hijriMonth, month.gregorianStartDate);
+      } catch {
+        // A derived date that would sit out of sequence against an already
+        // stored neighbour is skipped, not forced — and the other eleven
+        // months still import.
+        continue;
+      }
+      toInsert.push(month);
+    }
+
+    if (toInsert.length > 0) {
+      await tx.hijriMonthStart.createMany({
+        data: toInsert.map((m) => ({
+          hijriYear: m.hijriYear,
+          hijriMonth: m.hijriMonth,
+          gregorianStartDate: m.gregorianStartDate,
+          // Provenance per value (§7's `source` column, which exists for this).
+          source: UMM_AL_QURA_SOURCE,
+          updatedById: actor.userId,
+        })),
+        // The unique index on (hijri_year, hijri_month) is the real guarantee
+        // that a concurrent import cannot double-write a month.
+        skipDuplicates: true,
+      });
+    }
+    return { imported: toInsert.length, skipped: derived.length - toInsert.length };
+  });
+
+  // TD-8 — one row for the act, not twelve. What matters later is *who ran the
+  // import, for which year, and how much of it was already answered*.
+  await audit.write(prisma, {
+    actorUserId: actor.userId,
+    activeRole: actor.activeRole,
+    actionType: 'settings.change',
+    targetEntity: 'HijriMonthStart',
+    // **No `targetId`.** This act is about a YEAR — twelve rows, one decision —
+    // and `target_id` is a uuid column, so the year travels in the detail
+    // exactly as `hijri.year.publish` already carries it.
+    detail: { hijri_import: { year, imported, skipped, source: UMM_AL_QURA_SOURCE } },
+  });
+
+  return { imported, skipped, source: UMM_AL_QURA_SOURCE };
+}
+
 export async function publishYear(
   prisma: PrismaClient,
   actor: Actor,

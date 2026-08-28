@@ -27,6 +27,20 @@ export interface TeachingProfile {
   availability: (AvailabilityRange & { id: string })[];
 }
 
+/**
+ * Her own profile **plus the catalogue she chooses from** (2026-08-30).
+ *
+ * Only `/me/teaching-profile` and the two self-service writes answer this. The
+ * options ride on the read she already makes because a مؤطِّرة cannot call
+ * `/admin/subjects` — and widening that to make this screen work would be the
+ * one fix that is never right (rule O). Rule AX besides: the form that decides
+ * what is saved carries the options it saves from.
+ */
+export interface OwnTeachingProfile extends TeachingProfile {
+  selectable_subjects: { id: string; name: string }[];
+  selectable_categories: { id: string; name: string }[];
+}
+
 export interface TeachingProfileInput {
   subject_ids: string[];
   category_ids: string[];
@@ -59,13 +73,13 @@ export async function saveTeachingProfile(
 /**
  * **Her own profile** (R106) — `GET /me/teaching-profile`.
  *
- * The whole profile, capabilities included: the page shows what the
- * administration has recorded she can teach, read-only, beside the ranges she
- * edits. Availability presented with no sight of what it is availability *for*
- * is a question asked out of context.
+ * The whole profile, capabilities included — and since 2026-08-30 the
+ * catalogue she may choose them from, because the Owner made those two fields
+ * hers to edit. Availability presented with no sight of what it is
+ * availability *for* would be a question asked out of context.
  */
-export async function fetchMyTeachingProfile(token: string | null): Promise<TeachingProfile> {
-  return (await api<{ data: TeachingProfile }>('/me/teaching-profile', { token })).data;
+export async function fetchMyTeachingProfile(token: string | null): Promise<OwnTeachingProfile> {
+  return (await api<{ data: OwnTeachingProfile }>('/me/teaching-profile', { token })).data;
 }
 
 /**
@@ -77,11 +91,36 @@ export async function fetchMyTeachingProfile(token: string | null): Promise<Teac
  * the profile would look exactly like a successful rewrite of what she is
  * authorised to teach.
  */
+/**
+ * **Her declarations, replaced whole** (Owner, 2026-08-30) —
+ * `PUT /me/teaching-profile/capabilities`.
+ *
+ * The counterpart of `saveMyAvailability`, and a separate call for the same
+ * reason the routes are separate: each replaces exactly the half it names, so a
+ * page holding a stale copy of the other half cannot erase it. The server's
+ * schema is `.strict()`, so sending `availability` here is refused.
+ *
+ * **Planning metadata.** Declaring a Subject tells the administration what to
+ * consider her for; teaching authority is an assignment and lives elsewhere.
+ */
+export async function saveMyCapabilities(
+  subjectIds: readonly string[],
+  categoryIds: readonly string[],
+  token: string | null,
+): Promise<OwnTeachingProfile> {
+  const body = await api<{ data: OwnTeachingProfile }>('/me/teaching-profile/capabilities', {
+    method: 'PUT',
+    token,
+    body: { subject_ids: subjectIds, category_ids: categoryIds },
+  });
+  return body.data;
+}
+
 export async function saveMyAvailability(
   availability: readonly AvailabilityRange[],
   token: string | null,
-): Promise<TeachingProfile> {
-  const body = await api<{ data: TeachingProfile }>('/me/teaching-profile/availability', {
+): Promise<OwnTeachingProfile> {
+  const body = await api<{ data: OwnTeachingProfile }>('/me/teaching-profile/availability', {
     method: 'PUT',
     token,
     body: { availability },

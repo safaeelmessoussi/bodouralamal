@@ -10,7 +10,7 @@ import {
 import { t } from '../../i18n/index.js';
 import { AvailabilityEditor } from '../teaching/availability-editor.js';
 import { FormDialog } from '../ui/form-dialog.js';
-import { MultiSelectField } from '../ui/multi-select.js';
+import { CapabilitiesEditor } from '../teaching/capabilities-editor.js';
 import { isDirty } from '../../lib/form-dirty.js';
 
 /**
@@ -157,23 +157,17 @@ export function TeachingProfileDialog({
         })();
       }}
     >
-      {/* **Said on the screen, not only in the docs.** A form listing Subjects
-          and Quran looks exactly like a permissions form; this is the sentence
-          that stops an administrator believing she has just granted access. */}
-      <p className="field__hint">{t('admin.teachingProfile.planningOnly')}</p>
-
-      <MultiSelectField
-        label={t('admin.teachingProfile.subjects')}
-        options={subjects.map((s) => ({ value: s.id, label: s.name }))}
-        selected={subjectIds}
-        onChange={setSubjectIds}
-      />
-
-      <MultiSelectField
-        label={t('admin.teachingProfile.categories')}
-        options={categories.map((c) => ({ value: c.id, label: c.name }))}
-        selected={categoryIds}
-        onChange={setCategoryIds}
+      {/* **The shared editor**, for the same reason `AvailabilityEditor` is
+          shared: a مؤطِّرة now has these two controls on her own page, and a
+          second hand-written copy is how the pair drift (rule C). The
+          planning-only sentence travels with them. */}
+      <CapabilitiesEditor
+        subjects={subjects}
+        categories={categories}
+        subjectIds={subjectIds}
+        categoryIds={categoryIds}
+        onSubjects={setSubjectIds}
+        onCategories={setCategoryIds}
       />
 
       {/* **The shared editor** (R106). It was written out here, and the

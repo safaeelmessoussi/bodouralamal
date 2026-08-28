@@ -6,11 +6,13 @@ import {
   readOwnTeachingProfile,
   readTeachingProfile,
   replaceOwnAvailability,
+  replaceOwnCapabilities,
   replaceTeachingProfile,
 } from '../services/teaching-profile.service.js';
 import { listTeachingCandidates } from '../services/teaching-candidates.service.js';
 import {
   ownAvailabilitySchema,
+  ownCapabilitiesSchema,
   teachingCandidatesQuerySchema,
   teachingProfileSchema,
 } from '../validators/teaching-profile.validators.js';
@@ -83,6 +85,30 @@ export function candidates(prisma: PrismaClient) {
 export function readMine(prisma: PrismaClient) {
   return async (req: Request, res: Response): Promise<void> => {
     res.json({ data: await readOwnTeachingProfile(prisma, requireActor(req)) });
+  };
+}
+
+/**
+ * **`PUT /me/teaching-profile/capabilities`** — her declarations only.
+ *
+ * The path names the half it replaces, exactly as the availability route does.
+ * **There is no `{id}`**, so there is nowhere in this request to name another
+ * person: the subject is the token's `sub`, and that is the security property
+ * rather than a check that could be forgotten.
+ *
+ * The Owner opened this on 2026-08-30; R88.2's refusal covered it until then.
+ * It remains planning metadata — see `replaceOwnCapabilities` for why declaring
+ * a Subject grants no access to any student, class or sheet.
+ */
+export function replaceMyCapabilities(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const body = parse(ownCapabilitiesSchema, req.body ?? {});
+    res.json({
+      data: await replaceOwnCapabilities(prisma, requireActor(req), {
+        subjectIds: body.subject_ids,
+        categoryIds: body.category_ids,
+      }),
+    });
   };
 }
 

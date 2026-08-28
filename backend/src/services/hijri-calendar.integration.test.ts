@@ -6,9 +6,11 @@ import type { RoleScope } from "../policies/branch-scope.js";
 import type { Actor } from "../policies/actor.js";
 import {
   coverage,
+  importYearFromUmmAlQura,
   listYear,
   publishYear,
   recordMonthStart,
+  UMM_AL_QURA_SOURCE,
   yearHistory,
 } from "./hijri-calendar.service.js";
 
@@ -110,6 +112,97 @@ describe("TD-2 / Revision 26 — the official calendar is Super Admin only", () 
     expect(
       await prisma.hijriMonthStart.count({ where: { hijriYear: YEAR } }),
     ).toBe(0);
+  });
+});
+
+describe("the Umm al-Qura baseline prefills, and never overwrites (Owner 2026-08-30)", () => {
+  it("fills an empty year as DRAFT, with its provenance recorded per value", async () => {
+    const result = await importYearFromUmmAlQura(prisma, superAdmin(), YEAR);
+    expect(result.imported).toBe(12);
+    expect(result.skipped).toBe(0);
+
+    const rows = await prisma.hijriMonthStart.findMany({
+      where: { hijriYear: YEAR, deletedAt: null },
+      orderBy: { hijriMonth: "asc" },
+    });
+    expect(rows).toHaveLength(12);
+    // Nothing derived is visible to anybody until a Super Admin publishes the
+    // year: Umm al-Qura is calculated and Morocco announces by sighting.
+    expect(rows.every((r) => r.status === "draft")).toBe(true);
+    // §7's `source` column exists for exactly this — «who said so».
+    expect(rows.every((r) => r.source === UMM_AL_QURA_SOURCE)).toBe(true);
+    // The ordering invariant the table enforces.
+    for (let i = 1; i < rows.length; i += 1) {
+      expect(rows[i]!.gregorianStartDate.getTime()).toBeGreaterThan(
+        rows[i - 1]!.gregorianStartDate.getTime(),
+      );
+    }
+  });
+
+  it("is idempotent — a second run imports nothing and changes nothing", async () => {
+    await importYearFromUmmAlQura(prisma, superAdmin(), YEAR);
+    const before = await prisma.hijriMonthStart.findMany({
+      where: { hijriYear: YEAR },
+      orderBy: { hijriMonth: "asc" },
+    });
+
+    const again = await importYearFromUmmAlQura(prisma, superAdmin(), YEAR);
+    expect(again.imported).toBe(0);
+    expect(again.skipped).toBe(12);
+
+    const after = await prisma.hijriMonthStart.findMany({
+      where: { hijriYear: YEAR },
+      orderBy: { hijriMonth: "asc" },
+    });
+    // Versions too: an "update to the same value" would still bump TD-15's
+    // version and return the month to draft, which a reviewer would see as
+    // somebody having changed her work.
+    expect(after.map((r) => [r.gregorianStartDate.toISOString(), r.version, r.source])).toEqual(
+      before.map((r) => [r.gregorianStartDate.toISOString(), r.version, r.source]),
+    );
+  });
+
+  it("NEVER overwrites a Super Admin's correction — the Owner's rule", async () => {
+    /**
+     * The rule that matters. Morocco announces by sighting and Umm al-Qura is
+     * calculated, so a corrected month is precisely the case where the two
+     * disagree — and precisely the value a later import must not silently
+     * replace with the computed one.
+     *
+     * Implemented as *never update*, not as a test of whether a human touched
+     * the row: any such test can be got wrong, and getting it wrong is
+     * invisible until somebody keeps Ramadan on the wrong day.
+     */
+    const corrected = day("2185-01-15");
+    await recordMonthStart(prisma, superAdmin(), {
+      year: YEAR,
+      month: 1,
+      gregorianStartDate: corrected,
+    });
+    const before = await prisma.hijriMonthStart.findFirstOrThrow({
+      where: { hijriYear: YEAR, hijriMonth: 1 },
+    });
+    expect(before.source).toBe("manual");
+
+    const result = await importYearFromUmmAlQura(prisma, superAdmin(), YEAR);
+    expect(result.skipped).toBeGreaterThanOrEqual(1);
+
+    const after = await prisma.hijriMonthStart.findFirstOrThrow({
+      where: { hijriYear: YEAR, hijriMonth: 1 },
+    });
+    expect(after.gregorianStartDate.toISOString()).toBe(corrected.toISOString());
+    // Her provenance survives too — the row still says a person recorded it.
+    expect(after.source).toBe("manual");
+    expect(after.version).toBe(before.version);
+  });
+
+  it("refuses anybody below Super Admin, like every other write here", async () => {
+    for (const who of [admin(), teacher()]) {
+      await expect(importYearFromUmmAlQura(prisma, who, YEAR)).rejects.toMatchObject({
+        code: "FORBIDDEN",
+      });
+    }
+    expect(await prisma.hijriMonthStart.count({ where: { hijriYear: YEAR } })).toBe(0);
   });
 });
 

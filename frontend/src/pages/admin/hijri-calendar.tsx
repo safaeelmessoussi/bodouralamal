@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type ReactNode } from 'react';
 
 import {
   fetchHijriYear,
+  importYearBaseline,
   publishYear,
   recordMonthStart,
   type HijriMonthRow,
@@ -79,6 +80,7 @@ export function HijriCalendarPage(): ReactNode {
   const [state, setState] = useState<'loading' | 'ready' | 'error'>('loading');
   const [busyMonth, setBusyMonth] = useState<number | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [importing, setImporting] = useState(false);
 
   const load = useCallback(async () => {
     setState('loading');
@@ -117,6 +119,33 @@ export function HijriCalendarPage(): ReactNode {
     }
   }
 
+  /**
+   * **Prefill, then correct** (Owner, 2026-08-30).
+   *
+   * The months with no row yet are filled from the Umm al-Qura baseline; every
+   * month already recorded is left exactly as it is, so this can be run without
+   * reading it first and without risking a correction. The result says which of
+   * the two happened for how many months, because *«nothing was imported»* and
+   * *«twelve were»* look identical on a table that reloads either way.
+   */
+  async function importBaseline(): Promise<void> {
+    setNotice(null);
+    setImporting(true);
+    try {
+      const result = await importYearBaseline(year, accessToken);
+      await load();
+      setNotice(
+        t('admin.hijri.imported')
+          .replace('{imported}', String(result.imported))
+          .replace('{skipped}', String(result.skipped)),
+      );
+    } catch {
+      setNotice(t('admin.hijri.importFailed'));
+    } finally {
+      setImporting(false);
+    }
+  }
+
   async function publish(): Promise<void> {
     setNotice(null);
     try {
@@ -135,9 +164,17 @@ export function HijriCalendarPage(): ReactNode {
       title={t('admin.hijri.title')}
       lede={t('admin.hijri.lede')}
       actions={
-        <Button variant="primary" onClick={() => void publish()} disabled={drafts === 0}>
-          {t('admin.hijri.publish')}
-        </Button>
+        /* In reading order: fill what is missing, correct what differs from the
+           Ministry's announcement, then publish. The baseline button is
+           `secondary` because it makes nothing visible — it only saves typing. */
+        <>
+          <Button variant="secondary" onClick={() => void importBaseline()} disabled={importing}>
+            {t('admin.hijri.import')}
+          </Button>
+          <Button variant="primary" onClick={() => void publish()} disabled={drafts === 0}>
+            {t('admin.hijri.publish')}
+          </Button>
+        </>
       }
     >
       <div className="admin-panel">

@@ -326,6 +326,7 @@ export function createApp(
   // she may teach stays the administration's (R88.2).
   guarded.get('/me/teaching-profile', teachingProfile.readMine(prisma));
   guarded.put('/me/teaching-profile/availability', teachingProfile.replaceMyAvailability(prisma));
+  guarded.put('/me/teaching-profile/capabilities', teachingProfile.replaceMyCapabilities(prisma));
   // R90 — who would SUIT a class being planned, and why she might not. A read
   // that returns warnings and never a filtered list: shortening it would be the
   // one refusal an administrator could not override.
@@ -397,6 +398,7 @@ export function createApp(
   guarded.get('/admin/hijri-calendar', hijri.list(prisma));
   guarded.put('/admin/hijri-calendar/:year/:month', hijri.recordMonth(prisma));
   guarded.post('/admin/hijri-calendar/:year/publish', hijri.publish(prisma));
+  guarded.post('/admin/hijri-calendar/:year/import', hijri.importYear(prisma));
   // R59.5 — the one Super-Admin-creatable entity that had no deletion at all.
   guarded.delete('/admin/hijri-calendar/:year/:month', hijri.deleteMonth(prisma));
   guarded.get('/admin/hijri-calendar/:year/history', hijri.history(prisma));

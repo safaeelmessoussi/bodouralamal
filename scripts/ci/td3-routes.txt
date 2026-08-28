@@ -130,6 +130,7 @@ GET /admin/users/{id}/teaching-profile        # R88; PLANNING data — declared 
 PUT /admin/users/{id}/teaching-profile        # R88; replaced whole; Admin-owned; capability is not authorization
 GET /me/teaching-profile                      # R106; her own, read by her; whole profile so the ranges have context
 PUT /me/teaching-profile/availability         # R106; AVAILABILITY ONLY — capabilities stay Admin-owned (R88.2); grants nothing (R88.3)
+PUT /me/teaching-profile/capabilities         # Owner 2026-08-30; CAPABILITIES ONLY — supersedes R88.2's refusal; planning metadata, grants nothing (R88.3)
 GET /admin/teaching-candidates                # R90; the staff picker's planning appraisal — WARNINGS, never a filtered list
 GET /sessions/{id}/roster                     # R92; who is expected at ONE occurrence — venue and audience as separate facts
 PUT /sessions/{id}/audience-branches          # R92; this occurrence's audience branches; empty list clears the override
@@ -147,6 +148,7 @@ GET /admin/hijri-calendar                     # TD-3.4 R31, ?year=
 PUT /admin/hijri-calendar/{year}/{month}      # TD-3.4 R31, TD-15
 DELETE /admin/hijri-calendar/{year}/{month}   # §5.7 (R59.5) — withdraw a recorded month; Super Admin only; last month only
 POST /admin/hijri-calendar/{year}/publish     # TD-3.4 R31
+POST /admin/hijri-calendar/{year}/import      # Owner 2026-08-30; Umm al-Qura BASELINE — inserts absent months only, never overwrites a correction
 GET /admin/hijri-calendar/{year}/history      # TD-3.4 R31, TD-8
 # (No import route: Revision 32 removed it from the MVP — no machine-readable
 #  Ministry source exists, so it could only ever answer 'not configured'.)

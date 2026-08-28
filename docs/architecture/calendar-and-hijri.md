@@ -519,6 +519,38 @@ official announcements, and a wrong month start silently shifts every Hijri labe
 
 ---
 
+### The Umm al-Qura baseline (Owner, 2026-08-30)
+
+Everything above stands: the table is the sole authority and a computed calendar is not.
+What the Owner added is a way to stop typing twelve dates a year from nothing.
+
+**`POST /admin/hijri-calendar/{year}/import` fills only the months that have no row at
+all.** It is not "import unless edited" — it **never updates**. A month that exists is
+skipped, whatever it says and whoever wrote it.
+
+That is deliberately stronger than a rule about *corrected* rows. Any test of *«has a human
+touched this?»* is a test that can be got wrong, and getting it wrong means silently
+replacing an official Moroccan date with a computed Saudi one — a failure nobody notices
+until Ramadan starts on the wrong day. Skipping every existing row cannot fail that way, and
+it makes re-running the import idempotent by construction.
+
+| | |
+|---|---|
+| **Source** | ICU's Umm al-Qura tables, through `Intl.DateTimeFormat` — `lib/umm-al-qura.ts` |
+| **Provenance** | `source = 'umm_al_qura_icu'` per row; a corrected row reads `manual` |
+| **Status on arrival** | `draft` — nothing derived is displayed until a Super Admin publishes the year |
+| **Network** | none, ever. The tables ship with the Node build |
+| **Runtime authority** | none. No read path consults it; after the insert the row is an ordinary row |
+
+**Why ICU rather than a JSON table.** A checked-in file would have been transcribed from the
+same data, and would then need re-transcribing to extend the range. `assertUmmAlQuraAvailable`
+refuses on a Node without full ICU rather than silently falling back to the arithmetic
+`islamic` calendar, which would produce plausible dates that are simply wrong.
+
+**The example at the top of this section is the whole point.** 1 Muharram 1448 is 17 June
+2026 in Morocco and 16 June in Umm al-Qura. The import will propose the 16th; the Super Admin
+corrects it to the 17th; and every later import leaves her correction alone.
+
 ## The calendar screen's two requests
 
 The frontend calendar makes **exactly two requests, and never a third** — including when a

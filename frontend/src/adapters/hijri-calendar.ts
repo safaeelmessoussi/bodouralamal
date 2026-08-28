@@ -112,6 +112,26 @@ export async function recordMonthStart(
   });
 }
 
+/**
+ * **Prefills the year from the Umm al-Qura baseline** (Owner, 2026-08-30).
+ *
+ * A starting point, never an authority. The server inserts only the months that
+ * have no row at all, so a date the Super Admin has already corrected is never
+ * touched — running it twice changes nothing the second time. Imported months
+ * arrive as `draft`: Umm al-Qura is calculated, Morocco announces by sighting,
+ * and the difference is exactly what she is being asked to review.
+ */
+export async function importYearBaseline(
+  year: number,
+  token: string | null,
+): Promise<{ imported: number; skipped: number; source: string }> {
+  const body = await api<{ data: { imported: number; skipped: number; source: string } }>(
+    `/admin/hijri-calendar/${year}/import`,
+    { method: 'POST', token },
+  );
+  return body.data;
+}
+
 /** Publishes the year's draft months. **Only published months render anywhere**,
  *  so this is the act that makes a recording visible platform-wide. */
 export async function publishYear(

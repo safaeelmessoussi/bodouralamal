@@ -504,6 +504,123 @@ describe("R106 — a مؤطِّرة states her own availability", () => {
     expect((await call("GET", "/me/teaching-profile")).status).toBe(401);
   });
 
+  it("she replaces her OWN declared Subjects and Categories (Owner 2026-08-30)", async () => {
+    // R88.2 refused this and R106 took only the availability half; the Owner
+    // has now taken this one. Same two tables, same editor, same rules.
+    const res = await call("PUT", "/me/teaching-profile/capabilities", teacherToken, {
+      subject_ids: [quranSubject],
+      category_ids: [womenCategory],
+    });
+    expect(res.status).toBe(200);
+
+    const after = await call("GET", "/me/teaching-profile", teacherToken);
+    const body = after.body.data as { subjects: { id: string }[]; categories: { id: string }[] };
+    expect(body.subjects.map((x) => x.id)).toEqual([quranSubject]);
+    expect(body.categories.map((x) => x.id)).toEqual([womenCategory]);
+  });
+
+  it("REFUSES a body naming availability rather than ignoring it", async () => {
+    // The mirror of the assertion above it: each self-service route replaces
+    // exactly the half it names, so a stale tab cannot erase the other one and
+    // a forged body cannot make one endpoint do the other's job.
+    await call("PUT", "/me/teaching-profile/availability", teacherToken, {
+      availability: [{ weekday: "monday", start_time: "09:00", end_time: "10:00" }],
+    });
+    const before = await call("GET", "/me/teaching-profile", teacherToken);
+    const ranges = (before.body.data as { availability: unknown[] }).availability;
+
+    const res = await call("PUT", "/me/teaching-profile/capabilities", teacherToken, {
+      subject_ids: [quranSubject],
+      category_ids: [],
+      availability: [],
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.error?.code).toBe("VALIDATION_FAILED");
+
+    const after = await call("GET", "/me/teaching-profile", teacherToken);
+    expect((after.body.data as { availability: unknown[] }).availability).toEqual(ranges);
+  });
+
+  it("leaves her availability untouched when she saves her capabilities", async () => {
+    // The whole-object-PUT failure mode from the other direction.
+    await call("PUT", "/me/teaching-profile/availability", teacherToken, {
+      availability: [{ weekday: "wednesday", start_time: "08:00", end_time: "09:30" }],
+    });
+    const before = await call("GET", "/me/teaching-profile", teacherToken);
+    const ranges = (before.body.data as { availability: unknown[] }).availability;
+    expect(ranges).toHaveLength(1);
+
+    await call("PUT", "/me/teaching-profile/capabilities", teacherToken, {
+      subject_ids: [tafseerSubject],
+      category_ids: [],
+    });
+
+    const after = await call("GET", "/me/teaching-profile", teacherToken);
+    expect((after.body.data as { availability: unknown[] }).availability).toEqual(ranges);
+  });
+
+  it("refuses a retired Subject, from the same code the administrator's route uses", async () => {
+    const res = await call("PUT", "/me/teaching-profile/capabilities", teacherToken, {
+      subject_ids: ["00000000-0000-4000-8000-000000000000"],
+      category_ids: [],
+    });
+    expect(res.status).toBe(400);
+    expect(res.body.error?.details?.["reason"]).toBe("UNKNOWN_SUBJECT");
+  });
+
+  it("carries the catalogue she chooses from, so no admin read is needed", async () => {
+    // She cannot call `/admin/subjects`, and widening that to make the screen
+    // work would be the one fix that is never right. The options ride on the
+    // read she already makes.
+    const res = await call("GET", "/me/teaching-profile", teacherToken);
+    const body = res.body.data as {
+      selectable_subjects: { id: string }[];
+      selectable_categories: { id: string }[];
+    };
+    expect(body.selectable_subjects.map((x) => x.id)).toContain(quranSubject);
+    expect(body.selectable_categories.map((x) => x.id)).toContain(womenCategory);
+    // And the admin route she must NOT have stays refused.
+    expect((await call("GET", "/admin/subjects", teacherToken)).status).toBe(403);
+  });
+
+  it("CAPABILITIES grant nothing either — declaring every Subject reaches no one", async () => {
+    /**
+     * The property that makes this grant safe (R88.3, §4.4c, R73, R87).
+     * Teaching authority is an ASSIGNMENT — `CourseScheduleStaff`/`SessionStaff`
+     * resolved through `studentsTaughtBy` — and nothing she can write here
+     * touches either.
+     */
+    await call("PUT", "/me/teaching-profile/capabilities", teacherToken, {
+      subject_ids: [quranSubject, tafseerSubject],
+      category_ids: [womenCategory],
+    });
+
+    const students = await call("GET", "/quran-students", teacherToken);
+    expect(students.status).toBe(200);
+    expect((students.body.data as unknown as { students: unknown[] }).students).toHaveLength(0);
+    // Nor does it let her near the administration's own surfaces.
+    expect((await call("GET", "/admin/users", teacherToken)).status).toBe(403);
+  });
+
+  it("is HERS only — an Admin and an anonymous caller are both refused", async () => {
+    // There is no `{id}` in the route, so there is nowhere to name another
+    // person; the remaining question is who may call it at all.
+    expect(
+      (
+        await call("PUT", "/me/teaching-profile/capabilities", adminToken, {
+          subject_ids: [],
+          category_ids: [],
+        })
+      ).status,
+    ).toBe(403);
+    expect(
+      (await call("PUT", "/me/teaching-profile/capabilities", undefined, {
+        subject_ids: [],
+        category_ids: [],
+      })).status,
+    ).toBe(401);
+  });
+
   it("grants NOTHING — R88.3 still holds after she asserts it herself", async () => {
     // The reason R106 is a small decision. She has just declared availability
     // covering every hour of Tuesday; she reaches no beneficiary by it.

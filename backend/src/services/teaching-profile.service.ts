@@ -46,11 +46,69 @@ export interface TeachingProfile {
   availability: { id: string; weekday: string; start_time: string; end_time: string }[];
 }
 
+/**
+ * Her own profile **plus what she may choose from** (Owner, 2026-08-30).
+ *
+ * Only `GET /me/teaching-profile` returns this. The catalogue is carried on the
+ * read she already makes rather than sent to a separate endpoint, because the
+ * alternative was to let a مؤطِّرة call `/admin/subjects` — and **widening a
+ * permission to make a screen work is the one fix that is never right** (rule
+ * O). It is also rule AX: the form that decides what is saved contains the
+ * options it saves from.
+ *
+ * Names only, and only live rows. Subjects and Categories are curriculum
+ * reference data she already sees on her own schedules; this discloses no
+ * person, no enrolment and nothing about anybody else.
+ */
+export interface OwnTeachingProfile extends TeachingProfile {
+  selectable_subjects: { id: string; name: string }[];
+  selectable_categories: { id: string; name: string }[];
+}
+
 /** Managing somebody's planning data is an administrative act (TD-2). */
 function assertMayManage(actor: Actor): void {
   if (!scope.isSuperAdmin(actor.roleScopes) && !scope.hasRole(actor.roleScopes, 'admin')) {
     throw new AppError('FORBIDDEN', 'managing a teaching profile requires an administrator');
   }
+}
+
+/**
+ * **The capability rules, stated once** (2026-08-30).
+ *
+ * Both writers apply them: the administrator replacing somebody's profile and,
+ * since the Owner opened it, the مؤطِّرة replacing her own. Extracted rather
+ * than copied — a second statement of *«a retired Subject is refused»* is a
+ * second statement that can drift, and the self-service path is exactly where a
+ * looser copy would not be noticed.
+ */
+async function resolveCapabilities(
+  prisma: PrismaClient,
+  rawSubjectIds: readonly string[],
+  rawCategoryIds: readonly string[],
+): Promise<{ subjectIds: string[]; categoryIds: string[] }> {
+  // Duplicates within one request are the caller repeating itself, not two
+  // declarations — collapsed rather than refused.
+  const subjectIds = [...new Set(rawSubjectIds)];
+  const categoryIds = [...new Set(rawCategoryIds)];
+
+  const [subjects, categories] = await Promise.all([
+    prisma.subject.findMany({ where: { id: { in: subjectIds }, deletedAt: null }, select: { id: true } }),
+    prisma.category.findMany({ where: { id: { in: categoryIds }, deletedAt: null }, select: { id: true } }),
+  ]);
+  // **A retired Subject is refused, not silently dropped**: a profile that
+  // quietly loses a declaration would have the administration planning against
+  // something it cannot see.
+  if (subjects.length !== subjectIds.length) {
+    throw new AppError('VALIDATION_FAILED', 'one of those subjects does not exist', {
+      reason: 'UNKNOWN_SUBJECT',
+    });
+  }
+  if (categories.length !== categoryIds.length) {
+    throw new AppError('VALIDATION_FAILED', 'one of those categories does not exist', {
+      reason: 'UNKNOWN_CATEGORY',
+    });
+  }
+  return { subjectIds, categoryIds };
 }
 
 const time = (d: Date): string => d.toISOString().slice(11, 16);
@@ -163,9 +221,22 @@ export async function readTeachingProfile(
 export async function readOwnTeachingProfile(
   prisma: PrismaClient,
   actor: Actor,
-): Promise<TeachingProfile> {
+): Promise<OwnTeachingProfile> {
   assertIsTeacher(actor);
-  return loadProfile(prisma, actor.userId);
+  const [profile, subjects, categories] = await Promise.all([
+    loadProfile(prisma, actor.userId),
+    prisma.subject.findMany({
+      where: { deletedAt: null },
+      select: { id: true, name: true },
+      orderBy: { name: 'asc' },
+    }),
+    prisma.category.findMany({
+      where: { deletedAt: null },
+      select: { id: true, name: true },
+      orderBy: { name: 'asc' },
+    }),
+  ]);
+  return { ...profile, selectable_subjects: subjects, selectable_categories: categories };
 }
 
 /**
@@ -191,28 +262,11 @@ export async function replaceTeachingProfile(
   });
   if (!user) throw new AppError('NOT_FOUND', 'no such user');
 
-  // Duplicates within one request are the caller repeating itself, not two
-  // declarations — collapsed rather than refused.
-  const subjectIds = [...new Set(input.subjectIds)];
-  const categoryIds = [...new Set(input.categoryIds)];
-
-  const [subjects, categories] = await Promise.all([
-    prisma.subject.findMany({ where: { id: { in: subjectIds }, deletedAt: null }, select: { id: true } }),
-    prisma.category.findMany({ where: { id: { in: categoryIds }, deletedAt: null }, select: { id: true } }),
-  ]);
-  // **A retired Subject is refused, not silently dropped**: a profile that
-  // quietly loses a declaration would have the administration planning against
-  // something it cannot see.
-  if (subjects.length !== subjectIds.length) {
-    throw new AppError('VALIDATION_FAILED', 'one of those subjects does not exist', {
-      reason: 'UNKNOWN_SUBJECT',
-    });
-  }
-  if (categories.length !== categoryIds.length) {
-    throw new AppError('VALIDATION_FAILED', 'one of those categories does not exist', {
-      reason: 'UNKNOWN_CATEGORY',
-    });
-  }
+  const { subjectIds, categoryIds } = await resolveCapabilities(
+    prisma,
+    input.subjectIds,
+    input.categoryIds,
+  );
 
   assertNoOverlap(input.availability);
 
@@ -306,11 +360,108 @@ export async function replaceTeachingProfile(
  * question was *whether the administration may then rely on it* — and the
  * honest answer to that is legible only if the record says who asserted it.
  */
+/**
+ * **`المواد التي يمكنني تدريسها` و`الفئات` — she replaces her own declarations**
+ * (Owner, 2026-08-30).
+ *
+ * ## What changed, and what did not
+ *
+ * R88.2 refused this in terms — *"a مؤطِّرة may not edit her own"* — and R106
+ * took only the availability half. **The Owner has now taken the other half.**
+ * `/teacher/availability` therefore stops rendering the capabilities as
+ * read-only text and offers the same two controls the administrator's dialog
+ * has, against the same two tables.
+ *
+ * ## It still grants nothing (R88.3, §4.4c, R73, R87)
+ *
+ * This is the part that must not be misread. `TeacherSubjectCapability` and
+ * `TeacherCategoryCapability` are **planning metadata**: *«I can teach Quran»*
+ * is information for the administration, not authorization.
+ *
+ * Teaching authority is an **assignment** — `CourseScheduleStaff` /
+ * `SessionStaff`, resolved through `studentsTaughtBy` — and nothing here writes
+ * either. So a مؤطِّرة declaring every Subject on the platform gains access to
+ * no student, no class and no grade sheet; she has only told the administration
+ * what to consider her for. That separation is what makes this grant safe, and
+ * it is asserted rather than assumed.
+ *
+ * ## Her OWN profile, and only that
+ *
+ * There is **no `{id}` in the route** (`PUT /me/teaching-profile/capabilities`),
+ * so there is nowhere in the request to name another person — the same
+ * construction `replaceOwnAvailability` and `/students/me/quran` use. The
+ * subject is the token's `sub`; a forged body cannot move it.
+ *
+ * ## Availability is untouched
+ *
+ * Deliberately a separate writer from `replaceOwnAvailability`, not a widened
+ * one: she may be editing one and not the other, and a single whole-profile
+ * self-service write would let a stale tab silently erase the half it did not
+ * load. Each statement replaces only what it is about.
+ *
+ * `self_service: true` in the audit for R88.2's original reason — *whether the
+ * administration may rely on it* is answerable only if the record says who
+ * asserted it.
+ */
+export async function replaceOwnCapabilities(
+  prisma: PrismaClient,
+  actor: Actor,
+  input: { subjectIds: readonly string[]; categoryIds: readonly string[] },
+): Promise<OwnTeachingProfile> {
+  assertIsTeacher(actor);
+
+  const { subjectIds, categoryIds } = await resolveCapabilities(
+    prisma,
+    input.subjectIds,
+    input.categoryIds,
+  );
+
+  await prisma.$transaction(async (tx) => {
+    // A still-valid access token is not permission to recreate planning rows
+    // after this account has been deleted — the same R111 lock the other two
+    // writers take, and for the same reason.
+    await assertStaffAccountsAvailable(tx, [actor.userId]);
+
+    // Replaced whole: *these are my declarations now*. A diff would invite the
+    // half-applied state the whole-profile writer's docstring describes.
+    await tx.teacherSubjectCapability.deleteMany({ where: { userId: actor.userId } });
+    await tx.teacherCategoryCapability.deleteMany({ where: { userId: actor.userId } });
+
+    if (subjectIds.length > 0) {
+      await tx.teacherSubjectCapability.createMany({
+        data: subjectIds.map((subjectId) => ({ userId: actor.userId, subjectId })),
+      });
+    }
+    if (categoryIds.length > 0) {
+      await tx.teacherCategoryCapability.createMany({
+        data: categoryIds.map((categoryId) => ({ userId: actor.userId, categoryId })),
+      });
+    }
+
+    await audit.write(tx as unknown as Prisma.TransactionClient, {
+      actorUserId: actor.userId,
+      activeRole: actor.activeRole,
+      actionType: 'settings.change',
+      targetEntity: 'User',
+      targetId: actor.userId,
+      detail: {
+        teaching_profile: { subjects: subjectIds.length, categories: categoryIds.length },
+        self_service: true,
+      },
+    });
+  });
+
+  // The same shape the read answers, so a save leaves the page with everything
+  // it needs — including the catalogue — rather than a profile missing the half
+  // its own controls are built from.
+  return readOwnTeachingProfile(prisma, actor);
+}
+
 export async function replaceOwnAvailability(
   prisma: PrismaClient,
   actor: Actor,
   availability: readonly AvailabilityInput[],
-): Promise<TeachingProfile> {
+): Promise<OwnTeachingProfile> {
   assertIsTeacher(actor);
   assertNoOverlap(availability);
 
@@ -349,5 +500,5 @@ export async function replaceOwnAvailability(
     });
   });
 
-  return loadProfile(prisma, actor.userId);
+  return readOwnTeachingProfile(prisma, actor);
 }

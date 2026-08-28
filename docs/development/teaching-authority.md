@@ -201,6 +201,45 @@ R91 declines the extension dependency and takes the lock instead. **The lock is
 what makes two administrators racing impossible**: the second transaction blocks
 and then sees the first's rows.
 
+## Who may assert a capability (Owner, 2026-08-30)
+
+The table at the top is unchanged and is the point of this section: capability answers
+**never**. What changed is only *who writes it*.
+
+R88.2 reserved the whole teaching profile to the administration — *"a مؤطِّرة may not edit
+her own, because who may assert their own availability, and whether the administration may
+then rely on it, is a separate decision the Owner has not taken."* R106 took the availability
+half. The Owner has now taken the other: on `/teacher/availability` a مؤطِّرة edits her own
+declared **Subjects** and **Categories** too.
+
+**Nothing about authority moves.** She writes `TeacherSubjectCapability` and
+`TeacherCategoryCapability`; teaching authority is an **assignment** —
+`CourseScheduleStaff` / `SessionStaff`, resolved through `studentsTaughtBy` — and neither
+self-service route touches either table. A مؤطِّرة who declares every Subject on the platform
+still reaches no student, no class and no grade sheet, which is asserted directly rather than
+argued: the HTTP suite declares two Subjects and a Category and then finds `/quran-students`
+empty and `/admin/users` refused.
+
+Three properties hold the grant where it is:
+
+- **No `{id}` in the route.** `PUT /me/teaching-profile/capabilities` takes its subject from
+  the token, so there is nowhere in the request to name another person — construction, not a
+  check that could be forgotten.
+- **Two routes, not one widened one.** Capabilities and availability each replace only the
+  half their path names, and each schema is `.strict()` against the other's field. A page
+  holding a stale copy of one half cannot erase it, and a forged body cannot make one
+  endpoint do the other's job.
+- **`self_service: true` in the audit.** R88.2's open question was whether the administration
+  may *rely* on a self-asserted declaration. That stays answerable only if the record says who
+  asserted it.
+
+The validation is shared with the administrative writer — a retired Subject is refused
+(`UNKNOWN_SUBJECT`), never silently dropped — and the two screens render the **same**
+`CapabilitiesEditor`, so the pair cannot drift.
+
+**Note for the Document Owner:** SRS R88.2's refusal is superseded by this instruction. The
+SRS is not edited here; a revision recording the change is the Owner's call.
+
 ## The guards
 
 | Guard | What it pins |

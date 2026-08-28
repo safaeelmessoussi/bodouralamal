@@ -1804,6 +1804,57 @@
         }
       }
     },
+    "/admin/hijri-calendar/{year}/import": {
+      "post": {
+        "summary": "Prefill a Hijri year from the Umm al-Qura baseline",
+        "description": "§4.4, §7, R31, **Owner decision 2026-08-30**. **A starting point to correct, never an authority.** Revision 31 makes `HijriMonthStart` the sole source of every Hijri value the platform displays, recording what the Ministry of Habous announced **by sighting**; this only spares the Super Admin typing twelve dates a year from nothing. **Insert-only**: a month that already has a row is skipped whatever it says and whoever wrote it, so a correction can never be overwritten — implemented as *never update*, not as a test of whether a human touched the row, because any such test can be got wrong and getting it wrong silently replaces an official Moroccan date with a computed Saudi one. Re-running is therefore idempotent. Imported months land as **`draft`**, because Umm al-Qura is calculated and the two calendars differ by a day with some regularity, so nothing derived is displayed until the year is reviewed and published. Provenance is recorded per value in `source` (`umm_al_qura_icu`). **No network call at any time** — the tables come from the Node build's own ICU — and **no read path consults the baseline**: after the insert the row is an ordinary row, corrected through `PUT /admin/hijri-calendar/{year}/{month}` under TD-15. A month whose derived date would violate the ordering invariant against already-stored neighbours is skipped rather than failing the year. Super Admin only; audited once for the act (TD-8).",
+        "responses": {
+          "200": {
+            "description": "How many months were imported and how many were already answered."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — a year outside the supported range.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN below Super Admin.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/admin/hijri-calendar/{year}/publish": {
       "post": {
         "summary": "Publish the official months of a Hijri year",
@@ -7784,6 +7835,57 @@
           },
           "400": {
             "description": "Error envelope (TD-3.8). VALIDATION_FAILED — an inverted or overlapping range, or any key other than availability.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Error envelope (TD-3.8).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Error envelope (TD-3.8). FORBIDDEN for an account without the teaching role.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Error envelope (TD-3.8). INTERNAL — unexpected server fault; details are never leaked to the client.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorEnvelope"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/teaching-profile/capabilities": {
+      "put": {
+        "summary": "Replace my own declared Subjects and Categories",
+        "description": "§4.4c, R88, R106, **Owner decision 2026-08-30**. **Capabilities ONLY, and the path says so** — the counterpart of `/me/teaching-profile/availability`, and deliberately a second route rather than a widened one: a مؤطِّرة may be editing one and not the other, and a single whole-profile self-service write would let a stale tab silently erase the half it did not load. The body is `.strict()` and carries `subject_ids` and `category_ids` alone, so a request naming `availability` is **refused rather than ignored**. R88.2 reserved this as *\"a separate decision the Owner has not taken\"* and R106 took only the availability half; the Owner has now taken this one. **It grants nothing** (R88.3, §4.4c, R73, R87): `TeacherSubjectCapability` and `TeacherCategoryCapability` are planning metadata, teaching authority is an ASSIGNMENT — `CourseScheduleStaff`/`SessionStaff`, resolved through `studentsTaughtBy` — and nothing here writes either, so a مؤطِّرة declaring every Subject on the platform reaches no student, no class and no grade sheet. **There is no `{id}`**: the subject is the token's `sub`, so there is nowhere in the request to name another person. **Replaced whole.** A retired Subject or Category is REFUSED (`UNKNOWN_SUBJECT`/`UNKNOWN_CATEGORY`) rather than silently dropped, from the same code the administrative writer uses. Audited (TD-8) with **`self_service: true`**, for R88.2's original reason: whether the administration may rely on a self-asserted declaration is answerable only if the record says who asserted it.",
+        "responses": {
+          "200": {
+            "description": "The stored profile, capabilities included."
+          },
+          "400": {
+            "description": "Error envelope (TD-3.8). VALIDATION_FAILED — an unknown Subject or Category, or any key other than subject_ids/category_ids.",
             "content": {
               "application/json": {
                 "schema": {

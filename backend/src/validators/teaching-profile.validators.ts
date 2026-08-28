@@ -66,6 +66,25 @@ export const ownAvailabilitySchema = z
   .strict();
 
 /**
+ * **What a مؤطِّرة may send about her own capabilities** (Owner, 2026-08-30).
+ *
+ * The counterpart of `ownAvailabilitySchema`, and `.strict()` for the same
+ * reason read in the other direction: `availability` is **refused here**, not
+ * ignored. Each self-service path replaces exactly the half its route names, so
+ * a stale tab cannot silently erase the half it did not load — and a forged
+ * body cannot make one endpoint do the other's job.
+ *
+ * The bounds match the administrative schema's: the same two tables, the same
+ * limits, one set of rules.
+ */
+export const ownCapabilitiesSchema = z
+  .object({
+    subject_ids: z.array(uuid).max(50),
+    category_ids: z.array(uuid).max(20),
+  })
+  .strict();
+
+/**
  * **The planning appraisal's read boundary** (R90).
  *
  * A query, not a body: this asks *who would suit this class* and stores nothing.

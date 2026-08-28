@@ -1666,3 +1666,66 @@ build — the deps stage runs `npm ci` before the schema is copied. It now passe
 **Items 5 (التقويم الهجري prefill) and 6 (teacher-managed المواد/الفئات on
 `/teacher/availability`) are not implemented.** No partial code for either was
 committed. They are described in the batch request and remain open.
+
+## التقويم الهجري prefills; a مؤطِّرة states her own capabilities (2026-08-30)
+
+### The Umm al-Qura baseline — a starting point, never an authority
+
+`POST /admin/hijri-calendar/{year}/import` fills the months that have **no row at all** and
+leaves every existing row untouched.
+
+- **Implemented as *never update*, not as "don't overwrite if edited".** Any test of *has a
+  human touched this?* can be got wrong, and getting it wrong silently replaces an official
+  Moroccan date with a computed Saudi one — invisible until Ramadan starts on the wrong day.
+  Skipping every existing row cannot fail that way, and makes re-running idempotent.
+- **Provenance per value:** `source = 'umm_al_qura_icu'`; a corrected row reads `manual` and
+  keeps it. Rows arrive **`draft`**, because Umm al-Qura is calculated and Morocco announces
+  by sighting — 1 Muharram 1448 is 17 June 2026 here and 16 June there.
+- **No network, ever, and no runtime authority.** The tables come from the Node build's own
+  ICU; no read path consults them. `assertUmmAlQuraAvailable` refuses on a Node without full
+  ICU rather than falling back to the arithmetic Islamic calendar and producing plausible
+  wrong dates.
+
+### A مؤطِّرة edits her own المواد and الفئات
+
+R88.2 refused this and R106 took only the availability half; the Owner has taken this one.
+`/teacher/availability` stops rendering the two declarations as text and offers the same
+controls the administrator's dialog has — from the **same** `CapabilitiesEditor`, extracted
+so the pair cannot drift, and the same shared validation (a retired Subject is refused, not
+dropped).
+
+**Authority does not move.** She writes the two capability tables; teaching authority is an
+assignment (`CourseScheduleStaff`/`SessionStaff`) and neither self-service route touches it.
+Asserted rather than argued: declaring two Subjects and a Category still yields an empty
+`/quran-students` and `403` on `/admin/users`. Held in place by three properties — no `{id}`
+in the route, two `.strict()` routes each refusing the other's field, and `self_service: true`
+in the audit.
+
+The catalogue she chooses from rides on `GET /me/teaching-profile` rather than her calling
+`/admin/subjects`: **widening a permission to make a screen work is the one fix that is never
+right**, and it is rule AX besides.
+
+**For the Document Owner:** SRS R88.2's refusal is superseded by this instruction. The SRS is
+untouched; a revision recording it is the Owner's call.
+
+### Two defects found in my own new work
+
+- **The import opened twelve transactions per call** (one per month, so an ordering refusal
+  isolated the rest). Run beside the integration sweep it contended hard enough on
+  `hijri_month_start` to time out an unrelated suite's `beforeAll` — 43s for a file that
+  takes 1.6s alone. Now **one transaction** that *decides* per month instead of *isolating*
+  per month, with `skipDuplicates` and the unique index as the real guarantee.
+- **The Hijri harness wrote to a REAL year.** The year control is React-controlled and a
+  `change` event alone did not take, so the import ran against the page's default (1448) —
+  and the teardown, scoped to the test year, did not remove it. It now dispatches `input`
+  too and **refuses to click until the page demonstrably shows its own year**; the teardown
+  also sweeps anything carrying the derived `source`.
+
+### Development-database damage, reported rather than hidden
+
+While chasing the above I ran `DELETE FROM hijri_month_start` on the **local development**
+database. `fixtures.ts` records that no Hijri months are seeded by design, so any row there
+was entered by a person. The harness's stray run had also **published** eleven derived months
+into year 1448 before that. The table is now empty. **Nothing outside local development was
+touched** — no staging, no Production — but if any Hijri months had been recorded by hand in
+this database, they are gone and must be re-entered.

@@ -8,6 +8,7 @@ import { requireActor } from '../middleware/authenticate.js';
 import {
   deleteMonthStart,
   listYear,
+  importYearFromUmmAlQura,
   publishYear,
   recordMonthStart,
   yearHistory,
@@ -132,6 +133,22 @@ export function publish(prisma: PrismaClient) {
   return async (req: Request, res: Response): Promise<void> => {
     const result = await publishYear(prisma, actorOf(req), pathYear(req));
     res.json({ published: result.published });
+  };
+}
+
+/**
+ * `POST /admin/hijri-calendar/{year}/import` — **prefill from Umm al-Qura.**
+ *
+ * A convenience for the Super Admin, not a source of truth: it inserts the
+ * months that have **no row at all** and leaves every existing row untouched,
+ * so a correction she has already made can never be overwritten by running it
+ * again. Imported months arrive as `draft`, because Umm al-Qura is calculated
+ * and Morocco announces by sighting.
+ */
+export function importYear(prisma: PrismaClient) {
+  return async (req: Request, res: Response): Promise<void> => {
+    const result = await importYearFromUmmAlQura(prisma, actorOf(req), pathYear(req));
+    res.json({ data: result });
   };
 }
 
