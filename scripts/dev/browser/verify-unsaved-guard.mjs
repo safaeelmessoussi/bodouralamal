@@ -214,9 +214,19 @@ await sleep(500);
 let s6 = await state();
 check('confirming discard closes the dialog', s6.open === 0, JSON.stringify(s6));
 
-/* ── ＋تسجيل مستفيدة — the reference must not have regressed ─────────────── */
-check('the enrolments screen loads', (await goto('/admin/enrollments')) === 'ready');
-const opened = await clickByText('تسجيل مستفيدة');
+/* ── الشركاء — the reference must not have regressed ─────────────────────── */
+
+/**
+ * **Restated 2026-08-28: the reference moved.**
+ *
+ * It drove `＋تسجيل مستفيدة` on المستفيدات, which the Owner **removed** —
+ * enrolling now starts from a مستفيدة's own row rather than from a form that
+ * begins by asking who she is. A harness pointed at a withdrawn control proves
+ * nothing, so the reference is now الشركاء: a plain pristine `FormDialog`
+ * reached from a header Add, which is what this check was ever about.
+ */
+check('the partners screen loads', (await goto('/admin/partners')) === 'ready');
+const opened = await clickByText('إضافة شريك');
 if (opened === 'ok') {
   await sleep(600);
   check('the reference form opens', (await state()).formOpen === true);
@@ -228,25 +238,22 @@ if (opened === 'ok') {
     r1.open === 0,
     JSON.stringify(r1),
   );
-  await clickByText('تسجيل مستفيدة');
+
+  await clickByText('إضافة شريك');
   await sleep(600);
-  /**
-   * **A search box is not unsaved work**, and the reference form is right not
-   * to treat it as such: its `dirty` compares the chosen student, Level, branch,
-   * group and circles — the values that would be saved. Typing a search term
-   * and walking away loses nothing. So the change here is a real selection.
-   */
-  const picked = await evaluate(`(() => {
+  // A real change to a field that would be SAVED — not a search term, which is
+  // not unsaved work and which the guard is right to ignore.
+  const typed = await evaluate(`(() => {
     const d = document.querySelector('dialog[open]');
-    const sel = [...(d?.querySelectorAll('select') ?? [])].find((s) => [...s.options].some((o) => o.value !== ''));
-    if (!sel) return 'no-select';
-    const opt = [...sel.options].find((o) => o.value !== '');
-    Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value').set.call(sel, opt.value);
-    sel.dispatchEvent(new Event('change', { bubbles: true }));
+    const input = d ? d.querySelector('input[type=text], input:not([type])') : null;
+    if (!input) return 'no-input';
+    const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+    set.call(input, 'شريك مؤقّت');
+    input.dispatchEvent(new Event('input', { bubbles: true }));
     return 'ok';
   })()`);
-  check('a real value can be chosen on the reference form', picked === 'ok', picked);
-  await sleep(500);
+  check('a real value can be entered on the reference form', typed === 'ok', typed);
+  await sleep(300);
   await clickBackdrop();
   await sleep(400);
   const r2 = await state();
@@ -259,50 +266,47 @@ if (opened === 'ok') {
   check('the reference form could be opened', false, `state=${opened}`);
 }
 
-/* ── A PRISTINE form closes without asking (2026-08-28) ─────────────────── */
+/* ── الجدولة: a pristine add/edit form asks nothing (2026-08-28) ─────────── */
 
 /**
- * **The half the harness did not cover**, and the defect it missed.
+ * **A second cause, on a different screen.**
  *
- * تعديل المجموعة asked *«هناك تغييرات لم تُحفظ بعد»* on a form nobody had
- * touched. Every check above opens a form and **types into it**, so all of them
- * passed against it: they proved the question appears when it should and never
- * that it stays away when it should. The sequence needs a real `<dialog>` and
- * its native `close` event — the parent clears the record it was editing, and
- * that event re-enters the guard in the one render before the form's reset
- * effect has run.
+ * مجموعات المستويات was dirty because a closing form's pristine had been
+ * cleared. الجدولة was dirty for the whole time it was open, and every value
+ * matched: its two snapshots are **separate literals**, and `schedulingTypeId`
+ * sat second in one and twentieth in the other, so the serialised comparison
+ * differed on key position alone. Both are checked here because both reached the
+ * reader as the same sentence.
  */
-const reached = await goto('/admin/groups');
-if (reached === 'ready') {
+const sched = await goto('/admin/schedules');
+if (sched === 'ready') {
   const opened = await evaluate(`(async () => {
-    const edit = [...document.querySelectorAll('.admin-table tbody button, .admin-table tbody a')]
-      .find((b) => b.textContent.trim() === 'تعديل');
-    if (!edit) return { noRow: true };
-    edit.click();
-    await new Promise((r) => setTimeout(r, 900));
+    const add = [...document.querySelectorAll('button')].find((b) =>
+      b.textContent.trim().includes('إضافة عنصر'));
+    if (!add) return { noAdd: true };
+    add.click();
+    await new Promise((r) => setTimeout(r, 1500));
     const dlg = document.querySelector('dialog[open]');
     if (!dlg) return { noDialog: true };
-    // The X, which is the path that re-enters through the native close event —
-    // not «إلغاء», which the defect did not reach.
     const close = [...dlg.querySelectorAll('button')].find((b) => b.textContent.trim() === 'إغلاق');
     if (!close) return { noCloseButton: true };
     close.click();
-    await new Promise((r) => setTimeout(r, 700));
+    await new Promise((r) => setTimeout(r, 800));
     return { closed: true };
   })()`);
 
-  if (opened.noRow) {
-    check('PRISTINE close: a group exists to edit', false, JSON.stringify(opened));
+  if (opened.closed !== true) {
+    check('PRISTINE الجدولة: the add form could be opened', false, JSON.stringify(opened));
   } else {
     const after = await state();
     check(
-      'PRISTINE: an untouched edit form closes with no discard question',
-      opened.closed === true && after.confirming === false && after.open === 0,
-      JSON.stringify({ opened, after }),
+      'PRISTINE: an untouched إضافة عنصر closes with no discard question',
+      after.confirming === false && after.open === 0,
+      JSON.stringify(after),
     );
   }
 } else {
-  check('PRISTINE close: مجموعات المستويات could be reached', false, `state=${reached}`);
+  check('PRISTINE الجدولة: the page could be reached', false, `state=${sched}`);
 }
 
 close();

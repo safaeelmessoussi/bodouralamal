@@ -1860,3 +1860,52 @@ describe("R111 — deleting an account keeps the record", () => {
     }
   });
 });
+
+/* ── A role's scope is editable (Owner, 2026-08-28) ──────────────────────── */
+
+describe("an assigned role's scope can be narrowed and widened", () => {
+  it("moves a scope while keeping the previous assignment as history", async () => {
+    /**
+     * The scope rendered as text with only a Delete beside it, so narrowing or
+     * widening meant removing the role and adding it back — which loses the
+     * assignment's history for a change that is not a revocation.
+     *
+     * One role still carries one scope: the move revokes the old row and grants
+     * the new one, so *«who taught at this branch in March»* stays answerable.
+     */
+    const id = await makeUser("أستاذة يتغير نطاقها");
+    await grant(id, "teacher", branchId);
+
+    // Narrow → the other branch.
+    const moved = await call("PUT", `/admin/users/${id}/roles`, superAdmin, {
+      assignments: [{ role: "teacher", branch_id: otherBranchId }],
+    });
+    expect(moved.status).toBe(200);
+    expect(moved.body.data!["roles"]).toEqual([
+      { role: "teacher", branch_id: otherBranchId, branch_name: `${TAG} فرع آخر` },
+    ]);
+    expect(
+      await prisma.userBranchRole.count({
+        where: { userId: id, branchId, deletedAt: { not: null } },
+      }),
+    ).toBe(1);
+
+    // Widen → all branches. `null` is every branch (§7 R24), never none.
+    const widened = await call("PUT", `/admin/users/${id}/roles`, superAdmin, {
+      assignments: [{ role: "teacher", branch_id: null }],
+    });
+    expect(widened.status).toBe(200);
+    expect(widened.body.data!["roles"]).toEqual([
+      { role: "teacher", branch_id: null, branch_name: null },
+    ]);
+
+    // Exactly one live assignment throughout — the index and the rule agree.
+    expect(
+      await prisma.userBranchRole.count({ where: { userId: id, deletedAt: null } }),
+    ).toBe(1);
+    // ...and every earlier scope survives as a tombstone.
+    expect(
+      await prisma.userBranchRole.count({ where: { userId: id, deletedAt: { not: null } } }),
+    ).toBe(2);
+  });
+});

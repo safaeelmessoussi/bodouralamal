@@ -10,15 +10,16 @@ import {
 } from '../../adapters/partners.js';
 import { AdminLayout } from '../../components/admin/admin-layout.js';
 import { Button } from '../../components/ui/button.js';
+import { BlockedNotice } from '../../components/ui/blocked-notice.js';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
 import { DataTable, type Column, type RowAction, type TableStatus } from '../../components/ui/data-table.js';
 import { Feedback } from '../../components/ui/feedback.js';
 import { FormDialog } from '../../components/ui/form-dialog.js';
-import { SelectField, TextField } from '../../components/ui/field.js';
+import { SelectField, TextArea, TextField } from '../../components/ui/field.js';
 import { useSession } from '../../contexts/session.js';
 import { t } from '../../i18n/index.js';
 import { isDirty } from '../../lib/form-dirty.js';
-import { classifyDeletion } from '../../lib/deletion-outcome.js';
+import { classifyDeletion, deletionNotice } from '../../lib/deletion-outcome.js';
 
 /**
  * `/admin/partners` — **شركاء بذور الأمل** (NEW N).
@@ -49,6 +50,7 @@ export function PartnersPage(): ReactNode {
   const [status, setStatus] = useState<TableStatus>('loading');
   const [editing, setEditing] = useState<Partner | 'new' | null>(null);
   const [deleting, setDeleting] = useState<Partner | null>(null);
+  const [blocked, setBlocked] = useState<unknown>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -68,6 +70,13 @@ export function PartnersPage(): ReactNode {
 
   const columns: Column<Partner>[] = [
     { key: 'name', header: t('admin.partners.colName'), cell: (r) => r.name },
+    {
+      // Rule BA — the field the landing page shows beside the name.
+      key: 'description',
+      header: t('admin.partners.colDescription'),
+      secondary: true,
+      cell: (r) => r.description ?? <span className="muted">{t('common.notSet')}</span>,
+    },
     {
       // §8/rule BA — the fact that decides whether the landing page shows them.
       key: 'visible',
@@ -98,14 +107,20 @@ export function PartnersPage(): ReactNode {
   }
 
   return (
-    <AdminLayout title={t('admin.nav.partners')} lede={t('admin.partners.lede')}>
-      {notice === null ? null : <Feedback>{notice}</Feedback>}
-
-      <div className="register-form__actions">
+    <AdminLayout
+      title={t('admin.nav.partners')}
+      lede={t('admin.partners.lede')}
+      /* **The shared header slot, like every other management page.** This was
+         a `register-form__actions` row of its own between the lede and the
+         table — the same drift `FormDialog` exists to end, one screen deciding
+         its own placement for a control eleven others already place. */
+      actions={
         <Button variant="add" onClick={() => setEditing('new')}>
           {t('admin.partners.create')}
         </Button>
-      </div>
+      }
+    >
+      {notice === null ? null : <Feedback>{notice}</Feedback>}
 
       <DataTable
         caption={t('admin.partners.caption')}
@@ -133,22 +148,48 @@ export function PartnersPage(): ReactNode {
         confirmLabel={t('common.delete')}
         danger
         busy={busy}
-        onCancel={() => setDeleting(null)}
+        onCancel={() => {
+          setDeleting(null);
+          setBlocked(null);
+        }}
+        {...(blocked === null
+          ? {}
+          : { blocked: <BlockedNotice error={blocked} item={t('admin.partners.thisItem')} /> })}
         onConfirm={() => {
           void (async () => {
             setBusy(true);
-            const outcome = await classifyDeletion(() =>
-              deletePartner(deleting!.id, accessToken),
-            );
-            setBusy(false);
-            setDeleting(null);
-            // The shared classifier, so «already gone» reads as success and a
-            // refusal never renders as a generic failure.
-            if (outcome.kind === 'deleted' || outcome.kind === 'already-gone') {
-              setNotice(t('admin.partners.deleted'));
+            setNotice(null);
+            try {
+              /**
+               * **`classifyDeletion` takes the CAUGHT ERROR, not a callback.**
+               *
+               * This called `classifyDeletion(() => deletePartner(...))`, so the
+               * function itself was classified — it is not `null`, not an
+               * `ApiError`, so it fell through to `failed` — and
+               * `deletePartner` was **never invoked**. Delete appeared to do
+               * nothing because it genuinely did nothing: no request reached
+               * nginx or the API, and the reader was told it had failed.
+               *
+               * The shape here is now the one every other delete screen uses.
+               */
+              await deletePartner(deleting!.id, accessToken);
+              setBlocked(null);
               await load();
-            } else {
-              setNotice(t('admin.partners.deleteFailed'));
+              setNotice(t('admin.partners.deleted'));
+              setDeleting(null);
+            } catch (error) {
+              const outcome = classifyDeletion(error);
+              if (outcome.kind === 'blocked') {
+                // The dialog stays open and names what holds it (rule AZ.1).
+                setBlocked(error);
+                return;
+              }
+              // «Already gone» is the state the reader wanted, not a failure.
+              if (outcome.kind === 'already-gone') await load();
+              setNotice(deletionNotice(outcome));
+              setDeleting(null);
+            } finally {
+              setBusy(false);
             }
           })();
         }}
@@ -171,6 +212,7 @@ function PartnerFormDialog({
 }): ReactNode {
   const pristine = {
     name: partner?.name ?? '',
+    description: partner?.description ?? '',
     visible: partner === null ? 'true' : String(partner.is_visible),
   };
   const [form, setForm] = useState(pristine);
@@ -189,7 +231,12 @@ function PartnerFormDialog({
       onSubmit={() => {
         setTouched(true);
         if (error) return;
-        onSave({ name: form.name.trim(), is_visible: form.visible === 'true' });
+        onSave({
+          name: form.name.trim(),
+          // `''` → `null`: *no description* is one state, not two.
+          description: form.description.trim() || null,
+          is_visible: form.visible === 'true',
+        });
       }}
     >
       <TextField
@@ -198,6 +245,13 @@ function PartnerFormDialog({
         onChange={(v) => setForm((f) => ({ ...f, name: v }))}
         required
         error={touched ? error : null}
+      />
+      <TextArea
+        label={t('admin.partners.colDescription')}
+        value={form.description}
+        onChange={(v) => setForm((f) => ({ ...f, description: v }))}
+        rows={2}
+        hint={t('admin.partners.descriptionHint')}
       />
       <SelectField
         label={t('admin.partners.colVisible')}

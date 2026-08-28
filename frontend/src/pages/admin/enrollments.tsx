@@ -26,10 +26,10 @@ import { LevelSelect, levelLabel } from '../../components/scope/level-select.js'
 import { Button } from '../../components/ui/button.js';
 import { ConfirmDialog } from '../../components/ui/confirm-dialog.js';
 import { DataTable, type Column, type RowAction } from '../../components/ui/data-table.js';
+import { Dialog } from '../../components/ui/dialog.js';
 import { FormDialog } from '../../components/ui/form-dialog.js';
 import { SearchInput, SelectField } from '../../components/ui/field.js';
 import { MultiSelectField } from '../../components/ui/multi-select.js';
-import { SearchableSelect } from '../../components/ui/searchable-select.js';
 import { useSession } from '../../contexts/session.js';
 import { isDirty } from '../../lib/form-dirty.js';
 import { t } from '../../i18n/index.js';
@@ -67,6 +67,17 @@ import { Feedback } from '../../components/ui/feedback.js';
  * one-enrolment-per-Level refusal all stay where they already were. This screen
  * renders refusals rather than reimplementing rules.
  */
+/**
+ * A مستفيدة and every placement she holds — the row this screen lists since
+ * 2026-08-28. `enrolments` may be empty: an account with the Student role and
+ * no placement is precisely who this page exists to enrol.
+ */
+interface StudentRow {
+  id: string;
+  name: string;
+  enrolments: EnrollmentRowView[];
+}
+
 export function EnrollmentsPage(): ReactNode {
   const { accessToken } = useSession();
 
@@ -79,7 +90,14 @@ export function EnrollmentsPage(): ReactNode {
   const [sort, setSort] = useState<SortState | null>(null);
   const [query, setQuery] = useState('');
   const [notice, setNotice] = useState<string | null>(null);
-  const [composing, setComposing] = useState(false);
+  const [composing, setComposing] = useState<string | null>(null);
+  /**
+   * Every account this screen must list: the Student role (Owner) united with
+   * R79.7's durable beneficiary fact, so neither rule drops anybody.
+   */
+  const [students, setStudents] = useState<DirectoryEntry[]>([]);
+  /** Which مستفيدة's placements are open — she may hold several. */
+  const [placementsOf, setPlacementsOf] = useState<StudentRow | null>(null);
   const [editing, setEditing] = useState<EnrollmentRowView | null>(null);
   const [ending, setEnding] = useState<EnrollmentRowView | null>(null);
   const [busy, setBusy] = useState(false);
@@ -87,12 +105,23 @@ export function EnrollmentsPage(): ReactNode {
   const load = useCallback(async () => {
     setState('loading');
     try {
-      const [list, levelList] = await Promise.all([
+      /**
+       * **Both rules, united** — see `byStudent` below. The Student role is the
+       * Owner's rule; `beneficiaries_only` is R79.7's durable fact, which exists
+       * because role membership does not identify a beneficiary. Taking either
+       * alone would drop people from the screen that places them.
+       */
+      const [list, levelList, byRole, byFact] = await Promise.all([
         listEnrollments(accessToken, filterLevel ? { level_id: filterLevel } : {}, sort),
         listLevels(accessToken),
+        searchDirectory(accessToken, { role: 'student' }, 1, null),
+        searchDirectory(accessToken, { beneficiaries_only: 'true' }, 1, null),
       ]);
       setRows(list);
       setLevels(levelList);
+      const union = new Map<string, DirectoryEntry>();
+      for (const person of [...byRole.data, ...byFact.data]) union.set(person.id, person);
+      setStudents([...union.values()]);
       setState('ready');
     } catch {
       setState('error');
@@ -116,46 +145,104 @@ export function EnrollmentsPage(): ReactNode {
   }, [accessToken]);
 
   /** Client-side narrowing by name; the Level narrows server-side already. */
-  const visible = rows.filter((r) => {
-    const needle = query.trim().toLowerCase();
-    return needle === '' || r.student_name.toLowerCase().includes(needle);
-  });
 
-  const columns: Column<EnrollmentRowView>[] = [
+
+  /**
+   * **One row per STUDENT, not per enrolment** (Owner, 2026-08-28).
+   *
+   * The page listed enrolments, so a مستفيدة enrolled in two Levels appeared
+   * twice and one enrolled in none did not appear at all — on the screen whose
+   * job is enrolling her.
+   *
+   * **Who counts as a student.** The Owner's rule is *every account holding the
+   * Student role*. R79.7's rule is the durable `is_beneficiary` fact, and it
+   * exists because **role membership does not identify a beneficiary**: a
+   * مؤطِّرة may study, and §4.3's minors hold no role at all. Taking either
+   * alone would drop people from the screen that places them, so this is the
+   * **union** — every Student-role account appears, as the Owner requires, and
+   * nobody who is already a beneficiary disappears.
+   */
+  const byStudent = new Map<string, StudentRow>();
+  for (const person of students) {
+    byStudent.set(person.id, { id: person.id, name: person.name_arabic, enrolments: [] });
+  }
+  for (const e of rows) {
+    const existing = byStudent.get(e.student_id) ?? {
+      id: e.student_id,
+      name: e.student_name,
+      enrolments: [],
+    };
+    existing.enrolments.push(e);
+    byStudent.set(e.student_id, existing);
+  }
+  const studentRows = [...byStudent.values()].sort((a, b) => a.name.localeCompare(b.name, 'ar'));
+
+  // Search narrows the students shown; the Level filter narrows by placement,
+  // and a student with no placement cannot match one (§14.4 — a filtered empty
+  // state is a different answer from an empty page).
+  const needleText = query.trim().toLowerCase();
+  const visibleStudents = studentRows.filter(
+    (r) =>
+      (needleText === '' || r.name.toLowerCase().includes(needleText)) &&
+      (filterLevel === null || r.enrolments.some((e) => e.level_id === filterLevel)),
+  );
+
+  const columns: Column<StudentRow>[] = [
     {
       key: 'student',
       header: t('admin.enrollments.student'),
-      sortKey: 'student',
-      cell: (r) => r.student_name,
+      cell: (r) => r.name,
     },
     {
       key: 'level',
       header: t('admin.nav.levels'),
-      sortKey: 'level',
-      // The shared label — `{Category} — {Level}` — so a Level reads the same
-      // here as in every selector (§4.4b).
+      // Every Level she is enrolled in — the shared `{Category} — {Level}` label
+      // (§4.4b), because a Level name alone identifies nothing.
       cell: (r) =>
-        levelLabel({
-          id: r.level_id,
-          name: r.level_name,
-          category_name: r.category_name,
-        }),
+        r.enrolments.length === 0 ? (
+          <span className="muted">{t('admin.enrollments.notEnrolled')}</span>
+        ) : (
+          <ul className="admin-list admin-list--plain">
+            {r.enrolments.map((e) => (
+              <li key={e.id}>
+                {levelLabel({ id: e.level_id, name: e.level_name, category_name: e.category_name })}
+              </li>
+            ))}
+          </ul>
+        ),
     },
     {
       key: 'group',
       header: t('admin.nav.groups'),
       cell: (r) =>
-        r.administrative_group_name ?? (
-          // R66 — a Level nobody has subdivided is ordinary, and an enrolment
-          // without a group is a placement, not a gap.
-          <span className="muted">{t('admin.enrollments.noGroup')}</span>
+        r.enrolments.length === 0 ? (
+          <span className="muted">—</span>
+        ) : (
+          <ul className="admin-list admin-list--plain">
+            {r.enrolments.map((e) => (
+              <li key={e.id}>
+                {/* R66 — a Level nobody has subdivided is ordinary, and an
+                    enrolment without a group is a placement, not a gap. */}
+                {e.administrative_group_name ?? t('admin.enrollments.noGroup')}
+              </li>
+            ))}
+          </ul>
         ),
     },
     {
       key: 'branch',
       header: t('admin.enrollments.branch'),
       secondary: true,
-      cell: (r) => r.branch_name,
+      // **Read-only here.** Branch membership is edited on تعديل بيانات
+      // المستخدم and stays there (Owner, 2026-08-28); this shows where each
+      // placement sits so the row reads without opening it.
+      cell: (r) => (
+        <ul className="admin-list admin-list--plain">
+          {[...new Set(r.enrolments.map((e) => e.branch_name))].map((b) => (
+            <li key={b}>{b}</li>
+          ))}
+        </ul>
+      ),
     },
     {
       key: 'circles',
@@ -164,29 +251,44 @@ export function EnrollmentsPage(): ReactNode {
       // "nothing aligns them and nothing should try to"); it is shown so
       // مستفيدة → مستوى → مجموعة → مادة → حلقة reads in one place, and it is
       // managed on حلقات المواد and offered at placement time.
-      cell: (r) =>
-        r.circles.length === 0 ? (
+      cell: (r) => {
+        const circles = r.enrolments.flatMap((e) => e.circles);
+        return circles.length === 0 ? (
           <span className="muted">{t('admin.enrollments.noCircles')}</span>
         ) : (
           <ul className="admin-list admin-list--plain">
-            {r.circles.map((c) => (
+            {circles.map((c) => (
               <li key={`${c.subject_name}-${c.circle_name}`}>
                 {c.subject_name} — {c.circle_name}
               </li>
             ))}
           </ul>
-        ),
+        );
+      },
     },
   ];
 
-  const actions: RowAction<EnrollmentRowView>[] = [
-    { label: t('common.edit'), onSelect: (r) => setEditing(r) },
-    // Destructive, so it carries the shared danger treatment — the enrolment is
-    // soft-deleted into Trash (R59), which the confirmation states in full.
+  const actions: RowAction<StudentRow>[] = [
+    /**
+     * **تسجيل — place her in another Level** (Owner, 2026-08-28). A مستفيدة may
+     * hold several placements, so this is repeatable rather than a one-off: the
+     * dialog opens with her already chosen and asks only where she is going.
+     */
     {
-      label: t('admin.enrollments.end'),
-      danger: true,
-      onSelect: (r) => setEnding(r),
+      // «تسجيل» alone: the row already says who, so repeating «مستفيدة» in
+      // the action would restate the column beside it.
+      label: t('admin.enrollments.enrol'),
+      onSelect: (r) => setComposing(r.id),
+    },
+    /**
+     * **تعديل / إنهاء act on ONE placement.** A student row may hold several,
+     * and «edit» with no answer to *which one* would be a guess — so a row with
+     * exactly one placement acts on it, and a row with more opens the list.
+     */
+    {
+      label: t('common.edit'),
+      onSelect: (r) => setPlacementsOf(r),
+      available: (r) => r.enrolments.length > 0,
     },
   ];
 
@@ -194,18 +296,18 @@ export function EnrollmentsPage(): ReactNode {
     <AdminLayout
       title={t('admin.nav.enrollments')}
       lede={t('admin.enrollments.lede')}
-      actions={
-        <Button variant="add" onClick={() => setComposing(true)}>
-          {t('admin.enrollments.add')}
-        </Button>
-      }
+      /* **No ＋ تسجيل مستفيدة** (Owner, 2026-08-28). Enrolling starts from the
+         مستفيدة, not from an empty form that asks who she is: every account with
+         the Student role is already a row here, and تسجيل on her row places
+         her. A page-level Add would be a second way in that begins by asking a
+         question the row has already answered. */
     >
       {notice ? <Feedback>{notice}</Feedback> : null}
 
       <DataTable
         caption={t('admin.enrollments.caption')}
         columns={columns}
-        rows={visible}
+        rows={visibleStudents}
         rowKey={(r) => r.id}
         status={state === 'ready' ? 'ready' : state}
         actions={actions}
@@ -309,14 +411,60 @@ export function EnrollmentsPage(): ReactNode {
         onCancel={() => setEnding(null)}
       />
 
+      {placementsOf ? (
+        <Dialog
+          open
+          onClose={() => setPlacementsOf(null)}
+          title={t('admin.enrollments.placementsTitle').replace('{name}', placementsOf.name)}
+        >
+          {/* Each placement is edited or ended on its own, because they are
+              separate facts: ending one Level does not touch another. */}
+          <ul className="admin-list">
+            {placementsOf.enrolments.map((e) => (
+              <li key={e.id}>
+                <span className="admin-list__label">
+                  {levelLabel({
+                    id: e.level_id,
+                    name: e.level_name,
+                    category_name: e.category_name,
+                  })}
+                </span>
+                <span className="muted">
+                  {e.administrative_group_name ?? t('admin.enrollments.noGroup')}
+                </span>
+                <Button
+                  variant="secondary"
+                  onClick={() => {
+                    setPlacementsOf(null);
+                    setEditing(e);
+                  }}
+                >
+                  {t('common.edit')}
+                </Button>
+                <Button
+                  variant="danger"
+                  onClick={() => {
+                    setPlacementsOf(null);
+                    setEnding(e);
+                  }}
+                >
+                  {t('admin.enrollments.end')}
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </Dialog>
+      ) : null}
+
       {composing ? (
         <EnrolDialog
           levels={levels}
           branches={branches}
           token={accessToken}
-          onCancel={() => setComposing(false)}
+          studentId={composing}
+          onCancel={() => setComposing(null)}
           onDone={(message) => {
-            setComposing(false);
+            setComposing(null);
             setNotice(message);
             void load();
           }}
@@ -330,17 +478,25 @@ function EnrolDialog({
   levels,
   branches,
   token,
+  studentId: fixedStudentId,
   onCancel,
   onDone,
 }: {
   levels: Level[];
   branches: Branch[];
   token: string | null;
+  /**
+   * **Opened from her row, so she is already chosen** (Owner, 2026-08-28). The
+   * form no longer begins by asking who is being enrolled — the row answered
+   * that — so the picker below is not rendered and the question the dialog asks
+   * is only *where*.
+   */
+  studentId: string;
   onCancel: () => void;
   onDone: (message: string) => void;
 }): ReactNode {
   const [matches, setMatches] = useState<DirectoryEntry[]>([]);
-  const [studentId, setStudentId] = useState('');
+  const [studentId] = useState(fixedStudentId);
   const [levelId, setLevelId] = useState<string | null>(null);
   /**
    * **The Levels THIS beneficiary may enter**, resolved server-side once she is
@@ -583,18 +739,16 @@ function EnrolDialog({
           every live row, and a مؤطرة may legitimately be enrolled — one of the
           association's accounts holds both `teacher` and `student` today.
           Filtering by role would hide exactly the students who need enrolling. */}
-      {/* **The beneficiary is asked FIRST, and is independent.** The form's
-          question is *who am I enrolling*, and every other field answers *where
-          and how*. Narrowing this list by a chosen Level was tried and reversed:
-          a woman already enrolled elsewhere is still a beneficiary. */}
-      <SearchableSelect
-        label={t('admin.enrollments.student')}
-        options={matches.map((m) => ({ value: m.id, label: m.name_arabic }))}
-        value={studentId}
-        onChange={setStudentId}
-        hint={t('admin.enrollments.searchHint')}
-        required
-      />
+      {/* **The beneficiary is no longer asked for** (Owner, 2026-08-28): this
+          dialog opens from her row, so the question it asks is only *where*.
+          The list of candidates above is still loaded, because the name is what
+          the heading shows and what the Level narrowing is resolved against. */}
+      <p className="field__hint">
+        {t('admin.enrollments.enrolling').replace(
+          '{name}',
+          matches.find((m) => m.id === studentId)?.name_arabic ?? '',
+        )}
+      </p>
 
       {/* Narrowed by HER: restricted Levels she cannot enter, and the one she is
           already enrolled in, are not offered (R27, BR-21). */}

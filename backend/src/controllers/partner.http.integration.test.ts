@@ -134,7 +134,7 @@ describe('the partners catalogue', () => {
     const rows = (await call('GET', '/partners')).body.data as Record<string, unknown>[];
     const row = rows.find((r) => String(r['name']).startsWith(TAG));
     if (!row) throw new Error('the seeded partner did not appear on the public list');
-    expect(Object.keys(row).sort()).toEqual(['id', 'name']);
+    expect(Object.keys(row).sort()).toEqual(['description', 'id', 'name']);
   });
 
   it('refuses an Admin every management verb — OD-01 keeps Partners undelegated', async () => {
@@ -152,6 +152,33 @@ describe('the partners catalogue', () => {
       const res = await call(method, path, admin, body);
       expect(res.status, `${method} ${path}`).toBe(403);
     }
+  });
+
+  it('carries the description through create, read and the public list', async () => {
+    // End to end: what a Super Admin types is what the landing page renders.
+    const created = await call('POST', '/admin/partners', superAdmin, {
+      name: `${TAG} شريك بوصف`,
+      description: 'جهة شريكة في البرامج التعليمية',
+    });
+    expect(created.status).toBe(201);
+    expect((created.body.data as Record<string, unknown>)['description']).toBe(
+      'جهة شريكة في البرامج التعليمية',
+    );
+
+    const publicRows = (await call('GET', '/partners')).body.data as Record<string, unknown>[];
+    const row = publicRows.find((p) => String(p['name']).endsWith('شريك بوصف'));
+    expect(row?.['description']).toBe('جهة شريكة في البرامج التعليمية');
+  });
+
+  it('normalises an emptied description to null, never to a blank string', async () => {
+    // *No description* is one state, not two — a blank would read as set and
+    // render as an empty line under the name.
+    const created = await call('POST', '/admin/partners', superAdmin, {
+      name: `${TAG} شريك بوصف فارغ`,
+      description: '   ',
+    });
+    expect(created.status).toBe(201);
+    expect((created.body.data as Record<string, unknown>)['description']).toBeNull();
   });
 
   it('refuses a logo or a URL rather than silently dropping it', async () => {

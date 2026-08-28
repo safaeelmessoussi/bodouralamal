@@ -707,6 +707,12 @@ model Partner {
   id   String @id @default(uuid()) @db.Uuid
   name String @db.VarChar(200)
 
+  /// **What this partner is** (Owner, 2026-08-28). NEW N gave a Partner a name
+  /// and nothing else on the rule that a column exists for a fact the platform
+  /// holds; the Owner supplied the fact, so the column follows the decision.
+  /// Nullable — a partner without one is ordinary, not incomplete.
+  description String? @db.VarChar(500)
+
   /// §2.2 ordering. Nullable, because *unordered* is a real state — BR-19 falls
   /// back to the name.
   displayOrder Int? @map("display_order")

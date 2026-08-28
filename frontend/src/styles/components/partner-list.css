@@ -32,3 +32,14 @@
   display: flex;
   gap: var(--space-4);
 }
+
+/** The description under the name — a stacked pair, not a second column. */
+.partner-list > li {
+  display: flex;
+  flex-direction: column;
+}
+
+.partner-list__description {
+  font-weight: 400;
+  color: var(--color-text-secondary);
+}

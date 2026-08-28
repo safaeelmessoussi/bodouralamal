@@ -10,6 +10,8 @@ import { api } from '../lib/api.js';
 export interface PublicPartner {
   id: string;
   name: string;
+  /** What the partner is, in the association's words. `null` is ordinary. */
+  description: string | null;
 }
 
 /** `GET /partners` — public, unauthenticated, and the landing section's only
@@ -29,6 +31,7 @@ export interface Partner extends PublicPartner {
 
 export interface PartnerInput {
   name: string;
+  description?: string | null;
   display_order?: number | null;
   is_visible?: boolean;
 }

@@ -1365,3 +1365,75 @@ current model — and which the test's own token already claimed.
   a minor signs in through their guardian's. §4.3 currently models a minor as a
   login-less row. That is a model change with its own slice; this batch changed
   the label only and did not touch §4.3.
+
+## Users, enrolments, scheduling and partners (2026-08-28)
+
+### الشركاء — حذف did nothing, literally
+
+`classifyDeletion` takes the **caught error**; الشركاء passed it a **callback**:
+`classifyDeletion(() => deletePartner(id, token))`. A function is neither `null`
+nor an `ApiError`, so it fell through to `failed` — and `deletePartner` was
+never invoked. Confirmed at both boundaries: **no DELETE reached nginx or the
+API**, while the reader was told the deletion had failed. My own defect from the
+NEW N slice.
+
+The parameter is `unknown`, which a function satisfies, so the type checker had
+nothing to say. `classifyDeletion` now **throws** on a callback rather than
+returning a tidy `failed`: a caller that passed an operation has not deleted
+anything, and reporting a neat failure hid that for a whole release. Every other
+delete screen was checked; partners was the only misuse.
+
+### الجدولة — permanently dirty on key ORDER
+
+`isDirty` serialised both snapshots and was order-sensitive for object keys, on
+the documented reasoning that both sides are built by *the same literal in the
+same file*. الجدولة falsified it: its two snapshots are **separate literals**,
+and `schedulingTypeId` sat second in one and twentieth in the other. Every value
+matched — the instrumented comparison found **no differing field** — and the form
+was dirty from the moment it opened, so إضافة عنصر and تعديل العنصر asked to
+discard nothing.
+
+`isDirty` now sorts object keys and **keeps array order significant**, because a
+reordered list is a genuine change. That is the second distinct cause behind one
+sentence; the first (a closing form's cleared pristine) was fixed earlier, and
+the harness now covers both.
+
+### المستخدمون
+
+- **Every assigned role's scope is editable.** It rendered as text with only a
+  Delete, so narrowing or widening meant removing the role and adding it back —
+  losing the assignment's history for a change that is not a revocation. Saving
+  revokes the old row and grants the new one, so *«who taught at this branch in
+  March»* stays answerable, and one role still carries one scope.
+
+### المستفيدات — one row per مستفيدة
+
+The page listed **enrolments**, so a مستفيدة in two Levels appeared twice and one
+in none did not appear at all — on the screen whose job is enrolling her. It now
+lists students, each with every Level, group, branch and circle she holds.
+`＋ تسجيل مستفيدة` is gone: تسجيل starts from her row, so the form no longer
+opens by asking a question the row has answered. Branch membership stays
+read-only here and is edited on تعديل بيانات المستخدم, as the Owner requires.
+
+**Who counts as a student, stated rather than assumed.** The Owner's rule is
+*every account holding the Student role*. R79.7's rule is the durable
+`is_beneficiary` fact, and it exists because **role membership does not identify
+a beneficiary** — a مؤطِّرة may study, and §4.3's minors hold no role at all.
+Either alone drops people from the screen that places them, so the page shows the
+**union**. Every Student-role account appears as required, and nobody already a
+beneficiary disappears. **If the Owner wants the role alone, that is a one-line
+change and this note is the flag.**
+
+### الشركاء — الوصف, end to end
+
+A nullable `VARCHAR(500)` on `Partner`, through the validators, service, both
+DTOs, the form, the management table and the public landing section. `''`
+normalises to `null`: *no description* is one state, not two. `＋ إضافة شريك`
+moved into `AdminLayout`'s shared header slot, where the other eleven management
+pages put it.
+
+### A harness that pointed at a withdrawn control
+
+`verify-unsaved-guard` drove `＋تسجيل مستفيدة` as its reference form. The Owner
+removed that button, so the reference is now الشركاء — a plain pristine
+`FormDialog` behind a header Add, which is what the check was ever about.

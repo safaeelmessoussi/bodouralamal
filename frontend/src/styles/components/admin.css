@@ -517,6 +517,30 @@
   white-space: nowrap;
 }
 
+/* **The assigned-role rows** (2026-08-28): a name, its editable branch scope and
+   a Remove, on one line where there is room and stacked where there is not. The
+   scope became a real control when the Owner made every role's scope editable,
+   and three inline elements with no rule laid themselves out on nothing. */
+.admin-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.admin-list > li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--space-3);
+}
+
+.admin-list__label {
+  font-weight: 600;
+}
+
 /* A list inside a table cell: the enrolment row's circles, which are read-only
    context rather than a set of actions, so they carry no bullet furniture. */
 .admin-list--plain {

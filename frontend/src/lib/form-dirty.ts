@@ -30,13 +30,34 @@
  * `JSON.stringify` over a caller-built snapshot:
  *
  * * **order-sensitive for arrays**, which is right — a reordered list is a change;
- * * **order-sensitive for object keys**, which is fine because both snapshots are
- *   built by the same literal in the same file, so key order comes from the
- *   source and not from data;
+ * * **order-INSENSITIVE for object keys** (2026-08-28). It was order-sensitive,
+ *   on the reasoning that both snapshots are built by the same literal in the
+ *   same file — and الجدولة falsified that: its two snapshots are **separate
+ *   literals**, and `schedulingTypeId` was second in one and twentieth in the
+ *   other. Every value matched and the form was permanently dirty, so opening
+ *   إضافة عنصر or تعديل العنصر and closing it asked to discard nothing. A key
+ *   position is not information about what the reader typed, so it no longer
+ *   decides;
  * * no dependency and no deep-equal helper for a handful of scalars.
  *
  * Sets and Maps do not serialise; convert them to sorted arrays in the snapshot.
  */
 export function isDirty(current: unknown, pristine: unknown): boolean {
-  return JSON.stringify(current ?? null) !== JSON.stringify(pristine ?? null);
+  return stable(current ?? null) !== stable(pristine ?? null);
+}
+
+/**
+ * `JSON.stringify` with **object keys sorted**, recursively.
+ *
+ * Arrays keep their order, deliberately: a reordered list *is* a change, which
+ * is the one thing the original comparison got right and this must not lose.
+ */
+function stable(value: unknown): string {
+  return JSON.stringify(value, (_key, v: unknown) => {
+    if (v === null || typeof v !== 'object' || Array.isArray(v)) return v;
+    const source = v as Record<string, unknown>;
+    const sorted: Record<string, unknown> = {};
+    for (const key of Object.keys(source).sort()) sorted[key] = source[key];
+    return sorted;
+  });
 }

@@ -64,12 +64,20 @@ export function PartnersSection(): ReactNode {
           <p className="lede">{t('partners.lede')}</p>
         </div>
 
-        {/* A plain list, because a partner is a NAME and nothing else. A card
-            grid would frame each name in an empty box that looks like a missing
-            logo — reporting an absence the data does not have. */}
+        {/* A plain list rather than a card grid: a partner is a name and,
+            since 2026-08-28, a sentence. A card would frame each in a box with
+            an empty corner that reads as a missing logo — reporting an absence
+            the data does not have. */}
         <ul className="partner-list">
           {state.partners.map((partner) => (
-            <li key={partner.id}>{partner.name}</li>
+            <li key={partner.id}>
+              <strong>{partner.name}</strong>
+              {/* The description when there is one — an absent one renders
+                  nothing rather than an empty line under the name. */}
+              {partner.description === null ? null : (
+                <span className="partner-list__description">{partner.description}</span>
+              )}
+            </li>
           ))}
         </ul>
       </Container>

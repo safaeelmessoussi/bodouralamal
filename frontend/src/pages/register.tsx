@@ -16,11 +16,9 @@ import { BranchSelector } from '../components/ui/branch-selector.js';
 import { fetchCalendarBootstrap, type CategoryRef } from '../adapters/calendar.js';
 import { Button, ButtonLink } from '../components/ui/button.js';
 import { Container } from '../components/ui/container.js';
-import { SelectField, TextArea, TextField } from '../components/ui/field.js';
 import {
   ChildrenFieldset,
   EMPTY_CHILD,
-  NameFields,
   toChildInput,
   validateChildren,
   type ChildForm,

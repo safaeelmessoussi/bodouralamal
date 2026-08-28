@@ -49,6 +49,26 @@ const requestIdOf = (error: unknown): string | null =>
 export function classifyDeletion(error: unknown): DeletionOutcome {
   if (error === null || error === undefined) return { kind: 'deleted' };
 
+  /**
+   * **A callback is a misuse, and it must be loud** (2026-08-28).
+   *
+   * الشركاء called `classifyDeletion(() => deletePartner(id, token))`. The
+   * parameter is `unknown`, which a function satisfies, so the type checker had
+   * nothing to say — and a function is neither `null` nor an `ApiError`, so it
+   * fell through to `failed`. **The deletion was never performed**: no request
+   * reached nginx or the API, and the reader was told it had failed. «حذف does
+   * nothing» was literally true.
+   *
+   * Throwing is right where returning `failed` was wrong: a caller that passed
+   * an operation has not deleted anything, and reporting a tidy failure hid that
+   * for a whole release.
+   */
+  if (typeof error === 'function') {
+    throw new TypeError(
+      'classifyDeletion expects the caught error, not a callback — the deletion has not run',
+    );
+  }
+
   const requestId = requestIdOf(error);
 
   // Checked before the generic `STATE_CONFLICT` arm: a blocked deletion is the

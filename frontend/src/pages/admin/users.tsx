@@ -599,13 +599,34 @@ function ProfileDialog({
           <ul className="admin-list">
             {rows.map((r) => (
               <li key={r.role}>
-                <span>
-                  {t(`admin.users.role.${r.role}`)}
-                  {' — '}
-                  {r.branch_id
-                    ? (branches.find((b) => b.id === r.branch_id)?.name ?? r.branch_id)
-                    : t('admin.users.allBranches')}
-                </span>
+                <span className="admin-list__label">{t(`admin.users.role.${r.role}`)}</span>
+                {/**
+                  * **Every assigned role's scope is editable** (Owner,
+                  * 2026-08-28). It rendered as text with only a Delete beside
+                  * it, so the only way to narrow or widen a scope was to remove
+                  * the role and add it back — which loses the assignment's
+                  * history for a change that is not a revocation.
+                  *
+                  * Changing it here stages the new scope; saving revokes the old
+                  * assignment and grants the new one, so *«who taught at this
+                  * branch in March»* stays answerable (TD-5). One role still
+                  * carries one scope.
+                  */}
+                <SelectField
+                  label={t('admin.users.branchScope')}
+                  value={r.branch_id ?? ''}
+                  onChange={(next) =>
+                    setRows((current) =>
+                      current.map((x) =>
+                        x.role === r.role ? { ...x, branch_id: next === '' ? null : next } : x,
+                      ),
+                    )
+                  }
+                  options={[
+                    { value: '', label: t('admin.users.allBranches') },
+                    ...branches.map((b) => ({ value: b.id, label: b.name })),
+                  ]}
+                />
                 <Button
                   variant="secondary"
                   onClick={() => setRows((current) => current.filter((x) => x.role !== r.role))}

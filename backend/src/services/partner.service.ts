@@ -30,6 +30,8 @@ const PARTNER_ADMIN_ROLES = ['super_admin'] as const;
 export interface PublicPartner {
   id: string;
   name: string;
+  /** What the partner is, in the association's words. `null` is ordinary. */
+  description: string | null;
 }
 
 export interface PartnerRow extends PublicPartner {
@@ -53,7 +55,7 @@ export async function listPublicPartners(prisma: PrismaClient): Promise<PublicPa
   const rows = await prisma.partner.findMany({
     where: { deletedAt: null, isVisible: true },
     orderBy: PARTNER_ORDER,
-    select: { id: true, name: true },
+    select: { id: true, name: true, description: true },
   });
   return rows;
 }
@@ -64,12 +66,13 @@ export async function listPartners(prisma: PrismaClient, actor: Actor): Promise<
   return prisma.partner.findMany({
     where: { deletedAt: null },
     orderBy: PARTNER_ORDER,
-    select: { id: true, name: true, displayOrder: true, isVisible: true, version: true },
+    select: { id: true, name: true, description: true, displayOrder: true, isVisible: true, version: true },
   });
 }
 
 export interface PartnerInput {
   name: string;
+  description?: string | null;
   displayOrder?: number | null;
   isVisible?: boolean;
 }
@@ -85,6 +88,7 @@ export async function createPartner(
     const partner = await tx.partner.create({
       data: {
         name: input.name,
+        description: input.description ?? null,
         displayOrder: input.displayOrder ?? null,
         ...(input.isVisible === undefined ? {} : { isVisible: input.isVisible }),
       },
@@ -100,6 +104,7 @@ export async function createPartner(
     return {
       id: partner.id,
       name: partner.name,
+      description: partner.description,
       displayOrder: partner.displayOrder,
       isVisible: partner.isVisible,
       version: partner.version,
@@ -112,13 +117,14 @@ export async function updatePartner(
   actor: Actor,
   id: string,
   expectedVersion: number,
-  data: { name?: string; displayOrder?: number | null; isVisible?: boolean },
+  data: { name?: string; description?: string | null; displayOrder?: number | null; isVisible?: boolean },
 ): Promise<PartnerRow> {
   await assertFreshActive(prisma, actor.userId, PARTNER_ADMIN_ROLES, actor.activeRole);
 
   const partner = await updateWithVersion<{
     id: string;
     name: string;
+    description: string | null;
     displayOrder: number | null;
     isVisible: boolean;
     version: number;
@@ -145,6 +151,7 @@ export async function updatePartner(
   return {
     id: partner.id,
     name: partner.name,
+    description: partner.description,
     displayOrder: partner.displayOrder,
     isVisible: partner.isVisible,
     version: partner.version,

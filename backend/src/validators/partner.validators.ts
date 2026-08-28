@@ -13,9 +13,23 @@ import { displayOrder, version } from './common.js';
  */
 const partnerName = z.string().trim().min(1).max(200);
 
+/**
+ * A sentence under a name on a public page, not a page of its own — 500 to match
+ * the column. **`''` normalises to `null`**, because *no description* is one
+ * state and not two: a form that clears the field sends `''`, and storing that
+ * beside `null` would make «has a description» two different checks forever.
+ */
+const partnerDescription = z
+  .string()
+  .trim()
+  .max(500)
+  .nullable()
+  .transform((v) => (v === '' ? null : v));
+
 export const createPartnerSchema = z
   .object({
     name: partnerName,
+    description: partnerDescription.optional(),
     display_order: displayOrder.optional(),
     is_visible: z.boolean().optional(),
   })
@@ -25,6 +39,7 @@ export const updatePartnerSchema = z
   .object({
     version,
     name: partnerName.optional(),
+    description: partnerDescription.optional(),
     display_order: displayOrder.optional(),
     is_visible: z.boolean().optional(),
   })

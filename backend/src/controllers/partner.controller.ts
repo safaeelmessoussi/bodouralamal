@@ -23,13 +23,18 @@ import { createPartnerSchema, updatePartnerSchema } from '../validators/partner.
  * back office reaches a public page (§16.2 Revision 38) — so they are two
  * literals, not one with a filter.
  */
-function publicDto(row: PublicPartner): { id: string; name: string } {
-  return { id: row.id, name: row.name };
+function publicDto(row: PublicPartner): {
+  id: string;
+  name: string;
+  description: string | null;
+} {
+  return { id: row.id, name: row.name, description: row.description };
 }
 
 function adminDto(row: PartnerRow): {
   id: string;
   name: string;
+  description: string | null;
   display_order: number | null;
   is_visible: boolean;
   version: number;
@@ -37,6 +42,7 @@ function adminDto(row: PartnerRow): {
   return {
     id: row.id,
     name: row.name,
+    description: row.description,
     display_order: row.displayOrder,
     is_visible: row.isVisible,
     version: row.version,
@@ -63,6 +69,7 @@ export function create(prisma: PrismaClient) {
     const body = parse(createPartnerSchema, req.body ?? {});
     const partner = await createPartner(prisma, requireActor(req), {
       name: body.name,
+      ...(body.description !== undefined ? { description: body.description } : {}),
       ...(body.display_order !== undefined ? { displayOrder: body.display_order } : {}),
       ...(body.is_visible !== undefined ? { isVisible: body.is_visible } : {}),
     });
@@ -80,6 +87,7 @@ export function update(prisma: PrismaClient) {
       body.version,
       {
         ...(body.name !== undefined ? { name: body.name } : {}),
+        ...(body.description !== undefined ? { description: body.description } : {}),
         ...(body.display_order !== undefined ? { displayOrder: body.display_order } : {}),
         ...(body.is_visible !== undefined ? { isVisible: body.is_visible } : {}),
       },
