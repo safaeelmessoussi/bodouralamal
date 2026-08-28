@@ -1769,3 +1769,46 @@ Verified: all 28 CI guards, `check-openapi-td3` (0 undocumented), `check-openapi
 doc links, and a direct cross-check that both new routes appear in the SRS, the TD-3 registry
 and OpenAPI. Frontend 891 and backend 312 unit tests, both typechecks, lint and build re-run
 to confirm the implementation is untouched.
+
+## SRS §0 revision history completed for 111–113; 109 and 110 left unresolved (2026-08-30)
+
+**Revision-history reconciliation only.** `docs/SRS.md` is the only file changed, the diff is
+**purely additive** (8 insertions, 0 deletions) and every insertion is in §0's revision list.
+No requirement text elsewhere in the document was touched.
+
+### Three entries reconstructed, each from an authoritative record
+
+- **Revision 111** — account deletion as de-identification of a surviving row. From
+  `SRS-PROPOSAL-R111.md`, whose status line records **DESIGN RATIFIED by the Document Owner,
+  2026-08-27**, plus its §6a *«Who may delete whom»* clarification of 2026-08-28, which the
+  document itself marks AUTHORITATIVE and overriding.
+- **Revision 112** — global account administration is Super Admin's; `GET /admin/directory`
+  is the smaller operational read. From the same Owner clarification and
+  `SRS-PROPOSAL-R112.md` §§3–4, and from the wording §5.6/§5.7 and TD-2 have already carried
+  since 2026-08-28.
+- **Revision 113** — partners as Super-Admin-owned reference data. From
+  `SRS-PROPOSAL-R113.md` and §5.7's existing text.
+
+Each entry carries a parenthetical saying it was recorded by this sweep, naming its source,
+and stating that nothing is added, reinterpreted or widened. Clauses were **trimmed to what
+the repository actually records**: a draft sentence calling the partner catalogue
+*«database-authoritative after initialization»* was cut to the recorded decision — *ship
+empty and enter them through the new screen* (`CHANGES.log`) — because the broader phrasing
+appears in no repository document.
+
+### 109 and 110 are NOT ratified and no entries were written
+
+`SRS-PROPOSAL-R109.md` and `SRS-PROPOSAL-R110.md` are **drafts awaiting the Document Owner**,
+as `docs/README.md` states, and neither number appears anywhere in `docs/SRS.md`. The
+behaviour each describes is implemented, which is why the numbers are spoken for — but **no
+Owner decision exists to reconstruct from**, and writing one would be inventing a decision.
+§0 now carries a short factual note recording exactly that, so the gap reads as reserved
+rather than lost.
+
+### One discrepancy found and NOT fixed, because fixing it would change a requirement
+
+§5.7's Revision-113 text still reads *«no logo, URL, description or contact»*, while a later
+Owner instruction (2026-08-28) added `Partner.description` end to end — schema, API, both
+DTOs, the form, the management table and the public landing section. **The implementation is
+what the Owner asked for; the SRS sentence predates it.** Correcting it is a requirement
+change and therefore the Document Owner's, so it is reported here rather than edited.
