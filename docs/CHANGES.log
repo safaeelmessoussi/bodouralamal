@@ -1729,3 +1729,43 @@ was entered by a person. The harness's stray run had also **published** eleven d
 into year 1448 before that. The table is now empty. **Nothing outside local development was
 touched** — no staging, no Production — but if any Hijri months had been recorded by hand in
 this database, they are gone and must be re-entered.
+
+## SRS Revision 114 — recording what was already approved and shipped (2026-08-30)
+
+**Documentation reconciliation, authorised by the Document Owner.** No implementation
+changed; `docs/SRS.md` is the only modified file. It records the behaviour shipped in
+`fca3b2e` so the SRS, TD-3, the CI registry, OpenAPI and the code all say the same thing.
+
+- **R88.2's reservation is superseded**, and marked so **at its source** as well as in the
+  new revision — R88 clause (2) and the two sentences in R106 that said capabilities stay
+  the administration's now carry their supersession inline, so the paragraphs cannot
+  disagree with each other. R88 clause (3) — *capability is not authorization* — is
+  untouched and is cited as the condition on which the grant rests.
+- **The planning-metadata rule is stated normatively**: a declaration grants no scheduling,
+  assignment, administrative, Quran or other operational authority; authority is an
+  assignment. The three properties that hold it there — no `{id}` in the route, two
+  `.strict()` routes each refusing the other's field, `self_service: true` in the audit —
+  are recorded as normative rather than as implementation detail.
+- **New TD-3.14 lists all six teaching-profile routes together.** They had been specified
+  only in the prose of Revisions 88, 90 and 106, which is why the registry carried them on
+  revision authority with no block to point at.
+- **`POST /admin/hijri-calendar/{year}/import` joins TD-3.4**, and **Revision 32(2) is
+  narrowed at its source rather than contradicted**: an importer *of the official Ministry
+  calendar* remains absent and post-MVP, because its reasoning — there is no machine-readable
+  source — is still true. The baseline is a different route for a different thing. §10.1's
+  entry is retitled to say which of the two it describes.
+- **Fills missing months only, never updates, drafts, provenance retained, Super Admin
+  authoritative** — all four recorded, with the reasoning that *never update* is stated
+  instead of *do not overwrite a correction* because any test of whether a human touched a
+  row can be got wrong.
+- **§7's entity text corrected**: it claimed every row is written through `recordMonthStart`,
+  which the insert-only prefill does not do. It now says `recordMonthStart` is the single
+  path by which a month is created by hand or **changed**, and explains why an insert-only
+  writer needs no optimistic locking.
+- **TD-2 gains two rows** (the Teacher's own capabilities; the Super-Admin-only prefill) and
+  the R106 availability row is trimmed of the claim R114 supersedes.
+
+Verified: all 28 CI guards, `check-openapi-td3` (0 undocumented), `check-openapi-current`,
+doc links, and a direct cross-check that both new routes appear in the SRS, the TD-3 registry
+and OpenAPI. Frontend 891 and backend 312 unit tests, both typechecks, lint and build re-run
+to confirm the implementation is untouched.
