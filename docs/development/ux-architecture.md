@@ -2052,6 +2052,36 @@ Measured, and **proved against the defect in the same page**: uncapped the note
 is one line of 648px in a 1105px table; with the prose cap restored on the same
 element it becomes two lines at 620px.
 
+## BD · An empty table keeps its columns
+
+**Owner, 2026-08-30.** `DataTable` rendered `EmptyState` / `NoResultsState`
+**instead of** the table. A management page with nothing in it therefore showed
+a paragraph and no columns at all, which loses three things at once:
+
+- **what the page holds.** The headers are the page's description of its own
+  data; without rows they are the *only* description left, and that is exactly
+  when a reader most needs it.
+- **the sort controls.** A header that is not rendered takes its button and its
+  `aria-sort` announcement with it, so an empty view cannot be reordered before
+  the rows arrive.
+- **the difference between two situations.** On a filtered table, «nothing
+  here» and «nothing matches» have different next actions, and a bare paragraph
+  standing where the table was does not say which is on screen.
+
+The message now lives in a `<td colSpan>` spanning every column, the grip and
+actions columns included. That is also what makes it correct for a screen
+reader: it is announced **as part of the table it describes**, rather than as
+loose prose beside one.
+
+**Loading and error are deliberately unchanged.** A skeleton already stands in
+for the table's shape, and an error state must not present columns as though
+the read had succeeded — an empty table is a *fact about the data*, while those
+two are facts about the request.
+
+**Fixed once, on the shared component.** Twenty-odd pages render a `DataTable`;
+had this been done page by page it would have been done differently on each,
+and missed on the next one added — the failure mode rule C exists for.
+
 ## BC · A dialog does not re-fetch what its caller handed it
 
 **The defect, 2026-08-29.** `حفظ` on `تسجيل مستفيدة` did nothing at all — not a
@@ -2212,6 +2242,7 @@ system's internals, break on every restyle, and catch nothing.
 | [`scripts/dev/browser/verify-occurrence-details.mjs`](../../scripts/dev/browser/verify-occurrence-details.mjs) | **AT** — the dialog opened from public, back-office, مؤطرة and beneficiary calendars on a real Session, with both sections present and every focused read a 200 |
 | [`components/scheduling/staffing-periods.test.ts`](../../frontend/src/components/scheduling/staffing-periods.test.ts) | **AS** — a blank date is open-ended and converted once at the wire · many assistants and one person on several rows · a new row defaults to assistant · each interval refusal has its own Arabic sentence · **BB** — the schedule's bounds reach the rows, the marking is derived (no `useState`/`useEffect`) on **both** date fields, and Save refuses through the same one rule |
 | [`lib/staffing-period.test.ts`](../../frontend/src/lib/staffing-period.test.ts) | **BB** — the client mirror of `withinScheduleLife`: the Owner's 29-vs-30 غشت case, the anchor day accepted, overlap rather than containment, an untouched row never marked, and `''` behaving as ±∞ rather than as an empty string |
+| [`ui/empty-table.test.tsx`](../../frontend/src/components/ui/empty-table.test.tsx) | **BD** — an empty `DataTable` still renders `<table>` and both headers, keeps its sort buttons and `aria-sort`, spans every column with the message (actions column counted), still tells «nothing here» from «nothing matches», and does **not** show columns while loading or failed |
 | [`pages/admin/enrolment-save.test.ts`](../../frontend/src/pages/admin/enrolment-save.test.ts) | **BC/AH** — the enrolment dialog takes the row rather than an id it re-resolves, never derives the branch from a directory search, falls back through group → role → existing enrolment, gates حفظ only on the Level, and turns the service's own reasons into Arabic |
 | [`scripts/dev/browser/verify-effective-staffing.mjs`](../../scripts/dev/browser/verify-effective-staffing.mjs) | **AS/R91** — the replacement driven as four identities: dated rows on the form, Safa twice, per-date occurrences, four different answers on one class at one moment, and a handover that leaves the past alone |
 | [`components/scheduling/staff-picker.test.ts`](../../frontend/src/components/scheduling/staff-picker.test.ts) | **AR/C** — all three sections delegate to the shared picker and none hand-rolls a checkbox list · exactly one `filter`, and nothing `disabled` by a warning · every warning kind has its own catalogue key · no warning string reads as a prohibition |

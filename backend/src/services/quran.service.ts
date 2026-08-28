@@ -549,23 +549,62 @@ export async function listQuranStudents(
   const isSuper = actor.roles.includes('super_admin');
   const isAdmin = actor.roles.includes('admin');
 
+  /**
+   * **Who counts as a مستفيدة, for an administrator** (Owner, 2026-08-30).
+   *
+   * Two rules, united — the same union التسجيلات uses, and for the same reason.
+   * The Owner's rule is *every account holding the Student role*; R79.7's is the
+   * durable `is_beneficiary` fact, which exists because **role membership does
+   * not identify a beneficiary**: a مؤطِّرة may study, and §4.3's minors hold no
+   * role at all. Either alone drops people from the screen that records their
+   * memorisation.
+   *
+   * It is **not** «every account»: this read was `{ deletedAt: null }` once, and
+   * a Super Admin's selector offered parents, مؤطِّرات and administrators as
+   * candidates for memorisation entry. That correction stands.
+   */
+  const isStudent: Prisma.UserWhereInput = {
+    deletedAt: null,
+    OR: [{ isBeneficiary: true }, { branchRoles: { some: { deletedAt: null, role: { name: 'student' } } } }],
+  };
+
   let where: Prisma.UserWhereInput;
   if (isSuper) {
-    // **A beneficiary, not a User** (§C4/§C25). This read was `{ deletedAt:
-    // null }` — every account on the platform, so a Super Admin's Quran
-    // selector offered parents, مؤطِّرات and administrators as candidates for
-    // memorisation entry. The educational context is the enrolment, and R79's
-    // durable marker is what says somebody is a مستفيدة at all.
-    where = { deletedAt: null, isBeneficiary: true, levelEnrollments: { some: { deletedAt: null } } };
+    /**
+     * **The enrolment requirement is withdrawn for an administrator** (Owner,
+     * 2026-08-30). It was `levelEnrollments: { some: … }`, so the selector
+     * offered only مستفيدات who already held a placement — and the one person
+     * who most needs finding on this screen is the one whose record is empty.
+     *
+     * **The domain invariant is untouched.** `assertLevelCurriculum` still
+     * refuses `LEVEL_NOT_ENROLLED`: progress is recorded against a Level's
+     * curriculum, so a مستفيدة not enrolled in that Level cannot have progress
+     * in it. What changed is that she can be *found* and the screen can *say*
+     * that, instead of her being invisible with no explanation.
+     */
+    where = isStudent;
   } else if (isAdmin) {
     const branches = actor.roleScopes.find((r) => r.role === 'admin')?.branches ?? null;
-    where = {
-      deletedAt: null,
-      isBeneficiary: true,
-      levelEnrollments: {
-        some: { deletedAt: null, ...(branches === null ? {} : { branchId: { in: branches } }) },
-      },
-    };
+    /**
+     * **A branch-scoped Admin still sees only her branches.** Scope is not
+     * widened by this change — but it can no longer be read from an enrolment
+     * alone, since a مستفيدة may now appear with none. Her role assignment
+     * answers it for exactly those people, so both are accepted.
+     */
+    where =
+      branches === null
+        ? isStudent
+        : {
+            AND: [
+              isStudent,
+              {
+                OR: [
+                  { levelEnrollments: { some: { deletedAt: null, branchId: { in: branches } } } },
+                  { branchRoles: { some: { deletedAt: null, branchId: { in: branches } } } },
+                ],
+              },
+            ],
+          };
   } else {
     const subjectId = await quranSubjectId(prisma);
     if (subjectId === null) return { students: [], levels: [] };

@@ -246,6 +246,12 @@ async function clear(): Promise<void> {
   if (ids.length > 0) {
     await prisma.auditLog.deleteMany({ where: { actorUserId: { in: ids } } });
     await prisma.trash.deleteMany({ where: { deletedById: { in: ids } } });
+    // **RESTRICT on `user`, so it goes before the person** (2026-08-30). The
+    // suite never granted a role until the Owner's «all students» rule made a
+    // Student-role account part of the population under test — and one row here
+    // silently blocked the user delete, which the all-table snapshot caught as
+    // `user 30 → 32` while every test passed.
+    await prisma.userBranchRole.deleteMany({ where: { userId: { in: ids } } });
     await prisma.user.deleteMany({ where: { id: { in: ids } } });
   }
   const levels = await prisma.level.findMany({
@@ -698,6 +704,59 @@ describe("§C25 — the administration reaches beneficiaries, not users", () => 
       entry(her, levelOne, AL_FATIHA, 1, 7),
     );
     expect(saved.coverage_percent).toBe(100);
+  });
+
+  it("offers a مستفيدة with NO enrolment yet — and the write still refuses her level", async () => {
+    /**
+     * **Owner, 2026-08-30.** The selector required an enrolment, so the one
+     * person who most needs finding on this screen — a مستفيدة whose record is
+     * empty — was invisible, with nothing saying why.
+     *
+     * She is now offered. **The domain invariant is untouched**: progress is
+     * recorded against a Level's curriculum, so `assertLevelCurriculum` still
+     * refuses `LEVEL_NOT_ENROLLED`. Both halves are asserted together, because
+     * widening the list without keeping the refusal would be exactly the
+     * "expose the students by bypassing the invariant" the Owner ruled out.
+     */
+    const unplaced = await person("مستفيدة بلا تسجيل");
+
+    const scope = await listQuranStudents(prisma, superAdmin());
+    const row = scope.students.find((s) => s.id === unplaced);
+    expect(row).toBeDefined();
+    // No enrolment means no Level to record against — the screen says so
+    // rather than presenting a form that cannot be submitted.
+    expect(row!.level_ids).toEqual([]);
+
+    const denied = await failure(() =>
+      logProgress(prisma, superAdmin(), entry(unplaced, levelOne, AL_FATIHA, 1, 3)),
+    );
+    expect(denied.code).toBe("NOT_FOUND");
+    expect(denied.details?.["reason"]).toBe("LEVEL_NOT_ENROLLED");
+  });
+
+  it("offers a Student-role account that carries no beneficiary marker", async () => {
+    // R79.7's fact and the Owner's role rule are BOTH accepted — the same union
+    // التسجيلات uses. Either alone drops people from the screen that records
+    // their memorisation.
+    const byRole = await prisma.user.create({
+      data: { sex: "female", nameArabic: `${TAG} بالدور فقط`, accountStatus: "active" },
+    });
+    const role = await prisma.role.findUniqueOrThrow({ where: { name: "student" } });
+    await prisma.userBranchRole.create({
+      data: { userId: byRole.id, roleId: role.id, branchId: branchA },
+    });
+
+    const ids = (await listQuranStudents(prisma, superAdmin())).students.map((s) => s.id);
+    expect(ids).toContain(byRole.id);
+  });
+
+  it("still refuses staff and administrators — «all students» is not «all accounts»", async () => {
+    // The correction that stands: this read was `{ deletedAt: null }` once, and
+    // the selector offered parents, مؤطِّرات and administrators as candidates
+    // for memorisation entry.
+    const she = await person("مؤطرة بلا تسجيل");
+    const ids = (await listQuranStudents(prisma, superAdmin())).students.map((s) => s.id);
+    expect(ids).not.toContain(she);
   });
 
   it("an Admin reaches their own branches only, and the difference is preserved", async () => {

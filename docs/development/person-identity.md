@@ -178,6 +178,33 @@ inherits a table whose parts were all confirmed by somebody.
 The derivation is pinned by `lib/person-name.test.ts` and by an HTTP test that
 asserts the stored row is **still NULL** after the read that derived from it.
 
+### Sorting by either part, without backfilling
+
+The same NULL parts that broke the edit dialog also broke *ordering*. A table
+sorted by `last_name_arabic` would group every pre-Revision-40 row under NULL —
+which is not «sorted by family name», it is «sorted by whether anybody has
+edited this person yet».
+
+Ordering has to be a Prisma `orderBy` (`lib/sorting.ts` is emphatic that the
+database sorts, because TD-10 paginates), and Prisma cannot order by an
+expression. So the derivation is expressed **once more, in SQL**, as two
+`GENERATED ALWAYS … STORED` columns — `first_name_sort` and `last_name_sort` —
+indexed under `ar-x-icu`.
+
+Three properties keep them from becoming a second source of truth:
+
+- **Nothing can write them.** Postgres rejects any attempt, so they cannot drift
+  from `first_name_arabic` / `last_name_arabic` / `name_arabic`.
+- **They are never projected into a DTO.** What a reader sees still comes from
+  `splitComposedName`, so the wire carries one answer to *what is her family
+  name*.
+- **They are not contract fields.** `sort_by=first_name_sort` is refused like
+  any other name outside the allow-list — the column is an implementation
+  detail, and a test asserts the refusal.
+
+Revision 40's refusal is untouched: nothing is backfilled, and the stored parts
+stay NULL until an administrator confirms them.
+
 ## The guards
 
 | Guard | What it pins |

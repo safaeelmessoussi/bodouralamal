@@ -1590,3 +1590,79 @@ RESTRICT. Corrected to `student_teaching_group`, and its trap is now armed
 **before** the first row is created: a seed step failing under `set -e` had
 already exited once with rows it had made. Proven by counting rows either side —
 `users 29→29`, `enrolments 5→5`.
+
+## Name sorting, empty tables, and who an administrator may record for (2026-08-30)
+
+### Both name parts sort, on all three tables
+
+المستخدمون · المؤطِّرات · المستفيدات order by الاسم الشخصي or الاسم العائلي
+independently. The trap: ordering by the stored parts would collect every
+pre-Revision-40 row under NULL, because those revisions **refused a backfill**
+and the displayed value comes from `splitComposedName` on read. That is an order
+by *whether anybody has edited this person*.
+
+Two `GENERATED ALWAYS … STORED` columns carry the same derivation in SQL,
+indexed `ar-x-icu`. Nothing can write them, they are never projected into a DTO,
+and naming one in `sort_by` is refused like any other non-contract field — all
+three asserted. المستفيدات sorts client-side through the shared `sort-rows`
+helper, which is R76.2's stated exception: its rows are assembled from three
+reads and no endpoint could order them.
+
+### An empty table keeps its columns — new rule BD
+
+`DataTable` rendered the empty state *instead of* the table, losing the headers
+(the page's only description of its data when there are no rows), the sort
+controls, and the difference between «nothing here» and «nothing matches». The
+message now spans the body in a `colSpan` cell, which is also what makes it
+announce as part of its table. Loading and error are unchanged deliberately:
+those are facts about the request, not about the data. **Fixed once on the
+shared component** — twenty-odd pages inherit it.
+
+### إدخال الحفظ offers every مستفيدة, not only the placed ones
+
+The roster required `is_beneficiary` **and** an existing enrolment, so the one
+person who most needs finding on that screen — the مستفيدة whose record is empty
+— was invisible with nothing saying why. The population is now the same union
+التسجيلات uses (Student role ∪ R79.7's durable fact), which is **not** «every
+account»: parents, مؤطِّرات and administrators stay out, as the §C25 correction
+established.
+
+**The domain invariant is untouched.** `assertLevelCurriculum` still refuses
+`LEVEL_NOT_ENROLLED` — progress is recorded against a Level's curriculum — and
+the test asserts the widened list and the preserved refusal *together*, because
+widening without keeping the refusal is precisely the bypass the Owner ruled
+out. A branch-scoped Admin's reach is unchanged; it simply can no longer be read
+from an enrolment alone, so her role assignment answers it for the unplaced.
+
+The screen's «no curriculum» note now names both causes it can have and the page
+that fixes each.
+
+### نقاط الامتحانات — the population was already right; the silence was not
+
+Investigated rather than assumed. The sheet's rows are the exam's audience —
+students enrolled in its Level at its Branch — which **is** «where the exam
+context permits», with no narrowing beyond it, so nothing was widened.
+
+What was actually wrong: the only exam in the database is a pre-R58 sitting
+carrying no branch and no subject. The service refuses it deliberately
+(`EXAM_INCOMPLETE`; resolving Level-wide would put other branches' students on
+the sheet) — and **that reason was mapped nowhere on the client**, so it arrived
+as «تعذّر التحميل». An empty screen with no student and no explanation. It now
+says what is wrong with the exam and which screen fixes it.
+
+### Two fixture leaks the snapshot caught
+
+`quran-entry` never deleted `user_branch_role`, which RESTRICTs the user delete;
+it had never granted a role until the Owner's «all students» rule made a
+Student-role account part of the population under test. Caught as `user 30 → 32`
+while all 29 tests passed.
+
+Also: the previous commit's `postinstall: prisma generate` broke the Docker
+build — the deps stage runs `npm ci` before the schema is copied. It now passes
+`--ignore-scripts`, and the build stage generates explicitly as it already did.
+
+### NOT DELIVERED in this batch
+
+**Items 5 (التقويم الهجري prefill) and 6 (teacher-managed المواد/الفئات on
+`/teacher/availability`) are not implemented.** No partial code for either was
+committed. They are described in the batch request and remain open.

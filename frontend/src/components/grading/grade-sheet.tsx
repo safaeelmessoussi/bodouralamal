@@ -73,6 +73,15 @@ export function GradeSheetView({
   const [state, setState] = useState<'loading' | 'ready' | 'error' | 'forbidden'>('loading');
   const [notice, setNotice] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  /**
+   * **Why the sheet could not be opened, when the server said why**
+   * (2026-08-30). `EXAM_INCOMPLETE` — a pre-R58 sitting naming no branch and no
+   * subject — was mapped nowhere on the client, so the one refusal that has a
+   * concrete cause and a concrete fix arrived as «تعذّر التحميل». The reader saw
+   * an empty screen and no student, and nothing said the exam itself was the
+   * problem rather than her scope or the data.
+   */
+  const [reason, setReason] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setState('loading');
@@ -85,6 +94,11 @@ export function GradeSheetView({
     } catch (error) {
       // The server's refusal is rendered as a refusal — §4.4c is enforced there
       // and this screen reports it rather than pre-empting it.
+      setReason(
+        error instanceof ApiError && error.details['reason'] === 'EXAM_INCOMPLETE'
+          ? t('admin.grades.examIncomplete')
+          : null,
+      );
       setState(error instanceof ApiError && error.status === 403 ? 'forbidden' : 'error');
     }
   }, [examId, accessToken, onMaxGrade]);
@@ -156,7 +170,7 @@ export function GradeSheetView({
   if (state === 'error' || !sheet) {
     return (
       <p className="state" role="alert">
-        {t('common.loadFailed')}
+        {reason ?? t('common.loadFailed')}
       </p>
     );
   }
