@@ -1,0 +1,11 @@
+# Production-only overlay (SRS §19.1).
+#
+# The checked-in template deliberately defaults to Development for safe local
+# fixture work. A Production host must not depend on an operator remembering to
+# change that line: this overlay makes the runtime tier structural. It contains
+# no secret and changes no routing, port, storage, or resource policy.
+
+services:
+  api:
+    environment:
+      NODE_ENV: production

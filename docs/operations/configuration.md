@@ -35,6 +35,13 @@ if any required variable is missing.**
 | `STORAGE_BASE_URL` | Public storage path prefix. **Presigned URLs are signed against this**, so signatures survive the proxy |
 | `NODE_ENV` | `production` \| `development` \| `test`. Boot validation enumerates exactly these three, so a typo fails fast rather than silently passing the non-production guard |
 
+The origin relationship is validated, not conventional: `PUBLIC_BASE_URL` must be one
+canonical HTTP(S) origin with no path/query/fragment/trailing slash, and `STORAGE_BASE_URL`
+must be exactly its same-origin `/storage` path. Every non-loopback public origin requires HTTPS;
+HTTP is accepted only for Local Development on `localhost`, `127.0.0.1`, or `[::1]`.
+`JWT_SIGNING_KEY` and `ONBOARDING_TOKEN_KEY` must be distinct; reusing one key would collapse
+two separately scoped credential boundaries.
+
 ### Conditional
 
 | Variable | When |
@@ -61,6 +68,10 @@ they need to back up.
 
 Secrets never appear in logs, error payloads, or the API contract. A CI guard fails the
 build if an `.env` file is ever committed.
+
+The checked-in template defaults to `NODE_ENV=development` for Local Development. Release
+hosts do not trust that editable default: `docker-compose.production.yml` forces
+`production`, and the fixture-only Staging overlay forces `development`.
 
 ### One example of that discipline in the compose file
 

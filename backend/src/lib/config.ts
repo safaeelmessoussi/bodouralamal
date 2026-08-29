@@ -176,6 +176,52 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     throw new InvalidEnvValueError(['LOG_LEVEL: `debug` is prohibited in production (TD-13)']);
   }
 
+  const boundaryIssues: string[] = [];
+  let publicOrigin: URL | null = null;
+  try {
+    publicOrigin = new URL(parsed.data.PUBLIC_BASE_URL);
+  } catch {
+    boundaryIssues.push('PUBLIC_BASE_URL: must be an absolute URL');
+  }
+
+  if (publicOrigin !== null) {
+    if (parsed.data.PUBLIC_BASE_URL !== publicOrigin.origin) {
+      boundaryIssues.push(
+        'PUBLIC_BASE_URL: must be one canonical origin with no credentials, path, query, fragment, or trailing slash (§3.1)',
+      );
+    }
+    if (
+      parsed.data.STORAGE_BASE_URL !==
+      `${publicOrigin.origin}/storage`
+    ) {
+      boundaryIssues.push(
+        'STORAGE_BASE_URL: must be the exact same-origin /storage path beneath PUBLIC_BASE_URL (§3.1)',
+      );
+    }
+    const loopback = new Set(['localhost', '127.0.0.1', '[::1]']).has(
+      publicOrigin.hostname,
+    );
+    if (!new Set(['http:', 'https:']).has(publicOrigin.protocol)) {
+      boundaryIssues.push(
+        'PUBLIC_BASE_URL: must use HTTPS, or HTTP on a loopback origin (§3.1, §19.0)',
+      );
+    } else if (publicOrigin.protocol === 'http:' && !loopback) {
+      boundaryIssues.push(
+        'PUBLIC_BASE_URL: a non-loopback origin requires HTTPS (§3.1, §19.0)',
+      );
+    }
+  }
+
+  if (parsed.data.JWT_SIGNING_KEY === parsed.data.ONBOARDING_TOKEN_KEY) {
+    boundaryIssues.push(
+      'ONBOARDING_TOKEN_KEY: must be distinct from JWT_SIGNING_KEY (TD-12, TD-13)',
+    );
+  }
+
+  if (boundaryIssues.length > 0) {
+    throw new InvalidEnvValueError(boundaryIssues);
+  }
+
   /**
    * **R98 — the three LiveKit variables are all-or-nothing** (TD-13).
    *

@@ -28,6 +28,18 @@ function validEnv(
   };
 }
 
+function productionEnv(
+  overrides: Record<string, string | undefined> = {},
+): NodeJS.ProcessEnv {
+  return validEnv({
+    NODE_ENV: "production",
+    BACKUP_TARGET_SSH: "restic@backup.example.com:/srv/bodour",
+    PUBLIC_BASE_URL: "https://platform.example.com",
+    STORAGE_BASE_URL: "https://platform.example.com/storage",
+    ...overrides,
+  });
+}
+
 describe("loadConfig (TD-13 fail-fast)", () => {
   it("returns the typed config when every required variable is present", () => {
     const config = loadConfig(validEnv());
@@ -95,12 +107,7 @@ describe("loadConfig (TD-13 fail-fast)", () => {
     const production = validEnv({ NODE_ENV: "production" });
     expect(() => loadConfig(production)).toThrow(MissingRequiredEnvError);
 
-    const withBackup = loadConfig(
-      validEnv({
-        NODE_ENV: "production",
-        BACKUP_TARGET_SSH: "restic@backup.example.com:/srv/bodour",
-      }),
-    );
+    const withBackup = loadConfig(productionEnv());
     expect(withBackup.BACKUP_TARGET_SSH).toBe(
       "restic@backup.example.com:/srv/bodour",
     );
@@ -110,9 +117,7 @@ describe("loadConfig (TD-13 fail-fast)", () => {
   });
 
   it("rejects LOG_LEVEL=debug in production (TD-13)", () => {
-    const env = validEnv({
-      NODE_ENV: "production",
-      BACKUP_TARGET_SSH: "restic@backup.example.com:/srv/bodour",
+    const env = productionEnv({
       LOG_LEVEL: "debug",
     });
     expect(() => loadConfig(env)).toThrow(InvalidEnvValueError);
@@ -133,5 +138,66 @@ describe("loadConfig (TD-13 fail-fast)", () => {
     expect(() => loadConfig(validEnv({ LOG_LEVEL: "trace" }))).toThrow(
       InvalidEnvValueError,
     );
+  });
+
+  it("requires the one canonical same-origin storage path in every tier (§3.1)", () => {
+    for (const overrides of [
+      { PUBLIC_BASE_URL: "http://localhost/" },
+      { PUBLIC_BASE_URL: "http://localhost/app" },
+      { STORAGE_BASE_URL: "http://storage.example.com/storage" },
+      { STORAGE_BASE_URL: "http://localhost/storage/other" },
+    ]) {
+      expect(() => loadConfig(validEnv(overrides))).toThrow(
+        InvalidEnvValueError,
+      );
+    }
+  });
+
+  it("requires HTTPS at every non-loopback public boundary", () => {
+    expect(() =>
+      loadConfig(
+        productionEnv({
+          PUBLIC_BASE_URL: "http://platform.example.com",
+          STORAGE_BASE_URL: "http://platform.example.com/storage",
+        }),
+      ),
+    ).toThrow(/non-loopback origin requires HTTPS/u);
+
+    expect(() =>
+      loadConfig(
+        validEnv({
+          PUBLIC_BASE_URL: "http://staging.example.com",
+          STORAGE_BASE_URL: "http://staging.example.com/storage",
+        }),
+      ),
+    ).toThrow(/non-loopback origin requires HTTPS/u);
+
+    expect(() =>
+      loadConfig(
+        validEnv({
+          PUBLIC_BASE_URL: "ftp://localhost",
+          STORAGE_BASE_URL: "ftp://localhost/storage",
+        }),
+      ),
+    ).toThrow(/must use HTTPS, or HTTP on a loopback origin/u);
+
+    expect(
+      loadConfig(
+        validEnv({
+          PUBLIC_BASE_URL: "http://[::1]",
+          STORAGE_BASE_URL: "http://[::1]/storage",
+        }),
+      ).PUBLIC_BASE_URL,
+    ).toBe("http://[::1]");
+  });
+
+  it("refuses one signing key reused across access and onboarding tokens", () => {
+    expect(() =>
+      loadConfig(
+        validEnv({
+          ONBOARDING_TOKEN_KEY: "fixture-jwt-signing-key",
+        }),
+      ),
+    ).toThrow(/must be distinct/u);
   });
 });

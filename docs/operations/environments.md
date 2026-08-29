@@ -7,7 +7,7 @@ one.
 
 | Tier | Frontend | Backend / DB / storage | Data | Residency |
 |---|---|---|---|---|
-| **Local Development** | Local Vite dev server | Developer's machine, inside the containerized stack — **the same images as production** | **Fixtures only** | Non-Moroccan hardware permitted, because no real data exists here |
+| **Local Development** | Local Vite dev server | Developer's machine, inside the same containerized architecture with locally built app images | **Fixtures only** | Non-Moroccan hardware permitted, because no real data exists here |
 | **Preview** | **Vercel**, auto-deployed from `develop` | — **calls no real backend** | **Fixture mocks only**; stores nothing | Vercel is outside Morocco — acceptable *only* because it holds no data at all |
 | **Staging** | Served by Nginx from the staging VPS, **same origin as the API**, over HTTPS | Same VPS: the full production-shaped stack | **Fixtures and synthetic records only** | Currently OVH France. Outside Morocco — acceptable *only* because the tier is fixture-only |
 | **Production** | Served by Nginx from the **Moroccan VPS**, same origin as the API | Same VPS: the full stack | **Real data** | Law 09-08: all real data **and backups** on Moroccan infrastructure only |
@@ -23,6 +23,11 @@ validation, nothing more — and **Staging** is a real, full-stack, production-s
 deployment with its own database and object storage.
 
 > **Staging is not a relaxed environment. It is Production with synthetic data.**
+
+The tier is structural in Compose. `docker-compose.production.yml` forces
+`NODE_ENV=production`; `docker-compose.staging.yml` forces `development`, the value that
+permits fixture seeding, and adds its resource ceilings. An operator cannot turn Production
+into a fixture-permitting process by forgetting to edit `.env.example`'s safe local default.
 
 HTTPS, the `HttpOnly; Secure; SameSite=Lax` refresh cookie on its R101 Path, the CSRF
 boundary, same-origin routing, the whole authorization matrix, and the B-01 public-storage
@@ -100,7 +105,8 @@ attribute. The problem simply does not arise there.
 
 ## What development actually runs
 
-The same images as production, through `docker-compose`:
+The same service topology as Production, through `docker-compose`; API and web images are
+built from the working source rather than pulled from GHCR:
 
 ```
 nginx   ← the only container publishing host ports (80, 443)

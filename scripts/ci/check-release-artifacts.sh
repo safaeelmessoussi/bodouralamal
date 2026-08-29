@@ -55,7 +55,7 @@ if grep -Fq 'docker compose build api' "$deployment" ||
   fail 'the deployment runbook must not contain target-host build commands'
 fi
 
-grep -Fq 'compose=(docker compose -f docker-compose.yml -f docker-compose.release.yml)' "$tls_activation" ||
+grep -Fq 'compose=(docker compose -f docker-compose.yml -f docker-compose.release.yml -f docker-compose.production.yml)' "$tls_activation" ||
   fail 'TLS activation must recreate Production Nginx through the release overlay'
 grep -Fq 'compose=(docker compose -f docker-compose.yml -f docker-compose.release.yml -f docker-compose.staging.yml)' "$tls_activation" ||
   fail 'TLS activation must retain the Staging resource overlay'
@@ -71,5 +71,10 @@ if grep -Fq 'nginx/conf.d/default.conf <<' "$tls_activation" ||
   grep -Fq '> nginx/conf.d/default.conf' "$tls_activation"; then
   fail 'TLS activation must not dirty the tracked deployment checkout'
 fi
+
+grep -Fq 'NODE_ENV: production' "$repo_root/docker-compose.production.yml" ||
+  fail 'the Production runtime tier must not depend on an editable .env default'
+grep -Fq 'NODE_ENV: development' "$repo_root/docker-compose.staging.yml" ||
+  fail 'the fixture-only Staging tier must be selected structurally'
 
 printf 'release-artifacts guard: exact-commit publication and no-build deployment verified\n'

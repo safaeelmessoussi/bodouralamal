@@ -33,7 +33,7 @@ case "$TIER" in
     compose=(docker compose -f docker-compose.yml -f docker-compose.release.yml -f docker-compose.staging.yml)
     ;;
   production)
-    compose=(docker compose -f docker-compose.yml -f docker-compose.release.yml)
+    compose=(docker compose -f docker-compose.yml -f docker-compose.release.yml -f docker-compose.production.yml)
     ;;
   *)
     echo "usage: $0 <domain> <staging|production>" >&2

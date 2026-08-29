@@ -7,11 +7,12 @@
 # It is a SEPARATE file, never `docker-compose.override.yml`, for the same
 # reason the dev overlay is: Compose must not merge it by accident.
 #
-# WHAT THIS FILE MAY CONTAIN: resource ceilings for a small VPS. Nothing else.
-# It publishes no port, relaxes no rate limit, substitutes no security setting
-# and holds no secret — R104 clause (3) makes Staging production-shaped in every
-# particular, so an overlay that changed behaviour would be changing the thing
-# the environment exists to rehearse.
+# WHAT THIS FILE MAY CONTAIN: the fixture-permitting tier value required by
+# R104 clause (4), plus resource ceilings for a small VPS. It publishes no port,
+# relaxes no rate limit, substitutes no security setting and holds no secret.
+# R104 clause (5) limits NODE_ENV to the fixture firewall, the Production-only
+# backup-target requirement and the Production debug-log ban; it must not alter
+# the security behaviour Staging exists to rehearse.
 #
 # The pins here are HARD ceilings on top of the soft budgets the base file
 # already sets (`NODE_OPTIONS --max-old-space-size=768`, `GOMEMLIMIT=512MiB`,
@@ -24,6 +25,10 @@
 
 services:
   api:
+    # Staging is fixture-only and this is the value that permits its fixture
+    # seed. No security policy branches on NODE_ENV (§19.0).
+    environment:
+      NODE_ENV: development
     mem_limit: 1024m
     memswap_limit: 1536m
 

@@ -35,7 +35,8 @@ test -f infra.env || cp infra.env.example infra.env
 #    SUPER_ADMIN_EMAIL is needed for the FIRST deployment only
 
 # 3  Pull the two exact-commit artifacts. A missing image stops deployment.
-docker compose -f docker-compose.yml -f docker-compose.release.yml pull api nginx
+docker compose -f docker-compose.yml -f docker-compose.release.yml \
+  -f docker-compose.production.yml pull api nginx
 test "$(docker image inspect --format '{{ index .Config.Labels \"org.opencontainers.image.revision\" }}' \
   "ghcr.io/safaeelmessoussi/bodouralamal-api:$BODOUR_RELEASE_TAG")" = "$BODOUR_RELEASE_TAG"
 test "$(docker image inspect --format '{{ index .Config.Labels \"org.opencontainers.image.revision\" }}' \
@@ -44,8 +45,10 @@ test "$(docker image inspect --format '{{ index .Config.Labels \"org.opencontain
 # 4  Existing deployment: stop the legacy cookie issuer, then start data services
 #    R101's next migration invalidates every live refresh session. The old API
 #    must not mint another narrow-path cookie after that one-time sweep.
-docker compose -f docker-compose.yml -f docker-compose.release.yml stop nginx api
-docker compose -f docker-compose.yml -f docker-compose.release.yml up --no-build -d db minio
+docker compose -f docker-compose.yml -f docker-compose.release.yml \
+  -f docker-compose.production.yml stop nginx api
+docker compose -f docker-compose.yml -f docker-compose.release.yml \
+  -f docker-compose.production.yml up --no-build -d db minio
 
 # 5  Migrate
 #    ON AN EXISTING DEPLOYMENT: pg_dump IMMEDIATELY BEFORE this line.
@@ -54,18 +57,22 @@ docker compose -f docker-compose.yml -f docker-compose.release.yml up --no-build
 #    already assigns one address to two Users. Follow the migration runbook;
 #    never clear or merge an identity merely to make deploy green.
 docker compose -f docker-compose.yml -f docker-compose.release.yml \
+  -f docker-compose.production.yml \
   run --rm api npx prisma migrate deploy
 
 # 6  Seed — idempotent, safe to re-run
 docker compose -f docker-compose.yml -f docker-compose.release.yml \
+  -f docker-compose.production.yml \
   run --rm api npm run seed:production
 
 # 7  Start the rest
 docker compose -f docker-compose.yml -f docker-compose.release.yml \
+  -f docker-compose.production.yml \
   --profile production up --no-build -d      # api, nginx, certbot
 
 #    FIRST DEPLOYMENT ONLY: issue the certificate through the live ACME path.
 docker compose -f docker-compose.yml -f docker-compose.release.yml \
+  -f docker-compose.production.yml \
   run --rm --entrypoint certbot certbot certonly \
   --webroot -w /var/www/certbot -d <domain>
 
@@ -96,10 +103,12 @@ publishes two GHCR images under **only the exact 40-character source commit**. E
 the same value in `org.opencontainers.image.revision`. There is no mutable `latest` tag and
 no deployment credential in CI.
 
-`docker-compose.release.yml` is the mandatory Staging/Production overlay. It refuses an
-absent `BODOUR_RELEASE_TAG`, selects both exact artifacts, and deployment always passes
-`--no-build`. A missing image or mismatched revision label is a hard stop. Building on the
-host is not a fallback.
+`docker-compose.release.yml` is the mandatory shared release overlay. It refuses an absent
+`BODOUR_RELEASE_TAG` and selects both exact artifacts. The deployment also selects exactly
+one tier overlay: `docker-compose.production.yml` forces `NODE_ENV=production`, while
+`docker-compose.staging.yml` forces the fixture-permitting `development` value plus its
+resource ceilings. Deployment always passes `--no-build`. A missing image or mismatched
+revision label is a hard stop. Building on the host is not a fallback.
 
 The web image contains the static Vite output. The client uses same-origin API and storage
 paths and no `import.meta.env`, so one artifact is valid for every environment; nothing
@@ -133,7 +142,8 @@ the new cookie.
 ## Rollback
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.release.yml down
+docker compose -f docker-compose.yml -f docker-compose.release.yml \
+  -f docker-compose.production.yml down
 # restore the latest complete recovery point per the runbook
 ```
 
@@ -215,6 +225,7 @@ Run it explicitly with the same release overlay; it is never part of deploy:
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.release.yml \
+  -f docker-compose.production.yml \
   run --rm api npx tsx scripts/reconcile-reference-data.ts
 ```
 
@@ -251,17 +262,20 @@ no others:
 
 `NODE_ENV=development` changes **no** security behaviour — see
 [Environments § `NODE_ENV`](environments.md#node_env-does-not-change-security-behaviour).
-Step 6 there is followed by `npm run seed:fixtures`, which is the only added step.
+For every Compose command in the pipeline, replace `-f docker-compose.production.yml` with
+`-f docker-compose.staging.yml`; never combine the two tier overlays. Step 6 is then followed
+by `npm run seed:fixtures`, which is the only added operation.
 
 **Never copy a development database or its MinIO objects into Staging.** A developer's
 database is not fixture data.
 
-Three committed pieces make the Staging host reproducible from Git, and none holds a secret:
+Four committed pieces make release hosts reproducible from Git, and none holds a secret:
 
 | File | What it is |
 |---|---|
 | `docker-compose.release.yml` | Selects the exact CI-published API and web artifacts; an absent commit tag is a configuration error |
-| `docker-compose.staging.yml` | Hard container memory ceilings for a small VPS, on top of the soft budgets the base file already sets. It publishes no port, relaxes no limit and substitutes no security setting — an overlay that changed behaviour would be changing the very thing Staging exists to rehearse |
+| `docker-compose.production.yml` | Forces the Production runtime tier instead of trusting `.env.example`'s safe Development default |
+| `docker-compose.staging.yml` | Selects the fixture-permitting tier value required by Revision 104 and adds hard container memory ceilings for a small VPS. It publishes no port, relaxes no limit and substitutes no security setting; `NODE_ENV` controls only the three Revision-104 behaviours named above |
 | `scripts/deploy/enable-tls.sh` | Generates only the ignored host-specific TLS block, refuses to run before the certificate exists, and recreates Nginx through the same exact-release plus environment overlays; the committed release HTTP block already preserves ACME and redirects everything else |
 
 ```bash

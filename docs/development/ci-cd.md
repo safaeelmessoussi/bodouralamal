@@ -223,9 +223,9 @@ On a green `develop` push, the release job authenticates to GHCR with GitHub's e
 workflow token, builds the backend and the environment-independent web artifact from that
 clean checkout, and publishes each under the exact 40-character `GITHUB_SHA`. It creates no
 mutable `latest` tag and holds no VPS, DNS, TLS, OAuth, database, or deployment credential.
-The target host must pull that exact tag through `docker-compose.release.yml` and use
-`--no-build`; the frontend build's ~2 GB peak remains the reason host compilation is
-prohibited.
+The target host must pull that exact tag through `docker-compose.release.yml`, select exactly
+one of the Production/Staging tier overlays, and use `--no-build`; the frontend build's ~2 GB
+peak remains the reason host compilation is prohibited.
 
 Pushing to `develop` triggers an automatic **Vercel** build of the frontend in a
 fixture-pointing configuration that calls no real backend.

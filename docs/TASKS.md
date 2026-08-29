@@ -1295,11 +1295,17 @@ was hiding behind it: the run went green on the first attempt.
 - [ ] §18 Content, Consent & Storage checklist green
 
 ## M7 — Hardening & Launch Data
+- [x] **Production configuration boundary** — the Production overlay structurally forces
+  `NODE_ENV=production` while Staging structurally remains fixture-permitting; boot rejects
+  non-canonical/cross-origin storage routing, non-HTTPS external origins, and reuse of one
+  signing key for access and onboarding tokens. The checked-in Development default can no
+  longer silently become the Production runtime tier.
 - [x] **Exact-commit release artifacts** — after all four existing CI jobs pass on a
   `develop` push, CI publishes API and environment-independent web images to GHCR under the
   immutable 40-character commit tag and revision label. Staging/Production select both
-  through `docker-compose.release.yml`; a missing tag/image stops the run and documented
-  deployment uses `--no-build`. This closes the repository-side artifact gap, not the open
+  through `docker-compose.release.yml` plus exactly one explicit tier overlay; a missing
+  tag/image stops the run and documented deployment uses `--no-build`. This closes the
+  repository-side artifact gap, not the open
   host/access, object-store, backup, or clean-host rehearsal blockers in the
   [readiness ledger](operations/deployment-readiness.md).
 - [~] **P0.1 object-store security** — the affected final MinIO OSS pin is launch-blocking;

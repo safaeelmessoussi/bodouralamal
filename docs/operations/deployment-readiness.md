@@ -28,7 +28,7 @@ Staging and current `develop` are different facts:
 | Application | One Node/Express container; pg-boss workers run in the API process |
 | Data | PostgreSQL 18.4 named volume; migrations are forward-only |
 | Storage | Three internal MinIO buckets: public, private, recording staging; current pin remains release-blocked by the [object-store decision](../architecture/storage.md#owner-decision-required--object-store) |
-| Web | One environment-independent Vite bundle served by Nginx; API and storage remain same-origin paths |
+| Web | One environment-independent Vite bundle served by Nginx; API and storage are boot-validated as exact same-origin paths |
 | TLS | Certbot webroot renewal plus periodic Nginx reload; activation remains a host operation |
 | Persistence | PostgreSQL, object storage, Certbot configuration, and ACME webroot are named volumes |
 | Recovery | Encrypted host-scoped recovery-point tooling passes a disposable drill; the remote target, retention, scheduling, alerting, and realistic host drill remain open |
@@ -44,6 +44,7 @@ Staging and current `develop` are different facts:
 | **EXTERNAL ACCESS REQUIRED** | Production VPS, DNS, TLS issuance access, Google OAuth Production credentials, and GHCR read authority are not available in this workspace | Supply only those external inputs; never commit them |
 | **OPEN** | Clean-host deployment and rollback have not been rehearsed end to end for the current commit | Execute [the deployment pipeline](deployment.md#the-pipeline) from a clean VPS, including fresh migration/seed, health, storage, browser smoke, backup, and restore |
 | **IMPLEMENTED — AWAITS FIRST CI PUBLICATION** | Deployable images previously did not exist | CI now publishes API and web images only after all four existing jobs pass, tagged by the exact 40-character commit; the release overlay refuses an absent tag and deployment uses `--no-build` |
+| **IMPLEMENTED** | The checked-in environment template defaults to Development | Explicit Production/Staging overlays force the intended runtime tier; boot refuses non-HTTPS external and non-canonical/cross-origin storage URLs |
 
 ## BLOCKS REAL USERS
 
