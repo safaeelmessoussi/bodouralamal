@@ -1320,9 +1320,11 @@ was hiding behind it: the run went green on the first attempt.
   command failure with a bounded timeout; a running Node process is not called ready. A separate
   isolated Production-mode drill now applies all migrations, executes and byte-compares the real
   seed twice, proves the clean initial inventory and internal MinIO policies, loads the actual TLS
-  Nginx edge, then stops MinIO and requires HTTPS `503` plus Docker `unhealthy` before recovery.
+  Nginx edge, drives the built login/public routes in a real anonymous Chrome session without
+  fixture authentication, then stops MinIO and requires HTTPS `503` plus Docker `unhealthy` before
+  recovery. The drill is now a sixth hosted verification job and release publication waits for it.
   This closes the repository-side bootstrap evidence, not the still-open real-VPS certificate,
-  resource-budget, backup/restore and rollback rehearsal.
+  authenticated Staging, resource-budget, backup/restore and rollback rehearsal.
 - [x] **Bounded graceful API shutdown** — SIGTERM now closes HTTP and stops pg-boss polling
   concurrently; active handlers have 105 seconds to finish or return durably to retry, inside a
   two-minute Docker grace period. The Production drill asserts the resolved Compose value, and
@@ -1354,7 +1356,7 @@ was hiding behind it: the run went green on the first attempt.
   storage origin; the real validator correctly refused it after all migrations. Its browser
   coordinate now uses the mandatory same-origin `/storage` path and the complete disposable
   seed/authorization/scenario drill passes again.
-- [x] **Exact-commit release artifacts** — after all five verification jobs pass on a
+- [x] **Exact-commit release artifacts** — after all six verification jobs pass on a
   `develop` push, CI publishes API and environment-independent web images to GHCR under the
   immutable 40-character commit tag and revision label. Staging/Production select both
   through `docker-compose.release.yml` plus exactly one explicit tier overlay; a missing

@@ -24,8 +24,16 @@ fail() {
 
 grep -Fq "if: github.event_name == 'push' && github.ref == 'refs/heads/develop'" "$workflow" ||
   fail 'release publication must be limited to pushes on develop'
-grep -Fq 'needs: [guards, contract, backend, frontend, integration]' "$workflow" ||
+grep -Fq 'needs: [guards, contract, backend, frontend, integration, production-smoke]' "$workflow" ||
   fail 'release publication must wait for every verification job'
+awk '
+  /^  production-smoke:/ { inside = 1 }
+  /^  release-images:/ { inside = 0 }
+  inside && /node-version-file: \.nvmrc/ { node = 1 }
+  inside && /run: bash scripts\/deploy\/verify-production-bootstrap\.sh/ { drill = 1 }
+  END { exit node && drill ? 0 : 1 }
+' "$workflow" ||
+  fail 'hosted CI must run the Production browser/recovery drill with the pinned Node runtime'
 grep -Fq 'packages: write' "$workflow" ||
   fail 'the release job must declare package publication authority'
 [[ "$(grep -Fc 'org.opencontainers.image.revision=$GITHUB_SHA' "$workflow")" -eq 2 ]] ||

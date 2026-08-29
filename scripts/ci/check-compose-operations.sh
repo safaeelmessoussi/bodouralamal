@@ -121,6 +121,19 @@ grep -Fq 'API container startup command may run migration/seed work' "$productio
   fail 'the Production drill must prove normal API startup does not migrate or seed'
 grep -Fq 'assert_persistent_state' "$production_drill" ||
   fail 'restart/recreate phases must verify database, migration and object persistence'
+grep -Fq 'verify-production-browser.mjs' "$production_drill" ||
+  fail 'the Production drill must execute the real built application in a browser'
+grep -Fq -- '--host-resolver-rules="MAP $domain 127.0.0.1"' "$production_drill" ||
+  fail 'the Production browser must resolve the exact TLS hostname to the isolated loopback edge'
+grep -Fq 'the real Production auth zone rate-limits browser traffic' \
+  "$repo_root/scripts/deploy/verify-production-browser.mjs" ||
+  fail 'the Production browser must exercise the real auth rate-limit zone'
+grep -Fq 'Production browser smoke assertions (repeated after service diagnostics)' \
+  "$production_drill" ||
+  fail 'a failing Production browser smoke must leave its assertion evidence visible'
+if grep -Fq 'issue-dev-session' "$repo_root/scripts/deploy/verify-production-browser.mjs"; then
+  fail 'the Production browser smoke must not bypass Google OAuth with a development issuer'
+fi
 grep -Fq 'down --volumes --remove-orphans' "$production_drill" ||
   fail 'the Production drill must destroy its isolated volumes on every exit'
 

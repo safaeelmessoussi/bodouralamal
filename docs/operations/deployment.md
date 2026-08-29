@@ -211,7 +211,7 @@ API and web images are built in CI and pulled, never built on the server:
 This is also why the container memory pins have any headroom at all — the budget assumes no
 build ever competes with the running services.
 
-After all five verification jobs pass on a push to `develop`, [CI](../development/ci-cd.md)
+After all six verification jobs pass on a push to `develop`, [CI](../development/ci-cd.md)
 publishes two GHCR images under **only the exact 40-character source commit**. Each carries
 the same value in `org.opencontainers.image.revision`. There is no mutable `latest` tag and
 no deployment credential in CI.
@@ -422,10 +422,12 @@ bash scripts/deploy/verify-production-bootstrap.sh
 
 It owns a unique Compose project and synthetic one-day certificate, runs the real migration and
 Production seed commands twice, asserts the clean initial inventory, loads the actual TLS/Nginx
-configuration, and proves that storage loss makes both `/healthz` and Docker health fail before
-recovering. It deliberately builds local images so it can test an uncommitted candidate; hosted
-CI publication separately proves the exact-commit GHCR artifacts. Passing it is not a deployment
-claim and does not replace the checks below.
+configuration, drives the built public/login routes in a real anonymous browser, and proves that
+storage loss makes both `/healthz` and Docker health fail before recovering. The browser verifies
+the Google-only boundary, public reads, CSP/runtime cleanliness and real Production auth throttling;
+it does not fake an authenticated identity. It deliberately builds local images so it can test an
+uncommitted candidate; the same drill gates hosted CI before exact-commit GHCR publication. Passing
+it is not a deployment claim and does not replace the authenticated and host checks below.
 
 Before launch, the full pipeline runs **on the production VPS itself**, because the staging
 topology exercises none of the VPS realities — memory ceilings, TLS automation, the backup

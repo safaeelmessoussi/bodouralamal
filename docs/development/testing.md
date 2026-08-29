@@ -79,14 +79,20 @@ unbound Super Admin, absence of branches/rooms/groups/rosters/schedules/content 
 accounts, all three MinIO policies, and no host binding for PostgreSQL or MinIO. A generated
 one-day certificate activates the real TLS Nginx configuration on loopback; `nginx -T`, HSTS,
 CSP, public-bucket-root denial, the anonymous API boundary and the complete worker health payload
-are asserted. The resolved API service must also carry the two-minute stop grace that outlives
+are asserted. A real headless Chrome then loads the built Arabic RTL login, calendar, library and
+not-found routes through that exact TLS hostname. It proves the Google-only login surface,
+anonymous refresh/API refusal, no browser credential residue, CSP/runtime cleanliness, successful
+public reads, and the live Production auth rate-limit envelope. The probe never mints a development
+session or loads fixture users; authenticated journeys remain a same-origin Staging acceptance
+gate. The resolved API service must also carry the two-minute stop grace that outlives
 pg-boss's bounded 105-second drain. The recovery half stops only its disposable MinIO and proves
 fail-closed health plus recovery; leaves a real job pending while the worker is stopped and proves
 it drains on return; holds a real handler active across API SIGTERM and proves the graceful drain;
 then restarts PostgreSQL, Nginx, and the full stack. Finally it force-recreates every long-running
 container over the same stateful volumes and rechecks the exact seed rows, migration history,
-private object bytes, job terminal states, and non-migrating/non-seeding API command. Cleanup
-destroys the unique containers, volumes, network, images, and generated key.
+private object bytes, job terminal states, and non-migrating/non-seeding API command. The same
+drill is a dedicated hosted verification job, and exact-image publication waits for it. Cleanup
+destroys the unique containers, volumes, network, images, generated key, and Chrome profile.
 
 This is repository-side deployment evidence, not Staging or Production acceptance. It does not
 pull from GHCR, obtain a public certificate, test a Moroccan VPS's resource budget or reboot,

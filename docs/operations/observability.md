@@ -50,7 +50,9 @@ API container itself to become `unhealthy`, then restarts storage and requires b
 recover. It additionally proves a worker-down job drains after restart and health returns only
 after the complete worker catalogue is live; database, edge, full-stack and container-recreation
 recovery retain the same health contract. The drill publishes no database or object-store port
-and destroys its own volumes.
+and destroys its own volumes. Before inducing those failures it also loads the built application
+through the real TLS edge in headless Chrome, so a green recovery result cannot hide a broken
+anonymous shell, CSP, public catalogue read, refresh boundary, or Production auth limiter.
 
 ```json
 {

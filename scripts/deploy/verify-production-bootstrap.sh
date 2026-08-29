@@ -17,6 +17,8 @@ cert_dir="$letsencrypt_dir/live/$domain"
 www_dir="$drill_root/www"
 api_image="bodour-production-drill-api:$project"
 web_image="bodour-production-drill-web:$project"
+chrome_pid=''
+browser_log="$drill_root/browser-smoke.log"
 
 export BODOUR_PRODUCTION_DRILL_HTTP_PORT="$http_port"
 export BODOUR_PRODUCTION_DRILL_HTTPS_PORT="$https_port"
@@ -49,9 +51,17 @@ cleanup() {
   local rc=$?
   trap - EXIT INT TERM
   set +e
+  if [[ -n "$chrome_pid" ]] && kill -0 "$chrome_pid" 2>/dev/null; then
+    kill "$chrome_pid" 2>/dev/null
+    wait "$chrome_pid" 2>/dev/null
+  fi
   if [[ "$rc" -ne 0 ]]; then
     "${compose[@]}" ps -a >&2
     "${compose[@]}" logs --no-color --tail 120 api nginx db minio >&2
+    if [[ -s "$browser_log" ]]; then
+      printf '\nProduction browser smoke assertions (repeated after service diagnostics):\n' >&2
+      tail -n 80 "$browser_log" >&2
+    fi
   fi
   "${compose[@]}" down --volumes --remove-orphans >/dev/null 2>&1
   docker image rm "$api_image" "$web_image" >/dev/null 2>&1
@@ -302,6 +312,35 @@ grep -Fq 'proxy_set_header Host              $http_host;' "$nginx_config" ||
   fail 'loaded storage proxy no longer preserves the exact SigV4 Host header'
 grep -Fq 'location = /storage/public' "$nginx_config" ||
   fail 'loaded Nginx config lacks the public bucket-root denial'
+
+# A curl-green edge can still ship a broken bundle, CSP, anonymous session
+# bootstrap or branded route. Drive the built SPA in an isolated Chrome profile
+# against this exact TLS origin. No session is minted: authenticated Staging E2E
+# remains a separate Google-OAuth/external-credential gate.
+chrome="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
+[[ -n "$chrome" ]] || fail 'Chrome/Chromium is required for the Production browser smoke'
+chrome_profile="$drill_root/chrome-profile"
+mkdir -p "$chrome_profile"
+"$chrome" --headless=new --no-sandbox --disable-gpu --disable-dev-shm-usage \
+  --disable-background-networking --disable-component-update --no-proxy-server \
+  --ignore-certificate-errors --remote-debugging-address=127.0.0.1 \
+  --remote-debugging-port=0 --user-data-dir="$chrome_profile" \
+  --host-resolver-rules="MAP $domain 127.0.0.1" about:blank >/dev/null 2>&1 &
+chrome_pid=$!
+devtools_port_file="$chrome_profile/DevToolsActivePort"
+for _ in $(seq 1 80); do
+  [[ -s "$devtools_port_file" ]] && break
+  kill -0 "$chrome_pid" 2>/dev/null || fail 'Chrome exited before exposing its debug port'
+  sleep 0.25
+done
+[[ -s "$devtools_port_file" ]] || fail 'Chrome did not expose its debug port'
+devtools_port="$(sed -n '1p' "$devtools_port_file")"
+[[ "$devtools_port" =~ ^[0-9]+$ ]] || fail 'Chrome exposed an invalid debug port'
+PORT="$devtools_port" APP_BASE="$https_url" \
+  node "$repo_root/scripts/deploy/verify-production-browser.mjs" | tee "$browser_log"
+kill "$chrome_pid" 2>/dev/null || true
+wait "$chrome_pid" 2>/dev/null || true
+chrome_pid=''
 
 "${compose[@]}" stop minio
 wait_for_https_status 503 30 'MinIO loss readiness'

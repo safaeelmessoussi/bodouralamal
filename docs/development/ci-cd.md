@@ -2,8 +2,8 @@
 
 # CI/CD
 
-GitHub Actions runs five parallel verification jobs on every push to `develop`/`main` and on
-every pull request. A sixth release job runs only after all five succeed on a push to
+GitHub Actions runs six parallel verification jobs on every push to `develop`/`main` and on
+every pull request. A seventh release job runs only after all six succeed on a push to
 `develop`.
 
 ```
@@ -12,7 +12,8 @@ contract    regenerate the OpenAPI document, fail on drift, check conformance
 backend     syntax-aware no-PII guard · lint · exact typecheck · default tests · production build
 frontend    lint · exact typecheck · tests · production build
 integration fresh PostgreSQL · MinIO · pg-boss · Nginx · all integration/API tests · isolation
-release     exact-commit API + web images → GHCR (develop push only, after all five pass)
+production  Production seed · TLS edge · anonymous browser · dependency/restart/recreation recovery
+release     exact-commit API + web images → GHCR (develop push only, after all six pass)
 ```
 
 The contract job runs the two OpenAPI-backed scripts and the backend job runs the remaining
@@ -22,8 +23,8 @@ executable direct `AuditLog` writes from comments and examples; it therefore run
 backend's locked `npm ci`, never in the dependency-free guard job. The portability guard pins
 that placement so a warm Local `node_modules` cannot hide clean-checkout failure again.
 
-Hosted run `33246930840` is the first complete proof of this topology: all five verification
-jobs passed from a clean checkout and the release job published both exact-commit images for
+Hosted run `33246930840` is the first complete proof of the preceding five-verification-job
+topology: all five jobs passed from a clean checkout and the release job published both exact-commit images for
 `9e0b303c27e77ec731e3afee936dcb31cd165504`. GitHub also reported that the v4 checkout and
 setup-node actions target deprecated Node 20 and were being force-run on Node 24. The
 maintained v7 action metadata uses `node24`, but adopting those major versions awaits the
@@ -198,7 +199,7 @@ The workflow is explicit that later milestones extend it, as **dedicated tasks r
 the ledger** rather than drive-by additions:
 
 - Permission-matrix API tests generated from the matrix
-- Playwright end-to-end journeys
+- Authenticated Playwright end-to-end journeys (the anonymous Production browser smoke is gated)
 - The ≥ 80 % coverage gate on services and policies
 - Fatal `TD3_REQUIRE_COMPLETE=1` release completeness, pending Owner/SRS reconciliation
 

@@ -213,10 +213,24 @@ jobs:
       - run: npm test
       - run: npm run build
 
+  production-smoke:
+    name: Production — anonymous browser + restart/recovery smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      # This owns a uniquely named Production-mode Compose project, synthetic
+      # TLS certificate and Chrome profile. It loads no fixtures and mints no
+      # session; authenticated journeys remain a Staging acceptance gate.
+      - run: bash scripts/deploy/verify-production-bootstrap.sh
+
   release-images:
     name: Release — publish exact-commit API and web images
     if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
-    needs: [guards, contract, backend, frontend, integration]
+    needs: [guards, contract, backend, frontend, integration, production-smoke]
     runs-on: ubuntu-latest
     permissions:
       contents: read
