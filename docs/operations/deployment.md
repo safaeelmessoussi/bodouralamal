@@ -254,7 +254,7 @@ Three committed pieces make the Staging host reproducible from Git, and none hol
 |---|---|
 | `docker-compose.release.yml` | Selects the exact CI-published API and web artifacts; an absent commit tag is a configuration error |
 | `docker-compose.staging.yml` | Hard container memory ceilings for a small VPS, on top of the soft budgets the base file already sets. It publishes no port, relaxes no limit and substitutes no security setting — an overlay that changed behaviour would be changing the very thing Staging exists to rehearse |
-| `scripts/deploy/enable-tls.sh` | Performs `tls.conf.example`'s manual steps 1–3 **idempotently**, refuses to run before the certificate exists, and keeps the ACME location above the redirect |
+| `scripts/deploy/enable-tls.sh` | Performs `tls.conf.example`'s manual steps 1–3 **idempotently**, refuses to run before the certificate exists, keeps the ACME location above the redirect, and recreates Nginx through the same exact-release plus environment overlays |
 
 ```bash
 BODOUR_RELEASE_TAG="$(git rev-parse HEAD)" \
@@ -266,7 +266,16 @@ BODOUR_RELEASE_TAG="$(git rev-parse HEAD)" \
 asked an operator to hand-edit a tracked file during the one window where the site is
 already public. Activating the TLS block **before** the certificate exists is worse than it
 sounds: `ssl_certificate` pointing at a missing file is a hard config error, so Nginx does
-not start at all. The script checks first.
+not start at all. The script checks first. Invoke it with the environment tier while the
+pipeline's `BODOUR_RELEASE_TAG` remains exported:
+
+```bash
+bash scripts/deploy/enable-tls.sh <domain> staging     # Staging host
+bash scripts/deploy/enable-tls.sh <domain> production  # Production host
+```
+
+It refuses an absent/mismatched commit tag and retains the Staging resource overlay where
+applicable; TLS activation cannot silently replace the approved web image with a host build.
 
 ## The dress rehearsal
 

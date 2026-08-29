@@ -9,6 +9,7 @@ repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 workflow="$repo_root/.github/workflows/ci.yml"
 release="$repo_root/docker-compose.release.yml"
 deployment="$repo_root/docs/operations/deployment.md"
+tls_activation="$repo_root/scripts/deploy/enable-tls.sh"
 
 fail() {
   printf 'release-artifacts guard: %s\n' "$1" >&2
@@ -50,5 +51,12 @@ if grep -Fq 'docker compose build api' "$deployment" ||
   grep -Fq 'docker run --rm -v "$PWD/frontend"' "$deployment"; then
   fail 'the deployment runbook must not contain target-host build commands'
 fi
+
+grep -Fq 'compose=(docker compose -f docker-compose.yml -f docker-compose.release.yml)' "$tls_activation" ||
+  fail 'TLS activation must recreate Production Nginx through the release overlay'
+grep -Fq 'compose=(docker compose -f docker-compose.yml -f docker-compose.release.yml -f docker-compose.staging.yml)' "$tls_activation" ||
+  fail 'TLS activation must retain the Staging resource overlay'
+grep -Fq '"${compose[@]}" up --no-build -d --force-recreate --no-deps nginx' "$tls_activation" ||
+  fail 'TLS activation must not rebuild or replace the exact web artifact'
 
 printf 'release-artifacts guard: exact-commit publication and no-build deployment verified\n'
