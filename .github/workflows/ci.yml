@@ -63,6 +63,8 @@ jobs:
         run: bash scripts/ci/check-backup-tooling.sh
       - name: Releases use exact-commit artifacts and never target-host builds
         run: bash scripts/ci/check-release-artifacts.sh
+      - name: Clean release hosts fail preflight before runtime mutation
+        run: bash scripts/ci/check-host-preflight.sh
       - name: Every Production service uses bounded local logs
         run: bash scripts/ci/check-compose-operations.sh
       - name: Storage retirement stays durable and automatic destruction stays disabled

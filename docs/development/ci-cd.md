@@ -7,7 +7,7 @@ every pull request. A sixth release job runs only after all five succeed on a pu
 `develop`.
 
 ```
-guards      twenty-seven dependency-free guard scripts — mechanically checkable repository rules
+guards      twenty-eight dependency-free guard scripts — mechanically checkable repository rules
 contract    regenerate the OpenAPI document, fail on drift, check conformance
 backend     syntax-aware no-PII guard · lint · exact typecheck · default tests · production build
 frontend    lint · exact typecheck · tests · production build
@@ -16,7 +16,7 @@ release     exact-commit API + web images → GHCR (develop push only, after all
 ```
 
 The contract job runs the two OpenAPI-backed scripts and the backend job runs the remaining
-syntax-aware no-PII script, so **all thirty committed `scripts/ci/check-*.sh` checks execute in
+syntax-aware no-PII script, so **all thirty-one committed `scripts/ci/check-*.sh` checks execute in
 CI**. `check-no-pii-logs.sh` deliberately uses the TypeScript compiler API to distinguish
 executable direct `AuditLog` writes from comments and examples; it therefore runs after the
 backend's locked `npm ci`, never in the dependency-free guard job. The portability guard pins
@@ -52,6 +52,7 @@ Each exists because something went wrong, or would plausibly go wrong silently. 
 | `check-storage-edge.sh` | An external MinIO path bypassing the shared proxy policy, or removal of the Nginx-owned unsigned streaming-trailer denial |
 | `check-backup-tooling.sh` | A floating restic image, external fixture replication, non-empty-volume restore, Docker-socket privilege, or destructive retention before an Owner policy exists |
 | `check-release-artifacts.sh` | Release publication that can precede a green gate, lacks an exact commit tag/revision label, omits either app artifact, or reintroduces target-host compilation |
+| `check-host-preflight.sh` | Loss of the executable clean-host gate, its pure version/domain/public-IP parser rules, the exact pipeline invocation, or the explicit Owner disk-capacity input |
 | `check-compose-operations.sh` | Any base-Compose service falling back to unbounded logs; drift in the shared ceilings; or loss of whole-application Docker/deployment health probes |
 | `check-association-terminology.sh` | Superseded Arabic role/person vocabulary returning to the user-facing catalogue |
 | `check-western-digits.sh` | Arabic-Indic digit conversion or rendered literals where the interface requires Western numerals |

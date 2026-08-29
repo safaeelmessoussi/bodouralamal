@@ -63,6 +63,10 @@ bash scripts/ci/test-integration.sh
 # Production-mode bootstrap/readiness — synthetic TLS, no fixtures, isolated volumes
 bash scripts/deploy/verify-production-bootstrap.sh
 
+# Actual release host — read-only; requires installed secrets, DNS, GHCR and approved disk floor
+BODOUR_RELEASE_TAG=<40-char-commit> bash scripts/deploy/preflight-host.sh \
+  production bodouralamal.com <expected-public-ipv4> <minimum-free-GiB>
+
 # Destructive only to uniquely named disposable volumes and a local encrypted repository
 bash scripts/backup/verify-backup-restore.sh
 ```
@@ -84,6 +88,12 @@ images, and generated key.
 This is repository-side deployment evidence, not Staging or Production acceptance. It does not
 pull from GHCR, obtain a public certificate, test a Moroccan VPS's resource budget, or rehearse
 rollback/restoration there; those remain separate host/external checks.
+
+The host preflight is the target-side complement. It is deliberately read-only and prints no
+configuration values. Its source guard directly tests the Compose-version, domain and public-IP
+parsers and pins every host/configuration invariant, while the actual VPS invocation checks the
+daemon, filesystem, DNS, secret modes, resolved release graph and exact GHCR manifests. Passing
+it still means only *ready to deploy*: no container, migration, certificate or backup has run.
 
 The backup drill is not a source-text assertion. It writes a PostgreSQL row and MinIO object,
 creates and verifies a real encrypted restic snapshot, destroys both disposable volumes,

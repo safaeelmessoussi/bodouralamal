@@ -2,22 +2,124 @@
 
 # Deployment
 
-A deterministic pipeline from a clean VPS to a healthy platform. Ten steps, in order.
+A deterministic pipeline from a clean VPS to a healthy platform. Eleven steps, in order.
 
-## Prerequisites
+## Supported host contract
 
-- An Ubuntu VPS from a **Moroccan provider**, minimum **4 GB RAM**, with Docker and Compose v2
-- A second Moroccan location for offsite backups
-- A domain with DNS control, for Let's Encrypt
-- Google OAuth client credentials — **allow days to weeks** for consent-screen verification
-- Read access to the repository's GitHub Container Registry packages. Authenticate Docker on
-  the host with a least-privilege token that can read packages; never put it in `.env`
+The release images are currently built on Linux/AMD64, so the supported clean host is
+deliberately narrow:
+
+| Concern | Required state |
+|---|---|
+| OS | Ubuntu Server **22.04 LTS or 24.04 LTS**, x86_64/AMD64; no derivative distribution |
+| Capacity | At least 4 GB RAM, swap present, and an **Owner-approved free-disk floor** on the filesystem holding Docker's data root |
+| Runtime | Docker Engine from Docker's official Ubuntu repository, local rootful system daemon enabled at boot; Docker Compose **2.24.4 or newer** |
+| Operator | One dedicated non-root deployment account, SSH public-key access only, member of `docker`; no shared login |
+| Checkout | `/opt/bodour`, owned by that account, not group/world-writable; approved commit checked out detached and clean |
+| State | Docker named volumes `bodour_db-data`, `bodour_minio-data`, `bodour_certbot-conf`, `bodour_certbot-www` on persistent host storage |
+| Network | One approved public IPv4; the environment domain has exactly that A result and no unverified AAAA; only SSH and TCP 80/443 admitted externally |
+| Time | Host clock NTP-synchronized. Host timezone is UTC; containers retain `Africa/Casablanca` for TD-11 wall-clock semantics |
+| Secrets | `.env`, `infra.env`, and Docker's GHCR credential file are regular, deployment-user-owned mode-`0600` files |
+
+Compose 2.24.4 is the floor because repository verification overlays use the documented
+`!override` merge tag introduced in that release. Newer Compose v2/v5 keeps the same command.
+The Engine itself is capability-checked rather than assigned an invented historical version:
+the daemon must be local Linux/AMD64, reachable by the deployment account, persistent, enabled
+at boot, and able to resolve the exact release model. Rootless Docker is not supported by the
+current volume-backup/reboot contract.
+
+Preflight distinguishes a fresh host (none of the four named volumes exists) from an upgrade
+(all four exist). A partial set is neither and stops for recovery review. On a fresh host it
+also requires the bootstrap Super Admin email and sex; an upgrade may omit those seed-only
+values once the database is authoritative.
+
+The `docker` group is **root-equivalent**. Restrict it to the deployment account and treat that
+account's SSH key as a host-root credential. Do not expose the Docker API over TCP.
+
+Production additionally requires a second Moroccan location for offsite backups, domain/DNS
+control for Let's Encrypt, Google OAuth credentials, and read access to the repository's GHCR
+packages. The primary disk has no honest fixed number yet: the SRS gives audit projections but
+requires the Owner's recording/week and average-size estimate. Select and pass that approved
+floor to preflight; never substitute a convenient default.
+
+## One-time host provisioning
+
+Provision the single-purpose host before cloning. First complete Docker's
+[official Ubuntu installation](https://docs.docker.com/engine/install/ubuntu/) so the Compose
+plugin and Engine come from one maintained channel; distribution `docker.io` and legacy
+`docker-compose` are outside this contract. Then run:
+
+```bash
+# As the provider-created sudo account; replace the SSH public key and port if required.
+sudo apt update && sudo apt full-upgrade
+sudo apt install ca-certificates curl git dnsutils openssh-server openssl python3 unattended-upgrades ufw
+sudo adduser --disabled-password --gecos '' bodour-deploy
+sudo usermod -aG docker bodour-deploy
+sudo install -d -o bodour-deploy -g bodour-deploy -m 0750 /opt/bodour
+sudo install -d -o bodour-deploy -g bodour-deploy -m 0700 /home/bodour-deploy/.ssh
+sudoedit /home/bodour-deploy/.ssh/authorized_keys
+sudo chown bodour-deploy:bodour-deploy /home/bodour-deploy/.ssh/authorized_keys
+sudo chmod 0600 /home/bodour-deploy/.ssh/authorized_keys
+sudo install -d -m 0755 /etc/ssh/sshd_config.d
+sudoedit /etc/ssh/sshd_config.d/60-bodour.conf
+```
+
+The SSH drop-in must enable public keys and set `PermitRootLogin no`,
+`PasswordAuthentication no`, and `KbdInteractiveAuthentication no`. Validate with
+`sudo sshd -t`, open a **second** key-authenticated session as `bodour-deploy`, and only then
+close the provisioning session. Never disable the only working access path.
+
+```bash
+sudo ufw default deny incoming
+sudo ufw default allow outgoing
+sudo ufw allow <ssh-port>/tcp
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+sudo ufw enable
+sudo systemctl enable --now docker containerd ssh ufw systemd-timesyncd apt-daily-upgrade.timer
+sudo dpkg-reconfigure --priority=low unattended-upgrades
+sudo timedatectl set-timezone Etc/UTC
+sudo timedatectl set-ntp true
+```
+
+Reboot after the initial upgrade when `/var/run/reboot-required` exists, then reconnect as
+`bodour-deploy`; preflight refuses to deploy across a pending kernel/system reboot.
+
+Docker-published ports bypass ordinary UFW forwarding rules. The release therefore relies on
+the stronger structural fact checked in CI and again by host preflight: **only Nginx publishes
+ports, and only 80/443**. PostgreSQL and object storage never receive a host binding. Verify the
+provider's network firewall independently with the same three admitted ports; do not expose a
+management console or Docker socket.
+
+Container stdout/stderr is already bounded per service at 10 MB × 5 through Docker's `local`
+driver. Bound the host journal as well in `/etc/systemd/journald.conf.d/60-bodour.conf` with
+`SystemMaxUse=500M`, `SystemKeepFree=2G`, and `RuntimeMaxUse=100M`, then run
+`sudo systemctl restart systemd-journald`. Security updates may install automatically; rehearse
+Docker/OS upgrades on Staging and schedule reboots explicitly rather than allowing an
+unobserved Production restart.
+
+Authenticate the deployment account to GHCR without placing the token in shell history or an
+environment file:
+
+```bash
+read -rsp 'GHCR read token: ' GHCR_TOKEN && printf '\n'
+printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username '<github-user>' --password-stdin
+unset GHCR_TOKEN
+chmod 600 "$HOME/.docker/config.json"
+```
 
 ## The pipeline
 
 ```bash
-# 1  Check out the exact commit already approved for this environment
-git clone <repo> && cd <repo>
+# 1  Check out the exact commit already approved for this environment.
+#    First deployment creates the checkout; an upgrade preserves it and every
+#    gitignored host file.
+if test -d /opt/bodour/.git; then
+  cd /opt/bodour
+else
+  git clone <repo> /opt/bodour
+  cd /opt/bodour
+fi
 export BODOUR_RELEASE_TAG='<approved 40-character commit>'
 printf '%s\n' "$BODOUR_RELEASE_TAG" | grep -Eq '^[0-9a-f]{40}$'
 git fetch origin
@@ -27,14 +129,23 @@ git switch --detach "$BODOUR_RELEASE_TAG"
 test -z "$(git status --porcelain)"
 test "$(git rev-parse HEAD)" = "$BODOUR_RELEASE_TAG"
 
-# 2  Configure
-test -f .env || cp .env.example .env
-test -f infra.env || cp infra.env.example infra.env
+# 2  Configure. On a first deployment these commands create private templates;
+#    normally install completed files from the external secret handoff instead.
+test -f .env || install -m 600 .env.example .env
+test -f infra.env || install -m 600 infra.env.example infra.env
+chmod 600 .env infra.env
 #    On first deploy, fill every Required value. Never overwrite existing secrets
 #    from a template during an upgrade. The Postgres password must match DATABASE_URL.
 #    SUPER_ADMIN_EMAIL is needed for the FIRST deployment only
 
-# 3  Pull the two exact-commit artifacts. A missing image stops deployment.
+# 3  Prove the host/config/release boundary without changing runtime state.
+export DEPLOYMENT_TIER=production                 # or staging
+export DOMAIN=bodouralamal.com                    # staging.bodouralamal.com for Staging
+export EXPECTED_PUBLIC_IPV4='<provider-approved-public-ipv4>'
+export MINIMUM_FREE_GIB='<Owner-approved-primary-disk-floor>'
+bash scripts/deploy/preflight-host.sh "$DEPLOYMENT_TIER" "$DOMAIN" "$EXPECTED_PUBLIC_IPV4" "$MINIMUM_FREE_GIB"
+
+# 4  Pull the two exact-commit artifacts. A missing image stops deployment.
 docker compose -f docker-compose.yml -f docker-compose.release.yml \
   -f docker-compose.production.yml pull api nginx
 test "$(docker image inspect --format '{{ index .Config.Labels \"org.opencontainers.image.revision\" }}' \
@@ -42,7 +153,7 @@ test "$(docker image inspect --format '{{ index .Config.Labels \"org.opencontain
 test "$(docker image inspect --format '{{ index .Config.Labels \"org.opencontainers.image.revision\" }}' \
   "ghcr.io/safaeelmessoussi/bodouralamal-web:$BODOUR_RELEASE_TAG")" = "$BODOUR_RELEASE_TAG"
 
-# 4  Existing deployment: stop the legacy cookie issuer, then start data services
+# 5  Existing deployment: stop the legacy cookie issuer, then start data services
 #    R101's next migration invalidates every live refresh session. The old API
 #    must not mint another narrow-path cookie after that one-time sweep.
 docker compose -f docker-compose.yml -f docker-compose.release.yml \
@@ -50,7 +161,7 @@ docker compose -f docker-compose.yml -f docker-compose.release.yml \
 docker compose -f docker-compose.yml -f docker-compose.release.yml \
   -f docker-compose.production.yml up --no-build -d db minio
 
-# 5  Migrate
+# 6  Migrate
 #    ON AN EXISTING DEPLOYMENT: pg_dump IMMEDIATELY BEFORE this line.
 #    Migrations are forward-only; this dump is the rollback point.
 #    The normalized-email migration deliberately aborts if historical data
@@ -60,12 +171,12 @@ docker compose -f docker-compose.yml -f docker-compose.release.yml \
   -f docker-compose.production.yml \
   run --rm api npx prisma migrate deploy
 
-# 6  Seed — idempotent, safe to re-run
+# 7  Seed — idempotent, safe to re-run
 docker compose -f docker-compose.yml -f docker-compose.release.yml \
   -f docker-compose.production.yml \
   run --rm api npm run seed:production
 
-# 7  Start the rest
+# 8  Start the rest
 docker compose -f docker-compose.yml -f docker-compose.release.yml \
   -f docker-compose.production.yml \
   --profile production up --no-build -d      # api, nginx, certbot
@@ -79,15 +190,15 @@ docker compose -f docker-compose.yml -f docker-compose.release.yml \
 #    Every deployment: generate/reconcile the ignored host-specific TLS block.
 bash scripts/deploy/enable-tls.sh <domain> production
 
-# 8  Verify
+# 9  Verify
 curl --fail-with-body --silent --show-error --max-time 15 https://<domain>/healthz
 #    Any non-200 response, including a truthful 503 from a dependency/worker
 #    failure, stops the deployment verification instead of looking successful.
 
-# 9  The Super Admin performs their first Google login
+# 10 The Super Admin performs their first Google login
 #    (the identity binds to the pre-provisioned account)
 
-# 10 Smoke test: journey J1 · backup dry run · restore drill
+# 11 Smoke test: journey J1 · backup dry run · restore drill
 ```
 
 ## Where the images come from

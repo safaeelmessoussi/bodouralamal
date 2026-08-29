@@ -1327,6 +1327,13 @@ was hiding behind it: the run went green on the first attempt.
   concurrently; active handlers have 105 seconds to finish or return durably to retry, inside a
   two-minute Docker grace period. The Production drill asserts the resolved Compose value, and
   focused tests prove readiness becomes `stopping` before the worker drain completes.
+- [x] **Executable clean-VPS preflight** — the deployment now stops before runtime mutation unless
+  the target is a supported Ubuntu LTS/AMD64 host with local boot-enabled Docker, Compose ≥2.24.4,
+  NTP, persistent/adequately sized Docker storage, an exact detached clean checkout, private
+  secret files, exact IPv4/no-AAAA DNS, valid same-origin configuration, the audited service/
+  port/volume/log/restart graph and both exact GHCR manifests. The disk floor remains an explicit
+  Owner capacity input rather than an invented default; passing is readiness, never a deployment
+  or backup claim.
 - [x] **Bounded Production container logs** — every base-Compose service uses one shared
   Docker `local` policy (10 MB × 5), retaining `docker compose logs` without allowing the
   engine's unrotated `json-file` default to exhaust the single VPS disk. A CI guard counts
