@@ -343,6 +343,171 @@ describe.skipIf(!enabled)('R107/R108 Production Subject seed on fresh PostgreSQL
   });
 });
 
+/**
+ * **The scheduling-type catalogue on a FRESH installation** (R110.1–110.2, as
+ * amended by 110.9).
+ *
+ * The defect these pin, measured rather than theorised: migration
+ * `20260828190100_holiday_catalogue` inserts **نشاط** unconditionally, and its
+ * two corrective `UPDATE`s match nothing on an empty table. So a brand-new
+ * database reaches the seed with exactly one row — and the seed's old
+ * `count > 0` guard read that as *the catalogue is there*, marked it
+ * initialized, and skipped the other five. A launch-ready platform ended up
+ * offering **one** scheduling type, with no `class` among them, so no class
+ * could be scheduled at all and nothing anywhere reported a problem.
+ *
+ * `count > 0` is therefore no longer proof of initialization. The **marker** is,
+ * and a pre-marker install is adopted only when every canonical name is already
+ * accounted for.
+ */
+const CANONICAL_TYPES = [
+  { name: 'حصة دراسية', structuralKind: 'class', attendanceRequired: true },
+  { name: 'اختبار', structuralKind: 'exam', attendanceRequired: true },
+  { name: 'محاضرة', structuralKind: 'class', attendanceRequired: false },
+  { name: 'حفل', structuralKind: 'activity', attendanceRequired: false },
+  { name: 'عطلة', structuralKind: 'holiday', attendanceRequired: false },
+  { name: 'نشاط', structuralKind: 'activity', attendanceRequired: false },
+] as const;
+
+async function typeSnapshot() {
+  return prisma.schedulingType.findMany({
+    orderBy: [{ name: 'asc' }],
+    select: {
+      id: true,
+      name: true,
+      structuralKind: true,
+      attendanceRequired: true,
+      displayOrder: true,
+      deletedAt: true,
+    },
+  });
+}
+
+/**
+ * Puts the catalogue back the way the wrapper's later suites expect.
+ *
+ * **Scoped to the canonical names, never a bare `deleteMany({})`.** P1.2's
+ * ownership guard refuses an unbounded mass delete, and it is right to: these
+ * rows are the ones this suite creates through the seed, and a row somebody
+ * else put here is not mine to remove — even in a disposable database, where
+ * the habit is what carries over.
+ */
+async function resetCatalogue(): Promise<void> {
+  await prisma.systemSetting.deleteMany({
+    where: { key: { contains: 'scheduling_types' } },
+  });
+  await prisma.schedulingType.deleteMany({
+    where: { name: { in: CANONICAL_TYPES.map((t) => t.name) } },
+  });
+}
+
+describe.skipIf(!enabled)('R110 scheduling-type catalogue survives every install shape', () => {
+  it('a COMPLETELY FRESH database receives the whole ratified catalogue', async () => {
+    await resetCatalogue();
+    await runProductionSeed();
+
+    const rows = await typeSnapshot();
+    expect(rows).toHaveLength(CANONICAL_TYPES.length);
+    for (const expected of CANONICAL_TYPES) {
+      const row = rows.find((r) => r.name === expected.name);
+      expect(row, `missing canonical type ${expected.name}`).toBeDefined();
+      expect(row!.structuralKind).toBe(expected.structuralKind);
+      expect(row!.attendanceRequired).toBe(expected.attendanceRequired);
+      expect(row!.deletedAt).toBeNull();
+    }
+    // All four structural kinds reachable — the postcondition the seed asserts,
+    // restated here against the rows rather than against its own error path.
+    expect(new Set(rows.map((r) => r.structuralKind))).toEqual(
+      new Set(['class', 'exam', 'activity', 'holiday']),
+    );
+  });
+
+  it('the PARTIAL fresh-install state — only نشاط, as the migration leaves it', async () => {
+    // **This is the exact defect.** One row present, five missing, no marker.
+    await resetCatalogue();
+    await prisma.schedulingType.create({
+      data: {
+        name: 'نشاط',
+        structuralKind: 'activity',
+        attendanceRequired: false,
+        displayOrder: 1,
+      },
+    });
+
+    await runProductionSeed();
+
+    const rows = await typeSnapshot();
+    expect(rows).toHaveLength(CANONICAL_TYPES.length);
+    expect(rows.map((r) => r.name).sort()).toEqual(
+      CANONICAL_TYPES.map((t) => t.name).sort(),
+    );
+    // A class can be scheduled, which is what the defect took away.
+    expect(rows.some((r) => r.structuralKind === 'class' && r.deletedAt === null)).toBe(true);
+  });
+
+  it('an ALREADY-INITIALIZED database keeps an edited canonical row untouched', async () => {
+    await resetCatalogue();
+    await runProductionSeed();
+
+    // The Owner renames nothing but re-flags and reorders — both hers once the
+    // row exists, which is the whole point of their being columns.
+    const before = await prisma.schedulingType.findFirstOrThrow({
+      where: { name: 'حفل', deletedAt: null },
+    });
+    await prisma.schedulingType.update({
+      where: { id: before.id },
+      data: { attendanceRequired: true, displayOrder: 99 },
+    });
+
+    await runProductionSeed();
+
+    const after = await prisma.schedulingType.findFirstOrThrow({
+      where: { name: 'حفل', deletedAt: null },
+    });
+    expect(after.id).toBe(before.id);
+    expect(after.attendanceRequired).toBe(true);
+    expect(after.displayOrder).toBe(99);
+    // And no second حفل was created beside it.
+    expect(await prisma.schedulingType.count({ where: { name: 'حفل' } })).toBe(1);
+  });
+
+  it('a SOFT-DELETED canonical type is NOT resurrected', async () => {
+    /**
+     * *Seeded does not mean immutable*, read in the direction that costs
+     * something: a type an administrator retired must not reappear on the next
+     * deploy. The name is not free — it is spoken for by a decision.
+     */
+    await resetCatalogue();
+    await runProductionSeed();
+    const target = await prisma.schedulingType.findFirstOrThrow({
+      where: { name: 'محاضرة', deletedAt: null },
+    });
+    await prisma.schedulingType.update({
+      where: { id: target.id },
+      data: { deletedAt: new Date() },
+    });
+    // Clear the marker so the reconciliation genuinely runs again.
+    await prisma.systemSetting.deleteMany({
+      where: { key: { contains: 'scheduling_types' } },
+    });
+
+    await runProductionSeed();
+
+    const rows = await prisma.schedulingType.findMany({ where: { name: 'محاضرة' } });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.id).toBe(target.id);
+    expect(rows[0]!.deletedAt).not.toBeNull();
+  });
+
+  it('leaves the catalogue seeded for the suites that run after this file', async () => {
+    await resetCatalogue();
+    await runProductionSeed();
+    expect(await prisma.schedulingType.count({ where: { deletedAt: null } })).toBe(
+      CANONICAL_TYPES.length,
+    );
+  });
+});
+
 afterAll(async () => {
   // Leave the disposable database in the valid seeded state so the wrapper can
   // run the established Quran integration suites against the same real schema.

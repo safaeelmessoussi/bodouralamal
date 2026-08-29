@@ -146,12 +146,29 @@ const MEMORISATION_SUBJECT = SUBJECTS[1];
  * makes a cancellation an edit to a Session row, so **a holiday cancels no
  * class**.
  */
+/**
+ * **The ratified catalogue** — SRS Revision 110(2) as amended by 110(9).
+ *
+ * Names, `attendance_required` and `display_order` are R110(2)'s verbatim, and
+ * `structural_kind` carries the Owner's amendment of 2026-08-28:
+ *
+ * * **محاضرة is `class`** — a lecture is taught, so it carries a Subject, a
+ *   Level and a teaching mode;
+ * * **عطلة is `holiday`**, the fourth kind — it has no staff, no room, no
+ *   Subject and no attendance, only which branches and Categories are off;
+ * * **نشاط** is the generic `activity` حفل had been carrying alone. Its
+ *   `attendance_required = false` is the migration's own explicit value; its
+ *   position is the append the amendment specifies, after the original five.
+ *
+ * Nothing here is inferred: every value is either R110(2)'s or the amendment's.
+ */
 const SCHEDULING_TYPES = [
   { name: 'حصة دراسية', structuralKind: 'class', attendanceRequired: true, displayOrder: 1 },
   { name: 'اختبار', structuralKind: 'exam', attendanceRequired: true, displayOrder: 2 },
-  { name: 'محاضرة', structuralKind: 'activity', attendanceRequired: false, displayOrder: 3 },
+  { name: 'محاضرة', structuralKind: 'class', attendanceRequired: false, displayOrder: 3 },
   { name: 'حفل', structuralKind: 'activity', attendanceRequired: false, displayOrder: 4 },
-  { name: 'عطلة', structuralKind: 'activity', attendanceRequired: false, displayOrder: 5 },
+  { name: 'عطلة', structuralKind: 'holiday', attendanceRequired: false, displayOrder: 5 },
+  { name: 'نشاط', structuralKind: 'activity', attendanceRequired: false, displayOrder: 6 },
 ] as const;
 
 const ACADEMIC_YEAR = '2026-2027';
@@ -455,24 +472,73 @@ async function seedSubjects(): Promise<void> {
  * of them the seed means is exactly what R107's preflight refuses to do.
  */
 async function seedSchedulingTypes(): Promise<void> {
-  // Same rule: the five rows are a starting point, not a whitelist (R110).
-  if (await initializedByPresence('scheduling_types', await prisma.schedulingType.count())) {
+  /**
+   * **`count > 0` is not proof that this catalogue is initialized** — the
+   * defect this replaces, measured on a fresh database.
+   *
+   * Migration `20260828190100_holiday_catalogue` inserts **نشاط**
+   * unconditionally, and its two corrective `UPDATE`s match nothing on an empty
+   * table. So a brand-new installation reaches this function with exactly one
+   * row — and the old presence check read that one row as *the catalogue is
+   * there*, marked it initialized, and skipped the other five. The result was a
+   * launch-ready platform offering **one** scheduling type, on which no class
+   * could be scheduled at all, with no error anywhere because no write path was
+   * ever reached.
+   *
+   * **The marker, not the row count, is what says «initialized».** Once this
+   * function has completed a reconciliation it records that fact, and every
+   * later run returns immediately: *the database is authoritative after
+   * initialization* (R110.1) is preserved exactly.
+   *
+   * **A pre-marker installation is adopted only when the catalogue is
+   * COMPLETE.** An install seeded before the markers existed has every
+   * canonical name already and must not be re-run over; one that is missing a
+   * name is not initialized, whatever its row count. Completeness is judged
+   * over live **and** soft-deleted rows, because a deleted type is a decision
+   * somebody took, not a gap to fill.
+   */
+  if (await alreadyInitialized('scheduling_types')) {
     console.log('  scheduling types: already initialized — the database is authoritative');
+    return;
+  }
+
+  const known = await prisma.schedulingType.findMany({
+    where: { name: { in: SCHEDULING_TYPES.map((t) => t.name) } },
+    select: { name: true },
+  });
+  if (known.length === SCHEDULING_TYPES.length) {
+    // Every canonical name is accounted for — this is a pre-marker install, and
+    // adopting it is what the old presence check was actually for.
+    await markInitialized('scheduling_types');
+    console.log('  scheduling types: complete before this run — adopted, nothing written');
     return;
   }
 
   await prisma.$transaction(async (tx) => {
     for (const type of SCHEDULING_TYPES) {
-      const live = await tx.schedulingType.findMany({
-        where: { name: type.name, deletedAt: null },
-        select: { id: true },
+      /**
+       * **Soft-deleted rows are counted here, and that is deliberate.** A type
+       * an administrator retired must not reappear on the next deploy — R110's
+       * *seeded does not mean immutable* read in the direction that actually
+       * costs something. The name is not "free"; it is spoken for by a decision.
+       */
+      const rows = await tx.schedulingType.findMany({
+        where: { name: type.name },
+        select: { id: true, deletedAt: true },
       });
+      const live = rows.filter((r) => r.deletedAt === null);
       if (live.length > 1) {
         throw new Error(
           `Production seed requires at most one live scheduling type named ${type.name}; found ${live.length}`,
         );
       }
-      if (live.length === 0) {
+      /**
+       * **Present in any form → left exactly as it is.** Not renamed, not
+       * re-flagged, not reordered: `attendance_required` and `display_order`
+       * are the Owner's once the row exists, which is the whole point of their
+       * being columns rather than constants.
+       */
+      if (rows.length === 0) {
         await tx.schedulingType.create({
           data: {
             name: type.name,
@@ -499,7 +565,10 @@ async function seedSchedulingTypes(): Promise<void> {
         })
       ).map((r) => r.structuralKind),
     );
-    for (const required of ['class', 'activity', 'exam'] as const) {
+    // `holiday` joins the three (R110.9): it is a structural kind with its own
+    // write path, so a catalogue without it cannot record a عطلة — the same
+    // failure as the other three, for the same reason.
+    for (const required of ['class', 'activity', 'exam', 'holiday'] as const) {
       if (!kinds.has(required)) {
         throw new Error(
           `Production seed must leave at least one live scheduling type of kind ${required}`,

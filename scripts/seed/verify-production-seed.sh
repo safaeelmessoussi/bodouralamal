@@ -48,9 +48,56 @@ export PORT="$api_port"
 (
   cd "$repo_root/backend"
   npx prisma migrate deploy
+)
+
+# **The fresh-install path, run and asserted BEFORE any test can mask it.**
+#
+# This is the exact scenario the defect lived in: `migrate deploy` inserts نشاط
+# on its own, and the seed then has to reconcile the other five rather than read
+# one row as "already initialized". Running the real entry point here — and
+# checking the DATABASE rather than a test's expectations — means the catalogue
+# is proved on the true deployment sequence, and proved even when an unrelated
+# assertion later in this drill fails.
+(
+  cd "$repo_root/backend"
+  npx tsx prisma/seed/production.ts
+)
+
+# **The catalogue is asserted against the DATABASE, not only inside vitest.**
+#
+# The defect this guards shipped precisely because nothing looked: the seed's
+# own guard read one row as "already initialized" and skipped five, and a fresh
+# installation ended up offering a single scheduling type on which no class
+# could be scheduled. A SQL assertion here fails the drill even if the vitest
+# file's status is muddied by an unrelated failure — which is the situation this
+# check exists for.
+psql_seed() {
+  docker compose --project-name "$project" --file "$compose_file" \
+    exec -T db psql -U app -d bodour -tAc "$1"
+}
+missing="$(psql_seed "
+  SELECT string_agg(t.name, ', ')
+    FROM (VALUES ('حصة دراسية'),('اختبار'),('محاضرة'),('حفل'),('عطلة'),('نشاط')) AS t(name)
+   WHERE NOT EXISTS (SELECT 1 FROM scheduling_type s WHERE s.name = t.name);" | tr -d '[:space:]')"
+if [[ -n "$missing" ]]; then
+  echo "FAIL: the seeded scheduling-type catalogue is incomplete (SRS R110.2/110.9)." >&2
+  echo "      missing: $missing" >&2
+  exit 1
+fi
+kinds="$(psql_seed "
+  SELECT count(DISTINCT structural_kind) FROM scheduling_type WHERE deleted_at IS NULL;" | tr -d '[:space:]')"
+if [[ "$kinds" != "4" ]]; then
+  echo "FAIL: expected all four structural kinds live after the seed; found $kinds." >&2
+  exit 1
+fi
+echo "OK: scheduling-type catalogue complete — six canonical rows, four structural kinds."
+
+(
+  cd "$repo_root/backend"
   npx vitest run --config vitest.integration.config.ts \
     src/services/production-seed.integration.test.ts
 )
+
 
 # Booting the real application initializes the pg-boss schema and queue catalog
 # used transactionally by schedule mutations. Keep it live for the HTTP phase,
