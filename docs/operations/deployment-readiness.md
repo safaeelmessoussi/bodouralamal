@@ -45,6 +45,7 @@ Staging and current `develop` are different facts:
 | **OPEN** | Clean-host deployment and rollback have not been rehearsed end to end for the current commit | Execute [the deployment pipeline](deployment.md#the-pipeline) from a clean VPS, including fresh migration/seed, health, storage, browser smoke, backup, and restore |
 | **IMPLEMENTED — AWAITS FIRST CI PUBLICATION** | Deployable images previously did not exist | CI now publishes API and web images only after all four existing jobs pass, tagged by the exact 40-character commit; the release overlay refuses an absent tag and deployment uses `--no-build` |
 | **IMPLEMENTED** | The checked-in environment template defaults to Development | Explicit Production/Staging overlays force the intended runtime tier; boot refuses non-HTTPS external and non-canonical/cross-origin storage URLs |
+| **IMPLEMENTED** | Docker's default container log driver is unbounded | Every base service resolves to one bounded local-log policy (10 MB × 5); a coverage guard fails when a service omits it |
 
 ## BLOCKS REAL USERS
 

@@ -1295,6 +1295,10 @@ was hiding behind it: the run went green on the first attempt.
 - [ ] §18 Content, Consent & Storage checklist green
 
 ## M7 — Hardening & Launch Data
+- [x] **Bounded Production container logs** — every base-Compose service uses one shared
+  Docker `local` policy (10 MB × 5), retaining `docker compose logs` without allowing the
+  engine's unrotated `json-file` default to exhaust the single VPS disk. A CI guard counts
+  services and fails if any new or existing service omits the policy.
 - [x] **Production configuration boundary** — the Production overlay structurally forces
   `NODE_ENV=production` while Staging structurally remains fixture-permitting; boot rejects
   non-canonical/cross-origin storage routing, non-HTTPS external origins, and reuse of one

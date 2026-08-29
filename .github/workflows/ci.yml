@@ -65,6 +65,8 @@ jobs:
         run: bash scripts/ci/check-backup-tooling.sh
       - name: Releases use exact-commit artifacts and never target-host builds
         run: bash scripts/ci/check-release-artifacts.sh
+      - name: Every Production service uses bounded local logs
+        run: bash scripts/ci/check-compose-operations.sh
       - name: Storage retirement stays durable and automatic destruction stays disabled
         run: bash scripts/ci/check-storage-lifecycle.sh
       - name: Association terminology remains consistent

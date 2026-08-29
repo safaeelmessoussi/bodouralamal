@@ -7,14 +7,14 @@ every pull request. A fifth release job runs only after all four succeed on a pu
 `develop`.
 
 ```
-guards      twenty-seven dependency-free guard scripts — mechanically checkable repository rules
+guards      twenty-eight dependency-free guard scripts — mechanically checkable repository rules
 contract    regenerate the OpenAPI document, fail on drift, check conformance
 backend     lint · exact typecheck · default tests · production build
 frontend    lint · exact typecheck · tests · production build
 release     exact-commit API + web images → GHCR (develop push only, after all four pass)
 ```
 
-The contract job runs the remaining two guard scripts, so **all twenty-nine committed
+The contract job runs the remaining two guard scripts, so **all thirty committed
 `scripts/ci/check-*.sh` checks execute in CI**. They stay in the contract job because both
 operate on the generated OpenAPI artifact and that job already installs the backend
 dependencies needed to regenerate it.
@@ -41,6 +41,7 @@ Each exists because something went wrong, or would plausibly go wrong silently. 
 | `check-storage-edge.sh` | An external MinIO path bypassing the shared proxy policy, or removal of the Nginx-owned unsigned streaming-trailer denial |
 | `check-backup-tooling.sh` | A floating restic image, external fixture replication, non-empty-volume restore, Docker-socket privilege, or destructive retention before an Owner policy exists |
 | `check-release-artifacts.sh` | Release publication that can precede a green gate, lacks an exact commit tag/revision label, omits either app artifact, or reintroduces target-host compilation |
+| `check-compose-operations.sh` | Any base-Compose service falling back to Docker's unbounded default logging driver, or drift in the shared size/file ceilings |
 | `check-association-terminology.sh` | Superseded Arabic role/person vocabulary returning to the user-facing catalogue |
 | `check-western-digits.sh` | Arabic-Indic digit conversion or rendered literals where the interface requires Western numerals |
 | `check-display-identity.sh` | Raw name fields reaching the frontend · an inline display-name fallback · a controller exposing both inputs outside the one admissible staff screen |

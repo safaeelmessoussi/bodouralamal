@@ -80,6 +80,12 @@ So a user reporting *"it said something went wrong, and there was a code b3f1…
 traceable end to end — through the request, into the job it enqueued, without ever asking who
 the user was.
 
+Every base-Compose service uses Docker's `local` logging driver with five files of at most
+10 MB each. This preserves `docker compose logs` while bounding one container's retained
+stdout/stderr to 50 MB instead of inheriting Docker's unrotated `json-file` default. The
+limit applies when a container is created or recreated; changing Compose does not retrofit an
+already-running container.
+
 ### No PII in logs
 
 Not a guideline. The rule:
