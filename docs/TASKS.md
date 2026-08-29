@@ -1343,7 +1343,9 @@ was hiding behind it: the run went green on the first attempt.
   Owner capacity input rather than an invented default; passing is readiness, never a deployment
   or backup claim. A real Staging run found that unprivileged `sshd -T` cannot read correctly
   root-only host material; preflight now uses a pinned non-interactive root inspection command
-  instead of weakening SSH file permissions.
+  instead of weakening SSH file permissions. The same run proved both exact GHCR packages are
+  publicly readable and found no Docker credential file; the gate now accepts that legitimate
+  state while still protecting any installed credential and requiring both exact manifests.
 - [x] **Bounded Production container logs** — every base-Compose service uses one shared
   Docker `local` policy (10 MB × 5), retaining `docker compose logs` without allowing the
   engine's unrotated `json-file` default to exhaust the single VPS disk. A CI guard counts

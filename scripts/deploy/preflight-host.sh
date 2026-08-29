@@ -257,15 +257,13 @@ main() {
   require_private_file .env
   require_private_file infra.env
 
-  require_private_file "$HOME/.docker/config.json"
-  python3 -c '
-import json
-import sys
-with open(sys.argv[1], encoding="utf-8") as stream:
-    config = json.load(stream)
-known = "ghcr.io" in config.get("auths", {}) or "ghcr.io" in config.get("credHelpers", {})
-raise SystemExit(0 if known else 1)
-' "$HOME/.docker/config.json" || fail 'Docker credential configuration has no GHCR authority'
+  # Public GHCR packages need no credential file. If a future/private package
+  # requires one, protect it like every other operator secret; the manifest
+  # probes below remain the authoritative proof that this account can read the
+  # two exact artifacts.
+  if [[ -e "$HOME/.docker/config.json" ]]; then
+    require_private_file "$HOME/.docker/config.json"
+  fi
 
   docker_root="$(docker info --format '{{.DockerRootDir}}')"
   [[ -d "$docker_root" ]] || fail 'Docker data root is not an accessible directory'

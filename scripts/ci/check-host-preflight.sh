@@ -101,7 +101,7 @@ for invariant in \
   "fresh deployment requires SUPER_ADMIN_EMAIL" \
   "DNS A record does not resolve exclusively to the approved public IPv4" \
   "must not publish an unverified AAAA record" \
-  "Docker credential configuration has no GHCR authority" \
+  'if [[ -e "$HOME/.docker/config.json" ]]' \
   "resolved application images do not match the approved commit" \
   "non-edge service publishes host ports" \
   "Nginx must publish exactly TCP 80 and 443" \

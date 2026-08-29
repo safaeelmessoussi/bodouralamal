@@ -19,7 +19,7 @@ deliberately narrow:
 | State | Docker named volumes `bodour_db-data`, `bodour_minio-data`, `bodour_certbot-conf`, `bodour_certbot-www` on persistent host storage |
 | Network | One approved public IPv4; the environment domain has exactly that A result and no unverified AAAA; only SSH and TCP 80/443 admitted externally |
 | Time | Host clock NTP-synchronized. Host timezone is UTC; containers retain `Africa/Casablanca` for TD-11 wall-clock semantics |
-| Secrets | `.env`, `infra.env`, and Docker's GHCR credential file are regular, deployment-user-owned mode-`0600` files |
+| Secrets | `.env` and `infra.env` are regular, deployment-user-owned mode-`0600` files; an optional Docker credential file is held to the same rule |
 
 Compose 2.24.4 is the floor because repository verification overlays use the documented
 `!override` merge tag introduced in that release. Newer Compose v2/v5 keeps the same command.
@@ -112,8 +112,10 @@ driver. Bound the host journal as well in `/etc/systemd/journald.conf.d/60-bodou
 Docker/OS upgrades on Staging and schedule reboots explicitly rather than allowing an
 unobserved Production restart.
 
-Authenticate the deployment account to GHCR without placing the token in shell history or an
-environment file:
+The current exact-release packages are public, so preflight accepts an absent Docker credential
+file and proves read authority by inspecting both exact manifests. If package visibility later
+becomes private, authenticate the deployment account to GHCR without placing the token in shell
+history or an environment file:
 
 ```bash
 read -rsp 'GHCR read token: ' GHCR_TOKEN && printf '\n'
@@ -121,6 +123,10 @@ printf '%s' "$GHCR_TOKEN" | docker login ghcr.io --username '<github-user>' --pa
 unset GHCR_TOKEN
 chmod 600 "$HOME/.docker/config.json"
 ```
+
+Never create an empty `auths` entry merely to satisfy preflight: it conveys no authority. The
+exact API and web manifest probes are the authoritative check for both public and private package
+visibility; if credentials exist, preflight independently refuses unsafe ownership or mode.
 
 ## The pipeline
 
