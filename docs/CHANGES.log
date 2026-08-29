@@ -1883,3 +1883,89 @@ on presence, or move the نشاط insert out of the migration into the seed list
 `scripts/seed/verify-production-seed.sh` fails two **pre-existing** R107/R108 Subject
 preflight assertions unrelated to this work, and its drill asserts nothing about the
 scheduling catalogue — which is why this went unseen.
+
+## The fresh-install scheduling-type catalogue, fixed (2026-08-30)
+
+### What was wrong
+
+A fresh Production install finished with **one** scheduling type. Migration
+`20260828190100_holiday_catalogue` inserts **نشاط** unconditionally, and its two corrective
+`UPDATE`s match nothing on an empty table — so the seed arrived at a one-row catalogue, and
+`initializedByPresence` read that one row as *the catalogue is there*, marked it initialized
+and skipped the other five. **No `class` row existed, so no class could be scheduled**, and
+nothing anywhere reported a problem because no write path was ever reached.
+
+### The rule that replaced it
+
+**The marker says «initialized», never the row count.** A pre-marker installation is adopted
+only when **every canonical name is already accounted for** — completeness, not presence,
+which is what the old check was actually reaching for. When the catalogue is incomplete the
+seed reconciles **by name**:
+
+- creates a canonical type that has **no row at all**;
+- **counts a soft-deleted row as present**, so a type an administrator retired is not
+  resurrected on the next deploy — *seeded does not mean immutable*, read in the direction
+  that costs something;
+- **never renames, re-flags or reorders an existing row**: `attendance_required` and
+  `display_order` are the Owner's once the row exists, which is the point of their being
+  columns;
+- **preserves «database authoritative after initialization»** (R110.1) exactly — once the
+  marker is written, later runs return immediately.
+
+The migration is untouched, as instructed.
+
+`SCHEDULING_TYPES` now carries the ratified catalogue: **محاضرة `class`**, **عطلة
+`holiday`**, **نشاط** added. Attendance flags and display orders are R110(2)'s verbatim and
+نشاط's are the migration's own — **nothing is inferred**. The seed's postcondition now
+requires all **four** structural kinds live, for the same reason it already required three.
+
+### Coverage
+
+Four states, in `production-seed.integration.test.ts`: a completely fresh database · the
+partial state where only نشاط exists (the defect itself) · an already-initialized database
+whose canonical row was re-flagged and reordered, which must survive untouched · a
+soft-deleted canonical type, which must stay deleted.
+
+`verify-production-seed.sh` now runs the **real seed entry point on the true
+migrate-then-seed sequence** and asserts the catalogue **in SQL, before vitest** — so the
+defect cannot hide behind an unrelated failure later in the drill.
+
+### One consequence, reported
+
+On a fresh install **نشاط keeps `display_order = 1`**, the value the migration gave it, and
+so shares that position with حصة دراسية; BR-19 tie-breaks by name. The seed does not correct
+it because that would overwrite an existing row's editable metadata, which the instruction
+forbids. Reordering is a supported administrative action.
+
+## R107/R108 preflight failures — a REAL defect, reported not fixed
+
+The two long-standing failures in the seed drill are **not stale assertions**. They encode
+SRS Revision 107(3): *"A conflicting live marker or duplicate live حفظ القرآن rows makes the
+seed fail loudly."*
+
+**Measured, not inferred.** On a disposable database seeded once (marker
+`seed.initialized.subjects` present), inserting a second live حفظ القرآن and re-running the
+seed prints `subjects: already initialized — the database is authoritative` and **exits 0**.
+The ambiguity preflight sits *inside* the transaction that runs only after the
+`initializedByPresence` guard, so on any already-initialized installation it never executes.
+
+- **The tests are right; the implementation contradicts a ratified requirement.**
+- The fix is one move — run the preflight before the initialization guard — but it changes
+  **Production deploy behaviour**: a database in an ambiguous Subject state would begin
+  failing every deploy, which is precisely what R107(3) intends and is not a change to make
+  unasked.
+- **Left untouched, and the assertions were not weakened**, per the instruction to report
+  rather than weaken. The drill therefore still exits non-zero for these two, while the new
+  SQL catalogue assertion runs and passes before them.
+
+## Staging deployment — NOT performed
+
+`docker-compose.staging.yml` is present and **validated** (`docker compose … --profile
+production config` succeeds), so the commit is staging-ready. **The deployment itself was not
+performed**: this repository and machine hold **no Staging host, no credentials and no deploy
+script** — `scripts/deploy/` contains only `enable-tls.sh`, CI builds but does not publish or
+deploy, and no Staging target exists in `.env.example` or the workflow. R104 also requires
+Staging to be production-shaped with its own TLS and synthetic data, which a local bring-up
+would not be. Running the overlay on this machine would collide with the development stack's
+ports and volumes and would not be a Staging deploy in any meaningful sense, so it was not
+attempted.
