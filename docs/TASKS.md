@@ -1327,6 +1327,12 @@ was hiding behind it: the run went green on the first attempt.
   concurrently; active handlers have 105 seconds to finish or return durably to retry, inside a
   two-minute Docker grace period. The Production drill asserts the resolved Compose value, and
   focused tests prove readiness becomes `stopping` before the worker drain completes.
+- [x] **Disposable restart and persistent-recreation proof** — the Production-mode drill now
+  proves a job inserted with the worker stopped drains after start, a real active handler finishes
+  across SIGTERM, PostgreSQL and Nginx recover independently, a full stack stop/start retains state,
+  and all long-running containers can be force-recreated over the exact database/object volumes.
+  Seed rows, migration history, private object bytes, durable job states and the non-seeding API
+  startup command are rechecked. Real-host reboot, pressure and realistic-volume RTO remain open.
 - [x] **Executable clean-VPS preflight** — the deployment now stops before runtime mutation unless
   the target is a supported Ubuntu LTS/AMD64 host with local boot-enabled Docker, Compose ≥2.24.4,
   NTP, persistent/adequately sized Docker storage, an exact detached clean checkout, private

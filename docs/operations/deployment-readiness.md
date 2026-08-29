@@ -70,7 +70,7 @@ Staging and current `develop` are different facts:
 | **OPEN** | Full automated J1–J8 and authenticated Staging E2E | Same-origin production-shaped browser run; no development-session backdoor |
 | **PARTIAL — INTEGRATION COMPLETE** | Permission/E2E/coverage gates in hosted CI | Full real-stack integration and all-table isolation now gate release; add the remaining gates only when each has isolated disposable infrastructure |
 | **OPEN** | Live edge-rate-limit, TLS-expiry, queue-lag, and backup-failure alert verification | Wire-observed signals on the target environment |
-| **PARTIAL — REPOSITORY SHUTDOWN BUDGET GREEN** | Production-host resource, disk-exhaustion, restart, graceful-shutdown, and realistic-RTO drills | API SIGTERM now stops HTTP/job intake concurrently, bounds pg-boss drain at 105 seconds and has a two-minute Docker grace period. Still observe recreate/restart, resource pressure and realistic RTO on the selected host/object store |
+| **PARTIAL — REPOSITORY RESTART/SHUTDOWN GREEN** | Production-host resource, disk-exhaustion, reboot, graceful-shutdown, and realistic-RTO drills | The Production-mode drill proves worker-down backlog drain, a real active handler completing across SIGTERM, independent PostgreSQL/Nginx restart, full-stack stop/start, and force-recreation over unchanged database/object volumes and state. Still observe host reboot, resource/disk pressure and realistic-volume RTO on the selected host with the supported replacement object store |
 
 ## Promotion rule
 

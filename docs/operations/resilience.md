@@ -83,9 +83,17 @@ API service gets 120 seconds before Docker may send SIGKILL, leaving 15 seconds 
 database-pool disconnect and process exit. A process-local latch makes repeated SIGTERM/SIGINT
 signals no-ops after the first and prevents two competing drains.
 
-The repository-side Production drill asserts the resolved two-minute container budget. The
-remaining host row in the readiness ledger is intentionally narrower: recreate/restart under the
-selected VPS's actual load and resource limits still needs to be observed there.
+The repository-side Production drill asserts the resolved two-minute container budget and
+exercises both sides of the worker boundary: work inserted while the API is stopped remains
+`created` and drains after start, while a handler observed `active` during SIGTERM completes before
+the restart. It also restarts PostgreSQL and Nginx independently, performs a full-stack stop/start,
+and force-recreates every long-running container over unchanged PostgreSQL/MinIO volumes. After
+each data-boundary phase it rechecks the exact Production seed, migration history, a private object,
+and durable job terminal states; ordinary API startup is also asserted not to migrate or seed.
+
+The remaining host row in the readiness ledger is intentionally narrower: a real host reboot,
+resource and disk pressure, supported replacement object store, and realistic-volume RTO still
+need to be observed on the selected VPS.
 
 ## Concurrency failures are expected, not exceptional
 

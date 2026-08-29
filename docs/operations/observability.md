@@ -47,7 +47,10 @@ runner — schema presence alone is never a worker heartbeat.
 Production-mode image and TLS edge, not a controller mock: it first requires all four components
 green, stops only its isolated MinIO, observes HTTPS `503` with `storage: "down"`, waits for the
 API container itself to become `unhealthy`, then restarts storage and requires both signals to
-recover. The drill publishes no database or object-store port and destroys its own volumes.
+recover. It additionally proves a worker-down job drains after restart and health returns only
+after the complete worker catalogue is live; database, edge, full-stack and container-recreation
+recovery retain the same health contract. The drill publishes no database or object-store port
+and destroys its own volumes.
 
 ```json
 {

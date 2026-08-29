@@ -80,14 +80,18 @@ accounts, all three MinIO policies, and no host binding for PostgreSQL or MinIO.
 one-day certificate activates the real TLS Nginx configuration on loopback; `nginx -T`, HSTS,
 CSP, public-bucket-root denial, the anonymous API boundary and the complete worker health payload
 are asserted. The resolved API service must also carry the two-minute stop grace that outlives
-pg-boss's bounded 105-second drain. Finally the drill stops only its disposable MinIO, requires
-HTTPS health to become `503` and the API container to become `unhealthy`, restarts storage, and
-requires both signals to recover. Cleanup destroys the unique containers, volumes, network,
-images, and generated key.
+pg-boss's bounded 105-second drain. The recovery half stops only its disposable MinIO and proves
+fail-closed health plus recovery; leaves a real job pending while the worker is stopped and proves
+it drains on return; holds a real handler active across API SIGTERM and proves the graceful drain;
+then restarts PostgreSQL, Nginx, and the full stack. Finally it force-recreates every long-running
+container over the same stateful volumes and rechecks the exact seed rows, migration history,
+private object bytes, job terminal states, and non-migrating/non-seeding API command. Cleanup
+destroys the unique containers, volumes, network, images, and generated key.
 
 This is repository-side deployment evidence, not Staging or Production acceptance. It does not
-pull from GHCR, obtain a public certificate, test a Moroccan VPS's resource budget, or rehearse
-rollback/restoration there; those remain separate host/external checks.
+pull from GHCR, obtain a public certificate, test a Moroccan VPS's resource budget or reboot,
+exercise resource/disk pressure, or rehearse rollback/restoration there; those remain separate
+host/external checks.
 
 The host preflight is the target-side complement. It is deliberately read-only and prints no
 configuration values. Its source guard directly tests the Compose-version, domain and public-IP

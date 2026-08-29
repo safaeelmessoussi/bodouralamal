@@ -84,8 +84,8 @@ grep -Fq "[[ \"\$stop_grace\" == '2m0s' ]]" "$production_drill" ||
   fail 'the Production drill must prove the resolved API stop budget'
 [[ "$(grep -Ec '^      - "127\.0\.0\.1:\$\{BODOUR_PRODUCTION_DRILL_' "$production_drill_overlay")" -eq 2 ]] ||
   fail 'the Production drill may publish only its loopback HTTP/TLS edge'
-grep -Fq 'run --rm api npx prisma migrate deploy' "$production_drill" ||
-  fail 'the Production drill must apply the real forward migration history'
+[[ "$(grep -Fc 'run --rm api npx prisma migrate deploy' "$production_drill")" -eq 1 ]] ||
+  fail 'the Production drill must migrate exactly once; restarts must never invoke it'
 [[ "$(grep -Fc 'run --rm api npm run seed:production' "$production_drill")" -eq 2 ]] ||
   fail 'the Production drill must execute and compare the real seed twice'
 if grep -Fq 'seed:fixtures' "$production_drill"; then
@@ -95,10 +95,32 @@ grep -Fq "docker inspect --format '{{json .HostConfig.PortBindings}}'" "$product
   fail 'the Production drill must prove MinIO has no host binding'
 grep -Fq '"${compose[@]}" stop minio' "$production_drill" ||
   fail 'the Production drill must exercise real storage degradation'
-grep -Fq "[[ \"\$status\" == '503' ]]" "$production_drill" ||
+grep -Fq "wait_for_https_status 503 30 'MinIO loss readiness'" "$production_drill" ||
   fail 'the Production drill must require degraded readiness to return 503'
 grep -Fq "[[ \"\$health_state\" == 'unhealthy' ]]" "$production_drill" ||
   fail 'the Production drill must require Docker health to fail with readiness'
+grep -Fq 'stop --timeout 120 api' "$production_drill" ||
+  fail 'the Production drill must enqueue durable work while the API worker is stopped'
+grep -Fq "enqueue_queue_job 'session.materialize'" "$production_drill" ||
+  fail 'the Production drill must prove a pending job drains on worker restart'
+grep -Fq "enqueue_queue_job 'token.purge'" "$production_drill" ||
+  fail 'the Production drill must exercise a real in-flight handler during API restart'
+grep -Fq "wait_for_job_state \"\$active_job_id\" active" "$production_drill" ||
+  fail 'the in-flight restart proof must observe the job active before signalling'
+grep -Fq 'restart db' "$production_drill" ||
+  fail 'the Production drill must exercise PostgreSQL restart recovery'
+grep -Fq 'restart nginx' "$production_drill" ||
+  fail 'the Production drill must exercise Nginx restart recovery'
+grep -Fq 'stop --timeout 120' "$production_drill" ||
+  fail 'the Production drill must exercise a host-like full stack stop'
+grep -Fq 'd --force-recreate --wait --wait-timeout 150' "$production_drill" ||
+  fail 'the Production drill must recreate runtime containers over retained volumes'
+grep -Fq 'named volume identity changed during recreation' "$production_drill" ||
+  fail 'the Production drill must preserve exact persistent volume identity'
+grep -Fq 'API container startup command may run migration/seed work' "$production_drill" ||
+  fail 'the Production drill must prove normal API startup does not migrate or seed'
+grep -Fq 'assert_persistent_state' "$production_drill" ||
+  fail 'restart/recreate phases must verify database, migration and object persistence'
 grep -Fq 'down --volumes --remove-orphans' "$production_drill" ||
   fail 'the Production drill must destroy its isolated volumes on every exit'
 

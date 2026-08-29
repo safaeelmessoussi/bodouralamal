@@ -104,6 +104,42 @@ assert_sql() {
     fail "$label: expected $expected, found ${actual:-<empty>}"
 }
 
+enqueue_queue_job() {
+  local queue="$1"
+  sql "
+    WITH inserted AS (
+      INSERT INTO pgboss.job (
+        name, data, expire_seconds, deletion_seconds, keep_until,
+        retry_limit, retry_delay, retry_backoff, retry_delay_max,
+        policy, dead_letter, heartbeat_seconds
+      )
+      SELECT
+        q.name, '{}'::jsonb, q.expire_seconds, q.deletion_seconds,
+        now() + q.retention_seconds * interval '1 second',
+        q.retry_limit, q.retry_delay, q.retry_backoff, q.retry_delay_max,
+        q.policy, q.dead_letter, q.heartbeat_seconds
+      FROM pgboss.queue q
+      WHERE q.name = '$queue'
+      RETURNING id
+    )
+    SELECT id FROM inserted;"
+}
+
+job_state() {
+  local job_id="$1"
+  sql "SELECT state::text FROM pgboss.job WHERE id = '$job_id'::uuid;"
+}
+
+wait_for_job_state() {
+  local job_id="$1" expected="$2" attempts="$3" label="$4" current=''
+  for _ in $(seq 1 "$attempts"); do
+    current="$(job_state "$job_id")"
+    [[ "$current" == "$expected" ]] && return 0
+    sleep 0.25
+  done
+  fail "$label did not reach $expected (found ${current:-missing})"
+}
+
 assert_sql 'SELECT count(*) FROM role;' '5' 'role catalogue'
 assert_sql 'SELECT count(*) FROM category WHERE deleted_at IS NULL;' '3' 'Category baseline'
 assert_sql 'SELECT count(*) FROM level WHERE deleted_at IS NULL;' '21' 'Level baseline'
@@ -146,11 +182,22 @@ seed_snapshot() {
     );"
 }
 
+migration_digest() {
+  sql "
+    SELECT md5(COALESCE(
+      (SELECT jsonb_agg(to_jsonb(t) ORDER BY t.id)::text FROM \"_prisma_migrations\" t),
+      '[]'
+    ));"
+}
+
 before_seed="$(seed_snapshot)"
 [[ -n "$before_seed" ]] || fail 'the first seed snapshot is empty'
 "${compose[@]}" run --rm api npm run seed:production
 after_seed="$(seed_snapshot)"
 [[ "$after_seed" == "$before_seed" ]] || fail 'the second Production seed changed initialized data'
+restart_seed_snapshot="$after_seed"
+migration_snapshot="$(migration_digest)"
+[[ -n "$migration_snapshot" ]] || fail 'migration-history snapshot is empty'
 
 policy_output="$(
   "${compose[@]}" run --rm --no-deps --entrypoint /bin/sh minio-init -c \
@@ -159,6 +206,12 @@ policy_output="$(
 grep -Fq 'download' <<<"$policy_output" || fail 'public bucket is not anonymous-download'
 [[ "$(grep -Fc 'private' <<<"$policy_output")" -eq 2 ]] ||
   fail 'private and recording-staging buckets are not anonymous-deny'
+
+canary_key='restart-drill/persistence-canary.txt'
+canary_value='bodour-production-restart-canary-v1'
+printf '%s' "$canary_value" |
+  "${compose[@]}" run --rm -T --no-deps --entrypoint /bin/sh minio-init \
+    -c "mc pipe local/private/$canary_key >/dev/null"
 
 minio_container="$("${compose[@]}" ps -q minio)"
 [[ -n "$minio_container" ]] || fail 'the MinIO container is missing'
@@ -173,6 +226,41 @@ curl_https=(curl --noproxy '*' --insecure --resolve "$domain:$https_port:127.0.0
 response_body="$drill_root/response.json"
 headers="$drill_root/headers.txt"
 nginx_config="$drill_root/nginx-T.txt"
+
+wait_for_https_status() {
+  local expected="$1" attempts="$2" label="$3" current=''
+  for _ in $(seq 1 "$attempts"); do
+    current="$("${curl_https[@]}" --output "$response_body" --write-out '%{http_code}' "$https_url/healthz" || true)"
+    if [[ "$current" == "$expected" ]]; then
+      status="$current"
+      return 0
+    fi
+    sleep 1
+  done
+  fail "$label did not reach HTTPS $expected (found ${current:-connection-failed})"
+}
+
+assert_canary() {
+  local actual
+  actual="$("${compose[@]}" run --rm -T --no-deps --entrypoint /bin/sh minio-init \
+    -c "mc cat local/private/$canary_key")"
+  [[ "$actual" == "$canary_value" ]] || fail 'private object did not survive restart/recreation'
+}
+
+assert_persistent_state() {
+  [[ "$(seed_snapshot)" == "$restart_seed_snapshot" ]] ||
+    fail 'initialized Production data changed across restart/recreation'
+  [[ "$(migration_digest)" == "$migration_snapshot" ]] ||
+    fail 'migration history changed across restart/recreation'
+  assert_canary
+}
+
+container_id() {
+  local service="$1" id
+  id="$("${compose[@]}" ps -q "$service")"
+  [[ -n "$id" ]] || fail "container is missing: $service"
+  printf '%s' "$id"
+}
 
 status="$("${curl_https[@]}" --output "$response_body" --write-out '%{http_code}' "$https_url/healthz")"
 [[ "$status" == '200' ]] || fail "whole-application HTTPS health returned $status"
@@ -216,16 +304,7 @@ grep -Fq 'location = /storage/public' "$nginx_config" ||
   fail 'loaded Nginx config lacks the public bucket-root denial'
 
 "${compose[@]}" stop minio
-degraded=''
-for _ in $(seq 1 30); do
-  status="$("${curl_https[@]}" --output "$response_body" --write-out '%{http_code}' "$https_url/healthz" || true)"
-  if [[ "$status" == '503' ]]; then
-    degraded='yes'
-    break
-  fi
-  sleep 1
-done
-[[ "$degraded" == 'yes' ]] || fail 'MinIO loss did not produce HTTPS 503 readiness'
+wait_for_https_status 503 30 'MinIO loss readiness'
 grep -Fq '"storage":"down"' "$response_body" || fail 'degraded health did not identify storage'
 
 api_container="$("${compose[@]}" ps -q api)"
@@ -242,16 +321,7 @@ done
 [[ "$docker_unhealthy" == 'yes' ]] || fail 'Docker health remained green while /healthz returned 503'
 
 "${compose[@]}" up --no-build -d --wait --wait-timeout 90 minio
-recovered=''
-for _ in $(seq 1 60); do
-  status="$("${curl_https[@]}" --output "$response_body" --write-out '%{http_code}' "$https_url/healthz" || true)"
-  if [[ "$status" == '200' ]]; then
-    recovered='yes'
-    break
-  fi
-  sleep 1
-done
-[[ "$recovered" == 'yes' ]] || fail 'readiness did not recover after MinIO restart'
+wait_for_https_status 200 60 'MinIO restart readiness'
 
 docker_healthy=''
 for _ in $(seq 1 45); do
@@ -264,4 +334,111 @@ for _ in $(seq 1 45); do
 done
 [[ "$docker_healthy" == 'yes' ]] || fail 'Docker health did not recover after MinIO restart'
 
-printf 'Production bootstrap drill: migrations, idempotent seed, clean inventory, TLS/Nginx, workers and fail-closed readiness passed\n'
+# Worker-down durability: a correctly configured queue row inserted while the
+# API is stopped must remain created, then complete after the same container is
+# started and the full worker catalogue becomes ready again.
+"${compose[@]}" stop --timeout 120 api
+if "${compose[@]}" ps --services --status running | grep -Fxq api; then
+  fail 'API remained running after the explicit stop'
+fi
+queued_job_id="$(enqueue_queue_job 'session.materialize')"
+[[ "$queued_job_id" =~ ^[0-9a-f-]{36}$ ]] || fail 'worker-down job was not durably inserted'
+[[ "$(job_state "$queued_job_id")" == 'created' ]] ||
+  fail 'worker-down job did not remain pending while the API was stopped'
+"${compose[@]}" up --no-build -d --wait --wait-timeout 150 api
+wait_for_job_state "$queued_job_id" completed 120 'worker-down durable job'
+wait_for_https_status 200 60 'API start after queued work'
+
+# In-flight graceful restart: hold the exact table used by token.purge long
+# enough for pg-boss to mark the job active, signal the API, then release below
+# PostgreSQL's ten-second statement timeout. The handler must finish before the
+# container restarts rather than being severed or losing its durable row.
+"${compose[@]}" exec -T db psql -v ON_ERROR_STOP=1 -U app -d bodour \
+  -c 'BEGIN; LOCK TABLE consumed_token IN ACCESS EXCLUSIVE MODE; SELECT pg_sleep(9); COMMIT;' \
+  >/dev/null &
+lock_pid=$!
+lock_acquired=''
+for _ in $(seq 1 40); do
+  if [[ "$(sql "SELECT count(*) FROM pg_locks WHERE relation = 'consumed_token'::regclass AND mode = 'AccessExclusiveLock' AND granted;")" == '1' ]]; then
+    lock_acquired='yes'
+    break
+  fi
+  sleep 0.1
+done
+[[ "$lock_acquired" == 'yes' ]] || fail 'could not establish the in-flight job lock fixture'
+
+active_job_id="$(enqueue_queue_job 'token.purge')"
+[[ "$active_job_id" =~ ^[0-9a-f-]{36}$ ]] || fail 'in-flight job was not durably inserted'
+wait_for_job_state "$active_job_id" active 32 'locked in-flight job'
+"${compose[@]}" restart api >/dev/null &
+restart_pid=$!
+wait "$lock_pid" || fail 'in-flight lock fixture failed'
+wait "$restart_pid" || fail 'API restart failed while draining an active job'
+wait_for_job_state "$active_job_id" completed 120 'gracefully drained job'
+wait_for_https_status 200 90 'API readiness after graceful in-flight restart'
+
+# Data-service restart issues no API restart command. Whether its pools reconnect
+# in-process or the configured service restart policy replaces the process, the
+# API and every worker must converge to healthy while database and object state
+# remain byte-for-byte authoritative.
+"${compose[@]}" restart db
+"${compose[@]}" up --no-build -d --wait --wait-timeout 90 db
+wait_for_https_status 200 120 'PostgreSQL restart recovery'
+assert_persistent_state
+
+# The edge itself may restart independently. Connection failures during the
+# restart are expected; the same TLS health route must recover without touching
+# the application/data containers.
+"${compose[@]}" restart nginx
+wait_for_https_status 200 60 'Nginx restart recovery'
+
+# Host-like stop/start: no process remains running, then the exact existing
+# containers start against the same named volumes. Neither migrations nor seeds
+# are invoked anywhere in this phase.
+"${compose[@]}" stop --timeout 120
+[[ -z "$("${compose[@]}" ps --services --status running)" ]] ||
+  fail 'services remained running after the full stack stop'
+"${compose[@]}" up --no-build -d --wait --wait-timeout 150 db minio api nginx
+wait_for_https_status 200 90 'full stack start recovery'
+assert_persistent_state
+[[ "$(job_state "$queued_job_id")" == 'completed' ]] ||
+  fail 'completed worker-down job regressed after full stack start'
+[[ "$(job_state "$active_job_id")" == 'completed' ]] ||
+  fail 'completed in-flight job regressed after full stack start'
+
+# Upgrade-like recreation replaces every runtime container while retaining the
+# two stateful named volumes. The drill overlay deliberately bind-mounts its
+# disposable TLS/ACME fixture, so the base file's certbot volumes are not part
+# of this resolved four-service graph. This catches accidental anonymous
+# storage, ephemeral DB state, stale bind mounts, and startup commands that
+# silently seed/migrate.
+before_api="$(container_id api)"
+before_db="$(container_id db)"
+before_minio="$(container_id minio)"
+before_nginx="$(container_id nginx)"
+before_volumes="$(for volume in db-data minio-data; do
+  "${compose[@]}" config --volumes | grep -Fxq "$volume" || fail "logical volume is missing: $volume"
+  docker volume inspect --format '{{.Name}}|{{.CreatedAt}}' "${project}_$volume"
+done)"
+
+"${compose[@]}" up --no-build -d --force-recreate --wait --wait-timeout 150 \
+  db minio api nginx
+after_api="$(container_id api)"
+after_db="$(container_id db)"
+after_minio="$(container_id minio)"
+after_nginx="$(container_id nginx)"
+[[ "$after_api" != "$before_api" && "$after_db" != "$before_db" &&
+   "$after_minio" != "$before_minio" && "$after_nginx" != "$before_nginx" ]] ||
+  fail 'force-recreate did not replace every long-running application container'
+after_volumes="$(for volume in db-data minio-data; do
+  docker volume inspect --format '{{.Name}}|{{.CreatedAt}}' "${project}_$volume"
+done)"
+[[ "$after_volumes" == "$before_volumes" ]] || fail 'named volume identity changed during recreation'
+[[ "$(docker inspect --format '{{json .Config.Cmd}}' "$after_api")" == '["node","dist/src/index.js"]' ]] ||
+  fail 'API container startup command may run migration/seed work'
+wait_for_https_status 200 90 'force-recreate recovery'
+assert_persistent_state
+[[ "$(job_state "$queued_job_id")" == 'completed' && "$(job_state "$active_job_id")" == 'completed' ]] ||
+  fail 'durable job terminal state changed during recreation'
+
+printf 'Production bootstrap drill: bootstrap, dependency failure, graceful job drain, restart and persistent recreation passed\n'
