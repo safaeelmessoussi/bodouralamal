@@ -25,6 +25,8 @@ const config = loadConfig();
 const prisma = createPrismaClient(config.DATABASE_URL, TEST_CONNECTION_LIMIT);
 const run = promisify(execFile);
 const TAG = '[production-seed-r108]';
+/** The one Subject R107 marks; named once so the restore cannot drift from it. */
+const MEMORISATION_NAME = 'حفظ القرآن';
 
 const EXPECTED_SUBJECTS = [
   { name: 'أحكام القرآن', displayOrder: 1, tracksQuranProgress: false },
@@ -295,7 +297,36 @@ describe.skipIf(!enabled)('R107/R108 Production Subject seed on fresh PostgreSQL
     }
   });
 
+  it('an INITIALIZED healthy catalogue exits normally and rewrites nothing', async () => {
+    /**
+     * The other half of moving the preflight ahead of the guard: running a
+     * read-only ambiguity check on every invocation must not disturb the
+     * *«database authoritative after initialization»* rule it now precedes.
+     *
+     * The marker is present by this point (the suite has already seeded), so a
+     * healthy catalogue must still exit 0 and leave every row byte-identical —
+     * including `updatedAt`, which any write would move.
+     */
+    const before = await subjectSnapshot();
+    await runProductionSeed();
+    expect(await subjectSnapshot()).toEqual(before);
+  });
+
   it('fails before seed mutation when duplicate live حفظ القرآن rows exist', async () => {
+    /**
+     * **The database is already initialized here**, which is the whole point:
+     * R107(3)'s *"fail loudly"* is not conditional on how many times the
+     * platform has been deployed, and the `seed.initialized.subjects` marker
+     * must not buy silence. This assertion failed for exactly that reason until
+     * the preflight moved ahead of the initialization guard.
+     */
+    expect(
+      await prisma.systemSetting.findFirst({
+        where: { key: { contains: 'subjects' } },
+        select: { key: true },
+      }),
+    ).not.toBeNull();
+
     const duplicate = await prisma.subject.create({
       data: {
         name: 'حفظ القرآن',
@@ -335,11 +366,36 @@ describe.skipIf(!enabled)('R107/R108 Production Subject seed on fresh PostgreSQL
     ]);
     const before = await subjectSnapshot();
 
-    await expect(runProductionSeed()).rejects.toThrow(
-      'Owner reconciliation is required',
-    );
-    expect(await subjectSnapshot()).toEqual(before);
-    expect(await prisma.role.findUnique({ where: { name: 'parent' } })).toBeNull();
+    try {
+      await expect(runProductionSeed()).rejects.toThrow(
+        'Owner reconciliation is required',
+      );
+      expect(await subjectSnapshot()).toEqual(before);
+      expect(await prisma.role.findUnique({ where: { name: 'parent' } })).toBeNull();
+    } finally {
+      /**
+       * **This test restores its own state** (P1.2), and since the R107(3)
+       * preflight moved ahead of the initialization guard it has to.
+       *
+       * The ambiguity it creates is exactly what the seed now refuses on EVERY
+       * invocation — so leaving it for `afterAll` made every later test in this
+       * file fail on a state this one had introduced. A test that depends on
+       * its neighbours' cleanup order is a test that fails for reasons unrelated
+       * to its own property.
+       */
+      await prisma.$transaction([
+        prisma.subject.deleteMany({ where: { name: `${TAG} conflicting marker` } }),
+        prisma.subject.updateMany({
+          where: { name: MEMORISATION_NAME, deletedAt: null },
+          data: { tracksQuranProgress: true },
+        }),
+        prisma.role.upsert({
+          where: { name: 'parent' },
+          update: {},
+          create: { name: 'parent' },
+        }),
+      ]);
+    }
   });
 });
 

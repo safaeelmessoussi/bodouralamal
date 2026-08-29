@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import type { PrismaClient } from '../../src/generated/prisma/client.js';
 import { GenderRestriction, Visibility } from '../../src/generated/prisma/enums.js';
 import { loadConfig } from '../../src/lib/config.js';
 import { createPrismaClient } from '../../src/lib/prisma.js';
@@ -375,7 +376,66 @@ async function seedPartners(): Promise<void> {
   console.log(`  partners: ${PARTNERS.length}`);
 }
 
+/**
+ * **R107(3)'s loud failure — one statement of it, called from two places.**
+ *
+ * *"A conflicting live marker or duplicate live حفظ القرآن rows makes the seed
+ * fail loudly; the seed never silently renames, deletes, or reclassifies
+ * Owner-managed historical Subjects."*
+ *
+ * Read-only. It **decides nothing**: it does not delete a duplicate, merge two
+ * rows, rename either, or pick which one the seed meant — guessing among
+ * Owner-managed rows is precisely what R107 refuses. It reports the ambiguity
+ * by name and stops.
+ *
+ * Accepts the client or a transaction client so the identical check serves both
+ * call sites; a second copy of this rule is a second copy that can drift.
+ */
+async function assertSubjectsUnambiguous(db: Pick<PrismaClient, 'subject'>): Promise<void> {
+  const liveMemorisationSubjects = await db.subject.findMany({
+    where: { name: MEMORISATION_SUBJECT.name, deletedAt: null },
+    select: { id: true, tracksQuranProgress: true },
+  });
+  if (liveMemorisationSubjects.length > 1) {
+    throw new Error(
+      `Production seed requires exactly one live ${MEMORISATION_SUBJECT.name} Subject; found ${liveMemorisationSubjects.length}`,
+    );
+  }
+
+  const liveTrackers = await db.subject.findMany({
+    where: { tracksQuranProgress: true, deletedAt: null },
+    select: { id: true, name: true },
+  });
+  const existingMemorisationSubject = liveMemorisationSubjects[0];
+  const conflictingTracker = liveTrackers.find(
+    (subject) => subject.id !== existingMemorisationSubject?.id,
+  );
+  if (conflictingTracker) {
+    throw new Error(
+      `Production seed cannot move tracks_quran_progress from live Subject ${conflictingTracker.name}; Owner reconciliation is required`,
+    );
+  }
+}
+
 async function seedSubjects(): Promise<void> {
+  /**
+   * **The ambiguity check runs BEFORE the initialization guard, and that
+   * ordering is the requirement** (R107.3).
+   *
+   * It used to sit inside the transaction below, which the guard returns before
+   * ever reaching. So on any already-initialized installation — every real one,
+   * after its first deploy — a second live حفظ القرآن row or a marker owned by
+   * another Subject produced `subjects: already initialized` and **exit 0**.
+   * Measured, not assumed: the two drill assertions that encode R107(3) had
+   * been failing for exactly this reason.
+   *
+   * *"Fail loudly"* is not conditional on how many times the platform has been
+   * deployed, and **the marker is not a licence to stop looking**. The check is
+   * read-only and decides nothing, so running it first costs one query and
+   * cannot itself mutate anything.
+   */
+  await assertSubjectsUnambiguous(prisma);
+
   /**
    * **After initialization the Subjects belong to the Super Admin.**
    *
@@ -390,33 +450,13 @@ async function seedSubjects(): Promise<void> {
   }
 
   await prisma.$transaction(async (tx) => {
-    // Fail before writing if existing Owner-managed reference data is
-    // ambiguous. The seed may complete a correctly named حفظ القرآن row by
-    // attaching its structural marker, but it never guesses among duplicates
-    // or silently moves a marker from another Subject.
-    const liveMemorisationSubjects = await tx.subject.findMany({
-      where: { name: MEMORISATION_SUBJECT.name, deletedAt: null },
-      select: { id: true, tracksQuranProgress: true },
-    });
-    if (liveMemorisationSubjects.length > 1) {
-      throw new Error(
-        `Production seed requires exactly one live ${MEMORISATION_SUBJECT.name} Subject; found ${liveMemorisationSubjects.length}`,
-      );
-    }
-
-    const liveTrackers = await tx.subject.findMany({
-      where: { tracksQuranProgress: true, deletedAt: null },
-      select: { id: true, name: true },
-    });
-    const existingMemorisationSubject = liveMemorisationSubjects[0];
-    const conflictingTracker = liveTrackers.find(
-      (subject) => subject.id !== existingMemorisationSubject?.id,
-    );
-    if (conflictingTracker) {
-      throw new Error(
-        `Production seed cannot move tracks_quran_progress from live Subject ${conflictingTracker.name}; Owner reconciliation is required`,
-      );
-    }
+    /**
+     * **Re-asserted inside the transaction**, from the same function. The
+     * preflight above is what makes the refusal unconditional; this is what
+     * makes the WRITE path's guarantee its own, rather than something inherited
+     * from a read taken earlier outside any transaction.
+     */
+    await assertSubjectsUnambiguous(tx);
 
     for (const subject of SUBJECTS) {
       const existing = await tx.subject.findFirst({

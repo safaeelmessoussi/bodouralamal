@@ -1969,3 +1969,59 @@ Staging to be production-shaped with its own TLS and synthetic data, which a loc
 would not be. Running the overlay on this machine would collide with the development stack's
 ports and volumes and would not be a Staging deploy in any meaningful sense, so it was not
 attempted.
+
+## R107(3)'s loud failure restored — the marker is no longer a licence to stop looking (2026-08-30)
+
+### The defect
+
+SRS Revision 107(3): *"A conflicting live marker or duplicate live حفظ القرآن rows makes the
+seed fail loudly."* The ambiguity preflight sat **inside** the transaction that
+`initializedByPresence('subjects', …)` returns before ever reaching — so on any
+already-initialized installation, which is every real one after its first deploy, a second
+live حفظ القرآن row or a marker owned by another Subject produced
+`subjects: already initialized` and **exit 0**.
+
+### The fix
+
+The check moved **ahead of the initialization guard**, where *"fail loudly"* stops being
+conditional on how many times the platform has been deployed. It is read-only and **decides
+nothing** — it does not delete a duplicate, merge two rows, rename either or choose between
+them, because guessing among Owner-managed rows is exactly what R107 refuses. It reports the
+ambiguity by name and stops.
+
+Extracted as `assertSubjectsUnambiguous(db)` and called from **both** places: before the
+guard, so the refusal is unconditional, and inside the transaction, so the write path keeps
+its own guarantee rather than inheriting one from a read taken earlier outside any
+transaction. One statement of the rule, two call sites — a second copy is a second copy that
+can drift.
+
+### Proven on disposable databases, not argued
+
+- **Initialized + duplicate** — marker `seed.initialized.subjects` present, a second live
+  حفظ القرآن inserted: the seed **exits 1** with *«requires exactly one live حفظ القرآن
+  Subject; found 2»*, and the Subject rows are exactly as they were. Nothing merged, nothing
+  removed.
+- **Initialized + healthy** — the same database with the duplicate removed: **exits 0**, and
+  `count` and `max(updated_at)` are byte-identical before and after. Running a read-only
+  check on every invocation does not disturb *«database authoritative after initialization»*.
+
+Both are now regression tests: the healthy case asserts a full snapshot equality, and the
+duplicate case first asserts the marker is present, so it can never again pass by accident on
+an uninitialized database.
+
+### A test that had to start cleaning up after itself
+
+The conflicting-marker test left the database ambiguous for its neighbours and relied on
+`afterAll`. That was survivable only while the preflight was unreachable; now that the seed
+refuses ambiguity on **every** invocation, it made every later test in the file fail on a
+state this one introduced. It restores its own rows in a `finally` (P1.2) — **the assertions
+are unchanged and nothing was weakened**.
+
+### Unchanged, deliberately
+
+The scheduling-type reconciliation from `1631c80`/`4dd739a` is untouched — verified by diff.
+**نشاط keeps `display_order = 1`**: it is existing editable catalogue data, and no
+authoritative requirement gives it another position, so this task does not reorder it.
+
+The whole Production seed drill now exits **0** (12/12 in the seed file, then 318 and 175 in
+the downstream suites), where it had been red on these two assertions.
