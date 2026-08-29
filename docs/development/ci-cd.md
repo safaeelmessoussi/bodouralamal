@@ -22,6 +22,14 @@ executable direct `AuditLog` writes from comments and examples; it therefore run
 backend's locked `npm ci`, never in the dependency-free guard job. The portability guard pins
 that placement so a warm Local `node_modules` cannot hide clean-checkout failure again.
 
+Hosted run `33246930840` is the first complete proof of this topology: all five verification
+jobs passed from a clean checkout and the release job published both exact-commit images for
+`9e0b303c27e77ec731e3afee936dcb31cd165504`. GitHub also reported that the v4 checkout and
+setup-node actions target deprecated Node 20 and were being force-run on Node 24. The
+maintained v7 action metadata uses `node24`, but adopting those major versions awaits the
+Document Owner approval required by SRS §3.1a; the warning is not treated as resolved merely
+because GitHub currently applies a compatibility override.
+
 ## The guards
 
 Each exists because something went wrong, or would plausibly go wrong silently. Each was

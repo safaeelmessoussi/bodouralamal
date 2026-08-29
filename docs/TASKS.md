@@ -1307,8 +1307,14 @@ was hiding behind it: the run went green on the first attempt.
   exposed a pre-existing clean-checkout mismatch: the syntax-aware no-PII guard needs the
   TypeScript compiler but had been placed in the dependency-free job. It now runs after the
   backend's locked install, with a portability guard pinning that exact boundary.
-  The first hosted disposable integration job itself completed successfully; its workflow was
-  red only because this older guard-placement defect skipped the release job.
+  The corrected hosted run `33246930840` then passed guards, contract, backend, frontend and
+  the full disposable integration job, and published both exact-commit images for
+  `9e0b303c27e77ec731e3afee936dcb31cd165504`.
+- [ ] **DOCUMENT OWNER APPROVAL REQUIRED — GitHub Actions runtime majors.** Hosted CI warns
+  that `actions/checkout@v4` and `actions/setup-node@v4` target deprecated Node 20 and are
+  currently force-run on Node 24. Official v7 action metadata uses `node24`, but moving v4 →
+  v7 is a major tooling upgrade prohibited without approval by SRS §3.1a. Keep this as a
+  dedicated upgrade task; do not mistake GitHub's temporary compatibility override for a fix.
 - [x] **Fail-closed deployment readiness** — the API container healthcheck exercises the real
   DB/storage/queue/worker `/healthz` contract, and deployment verification treats every 503 as
   command failure with a bounded timeout; a running Node process is not called ready.
@@ -1322,7 +1328,7 @@ was hiding behind it: the run went green on the first attempt.
   signing key for access and onboarding tokens. The checked-in Development default can no
   longer silently become the Production runtime tier; its `NODE_ENV` guidance enumerates all
   three TD-13 values and explicitly preserves Revision 104's uniform error boundary.
-- [x] **Exact-commit release artifacts** — after all four existing CI jobs pass on a
+- [x] **Exact-commit release artifacts** — after all five verification jobs pass on a
   `develop` push, CI publishes API and environment-independent web images to GHCR under the
   immutable 40-character commit tag and revision label. Staging/Production select both
   through `docker-compose.release.yml` plus exactly one explicit tier overlay; a missing

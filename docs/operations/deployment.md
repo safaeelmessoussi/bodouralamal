@@ -100,7 +100,7 @@ API and web images are built in CI and pulled, never built on the server:
 This is also why the container memory pins have any headroom at all — the budget assumes no
 build ever competes with the running services.
 
-After all four existing jobs pass on a push to `develop`, [CI](../development/ci-cd.md)
+After all five verification jobs pass on a push to `develop`, [CI](../development/ci-cd.md)
 publishes two GHCR images under **only the exact 40-character source commit**. Each carries
 the same value in `org.opencontainers.image.revision`. There is no mutable `latest` tag and
 no deployment credential in CI.
