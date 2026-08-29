@@ -1327,7 +1327,11 @@ was hiding behind it: the run went green on the first attempt.
   non-canonical/cross-origin storage routing, non-HTTPS external origins, and reuse of one
   signing key for access and onboarding tokens. The checked-in Development default can no
   longer silently become the Production runtime tier; its `NODE_ENV` guidance enumerates all
-  three TD-13 values and explicitly preserves Revision 104's uniform error boundary.
+  three TD-13 values and explicitly preserves Revision 104's uniform error boundary. The
+  older fresh-Production-seed harness was found still exporting direct MinIO as the public
+  storage origin; the real validator correctly refused it after all migrations. Its browser
+  coordinate now uses the mandatory same-origin `/storage` path and the complete disposable
+  seed/authorization/scenario drill passes again.
 - [x] **Exact-commit release artifacts** — after all five verification jobs pass on a
   `develop` push, CI publishes API and environment-independent web images to GHCR under the
   immutable 40-character commit tag and revision label. Staging/Production select both

@@ -954,6 +954,12 @@ and then checks the R107–R108 boundary through the real policy and Quran servi
 the real API/pg-boss catalog against disposable MinIO, runs all 18 integration files affected
 by the reconciliation, and round-trips all eight changed scenario seeds on that same stack:
 
+The drill's internal S3 client uses its loopback MinIO endpoint, while its browser-facing
+`STORAGE_BASE_URL` is the exact same-origin `${PUBLIC_BASE_URL}/storage` coordinate required
+by §3.1. The latter is configuration validation in this seed-focused harness, not a claim that
+the harness's direct API listener is an Nginx storage proxy; production-shaped proxy traffic is
+covered by the disposable full-stack CI gate.
+
 - the exact eight seeded Subjects exist once, with stable ids and timestamps across the second run;
 - القرآن الكريم, محو الأمية, the ambiguous bare تفسير, and separate ترتيل/تجويد synonyms are absent from a fresh seed;
 - Super-Admin additions, later Quran-domain Subjects, and historical rows survive a rerun unchanged and unmarked;

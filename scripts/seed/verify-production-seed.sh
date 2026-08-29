@@ -37,7 +37,10 @@ export MINIO_ENDPOINT="http://127.0.0.1:${minio_port}"
 export MINIO_ACCESS_KEY='production-seed-fixture'
 export MINIO_SECRET_KEY='production-seed-fixture-secret'
 export PUBLIC_BASE_URL="http://127.0.0.1:${api_port}"
-export STORAGE_BASE_URL="http://127.0.0.1:${minio_port}"
+# The drill reaches MinIO directly only through the server-side endpoint above.
+# Browser-facing capability URLs must retain the same-origin /storage shape the
+# real Nginx deployment owns; a direct MinIO origin is invalid in every tier.
+export STORAGE_BASE_URL="${PUBLIC_BASE_URL}/storage"
 export SUPER_ADMIN_EMAIL='production-seed-super-admin@example.com'
 export SUPER_ADMIN_SEX='female'
 export NODE_ENV='test'
